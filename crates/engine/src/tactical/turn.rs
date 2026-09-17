@@ -16,6 +16,7 @@ use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
+use crate::tuning::TACTICAL_MELEE_RANGE;
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -222,12 +223,189 @@ impl Game {
         if spent + cost > self.movement_allowance(actor) {
             return StepOutcome::Refused;
         }
-        let mut battle = self.world.resource_mut::<TacticalBattle>();
+        // **Before the move is written**, so a mover that is put down or
+        // stalled on its way out dies on the cell it tried to leave rather
+        // than on the one it was reaching for. Below every refusal above it:
+        // a step that was never going to happen provokes nobody.
+        let reactors = self.step_reactors(actor, from, to);
+        if !reactors.is_empty() && !self.provoke(actor, reactors) {
+            return StepOutcome::Refused;
+        }
+        // The fight can close under a fatal reaction — a lone hostile put the
+        // player down, or the player's last companion went with them.
+        let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() else {
+            return StepOutcome::Refused;
+        };
         if !battle.move_to(actor, to) {
             return StepOutcome::Refused;
         }
         battle.spend(cost);
         StepOutcome::Moved
+    }
+
+    /// Everyone who would react to `mover` stepping from `from` to `to`.
+    ///
+    /// **Leaving reach is the trigger, and a step that stays adjacent is
+    /// not one.** The cell it starts on has to be inside the reactor's melee
+    /// reach and the cell it ends on outside — so closing on a body, or
+    /// circling it, is free, and only disengaging is paid for.
+    pub(crate) fn step_reactors(
+        &self,
+        mover: Entity,
+        from: (i32, i32),
+        to: (i32, i32),
+    ) -> Vec<Entity> {
+        self.reactors(mover, from, |at| {
+            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
+                && reach::distance(at, to) > TACTICAL_MELEE_RANGE
+        })
+    }
+
+    /// Everyone who would react to `mover` invoking a routine where it
+    /// stands — every enemy already inside melee reach of it.
+    pub(crate) fn invoke_reactors(&self, mover: Entity) -> Vec<Entity> {
+        let Some(from) = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|battle| battle.cell_of(mover))
+        else {
+            return Vec::new();
+        };
+        self.reactors(mover, from, |at| {
+            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
+        })
+    }
+
+    /// The half both triggers share: who is *able* to react to `mover` at
+    /// all, in initiative order, out of the bodies whose cell `trigger`
+    /// accepts.
+    ///
+    /// Four conditions, and each is somebody else's rule rather than a new
+    /// one. An enemy of the mover, read through `acts_for_hostiles` so an
+    /// injected body reacts for the side it now believes it is on. Its
+    /// reaction unspent. Line of sight to the mover, `tactical_attack`'s own
+    /// gate. And the mover nameable at all — **a cloaked body provokes
+    /// nobody**, which is not a special case here but the same filter that
+    /// sits at the five doors that name a body.
+    ///
+    /// **Melee reach and not `Game::swing_range`.** A reaction from across
+    /// the board is overwatch, which is a different feature; this is the one
+    /// place in tactical code that reads `TACTICAL_MELEE_RANGE` rather than
+    /// asking how far a body swings, and it is deliberate.
+    fn reactors(
+        &self,
+        mover: Entity,
+        cell: (i32, i32),
+        trigger: impl Fn((i32, i32)) -> bool,
+    ) -> Vec<Entity> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        if self.is_cloaked(mover) {
+            return Vec::new();
+        }
+        let mover_side = self.acts_for_hostiles(mover);
+        battle
+            .initiative()
+            .iter()
+            .copied()
+            .filter(|&body| body != mover)
+            .filter(|&body| self.acts_for_hostiles(body) != mover_side)
+            .filter(|&body| !battle.reaction_spent(body))
+            .filter(|&body| self.creature_alive(body))
+            .filter(|&body| {
+                battle
+                    .cell_of(body)
+                    .is_some_and(|at| trigger(at) && reach::line_of_sight(&battle.board, at, cell))
+            })
+            .collect()
+    }
+
+    /// Runs the reactions `reactors` take against `mover`, and reports
+    /// whether `mover` may still do the thing that provoked them.
+    ///
+    /// **One door for both triggers.** A step and an invocation differ in
+    /// who they provoke and in what a stopped mover means, never in what a
+    /// reaction *is* — so the swing, the charge, the order, the streak and
+    /// the stopping rule are written once.
+    ///
+    /// The swing is free (`Swing::reaction`), so it cannot fumble: a
+    /// fumbled reaction could riposte, and a riposte is another swing that
+    /// could provoke again.
+    ///
+    /// **The loop stops the moment the mover is down or stalled.** A body
+    /// that has been stunned is not walking anywhere, and swinging at a
+    /// corpse would charge the rest of the pack a reaction for nothing.
+    pub(crate) fn provoke(&mut self, mover: Entity, reactors: Vec<Entity>) -> bool {
+        for reactor in reactors {
+            if !self.creature_alive(mover) || self.is_stunned(mover) {
+                return false;
+            }
+            // Re-read each time round: an earlier reaction can kill a
+            // reactor through a shared effect, and the fight can close
+            // under the whole loop.
+            let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+                return false;
+            };
+            let (Some(at), Some(to)) = (battle.cell_of(reactor), battle.cell_of(mover)) else {
+                continue;
+            };
+            if !self.creature_alive(reactor) {
+                continue;
+            }
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .spend_reaction(reactor);
+            let color = self
+                .world
+                .get::<crate::components::Glyph>(reactor)
+                .map(|g| g.color)
+                .unwrap_or(crate::components::GlyphColor::White);
+            // `tactical_attack`'s rule: pushed before the blow lands, so a
+            // body that dies to it still gets its streak drawn.
+            self.world
+                .resource_mut::<crate::resources::BoltQueue>()
+                .push(crate::resources::BoltCue {
+                    from: at,
+                    to,
+                    color,
+                });
+            let (move_name, _) = self.swing_move_at(reactor, Some(reach::distance(at, to)));
+            let range = self.natural_range_of(reactor);
+            let outcome = self.resolve_and_apply_attack(
+                reactor,
+                mover,
+                crate::battle::Swing::reaction(range),
+            );
+            // **Through the model's own line builder**, so a reaction that
+            // misses reads as a miss. A line written here would be a second
+            // vocabulary for the same four outcomes, and the one that drifts
+            // is the one that says a refused swing landed. The interrupt is
+            // named in the move rather than in a lead of its own, because
+            // both of that builder's forms — the player's and everybody
+            // else's — put the move where the parenthetical still reads.
+            let line = self.party_swing_line(reactor, &format!("{move_name} (interrupt)"), outcome);
+            // Whose news the line is, which is what a kind means here — a
+            // reaction is taken by both sides, so it cannot be one kind.
+            let kind = match self.world.get::<Hostile>(reactor).is_some() {
+                true => crate::resources::MessageKind::EnemyAttack,
+                false => crate::resources::MessageKind::PartyDamage,
+            };
+            self.log_swing(kind, outcome, line);
+        }
+        // A reaction can put the mover down, and a body left standing on the
+        // board at zero Integrity would keep its place in the order.
+        self.reap_tactical_dead(Some(mover));
+        // **Still on the board, not merely still alive.** A fatal reaction
+        // closes the fight from inside the reap, and a Forgiving player is
+        // rebooted by the tick that follows — so `creature_alive` alone
+        // answers `true` for a body that has no cell, and the caller walks
+        // on into a `TacticalBattle` that is no longer there.
+        self.world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| battle.cell_of(mover).is_some())
+            && self.creature_alive(mover)
+            && !self.is_stunned(mover)
     }
 
     /// Takes a body out of the fight without killing it: off the board, out
@@ -627,6 +805,15 @@ impl Game {
     /// indexes `actor_abilities`, which drops any id the `AbilityDb` cannot
     /// resolve — so that index is *not* a position in `Routines`, and a
     /// caller holding a def it found for itself must not have to invert one.
+    ///
+    /// **Invoking beside an enemy provokes, and the price is paid first.**
+    /// The order is the charge, then the reactions, then the effect — so a
+    /// routine that is cut off has still spent its Power and armed its
+    /// cooldown. That is a **fizzle and not a refusal**: every refusal lands
+    /// before anything is spent, above in `tactical_use_routine`, and this
+    /// is the rest interrupt's shape instead — the turn is gone, nothing is
+    /// handed back, and the line says so. `Decompile` is exempt, because a
+    /// capture is the one action whose whole cost is already the catalyst.
     pub(crate) fn run_tactical_routine(
         &mut self,
         actor: Entity,
@@ -641,6 +828,28 @@ impl Game {
         // written onto an entity the teardown has already cleaned up.
         self.arm_tactical_cooldown(actor, ability, cooldown_floor);
         self.spend_power(actor, abilities::routine_power_cost(ability));
+
+        // Below the charge and above the effect — the fizzle keeps what the
+        // charge took. A capture is exempt.
+        if !matches!(ability.effect, AbilityEffect::Decompile) {
+            let reactors = self.invoke_reactors(actor);
+            if !reactors.is_empty() && !self.provoke(actor, reactors) {
+                let line = format!(
+                    "{}'s {} is cut off.",
+                    self.creature_label(actor),
+                    ability.name
+                );
+                self.log(line);
+                // The tail the effect's own branches share: the action was
+                // taken, whatever it bought, and a reaction can have ended
+                // the fight under it.
+                if self.world.get_resource::<TacticalBattle>().is_some() {
+                    self.world.resource_mut::<TacticalBattle>().mark_acted();
+                }
+                self.hand_on_turn(actor, round_before);
+                return;
+            }
+        }
 
         let name = self.creature_label(actor);
         // A capture is aimed at a body rather than resolved over an area:

@@ -77,13 +77,35 @@ pub struct Swing {
     /// a weapon's accuracy belongs to the *wielder* and rides `Combatant`,
     /// where it applies to every swing they make.
     pub accuracy: i32,
+    /// Whether this swing is a *free* one — taken outside its owner's turn,
+    /// and so never able to fumble.
+    ///
+    /// **The Opening rung's non-recursion rule, with a second caller.** A
+    /// fumbled free swing would riposte, and a riposte is another swing that
+    /// could itself provoke: one bad roll chains into an unbounded exchange.
+    /// The polarity is the Default-safe one — `false` is an ordinary swing,
+    /// so a `Swing::default()` written later cannot silently switch the
+    /// fumble ladder off.
+    pub free: bool,
 }
 
 impl Swing {
     /// A swing with no accuracy of its own: every basic attack, and every
     /// defender profile built for an Opening rung's riposte.
     pub fn plain(range: DamageRange) -> Self {
-        Swing { range, accuracy: 0 }
+        Swing {
+            range,
+            accuracy: 0,
+            free: false,
+        }
+    }
+
+    /// The swing a reaction takes: plain, and free, so it cannot fumble.
+    pub fn reaction(range: DamageRange) -> Self {
+        Swing {
+            free: true,
+            ..Swing::plain(range)
+        }
     }
 }
 
@@ -212,6 +234,20 @@ pub fn resolve_attack(
     resolve_attack_inner(attacker, defender, rng, true)
 }
 
+/// `resolve_attack` for a swing taken outside its owner's turn: the fumble
+/// band is closed, so it lands, crits or misses and nothing else.
+///
+/// **Two callers and one rule** — the Opening rung's riposte below, and a
+/// reaction through `Swing::free`. Named rather than spelled `false` at each
+/// of them, because what the flag means is not readable at the call site.
+pub fn resolve_free_attack(
+    attacker: Combatant,
+    defender: Combatant,
+    rng: &mut impl rand::Rng,
+) -> AttackOutcome {
+    resolve_attack_inner(attacker, defender, rng, false)
+}
+
 /// `allow_fumble: false` is the Opening rung's non-recursion guard — see
 /// `fumble_rung`.
 fn resolve_attack_inner(
@@ -272,7 +308,7 @@ fn fumble_rung(
         // without it one bad roll chains into an unbounded exchange, and the
         // deepest rung stops being the run-ender the ladder is shaped to
         // avoid. `the_opening_rung_does_not_recurse` pins it.
-        let riposte = resolve_attack_inner(defender, attacker, rng, false);
+        let riposte = resolve_free_attack(defender, attacker, rng);
         return FumbleRung::Opening {
             dmg: riposte.damage_to_defender(),
         };
@@ -524,6 +560,14 @@ pub struct SpecialOption {
     /// rather than only reporting it through `unavailable` once it is too
     /// late to choose differently. 0 means no cooldown at all.
     pub cooldown: u32,
+    /// How many bodies would react to this being invoked from where the
+    /// actor stands — a battle map's question, and 0 in the group model,
+    /// which has no reach to leave and no cell to invoke from.
+    ///
+    /// A field rather than a clause appended to `detail`: the row is laid
+    /// out in columns, and a figure folded into prose is the substring that
+    /// pushes a row off the end of its box.
+    pub provokes: usize,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

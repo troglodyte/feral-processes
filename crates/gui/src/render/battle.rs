@@ -578,8 +578,16 @@ fn special_row(index: usize, option: &SpecialOption) -> String {
         0 => String::new(),
         rounds => format!("{rounds} rd — "),
     };
+    // The second price, and beside the first for that reason: invoking
+    // beside an enemy is swung at, and a player choosing between two ready
+    // routines is choosing what this turn costs. Zero on every row in the
+    // group model, which has nothing to provoke, so no row there moves.
+    let provokes = match option.provokes {
+        0 => String::new(),
+        n => format!("provokes {n} — "),
+    };
     format!(
-        "[{}] {} — {price}{}{reason}",
+        "[{}] {} — {price}{provokes}{}{reason}",
         index + 1,
         option.name,
         option.detail,
@@ -997,6 +1005,7 @@ mod tests {
                 sweeps_party: false,
                 unavailable: unavailable.map(str::to_string),
                 cooldown,
+                provokes: 0,
             }
         }
 
@@ -1007,6 +1016,18 @@ mod tests {
         assert_eq!(
             special_row(2, &option(2, Some("2 more rounds"))),
             "[3] Cascade Overflow — 2 rd — Damage a whole group (2 more rounds)"
+        );
+        // The second price, and only on a battle map: the group model
+        // leaves `provokes` at zero, so no row there gains a column.
+        assert_eq!(
+            special_row(
+                0,
+                &SpecialOption {
+                    provokes: 2,
+                    ..option(2, None)
+                }
+            ),
+            "[1] Cascade Overflow — 2 rd — provokes 2 — Damage a whole group"
         );
         // Decompile is the one battle routine that arms nothing, and a
         // price of zero is worse than no price at all — it reads as a

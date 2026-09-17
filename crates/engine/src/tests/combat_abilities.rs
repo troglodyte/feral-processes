@@ -2570,6 +2570,7 @@ fn a_routines_accuracy_aims_that_swing_and_nothing_else() {
     let aimed = game.combatant_profile(
         player,
         crate::battle::Swing {
+            free: false,
             range: band,
             accuracy: 40,
         },

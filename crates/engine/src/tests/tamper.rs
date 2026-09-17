@@ -2086,8 +2086,13 @@ fn a_cold_profiled_hostile_does_what_its_forecast_said() {
             ForecastAction::Swing => {
                 swings += 1;
                 let bolts = game.take_bolts();
+                // **The subject's own streak, not the first in the queue.**
+                // A walk that leaves a hostile's reach provokes, and a
+                // reaction's streak is pushed from the *reactor* before the
+                // swing this is asking about — so the cue to read is the
+                // first one leaving the cell the subject ended on.
                 assert_eq!(
-                    bolts.first().map(|b| b.to),
+                    bolts.iter().find(|b| b.from == end).map(|b| b.to),
                     forecast.target,
                     "board {i}: the swing landed somewhere the forecast did not name"
                 );

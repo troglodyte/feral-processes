@@ -169,6 +169,11 @@ pub struct TacticalView {
     pub round: u32,
     /// Every cell the acting body could still reach, its own included.
     pub reachable: Vec<(i32, i32)>,
+    /// The subset of `reachable` the acting body cannot walk to without
+    /// being swung at on the way — `Game::walk_risk`'s own answer, so the
+    /// tint and the AI's scoring cannot come to disagree about which cells
+    /// cost something.
+    pub provoking: Vec<(i32, i32)>,
     /// Every Hallucination fake on the board, both sides'.
     pub decoys: Vec<DecoyView>,
 }
@@ -199,6 +204,7 @@ impl TacticalView {
             player_turn: false,
             allowance: 0,
             reachable: Vec::new(),
+            provoking: Vec::new(),
             order,
             decoys: Vec::new(),
             ..self
@@ -273,11 +279,23 @@ impl Game {
         let allowance = actor
             .map(|a| self.movement_allowance(a).saturating_sub(spent))
             .unwrap_or(0);
-        let reachable = actor
+        let reachable: Vec<(i32, i32)> = actor
             .map(|a| {
                 let battle = self.world.resource::<TacticalBattle>();
                 reach::movement_field(battle, a, allowance)
                     .into_keys()
+                    .collect()
+            })
+            .unwrap_or_default();
+        // A *call* into the term the walk scoring reads, never a second
+        // reading of the geometry: what the player is shown and what a
+        // hostile prices are the same figure.
+        let provoking: Vec<(i32, i32)> = actor
+            .map(|a| {
+                reachable
+                    .iter()
+                    .copied()
+                    .filter(|&cell| self.walk_risk(a, cell) > 0.0)
                     .collect()
             })
             .unwrap_or_default();
@@ -292,6 +310,7 @@ impl Game {
             acted,
             round,
             reachable,
+            provoking,
             decoys,
         })
     }

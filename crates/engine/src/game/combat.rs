@@ -1416,7 +1416,24 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return Vec::new();
         };
+        // Asked once and not per row: every routine but a capture provokes
+        // the same bodies, because what provokes is *invoking* and not what
+        // was invoked.
+        let reactors = self.invoke_reactors(actor).len();
+        let abilities = self.actor_abilities(actor);
         self.special_options_for(actor)
+            .into_iter()
+            .map(|option| SpecialOption {
+                // A capture is exempt here exactly as it is in
+                // `run_tactical_routine` — the row must not promise a cost
+                // the act does not charge.
+                provokes: match abilities.get(option.index).map(|a| &a.effect) {
+                    Some(crate::abilities::AbilityEffect::Decompile) => 0,
+                    _ => reactors,
+                },
+                ..option
+            })
+            .collect()
     }
 
     /// One body's runnable routines, whichever model asked.
@@ -1437,6 +1454,9 @@ impl Game {
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),
                 cooldown: ability.cooldown,
+                // Filled in by `tactical_routine_options`, the only caller
+                // with a board to ask. The group model leaves it at zero.
+                provokes: 0,
             })
             .collect()
     }

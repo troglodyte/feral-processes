@@ -5113,6 +5113,18 @@ pub const TACTICAL_AI_REACH_SCORE: f32 = 40.0;
 pub const TACTICAL_AI_CLOSING_WEIGHT: f32 = 1.0;
 pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
 
+/// What a point of expected reaction damage is worth against the three
+/// terms above, when a hostile weighs a cell it would have to walk out of
+/// somebody's reach to take.
+///
+/// One, so a step that costs an Integrity is worth exactly one step of
+/// closing. Deliberately small against `TACTICAL_AI_REACH_SCORE`: a body
+/// should not be talked out of the approach it came for by the swing it
+/// will take on the way, only out of repositioning that buys it little.
+/// Walking *toward* a body provokes nothing, so this term never slows a
+/// charge — it prices disengaging and circling.
+pub const TACTICAL_AI_REACTION_WEIGHT: f32 = 1.0;
+
 /// How much a hostile's choice of cell is allowed to wander off the best
 /// one, as `policy::sample_scored`'s softmax temperature.
 ///

@@ -54,6 +54,15 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-17 — The arena cannot see opportunity attacks](2026-09-17-tactical-reactions-arena-blind.md)
+  — `dev-arenas/tactical-full-group.ron` is identical to every digit before
+  and after reactions shipped, because **zero fire in fifty reps**: the
+  planner holds its ground once in reach (`cell_merit`'s reach bonus) and
+  nothing in that scenario invokes in melee, so neither trigger is reachable
+  by the AI. The feature's weight lands on the player, who is the only body
+  that disengages at will — so a reaction tuned "because the arena says it
+  does nothing" would be tuned against an instrument blind to it.
+
 - [2026-09-10 — What a wide swing is worth against the single-target ladder](2026-09-10-weapon-reach-throughput.md)
   — the two shipped reach weapons are priced **below** the ladder on band and
   still clear a fight ~**9%** faster than it, at both tiers: 5.8 rounds

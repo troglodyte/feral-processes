@@ -1576,6 +1576,7 @@ impl Game {
                         actor,
                         recipient,
                         battle::Swing {
+                            free: false,
                             range: band,
                             accuracy: ability.accuracy,
                         },
@@ -1615,6 +1616,7 @@ impl Game {
                         actor,
                         recipient,
                         battle::Swing {
+                            free: false,
                             range: band,
                             accuracy: ability.accuracy,
                         },

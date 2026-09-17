@@ -153,6 +153,16 @@ pub struct TacticalBattle {
     /// Every decoy a Hallucination has placed and nobody has struck through
     /// yet, in placement order — `bodies`' reason for a `Vec`.
     decoys: Vec<Decoy>,
+    /// Who has spent their reaction and not yet had it back — `bodies`'
+    /// reason for a `Vec` again, and a fight holds at most thirteen.
+    ///
+    /// **Refunded at a body's own turn, which is `begin_turn` and not the
+    /// hand-on.** The cursor moves in two places and only one of them is
+    /// `end_turn`: a body that dies on the last rung starts the next round
+    /// from inside `remove`, and a refund hung off the hand-on would miss
+    /// whoever the wrap landed on — one body unable to react for a round,
+    /// for a reason nothing on screen could explain.
+    reacted: Vec<Entity>,
 }
 
 impl TacticalBattle {
@@ -171,6 +181,20 @@ impl TacticalBattle {
             round: 1,
             outmatched: false,
             decoys: Vec::new(),
+            reacted: Vec::new(),
+        }
+    }
+
+    /// Whether `body` has already spent its reaction this round.
+    pub fn reaction_spent(&self, body: Entity) -> bool {
+        self.reacted.contains(&body)
+    }
+
+    /// Charges `body`'s reaction. Idempotent, so a caller that swings twice
+    /// in one provocation cannot hand a body two budgets back.
+    pub(crate) fn spend_reaction(&mut self, body: Entity) {
+        if !self.reacted.contains(&body) {
+            self.reacted.push(body);
         }
     }
 
@@ -231,16 +255,25 @@ impl TacticalBattle {
     /// A body that dies on somebody else's turn costs the order nothing.
     pub fn remove(&mut self, body: Entity) {
         self.bodies.retain(|(e, _)| *e != body);
+        self.reacted.retain(|e| *e != body);
         let Some(idx) = self.initiative.iter().position(|&e| e == body) else {
             return;
         };
         self.initiative.remove(idx);
+        let was_acting = idx == self.turn;
         if idx < self.turn {
             self.turn -= 1;
-        } else if idx == self.turn {
+        }
+        // **The wrap comes first, and `begin_turn` after it.** `begin_turn`
+        // refunds the reaction of whoever is now acting, so it has to run
+        // with the cursor already inside the order — taking the *last* body
+        // out leaves `turn == len` until the wrap, and a refund read from
+        // there names nobody. The three cursor fields it clears do not care
+        // which order they are reset in, which is why this was free.
+        self.wrap();
+        if was_acting {
             self.begin_turn();
         }
-        self.wrap();
     }
 
     /// Splices `body` into the turn order immediately behind the cursor.
@@ -336,10 +369,20 @@ impl TacticalBattle {
         self.begin_turn();
     }
 
+    /// The one place a body's turn starts — `end_turn`, `remove` and
+    /// `set_initiative` all land here, which is what makes it the honest
+    /// home for the reaction refund.
     fn begin_turn(&mut self) {
         self.spent = 0;
         self.acted = false;
         self.walk = None;
+        // **Refunded at the start of its own turn, not at the round.** A
+        // body that reacts early in a round gets its budget back when its
+        // own turn comes round and may react again later in the same one —
+        // standing next to an enemy costs the mover, not the clock.
+        if let Some(actor) = self.actor() {
+            self.reacted.retain(|&e| e != actor);
+        }
     }
 
     /// Brings the cursor back inside the order, counting a round each time

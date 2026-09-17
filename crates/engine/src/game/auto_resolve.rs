@@ -22,6 +22,17 @@ impl Game {
     /// Plays the open fight out to its end with no pacing, whichever combat
     /// model holds it, and reports whether it closed.
     ///
+    /// `auto_resolve_battle_with` with a hook that does nothing — see there
+    /// for the loop itself. This door is every caller but one: the arena's
+    /// `[R]` half needs to hear each round as it happens, and is the reason
+    /// the hook exists at all.
+    pub fn auto_resolve_battle(&mut self) -> AutoResolve {
+        self.auto_resolve_battle_with(|_| {})
+    }
+
+    /// `auto_resolve_battle`, calling `after_round` once for every round
+    /// that actually resolved — including the one that ends the fight.
+    ///
     /// **Which model is open is read off `TacticalBattle`'s presence, not
     /// passed in**: a `TacticalBattle` resource means a battle map, and its
     /// absence with a fight open means the group model. Each step is that
@@ -43,7 +54,17 @@ impl Game {
     /// `None` — and reading that as round 0 would corrupt the cap
     /// arithmetic (a `u32` underflow against `start`) instead of simply
     /// never being reached, because the stop check above already returned.
-    pub fn auto_resolve_battle(&mut self) -> AutoResolve {
+    ///
+    /// **The hook fires on a round, never on a step**, which is not the
+    /// same thing: `battle_auto_round` reports a step *as* a round, so the
+    /// two agree for the group model, but `tactical_drive_turn` reports a
+    /// step for every body's *turn*, and a turn is not a round. Gating the
+    /// call on `fight_round()` actually moving (or the fight ending inside
+    /// the step) is `run_tactical_rep`'s own rule for the same reason: a
+    /// `Watch` counts one call as one round, and the arena's published
+    /// numbers rest on this loop counting the same way whether the fight
+    /// was paced by hand or played out here in one call.
+    pub fn auto_resolve_battle_with(&mut self, mut after_round: impl FnMut(&Game)) -> AutoResolve {
         let Some(start) = self.fight_round() else {
             return AutoResolve::Finished;
         };
@@ -73,6 +94,9 @@ impl Game {
                 } else {
                     AutoResolve::Stalled
                 };
+            }
+            if !self.has_active_battle() || self.fight_round() != Some(round) {
+                after_round(self);
             }
         }
     }

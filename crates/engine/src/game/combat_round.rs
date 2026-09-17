@@ -221,12 +221,16 @@ impl Game {
     /// it is exactly the drift `CLAUDE.md`'s "a call, not a copy" rule
     /// forbids.
     ///
-    /// `false` covers two cases a caller cannot tell apart from here and
+    /// `false` covers three cases a caller cannot tell apart from here and
     /// does not need to: `battle_plan_remaining` refused because the fight
-    /// ended between the check and the call, or the round still is not
-    /// ready once every commandable slot is filled (a fork or an ally
-    /// nobody may plan for). Either way there is nothing left this step can
-    /// do.
+    /// ended between the check and the call, the round still is not ready
+    /// once every commandable slot is filled (a fork or an ally nobody may
+    /// plan for), or `battle_resolve_round` found `is_game_over` already set
+    /// and did nothing — a Permadeath game over left the fight open, which
+    /// `auto_resolve_battle`'s own stop check exists to catch (see
+    /// `game::auto_resolve`). Read off whether the round actually advanced
+    /// rather than off `battle_resolve_round`'s own return, since that third
+    /// case is a call that ran and changed nothing.
     pub(crate) fn battle_auto_round(&mut self) -> bool {
         // An `Err` here means the battle ended between the caller's own
         // stop check and this call — the fight being over, not a bug to
@@ -240,8 +244,9 @@ impl Game {
         if !self.battle_round_ready() {
             return false;
         }
+        let before = self.fight_round();
         self.battle_resolve_round();
-        true
+        self.fight_round() != before
     }
 
     /// Puts `ability` on cooldown for `entity`, if it has one to arm.

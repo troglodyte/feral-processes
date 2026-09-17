@@ -200,15 +200,21 @@ impl TacticalBattle {
 
     /// Puts a body on a cell, or refuses.
     ///
-    /// Refused when the cell cannot be stood on, when somebody is already
-    /// there, or when this body is already on the board — the last so a
-    /// double placement is a refusal rather than a second entry that
-    /// `cell_of` would answer from and `occupant` would not.
+    /// Refused when any cell of the footprint anchored there cannot be stood
+    /// on, when somebody already holds one, or when this body is already on
+    /// the board — the last so a double placement is a refusal rather than a
+    /// second entry that `cell_of` would answer from and `occupant` would
+    /// not.
     pub fn place(&mut self, body: Entity, cell: (i32, i32)) -> bool {
-        if !self.board.walkable(cell.0, cell.1)
-            || self.occupant(cell).is_some()
-            || self.cell_of(body).is_some()
-        {
+        if self.cell_of(body).is_some() {
+            return false;
+        }
+        let footprint = self.footprint_cells(body, cell);
+        let blocked: Vec<(i32, i32)> = self
+            .bodies()
+            .flat_map(|(other, _)| self.cells_of(other))
+            .collect();
+        if !footprint_clear(&self.board, &footprint, &blocked) {
             return false;
         }
         self.bodies.push((body, cell));
@@ -222,25 +228,70 @@ impl TacticalBattle {
             .map(|(_, cell)| *cell)
     }
 
+    /// The body whose footprint contains `cell`, if any.
     pub fn occupant(&self, cell: (i32, i32)) -> Option<Entity> {
         self.bodies
             .iter()
-            .find(|(_, at)| *at == cell)
-            .map(|(e, _)| *e)
+            .map(|&(e, _)| e)
+            .find(|&e| self.cells_of(e).contains(&cell))
+    }
+
+    /// How many cells wide (and tall) `body`'s footprint is — one without a
+    /// `Squad`.
+    ///
+    /// **Task 4's whole component lookup lands in this one function.** Every
+    /// reader of a body's footprint goes through this or
+    /// [`cells_of`](Self::cells_of) rather than assuming one cell, so
+    /// widening a formation's footprint is the only place that has to
+    /// change.
+    pub fn footprint_of(&self, _body: Entity) -> u8 {
+        1
+    }
+
+    /// The cells `body`'s footprint would cover, anchored top-left at
+    /// `anchor` — [`cells_of`](Self::cells_of)'s general form, usable before
+    /// a body is actually standing there. `place`'s own refusal needs to ask
+    /// about a cell nobody occupies yet.
+    fn footprint_cells(&self, body: Entity, anchor: (i32, i32)) -> Vec<(i32, i32)> {
+        let side = i32::from(self.footprint_of(body));
+        (0..side)
+            .flat_map(|dy| (0..side).map(move |dx| (anchor.0 + dx, anchor.1 + dy)))
+            .collect()
+    }
+
+    /// Every cell `body`'s footprint covers right now, anchored at
+    /// [`cell_of`](Self::cell_of) — empty for a body not on the board, the
+    /// same "off the board reaches nothing" answer every other reader here
+    /// gives.
+    pub fn cells_of(&self, body: Entity) -> Vec<(i32, i32)> {
+        match self.cell_of(body) {
+            Some(anchor) => self.footprint_cells(body, anchor),
+            None => Vec::new(),
+        }
     }
 
     /// Moves a placed body, or refuses. Standing still is allowed.
+    ///
+    /// Refused when any cell of the footprint anchored at `cell` cannot be
+    /// stood on, or is held by a body other than this one.
     pub fn move_to(&mut self, body: Entity, cell: (i32, i32)) -> bool {
-        if !self.board.walkable(cell.0, cell.1) {
+        if self.cell_of(body).is_none() {
             return false;
         }
-        match self.occupant(cell) {
-            Some(other) if other != body => return false,
-            _ => {}
-        }
-        let Some(slot) = self.bodies.iter_mut().find(|(e, _)| *e == body) else {
+        let footprint = self.footprint_cells(body, cell);
+        let blocked: Vec<(i32, i32)> = self
+            .bodies()
+            .filter(|&(other, _)| other != body)
+            .flat_map(|(other, _)| self.cells_of(other))
+            .collect();
+        if !footprint_clear(&self.board, &footprint, &blocked) {
             return false;
-        };
+        }
+        let slot = self
+            .bodies
+            .iter_mut()
+            .find(|(e, _)| *e == body)
+            .expect("checked above: cell_of(body) answered Some");
         slot.1 = cell;
         true
     }
@@ -441,10 +492,24 @@ impl TacticalBattle {
     }
 }
 
+/// Whether every cell of `footprint` can be stood on: walkable, and none of
+/// them in `blocked` — `place`/`move_to`'s shared refusal.
+///
+/// A free function rather than inlined at each call site, so its own test
+/// can hand it a hand-built multi-cell footprint with no `Squad` behind
+/// it — `footprint_of` hardcodes one cell today, which is what makes this
+/// the only way to pin "any overlapping cell refuses the whole placement"
+/// ahead of task 4 giving a body a wider one.
+fn footprint_clear(board: &Board, footprint: &[(i32, i32)], blocked: &[(i32, i32)]) -> bool {
+    footprint
+        .iter()
+        .all(|&(x, y)| board.walkable(x, y) && !blocked.contains(&(x, y)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tactical::map::{BattleSpec, generate};
+    use crate::tactical::map::{BattleSpec, Board, generate};
     use crate::world::Biome;
     use bevy_ecs::world::World;
 
@@ -710,5 +775,46 @@ mod tests {
         }
         let order: Vec<Entity> = battle.bodies().map(|(e, _)| e).collect();
         assert_eq!(order, bodies);
+    }
+
+    /// A footprint of one is exactly the anchor `cell_of` already answers —
+    /// the whole of `footprint_of`'s hardcoded rule until task 4 adds
+    /// `Squad`.
+    #[test]
+    fn a_bodys_cells_are_its_anchor_alone_without_a_squad() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.place(bodies[0], cell);
+        assert_eq!(battle.footprint_of(bodies[0]), 1);
+        assert_eq!(battle.cells_of(bodies[0]), vec![cell]);
+    }
+
+    #[test]
+    fn a_body_not_on_the_board_has_no_cells() {
+        let (battle, bodies) = fight();
+        assert!(battle.cells_of(bodies[0]).is_empty());
+    }
+
+    /// Two bodies cannot be placed overlapping — `footprint_clear`'s own
+    /// rule, pinned on a hand-built two-cell footprint since no `Squad`
+    /// exists yet to seat a real one. Deleting the rule (checking only the
+    /// footprint's first cell) would still pass a footprint whose *first*
+    /// cell is clear, so the blocked cell here is the footprint's second.
+    #[test]
+    fn a_footprint_refuses_a_cell_any_other_body_already_holds() {
+        let board = Board::from_rows(&["...", "...", "..."]);
+        let blocked = vec![(1, 1)];
+        assert!(
+            !footprint_clear(&board, &[(0, 0), (1, 1)], &blocked),
+            "a footprint overlapping an occupied cell was accepted"
+        );
+        assert!(footprint_clear(&board, &[(0, 0), (0, 1)], &blocked));
+    }
+
+    #[test]
+    fn a_footprint_refuses_ground_any_of_its_cells_cannot_stand_on() {
+        let board = Board::from_rows(&["..X", "...", "..."]);
+        assert!(!footprint_clear(&board, &[(0, 0), (2, 0)], &[]));
+        assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &[]));
     }
 }

@@ -92,8 +92,8 @@ pub fn movement_field(
     //
     // **Every cell of every other body**, via `cells_of` rather than
     // `cell_of` — a wall the size of a footprint, not just its anchor.
-    // Footprint hardcodes to one without a `Squad`, so this is the same set
-    // `cell_of` built until task 4 gives a body a wider one.
+    // Footprint stays one cell without a `Squad`, so this is the same set
+    // `cell_of` always built for an ordinary body.
     let occupied: HashSet<(i32, i32)> = battle
         .bodies()
         .flat_map(|(other, _)| battle.cells_of(other))

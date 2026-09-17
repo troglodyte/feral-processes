@@ -11,12 +11,12 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Player, Stats};
+use crate::components::{Hostile, Player, Squad, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
-use crate::tuning::TACTICAL_MELEE_RANGE;
+use crate::tuning::{FORMATIONS, TACTICAL_MELEE_RANGE};
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -155,15 +155,20 @@ impl Game {
         self.world.get_resource::<TacticalBattle>()?.actor()
     }
 
-    /// How many actions `body` gets on its turn — one without a `Squad`,
-    /// which is every body today. The player's party always gets one.
+    /// How many actions `body` gets on its turn — a formation's `actions`
+    /// for a `Squad`, one otherwise. The player's party always gets one,
+    /// since a companion is never a formation row.
     ///
-    /// `footprint_of`'s door on the `Game` side: task 4 adds the arm that
-    /// reads a formation's `actions` off `components::Squad`, and every
-    /// reader of "how many actions" goes through this rather than assuming
-    /// one.
-    pub fn actions_per_turn(&self, _body: Entity) -> u8 {
-        1
+    /// `footprint_of`'s door on the `Game` side: `TacticalBattle` holds no
+    /// `World` to look a `Squad` up with itself, so `open_tactical_battle_at`
+    /// calls this once, at seat time, and hands the answer to
+    /// `TacticalBattle::set_shape` for `begin_turn` to read back every
+    /// round.
+    pub fn actions_per_turn(&self, body: Entity) -> u8 {
+        self.world
+            .get::<Squad>(body)
+            .and_then(|s| FORMATIONS.get(s.formation))
+            .map_or(1, |f| f.actions)
     }
 
     /// Moves the acting body one cell.
@@ -474,8 +479,9 @@ impl Game {
             return false;
         };
         // `gap` rather than `distance`, and both bodies' whole footprints
-        // rather than their anchors alone — one cell each today, without a
-        // `Squad`, so this is the same range test until task 4.
+        // rather than their anchors alone — one cell each without a
+        // `Squad`, so an ordinary swing reads exactly the same range test
+        // it always did.
         let actor_cells = battle.cells_of(actor);
         let target_cells = battle.cells_of(target);
         if actor == target || reach::gap(&actor_cells, &target_cells) > self.swing_range(actor) {

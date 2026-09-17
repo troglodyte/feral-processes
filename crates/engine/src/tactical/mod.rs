@@ -120,9 +120,9 @@ pub struct TacticalBattle {
     /// `Game::movement_allowance`.
     spent: u32,
     /// How many of the acting body's actions this turn are unspent — one
-    /// without a `Squad`, task 4's whole formation lookup. The turn ends
-    /// once this reaches zero, so it is only ever read between an action
-    /// landing and the turn being handed on.
+    /// without a `Squad`. The turn ends once this reaches zero, so it is
+    /// only ever read between an action landing and the turn being handed
+    /// on. Set from `shapes` in `begin_turn`.
     actions_left: u8,
     /// The cells the acting body has committed to walking and has not walked
     /// yet, in the order it will enter them.
@@ -165,6 +165,24 @@ pub struct TacticalBattle {
     /// whoever the wrap landed on — one body unable to react for a round,
     /// for a reason nothing on screen could explain.
     reacted: Vec<Entity>,
+    /// A body's shape on the board — footprint and actions per turn —
+    /// written once, when it is seated (`set_shape`), and absent for an
+    /// ordinary body.
+    ///
+    /// `TacticalBattle` holds no `World`, so `footprint_of` and `begin_turn`
+    /// cannot resolve a `components::Squad` themselves; they read whatever
+    /// the caller who *does* have one (`Game::open_tactical_battle_at`)
+    /// told them at seat time instead. A `HashMap` rather than a fourth
+    /// parallel `Vec`, for `decompile_attempts`' reason: both are keyed
+    /// lookups a body's own turn reads, never walked in fight order.
+    shapes: HashMap<Entity, BodyShape>,
+}
+
+/// One entry of `TacticalBattle::shapes` — see that field's doc.
+#[derive(Clone, Copy, Debug)]
+struct BodyShape {
+    footprint: u8,
+    actions: u8,
 }
 
 impl TacticalBattle {
@@ -184,6 +202,7 @@ impl TacticalBattle {
             outmatched: false,
             decoys: Vec::new(),
             reacted: Vec::new(),
+            shapes: HashMap::new(),
         }
     }
 
@@ -239,15 +258,23 @@ impl TacticalBattle {
     }
 
     /// How many cells wide (and tall) `body`'s footprint is — one without a
-    /// `Squad`.
+    /// `Squad`, read out of `shapes` — see that field's doc for why this
+    /// cannot ask a `Squad` component itself.
     ///
-    /// **Task 4's whole component lookup lands in this one function.** Every
-    /// reader of a body's footprint goes through this or
+    /// Every reader of a body's footprint goes through this or
     /// [`cells_of`](Self::cells_of) rather than assuming one cell, so
     /// widening a formation's footprint is the only place that has to
     /// change.
-    pub fn footprint_of(&self, _body: Entity) -> u8 {
-        1
+    pub fn footprint_of(&self, body: Entity) -> u8 {
+        self.shapes.get(&body).map_or(1, |s| s.footprint)
+    }
+
+    /// Records `body`'s shape for the rest of the fight — its footprint and
+    /// how many actions it gets a turn. Called once, when it is seated
+    /// (`Game::open_tactical_battle_at`), never again: a squad keeps its
+    /// formation to the end whatever its Integrity.
+    pub(crate) fn set_shape(&mut self, body: Entity, footprint: u8, actions: u8) {
+        self.shapes.insert(body, BodyShape { footprint, actions });
     }
 
     /// The cells `body`'s footprint would cover, anchored top-left at
@@ -255,10 +282,7 @@ impl TacticalBattle {
     /// a body is actually standing there. `place`'s own refusal needs to ask
     /// about a cell nobody occupies yet.
     fn footprint_cells(&self, body: Entity, anchor: (i32, i32)) -> Vec<(i32, i32)> {
-        let side = i32::from(self.footprint_of(body));
-        (0..side)
-            .flat_map(|dy| (0..side).map(move |dx| (anchor.0 + dx, anchor.1 + dy)))
-            .collect()
+        footprint_cells_at(anchor, self.footprint_of(body))
     }
 
     /// Every cell `body`'s footprint covers right now, anchored at
@@ -458,15 +482,13 @@ impl TacticalBattle {
     /// `set_initiative` all land here, which is what makes it the honest
     /// home for the reaction refund.
     ///
-    /// **`actions_left` is hardcoded to one, `footprint_of`'s reason**:
-    /// there is no `Squad` yet to ask. Unlike `footprint_of`, task 4 cannot
-    /// just fill this function in — `TacticalBattle` holds no `World` to
-    /// look a formation's `actions` up with, so wiring `Game::
-    /// actions_per_turn` in here needs the reset moved to a caller that has
-    /// one, or the value threaded through as a parameter.
+    /// **`actions_left` is read out of `shapes`, `footprint_of`'s door
+    /// again** — one for a body `set_shape` never touched.
     fn begin_turn(&mut self) {
         self.spent = 0;
-        self.actions_left = 1;
+        self.actions_left = self
+            .actor()
+            .map_or(1, |a| self.shapes.get(&a).map_or(1, |s| s.actions));
         self.walk = None;
         // **Refunded at the start of its own turn, not at the round.** A
         // body that reacts early in a round gets its budget back when its
@@ -533,14 +555,23 @@ impl TacticalBattle {
     }
 }
 
+/// The cells an anchor-top-left footprint of `side` cells covers —
+/// [`TacticalBattle::footprint_cells`](TacticalBattle::footprint_cells)'s
+/// pure grid math, pulled out to a free function so `deploy` (which never
+/// sees an `Entity` at all) can seat a squad's clear NxN block without
+/// reaching back into a body's own shape lookup.
+pub(crate) fn footprint_cells_at(anchor: (i32, i32), side: u8) -> Vec<(i32, i32)> {
+    let side = i32::from(side);
+    (0..side)
+        .flat_map(|dy| (0..side).map(move |dx| (anchor.0 + dx, anchor.1 + dy)))
+        .collect()
+}
+
 /// Whether every cell of `footprint` can be stood on: walkable, and none of
 /// them in `blocked` — `place`/`move_to`'s shared refusal.
 ///
 /// A free function rather than inlined at each call site, so its own test
-/// can hand it a hand-built multi-cell footprint with no `Squad` behind
-/// it — `footprint_of` hardcodes one cell today, which is what makes this
-/// the only way to pin "any overlapping cell refuses the whole placement"
-/// ahead of task 4 giving a body a wider one.
+/// can hand it a hand-built multi-cell footprint with no `Squad` behind it.
 fn footprint_clear(board: &Board, footprint: &[(i32, i32)], blocked: &[(i32, i32)]) -> bool {
     footprint
         .iter()
@@ -857,5 +888,41 @@ mod tests {
         let board = Board::from_rows(&["..X", "...", "..."]);
         assert!(!footprint_clear(&board, &[(0, 0), (2, 0)], &[]));
         assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &[]));
+    }
+
+    /// `set_shape` is what `footprint_of` and `begin_turn` read — task 4's
+    /// whole component lookup lands at the caller instead, since
+    /// `TacticalBattle` holds no `World` to ask a `Squad` component itself.
+    #[test]
+    fn a_seated_shape_is_what_footprint_of_and_begin_turn_read() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.place(bodies[0], cell);
+        battle.set_shape(bodies[0], 2, 2);
+        assert_eq!(battle.footprint_of(bodies[0]), 2);
+        assert_eq!(
+            battle.cells_of(bodies[0]).len(),
+            4,
+            "a footprint of 2 covers a 2x2 block"
+        );
+
+        battle.set_initiative(vec![bodies[0]]);
+        assert_eq!(
+            battle.actions_left(),
+            2,
+            "begin_turn (run by set_initiative) must read the seated shape"
+        );
+    }
+
+    /// A body `set_shape` never touched still reads footprint 1, action 1 —
+    /// the default this whole feature must leave alone.
+    #[test]
+    fn an_unshaped_body_keeps_the_ordinary_defaults() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.place(bodies[0], cell);
+        battle.set_initiative(vec![bodies[0]]);
+        assert_eq!(battle.footprint_of(bodies[0]), 1);
+        assert_eq!(battle.actions_left(), 1);
     }
 }

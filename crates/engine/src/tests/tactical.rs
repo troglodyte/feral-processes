@@ -4311,3 +4311,117 @@ mod squads {
         );
     }
 }
+
+/// A surviving squad hands its own Integrity fraction back to its members
+/// and disbands, whichever way the fight ends alive under it: it walks off
+/// the board itself, or the fight ends around it because the player jacked
+/// out or went down.
+mod disbanding {
+    use super::*;
+
+    /// A 9-of-a-kind squad at exactly half Integrity, still on the board.
+    fn squad_at_half(game: &mut Game) -> (Entity, Vec<Entity>) {
+        let pack = tactical_pack(game, 9, 10);
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        {
+            let mut stats = game.world.get_mut::<Stats>(squad).unwrap();
+            stats.hp = stats.max_hp / 2;
+        }
+        let members = game.world.get::<Squad>(squad).unwrap().members.clone();
+        (squad, members)
+    }
+
+    /// A walkable block on the western edge wide enough for `footprint` —
+    /// `western_edge`'s general form, since a single free cell there is not
+    /// enough room for a squad's whole footprint.
+    fn footprint_western_edge(game: &Game, footprint: u8) -> (i32, i32) {
+        let battle = game.world.resource::<TacticalBattle>();
+        (0..battle.board.side)
+            .map(|y| (0, y))
+            .find(|&at| {
+                crate::tactical::footprint_cells_at(at, footprint)
+                    .iter()
+                    .all(|&(x, y)| battle.board.walkable(x, y) && battle.occupant((x, y)).is_none())
+            })
+            .expect("a walkable block on the western edge")
+    }
+
+    /// A squad that walks off the board edge disbands into its members at
+    /// its own Integrity fraction, rather than vanishing along with it.
+    #[test]
+    fn a_squad_that_departs_the_board_disbands_its_members() {
+        let mut game = game();
+        let (squad, members) = squad_at_half(&mut game);
+        assert!(
+            wait_for_turn(&mut game, squad),
+            "the squad never got a turn"
+        );
+
+        let footprint = game.world.resource::<TacticalBattle>().footprint_of(squad);
+        let edge = footprint_western_edge(&game, footprint);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(squad, edge),
+            "the squad could not be seated on the edge"
+        );
+
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+
+        assert!(
+            game.world.get::<Squad>(squad).is_none(),
+            "a squad must not survive its own departure"
+        );
+        for &member in &members {
+            let stats = game.world.get::<Stats>(member).unwrap();
+            assert_eq!(
+                stats.hp,
+                stats.max_hp / 2,
+                "member {member:?} did not land at the squad's own Integrity fraction"
+            );
+        }
+    }
+
+    /// A squad left standing when the player jacks out disbands too, even
+    /// though nothing happened to the squad itself — `settle_tactical`'s own
+    /// sweep, not `depart_tactical`'s direct call for its own departure.
+    #[test]
+    fn a_squad_left_standing_when_the_player_jacks_out_disbands() {
+        let mut game = game();
+        let (squad, members) = squad_at_half(&mut game);
+        let player = game.player_entity();
+        assert!(
+            wait_for_turn(&mut game, player),
+            "the player never got a turn"
+        );
+        let edge = western_edge(&game);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, edge)
+        );
+
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "the fight must have closed behind the jack-out"
+        );
+        assert!(
+            game.world.get::<Squad>(squad).is_none(),
+            "the world outside a fight must never contain a squad"
+        );
+        for &member in &members {
+            let stats = game.world.get::<Stats>(member).unwrap();
+            assert_eq!(stats.hp, stats.max_hp / 2);
+        }
+    }
+}

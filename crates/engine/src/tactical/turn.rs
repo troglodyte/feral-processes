@@ -475,6 +475,14 @@ impl Game {
         };
         self.log(line);
         self.world.resource_mut::<TacticalBattle>().remove(body);
+        // A departing squad is disbanded here rather than caught by
+        // `settle_tactical`'s own sweep: `remove` above has already taken it
+        // out of `TacticalBattle::bodies`, so that sweep — which reads
+        // `bodies()` for whatever squad the *player's* own departure or
+        // defeat left standing — would never see it.
+        if self.world.get::<Squad>(body).is_some() {
+            self.disband_squad(body);
+        }
         self.settle_tactical(None);
     }
 
@@ -1239,10 +1247,19 @@ impl Game {
         if hostiles > 0 && !down && !gone {
             return false;
         }
+        let rounds = battle.round;
+        let outmatched = battle.outmatched;
+        // `battle`'s last read — freeing the borrow of `self.world` before
+        // the squad sweep below needs `&mut self`. A squad still standing
+        // when the fight ends for a reason other than its own death (the
+        // player down, or gone) is the second of the three ways one
+        // survives a fight, `depart_tactical`'s own direct call being the
+        // first.
+        self.disband_surviving_squads();
         let verdict = FightVerdict {
             won: hostiles == 0,
-            rounds: battle.round,
-            outmatched: battle.outmatched,
+            rounds,
+            outmatched,
             // A lair is roused in the Stack and the Stack stays abstract, so
             // a tactical fight never has one. Stated rather than omitted:
             // this is the field a fourth in-scope encounter kind would have

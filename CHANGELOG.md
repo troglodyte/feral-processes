@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.198
+
+**Press R on your turn in any fight, on either battle screen, to play the
+rest of it out at once and go straight to the results.** Your party fights
+the way All attack ([A]) already makes it fight: plain attacks, no
+routines, so skipping a fight costs fighting it worse than you would by
+hand. A fight that cannot be won or lost within 200 rounds hands control
+back to you with "Couldn't settle it — finish by hand."
+
 ## 0.13.197
 
 **Sound no longer cuts out partway through a tactical battle, and each

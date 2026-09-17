@@ -3492,3 +3492,152 @@ fn placeable_cells_are_empty_for_a_single_target_routine() {
         "a Single shape has no centre to outline"
     );
 }
+
+// --- Partial cover -----------------------------------------------------
+//
+// `reach::cover_between` needs no `Game` at all: it is a pure function of a
+// board and two cells, so these are bare `Board`s and direct calls.
+
+/// Attacker at (3,1), defender at (3,5), and whatever `rows` says between
+/// them.
+fn cover_board(rows: &[&str]) -> crate::tactical::map::Board {
+    crate::tactical::map::Board::from_rows(rows)
+}
+
+#[test]
+fn a_boulder_in_the_arc_gives_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", "..#....", ".......", ".......",
+    ]);
+    assert!(
+        crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a boulder on the attacker's side of the defender is cover"
+    );
+}
+
+#[test]
+fn a_boulder_behind_the_defender_is_not_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", ".......", ".......", "..#....",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a boulder on the far side shields nothing"
+    );
+}
+
+/// The dot product is **strictly** positive, and this is the test that says
+/// so: a boulder exactly abeam of the defender scores zero, and a `>= 0`
+/// comparison would hand out cover for standing next to a rock.
+#[test]
+fn a_boulder_exactly_abeam_is_not_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", ".......", "..#....", ".......",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "ninety degrees off the bearing is beside you, not between you and the shot"
+    );
+}
+
+#[test]
+fn cover_does_nothing_at_melee_range() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", "..#....", ".......", ".......",
+    ]);
+    assert_eq!(
+        crate::tactical::reach::distance((3, 4), (3, 5)),
+        crate::tuning::TACTICAL_MELEE_RANGE,
+        "the fixture is meant to sit exactly on the melee band"
+    );
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 4), (3, 5)),
+        "a boulder is no help against someone standing on top of you"
+    );
+}
+
+#[test]
+fn a_defender_out_of_sight_has_no_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", "...#...", "..#....", ".......", ".......",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a shot that cannot be taken needs no modifier"
+    );
+}
+
+/// **Cover that no generated board produces is a feature that ships green
+/// and dead**, which this repo has shipped before. Measured over full
+/// enumeration on 2026-09-17, as the share of ordered walkable pairs beyond
+/// melee range *with line of sight* whose defender has cover:
+///
+/// | biome | `Cover` weight | share |
+/// |---|---:|---:|
+/// | OpenGrid | 4 | 12.7% |
+/// | Deadlock | 7 | 22.3% |
+/// | NullSector | 8 | 22.8% |
+/// | Backplane | 20 | 43.2% |
+///
+/// Sighted pairs is the right denominator: a pair with no line of sight has
+/// no attack to modify. Note Backplane has the *lowest* share of all pairs
+/// and the highest of sighted ones — dense cover blocks most long sightlines
+/// outright, so the shots that remain are mostly covered ones.
+///
+/// The sweep here samples attackers rather than exhausting them, to stay
+/// cheap; the floor is well below every measured figure.
+#[test]
+fn cover_is_reachable_on_every_biome_a_fight_opens_on() {
+    use crate::tactical::map::{BattleSpec, generate};
+    use crate::tactical::reach::{cover_between, distance, line_of_sight};
+    use crate::tuning::TACTICAL_MELEE_RANGE;
+    use crate::world::Biome;
+
+    for biome in [
+        Biome::OpenGrid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+    ] {
+        let (mut sighted, mut covered) = (0u32, 0u32);
+        for seed in 1..=3u32 {
+            for bodies in [2u32, 5, 8] {
+                let board = generate(BattleSpec {
+                    world_seed: seed,
+                    site: (seed as i32, 0),
+                    tick: u64::from(seed) * 17,
+                    zone: 1,
+                    biome,
+                    bodies,
+                });
+                let walkable: Vec<(i32, i32)> = board
+                    .cells()
+                    .filter(|(_, kind)| kind.walkable())
+                    .map(|(cell, _)| cell)
+                    .collect();
+                let step = (walkable.len() / 60).max(1);
+                for &attacker in walkable.iter().step_by(step) {
+                    for &defender in &walkable {
+                        if distance(attacker, defender) <= TACTICAL_MELEE_RANGE
+                            || !line_of_sight(&board, attacker, defender)
+                        {
+                            continue;
+                        }
+                        sighted += 1;
+                        if cover_between(&board, attacker, defender) {
+                            covered += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(sighted > 0, "{biome:?} produced no shots at all");
+        let share = f64::from(covered) / f64::from(sighted);
+        assert!(
+            share >= 0.10,
+            "{biome:?}: only {:.1}% of takeable shots are at a defender in cover, \
+             so the feature is close to unreachable there",
+            share * 100.0
+        );
+    }
+}

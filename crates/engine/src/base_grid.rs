@@ -15,6 +15,8 @@ use std::collections::BTreeMap;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
+use crate::floors::{FloorDb, FloorId};
+
 /// One cell of base space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseCell {
@@ -63,6 +65,16 @@ pub struct BaseGrid {
     /// case, and additive, so this costs no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     seed: u32,
+    /// A decorative finish the dig crew has painted over laid floor — never
+    /// stored on `BaseCell` itself, because `BaseCell` is what every existing
+    /// reader (`is_floor`, `wander_step`'s leash, structure placement) still
+    /// asks, and a finished cell must stay a plain `Floor` to every one of
+    /// them.
+    ///
+    /// `#[serde(default)]`, additive under field-named RON — no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    finishes: BTreeMap<(i32, i32), FloorId>,
 }
 
 impl BaseGrid {
@@ -175,8 +187,66 @@ impl BaseGrid {
     /// rather than chipped, because absent is what this module means by
     /// solid. `game::base::entropy` is the one caller — nothing else in the
     /// game ever *shrinks* base space.
+    ///
+    /// Also drops any finish on the cell: "a finish implies floor" is a
+    /// property of this store while the game is running, not only at load.
     pub(crate) fn revert(&mut self, x: i32, y: i32) {
         self.cells.remove(&(x, y));
+        self.finishes.remove(&(x, y));
+    }
+
+    /// The finish painted over `(x, y)`, if any.
+    pub fn finish_at(&self, x: i32, y: i32) -> Option<&FloorId> {
+        self.finishes.get(&(x, y))
+    }
+
+    /// Paints `id` over `(x, y)`, refusing — and changing nothing — unless
+    /// the cell is laid floor. Overwrites whatever finish was already there.
+    ///
+    /// `#[allow(dead_code)]` until `Game::set_mark`'s finish arm calls it —
+    /// the next commit in this sequence.
+    #[allow(dead_code)]
+    pub(crate) fn set_finish(&mut self, x: i32, y: i32, id: FloorId) -> bool {
+        if !self.is_floor(x, y) {
+            return false;
+        }
+        self.finishes.insert((x, y), id);
+        true
+    }
+
+    /// Strips `(x, y)`'s finish, if it has one, leaving the cell `Floor`.
+    /// Reports whether a finish was actually removed.
+    ///
+    /// `#[allow(dead_code)]`, `set_finish`'s own reason.
+    #[allow(dead_code)]
+    pub(crate) fn clear_finish(&mut self, x: i32, y: i32) -> bool {
+        self.finishes.remove(&(x, y)).is_some()
+    }
+
+    /// Drops every finish `db` no longer resolves and every finish on a cell
+    /// that is not `Floor`, returning one warning line per drop — called
+    /// once at load, right before this grid becomes the live resource, so a
+    /// mod that renamed or deleted a finish (or a save from before this
+    /// feature ran `set_finish`'s own check) cannot leave a dangling id
+    /// behind.
+    pub(crate) fn prune_finishes(&mut self, db: &FloorDb) -> Vec<String> {
+        let mut warnings = Vec::new();
+        self.finishes.retain(|&(x, y), id| {
+            if db.get(id).is_none() {
+                warnings.push(format!(
+                    "dropped floor finish {id:?} at ({x}, {y}): no such finish is loaded"
+                ));
+                return false;
+            }
+            if !matches!(self.cells.get(&(x, y)), Some(BaseCell::Floor)) {
+                warnings.push(format!(
+                    "dropped floor finish {id:?} at ({x}, {y}): the cell is not laid floor"
+                ));
+                return false;
+            }
+            true
+        });
+        warnings
     }
 
     /// The map in key order — the deterministic iteration this type exists

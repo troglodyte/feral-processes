@@ -1051,7 +1051,7 @@ impl Game {
             affixes: affix_db,
             settlements: settlement_db,
             policy: enemy_policy,
-            warnings: load_warnings,
+            warnings: mut load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
         // Both inputs come off the save, which is the whole reason a sector
@@ -1096,7 +1096,6 @@ impl Game {
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
-        world.insert_resource(floor_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1159,6 +1158,12 @@ impl Game {
                 .collect()
         }));
         world.insert_resource(ZoneLevel(data.zone));
+        // Pruned against the loaded catalogue right before the grid becomes
+        // the live resource: a mod that renamed or deleted a finish, or a
+        // cell that stopped being floor, must not leave a dangling entry
+        // behind — `BaseGrid::revert`'s own rule, applied once at load.
+        load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
+        world.insert_resource(floor_db);
         world.insert_resource(data.base_grid);
         world.insert_resource(crate::resources::MiningMode(data.mining));
         world.insert_resource(data.enemy_strength);

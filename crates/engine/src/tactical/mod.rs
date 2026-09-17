@@ -118,10 +118,11 @@ pub struct TacticalBattle {
     /// What the acting body has spent on movement this turn, against
     /// `Game::movement_allowance`.
     spent: u32,
-    /// Whether the acting body has taken its action. The action ends the
-    /// turn, so this is only ever read between the action landing and the
-    /// turn being handed on.
-    acted: bool,
+    /// How many of the acting body's actions this turn are unspent — one
+    /// without a `Squad`, task 4's whole formation lookup. The turn ends
+    /// once this reaches zero, so it is only ever read between an action
+    /// landing and the turn being handed on.
+    actions_left: u8,
     /// The cells the acting body has committed to walking and has not walked
     /// yet, in the order it will enter them.
     ///
@@ -176,7 +177,7 @@ impl TacticalBattle {
             initiative: Vec::new(),
             turn: 0,
             spent: 0,
-            acted: false,
+            actions_left: 1,
             walk: None,
             round: 1,
             outmatched: false,
@@ -366,9 +367,9 @@ impl TacticalBattle {
         self.spent
     }
 
-    /// Whether the acting body has already taken its action.
-    pub fn acted(&self) -> bool {
-        self.acted
+    /// How many actions the acting body has left to spend this turn.
+    pub fn actions_left(&self) -> u8 {
+        self.actions_left
     }
 
     /// Charges `cost` against the acting body's movement.
@@ -405,11 +406,43 @@ impl TacticalBattle {
         self.walk.as_ref().is_some_and(|walk| !walk.is_empty())
     }
 
-    /// Records that the acting body has acted. The caller ends the turn —
-    /// this only says the action landed, because a body killed by its own
-    /// fumble leaves the order instead.
-    pub fn mark_acted(&mut self) {
-        self.acted = true;
+    /// Spends one of the acting body's actions. The caller ends the turn
+    /// once none are left — this only says one landed, because a body
+    /// killed by its own fumble or its own blast leaves the order instead.
+    pub fn spend_action(&mut self) {
+        self.actions_left = self.actions_left.saturating_sub(1);
+    }
+
+    /// Clears whatever the acting body has committed to walking, leaving
+    /// everything else about its turn alone — `begin_turn`'s reset with the
+    /// movement allowance and the action budget left untouched.
+    ///
+    /// **`hand_on_turn`'s own door, for a body with another action still to
+    /// spend.** A turn's movement is spent once for the whole turn however
+    /// many actions it buys, so the walk is the only thing stale between one
+    /// action and the next — the next action plans a fresh one from
+    /// wherever this one left the body standing.
+    pub(crate) fn clear_walk(&mut self) {
+        self.walk = None;
+    }
+
+    /// Empties the acting body's action budget without spending anything.
+    ///
+    /// `tactical_end_turn`'s own door: passing a turn with actions still
+    /// unspent forfeits all of them, not just one, so `hand_on_turn`'s
+    /// "another action is coming" gate cannot read a pass as anything but
+    /// the end of the turn.
+    pub(crate) fn forfeit_actions(&mut self) {
+        self.actions_left = 0;
+    }
+
+    /// Test hook: overrides the acting body's action budget for the turn, so
+    /// a rule task 4's `Squad` will exercise for real can be pinned today —
+    /// no body carries more than one action yet, so nothing outside a test
+    /// calls this.
+    #[cfg(test)]
+    pub(crate) fn set_actions_left(&mut self, n: u8) {
+        self.actions_left = n;
     }
 
     /// Hands the turn to the next body in the order, starting a new round
@@ -423,9 +456,16 @@ impl TacticalBattle {
     /// The one place a body's turn starts — `end_turn`, `remove` and
     /// `set_initiative` all land here, which is what makes it the honest
     /// home for the reaction refund.
+    ///
+    /// **`actions_left` is hardcoded to one, `footprint_of`'s reason**:
+    /// there is no `Squad` yet to ask. Unlike `footprint_of`, task 4 cannot
+    /// just fill this function in — `TacticalBattle` holds no `World` to
+    /// look a formation's `actions` up with, so wiring `Game::
+    /// actions_per_turn` in here needs the reset moved to a caller that has
+    /// one, or the value threaded through as a parameter.
     fn begin_turn(&mut self) {
         self.spent = 0;
-        self.acted = false;
+        self.actions_left = 1;
         self.walk = None;
         // **Refunded at the start of its own turn, not at the round.** A
         // body that reacts early in a round gets its budget back when its
@@ -672,12 +712,12 @@ mod tests {
     fn a_new_turn_starts_with_nothing_spent_and_nothing_done() {
         let (mut battle, _) = seated();
         battle.spend(3);
-        battle.mark_acted();
+        battle.spend_action();
         assert_eq!(battle.spent(), 3);
-        assert!(battle.acted());
+        assert_eq!(battle.actions_left(), 0);
         battle.end_turn();
         assert_eq!(battle.spent(), 0);
-        assert!(!battle.acted());
+        assert_eq!(battle.actions_left(), 1);
     }
 
     /// `None` is "has not chosen yet" and `Some(vec![])` is "has arrived",

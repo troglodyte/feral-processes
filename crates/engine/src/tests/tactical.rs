@@ -382,7 +382,7 @@ fn the_action_ends_the_turn_and_no_second_one_is_offered() {
     );
     assert!(wait_for_turn(&mut game, player));
     assert!(
-        !game.world.resource::<TacticalBattle>().acted(),
+        game.world.resource::<TacticalBattle>().actions_left() > 0,
         "a fresh turn came in already spent"
     );
 }
@@ -1473,6 +1473,257 @@ fn a_body_that_kills_itself_with_its_own_action_hands_the_turn_on_once() {
     );
 }
 
+/// Nothing carries a `Squad` yet, so every body — the player's own included —
+/// gets exactly one action. Task 4's whole reason `actions_per_turn` takes an
+/// entity at all.
+#[test]
+fn every_body_gets_one_action_without_a_squad() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    assert_eq!(game.actions_per_turn(player), 1);
+    assert_eq!(game.actions_per_turn(pack[0]), 1);
+}
+
+/// `hand_on_turn` hands the turn on only once no actions are left, and the
+/// existing "still the one acting" guard stays alongside the new gate — a
+/// body cannot be exercised this way for real yet, since no body carries
+/// more than one action, so `actions_left` is driven directly.
+#[test]
+fn a_body_with_two_actions_keeps_its_turn_after_the_first() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+
+    assert!(game.tactical_defend(), "the first brace was refused");
+    assert_eq!(
+        game.tactical_actor(),
+        Some(player),
+        "a second action still owed was handed to the next body early"
+    );
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().actions_left(),
+        1,
+        "the first of two actions did not spend itself"
+    );
+
+    assert!(game.tactical_defend(), "the second brace was refused");
+    assert_eq!(
+        game.tactical_actor(),
+        Some(pack[0]),
+        "the last of two actions did not hand the turn on"
+    );
+}
+
+/// `tactical_attack` reads `actions_left == 0` where it used to read
+/// `acted` — a body with nothing left to spend may not swing.
+#[test]
+fn a_body_with_no_actions_left_may_not_attack() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+    // Beside the player, not wherever deployment put it — the refusal has
+    // to be `actions_left`'s, not a range or sight refusal that would pass
+    // whether or not the gate this test names is even there.
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    let beside = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[0], beside)
+    );
+    let before = hp_of(&game, pack[0]);
+    game.world.resource_mut::<TacticalBattle>().spend_action();
+
+    assert!(!game.tactical_attack(pack[0]), "a spent body swung anyway");
+    assert_eq!(
+        hp_of(&game, pack[0]),
+        before,
+        "the refusal still landed a blow"
+    );
+}
+
+/// The movement allowance is the *turn's*, not one action's — a body walks
+/// once for the whole turn however many actions it buys, so what it has
+/// already spent must carry from one action into the next and reset only
+/// once the turn actually ends.
+#[test]
+fn two_actions_share_one_turns_movement_allowance() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+    game.world.resource_mut::<TacticalBattle>().spend(2);
+
+    assert!(game.tactical_defend(), "the first brace was refused");
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().spent(),
+        2,
+        "movement already spent this turn must carry into its second action"
+    );
+
+    assert!(game.tactical_defend(), "the second brace was refused");
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().spent(),
+        0,
+        "the next body's own turn must start with nothing spent"
+    );
+}
+
+/// After landing an action with another still owed, `run_tactical_beat`
+/// clears the walk rather than ending the turn, so the next action plans a
+/// fresh one from wherever this one left the body standing.
+#[test]
+fn a_second_action_plans_a_fresh_walk_rather_than_ending_the_turn() {
+    use crate::tactical::ai::AiBeat;
+
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 400);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild));
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+
+    // Closing the deployment gap can cost a walk of its own beats before the
+    // first action lands — every one of them must report `Stepped`, since
+    // none of them may end the turn early.
+    let mut beats = 0;
+    loop {
+        assert_eq!(
+            game.tactical_ai_beat(),
+            AiBeat::Stepped,
+            "neither a walk step nor a landed first action may end the turn"
+        );
+        beats += 1;
+        assert!(beats < 20, "the hostile never closed on the player to act");
+        if game.world.resource::<TacticalBattle>().actions_left() < 2 {
+            break;
+        }
+    }
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().actions_left(),
+        1,
+        "the first action was not spent"
+    );
+    assert!(
+        !game.world.resource::<TacticalBattle>().walk_planned(),
+        "the walk was not cleared for the second action to plan its own"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(wild),
+        "the body with an action left lost its turn early"
+    );
+
+    assert_eq!(
+        game.tactical_ai_beat(),
+        AiBeat::Acted,
+        "the second of two actions must end the turn"
+    );
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().actions_left(),
+        1,
+        "the next body's own fresh budget must not read as the first's leftover"
+    );
+}
+
+/// A routine's cooldown arms the moment it runs, not when the turn ends —
+/// otherwise a body with two actions could run the same one-shot routine
+/// twice in the same turn.
+#[test]
+fn a_routines_cooldown_arms_the_action_it_runs_in_not_the_turn_it_ends() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    only_routine(&mut game, wild, "acid_wash");
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("acid_wash")
+        .cloned()
+        .expect("acid_wash ships");
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    assert_eq!(
+        log_texts(&game)
+            .iter()
+            .filter(|l| l.contains(&def.name))
+            .count(),
+        1,
+        "the routine ran twice in one turn — its cooldown did not arm until \
+         the turn ended"
+    );
+}
+
+/// `actions_left` must not resurrect a turn `TacticalBattle::remove` already
+/// handed on: a body with two actions that kills itself with the first still
+/// does not get a second — the body behind it acts next, exactly as it does
+/// with one action.
+#[test]
+fn a_body_with_two_actions_that_kills_itself_on_the_first_gets_no_second() {
+    let mut game = game();
+    // A companion rather than a hostile: a hostile holds no `PowerReserve`,
+    // so the player's door refuses it every priced routine there is.
+    let actor = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, actor);
+    tactical_fight(&mut game, 1, 400);
+    assert!(wait_for_turn(&mut game, actor));
+    only_routine(&mut game, actor, "cascade_overflow");
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+
+    // Alone in its own blast: the roll is forced for one recipient, so the
+    // one that matters has to be the only one there is.
+    let alone = lonely_cell(&game, 3);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(actor, alone)
+    );
+    game.world.get_mut::<Stats>(actor).unwrap().hp = 1;
+    let next = after(&mut game, actor);
+    crate::tests::support::force_the_next_attack_to_land(&mut game);
+
+    assert!(
+        game.tactical_use_routine(0, alone),
+        "the blast was refused before it could land"
+    );
+    assert!(
+        !game.creature_alive(actor),
+        "the blast spared its own invoker — this fixture needs a lethal roll"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(next),
+        "the dead body's second action resurrected its turn"
+    );
+}
+
 /// A round on a battle map spends the upkeep an abstract round spends —
 /// cooldowns and status effects tick, and the world clock moves. Without it
 /// every routine is once per fight and a fight costs the world no time at
@@ -1933,7 +2184,7 @@ fn a_body_that_has_acted_may_not_brace() {
         .resource_mut::<TacticalBattle>()
         .set_initiative(vec![player, pack[0]]);
     let raw = game.effective_mitigation(player);
-    game.world.resource_mut::<TacticalBattle>().mark_acted();
+    game.world.resource_mut::<TacticalBattle>().spend_action();
 
     assert!(!game.tactical_defend(), "an acted body braced anyway");
     assert_eq!(
@@ -3003,7 +3254,7 @@ fn walking_into_a_companion_is_refused_rather_than_a_swing() {
         "a bump into one of your own landed a blow"
     );
     assert!(
-        !game.world.resource::<TacticalBattle>().acted(),
+        game.world.resource::<TacticalBattle>().actions_left() > 0,
         "a refused bump spent the turn's action"
     );
 }

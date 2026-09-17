@@ -172,7 +172,9 @@ pub struct TacticalView {
     pub player_turn: bool,
     /// Steps the acting body has left, already net of what it has spent.
     pub allowance: u32,
-    /// Whether the acting body has spent its action.
+    /// Whether the acting body has no actions left to spend this turn —
+    /// `actions_left() == 0`, always true after the one action a body
+    /// without a `Squad` gets.
     pub acted: bool,
     pub round: u32,
     /// Every cell the acting body could still reach, its own included.
@@ -290,7 +292,7 @@ impl Game {
         let battle = self.world.resource::<TacticalBattle>();
         let board = battle.board.clone();
         let round = battle.round;
-        let acted = battle.acted();
+        let acted = battle.actions_left() == 0;
         let spent = battle.spent();
         let actor = battle.actor();
         let placed: Vec<(Entity, (i32, i32))> = battle.bodies().collect();

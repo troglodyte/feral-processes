@@ -92,10 +92,11 @@ impl Intent {
 /// the player can read the blow in, and there was nothing to drive at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AiBeat {
-    /// The body walked one cell. The rest of its turn is still owed.
+    /// The body walked one cell, or spent one of more than one action.
+    /// Either way the rest of its turn is still owed.
     Stepped,
-    /// The body spent its action — or passed — and the turn has been handed
-    /// on.
+    /// The body spent its last action — or passed — and the turn has been
+    /// handed on.
     Acted,
     /// Nobody this file may drive is acting.
     Idle,
@@ -370,7 +371,7 @@ impl Game {
         if self.world.get::<Hostile>(body).is_none() || !profiled {
             return None;
         }
-        if battle.actor() == Some(body) && (battle.walk_planned() || battle.acted()) {
+        if battle.actor() == Some(body) && (battle.walk_planned() || battle.actions_left() == 0) {
             return None;
         }
         let from = battle.cell_of(body)?;
@@ -505,12 +506,15 @@ impl Game {
     /// `tactical_walking`'s sibling and derived the same way, off the fight
     /// rather than remembered: a body that has planned a walk carries a
     /// `Some` — `Some(vec![])` once it has arrived — and a body that has
-    /// swung carries `acted`, so all three states are told apart without a
-    /// driver having to hold what the last beat did.
+    /// spent an action has fewer than its full `actions_left`, so all three
+    /// states are told apart without a driver having to hold what the last
+    /// beat did.
     pub fn tactical_turn_opening(&self) -> bool {
         self.world
             .get_resource::<TacticalBattle>()
-            .is_some_and(|battle| !battle.walk_planned() && battle.spent() == 0 && !battle.acted())
+            .is_some_and(|battle| {
+                !battle.walk_planned() && battle.spent() == 0 && battle.actions_left() > 0
+            })
     }
 
     /// Runs the acting body's turn **whichever side it is on**, and reports
@@ -550,8 +554,8 @@ impl Game {
         while self.run_tactical_beat(actor, temperature) == AiBeat::Stepped {}
     }
 
-    /// One beat of `actor`'s turn: the next cell of its walk, or the action
-    /// that ends the turn.
+    /// One beat of `actor`'s turn: the next cell of its walk, or one action —
+    /// which ends the turn only once none are left.
     ///
     /// The walk is planned on the beat that takes its first step and read
     /// back off `TacticalBattle` by every beat after it, which is what holds
@@ -579,28 +583,40 @@ impl Game {
             }
         }
 
+        // Read before the action, so landing one is told apart from finding
+        // nothing to spend it on — both leave this body `battle.actor()`
+        // when there is another action still owed, and only one of them
+        // spent anything.
+        let actions_before = self.world.resource::<TacticalBattle>().actions_left();
         match intent {
             Intent::Routine(_) => self.run_tactical_intent(actor, &intent, &sides),
             Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &intent, &sides),
         }
-        // **Only if the action did not already hand it on.** The action ends
-        // the turn, so `tactical_attack` and `tactical_use_routine` both end
-        // it themselves; ending it again here spends two rungs of the order
+        // **Only if the action did not already hand the turn on.** The
+        // action ends the turn once no actions are left, so `tactical_attack`
+        // and `tactical_use_routine` both end it themselves through
+        // `hand_on_turn`; ending it again here spends two rungs of the order
         // and skips whoever came next, which against a lone hostile is a
-        // fight the player never gets a turn in. A body that found nothing
-        // to swing at ended none, and still owes one.
+        // fight the player never gets a turn in.
         //
         // Asked as "is this body still up" rather than tracked as a flag: a
         // fight that ended inside the action took the resource with it, and
         // that is the same question with the same answer.
-        let still_up = self
-            .world
-            .get_resource::<TacticalBattle>()
-            .and_then(|b| b.actor())
-            == Some(actor);
-        if still_up {
-            self.tactical_end_turn();
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return AiBeat::Acted;
+        };
+        if battle.actor() != Some(actor) {
+            return AiBeat::Acted;
         }
+        if battle.actions_left() < actions_before {
+            // An action landed and `hand_on_turn` left this body still
+            // acting — another is owed this turn. Its walk was cleared
+            // there, so the next beat plans a fresh one from here.
+            return AiBeat::Stepped;
+        }
+        // Nothing landed: a swing or routine that found nothing to spend
+        // itself on still owes the turn, whole.
+        self.tactical_end_turn();
         AiBeat::Acted
     }
 

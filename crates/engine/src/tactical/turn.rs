@@ -155,6 +155,17 @@ impl Game {
         self.world.get_resource::<TacticalBattle>()?.actor()
     }
 
+    /// How many actions `body` gets on its turn — one without a `Squad`,
+    /// which is every body today. The player's party always gets one.
+    ///
+    /// `footprint_of`'s door on the `Game` side: task 4 adds the arm that
+    /// reads a formation's `actions` off `components::Squad`, and every
+    /// reader of "how many actions" goes through this rather than assuming
+    /// one.
+    pub fn actions_per_turn(&self, _body: Entity) -> u8 {
+        1
+    }
+
     /// Moves the acting body one cell.
     ///
     /// **A step off the board is a departure, not a refusal.** Disengaging
@@ -179,7 +190,7 @@ impl Game {
     /// this is the door that loop's walk goes through, so without it a
     /// hostile could spend its action part-way along a path it planned.
     ///
-    /// Refused once the body has acted, because the action ends the turn.
+    /// Refused once the body has spent every action it has this turn.
     pub fn tactical_step(&mut self, dir: (i32, i32)) -> StepOutcome {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return StepOutcome::Refused;
@@ -187,7 +198,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return StepOutcome::Refused;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return StepOutcome::Refused;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -447,8 +458,8 @@ impl Game {
     /// still a wall in `reach::movement_field`, so the cell it stands on is
     /// the tell.
     ///
-    /// Reports whether the swing happened. The action ends the turn, so a
-    /// swing that lands hands the turn on — unless it ended the fight.
+    /// Reports whether the swing happened. It spends one action, which hands
+    /// the turn on once none are left — unless it ended the fight.
     pub fn tactical_attack(&mut self, target: Entity) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -456,7 +467,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
@@ -566,7 +577,7 @@ impl Game {
             let line = self.party_swing_line(actor, &move_name, outcome);
             self.log_swing(crate::resources::MessageKind::PartyDamage, outcome, line);
         }
-        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.world.resource_mut::<TacticalBattle>().spend_action();
 
         // Every body that fell, not just the target: a fumble's riposte can
         // put the swinger down, and a body left standing on the board at
@@ -600,13 +611,14 @@ impl Game {
     /// player can read before spending the turn.
     ///
     /// Three refusals, all before anything is spent: no fight, nobody
-    /// acting, and a body that has already taken its action. **No
-    /// `is_stunned` gate**, unlike `battle_resolve_round`'s Defend loop —
-    /// nothing in this model reads stun at all and a stunned body already
-    /// takes a whole turn on a board, so gating the brace alone would make
-    /// bracing the one thing a stunned body could not do.
+    /// acting, and a body with no actions left to spend. **No `is_stunned`
+    /// gate**, unlike `battle_resolve_round`'s Defend loop — nothing in this
+    /// model reads stun at all and a stunned body already takes a whole turn
+    /// on a board, so gating the brace alone would make bracing the one
+    /// thing a stunned body could not do.
     ///
-    /// Reports whether the brace took. The action ends the turn.
+    /// Reports whether the brace took. It spends one action, which hands
+    /// the turn on once none are left.
     pub fn tactical_defend(&mut self) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -614,13 +626,13 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
 
         let round_before = battle.round;
         self.begin_defend(actor);
-        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.world.resource_mut::<TacticalBattle>().spend_action();
         // No reap: bracing damages nobody, and the round upkeep
         // `hand_on_turn` may spend brings its own.
         self.hand_on_turn(actor, round_before);
@@ -656,7 +668,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -865,7 +877,7 @@ impl Game {
                 // taken, whatever it bought, and a reaction can have ended
                 // the fight under it.
                 if self.world.get_resource::<TacticalBattle>().is_some() {
-                    self.world.resource_mut::<TacticalBattle>().mark_acted();
+                    self.world.resource_mut::<TacticalBattle>().spend_action();
                 }
                 self.hand_on_turn(actor, round_before);
                 return;
@@ -954,23 +966,36 @@ impl Game {
         // friendly fire means — so the reap is over the whole roster rather
         // than over what was aimed at, exactly as it is after a swing.
         if self.world.get_resource::<TacticalBattle>().is_some() {
-            self.world.resource_mut::<TacticalBattle>().mark_acted();
+            self.world.resource_mut::<TacticalBattle>().spend_action();
             let aimed = self.world.resource::<TacticalBattle>().occupant(aim);
             self.reap_tactical_dead(aimed);
         }
         self.hand_on_turn(actor, round_before);
     }
 
-    /// Hands the turn on after `actor` has finished with it, and spends the
-    /// round's upkeep when the order comes back round.
+    /// Hands the turn on once `actor` has spent every action it has, and
+    /// spends the round's upkeep when the order comes back round.
     ///
-    /// **Only if `actor` is still the one acting.** A body that died to its
-    /// own action — a fumble's recoil, a blast centred on its own cell —
-    /// left the order inside the reap, and `TacticalBattle::remove` hands
-    /// the turn on as it goes, because the cursor names a body rather than
-    /// a position. Ending the turn again on top of that skips whoever was
-    /// standing behind it: a companion who fumbles fatally costs the player
-    /// their turn, with nothing on screen to say why.
+    /// **Another action still owed is not the turn ending.** Called once
+    /// per action — the per-action `spend_action`/`hand_on_turn` pairs stay
+    /// at each door rather than being hoisted to fire once after the whole
+    /// turn — so a body with more than one action reads its own still-fresh
+    /// `actions_left` here and gets nothing below: not the tamper age, not
+    /// the decoy settle, not the round upkeep, all of which count a *turn*,
+    /// not an action. Only its walk is cleared, so the next action plans a
+    /// fresh one from wherever this one left the body standing.
+    ///
+    /// **The identity check has to run first, and stay first.** A body
+    /// killed by its own action — a fumble's recoil, a blast centred on its
+    /// own cell — left the order inside the reap that ran before this was
+    /// called, and `TacticalBattle::remove` hands the turn on as it goes,
+    /// because the cursor names a body rather than a position. Reading
+    /// `actions_left` before checking `actor` is still `battle.actor()`
+    /// would read the *next* body's fresh budget and mistake it for this
+    /// one's still-open turn — silently skipping the round's upkeep
+    /// whenever that death landed on the last rung of the order, and, were
+    /// the reap ever deferred instead of run per action, leaving a dead
+    /// body sitting as the acting one.
     ///
     /// **`round_before` is read by the caller, before it acts.** The order
     /// wraps in two places, not one: `end_turn` below, and
@@ -983,6 +1008,15 @@ impl Game {
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
     pub(crate) fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+        let continues = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| battle.actor() == Some(actor) && battle.actions_left() > 0);
+        if continues {
+            self.world.resource_mut::<TacticalBattle>().clear_walk();
+            return;
+        }
+
         // **First, and only while `actor` is alive.** Duration counts the
         // tampered body's own turns — `components::Tampered`'s reason for
         // ageing here rather than in `Game::tick_one_combatant` — so this is
@@ -1066,7 +1100,12 @@ impl Game {
             .insert(AbilityCooldowns(cooldowns));
     }
 
-    /// Ends the acting body's turn without spending its action.
+    /// Ends the acting body's turn without spending any of its actions.
+    ///
+    /// **Forfeits whatever is left, rather than spending one.** `hand_on_
+    /// turn`'s "another action is coming" gate reads `actions_left` alone
+    /// once the identity check passes, so a pass that only spent one of two
+    /// would read as a turn still open and hand nobody anything.
     ///
     /// Through `hand_on_turn` like every other way a turn ends, so a passed
     /// turn buys the round's upkeep exactly as a spent one does.
@@ -1076,6 +1115,9 @@ impl Game {
         };
         let round_before = battle.round;
         if let Some(actor) = battle.actor() {
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .forfeit_actions();
             self.hand_on_turn(actor, round_before);
         }
     }

@@ -54,23 +54,13 @@ pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> Re
             break;
         }
         for slot in bracing_slots(game, plan) {
-            // Same reasoning as the `Err` below: a slot that has just
-            // stopped being able to act is the fight moving on, not a bug.
-            // `battle_plan_remaining` will skip it too.
+            // A slot that has just stopped being able to act is the fight
+            // moving on, not a bug — `battle_auto_round` will skip it too.
             let _ = game.battle_set_action(slot, BattleAction::Defend);
         }
-        // An `Err` here means the battle ended between the check above and
-        // this call — the fight being over, not a bug to panic on.
-        if game
-            .battle_plan_remaining(BattleAction::Attack { group: 0 })
-            .is_err()
-        {
+        if !game.battle_auto_round() {
             break;
         }
-        if !game.battle_round_ready() {
-            break;
-        }
-        game.battle_resolve_round();
         watch.observe(game);
     }
 
@@ -105,26 +95,22 @@ pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch) -> RepRecord 
         if !game.has_active_battle() || game.is_game_over().is_some() {
             break;
         }
-        let round = tactical_round(game);
+        let round = game.fight_round().unwrap_or(0);
         if !game.tactical_drive_turn() {
             break;
         }
         // The fight ending inside the turn is observed too, and counts as a
         // round: it is the round it happened in, which is what `run_rep`
-        // records when a fight ends inside a resolution.
-        if !game.has_active_battle() || tactical_round(game) != round {
+        // records when a fight ends inside a resolution. `fight_round`
+        // reads `None` off the same removed resource `has_active_battle`
+        // already checked, which is why the sentinel 0 below only ever
+        // stands for "gone", never for a real round.
+        if !game.has_active_battle() || game.fight_round().unwrap_or(0) != round {
             watch.observe(game);
         }
     }
 
     watch.finish(game)
-}
-
-/// Which round the open tactical fight is on, or 0 when none is.
-fn tactical_round(game: &Game) -> u32 {
-    game.world
-        .get_resource::<crate::tactical::TacticalBattle>()
-        .map_or(0, |battle| battle.round)
 }
 
 /// The party slots that brace this round under `plan`, in slot order.

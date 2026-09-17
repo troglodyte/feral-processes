@@ -45,7 +45,7 @@ impl App {
         // rather than the folded one, exactly as `W` rides ahead of
         // `selected_index` on the companion screen. Both stages below were
         // checked rather than assumed to be free: party commands are
-        // `A`/`D`/`j` and per-slot actions are `a`/`d`/`s`/`u`, so neither
+        // `A`/`D`/`R`/`j` and per-slot actions are `a`/`d`/`s`/`u`, so neither
         // `T` nor the `t` the case-folding retry would look for hits
         // anything. The refusal is unreachable — this handler only runs in
         // `Mode::Battle` — so there is nothing to put on the status line.
@@ -57,9 +57,10 @@ impl App {
         }
 
         // Party-wide commands are matched on the raw char first, so uppercase
-        // `A`/`D` stay distinct from the lowercase per-slot Attack/Defend. The
-        // lowercase retry is what lets a shifted `J` still jack out; `a`/`d`
-        // can't match it, so they fall through to the per-slot menu below.
+        // `A`/`D`/`R` stay distinct from the lowercase per-slot Attack/Defend.
+        // The lowercase retry is what lets a shifted `J` still jack out;
+        // `a`/`d` can't match it, so they fall through to the per-slot menu
+        // below.
         let party = self
             .game
             .as_ref()
@@ -150,6 +151,7 @@ impl App {
                 self.push_battle_outcome_sounds(sound, still_active);
             }
             PartyCommandKind::AllDefend => self.plan_every_slot(BattleAction::Defend),
+            PartyCommandKind::AutoResolve => self.auto_resolve(),
             PartyCommandKind::AllAttack => {
                 if needs_target {
                     self.pending_party_attack = true;
@@ -179,6 +181,93 @@ impl App {
         let still_active = game.has_active_battle();
         self.settle_after_round(still_active);
         self.push_battle_outcome_sounds(None, still_active);
+    }
+
+    /// Plays the open fight out to its end with no pacing — `[R]` on either
+    /// battle screen — whichever combat model holds it.
+    ///
+    /// **Which model is read off `self.mode` before calling the engine**,
+    /// not after: a fight that closes takes both `BattleState` and
+    /// `TacticalBattle` with it, so nothing is left behind afterward to ask.
+    ///
+    /// **An open arena session's `Watch` is fed through the engine's own
+    /// per-round hook**, never through `settle_after_round`'s usual
+    /// `observe_arena_round` — the whole fight resolves inside this one
+    /// engine call, so a single observation taken afterward would read
+    /// every round the fight actually took as one. `settle_after_round_
+    /// without_observing` is `settle_after_round`'s tail with that single
+    /// call held out, so the rounds the hook already fed the `Watch` are
+    /// not recorded a second time.
+    pub(crate) fn auto_resolve(&mut self) {
+        let tactical = self.mode == Mode::TacticalBattle;
+        let App { game, arena, .. } = self;
+        let Some(game) = game.as_mut() else { return };
+        let outcome = game.auto_resolve_battle_with(|g| {
+            if let Some(watch) = arena.as_mut().and_then(|s| s.watch.as_mut()) {
+                watch.observe(g);
+            }
+        });
+        // Every tactical arm, `Stalled` included — a stalled resolve always
+        // fills `SwingCueQueue` to its cap, the same flood a finished one
+        // produces.
+        if tactical {
+            self.drain_tactical_auto_resolve_cues();
+        }
+        match outcome {
+            AutoResolve::Stalled => {
+                self.refuse("Couldn't settle it — finish by hand.");
+            }
+            AutoResolve::Finished if tactical => {
+                // `settle_tactical_end` no-ops when `has_active_battle()`
+                // still answers true, which a `Finished` result can leave
+                // behind: `is_game_over` alone can end the loop with the
+                // `TacticalBattle` resource still standing (see engine's
+                // `Game::battle_auto_round` doc). `check_game_over` is what
+                // actually moves the mode in that case.
+                if !self.settle_tactical_end() {
+                    self.check_game_over();
+                }
+            }
+            AutoResolve::Finished => {
+                // Order matters: `settle_after_round_without_observing`
+                // restarts the reveal, which `finish_reveal` then completes
+                // so the results appear at once instead of scrolling in;
+                // the sounds call runs `check_game_over`. `false` rather
+                // than a re-read of `has_active_battle` — `Finished`
+                // already means the fight is closed.
+                self.settle_after_round_without_observing(false);
+                self.finish_reveal();
+                self.push_battle_outcome_sounds(None, false);
+            }
+        }
+    }
+
+    /// After a tactical `[R]` plays a whole fight inside one engine call,
+    /// every swing in it queued a cue in the engine's own per-frame
+    /// queues — `SwingCueQueue`, `BoltQueue` and `TacticalFxQueue`, each
+    /// capped at `EFFECT_QUEUE_CAP` — and the next frame would otherwise
+    /// start every one of them at once: up to thirty-two clips stacked in a
+    /// single frame, plus that many bolts and hit flashes drawn over a
+    /// results popup with no board left standing under them.
+    ///
+    /// **Collapsed to the loudest swing cue**, `skip_reveal`'s rule for a
+    /// skipped stretch of narration — the fight's own end still earns a
+    /// sound, just one rather than thirty-two. The bolts and hit flashes
+    /// are discarded outright rather than collapsed: they are cosmetic, and
+    /// there is nothing left on screen for even one of them to land on by
+    /// the time the results popup opens.
+    fn drain_tactical_auto_resolve_cues(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let cues = game.take_swing_cues();
+        game.take_bolts();
+        game.take_tactical_fx();
+        if let Some(loudest) = cues
+            .into_iter()
+            .max_by_key(|&outcome| crate::app::input::cue_rank(outcome))
+        {
+            self.pending_sounds
+                .push(crate::app::input::swing_sound(loudest));
+        }
     }
 
     /// Picks which enemy group the action chosen in `Mode::Battle` hits —
@@ -449,6 +538,15 @@ impl App {
     /// headless one share the same answer to what a fight cost.
     fn settle_after_round(&mut self, still_active: bool) {
         self.observe_arena_round();
+        self.settle_after_round_without_observing(still_active);
+    }
+
+    /// `settle_after_round`'s tail, without the `Watch` call at its front —
+    /// for `auto_resolve`'s group arm, whose per-round hook has already fed
+    /// an open arena session's `Watch` everything `observe_arena_round`
+    /// would, so a second call here would double-count the fight's last
+    /// round.
+    fn settle_after_round_without_observing(&mut self, still_active: bool) {
         if !still_active && self.in_arena() {
             self.finish_arena_fight();
             return;

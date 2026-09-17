@@ -84,8 +84,9 @@ No save change and no schema change: a battle never persists mid-fight.
   - Tactical: `settle_tactical_end`, which leads to `TacticalResult` and
     calls `check_game_over`.
 - **After `Stalled`:** the mode is unchanged and `App::refuse` reports
-  "Couldn't settle it — finish by hand.", which reaches both the status
-  line and the log.
+  "Couldn't settle it — finish by hand." on the status line alone —
+  `Game::note_refusal` is deliberately silent while a battle is open, and a
+  `Stalled` fight is still open, so this does not also reach the log.
 
 ## 3. Gui
 

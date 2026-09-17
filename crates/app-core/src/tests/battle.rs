@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::app::input::loudest_cue;
 use crate::*;
+use feral_processes_engine::save;
 use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
 
 /// Scans seeds until one puts a wild program next to the player, then
@@ -64,6 +65,85 @@ fn battling_app_with(setup: impl Fn(&mut App)) -> App {
     );
 }
 
+/// Weakens every wild program the world already spawned to `hp`/`max_hp`,
+/// leaving `atk` alone — a `[R]` setup that certainly resolves in one round
+/// rather than one that merely usually does. Through the save, the only
+/// door app-core has onto the engine's `World` (see
+/// `place_wild_program_east`); called from inside `battling_app_with`'s
+/// `setup`, ahead of its adjacency scan, so whichever hostile that scan
+/// finds is already this weak.
+fn weaken_every_wild(app: &mut App, hp: i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("auto_resolve_weaken", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    for creature in data.creatures.iter_mut().filter(|c| !c.tamed) {
+        creature.hp = hp;
+        creature.max_hp = hp;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
+/// The stall fixture: both sides made unkillable, `auto_resolve.rs`'s own
+/// engine-level setup (`a_fight_nobody_can_end_stalls_at_the_cap_with_the_
+/// fight_open`) through the save instead of a direct `Stats` write.
+fn make_both_sides_unkillable(app: &mut App) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("auto_resolve_unkillable", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.hp = 10_000_000;
+    data.player.max_hp = 10_000_000;
+    for creature in data.creatures.iter_mut().filter(|c| !c.tamed) {
+        creature.hp = 10_000_000;
+        creature.max_hp = 10_000_000;
+        creature.atk = 0;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
+/// `[R]` plays a group fight out to its end with no pacing and opens the
+/// results at once, with nothing left scrolling in.
+///
+/// `test_app` is always `DifficultyMode::Forgiving` (see `support::
+/// test_app`), so `Mode::GameOver` is not a reachable answer here —
+/// asserting it anyway only loosens what this pins down.
+#[test]
+fn r_resolves_the_fight_and_opens_the_results_with_nothing_unrevealed() {
+    let mut app = battling_app_with(|app| weaken_every_wild(app, 1));
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(app.mode, Mode::BattleResult, "{:?}", app.status_line);
+    assert!(
+        !app.is_revealing(),
+        "[R] should have released every line at once"
+    );
+    assert!(
+        !app.game.as_ref().unwrap().has_active_battle(),
+        "a finished fight must not stay open behind the results"
+    );
+}
+
+/// A fight `[R]` cannot settle within the round cap leaves the roster open
+/// and says so, rather than silently doing nothing.
+#[test]
+fn a_stalled_resolve_stays_on_the_roster_and_says_so() {
+    let mut app = battling_app_with(make_both_sides_unkillable);
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert_eq!(
+        app.status_line,
+        Some("Couldn't settle it — finish by hand.".to_string())
+    );
+}
+
 /// The action set lives in the engine. If app-core or a renderer
 /// hardcoded a key, the two frontends would drift the moment an action
 /// was added — which is the exact failure this indirection exists to
@@ -80,7 +160,7 @@ fn battling_app_with(setup: impl Fn(&mut App)) -> App {
 /// resolves to is the engine's business, and depends on the gear and
 /// party the seed happens to hand out.
 #[test]
-fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensitive() {
+fn battle_action_keys_come_from_the_engine_with_only_the_party_commands_case_sensitive() {
     let probe = battling_app();
     let game = probe.game.as_ref().unwrap();
     let per_slot: Vec<char> = game
@@ -93,7 +173,7 @@ fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensiti
         "the engine should always offer at least Attack and Defend, got {per_slot:?}"
     );
     let party: Vec<char> = game.battle_party_commands().iter().map(|c| c.key).collect();
-    assert_eq!(party, vec!['A', 'D', 'j']);
+    assert_eq!(party, vec!['A', 'D', 'R', 'j']);
 
     // Every key the engine advertises must route as pressed, and the
     // shifted form of each lowercase one must route too.
@@ -120,6 +200,26 @@ fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensiti
             "[{key}] is advertised by the engine, but the keypress was swallowed"
         );
     }
+}
+
+/// `R` is the party command; lowercase `r` binds nothing on the group
+/// roster, the counterpart to `tests::tactical::r_is_not_a_second_way_
+/// into_the_picker` on the battle map. The probe just above exercises
+/// every key the engine actually advertises, and `r` is not one of them —
+/// this pins the negative down directly rather than leaving it to that
+/// omission alone.
+#[test]
+fn lowercase_r_is_not_bound_on_the_group_roster() {
+    let mut app = battling_app();
+
+    app.handle_key(GameKey::Char('r'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert!(app.status_line.is_none());
+    assert!(
+        !app.is_revealing(),
+        "a lowercase r must not have planned or resolved anything"
+    );
 }
 
 /// The bug this feature exists to fix: a resolved round used to queue its

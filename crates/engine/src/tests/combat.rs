@@ -286,7 +286,7 @@ fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
 
 /// The renderers draw this list verbatim instead of hardcoding strings.
 #[test]
-fn battle_party_commands_offers_all_attack_all_defend_and_jack_out() {
+fn battle_party_commands_offers_all_attack_all_defend_resolve_and_jack_out() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let species = game.species_defs().into_iter().next().unwrap().id;
@@ -297,8 +297,8 @@ fn battle_party_commands_offers_all_attack_all_defend_and_jack_out() {
     let keys: Vec<char> = commands.iter().map(|c| c.key).collect();
     assert_eq!(
         keys,
-        vec!['A', 'D', 'j'],
-        "uppercase for the party-wide pair, lowercase for jack out"
+        vec!['A', 'D', 'R', 'j'],
+        "uppercase for the party-wide pair and resolve, lowercase for jack out"
     );
     for command in &commands {
         assert!(

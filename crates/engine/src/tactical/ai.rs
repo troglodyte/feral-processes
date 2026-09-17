@@ -478,10 +478,13 @@ impl Game {
     /// `tactical_ai_actor`'s gate is `Hostile`, `Summoned` or taken-over
     /// because every other party body is the player's to command — so a
     /// fight with nobody at the keyboard cannot be resolved through the door
-    /// above, which is the whole of why this one exists. **Its only caller
-    /// is `arena::run`**: called from a real fight it would walk a
-    /// companion by itself, which is exactly the failure that gate is
-    /// there to prevent.
+    /// above, which is the whole of why this one exists. **It has two
+    /// callers, `arena::run` and `Game::auto_resolve_battle`**: called from
+    /// a real fight unasked, it would walk a companion by itself, which is
+    /// exactly the failure that gate is there to prevent — the second
+    /// caller drives companions only because the player pressed `[R]` and
+    /// asked for it, the consent the `tactical_ai_actor` gate otherwise
+    /// stands in for.
     ///
     /// A party body **swings and never invokes**, which is not a policy
     /// invented for the tester: `PartyPlan::AllAttack` is the group model's

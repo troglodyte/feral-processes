@@ -547,6 +547,9 @@ pub struct AllyOption {
 pub enum PartyCommandKind {
     AllAttack,
     AllDefend,
+    /// Plays the fight out to its end with no pacing — `[R]` on the group
+    /// roster. See `Game::auto_resolve_battle`.
+    AutoResolve,
     JackOut,
 }
 
@@ -555,8 +558,10 @@ pub enum PartyCommandKind {
 #[derive(Debug, Clone)]
 pub struct PartyCommand {
     pub kind: PartyCommandKind,
-    /// Uppercase for the party-wide pair, so shift reads as "everyone does
-    /// this" against the lowercase per-slot keys.
+    /// Uppercase for a party-wide command — `AllAttack`, `AllDefend`,
+    /// `AutoResolve` and `JackOut` all take one — so shift reads as
+    /// "everyone does this" (or "no one does anything else") against the
+    /// lowercase per-slot keys.
     pub key: char,
     pub label: String,
     /// Whether the UI must collect an enemy group before this can run.

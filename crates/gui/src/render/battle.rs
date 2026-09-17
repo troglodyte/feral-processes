@@ -5,13 +5,32 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::battle::SpecialOption;
+use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
 use feral_processes_engine::components::POWER_MAX;
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
 /// two ranges can never meet.
 const PARTY_BAR_KEY_BASE: u64 = 1000;
+
+/// The bar drawn at the foot of the roster once narration has finished
+/// revealing and the fight is still open — every offered action, then every
+/// party command, joined exactly as `draw_battle` shows them.
+///
+/// Extracted so `the_group_action_bar_fits_the_screen` measures what the
+/// screen actually draws instead of a second copy of this line — the same
+/// reason the tactical screen's `action_bar` is its own function.
+pub(super) fn action_bar_line(options: &[ActionOption], party_commands: &[PartyCommand]) -> String {
+    let mut actions: Vec<String> = options
+        .iter()
+        .map(|o| match &o.unavailable {
+            None => o.label.clone(),
+            Some(reason) => format!("{} ({reason})", o.label),
+        })
+        .collect();
+    actions.extend(party_commands.iter().map(|c| c.label.clone()));
+    actions.join("   ")
+}
 
 fn status_tag(status: &Option<String>) -> String {
     status
@@ -490,19 +509,10 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         } else {
             // The action bar is drawn from whatever the engine offers, never
             // from strings authored here — so a new action reaches both
-            // renderers without either being touched.
-            let mut actions: Vec<String> = view
-                .options
-                .iter()
-                .map(|o| match &o.unavailable {
-                    None => o.label.clone(),
-                    Some(reason) => format!("{} ({reason})", o.label),
-                })
-                .collect();
-            // Party-level commands come from the engine too, so the two
-            // renderers cannot drift on them either.
-            actions.extend(party_commands.into_iter().map(|c| c.label));
-            actions.join("   ")
+            // renderers without either being touched. Party-level commands
+            // come from the engine too, so the two renderers cannot drift on
+            // them either.
+            action_bar_line(&view.options, &party_commands)
         };
         painter.ui(
             bar,
@@ -1237,6 +1247,86 @@ mod tests {
             texts.iter().any(|t| t.contains("[OVERC")),
             "the party roster row should carry its rarity tag: {texts:?}"
         );
+    }
+
+    /// The group action bar is one unbroken line drawn with no wrap and no
+    /// clip (unlike the tactical bar's `strip::fitting`), so a longer row —
+    /// `[R]esolve` added roughly twelve cells to it — is a measured question
+    /// rather than a hope. Built through `action_bar_line`, the same
+    /// function `draw_battle` calls, so this measures what is actually
+    /// drawn.
+    ///
+    /// **The worst case, built directly** rather than fished for with a
+    /// seed search: `action_bar_line` is pure, and a seeded fight always
+    /// carries usable items, so `[u]se item (no usable items)` — the only
+    /// `unavailable` reason `battle_action_options` can produce, and the
+    /// widest row on the bar — was never measured before. All four options
+    /// and all four party commands, every one of them advertised at once,
+    /// which is the actual ceiling this line can reach.
+    #[test]
+    fn the_group_action_bar_fits_the_screen() {
+        use feral_processes_engine::battle::{ActionKind, PartyCommandKind, TargetSpec};
+
+        let option = |kind, key, label: &str, target, unavailable: Option<&str>| ActionOption {
+            kind,
+            key,
+            label: label.to_string(),
+            detail: String::new(),
+            target,
+            unavailable: unavailable.map(str::to_string),
+        };
+        let options = vec![
+            option(
+                ActionKind::Attack,
+                'a',
+                "[a]ttack",
+                TargetSpec::EnemyGroup,
+                None,
+            ),
+            option(ActionKind::Defend, 'd', "[d]efend", TargetSpec::None, None),
+            option(
+                ActionKind::Special,
+                's',
+                "[s]pecial",
+                TargetSpec::SpecialAbility,
+                None,
+            ),
+            option(
+                ActionKind::UseItem,
+                'u',
+                "[u]se item",
+                TargetSpec::InventoryItem,
+                Some("no usable items"),
+            ),
+        ];
+        let command = |kind, key, label: &str, needs_target| PartyCommand {
+            kind,
+            key,
+            label: label.to_string(),
+            needs_target,
+        };
+        let party_commands = vec![
+            command(PartyCommandKind::AllAttack, 'A', "[A]ll attack", false),
+            command(PartyCommandKind::AllDefend, 'D', "[D] all defend", false),
+            command(PartyCommandKind::AutoResolve, 'R', "[R]esolve", false),
+            command(PartyCommandKind::JackOut, 'j', "[j]ack out", false),
+        ];
+        let line = action_bar_line(&options, &party_commands);
+
+        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
+            let m = ui_metrics(h);
+            let margin = m.inset * 2.0;
+            let avail = w - margin * 2.0;
+            crate::paint::with_painter(|p| {
+                let taken = p.measure_ui_advance(&line, m.font_size);
+                assert!(
+                    taken <= avail,
+                    "the group action bar overhangs its screen by {:.1}px at \
+                     {w}x{h}: {line:?}",
+                    taken - avail
+                );
+            });
+        }
     }
 }
 

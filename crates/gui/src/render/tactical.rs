@@ -792,16 +792,22 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         // shared `s` stop reading as the same key.
         ("s".to_string(), "special".to_string()),
         ("E".to_string(), "end turn".to_string()),
+        // Before `A`, which stays last per its own comment below.
+        ("R".to_string(), "resolve".to_string()),
         // Last, because `strip::fitting` drops from the end and this is the
         // row that may go — but it does not go at 1280x720, which is
         // `the_action_bar_fits_the_log_pane`'s measurement and not a hope.
         ("A".to_string(), "auto-attack".to_string()),
     ];
     if view.acted {
-        // The auto row survives a spent turn: arming it is not an action, and
-        // a turn with nothing left to spend is exactly when a player decides
-        // they would rather watch the rest.
-        rows.retain(|(k, _)| k == "E" || k == "A");
+        // The auto and resolve rows survive a spent turn: arming either is
+        // not an action, and a turn with nothing left to spend is exactly
+        // when a player decides they would rather watch the rest —
+        // `tactical_drive_turn` on a spent turn is safe (`tactical_attack`
+        // and `tactical_step` both refuse when `acted`, so `[R]` just ends
+        // the turn and carries on), and hiding it here would hide a key
+        // that is not actually refused.
+        rows.retain(|(k, _)| k == "E" || k == "R" || k == "A");
     }
     rows
 }
@@ -1619,12 +1625,13 @@ mod tests {
 
         view.acted = true;
         let spent = action_bar(Mode::TacticalBattle, &view, false);
-        // `A` stays: arming auto-attack is not an action and is not refused on
-        // a spent turn — and a turn with nothing left to spend is exactly when
-        // a player decides they would rather watch the rest of the fight.
+        // `R` and `A` both stay: arming auto-attack or driving the rest of
+        // the fight are not actions and are not refused on a spent turn —
+        // and a turn with nothing left to spend is exactly when a player
+        // decides they would rather watch the rest of the fight.
         assert_eq!(
             spent.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
-            vec!["E", "A"],
+            vec!["E", "R", "A"],
             "a spent turn still offered an action"
         );
     }

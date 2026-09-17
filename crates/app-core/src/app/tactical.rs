@@ -107,6 +107,10 @@ impl App {
                 }
                 self.after_tactical_action();
             }
+            // Uppercase, `E`'s reason — and free here: `r` already backs out
+            // of nothing on this screen (`r_is_not_a_second_way_into_the_
+            // picker`), so the shift-slip costs nothing either.
+            GameKey::Char('R') => self.auto_resolve(),
             _ => {}
         }
     }
@@ -358,7 +362,7 @@ impl App {
     /// **`has_active_battle` and not the tactical resource alone.** A fight
     /// that ended took `TacticalBattle` with it, and the board the popup is
     /// drawn over is the copy `Game::tactical_result_view` kept.
-    fn settle_tactical_end(&mut self) -> bool {
+    pub(crate) fn settle_tactical_end(&mut self) -> bool {
         let over = self.game.as_ref().is_some_and(|g| !g.has_active_battle());
         if !over {
             return false;

@@ -295,3 +295,14 @@ Gates: `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
 
 `feat/social-behaviours-survey` has uncommitted edits to `memories.rs`,
 `components.rs` and `tests/assets.rs`. Whichever lands second rebases.
+
+## Corrected in the plan
+
+Checked against source on 2026-09-17, ahead of implementation:
+`docs/superpowers/plans/2026-09-17-floor-finishes.md`'s "Where this plan
+corrects the spec" lists nine points where this document's design and the
+real source disagree — `Tile` staying untouched rather than gaining a
+sprite field, `DigSite` losing `Copy`, `MemorySubject::BaseTile` being a
+struct variant rather than a tuple one, the dry rule reading a substrate
+*count* rather than a bool, and five smaller ones. The plan is what was
+built; read it rather than this document wherever the two disagree.

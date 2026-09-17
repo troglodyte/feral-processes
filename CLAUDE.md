@@ -566,6 +566,8 @@ relying on one, and correct all three places if it has moved.
   that function through `Game::build_candidates` rather than a percentage.
 - **`Potential`'s two build rolls are deliberately independent of the four
   combat rolls, and `quality_percent` still folds only the four.**
+- **A finish is a third dig mark over laid floor, stored beside `BaseGrid`'s
+  cells and never in them, and `view_finishes_at` is gui's only door to it.**
 
 ### Instrumentation
 

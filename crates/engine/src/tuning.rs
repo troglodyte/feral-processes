@@ -5164,6 +5164,64 @@ pub const TACTICAL_AI_REACTION_WEIGHT: f32 = 1.0;
 pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Tactical squads
+// ─────────────────────────────────────────────────────────────────────────
+
+/// One row of the formation table: an exact set size that folds into a
+/// single enhanced body on a battle map, and what that body is worth.
+///
+/// A table and not a special case, so a larger formation later is another
+/// row rather than a second code path — `tactical::squads::plan` walks
+/// `FORMATIONS` largest-first, and every reader of a body's shape
+/// (`TacticalBattle::footprint_of`, `Game::actions_per_turn`) treats the
+/// *absence* of `components::Squad` as the one-cell, one-action row this
+/// table does not need to spell out.
+///
+/// Difficulty tuning, so it lives here and not in `assets/`, per
+/// CLAUDE.md's moddability rule: content is moddable, how hard the game is,
+/// is not.
+pub struct Formation {
+    /// The exact number of same-species bodies a set of this size cuts.
+    pub members: usize,
+    /// The side, in cells, of the square footprint the folded body
+    /// occupies.
+    pub footprint: u8,
+    /// Actions per turn the folded body gets — a single body always gets
+    /// one, so this table is where "more than one" starts existing at all.
+    pub actions: u8,
+    /// The fraction of the members' summed `atk` the folded body swings
+    /// with. `Game::spawn_squad` bakes this into `Stats::atk` once, at
+    /// formation; `Game::effective_atk`'s `Squad` arm then scales *that*
+    /// figure by the squad's own remaining Integrity, so the two rules
+    /// compose rather than duplicate.
+    pub swing_share: f32,
+    /// The noun the engine builds a squad's name from — `"<species>
+    /// squad (5)"`.
+    pub noun: &'static str,
+    /// The mark drawn in the footprint's corner nothing else claims.
+    pub mark: char,
+}
+
+/// The shipped formation table: one row, five of a kind folding into a 2x2
+/// squad with two actions a turn.
+///
+/// `swing_share` is expected to move once squads have been played —
+/// `docs/measurements/` is the instrument, since `balance_sim` models no
+/// battle maps and so gates none of this. At `0.5` and two actions, a fresh
+/// squad's turn deals what its five members would deal fighting alone; the
+/// remaining differences (two large hits losing less to mitigation than
+/// five small ones, the damage landing on one target, no overkill wasted
+/// between members) are the formation's actual edge over five loose bodies.
+pub const FORMATIONS: &[Formation] = &[Formation {
+    members: 5,
+    footprint: 2,
+    actions: 2,
+    swing_share: 0.5,
+    noun: "squad",
+    mark: '^',
+}];
+
+// ─────────────────────────────────────────────────────────────────────────
 // Battle summons
 // ─────────────────────────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@ pub mod ai;
 pub mod deploy;
 pub mod map;
 pub mod reach;
+pub mod squads;
 pub mod turn;
 pub mod view;
 

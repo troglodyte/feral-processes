@@ -4088,6 +4088,15 @@ pub const FUMBLE_RECOIL_FRACTION: f32 = 0.5;
 /// Percentage points of evasion the Exposed rung strips from the fumbler
 /// until their next turn.
 pub const EXPOSED_EVASION_PERCENT: i32 = 50;
+/// Percentage points of evasion a defender in partial cover gains against
+/// the body shooting at them.
+///
+/// Read by `combatant_profile`'s own caller `defender_profile_against`, and
+/// so kept here beside the Exposed rung rather than with the tactical grid's
+/// constants: the two are the same kind of late multiplicative percentage on
+/// the same number, one up and one down, and a reader comparing their
+/// magnitudes should not have to go looking.
+pub const COVER_EVASION_PERCENT: i32 = 50;
 
 /// How long the Exposed rung lasts. One round, because
 /// `ActiveStatus::landed_this_round` already exempts the round a condition

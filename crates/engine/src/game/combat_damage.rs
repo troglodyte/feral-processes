@@ -163,6 +163,42 @@ impl Game {
         }
     }
 
+    /// `defender`'s side of an attack roll from `attacker`, cover included.
+    ///
+    /// **The one place the cover bonus enters a roll**, and the reason it
+    /// lives here rather than in `combatant_profile`: cover is a property of
+    /// the *pair*, and `combatant_profile` takes one entity by design — the
+    /// Exposed rung it already reads is entity state and has no second body
+    /// to ask about. So this wraps that function rather than copying it,
+    /// and nothing moves out of it.
+    ///
+    /// `get_resource`, not `resource`: this runs in the group model too,
+    /// where there is no board, and a panic there would be the whole group
+    /// model.
+    ///
+    pub(crate) fn defender_profile_against(
+        &self,
+        attacker: Entity,
+        defender: Entity,
+        swing: battle::Swing,
+    ) -> battle::Combatant {
+        let mut profile = self.combatant_profile(defender, swing);
+        let covered = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|battle| {
+                let from = battle.cell_of(attacker)?;
+                let at = battle.cell_of(defender)?;
+                Some(tactical::reach::cover_between(&battle.board, from, at))
+            })
+            .unwrap_or(false);
+        if covered {
+            profile.evasion =
+                profile.evasion * (100 + crate::tuning::COVER_EVASION_PERCENT) as f64 / 100.0;
+        }
+        profile
+    }
+
     /// Lands one rung of the fumble ladder on `fumbler`.
     ///
     /// **Rungs replace rather than stack.** `StatusEffects` holds one
@@ -225,7 +261,8 @@ impl Game {
         // inside `resolve_attack` — deals real damage rather than zero.
         // `plain`, not `swing`: an aimed routine aims the attacker's swing,
         // and handing its accuracy to the riposte would aim the counter too.
-        let defender_profile = self.combatant_profile(
+        let defender_profile = self.defender_profile_against(
+            attacker,
             defender,
             battle::Swing::plain(self.natural_range_of(defender)),
         );

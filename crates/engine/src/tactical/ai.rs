@@ -862,7 +862,11 @@ impl Game {
     fn expected_reaction_damage(&self, reactor: Entity, mover: Entity) -> f32 {
         let swing = crate::battle::Swing::reaction(self.natural_range_of(reactor));
         let attacker = self.combatant_profile(reactor, swing);
-        let defender = self.combatant_profile(
+        // A call rather than a copy: a reaction reaches `TACTICAL_MELEE_RANGE`
+        // and cover's first rule refuses melee, so this is a no-op today —
+        // and stays correct if that rule ever moves.
+        let defender = self.defender_profile_against(
+            reactor,
             mover,
             crate::battle::Swing::plain(self.natural_range_of(mover)),
         );

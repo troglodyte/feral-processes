@@ -6,6 +6,7 @@
 //! `Game`.
 
 pub(crate) mod achievements;
+pub(crate) mod auto_resolve;
 pub(crate) mod base;
 pub(crate) mod base_space;
 pub(crate) mod caravan;

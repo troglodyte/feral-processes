@@ -81,6 +81,7 @@ use components::{
     Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Tampered, Task, TaskKind,
     Temporary, TownPatrol, WanderAi, ZonePortal,
 };
+pub use game::auto_resolve::AutoResolve;
 pub use game::base::transfer::TransferBasket;
 pub use game::base::work_orders::WorkOrder;
 pub use game::caravan::CaravanReach;

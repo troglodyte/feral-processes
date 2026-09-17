@@ -1020,6 +1020,21 @@ pub const JACK_OUT_CHANCE_MAX: f64 = 0.95;
 pub const MIN_INDIVIDUAL_ROLL: f32 = 0.8;
 pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 
+/// Rounds `Game::auto_resolve_battle` will drive a fight for, in either
+/// combat model, before giving up and reporting `AutoResolve::Stalled` with
+/// the fight still open.
+///
+/// **A stalemate guard, never a difficulty lever.** Neither live model has
+/// a round cap of its own — a fight with no reachable target just hands
+/// turns on forever — so this exists to bound the loop, not to shape how
+/// fights play out; a real fight ends far short of it. The longest single
+/// authored set-piece on record is `class-mirror` at 21 rounds
+/// (`docs/measurements/2026-08-19-combat-model-slice-1.md`), and the arena's
+/// own `ROUND_CAP` (`arena::run`) sits at 2000 for the same "stalemate, not
+/// a real bound" reason. 200 is comfortably above anything a player's
+/// fight can reach and comfortably below flooding the log with a stall.
+pub const AUTO_RESOLVE_ROUND_CAP: u32 = 200;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Taming
 // ─────────────────────────────────────────────────────────────────────────

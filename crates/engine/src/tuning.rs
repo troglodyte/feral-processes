@@ -5122,6 +5122,21 @@ pub const TACTICAL_AI_REACH_SCORE: f32 = 40.0;
 pub const TACTICAL_AI_CLOSING_WEIGHT: f32 = 1.0;
 pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
 
+/// What standing behind a boulder is worth to a hostile, as a fraction of
+/// the targets it would have cover against.
+///
+/// **Bracketed rather than tuned alone**, against the three above. Strictly
+/// below `TACTICAL_AI_REACH_SCORE`, so full cover is never worth walking out
+/// of reach for; well above `TACTICAL_AI_CLOSING_WEIGHT`, or nothing would
+/// ever take a cell for it. The melee tie-break is smaller than crowding for
+/// crowding's own reason: a body already in reach may prefer cover between
+/// two cells that both reach, and may never be talked out of the fight by
+/// it. Changing `COVER_EVASION_PERCENT` is not a reason to move either of
+/// these — they are read against the terms beside them, not against what
+/// cover is worth in the roll.
+pub const TACTICAL_AI_COVER_WEIGHT: f32 = 4.0;
+pub const TACTICAL_AI_COVER_TIEBREAK: f32 = 0.25;
+
 /// What a point of expected reaction damage is worth against the three
 /// terms above, when a hostile weighs a cell it would have to walk out of
 /// somebody's reach to take.

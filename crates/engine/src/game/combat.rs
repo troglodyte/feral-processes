@@ -138,9 +138,10 @@ impl Game {
     }
 
     /// Which round the open fight is on, whichever model is holding it, or
-    /// `None` when no fight is open. The only counter a `ReachCharge` is
-    /// ever measured against.
-    fn fight_round(&self) -> Option<u32> {
+    /// `None` when no fight is open. `ReachCharge` is measured against it,
+    /// and it is `auto_resolve_battle`'s own round counter — `pub(crate)`
+    /// for that second caller, in `game::auto_resolve`.
+    pub(crate) fn fight_round(&self) -> Option<u32> {
         if let Some(battle) = self.world.get_resource::<BattleState>() {
             return Some(battle.round);
         }

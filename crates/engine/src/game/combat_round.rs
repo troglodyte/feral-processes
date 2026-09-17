@@ -208,6 +208,42 @@ impl Game {
         self.tick();
     }
 
+    /// One step of the group model's "everyone attacks" plan: fill every
+    /// unplanned commanded slot with `Attack { group: 0 }`, resolve the
+    /// round if that leaves it ready, and report whether a round actually
+    /// went out.
+    ///
+    /// `[A]`'s own path — `App::plan_every_slot` calls the same two
+    /// primitives this wraps — pulled out to one method because
+    /// `arena::run::run_rep` and `auto_resolve_battle` both need to run it
+    /// and neither may hold its own copy: the arena's published numbers
+    /// rest on `[A]`'s path being the game's path, and a second spelling of
+    /// it is exactly the drift `CLAUDE.md`'s "a call, not a copy" rule
+    /// forbids.
+    ///
+    /// `false` covers two cases a caller cannot tell apart from here and
+    /// does not need to: `battle_plan_remaining` refused because the fight
+    /// ended between the check and the call, or the round still is not
+    /// ready once every commandable slot is filled (a fork or an ally
+    /// nobody may plan for). Either way there is nothing left this step can
+    /// do.
+    pub(crate) fn battle_auto_round(&mut self) -> bool {
+        // An `Err` here means the battle ended between the caller's own
+        // stop check and this call — the fight being over, not a bug to
+        // propagate.
+        if self
+            .battle_plan_remaining(BattleAction::Attack { group: 0 })
+            .is_err()
+        {
+            return false;
+        }
+        if !self.battle_round_ready() {
+            return false;
+        }
+        self.battle_resolve_round();
+        true
+    }
+
     /// Puts `ability` on cooldown for `entity`, if it has one to arm.
     ///
     /// **Always call this before the effect resolves.** A killing blow ends

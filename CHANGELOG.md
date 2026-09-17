@@ -42,6 +42,21 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.201
+
+**A boulder standing between you and whoever is shooting at you now makes
+you harder to hit, and walking around it takes that protection away.** On a
+battle map, a body with cover on the attacker's side of it dodges half again
+as well — but only against shots from that side, so flanking is simply
+stepping somewhere the rock no longer helps. Cover does nothing at arm's
+length, nothing against a blast, and nothing where the shot could not be
+taken at all. The hostiles read the same rule you do: a body that fights at
+range will walk to a sheltered cell it can still fire from, while one that
+fights up close will not stall behind a rock instead of closing. A body
+sheltered from whoever is acting wears a mark in the corner of its tile, and
+the cells that would shelter *you* are washed on the movement overlay before
+you step.
+
 ## 0.13.200
 
 **Walking away from something you are standing next to now costs you a free

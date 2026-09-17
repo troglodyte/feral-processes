@@ -259,7 +259,10 @@ impl Game {
             .get_resource::<TacticalBattle>()
             .and_then(|battle| {
                 let from = battle.cell_of(attacker)?;
-                let at = battle.cell_of(defender)?;
+                // `defender_profile_against`'s own conversion: the nearest of
+                // the defender's footprint cells to the attacker, one cell
+                // today without a `Squad`.
+                let at = reach::nearest_cell(&battle.cells_of(defender), from)?;
                 Some(reach::cover_between(&battle.board, from, at))
             })
             .unwrap_or(false)

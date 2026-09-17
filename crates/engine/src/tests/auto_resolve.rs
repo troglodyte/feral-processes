@@ -104,6 +104,42 @@ fn a_fight_nobody_can_end_stalls_at_the_cap_with_the_fight_open() {
     );
 }
 
+/// A stalled resolve owes the hook its rounds too — the `if` that calls it
+/// does not special-case `Stalled` against `Finished`, so every round the
+/// cap actually spent must reach it, exactly `AUTO_RESOLVE_ROUND_CAP` of
+/// them. `App::auto_resolve` installs the same hook whichever `AutoResolve`
+/// comes back (see app-core's `battle.rs`), so an arena session's `Watch`
+/// stalling with the wrong round count would be this call site lying, and
+/// there is no door onto a live `Stats` write from app-core's own tests to
+/// build that fixture there — see the comment in `tests::arena` where one
+/// was tried.
+#[test]
+fn a_stalled_resolve_calls_the_hook_for_every_round_it_fought() {
+    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Stats>(player).unwrap().hp = 10_000_000;
+    game.world.get_mut::<Stats>(player).unwrap().max_hp = 10_000_000;
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    {
+        let mut w = game.world.get_mut::<Stats>(wild).unwrap();
+        w.hp = 10_000_000;
+        w.max_hp = 10_000_000;
+        w.atk = 0;
+    }
+    game.start_battle(vec![wild]);
+
+    let mut calls = 0u32;
+    let outcome = game.auto_resolve_battle_with(|_| calls += 1);
+
+    assert_eq!(outcome, AutoResolve::Stalled);
+    assert!(game.has_active_battle());
+    assert_eq!(
+        calls,
+        tuning::AUTO_RESOLVE_ROUND_CAP,
+        "a stall must feed the hook every round the cap actually spent, not none of them"
+    );
+}
+
 /// `App::auto_resolve` feeds an arena's `Watch` through `auto_resolve_
 /// battle_with`'s hook — it has to see one call per round actually fought,
 /// the same count `arena::run`'s own loop produces driving `battle_auto_

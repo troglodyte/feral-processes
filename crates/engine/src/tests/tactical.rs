@@ -3711,3 +3711,93 @@ mod cover_by_shape {
         assert!(!battle::Swing::default().cover_ignored);
     }
 }
+
+/// What the screen is told about cover.
+mod cover_telegraph {
+    use super::*;
+    use crate::tests::combat_status::{COVERED_BOARD, cover_fight};
+
+    /// **The test the spec asks for by name, and the one that must not be
+    /// weakened.** The mark and the roll are two calls into one rule; over
+    /// every ordered pair on a board, they answer the same thing.
+    #[test]
+    fn the_telegraph_agrees_with_the_roll() {
+        let (game, player, wild) = cover_fight(905, &COVERED_BOARD, (4, 1), (4, 4));
+        let mut agreed = 0;
+        for (attacker, defender) in [(player, wild), (wild, player)] {
+            let swing = crate::battle::Swing::plain(game.natural_range_of(defender));
+            let raised = game
+                .defender_profile_against(attacker, defender, swing)
+                .evasion
+                > game.combatant_profile(defender, swing).evasion;
+            assert_eq!(
+                game.body_in_cover(attacker, defender),
+                raised,
+                "the mark and the roll disagree"
+            );
+            agreed += u32::from(raised);
+        }
+        assert_eq!(
+            agreed, 1,
+            "the fixture should shelter exactly one of the two, or it proves nothing"
+        );
+    }
+
+    /// The standing mark is a hostile's turn only — on the player's own,
+    /// nothing has been aimed yet.
+    #[test]
+    fn the_standing_mark_is_a_hostiles_turn_only() {
+        let (mut game, player, wild) = cover_fight(906, &COVERED_BOARD, (4, 4), (4, 1));
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+        let view = game.tactical_view().expect("a fight is open");
+        assert!(
+            view.bodies.iter().all(|b| !b.in_cover),
+            "the player's own turn lit a standing mark"
+        );
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let view = game.tactical_view().expect("a fight is open");
+        let marked = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == player)
+            .expect("the player is on the board");
+        assert!(
+            marked.in_cover,
+            "the boulder shelters the player from the hostile whose turn it is"
+        );
+        assert_eq!(
+            marked.in_cover,
+            game.body_in_cover(wild, player),
+            "the mark disagrees with the door it is a call into"
+        );
+    }
+
+    /// A reachable cell that would shelter the acting body is washed, and
+    /// one that would not is left alone.
+    #[test]
+    fn a_covered_destination_is_marked() {
+        let (mut game, _, wild) = cover_fight(907, &COVERED_BOARD, (4, 1), (4, 6));
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let view = game.tactical_view().expect("a fight is open");
+        assert!(
+            !view.covered.is_empty(),
+            "nothing on this board sheltered the hostile from the player"
+        );
+        for cell in &view.covered {
+            assert!(
+                view.reachable.contains(cell),
+                "a covered cell that cannot be walked to was marked"
+            );
+        }
+    }
+
+    /// A finished fight is a result screen, not a resumed one.
+    #[test]
+    fn a_finished_fight_marks_nothing() {
+        let (mut game, _, wild) = cover_fight(908, &COVERED_BOARD, (4, 1), (4, 6));
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let frozen = game.tactical_view().expect("a fight is open").frozen();
+        assert!(frozen.covered.is_empty());
+        assert!(frozen.bodies.iter().all(|b| !b.in_cover));
+    }
+}

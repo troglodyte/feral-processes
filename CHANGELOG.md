@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.199
+
+**Your dig crew can now finish a laid floor: pick a brush with [F] while
+marking out a dig, and they paint the floor a colour and carve a pattern
+into it.** Base floor was one flat grey wherever you laid it, so a room
+you had built up looked exactly like the corridor you cut to reach it.
+Each finished tile costs three Blank Substrate, a strip brush takes one
+back off, and two of the three shipped finishes are comfortable enough
+that a program standing on one remembers it fondly. Drop a file in
+`assets/floors/` to add your own.
+
 ## 0.13.198
 
 **Press R on your turn in any fight, on either battle screen, to play the

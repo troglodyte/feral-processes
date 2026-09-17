@@ -18,11 +18,15 @@ pub(crate) fn swing_sound(outcome: SwingOutcome) -> SoundEvent {
     }
 }
 
-/// How loud a band is, for `loudest_cue` alone. Deliberately not an `Ord`
-/// derived on `SwingOutcome`: the enum's own order is the four bands
-/// `battle::resolve_attack` draws, and reading a ranking into it would make
-/// a reordering there silently change what a skipped round sounds like.
-fn cue_rank(outcome: SwingOutcome) -> u8 {
+/// How loud a band is. Deliberately not an `Ord` derived on `SwingOutcome`:
+/// the enum's own order is the four bands `battle::resolve_attack` draws,
+/// and reading a ranking into it would make a reordering there silently
+/// change what a skipped round, or an auto-resolved one, sounds like.
+///
+/// `pub(crate)` beyond `loudest_cue` alone for `App::auto_resolve`'s
+/// tactical arm — see `battle::drain_tactical_auto_resolve_cues` — which
+/// ranks `SwingCueQueue`'s raw `SwingOutcome`s rather than `LogLine`s.
+pub(crate) fn cue_rank(outcome: SwingOutcome) -> u8 {
     match outcome {
         SwingOutcome::Crit => 2,
         SwingOutcome::Hit => 1,

@@ -375,6 +375,66 @@ fn the_staging_warnings_survive_the_fight() {
     assert!(!app.arena.as_ref().unwrap().warnings.is_empty());
 }
 
+/// `I1`'s regression: `auto_resolve_battle` played the whole fight inside
+/// one engine call, and the session's `Watch` was observed exactly once
+/// afterward — reading a seven-round fight as one, and copying only the
+/// last round's lines into the transcript. The fix feeds the round through
+/// the engine's own per-round hook instead of a single post-hoc call, and
+/// this checks it against the one fight everyone already trusts to count
+/// right: the identically-seeded fight played to the end by hand,
+/// `winning_an_arena_fight_lands_on_the_result`'s own path.
+#[test]
+fn pressing_r_records_every_round_the_fight_actually_took() {
+    let s = scenario(30, 1, &[("wintermute", 1)], 5);
+
+    let mut by_hand = app_fighting(40, s.clone());
+    fight_to_the_end(&mut by_hand);
+    let by_hand_record = by_hand
+        .arena
+        .as_ref()
+        .unwrap()
+        .outcome
+        .as_ref()
+        .unwrap()
+        .clone();
+    assert!(by_hand_record.won, "{by_hand_record:?}");
+    assert!(
+        by_hand_record.rounds > 1,
+        "need a multi-round fight to tell counted-once from counted-right: {by_hand_record:?}"
+    );
+
+    let mut by_r = app_fighting(40, s);
+    press(&mut by_r, GameKey::Char('R'));
+
+    assert_eq!(by_r.mode, Mode::ArenaResult, "{:?}", by_r.status_line);
+    let by_r_record = by_r.arena.as_ref().unwrap().outcome.as_ref().unwrap();
+    assert_eq!(
+        *by_r_record, by_hand_record,
+        "[R] must record what it actually fought, not the whole fight as one round"
+    );
+}
+
+// A stalled arena `[R]` recording every round it actually fought is not
+// re-proven at this layer: app-core has no door onto `Stats`, and every
+// composition reachable through `Scenario` alone either resolves well
+// inside `AUTO_RESOLVE_ROUND_CAP` or ties the opponent's damage output to
+// the same zone figure that would have to inflate its HP, killing the
+// player before the cap rather than stalling (tried both — a bare level-1
+// against eight of the toughest ordinary species loses outright, as does a
+// single ordinary opponent at a high zone). The engine's own `battle_auto_
+// round` and `auto_resolve_battle_with` tests already cover this with a
+// direct `Stats` write: `tests::auto_resolve::a_fight_nobody_can_end_
+// stalls_at_the_cap_with_the_fight_open` proves the cap and the open
+// battle, and `the_hook_fires_once_a_round_not_once_for_the_whole_fight`
+// proves the hook's call site does not special-case `Stalled` — the same
+// `if` that gates it runs whether the loop's caller ends up returning
+// `Finished` or `Stalled`, so a stall recording its rounds is not a
+// separate code path from a win recording its rounds. `App::auto_resolve`
+// installs the identical hook closure regardless of which `AutoResolve`
+// comes back (see `battle.rs`), so this wiring is what would have to
+// diverge for the two to disagree, and it does not branch on the outcome
+// before calling `auto_resolve_battle_with`.
+
 /// An open builder holding `scenario`, with nothing fought yet.
 fn app_building(seed: u32, scenario: Scenario) -> App {
     let mut app = app_with_arena(seed);

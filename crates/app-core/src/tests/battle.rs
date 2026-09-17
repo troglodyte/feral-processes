@@ -108,17 +108,17 @@ fn make_both_sides_unkillable(app: &mut App) {
 
 /// `[R]` plays a group fight out to its end with no pacing and opens the
 /// results at once, with nothing left scrolling in.
+///
+/// `test_app` is always `DifficultyMode::Forgiving` (see `support::
+/// test_app`), so `Mode::GameOver` is not a reachable answer here —
+/// asserting it anyway only loosens what this pins down.
 #[test]
 fn r_resolves_the_fight_and_opens_the_results_with_nothing_unrevealed() {
     let mut app = battling_app_with(|app| weaken_every_wild(app, 1));
 
     app.handle_key(GameKey::Char('R'));
 
-    assert!(
-        matches!(app.mode, Mode::BattleResult | Mode::GameOver),
-        "expected the results screen (or a permadeath game over), got {:?}",
-        app.mode
-    );
+    assert_eq!(app.mode, Mode::BattleResult, "{:?}", app.status_line);
     assert!(
         !app.is_revealing(),
         "[R] should have released every line at once"
@@ -160,7 +160,7 @@ fn a_stalled_resolve_stays_on_the_roster_and_says_so() {
 /// resolves to is the engine's business, and depends on the gear and
 /// party the seed happens to hand out.
 #[test]
-fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensitive() {
+fn battle_action_keys_come_from_the_engine_with_only_the_party_commands_case_sensitive() {
     let probe = battling_app();
     let game = probe.game.as_ref().unwrap();
     let per_slot: Vec<char> = game
@@ -200,6 +200,26 @@ fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensiti
             "[{key}] is advertised by the engine, but the keypress was swallowed"
         );
     }
+}
+
+/// `R` is the party command; lowercase `r` binds nothing on the group
+/// roster, the counterpart to `tests::tactical::r_is_not_a_second_way_
+/// into_the_picker` on the battle map. The probe just above exercises
+/// every key the engine actually advertises, and `r` is not one of them —
+/// this pins the negative down directly rather than leaving it to that
+/// omission alone.
+#[test]
+fn lowercase_r_is_not_bound_on_the_group_roster() {
+    let mut app = battling_app();
+
+    app.handle_key(GameKey::Char('r'));
+
+    assert_eq!(app.mode, Mode::Battle);
+    assert!(app.status_line.is_none());
+    assert!(
+        !app.is_revealing(),
+        "a lowercase r must not have planned or resolved anything"
+    );
 }
 
 /// The bug this feature exists to fix: a resolved round used to queue its

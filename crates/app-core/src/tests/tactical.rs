@@ -445,6 +445,10 @@ fn r_is_not_a_second_way_into_the_picker() {
 
 /// `[R]`, uppercase, plays the fight out to its end with no pacing — the
 /// battle-map door onto `App::auto_resolve`, same as the group roster's.
+///
+/// `test_app` is always `DifficultyMode::Forgiving` (see `support::test_app`),
+/// so `Mode::GameOver` is not a reachable answer here — asserting it anyway
+/// only loosens what this pins down.
 #[test]
 fn r_on_the_players_turn_opens_the_results() {
     let mut app = fighting(9133);
@@ -452,10 +456,37 @@ fn r_on_the_players_turn_opens_the_results() {
 
     app.handle_key(GameKey::Char('R'));
 
+    assert_eq!(app.mode, Mode::TacticalResult, "{:?}", app.status_line);
+}
+
+/// `[R]`'s regression: the whole fight plays out inside one `handle_key`,
+/// so every swing pushed its own cue into `SwingCueQueue` — up to
+/// `EFFECT_QUEUE_CAP` of them — and the next frame started every one of
+/// them at once, a stacked burst rather than the single blow a paced fight
+/// sounds. Seed 9136 was checked by hand to take over twenty swings before
+/// it ends, so a single surviving cue here is the fix, not a fight too
+/// short to tell counted-right from counted-flooded apart.
+#[test]
+fn pressing_r_plays_at_most_one_swing_cue() {
+    let mut app = fighting(9136);
+    wait_for_the_player(&mut app);
+
+    app.handle_key(GameKey::Char('R'));
+
+    let sounds = app.take_sounds();
+    let swings = sounds.iter().filter(|c| is_swing_cue(c)).count();
     assert!(
-        matches!(app.mode, Mode::TacticalResult | Mode::GameOver),
-        "expected the results popup (or a permadeath game over), got {:?}",
-        app.mode
+        swings <= 1,
+        "an auto-resolved tactical fight dumped more than one swing cue into a single frame: {sounds:?}"
+    );
+    let game = app.game.as_mut().expect("the fixture has a game");
+    assert!(
+        game.take_bolts().is_empty(),
+        "auto-resolve must drain the bolt queue itself, not leave it for the next frame"
+    );
+    assert!(
+        game.take_tactical_fx().is_empty(),
+        "auto-resolve must drain the hit-flash queue itself, not leave it for the next frame"
     );
 }
 

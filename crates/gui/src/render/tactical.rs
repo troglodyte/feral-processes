@@ -283,6 +283,22 @@ pub(super) fn draw_tactical_map(
             // already carries it. The two washes stack deliberately: the
             // blue answers *where*, the red answers *at what cost*, and a
             // cell that is neither reachable nor provoking gets neither.
+            // **Between the two, and deliberately.** A cell can be reachable,
+            // sheltered and provoking all at once and all three should read;
+            // the order says which is the louder news, and an inbound
+            // reaction outranks a boulder. `HEALTHY` is the honest role —
+            // cover is protection, and nothing else on this board claims
+            // green but a party body's own health, which is the same thing
+            // said about the same side.
+            draw_cell_field(
+                painter,
+                &view.covered,
+                cell,
+                px,
+                py,
+                tile_px,
+                palette::HEALTHY,
+            );
             draw_cell_field(
                 painter,
                 &view.provoking,
@@ -574,6 +590,19 @@ fn draw_body(
         let leg = tile_px * 0.28;
         let y = py + RARITY_BAR_PX;
         painter.poly(&[(px, y), (px + leg, y), (px, y + leg)], c);
+    }
+    // **The top-right corner, which this board alone leaves free** — the
+    // surface map spends it on `nemesis_mark_rect`, which is never called
+    // here. Top-left is the con earmark and the two are meant to read as a
+    // pair, so this drops below the rarity bar exactly as that one does.
+    if body.in_cover {
+        let leg = tile_px * 0.28;
+        let far = px + tile_px - 1.0;
+        let y = py + RARITY_BAR_PX;
+        painter.poly(
+            &[(far, y), (far - leg, y), (far, y + leg)],
+            palette::HEALTHY,
+        );
     }
     if let Some(fraction) = body.hp_fraction {
         let h = (tile_px * 0.09).max(2.0);
@@ -1327,6 +1356,99 @@ mod tests {
                 "a hostile == {hostile} turn drew the other side's arrow"
             );
         }
+    }
+
+    /// The shield mark is drawn, and only for a body the view marks. Told
+    /// apart from the con earmark by *position*: both are triangles of the
+    /// same size dropping below the rarity bar, and only the corner they sit
+    /// in says which is which.
+    #[test]
+    fn a_body_in_cover_wears_a_mark() {
+        use crate::paint::painted_poly_points;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        for body in &mut view.bodies {
+            body.in_cover = false;
+        }
+        let mut fx = Fx::new();
+        let (_, bare) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let bare_polys = painted_poly_points(&bare, palette::HEALTHY);
+        let before = bare_polys.len();
+
+        view.bodies[0].in_cover = true;
+        let mut fx = Fx::new();
+        let (_, marked) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let after = painted_poly_points(&marked, palette::HEALTHY);
+        assert_eq!(
+            after.len(),
+            before + 1,
+            "one body in cover should add exactly one mark"
+        );
+        // Which corner it sits in, told without reading a colour: both
+        // triangles have a right angle at the tile corner they claim, so the
+        // x that appears twice is that corner. On the con earmark it is the
+        // smallest of the three; on this one it must be the largest.
+        let fresh = after
+            .iter()
+            .find(|pts| !bare_polys.contains(pts))
+            .expect("the new mark is not among the shapes drawn");
+        let xs: Vec<f32> = fresh.iter().map(|&(x, _)| x).collect();
+        let corner = xs
+            .iter()
+            .copied()
+            .find(|x| xs.iter().filter(|&o| o == x).count() == 2)
+            .expect("a right-angled mark has one repeated x");
+        assert_eq!(
+            corner,
+            xs.iter().copied().fold(f32::MIN, f32::max),
+            "the mark took the top-left corner the con earmark owns"
+        );
+    }
+
+    /// A covered destination is washed, and a board with none is not.
+    #[test]
+    fn a_covered_destination_is_washed() {
+        use crate::paint::painted_rects;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.covered = Vec::new();
+        let mut fx = Fx::new();
+        let (_, bare) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let before = painted_rects(&bare).len();
+
+        view.covered = view.reachable.iter().copied().take(1).collect();
+        assert_eq!(view.covered.len(), 1, "the acting body reaches nowhere");
+        let mut fx = Fx::new();
+        let (_, washed) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            painted_rects(&washed).len() > before,
+            "a covered cell drew no wash"
+        );
+    }
+
+    /// A finished board is a result screen: `frozen` clears both marks, so
+    /// neither can be drawn over one.
+    #[test]
+    fn a_finished_board_draws_neither() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.covered = view.reachable.clone();
+        for body in &mut view.bodies {
+            body.in_cover = true;
+        }
+        let frozen = view.frozen();
+        assert!(frozen.covered.is_empty());
+        assert!(frozen.bodies.iter().all(|b| !b.in_cover));
     }
 
     /// A blow in flight is drawn in the pane, and it is drawn *by the map*

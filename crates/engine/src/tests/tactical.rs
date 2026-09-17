@@ -4249,7 +4249,7 @@ mod squads {
     /// own power) is identical whether read before the swing or at the
     /// moment of death.
     #[test]
-    fn a_squads_death_pays_five_kills_worth_of_xp() {
+    fn a_squads_death_pays_five_kills_worth_of_xp_and_loot() {
         let mut game = game();
         tactical_fight(&mut game, 9, 1);
         let squad = {
@@ -4267,6 +4267,10 @@ mod squads {
         assert_eq!(members.len(), 5);
         let expected_xp: u32 = members.iter().map(|&m| game.kill_xp(m)).sum();
         let xp_before = game.world.get::<Experience>(player).unwrap().xp;
+        let downed_before = game
+            .world
+            .get::<crate::components::DownedPrograms>(player)
+            .map_or(0, |d| d.0.len());
 
         for _ in 0..64 {
             if game.world.get_resource::<TacticalBattle>().is_none() {
@@ -4308,6 +4312,15 @@ mod squads {
             xp_after - xp_before,
             expected_xp,
             "a squad's death must pay exactly what killing its five members individually would"
+        );
+        let downed_after = game
+            .world
+            .get::<crate::components::DownedPrograms>(player)
+            .map_or(0, |d| d.0.len());
+        assert_eq!(
+            downed_after - downed_before,
+            5,
+            "a squad's death must leave five downed programs behind, one per member"
         );
     }
 }

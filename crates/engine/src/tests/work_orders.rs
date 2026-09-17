@@ -1970,7 +1970,7 @@ fn standing_jobs_and_digs_still_come_after_every_order() {
     let node = spawn_machine_at(&mut game, "research_node", 2, 3);
     game.set_standing_job(node, true, false).unwrap();
     let wall = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
-    game.toggle_mark_box(wall, wall);
+    game.toggle_mark_box(wall, wall, None);
     let site = game
         .dig_site_at(wall.0, wall.1)
         .expect("a marked wall has a dig site");

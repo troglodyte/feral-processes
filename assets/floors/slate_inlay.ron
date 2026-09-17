@@ -1,0 +1,6 @@
+(
+    id: "slate_inlay",
+    name: "Slate Inlay",
+    description: "Grey stone set flush with the tile, purely decorative.",
+    shade: Slate,
+)

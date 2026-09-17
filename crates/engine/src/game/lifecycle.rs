@@ -430,6 +430,7 @@ impl Game {
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
+            floors: floor_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -467,6 +468,7 @@ impl Game {
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
+        world.insert_resource(floor_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -781,6 +783,24 @@ impl Game {
 
     fn restore_dig_sites(&mut self, sites: Vec<save::DigSiteSave>) {
         for d in sites {
+            // `BaseGrid::prune_finishes`'s rule, reached a second way: an
+            // `Apply` order naming an id the loaded `FloorDb` no longer
+            // resolves must not become a live `DigSite` the crew can never
+            // finish. Same message shape as `prune_finishes`'s own drops,
+            // logged through the same sink.
+            if let Some(FinishOrder::Apply(id)) = &d.finish
+                && self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(id)
+                    .is_none()
+            {
+                self.log(format!(
+                    "dropped floor finish {id:?} at ({}, {}): no such finish is loaded",
+                    d.position.0, d.position.1
+                ));
+                continue;
+            }
             let wall = self.wall_at(d.position.0, d.position.1);
             self.world.spawn((
                 DigSite {
@@ -790,6 +810,7 @@ impl Game {
                     // exactly when the player should be told again.
                     announced_stuck: false,
                     announced_dry: false,
+                    finish: d.finish,
                 },
                 Durability {
                     // Clamped rather than trusted, the same way a nest's is
@@ -1038,6 +1059,7 @@ impl Game {
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
+            floors: floor_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -1048,7 +1070,7 @@ impl Game {
             affixes: affix_db,
             settlements: settlement_db,
             policy: enemy_policy,
-            warnings: load_warnings,
+            warnings: mut load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
         // Both inputs come off the save, which is the whole reason a sector
@@ -1155,6 +1177,12 @@ impl Game {
                 .collect()
         }));
         world.insert_resource(ZoneLevel(data.zone));
+        // Pruned against the loaded catalogue right before the grid becomes
+        // the live resource: a mod that renamed or deleted a finish, or a
+        // cell that stopped being floor, must not leave a dangling entry
+        // behind — `BaseGrid::revert`'s own rule, applied once at load.
+        load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
+        world.insert_resource(floor_db);
         world.insert_resource(data.base_grid);
         world.insert_resource(crate::resources::MiningMode(data.mining));
         world.insert_resource(data.enemy_strength);
@@ -2074,6 +2102,7 @@ impl Game {
                 position: (pos.x, pos.y),
                 durability: durability.hp,
                 marked: site.marked,
+                finish: site.finish.clone(),
             });
         }
         dig_sites
@@ -2685,6 +2714,7 @@ struct AssetDbs {
     structures: StructureDb,
     research: ResearchDb,
     rock: crate::rock::RockDb,
+    floors: crate::floors::FloorDb,
     items: ItemDb,
     perks: PerkDb,
     talents: crate::talents::TalentDb,
@@ -2812,6 +2842,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // the swing floor, which is a bug fix and not content.
     let (rock, rock_warnings) = crate::rock::RockDb::load_dir(&assets_dir.join("rock"))?;
     warnings.extend(rock_warnings);
+    // Same absent-is-silent rule again — see `MemoryDb`'s own doc. An empty
+    // catalogue offers no brush and leaves every laid tile plain, which is
+    // the pre-finish game.
+    let (floors, floor_warnings) = crate::floors::FloorDb::load_dir(&assets_dir.join("floors"))?;
+    warnings.extend(floor_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -2853,6 +2888,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         structures,
         research,
         rock,
+        floors,
         items,
         perks,
         affixes,

@@ -1284,3 +1284,41 @@
   `quality_label` speak. **The trap is the RNG stream**: `roll_potential`
   going from four draws to six moved every seeded spawn, and ten tests were
   re-baselined by seed or fixture, never by assertion.
+- **A finish is a third dig mark over laid floor, stored beside `BaseGrid`'s
+  cells and never in them** (`seam:floor-finishes` has the full argument —
+  why `Tile` was not widened, why `FloorShade` is an enum, the separation
+  measurement). Five traps ship with it:
+  - **A finish on a non-floor cell.** `BaseGrid::set_finish` refuses unless
+    `is_floor`, but nothing stops a cell from *stopping* being floor under a
+    site that already exists (`BaseGrid::revert`, the only path there, walks
+    it back to solid). The crew's `Apply` arm re-checks `is_floor` at landing
+    and despawns uncharged rather than trusting the check it passed at mark
+    time; `prune_finishes` re-checks the grid's own map at every load for
+    the same reason.
+  - **`DigSite` is no longer `Copy`.** `FinishOrder::Apply(FloorId)` holds a
+    `String`, so every call site that used to copy a `DigSite` needs a
+    borrow or a `.clone()` instead — a mechanical fix, but one the compiler
+    only finds one site at a time.
+  - **A finish want inserted above tile wants starves the floor.**
+    `dig_wants`'s sort key is `(f.is_some(), x, y)`, not a plain `(x, y)` —
+    a fixture that places its finish site at a *lower* coordinate than its
+    tile site and asserts the tile wins passes by coincidence of position
+    rather than by the sort key actually being exercised; the ordering test
+    has to place the finish site where a naive `(x, y)` sort would rank it
+    *first* to mean anything.
+  - **An Apply id that no longer resolves.** A save can carry a
+    `FinishOrder::Apply(id)` for a finish a mod has since renamed or
+    deleted. `restore_dig_sites` drops one of these at load (the same
+    warning shape `BaseGrid::prune_finishes` uses), and the crew's `Apply`
+    arm checks `FloorDb` again at landing and despawns uncharged rather than
+    trusting a load-time check that predates the save, or a live `DigSite`
+    from before this guard existed — `BaseGrid::set_finish` itself does not
+    validate the id, so skipping either check paints a name nothing can
+    display onto the grid and charges for it.
+  - **Opaque art hides the dim fill.** `draw_finish` paints the shade fill
+    at the tile's ambient `dim`, then an edge ring and a sprite on top.
+    Shipped finish sprites are opaque squares, not translucent overlays —
+    tinting the sprite (and the edge) at the shade's *full* strength paints
+    clean over the dimmed fill beneath it, so a finished tile stops
+    answering to the Power vignette and to cloud dimming the way a plain
+    floor tile does. All three layers must scale by the same `dim`.

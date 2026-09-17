@@ -734,6 +734,28 @@ pub(super) fn assets_dir_missing_currency_item() -> ScratchAssets {
     )
 }
 
+/// A scratch install carrying every shipped floor finish except `omit` —
+/// the stand-in for a mod that renamed or deleted a `.ron` file between a
+/// save and its later load. `copy_shipped_assets` never touches `floors/`
+/// (`FloorDb::load_dir`'s absent-is-silent rule means most tests don't need
+/// it there at all), so this copies that directory itself.
+pub(super) fn assets_dir_missing_floor(tag: &str, omit: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let shipped = test_assets_dir();
+    let dst = dir.join("floors");
+    std::fs::create_dir_all(&dst).unwrap();
+    for entry in std::fs::read_dir(shipped.join("floors")).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        if name.to_str() == Some(omit) {
+            continue;
+        }
+        std::fs::copy(entry.path(), dst.join(name)).unwrap();
+    }
+    dir
+}
+
 /// Gives the player `n` Research Data, bypassing the Research Node so
 /// the test doesn't depend on tick timing or a tamed worker.
 pub(super) fn grant_research_data(game: &mut Game, n: u32) {

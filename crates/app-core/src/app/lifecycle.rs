@@ -87,6 +87,7 @@ impl App {
             tactical_auto: false,
             excavate_cursor: None,
             excavate_anchor: None,
+            excavate_brush: None,
             pending_battle_action: None,
             pending_party_attack: false,
             pending_special_ability: None,

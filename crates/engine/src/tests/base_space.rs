@@ -9,6 +9,7 @@
 //! real entry point from all three locales and asserts which refusal it met.
 
 use super::support::*;
+use crate::floors::FloorId;
 use crate::game::base_space::BASE_EXIT_CELL;
 use crate::*;
 
@@ -2322,7 +2323,7 @@ fn marking_a_box_marks_every_solid_cell_in_it() {
         );
     }
 
-    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR, None);
 
     for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
         assert!(
@@ -2337,9 +2338,9 @@ fn marking_a_box_marks_every_solid_cell_in_it() {
 #[test]
 fn an_anchor_on_a_marked_cell_clears_the_box_instead_of_marking_it() {
     let mut game = game_at_the_frontier(3251);
-    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR, None);
 
-    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR, None);
 
     for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
         assert!(
@@ -2367,7 +2368,7 @@ fn marking_a_floor_cell_does_nothing() {
         "the fixture must draw over a cell the opening pocket already floored"
     );
 
-    game.toggle_mark_box(floored, floored);
+    game.toggle_mark_box(floored, floored, None);
 
     assert!(!is_marked(&mut game, floored));
     assert_eq!(
@@ -2384,7 +2385,7 @@ fn marking_an_open_cell_marks_it_for_flooring() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3253, cut);
 
-    game.toggle_mark_box(cut, cut);
+    game.toggle_mark_box(cut, cut, None);
 
     assert!(
         is_marked(&mut game, cut),
@@ -2398,7 +2399,7 @@ fn marking_an_open_cell_marks_it_for_flooring() {
 #[test]
 fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
     let mut game = game_at_the_frontier_cutting(3254);
-    game.toggle_mark_box(WALL, WALL);
+    game.toggle_mark_box(WALL, WALL, None);
 
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
@@ -2464,7 +2465,7 @@ fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
 #[test]
 fn marked_cells_is_sorted() {
     let mut game = game_at_the_frontier(3256);
-    game.toggle_mark_box((7, 7), (5, 5));
+    game.toggle_mark_box((7, 7), (5, 5), None);
 
     let cells: Vec<(i32, i32)> = game.marked_cells().into_iter().map(|m| m.pos).collect();
 
@@ -2482,7 +2483,7 @@ fn marked_cells_is_sorted() {
 #[test]
 fn a_marks_cut_is_the_wall_it_has_left_and_not_the_swing_cadence() {
     let mut game = game_at_the_frontier_cutting(3257);
-    game.toggle_mark_box(WALL, WALL);
+    game.toggle_mark_box(WALL, WALL, None);
 
     let cut_at = |game: &mut Game| {
         game.marked_cells()
@@ -2516,7 +2517,7 @@ fn a_marks_cut_is_the_wall_it_has_left_and_not_the_swing_cadence() {
 #[test]
 fn a_floor_it_mark_has_no_cut_to_report() {
     let mut game = game_at_the_frontier_cutting(3258);
-    game.toggle_mark_box(WALL, WALL);
+    game.toggle_mark_box(WALL, WALL, None);
 
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
@@ -2535,6 +2536,212 @@ fn a_floor_it_mark_has_no_cut_to_report() {
             .expect("the mark survives the cut")
             .cut,
         None
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Floor finishes: a finish or a strip is a third kind of dig mark
+// ---------------------------------------------------------------------------
+
+/// The five cell states the brush table is keyed on — `BaseGrid`'s own
+/// state, never a pending `DigSite`, which is what makes replacing a finish
+/// target what is actually laid rather than a job still queued behind it.
+#[derive(Clone, Copy, Debug)]
+enum CellState {
+    Solid,
+    Open,
+    FloorPlain,
+    FloorX,
+    FloorY,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Brush {
+    Plain,
+    FinishX,
+    Strip,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Outcome {
+    Skip,
+    MarkPlain,
+    MarkFinishX,
+    MarkStrip,
+}
+
+/// One assertion per cell of the design's brush table — three brushes times
+/// five cell states, fifteen cases, each a fresh fixture so no case can leak
+/// state into the next.
+#[test]
+fn the_brush_table_matches_the_design() {
+    let finish_x = FloorId::from("cobalt_carpet");
+    let finish_y = FloorId::from("moss_weave");
+
+    let cases: &[(CellState, Brush, Outcome)] = &[
+        (CellState::Solid, Brush::Plain, Outcome::MarkPlain),
+        (CellState::Open, Brush::Plain, Outcome::MarkPlain),
+        (CellState::FloorPlain, Brush::Plain, Outcome::Skip),
+        (CellState::FloorX, Brush::Plain, Outcome::Skip),
+        (CellState::FloorY, Brush::Plain, Outcome::Skip),
+        (CellState::Solid, Brush::FinishX, Outcome::Skip),
+        (CellState::Open, Brush::FinishX, Outcome::Skip),
+        (CellState::FloorPlain, Brush::FinishX, Outcome::MarkFinishX),
+        (CellState::FloorX, Brush::FinishX, Outcome::Skip),
+        (CellState::FloorY, Brush::FinishX, Outcome::MarkFinishX),
+        (CellState::Solid, Brush::Strip, Outcome::Skip),
+        (CellState::Open, Brush::Strip, Outcome::Skip),
+        (CellState::FloorPlain, Brush::Strip, Outcome::Skip),
+        (CellState::FloorX, Brush::Strip, Outcome::MarkStrip),
+        (CellState::FloorY, Brush::Strip, Outcome::MarkStrip),
+    ];
+
+    for &(state, brush, expected) in cases {
+        let mut game = game_at_the_frontier(3259);
+        let cell = WALL;
+        match state {
+            CellState::Solid => {}
+            CellState::Open => {
+                let tick = game.current_tick();
+                game.world
+                    .resource_mut::<base_grid::BaseGrid>()
+                    .open(cell.0, cell.1, tick);
+            }
+            CellState::FloorPlain => {
+                game.world
+                    .resource_mut::<base_grid::BaseGrid>()
+                    .lay_floor(cell.0, cell.1);
+            }
+            CellState::FloorX => {
+                let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+                grid.lay_floor(cell.0, cell.1);
+                grid.set_finish(cell.0, cell.1, finish_x.clone());
+            }
+            CellState::FloorY => {
+                let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+                grid.lay_floor(cell.0, cell.1);
+                grid.set_finish(cell.0, cell.1, finish_y.clone());
+            }
+        }
+
+        let order = match brush {
+            Brush::Plain => None,
+            Brush::FinishX => Some(FinishOrder::Apply(finish_x.clone())),
+            Brush::Strip => Some(FinishOrder::Strip),
+        };
+        game.toggle_mark_box(cell, cell, order.as_ref());
+
+        let site = game.dig_site_at(cell.0, cell.1);
+        let name = || format!("{state:?} cell, {brush:?} brush");
+        match expected {
+            Outcome::Skip => {
+                assert!(
+                    site.is_none(),
+                    "{}: expected no mark, but one was spawned",
+                    name()
+                );
+            }
+            Outcome::MarkPlain => {
+                let dig = game
+                    .world
+                    .get::<DigSite>(site.unwrap_or_else(|| panic!("{}: expected a mark", name())))
+                    .unwrap();
+                assert!(dig.marked, "{}", name());
+                assert_eq!(
+                    dig.finish,
+                    None,
+                    "{}: a plain mark carried a finish",
+                    name()
+                );
+            }
+            Outcome::MarkFinishX => {
+                let dig = game
+                    .world
+                    .get::<DigSite>(site.unwrap_or_else(|| panic!("{}: expected a mark", name())))
+                    .unwrap();
+                assert!(dig.marked, "{}", name());
+                assert_eq!(
+                    dig.finish,
+                    Some(FinishOrder::Apply(finish_x.clone())),
+                    "{}",
+                    name()
+                );
+            }
+            Outcome::MarkStrip => {
+                let dig = game
+                    .world
+                    .get::<DigSite>(site.unwrap_or_else(|| panic!("{}: expected a mark", name())))
+                    .unwrap();
+                assert!(dig.marked, "{}", name());
+                assert_eq!(dig.finish, Some(FinishOrder::Strip), "{}", name());
+            }
+        }
+    }
+}
+
+/// A finish-marked box clears exactly as a plain one does — the anchor
+/// decides, and clearing does not care what kind of mark it is clearing.
+#[test]
+fn a_finish_marked_box_is_cleared_by_recommitting_with_the_plain_brush() {
+    let mut game = game_at_the_frontier(3260);
+    let cell = WALL;
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(cell.0, cell.1);
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(cell, cell, Some(&apply));
+    assert!(
+        game.dig_site_at(cell.0, cell.1).is_some(),
+        "the fixture must have actually marked the cell"
+    );
+
+    game.toggle_mark_box(cell, cell, None);
+
+    assert!(
+        game.dig_site_at(cell.0, cell.1).is_none(),
+        "re-committing the same box left the finish mark standing"
+    );
+}
+
+/// Save/load's own gate for `DigSite::finish` — a real round trip through
+/// `Game::save`/`Game::load`, which a RON round trip cannot hold to: it
+/// cannot catch a skipped field or a load path that forgets to restore one.
+#[test]
+fn a_finish_mark_and_a_strip_mark_survive_a_real_save_and_load() {
+    let mut game = game_at_the_frontier(3261);
+    let finished = WALL;
+    let stripped = (WALL.0 + 1, WALL.1);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(finished.0, finished.1);
+        grid.lay_floor(stripped.0, stripped.1);
+        grid.set_finish(stripped.0, stripped.1, FloorId::from("cobalt_carpet"));
+    }
+    let apply = FinishOrder::Apply(FloorId::from("moss_weave"));
+    game.toggle_mark_box(finished, finished, Some(&apply));
+    game.toggle_mark_box(stripped, stripped, Some(&FinishOrder::Strip));
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_finish_mark_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let applied_site = loaded
+        .dig_site_at(finished.0, finished.1)
+        .expect("the Apply mark must survive the reload");
+    assert_eq!(
+        loaded.world.get::<DigSite>(applied_site).unwrap().finish,
+        Some(FinishOrder::Apply(FloorId::from("moss_weave")))
+    );
+    let stripped_site = loaded
+        .dig_site_at(stripped.0, stripped.1)
+        .expect("the Strip mark must survive the reload");
+    assert_eq!(
+        loaded.world.get::<DigSite>(stripped_site).unwrap().finish,
+        Some(FinishOrder::Strip)
     );
 }
 
@@ -2563,7 +2770,7 @@ fn base_with_a_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
 }
 
 fn mark(game: &mut Game, cell: (i32, i32)) {
-    game.toggle_mark_box(cell, cell);
+    game.toggle_mark_box(cell, cell, None);
 }
 
 fn pass(game: &mut Game, ticks: usize) {
@@ -3253,7 +3460,7 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
     let target = WALL;
     let mut game = game_at_the_frontier(3240);
     let player = game.player_entity();
-    game.toggle_mark_box(target, target);
+    game.toggle_mark_box(target, target, None);
     // One swing, so the site holds progress and survives the unmarking.
     game.strike_rock(player, target.0, target.1);
     let site = game
@@ -3274,7 +3481,7 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
             required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
         },
     ));
-    game.toggle_mark_box(target, target);
+    game.toggle_mark_box(target, target, None);
 
     for _ in 0..50 {
         game.run_dig_crew();
@@ -3300,7 +3507,7 @@ fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3241, cut);
     // An `Open` cell's site starts at zero: there is nothing left to cut.
-    game.toggle_mark_box(cut, cut);
+    game.toggle_mark_box(cut, cut, None);
     assert!(
         game.dig_site_at(cut.0, cut.1).is_some(),
         "marking an open cell spawns a site to floor"
@@ -3311,7 +3518,7 @@ fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
         cell(&game, cut).is_none(),
         "the frontier cell should have reverted to solid"
     );
-    game.toggle_mark_box(cut, cut);
+    game.toggle_mark_box(cut, cut, None);
 
     assert!(
         game.dig_site_at(cut.0, cut.1).is_none(),
@@ -3418,7 +3625,7 @@ fn a_crew_swing_queues_the_same_cue() {
 fn a_posted_digger(seed: u32, at: (i32, i32)) -> (Game, Entity) {
     let mut game = game_at_the_frontier(seed);
     let player = game.player_entity();
-    game.toggle_mark_box(at, at);
+    game.toggle_mark_box(at, at, None);
     game.strike_rock(player, at.0, at.1);
     let site = game
         .dig_site_at(at.0, at.1)
@@ -3501,7 +3708,7 @@ fn the_tick_a_crew_swing_lands_cues_once() {
 fn a_crew_laying_floor_is_silent() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3250, cut);
-    game.toggle_mark_box(cut, cut);
+    game.toggle_mark_box(cut, cut, None);
     let site = game
         .dig_site_at(cut.0, cut.1)
         .expect("marking an open cell spawns a site to floor");
@@ -4267,7 +4474,7 @@ fn a_swing_at_unseen_rock_meets_its_real_kind() {
 fn a_posted_digger_is_drawn_on_the_map() {
     let target = WALL;
     let mut game = game_at_the_frontier(3260);
-    game.toggle_mark_box(target, target);
+    game.toggle_mark_box(target, target, None);
     let site = game
         .dig_site_at(target.0, target.1)
         .expect("a marked wall has a dig site");
@@ -4293,4 +4500,672 @@ fn a_posted_digger_is_drawn_on_the_map() {
         view.wears_job_mark,
         "and wears the mark itself — a dig site has no glyph to wear it"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Floor finishes: the crew lays and strips finishes
+// ---------------------------------------------------------------------------
+
+/// A game with one program posted on a finish job at `at`: `at` is laid
+/// floor, marked with `order`, and the worker stands one tile west of it —
+/// `a_posted_digger`'s own shape, but over floor rather than rock, since a
+/// finish or strip mark never has rock for a swing to spawn lazily.
+fn a_posted_finisher(seed: u32, at: (i32, i32), order: FinishOrder) -> (Game, Entity) {
+    let mut game = game_at_the_frontier(seed);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(at.0, at.1);
+    game.toggle_mark_box(at, at, Some(&order));
+    let site = game
+        .dig_site_at(at.0, at.1)
+        .expect("a marked floor cell has a dig site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: at.0 - 1,
+            y: at.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    (game, digger)
+}
+
+/// Runs the crew for exactly one work cycle — long enough for an
+/// already-posted, already-adjacent worker to land its job once.
+fn run_to_landing(game: &mut Game) {
+    for _ in 0..crate::tuning::BASE_DIG_TICKS_PER_SWING {
+        game.run_dig_crew();
+    }
+}
+
+/// A base shelf holding `qty` Blank Substrate, without a real Depot —
+/// `tests::base_ledger::what_leaves_the_shelves_is_counted_as_consumed`'s
+/// own pattern, reused here to test the base half of `Game::spend_substrate`.
+fn give_base(game: &mut Game, qty: u32) -> Entity {
+    let shelf = game
+        .world
+        .spawn((
+            Structure {
+                kind: "depot".to_string(),
+            },
+            Position { x: 1, y: 1 },
+            crate::components::Stock::default(),
+        ))
+        .id();
+    game.world
+        .get_mut::<crate::components::Stock>(shelf)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::BLANK_SUBSTRATE), qty);
+    shelf
+}
+
+fn base_substrate(game: &Game, shelf: Entity) -> u32 {
+    game.world
+        .get::<crate::components::Stock>(shelf)
+        .unwrap()
+        .output
+        .get(&ItemId::from(ids::BLANK_SUBSTRATE))
+        .copied()
+        .unwrap_or(0)
+}
+
+#[test]
+fn crew_applies_a_finish_spending_exactly_the_cost() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(3270, WALL, FinishOrder::Apply(finish.clone()));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1),
+        Some(&finish),
+        "the cell must wear the finish it was marked for"
+    );
+    assert_eq!(
+        before - count_item(&game, ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST,
+        "the crew must spend exactly the finish's cost, no more and no less"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "a finished site is despawned"
+    );
+}
+
+/// With fewer than the cost anywhere in reach, the full pipeline (not a
+/// hand-posted worker) must never assign anybody to the job, and nothing may
+/// move against it.
+#[test]
+fn an_apply_site_below_cost_spends_nothing_and_is_not_a_want() {
+    let (mut game, staff) = base_with_a_crew(3271, 1);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(WALL.0, WALL.1);
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, WALL, Some(&apply));
+    give(
+        &mut game,
+        &ItemId::from(ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST - 1,
+    );
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    pass(&mut game, 80);
+
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        before,
+        "an unaffordable finish job must never be handed a body to spend against"
+    );
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1)
+            .is_none(),
+        "the finish must never be applied"
+    );
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        None,
+        "the dry site is not a want, so the one body has nothing to do"
+    );
+}
+
+/// The dry-finish announcement must name what the job actually needs, not
+/// claim the store is empty: `give` below leaves `FLOOR_FINISH_COST - 1`
+/// (more than zero) Blank Substrate in reach, so "no Blank Substrate in
+/// store" is simply false the moment any amount short of the cost is held.
+#[test]
+fn a_dry_finish_names_the_cost_rather_than_claiming_the_store_is_empty() {
+    let (mut game, _staff) = base_with_a_crew(3273, 1);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(WALL.0, WALL.1);
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, WALL, Some(&apply));
+    give(
+        &mut game,
+        &ItemId::from(ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST - 1,
+    );
+
+    pass(&mut game, 1);
+
+    let said = game.message_history(20).iter().any(|line| {
+        line.text.contains(&format!(
+            "needs {} Blank Substrate",
+            crate::tuning::FLOOR_FINISH_COST
+        ))
+    });
+    assert!(
+        said,
+        "the announcement must name the cost ({})",
+        crate::tuning::FLOOR_FINISH_COST
+    );
+    let claimed_empty = game
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("no Blank Substrate in store"));
+    assert!(
+        !claimed_empty,
+        "the store is not empty — the crew is short of the cost, not out of the item"
+    );
+}
+
+/// Replacing spends the full cost again; nothing is refunded for the finish
+/// that was already there.
+#[test]
+fn replacing_a_finish_spends_the_cost_and_refunds_nothing() {
+    let mut game = game_at_the_frontier(3272);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(WALL.0, WALL.1);
+        grid.set_finish(WALL.0, WALL.1, FloorId::from("cobalt_carpet"));
+    }
+    let new_finish = FloorId::from("moss_weave");
+    game.toggle_mark_box(WALL, WALL, Some(&FinishOrder::Apply(new_finish.clone())));
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("a replacement mark spawns a site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: WALL.0 - 1,
+            y: WALL.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1),
+        Some(&new_finish)
+    );
+    assert_eq!(
+        before - count_item(&game, ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST,
+        "replacing a finish must spend the full cost again"
+    );
+}
+
+#[test]
+fn strip_removes_the_finish_leaves_floor_and_spends_nothing() {
+    let mut game = game_at_the_frontier(3273);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(WALL.0, WALL.1);
+        grid.set_finish(WALL.0, WALL.1, FloorId::from("cobalt_carpet"));
+    }
+    game.toggle_mark_box(WALL, WALL, Some(&FinishOrder::Strip));
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("a strip mark spawns a site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: WALL.0 - 1,
+            y: WALL.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    let grid = game.world.resource::<base_grid::BaseGrid>();
+    assert!(
+        grid.finish_at(WALL.0, WALL.1).is_none(),
+        "the finish must be gone"
+    );
+    assert!(
+        grid.is_floor(WALL.0, WALL.1),
+        "the cell must still be floor"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        before,
+        "stripping must move no stock"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "a stripped site is despawned"
+    );
+}
+
+/// The same mutation-proof rule `the_dry_report_is_said_again_after_the_base_restocks_and_runs_out`
+/// uses: an entry count would read the line said twice as said once.
+#[test]
+fn a_dry_apply_site_announces_once_across_several_ticks() {
+    let (mut game, _staff) = base_with_a_crew(3275, 1);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(WALL.0, WALL.1);
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, WALL, Some(&apply));
+    // No Blank Substrate anywhere, base or pack.
+
+    pass(&mut game, 80);
+
+    let dry_lines = |g: &Game| {
+        g.message_history(400)
+            .into_iter()
+            .filter(|m| m.text.contains("can't finish the floor"))
+            .map(|m| m.repeats)
+            .sum::<usize>()
+    };
+    assert_eq!(
+        dry_lines(&game),
+        1,
+        "said once on entering the state, not once a tick"
+    );
+}
+
+/// A `Strip` site needs no substrate at all, so it must be worked through
+/// the full pipeline even when the base holds none anywhere.
+#[test]
+fn a_strip_site_is_a_want_with_zero_substrate() {
+    let (mut game, _staff) = base_with_a_crew(3276, 1);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(WALL.0, WALL.1);
+        grid.set_finish(WALL.0, WALL.1, FloorId::from("cobalt_carpet"));
+    }
+    game.toggle_mark_box(WALL, WALL, Some(&FinishOrder::Strip));
+
+    pass(
+        &mut game,
+        crate::tuning::BASE_DIG_TICKS_PER_SWING as usize + WALK_ALLOWANCE,
+    );
+
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1)
+            .is_none(),
+        "a Strip site must be worked even with zero substrate anywhere"
+    );
+}
+
+/// `BaseGrid::clear_finish` reports whether it actually removed anything,
+/// and the crew's own log must agree — a `Strip` site landing on a cell
+/// something else already stripped must say nothing rather than claim a
+/// strip that did not happen.
+#[test]
+fn stripping_an_already_bare_cell_logs_nothing() {
+    let mut game = game_at_the_frontier(9103);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(WALL.0, WALL.1);
+        grid.set_finish(WALL.0, WALL.1, FloorId::from("cobalt_carpet"));
+    }
+    game.toggle_mark_box(WALL, WALL, Some(&FinishOrder::Strip));
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("a marked floor cell has a dig site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: WALL.0 - 1,
+            y: WALL.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    // Gone before the crew's cycle lands, so `clear_finish` below finds
+    // nothing left to remove.
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .clear_finish(WALL.0, WALL.1);
+
+    run_to_landing(&mut game);
+
+    let said = game
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("strips the finish"));
+    assert!(!said, "nothing was stripped, so nothing should be logged");
+}
+
+/// `BaseGrid::revert` is the only way to make this cell — nothing in play
+/// takes a `Floor` cell back — but the store must still hold "a finish
+/// implies floor" if it ever happens.
+#[test]
+fn a_cell_that_stopped_being_floor_despawns_an_apply_site_uncharged() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(3277, WALL, FinishOrder::Apply(finish));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .revert(WALL.0, WALL.1);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        before,
+        "an uncharged despawn must spend nothing"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "the stale site must be despawned"
+    );
+}
+
+/// A stale `Apply` order — an id `FloorDb` no longer resolves — must never
+/// reach `BaseGrid::set_finish`: the crew despawns the site uncharged
+/// rather than painting a finish nothing can name. `set_mark` never checks
+/// `FloorDb` at all, so this fixture can hand the crew the bad order
+/// directly, the same way a save from before this check existed could.
+#[test]
+fn crew_finishes_an_unresolvable_apply_uncharged_and_despawns_it() {
+    let bogus = FloorId::from("no_such_finish");
+    let (mut game, _digger) = a_posted_finisher(9101, WALL, FinishOrder::Apply(bogus));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        before,
+        "an unresolvable finish must spend nothing"
+    );
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1)
+            .is_none(),
+        "the grid must never wear a finish FloorDb cannot resolve"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "the stale site must be despawned"
+    );
+}
+
+/// A save made while `cobalt_carpet` was installed, loaded after a mod
+/// dropped it: `restore_dig_sites` must prune the stale `Apply` order
+/// rather than spawn a `DigSite` the crew can never finish —
+/// `BaseGrid::prune_finishes`'s rule, reached a second way for the order
+/// rather than the grid's own `finishes` map.
+#[test]
+fn a_restored_apply_naming_a_dropped_finish_is_pruned_at_load() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(9102, WALL, FinishOrder::Apply(finish));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_apply_finish_dropped_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let assets = assets_dir_missing_floor("apply_finish_dropped", "cobalt_carpet.ron");
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.dig_site_at(WALL.0, WALL.1).is_none(),
+        "an Apply order naming a dropped finish must not survive the load"
+    );
+    let warned = loaded
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("no such finish is loaded"));
+    assert!(
+        warned,
+        "the drop must be logged, the way prune_finishes's own drops are"
+    );
+}
+
+/// With one tile site and one finish site and a single worker, the tile
+/// site is worked first — `dig_wants`' own ordering rule.
+#[test]
+fn with_one_worker_the_tile_site_is_worked_before_the_finish_site() {
+    let (mut game, staff) = base_with_a_crew(3278, 1);
+    let tile_cell = WALL;
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(tile_cell.0, tile_cell.1, tick);
+    game.toggle_mark_box(tile_cell, tile_cell, None);
+    // Touches the now-Open `tile_cell`, so it has a station of its own —
+    // laid directly rather than dug, since only the ordering is under test.
+    // `y - 1` rather than `y + 1`: a plain `(x, y)` sort would then rank
+    // this cell *first*, so the assertion below only passes because
+    // `dig_wants`' sort key puts a finish want (`f.is_some()`) after a tile
+    // want regardless of position.
+    let finish_cell = (tile_cell.0, tile_cell.1 - 1);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(finish_cell.0, finish_cell.1);
+    game.toggle_mark_box(
+        finish_cell,
+        finish_cell,
+        Some(&FinishOrder::Apply(FloorId::from("cobalt_carpet"))),
+    );
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+
+    // One tick is enough for `schedule_base_labour` to post the one body —
+    // it writes the assignment outright, and the walk it takes to reach the
+    // post is a separate, later concern this test is not about.
+    pass(&mut game, 1);
+
+    let tile_site = game
+        .dig_site_at(tile_cell.0, tile_cell.1)
+        .expect("one tick cannot have finished the tile job");
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(tile_site),
+        "with one body and both wants available, the tile job must be worked first"
+    );
+}
+
+#[test]
+fn spend_substrate_spends_the_base_before_the_pack() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(3279, WALL, FinishOrder::Apply(finish));
+    let shelf = give_base(&mut game, 2);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 5);
+    let pack_before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        base_substrate(&game, shelf),
+        0,
+        "the base's own shelf must be drained first"
+    );
+    assert_eq!(
+        pack_before - count_item(&game, ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST - 2,
+        "only the shortfall past the base's 2 units comes from the pack"
+    );
+}
+
+#[test]
+fn spend_substrate_below_the_count_moves_nothing_from_either_store() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(3280, WALL, FinishOrder::Apply(finish));
+    let shelf = give_base(&mut game, 1);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
+    let pack_before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        base_substrate(&game, shelf),
+        1,
+        "below the count, the base shelf must be untouched"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        pack_before,
+        "below the count, the pack must be untouched"
+    );
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1)
+            .is_none(),
+        "nothing should have been applied"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Floor finishes: the engine's view of a finish
+// ---------------------------------------------------------------------------
+
+/// `view_finishes_at` must walk the same grid `view_tiles_at` does, or gui's
+/// two lookups on one coordinate would silently disagree about its shape.
+#[test]
+fn view_finishes_at_has_view_tiles_ats_own_shape() {
+    let mut game = game_at_the_frontier(4400);
+    let (cx, cy) = game.base_pos().unwrap();
+    let tiles = game.view_tiles_at((cx, cy), 3, 2);
+    let finishes = game.view_finishes_at((cx, cy), 3, 2);
+
+    assert_eq!(finishes.len(), tiles.len());
+    for (t_row, f_row) in tiles.iter().zip(finishes.iter()) {
+        assert_eq!(t_row.len(), f_row.len());
+    }
+}
+
+/// A finish resolves at exactly the index `view_tiles_at` draws that cell's
+/// `Biome::Platform` at — the property that lets gui zip the two grids with
+/// no coordinate translation of its own.
+#[test]
+fn a_finished_cell_lands_at_view_tiles_ats_own_index() {
+    let mut game = game_at_the_frontier(4401);
+    let (cx, cy) = game.base_pos().unwrap();
+    // The player's own standing tile is already laid floor — the pocket.
+    assert!(game.world.resource_mut::<base_grid::BaseGrid>().set_finish(
+        cx,
+        cy,
+        FloorId::from("cobalt_carpet")
+    ));
+
+    let half = 3;
+    let tiles = game.view_tiles_at((cx, cy), half, half);
+    let finishes = game.view_finishes_at((cx, cy), half, half);
+
+    let (row, col) = (half as usize, half as usize);
+    assert_eq!(
+        tiles[row][col].biome,
+        Biome::Platform,
+        "the fixture's own cell"
+    );
+    let finish = finishes[row][col]
+        .as_ref()
+        .expect("the centre cell was just finished");
+    assert_eq!(finish.name, "Cobalt Carpet");
+}
+
+/// Base space's own view has no meaning anywhere else, so it must not leak a
+/// finish onto a zone-surface coordinate that merely aliases one.
+#[test]
+fn view_finishes_at_is_all_none_off_base_space() {
+    let game = game(4402);
+    let finishes = game.view_finishes_at((0, 0), 2, 2);
+    assert!(
+        finishes.iter().flatten().all(|f| f.is_none()),
+        "the party is on the surface; nothing here should resolve"
+    );
+}
+
+/// A finish underfoot is named ahead of the wall beyond it — the shape
+/// correction 8 asks for: the ray's own first stop is checked for a finish
+/// before the ray runs.
+#[test]
+fn describe_base_rock_names_the_finish_before_the_wall_beyond_it() {
+    let mut game = game(4403);
+    stand_in_base_at(&mut game, 0, 0);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(1, 0);
+        assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
+        // (2, 0) is left solid by construction — the wall beyond the finish.
+    }
+
+    let line = game
+        .describe_base_rock(1, 0, 5)
+        .expect("a finish plus a wall beyond it must still answer");
+    assert!(
+        line.starts_with("Cobalt Carpet underfoot; "),
+        "the finish must be named first: {line}"
+    );
+    assert!(
+        line.contains("swings to cut through"),
+        "the rock line must still follow: {line}"
+    );
+}
+
+/// A finish with no rock in range still answers `Some` — an examined room
+/// that is fully floored and fully finished is not silence.
+#[test]
+fn describe_base_rock_names_a_finish_with_no_rock_in_range() {
+    let mut game = game(4404);
+    stand_in_base_at(&mut game, 0, 0);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        for step in 1..=5 {
+            grid.lay_floor(step, 0);
+        }
+        assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
+    }
+
+    let line = game
+        .describe_base_rock(1, 0, 5)
+        .expect("a finish alone must still answer Some");
+    assert_eq!(line, "Cobalt Carpet underfoot.");
 }

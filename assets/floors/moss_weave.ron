@@ -1,0 +1,7 @@
+(
+    id: "moss_weave",
+    name: "Moss Weave",
+    description: "A soft green matting, warm underfoot.",
+    shade: Moss,
+    comfort: Some("at_ease_on"),
+)

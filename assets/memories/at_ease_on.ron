@@ -1,0 +1,10 @@
+// A fondness for a comfortable finish, formed by lingering on it.
+(
+    id: "at_ease_on",
+    name: "At ease here",
+    blurb: "The floor underfoot is worth standing on.",
+    valence: 3.0,
+    half_life: 3000,
+    subject: BaseTile,
+    strike_cap: 3,
+)

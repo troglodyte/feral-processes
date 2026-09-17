@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::{AbilityId, TamperKind, TamperSlot};
 use crate::classes::PlayerClass;
+use crate::floors::FloorId;
 use crate::icon::PlayerIcon;
 use crate::items::{DownedProgram, EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
@@ -2265,7 +2266,7 @@ pub struct Durability {
 /// `seam:a-digsite-is-the-second-non-structure-entity-standing-in`; 0.13.0
 /// shipped two fixes for exactly this bug class, and a wrong-space read is
 /// silent.
-#[derive(Component, Clone, Copy, Debug, Default)]
+#[derive(Component, Clone, Debug, Default)]
 pub struct DigSite {
     /// Whether the player marked this cell for a crew. Set by the mark verb
     /// (slice 2, phase B) and saved, because a plan you drew has to survive
@@ -2286,6 +2287,26 @@ pub struct DigSite {
     /// so a reload says both again, which is right — the run that was told
     /// is over.
     pub announced_dry: bool,
+    /// What kind of mark this is, on top of cut-or-tile: `None` is today's
+    /// plain mark, `Some` is a finish or a strip over already-laid floor.
+    /// `Option<FinishOrder>` rather than a fourth `DigSite` variant of its
+    /// own — this is orthogonal to `marked`, not a replacement for it, so a
+    /// site can be unmarked and still carry the finish it was last asked
+    /// for while it holds no chip progress to keep it alive.
+    pub finish: Option<FinishOrder>,
+}
+
+/// What a finish mark asks the crew to do — `Game::toggle_mark_box`'s brush,
+/// carried on the `DigSite` it marks.
+///
+/// A `FloorId` rather than an index into `FloorDb`, `DigSite` losing `Copy`
+/// with it: `FloorDb::load_dir` re-sorts on every load, and a mod adding or
+/// removing a finish would silently repoint an index a save had already
+/// written to a different finish entirely.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FinishOrder {
+    Apply(FloorId),
+    Strip,
 }
 
 /// The character a pending build site draws.

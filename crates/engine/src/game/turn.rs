@@ -294,6 +294,11 @@ impl Game {
         // — but on a period rather than on an edge: a stranding *has* one and
         // a posting does not. See `MEMORY_POSTING_PERIOD`.
         self.note_postings();
+        // Beside `note_postings` and on the same period, for `note_comforts`'
+        // own reason: a comfort reads every staff body's `Position`, not just
+        // a posted one's `Task`, so it stands on its own rather than folding
+        // into the posting pass above.
+        self.note_comforts();
         // Beside `note_postings` and on the same period, because it is the
         // same kind of memory: a stretch of standing somewhere rather than an
         // edge. **After** it, so a body that is both posted and disgruntled

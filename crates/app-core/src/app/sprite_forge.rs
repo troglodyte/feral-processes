@@ -56,6 +56,12 @@ const ANCHOR_GLYPH_COLOR: GlyphColor = GlyphColor::Gray;
 /// `is_player`."
 const PLAYER_GLYPH: char = '@';
 
+/// A floor finish's placeholder glyph in the picker — never actually drawn
+/// on the map, since a finish is a fill and an edge over a `Platform` cell
+/// rather than a glyph substituting for one the way `sprite` does. Chosen to
+/// read as "ground" rather than as a stray character.
+const FLOOR_SPRITE_GLYPH: char = '_';
+
 /// Whether `FERAL_DEV_SPRITES` — or the `FERAL_DEV` master switch — was set
 /// when this `App` was built. Same predicate as `dev_arena_enabled` and
 /// `dev_console_enabled` — one answer to "is a dev tool on" is the rule
@@ -83,15 +89,29 @@ pub enum SpriteArt {
 /// `App::sprite_subjects`' cached static half, before `art` is attached —
 /// named so `App::sprite_static_subjects`'s field type in `lib.rs` isn't a
 /// bare four-tuple clippy's `type_complexity` lint flags on sight.
-pub(crate) type StaticSpriteSubject = (String, String, char, Option<GlyphColor>);
+pub(crate) type StaticSpriteSubject = (String, String, char, SubjectTint);
+
+/// What a subject's preview multiplies against — the `SpriteSubject::tint`
+/// a picker row and a live editor preview both read.
+///
+/// A small enum over the two sources rather than a second field: a species
+/// or structure (or the player, or the anchor) previews against a
+/// `GlyphColor`, a floor finish previews against a `FloorShade`, and a
+/// subject is always exactly one or the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubjectTint {
+    Glyph(Option<GlyphColor>),
+    Shade(feral_processes_engine::floors::FloorShade),
+}
 
 /// One row of `Mode::SpritePicker`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpriteSubject {
     /// The sprite lookup key — `SpeciesDef::sprite_name()` /
-    /// `StructureDef::sprite_name()`, **never** the def's own `id`: the
-    /// optional `sprite:` override is exactly what decides which file the
-    /// loader looks for, so two defs may legitimately share one name.
+    /// `StructureDef::sprite_name()` / `FloorDef::sprite_name()`, **never**
+    /// the def's own `id`: the optional `sprite:` override is exactly what
+    /// decides which file the loader looks for, so two defs may legitimately
+    /// share one name.
     pub name: String,
     /// The def's own display name, for a screen that reads better than a
     /// list of file stems.
@@ -99,19 +119,19 @@ pub struct SpriteSubject {
     /// The glyph this subject draws in place of today, in its own palette
     /// hue — what the picker shows for a subject with no art yet.
     pub glyph: char,
-    /// The def's own `GlyphColor` — `SpeciesDef::color` / `StructureDef::
-    /// color` — or `None` for the one subject that doesn't have one.
+    /// What this subject's preview is multiplied against.
     ///
-    /// `player` is `None` rather than the `GlyphColor::Cyan` the player
-    /// entity happens to spawn with: the HUD seam's rule is that the
-    /// player's `@` wears the **`PLAYER` role colour**, not an authored
-    /// hue, and `render/base.rs` never reads `glyph_color(GlyphColor::Cyan)`
-    /// for it — reading `Cyan` here and drawing it through the same table
-    /// every other subject uses would show the picker a colour the map
-    /// never actually paints. `anchor` **is** `Some(GlyphColor::Gray)`: it
-    /// has no role-based override, so its true drawn colour is an ordinary
-    /// glyph-table lookup like any species or structure's.
-    pub color: Option<GlyphColor>,
+    /// `player` is `Glyph(None)` rather than `Glyph(Some(GlyphColor::Cyan))`,
+    /// the colour the player entity happens to spawn with: the HUD seam's
+    /// rule is that the player's `@` wears the **`PLAYER` role colour**, not
+    /// an authored hue, and `render/base.rs` never reads
+    /// `glyph_color(GlyphColor::Cyan)` for it — reading `Cyan` here and
+    /// drawing it through the same table every other subject uses would show
+    /// the picker a colour the map never actually paints. `anchor` **is**
+    /// `Glyph(Some(GlyphColor::Gray))`: it has no role-based override, so its
+    /// true drawn colour is an ordinary glyph-table lookup like any species
+    /// or structure's.
+    pub tint: SubjectTint,
     pub art: SpriteArt,
 }
 
@@ -259,13 +279,14 @@ impl App {
     }
 
     /// Every name the map can draw a sprite for: each species def, each
-    /// structure def, and the two names hardcoded in Rust (`player` via
-    /// `DEFAULT_PLAYER_SPRITE`, `anchor`). Sorted by `name` and
-    /// de-duplicated on it.
+    /// structure def, each floor finish, and the two names hardcoded in Rust
+    /// (`player` via `DEFAULT_PLAYER_SPRITE`, `anchor`). Sorted by `name`
+    /// and de-duplicated on it.
     ///
     /// **Two halves with two different lifetimes.** The name/label/glyph
-    /// triple is *static* — nothing in `assets/species`/`assets/structures`
-    /// changes while a session runs — so it is parsed once, on first call,
+    /// triple is *static* — nothing in `assets/species`/`assets/structures`/
+    /// `assets/floors` changes while a session runs — so it is parsed once,
+    /// on first call,
     /// and cached in `sprite_static_subjects`; a `Mode::SpritePicker` draw
     /// call reads this every frame the screen is open, and re-parsing three
     /// asset directories that often would be dozens of `.ron` files loaded
@@ -294,7 +315,7 @@ impl App {
 
         static_subjects
             .iter()
-            .map(|(name, label, glyph, color)| {
+            .map(|(name, label, glyph, tint)| {
                 let art = if self.sprite_library.contains_key(name) {
                     SpriteArt::On
                 } else if self.sprite_disabled.contains_key(name) {
@@ -306,7 +327,7 @@ impl App {
                     name: name.clone(),
                     label: label.clone(),
                     glyph: *glyph,
-                    color: *color,
+                    tint: *tint,
                     art,
                 }
             })
@@ -314,48 +335,74 @@ impl App {
     }
 
     /// The static half of `sprite_subjects`, parsed once. Every species def,
-    /// every structure def, and the two hardcoded names, keyed on
-    /// `sprite_name()` through a `BTreeMap` — which is the de-duplication
-    /// *and* the "sort by name" rule in one structure.
+    /// every structure def, every floor finish, and the two hardcoded names,
+    /// keyed on `sprite_name()` through a `BTreeMap` — which is the
+    /// de-duplication *and* the "sort by name" rule in one structure.
     ///
-    /// `SpeciesDb::all`/`StructureDb::all` are both already deterministic
-    /// (each sorts its own defs), so which def wins a shared name is stable
-    /// run to run: structures after species, and the two hardcoded names
-    /// last of all.
+    /// `SpeciesDb::all`/`StructureDb::all`/`FloorDb::iter` are all already
+    /// deterministic (each sorts its own defs), so which def wins a shared
+    /// name is stable run to run: structures after species, floors after
+    /// structures, and the two hardcoded names last of all.
     fn load_static_sprite_subjects(assets_dir: &Path) -> Vec<StaticSpriteSubject> {
         let (abilities, _) = AbilityDb::load_dir(&assets_dir.join("abilities")).unwrap_or_default();
         let (species, _) =
             SpeciesDb::load_dir(&assets_dir.join("species"), &abilities).unwrap_or_default();
         let (structures, _) =
             StructureDb::load_dir(&assets_dir.join("structures")).unwrap_or_default();
+        let (floors, _) =
+            feral_processes_engine::floors::FloorDb::load_dir(&assets_dir.join("floors"))
+                .unwrap_or_default();
 
-        let mut by_name: BTreeMap<String, (String, char, Option<GlyphColor>)> = BTreeMap::new();
+        let mut by_name: BTreeMap<String, (String, char, SubjectTint)> = BTreeMap::new();
         for def in species.all() {
             by_name.insert(
                 def.sprite_name().to_string(),
-                (def.name.clone(), def.glyph, Some(def.color)),
+                (
+                    def.name.clone(),
+                    def.glyph,
+                    SubjectTint::Glyph(Some(def.color)),
+                ),
             );
         }
         for def in structures.all() {
             by_name.insert(
                 def.sprite_name().to_string(),
-                (def.name.clone(), def.glyph, Some(def.color)),
+                (
+                    def.name.clone(),
+                    def.glyph,
+                    SubjectTint::Glyph(Some(def.color)),
+                ),
             );
         }
-        // `None`, not `Some(GlyphColor::Cyan)` — see `SpriteSubject::color`'s
-        // own doc comment for why the player has no authored hue at all.
+        for def in floors.iter() {
+            by_name.insert(
+                def.sprite_name().to_string(),
+                (
+                    def.name.clone(),
+                    FLOOR_SPRITE_GLYPH,
+                    SubjectTint::Shade(def.shade),
+                ),
+            );
+        }
+        // `Glyph(None)`, not `Glyph(Some(GlyphColor::Cyan))` — see
+        // `SpriteSubject::tint`'s own doc comment for why the player has no
+        // authored hue at all.
         by_name.insert(
             DEFAULT_PLAYER_SPRITE.to_string(),
-            ("Player".to_string(), PLAYER_GLYPH, None),
+            ("Player".to_string(), PLAYER_GLYPH, SubjectTint::Glyph(None)),
         );
         by_name.insert(
             ANCHOR_SPRITE_NAME.to_string(),
-            ("Anchor".to_string(), ANCHOR_GLYPH, Some(ANCHOR_GLYPH_COLOR)),
+            (
+                "Anchor".to_string(),
+                ANCHOR_GLYPH,
+                SubjectTint::Glyph(Some(ANCHOR_GLYPH_COLOR)),
+            ),
         );
 
         by_name
             .into_iter()
-            .map(|(name, (label, glyph, color))| (name, label, glyph, color))
+            .map(|(name, (label, glyph, tint))| (name, label, glyph, tint))
             .collect()
     }
 

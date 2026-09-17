@@ -130,6 +130,52 @@ impl Game {
         rows
     }
 
+    /// The finish painted over each cell `view_tiles_at` would draw for the
+    /// same arguments — same indexing, same centre — so gui reads the two
+    /// grids in lockstep without a second coordinate mapping to keep in
+    /// sync.
+    ///
+    /// **All `None` outside base space**, where there is no `BaseGrid` cell
+    /// to ask, and `&self` rather than `&mut self`: unlike `view_tiles_at`,
+    /// nothing here mutates a cache, so there is nothing to justify the
+    /// wider borrow. An id `FloorDb` does not resolve — a mod that dropped a
+    /// finish out from under a save — reads as no finish, `BaseGrid::
+    /// prune_finishes`' rule reached a second way rather than restated.
+    pub fn view_finishes_at(
+        &self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<Option<crate::views::FinishView>>> {
+        let (cx, cy) = center;
+        let mut rows = Vec::new();
+        if self.base_pos().is_some() {
+            let grid = self.world.resource::<crate::base_grid::BaseGrid>();
+            let floors = self.world.resource::<crate::floors::FloorDb>();
+            for ty in -half_h..=half_h {
+                let mut row = Vec::new();
+                for tx in -half_w..=half_w {
+                    let (x, y) = (cx + tx, cy + ty);
+                    row.push(
+                        grid.finish_at(x, y)
+                            .and_then(|id| floors.get(id))
+                            .map(|def| crate::views::FinishView {
+                                shade: def.shade,
+                                sprite: def.sprite_name().to_string(),
+                                name: def.name.clone(),
+                            }),
+                    );
+                }
+                rows.push(row);
+            }
+            return rows;
+        }
+        for _ty in -half_h..=half_h {
+            rows.push(vec![None; (2 * half_w + 1).max(0) as usize]);
+        }
+        rows
+    }
+
     /// The structure standing on the tile one step in `(dx, dy)`, if any.
     ///
     /// One tile, deliberately, where `find_target_in_direction` below runs a

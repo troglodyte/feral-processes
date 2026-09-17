@@ -2872,6 +2872,124 @@ fn service_moves_morale_off_zero() {
     );
 }
 
+/// A staff body standing on a finish whose `comfort` names a shipped memory
+/// takes it, once the period comes round — driven through a real
+/// `Game::tick`, not a direct call, so this is also what
+/// `turn.rs`'s `note_comforts()` wiring is checked against.
+#[test]
+fn a_program_on_a_comfort_finish_is_at_ease_on_the_period() {
+    let mut game = Game::new(236, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(3, 3);
+        assert!(grid.set_finish(3, 3, crate::floors::FloorId::from("cobalt_carpet")));
+    }
+    // Pinned with a `Guard` task so `drift_idle_staff` leaves it standing on
+    // the finish for the tick below — an untasked body wanders the base on
+    // its own schedule, which this test must not race. `note_postings` also
+    // fires from the same real tick and writes its own memory about the
+    // guarded structure, so this only asserts `at_ease_on` is *among* what
+    // was written rather than the whole of it.
+    let post = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 50, y: 50 },
+        ))
+        .id();
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::Guard,
+        target: post,
+        progress: 0,
+        required: 0,
+    });
+
+    // `tick_inner` reads the clock before advancing it at its own tail, so
+    // the tick the period gate must see is this one, not the one after it.
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.tick();
+
+    let held = memories_of(&game, worker);
+    let comfort = held
+        .iter()
+        .find(|m| m.def == MemoryId::from("at_ease_on"))
+        .unwrap_or_else(|| panic!("no at_ease_on memory among {held:?}"));
+    assert_eq!(comfort.subject, MemorySubject::BaseTile { x: 3, y: 3 });
+}
+
+/// Plain, unfinished floor is not a comfort — the absence of a finish must
+/// not read as some default finish.
+#[test]
+fn a_program_on_plain_floor_takes_no_comfort() {
+    let mut game = Game::new(237, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .lay_floor(3, 3);
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_comforts();
+
+    assert!(memories_of(&game, worker).is_empty());
+}
+
+/// A finish with no `comfort` set is purely cosmetic and writes nothing —
+/// `slate_inlay` ships with no comfort for exactly this branch.
+#[test]
+fn a_program_on_a_comfort_less_finish_takes_no_comfort() {
+    let mut game = Game::new(238, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(3, 3);
+        assert!(grid.set_finish(3, 3, crate::floors::FloorId::from("slate_inlay")));
+    }
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_comforts();
+
+    assert!(memories_of(&game, worker).is_empty());
+}
+
+/// A finish naming a `comfort` id no loaded `MemoryDb` resolves writes
+/// nothing and panics nowhere — `remember`'s own resolve-first rule, reached
+/// through a finish rather than restated.
+#[test]
+fn a_finish_naming_an_unresolvable_comfort_writes_nothing() {
+    let mut game = Game::new(239, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let dir = scratch_assets_dir("floors_bad_comfort");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("ghost_weave.ron"),
+        r#"(
+    id: "ghost_weave",
+    name: "Ghost Weave",
+    description: "Names no memory that exists.",
+    shade: Slate,
+    comfort: Some("no_such_memory"),
+)"#,
+    )
+    .unwrap();
+    let (floors, warnings) = crate::floors::FloorDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    game.world.insert_resource(floors);
+
+    let worker = spawn_tamed(&mut game, 10, 3);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(3, 3);
+        assert!(grid.set_finish(3, 3, crate::floors::FloorId::from("ghost_weave")));
+    }
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_comforts();
+
+    assert!(memories_of(&game, worker).is_empty());
+}
+
 // ---------------------------------------------------------------------------
 // The manifest's MEMORIES box: what the sheet says a program feels, out of the
 // same two calls the `R` page reads. `views::morale_band` is the word both

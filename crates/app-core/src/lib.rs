@@ -21,7 +21,7 @@ pub use app::icon_editor::IconEditorView;
 pub use app::rig_tool::RigToolScreen;
 pub use app::sprite_forge::{
     PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
-    SpriteWrite,
+    SpriteWrite, SubjectTint,
 };
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
@@ -75,7 +75,7 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::components::{BuildGoal, Rarity};
+use feral_processes_engine::components::{BuildGoal, FinishOrder, Rarity};
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
@@ -2411,6 +2411,13 @@ pub struct App {
     /// `None` while the cursor is loose, which is what makes `space` a
     /// two-press verb rather than a drag.
     pub excavate_anchor: Option<(i32, i32)>,
+    /// The Excavation plan's brush — `None` is today's plain cut-or-tile
+    /// mark, `[F]` cycles it through every loaded finish and then strip
+    /// before returning here. Reset to `None` whenever the mode opens, the
+    /// same way `excavate_anchor` is: a brush left over from the last visit
+    /// would paint the first box drawn this time with a choice the player
+    /// never made this session.
+    pub excavate_brush: Option<FinishOrder>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,
@@ -2767,14 +2774,15 @@ pub struct App {
     /// the only tool that can read it back was the one place that didn't.
     sprite_disabled: HashMap<String, Canvas>,
     /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
-    /// color)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
-    /// `assets/structures` once and kept for the rest of the session. `None`
-    /// until the first call, so a session that never opens `Mode::
-    /// SpritePicker` never parses either directory — see `sprite_subjects`'
-    /// own doc comment for why the method takes `&mut self` to write this
-    /// rather than a `RefCell`. The colour is `Option<GlyphColor>` because
-    /// one of the two hardcoded subjects (`player`) doesn't have one — see
-    /// `SpriteSubject::color`'s own doc comment.
+    /// tint)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
+    /// `assets/structures`/`assets/floors` once and kept for the rest of the
+    /// session. `None` until the first call, so a session that never opens
+    /// `Mode::SpritePicker` never parses any of the three directories — see
+    /// `sprite_subjects`' own doc comment for why the method takes
+    /// `&mut self` to write this rather than a `RefCell`. The tint is a
+    /// `SubjectTint` rather than a bare `GlyphColor` because a floor finish
+    /// previews against a `FloorShade` instead — see `SpriteSubject::tint`'s
+    /// own doc comment.
     sprite_static_subjects: Option<Vec<crate::app::sprite_forge::StaticSpriteSubject>>,
     /// The open `Mode::SpriteEditor` session, or `None` while it is not
     /// open — `App::sprite_editor_view`'s source and `Enter` on

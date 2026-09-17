@@ -3,6 +3,8 @@
 
 use super::*;
 use feral_processes_engine::components::POWER_MAX;
+use feral_processes_engine::floors::FloorShade;
+use feral_processes_engine::views::FinishView;
 
 /// How far a bare tile's background may stray from its biome's flat colour,
 /// as a fraction either side. Enough to break up a field of identical tiles,
@@ -309,6 +311,95 @@ fn draw_speckle(painter: &Painter, r: Rect, ink: Color, h: u32) {
 fn draw_slab(painter: &Painter, r: Rect, ink: Color) {
     let i = r.w * 0.12;
     painter.rect(r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i, ink);
+}
+
+/// A floor finish's tint, resolved from the engine's own `FloorShade` —
+/// gui's one door onto the spec's colour table, and the reason `FloorShade`
+/// is a fixed enum rather than a free RGB triple a mod could author (see
+/// `floors.rs`'s own doc comment): every value here has to clear
+/// `FINISH_SHADE_MIN_SEPARATION` from a rock face, and only this table can
+/// promise that.
+///
+/// Exhaustive for `biome_tint`'s reason: a new `FloorShade` must not compile
+/// until someone has picked where it sits on the wheel and re-run the
+/// separation census below.
+pub(crate) fn shade_color(shade: FloorShade) -> Color {
+    match shade {
+        FloorShade::Cobalt => Color::new(0.10, 0.20, 0.55, 1.0),
+        FloorShade::Teal => Color::new(0.05, 0.30, 0.32, 1.0),
+        FloorShade::Moss => Color::new(0.14, 0.30, 0.12, 1.0),
+        FloorShade::Olive => Color::new(0.28, 0.28, 0.08, 1.0),
+        FloorShade::Ochre => Color::new(0.40, 0.26, 0.06, 1.0),
+        // Retuned from an original 0.24, 0.16, 0.10: the separation census
+        // measured that value 0.060 from `Entropy` brightened by 2.6 (0.075
+        // from the real shipped `fused` rock at shade 3.0) — functionally
+        // the same colour as an ordinary wall. This value is the best of a
+        // handful of brown/sand/earth candidates by the same measurement;
+        // see the spec's own note beside its shade table.
+        FloorShade::Umber => Color::new(0.36, 0.30, 0.18, 1.0),
+        FloorShade::Wine => Color::new(0.32, 0.06, 0.20, 1.0),
+        FloorShade::Plum => Color::new(0.28, 0.10, 0.34, 1.0),
+        FloorShade::Violet => Color::new(0.20, 0.12, 0.45, 1.0),
+        FloorShade::Slate => Color::new(0.20, 0.23, 0.27, 1.0),
+    }
+}
+
+/// How much darker a finish's edge ring is drawn than its fill — the same
+/// hue, scaled toward black, so a laid block reads as one material at two
+/// depths rather than two colours competing on one cell.
+pub(super) const FINISH_EDGE_LEVEL: f32 = 0.5;
+
+/// The smallest Euclidean RGB distance any `FloorShade` is allowed from any
+/// reference the separation census checks — every exposed rock face
+/// (`Entropy` brightened 1.0..=4.0), `Excavated`, `Platform`, `THREAT`, the
+/// critical damage wash, and every other shade.
+///
+/// Set just under the census's own measured floor: `Wine` against `Entropy`
+/// brightened by 3.2 sits at ≈0.099, the smallest gap among the ten shades
+/// once `Umber` was retuned away from its own 0.060 collision (see
+/// `shade_color`). Lowering this to make a future collision pass is the one
+/// thing not to do with it — the number belongs to the palette, not to
+/// whichever shade is failing.
+///
+/// `#[cfg(test)]`: nothing outside the census reads it — `draw_finish` draws
+/// with `shade_color` directly and has no threshold of its own to check.
+#[cfg(test)]
+pub(super) const FINISH_SHADE_MIN_SEPARATION: f32 = 0.09;
+
+/// A floor finish, drawn over `draw_slab`'s own inset rect in three layers:
+/// the shade fill at the tile's own ambient `dim` (the same value
+/// `draw_biome`'s caller already computed for a plain floor), a darker edge
+/// ring one sprite-pixel wide so a laid block reads as a block rather than a
+/// continuous wash of colour, and the carved sprite on top.
+///
+/// **The fill is always drawn.** This is a pattern painted over ground, not
+/// a substitute for a glyph the way `Painter::sprite` usually is — `sprite`
+/// itself answers `false` for a name the table has nothing under, and a
+/// finish with no art still has to read as the finish through the fill and
+/// the edge alone.
+///
+/// **The edge and the sprite tint are scaled by `dim` too.** Shipped finish
+/// sprites are opaque squares, not translucent overlays — a sprite tinted
+/// at the shade's full strength paints clean over the dimmed fill beneath
+/// it, and a finished tile stops answering to the Power vignette and cloud
+/// dimming the way a plain floor tile does. `at_level(shade, dim)` is
+/// `draw_biome`'s own scaling, applied here to all three layers rather than
+/// the fill alone.
+pub(super) fn draw_finish(painter: &Painter, r: Rect, finish: &FinishView, dim: f32) {
+    let shade = shade_color(finish.shade);
+    let shade = at_level(shade, dim);
+    draw_slab(painter, r, shade);
+    let i = r.w * 0.12;
+    let (ix, iy, iw, ih) = (r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i);
+    painter.rect_lines(
+        ix,
+        iy,
+        iw,
+        ih,
+        r.w / 16.0,
+        at_level(shade, FINISH_EDGE_LEVEL),
+    );
+    let _ = painter.sprite(&finish.sprite, ix, iy, iw, shade);
 }
 
 /// DataVoid: concentric rings falling away to black, so a hole in the map

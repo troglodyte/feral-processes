@@ -3188,3 +3188,18 @@ pub struct RigToolRow {
     pub ticks: u64,
     pub carriers_held: u32,
 }
+
+/// The finish painted over one cell of laid floor — `Game::view_finishes_at`,
+/// `Tile`'s own shape widened for a layer gui draws over it rather than
+/// folded into `Tile` itself, since `Tile` rides the save through
+/// `SaveData::tile_overrides` and a finish does not.
+///
+/// Carries the shade and the sprite key rather than a `FloorId`, `Tile`'s own
+/// argument for `rock_shade` over a rock kind: gui never reads `FloorDb`, so
+/// what it draws with has to already be the resolved answer.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FinishView {
+    pub shade: crate::floors::FloorShade,
+    pub sprite: String,
+    pub name: String,
+}

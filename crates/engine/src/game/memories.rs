@@ -359,6 +359,59 @@ impl crate::Game {
         }
     }
 
+    /// Writes the fondness a program takes from lingering on a decorated
+    /// floor, for every body on the base staff standing on a finish whose
+    /// `FloorDef::comfort` names a memory.
+    ///
+    /// **`note_postings`' shape, and for its argument.** A finish has no edge
+    /// to fire on — nothing tells the first tick standing on the carpet from
+    /// the thousandth — so this fires on `MEMORY_POSTING_PERIOD` and
+    /// `strikes` measures time spent, the same reasoning `note_respites`
+    /// gives for an errand.
+    ///
+    /// **`base_staff()` rather than a `Task` query.** `note_postings` reads
+    /// only posted bodies because a posting is what it is about; a comfort is
+    /// about standing on a cell, which an idle staff member wandering the
+    /// base does exactly as much as one posted at a machine. `base_staff()`
+    /// is every program in `ProgramRole::Staff`, which is precisely "every
+    /// program standing in base space" — the party, the wielded program and
+    /// a dispatched sortie are elsewhere and carry no reading here.
+    ///
+    /// Collected before anything is written, `note_postings`' reason:
+    /// `remember` takes `&mut self`. An id `FloorDb` cannot resolve, or a
+    /// finish with no `comfort` at all, contributes nothing — `remember`'s
+    /// own resolve-first rule, reached the same way here rather than
+    /// restated.
+    pub(crate) fn note_comforts(&mut self) {
+        let now = self.world.resource::<GameClock>().tick;
+        if !now.is_multiple_of(MEMORY_POSTING_PERIOD) {
+            return;
+        }
+        let comforts: Vec<(Entity, String, MemorySubject)> = self
+            .base_staff()
+            .into_iter()
+            .filter_map(|worker| {
+                let pos = self.world.get::<Position>(worker)?;
+                let (x, y) = (pos.x, pos.y);
+                let id = self
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .finish_at(x, y)?
+                    .clone();
+                let comfort = self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(&id)?
+                    .comfort
+                    .clone()?;
+                Some((worker, comfort, MemorySubject::BaseTile { x, y }))
+            })
+            .collect();
+        for (worker, comfort, subject) in comforts {
+            self.remember(worker, &comfort, subject);
+        }
+    }
+
     /// The signed sum of every memory `who` currently holds — the one figure
     /// the screen heads its page with, and the closest thing the roster has to
     /// a mood.

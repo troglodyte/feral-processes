@@ -4,6 +4,10 @@
 //! The mode's whole claim is that it is a *mode* and not an action, so the
 //! test that matters most here is the one asserting the clock never moves.
 
+use feral_processes_engine::floors::FloorId;
+use feral_processes_engine::resources::Locale;
+use feral_processes_engine::save;
+
 use super::support::*;
 use crate::*;
 
@@ -18,6 +22,86 @@ fn app_at_the_frontier(seed: u32) -> App {
         0,
     );
     app
+}
+
+/// A scratch install with everything `Game::new` needs but no
+/// `assets/floors/` at all — the supported "no finish content" install the
+/// brush must go inert against, `FloorDb::load_dir`'s own absent-directory
+/// rule reached from the other end.
+struct NoFloorsAssets(std::path::PathBuf);
+
+impl Drop for NoFloorsAssets {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn app_without_floors(seed: u32) -> (App, NoFloorsAssets) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir =
+        std::env::temp_dir().join(format!("feral_processes_appcore_no_floors_{seed}_{unique}"));
+    let shipped = test_assets_dir();
+    for sub in [
+        "species",
+        "structures",
+        "research",
+        "items",
+        "abilities",
+        "perks",
+        "talents",
+        "achievements",
+        "descriptions",
+        "policies",
+        "affixes",
+    ] {
+        let dst = dir.join(sub);
+        std::fs::create_dir_all(&dst).unwrap();
+        for entry in std::fs::read_dir(shipped.join(sub)).unwrap() {
+            let entry = entry.unwrap();
+            std::fs::copy(entry.path(), dst.join(entry.file_name())).unwrap();
+        }
+    }
+    let guard = NoFloorsAssets(dir.clone());
+
+    let mut app = App::new(
+        dir.clone(),
+        std::env::temp_dir().join(format!(
+            "feral_processes_appcore_no_floors_{seed}_{unique}_saves"
+        )),
+        std::env::temp_dir().join(format!(
+            "feral_processes_appcore_no_floors_{seed}_{unique}.log"
+        )),
+        std::env::temp_dir().join(format!(
+            "feral_processes_appcore_no_floors_{seed}_{unique}_profile.ron"
+        )),
+        arenas_dir(),
+        std::env::temp_dir().join(format!(
+            "feral_processes_appcore_no_floors_{seed}_{unique}_telemetry.jsonl"
+        )),
+    );
+    app.game = Game::new(seed, DifficultyMode::Forgiving, &dir).ok();
+    if let Some(game) = &mut app.game {
+        while game.take_notification().is_some() {}
+    }
+    app.mode = Mode::Playing;
+    found_the_base(&mut app);
+
+    // `stand_in_base_at` reloads through the real `test_assets_dir()`, which
+    // would silently bring the shipped floors back — this fixture's whole
+    // point is that they are absent, so the save/reload has to go through
+    // the same scratch directory by hand.
+    let path = dir.join("stand.sav");
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base {
+        x: feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
+        y: 0,
+    };
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &dir).unwrap());
+
+    (app, guard)
 }
 
 fn marks(app: &mut App) -> Vec<(i32, i32)> {
@@ -162,4 +246,136 @@ fn esc_with_an_anchor_down_drops_the_anchor_and_stays_in_the_mode() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing, "a second Esc leaves the mode");
     assert_eq!(app.excavate_cursor, None, "leaving must clear the cursor");
+}
+
+// ---------------------------------------------------------------------------
+// The brush
+// ---------------------------------------------------------------------------
+
+/// `[F]` walks plain → every shipped finish, in id order → strip → plain.
+#[test]
+fn f_cycles_the_brush_through_every_shipped_finish_then_strip_then_plain() {
+    let mut app = app_at_the_frontier(4306);
+    app.handle_key(GameKey::Char('m'));
+    assert_eq!(app.excavate_brush, None, "the brush opens plain");
+
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush,
+        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet")))
+    );
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush,
+        Some(FinishOrder::Apply(FloorId::from("moss_weave")))
+    );
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush,
+        Some(FinishOrder::Apply(FloorId::from("slate_inlay")))
+    );
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.excavate_brush, Some(FinishOrder::Strip));
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush, None,
+        "the cycle must wrap back to plain"
+    );
+}
+
+/// With no finish content loaded at all, `[F]` has nothing to offer and
+/// touches nothing — the same "supported, does exactly today's game"
+/// contract every asset-backed screen carries.
+#[test]
+fn f_is_inert_with_no_floor_catalogue_loaded() {
+    let (mut app, _assets) = app_without_floors(4307);
+    app.handle_key(GameKey::Char('m'));
+    assert_eq!(app.mode, Mode::Excavate);
+
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush, None,
+        "an empty FloorDb must leave the brush untouched"
+    );
+    assert_eq!(
+        app.excavate_brush_label(),
+        None,
+        "an empty FloorDb must offer no header line at all"
+    );
+}
+
+/// Opening the mode resets a brush left over from the last visit — the same
+/// rule `excavate_anchor` already follows.
+#[test]
+fn opening_the_mode_resets_the_brush_to_plain() {
+    let mut app = app_at_the_frontier(4308);
+    app.handle_key(GameKey::Char('m'));
+    app.handle_key(GameKey::Char('F'));
+    assert!(app.excavate_brush.is_some());
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    app.handle_key(GameKey::Char('m'));
+    assert_eq!(
+        app.excavate_brush, None,
+        "a brush left over from the last visit must not carry over"
+    );
+}
+
+/// The brush the player picked is what actually reaches
+/// `Game::toggle_mark_box`. A `Floor` cell is never touched by any other
+/// kind of mark (`plain` skips it outright), so a marked floor cell here can
+/// only be a finish or a strip mark reaching the engine.
+#[test]
+fn committing_with_a_finish_brush_marks_the_already_laid_floor_under_it() {
+    let mut app = app_at_the_frontier(4309);
+    let party = app.game.as_ref().unwrap().base_pos().unwrap();
+
+    app.handle_key(GameKey::Char('m'));
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush,
+        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet")))
+    );
+    // A single-cell box on the party's own tile, which the pocket already
+    // laid as floor — the one cell this fixture can be sure of without
+    // digging anything first.
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Char(' '));
+
+    assert_eq!(
+        marks(&mut app),
+        vec![party],
+        "the finish brush did not reach toggle_mark_box"
+    );
+}
+
+/// `excavate_brush_label` names each brush state and is absent entirely
+/// with no finish content loaded.
+#[test]
+fn excavate_brush_label_names_every_state() {
+    let mut app = app_at_the_frontier(4310);
+    app.handle_key(GameKey::Char('m'));
+    assert_eq!(
+        app.excavate_brush_label().as_deref(),
+        Some("Brush: plain [F]")
+    );
+
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush_label().as_deref(),
+        Some("Brush: Cobalt Carpet [F]")
+    );
+    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('F'));
+    assert_eq!(
+        app.excavate_brush_label().as_deref(),
+        Some("Brush: strip [F]")
+    );
+
+    let (mut empty, _assets) = app_without_floors(4311);
+    empty.handle_key(GameKey::Char('m'));
+    assert_eq!(empty.excavate_brush_label(), None);
 }

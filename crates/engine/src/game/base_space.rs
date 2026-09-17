@@ -307,9 +307,28 @@ impl Game {
     /// `the_map_and_the_examine_ray_agree_about_a_wall` pins it anyway,
     /// because "by construction" is exactly the kind of claim that stops
     /// being true when someone lets the ray run through rock.
+    ///
+    /// **A finish underfoot is named first.** The cell one step along
+    /// `(dx, dy)` — the ray's own first stop — is checked for a finish
+    /// before the ray runs at all, since a finished floor is walkable and
+    /// the ray would otherwise step straight over it looking for the wall
+    /// beyond. A finish with no rock in range still answers `Some`, so
+    /// examining a fully floored, fully finished room says something.
     pub fn describe_base_rock(&self, dx: i32, dy: i32, range: i32) -> Option<String> {
-        let (mut x, mut y) = self.base_pos()?;
+        let (bx, by) = self.base_pos()?;
         let seed = self.world.resource::<BaseGrid>().seed();
+        let finish_name = {
+            let grid = self.world.resource::<BaseGrid>();
+            grid.finish_at(bx + dx, by + dy).cloned()
+        }
+        .and_then(|id| {
+            self.world
+                .resource::<crate::floors::FloorDb>()
+                .get(&id)
+                .map(|def| def.name.clone())
+        });
+
+        let (mut x, mut y) = (bx, by);
         for _ in 0..range {
             x += dx;
             y += dy;
@@ -319,13 +338,17 @@ impl Game {
                     .world
                     .resource::<crate::rock::RockDb>()
                     .kind_at(seed, x, y);
-                return Some(format!(
+                let rock_line = format!(
                     "{}. It takes at least {} swings to cut through.",
                     def.name, def.min_swings
-                ));
+                );
+                return Some(match &finish_name {
+                    Some(name) => format!("{name} underfoot; {rock_line}"),
+                    None => rock_line,
+                });
             }
         }
-        None
+        finish_name.map(|name| format!("{name} underfoot."))
     }
 
     /// Whether the player's step into solid rock cuts it. See
@@ -502,21 +525,25 @@ impl Game {
     /// is already marked clears, an unmarked one marks. That is the whole of
     /// why there is no second erase verb — settled decision 4 — and it is
     /// also why the anchor is read *before* anything in the box is written.
+    /// Clearing ignores `brush` entirely: whatever kind of mark a cell in the
+    /// box carries, clearing removes it.
     ///
     /// The box is normalised rather than assumed ordered: a plan drawn
     /// up-left is the same plan drawn down-right, and a cursor the player
     /// dragged backwards is the ordinary case rather than the corner one.
     ///
-    /// A `Floor` cell takes no mark. There is nothing left to do to it, and a
-    /// site spawned over one would be a mark the crew could never clear.
-    pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32)) {
+    /// `brush` is the excavate screen's current tool: `None` is the plain
+    /// cut-or-tile brush, which takes solid and open cells and skips laid
+    /// floor exactly as before this feature; `Some` is a finish or a strip,
+    /// which take laid floor and skip everything else — `set_mark`'s table.
+    pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32), brush: Option<&FinishOrder>) {
         let mut sites = self.dig_sites_by_tile();
         let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         for y in y0..=y1 {
             for x in x0..=x1 {
-                self.set_mark(&mut sites, x, y, marking);
+                self.set_mark(&mut sites, x, y, marking, brush);
             }
         }
     }
@@ -573,20 +600,69 @@ impl Game {
     /// Writes one cell's mark, spawning or retiring its `DigSite` as needed.
     ///
     /// The durability a *marked* site is born with is the cell's own state:
-    /// a solid cell has the whole wall left to cut, an already-open one has
-    /// none — its mark means floor it. Clearing retires the site unless it is
-    /// still holding chip progress, so an unmarked wall the player had
-    /// started on does not heal.
-    fn set_mark(&mut self, sites: &mut HashMap<(i32, i32), Entity>, x: i32, y: i32, marked: bool) {
+    /// a solid cell has the whole wall left to cut, an already-open or
+    /// already-floored one has none — its mark means floor it, or finish it.
+    /// Clearing retires the site unless it is still holding chip progress, so
+    /// an unmarked wall the player had started on does not heal.
+    ///
+    /// **`brush` decides both which cells this pass may touch and what it
+    /// writes**, exactly the design's table: `None` marks solid and open
+    /// cells for cutting or tiling and skips laid floor, `Some(Apply(id))`
+    /// marks floor that does not already wear `id` and skips everything
+    /// else, `Some(Strip)` marks floor that wears *some* finish and skips a
+    /// bare one. A cell the brush has nothing to say about is left exactly
+    /// as it was — no site spawned, no existing one touched.
+    fn set_mark(
+        &mut self,
+        sites: &mut HashMap<(i32, i32), Entity>,
+        x: i32,
+        y: i32,
+        marked: bool,
+        brush: Option<&FinishOrder>,
+    ) {
         let grid = self.world.resource::<BaseGrid>();
-        if grid.is_floor(x, y) {
-            return;
-        }
         let solid = grid.is_solid(x, y);
+        let floor = grid.is_floor(x, y);
+
+        // The order to write onto the mark, or `None` to leave this cell
+        // untouched — decided from the *committed* grid, never from a
+        // pending `DigSite`, so replacing a finish always targets what is
+        // actually laid rather than a job still queued behind it.
+        let order = if marked {
+            match brush {
+                None => {
+                    if floor {
+                        return;
+                    }
+                    None
+                }
+                Some(FinishOrder::Apply(id)) => {
+                    if !floor || grid.finish_at(x, y) == Some(id) {
+                        return;
+                    }
+                    Some(FinishOrder::Apply(id.clone()))
+                }
+                Some(FinishOrder::Strip) => {
+                    if !floor || grid.finish_at(x, y).is_none() {
+                        return;
+                    }
+                    Some(FinishOrder::Strip)
+                }
+            }
+        } else {
+            None
+        };
+
         match sites.get(&(x, y)).copied() {
             Some(site) => {
                 if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
                     dig.marked = marked;
+                    // Overwrites whatever the site's `finish` carried —
+                    // clearing writes `None` through `order` above, and
+                    // marking with a different brush replaces it, so a site
+                    // never keeps a stale order for a kind it is no longer
+                    // asked to be.
+                    dig.finish = order;
                 }
                 // An unmarked site earns its keep by holding chip progress,
                 // and *both* ends of the meter hold none. A full meter is a
@@ -595,7 +671,9 @@ impl Game {
                 // a marked `Open` cell, and `strike_rock` refills it on the
                 // next swing anyway. Keeping either leaves an entity drawn
                 // nowhere, wanted by nobody, and written to every save from
-                // then on.
+                // then on. A finish or strip mark never holds chip progress
+                // — there is no rock left to cut — so clearing one always
+                // despawns it.
                 let holds_progress = self
                     .world
                     .get::<Durability>(site)
@@ -613,6 +691,7 @@ impl Game {
                         marked: true,
                         announced_stuck: false,
                         announced_dry: false,
+                        finish: order,
                     },
                     Durability {
                         hp: if solid { max_hp } else { 0 },
@@ -745,7 +824,8 @@ impl Game {
             }
             // Read per tick rather than once the cycle completes, because
             // which half of the one dig verb this is decides whether the
-            // tick makes a sound: cutting is mining and flooring is not.
+            // tick makes a sound: cutting is mining, flooring and finishing
+            // are not.
             let cutting = self
                 .world
                 .resource::<BaseGrid>()
@@ -756,15 +836,92 @@ impl Game {
             if !landed {
                 continue;
             }
-            // Which of the two halves of the one verb this is, decided by the
-            // cell rather than by anything stored on the job: marked solid
-            // means cut it, marked `Open` means floor it. A cut cell is still
-            // this body's job on the next cycle, because the mark outlives
-            // the cut.
-            if cutting {
-                self.strike_rock(worker, target.x, target.y);
-            } else {
-                self.crew_lays_tile(target.x, target.y);
+            // Which of the three things this cycle lands is decided by the
+            // site's own `finish`, not by anything about the cell: a finish
+            // or strip mark never reaches `strike_rock` or `crew_lays_tile`,
+            // because it only ever sits on laid floor and there is no rock
+            // to cut and no tile to lay. Absent one, marked solid means cut
+            // it and marked `Open` means floor it — the mark outlives the
+            // cut either way.
+            let finish = self
+                .world
+                .get::<DigSite>(site)
+                .and_then(|d| d.finish.clone());
+            match finish {
+                Some(order) => self.crew_finishes(site, target.x, target.y, order),
+                None if cutting => self.strike_rock(worker, target.x, target.y),
+                None => self.crew_lays_tile(target.x, target.y),
+            }
+        }
+    }
+
+    /// The crew's half of a finish or a strip mark. `Apply` spends
+    /// `tuning::FLOOR_FINISH_COST` and paints the shade on; `Strip` clears
+    /// whatever is there and charges nothing. Both despawn the site — a
+    /// finish job is done in one landing, unlike cutting, which keeps its
+    /// site across the cut and the tile.
+    fn crew_finishes(&mut self, site: Entity, x: i32, y: i32, order: FinishOrder) {
+        match order {
+            FinishOrder::Apply(id) => {
+                let grid = self.world.resource::<BaseGrid>();
+                // The cell stopped being floor, or a second digger already
+                // painted this exact finish here first: either way there is
+                // nothing left to do, and no charge for not doing it —
+                // `BaseGrid::revert`'s own caution about "a finish implies
+                // floor" reaching a cell mid-job.
+                if !grid.is_floor(x, y) || grid.finish_at(x, y) == Some(&id) {
+                    self.world.despawn(site);
+                    return;
+                }
+                // A mod removed this finish since the order was written —
+                // `restore_dig_sites` already drops one of these at load,
+                // but a live `DigSite` can still carry one from a save
+                // written before that check existed. `BaseGrid::set_finish`
+                // does not validate the id, so this must, or a name
+                // nothing can display gets painted onto the grid and
+                // charged for.
+                if self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(&id)
+                    .is_none()
+                {
+                    self.world.despawn(site);
+                    self.log_base(format!(
+                        "The finish planned for ({x}, {y}) is no longer installed — the order is dropped."
+                    ));
+                    return;
+                }
+                let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+                if !self.spend_substrate(&substrate, crate::tuning::FLOOR_FINISH_COST) {
+                    // `dig_wants` already judged this workable a moment ago
+                    // — the one way this can still fail is two finish jobs
+                    // landing on the same tick against a single surviving
+                    // batch, `crew_lays_tile`'s own race. The mark stays,
+                    // and the next `dig_wants` will see the shortage and
+                    // announce it.
+                    return;
+                }
+                let name = self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(&id)
+                    .map(|def| def.name.clone())
+                    .unwrap_or_else(|| id.as_str().to_string());
+                self.world.resource_mut::<BaseGrid>().set_finish(x, y, id);
+                self.world.despawn(site);
+                self.log_base(format!(
+                    "Your crew finishes the floor at ({x}, {y}) with {name}."
+                ));
+            }
+            FinishOrder::Strip => {
+                let removed = self.world.resource_mut::<BaseGrid>().clear_finish(x, y);
+                self.world.despawn(site);
+                if removed {
+                    self.log_base(format!(
+                        "Your crew strips the finish from the floor at ({x}, {y})."
+                    ));
+                }
             }
         }
     }
@@ -790,45 +947,42 @@ impl Game {
     /// site reaching this function has already been judged workable a
     /// moment ago; the one way this can still fail is two floor jobs
     /// finishing on the same tick against a single surviving unit, a race
-    /// `dig_wants`'s `substrate_in_stock` cannot see because it only asks
-    /// whether *one* exists, not one for every job about to ask. That race
-    /// needs no second announcement — `dig_wants` will see the shortage
-    /// itself on the very next tick — and the mark stays either way, so the
-    /// job is simply retried.
+    /// `dig_wants`'s `substrate_available` cannot see because it only reads
+    /// how much exists right now, not enough for every job about to ask.
+    /// That race needs no second announcement — `dig_wants` will see the
+    /// shortage itself on the very next tick — and the mark stays either
+    /// way, so the job is simply retried.
     fn crew_lays_tile(&mut self, x: i32, y: i32) {
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-        if !self.spend_one_substrate(&substrate) {
+        if !self.spend_substrate(&substrate, 1) {
             return;
         }
         self.floor_cell(x, y);
         self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
     }
 
-    /// Spends the one substrate a tile costs, base stores before the
-    /// player's pack, and reports whether it found one.
-    fn spend_one_substrate(&mut self, substrate: &ItemId) -> bool {
-        if crate::game::base::stock::spend_from_base(
-            self,
-            substrate,
-            1,
-            crate::base_ledger::ConsumeSource::Base,
-        ) == 1
-        {
-            return true;
-        }
-        let player = self.player_entity();
-        let held = self
-            .world
-            .get::<Inventory>(player)
-            .map(|inv| inv.count(substrate))
-            .unwrap_or(0);
-        if held == 0 {
+    /// Spends `count` of `substrate`, base stores before the player's pack,
+    /// refusing — and moving nothing — unless `substrate_available` already
+    /// covers the whole count. `crew_lays_tile` calls it with 1; the finish
+    /// arm above calls it with `tuning::FLOOR_FINISH_COST`.
+    fn spend_substrate(&mut self, substrate: &ItemId, count: u32) -> bool {
+        if self.substrate_available() < count {
             return false;
         }
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(substrate.clone(), 1);
+        let from_base = crate::game::base::stock::spend_from_base(
+            self,
+            substrate,
+            count,
+            crate::base_ledger::ConsumeSource::Base,
+        );
+        let remaining = count - from_base;
+        if remaining > 0 {
+            let player = self.player_entity();
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(substrate.clone(), remaining);
+        }
         true
     }
 

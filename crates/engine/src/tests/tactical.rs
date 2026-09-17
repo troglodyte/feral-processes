@@ -3492,3 +3492,312 @@ fn placeable_cells_are_empty_for_a_single_target_routine() {
         "a Single shape has no centre to outline"
     );
 }
+
+// --- Partial cover -----------------------------------------------------
+//
+// `reach::cover_between` needs no `Game` at all: it is a pure function of a
+// board and two cells, so these are bare `Board`s and direct calls.
+
+/// Attacker at (3,1), defender at (3,5), and whatever `rows` says between
+/// them.
+fn cover_board(rows: &[&str]) -> crate::tactical::map::Board {
+    crate::tactical::map::Board::from_rows(rows)
+}
+
+#[test]
+fn a_boulder_in_the_arc_gives_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", "..#....", ".......", ".......",
+    ]);
+    assert!(
+        crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a boulder on the attacker's side of the defender is cover"
+    );
+}
+
+#[test]
+fn a_boulder_behind_the_defender_is_not_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", ".......", ".......", "..#....",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a boulder on the far side shields nothing"
+    );
+}
+
+/// The dot product is **strictly** positive, and this is the test that says
+/// so: a boulder exactly abeam of the defender scores zero, and a `>= 0`
+/// comparison would hand out cover for standing next to a rock.
+#[test]
+fn a_boulder_exactly_abeam_is_not_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", ".......", "..#....", ".......",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "ninety degrees off the bearing is beside you, not between you and the shot"
+    );
+}
+
+#[test]
+fn cover_does_nothing_at_melee_range() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", ".......", "..#....", ".......", ".......",
+    ]);
+    assert_eq!(
+        crate::tactical::reach::distance((3, 4), (3, 5)),
+        crate::tuning::TACTICAL_MELEE_RANGE,
+        "the fixture is meant to sit exactly on the melee band"
+    );
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 4), (3, 5)),
+        "a boulder is no help against someone standing on top of you"
+    );
+}
+
+#[test]
+fn a_defender_out_of_sight_has_no_cover() {
+    let board = cover_board(&[
+        ".......", ".......", ".......", "...#...", "..#....", ".......", ".......",
+    ]);
+    assert!(
+        !crate::tactical::reach::cover_between(&board, (3, 1), (3, 5)),
+        "a shot that cannot be taken needs no modifier"
+    );
+}
+
+/// **Cover that no generated board produces is a feature that ships green
+/// and dead**, which this repo has shipped before. Measured over full
+/// enumeration on 2026-09-17, as the share of ordered walkable pairs beyond
+/// melee range *with line of sight* whose defender has cover:
+///
+/// | biome | `Cover` weight | share |
+/// |---|---:|---:|
+/// | OpenGrid | 4 | 12.7% |
+/// | Deadlock | 7 | 22.3% |
+/// | NullSector | 8 | 22.8% |
+/// | Backplane | 20 | 43.2% |
+///
+/// Sighted pairs is the right denominator: a pair with no line of sight has
+/// no attack to modify. Note Backplane has the *lowest* share of all pairs
+/// and the highest of sighted ones — dense cover blocks most long sightlines
+/// outright, so the shots that remain are mostly covered ones.
+///
+/// The sweep here samples attackers rather than exhausting them, to stay
+/// cheap; the floor is well below every measured figure.
+#[test]
+fn cover_is_reachable_on_every_biome_a_fight_opens_on() {
+    use crate::tactical::map::{BattleSpec, generate};
+    use crate::tactical::reach::{cover_between, distance, line_of_sight};
+    use crate::tuning::TACTICAL_MELEE_RANGE;
+    use crate::world::Biome;
+
+    for biome in [
+        Biome::OpenGrid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+    ] {
+        let (mut sighted, mut covered) = (0u32, 0u32);
+        for seed in 1..=3u32 {
+            for bodies in [2u32, 5, 8] {
+                let board = generate(BattleSpec {
+                    world_seed: seed,
+                    site: (seed as i32, 0),
+                    tick: u64::from(seed) * 17,
+                    zone: 1,
+                    biome,
+                    bodies,
+                });
+                let walkable: Vec<(i32, i32)> = board
+                    .cells()
+                    .filter(|(_, kind)| kind.walkable())
+                    .map(|(cell, _)| cell)
+                    .collect();
+                let step = (walkable.len() / 60).max(1);
+                for &attacker in walkable.iter().step_by(step) {
+                    for &defender in &walkable {
+                        if distance(attacker, defender) <= TACTICAL_MELEE_RANGE
+                            || !line_of_sight(&board, attacker, defender)
+                        {
+                            continue;
+                        }
+                        sighted += 1;
+                        if cover_between(&board, attacker, defender) {
+                            covered += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(sighted > 0, "{biome:?} produced no shots at all");
+        let share = f64::from(covered) / f64::from(sighted);
+        assert!(
+            share >= 0.10,
+            "{biome:?}: only {:.1}% of takeable shots are at a defender in cover, \
+             so the feature is close to unreachable there",
+            share * 100.0
+        );
+    }
+}
+
+/// Which attacks cover applies to. The fixture is `combat_status`'s, since
+/// these are questions about a swing rather than about a board.
+mod cover_by_shape {
+    use super::*;
+    use crate::abilities::AbilityShape;
+    use crate::battle;
+
+    fn shaped_swing(game: &Game, body: Entity, shape: AbilityShape) -> battle::Swing {
+        battle::Swing {
+            cover_ignored: shape.ignores_cover(),
+            ..battle::Swing::plain(game.natural_range_of(body))
+        }
+    }
+
+    fn covered(game: &Game, attacker: Entity, defender: Entity, shape: AbilityShape) -> bool {
+        let swing = shaped_swing(game, defender, shape);
+        game.defender_profile_against(attacker, defender, swing)
+            .evasion
+            > game.combatant_profile(defender, swing).evasion
+    }
+
+    /// A blast flushes a body out from behind its boulder.
+    #[test]
+    fn a_blast_ignores_cover() {
+        let (game, player, wild) = crate::tests::combat_status::cover_fight(
+            904,
+            &crate::tests::combat_status::COVERED_BOARD,
+            (4, 1),
+            (4, 4),
+        );
+        assert!(!covered(
+            &game,
+            player,
+            wild,
+            AbilityShape::Radius { radius: 1 }
+        ));
+    }
+
+    /// Everything that is a shot rather than a blast is refused by cover.
+    #[test]
+    fn every_other_shape_is_penalised_by_cover() {
+        let (game, player, wild) = crate::tests::combat_status::cover_fight(
+            904,
+            &crate::tests::combat_status::COVERED_BOARD,
+            (4, 1),
+            (4, 4),
+        );
+        for shape in [
+            AbilityShape::Single,
+            AbilityShape::Line { length: 4 },
+            AbilityShape::Cone {
+                length: 4,
+                degrees: 90,
+            },
+        ] {
+            assert!(
+                covered(&game, player, wild, shape),
+                "{shape:?} should be refused by cover"
+            );
+        }
+    }
+
+    /// **The polarity regression.** `false` is "cover applies", so a
+    /// `Swing::default()` written later cannot switch the feature off.
+    #[test]
+    fn a_default_swing_still_honours_cover() {
+        assert!(!battle::Swing::default().cover_ignored);
+    }
+}
+
+/// What the screen is told about cover.
+mod cover_telegraph {
+    use super::*;
+    use crate::tests::combat_status::{COVERED_BOARD, cover_fight};
+
+    /// **The test the spec asks for by name, and the one that must not be
+    /// weakened.** The mark and the roll are two calls into one rule; over
+    /// every ordered pair on a board, they answer the same thing.
+    #[test]
+    fn the_telegraph_agrees_with_the_roll() {
+        let (game, player, wild) = cover_fight(905, &COVERED_BOARD, (4, 1), (4, 4));
+        let mut agreed = 0;
+        for (attacker, defender) in [(player, wild), (wild, player)] {
+            let swing = crate::battle::Swing::plain(game.natural_range_of(defender));
+            let raised = game
+                .defender_profile_against(attacker, defender, swing)
+                .evasion
+                > game.combatant_profile(defender, swing).evasion;
+            assert_eq!(
+                game.body_in_cover(attacker, defender),
+                raised,
+                "the mark and the roll disagree"
+            );
+            agreed += u32::from(raised);
+        }
+        assert_eq!(
+            agreed, 1,
+            "the fixture should shelter exactly one of the two, or it proves nothing"
+        );
+    }
+
+    /// The standing mark is a hostile's turn only — on the player's own,
+    /// nothing has been aimed yet.
+    #[test]
+    fn the_standing_mark_is_a_hostiles_turn_only() {
+        let (mut game, player, wild) = cover_fight(906, &COVERED_BOARD, (4, 4), (4, 1));
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+        let view = game.tactical_view().expect("a fight is open");
+        assert!(
+            view.bodies.iter().all(|b| !b.in_cover),
+            "the player's own turn lit a standing mark"
+        );
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let view = game.tactical_view().expect("a fight is open");
+        let marked = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == player)
+            .expect("the player is on the board");
+        assert!(
+            marked.in_cover,
+            "the boulder shelters the player from the hostile whose turn it is"
+        );
+        assert_eq!(
+            marked.in_cover,
+            game.body_in_cover(wild, player),
+            "the mark disagrees with the door it is a call into"
+        );
+    }
+
+    /// A reachable cell that would shelter the acting body is washed, and
+    /// one that would not is left alone.
+    #[test]
+    fn a_covered_destination_is_marked() {
+        let (mut game, _, wild) = cover_fight(907, &COVERED_BOARD, (4, 1), (4, 6));
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let view = game.tactical_view().expect("a fight is open");
+        assert!(
+            !view.covered.is_empty(),
+            "nothing on this board sheltered the hostile from the player"
+        );
+        for cell in &view.covered {
+            assert!(
+                view.reachable.contains(cell),
+                "a covered cell that cannot be walked to was marked"
+            );
+        }
+    }
+
+    /// A finished fight is a result screen, not a resumed one.
+    #[test]
+    fn a_finished_fight_marks_nothing() {
+        let (mut game, _, wild) = cover_fight(908, &COVERED_BOARD, (4, 1), (4, 6));
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let frozen = game.tactical_view().expect("a fight is open").frozen();
+        assert!(frozen.covered.is_empty());
+        assert!(frozen.bodies.iter().all(|b| !b.in_cover));
+    }
+}

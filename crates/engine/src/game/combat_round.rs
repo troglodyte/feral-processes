@@ -1468,6 +1468,11 @@ impl Game {
         // someone to key it off the recipient instead.
         let level = self.ability_user_level(actor);
         let affinity = self.ability_affinity(actor, &ability.effect);
+        // **Through `tactical_shape`, never `def.shape`.** `shape:` is
+        // `#[serde(default)]` and nothing shipped authors one, so a direct
+        // read resolves the whole roster to nothing and every routine would
+        // be a blast — silently.
+        let blast = ability.tactical_shape().ignores_cover();
         // Damage/drain lines get the log kind their side actually earns,
         // rather than the party's own `PartyDamage` regardless of who is
         // acting — `use_ability` serves both sides now, but a hostile
@@ -1579,6 +1584,7 @@ impl Game {
                             free: false,
                             range: band,
                             accuracy: ability.accuracy,
+                            cover_ignored: blast,
                         },
                     );
                     let line = match outcome {
@@ -1619,6 +1625,7 @@ impl Game {
                             free: false,
                             range: band,
                             accuracy: ability.accuracy,
+                            cover_ignored: blast,
                         },
                     );
                     let dmg = outcome.damage_to_defender();

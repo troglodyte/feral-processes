@@ -289,6 +289,7 @@ its path, so it moved on its own.
 | Spec | What it designed | Evidence |
 | --- | --- | --- |
 | `2026-09-15-ai-tamper-routines-design` | Five battle-map routines that tamper with the hostile AI's decision-maker (temperature, forecast, side, sight), plus flavour routines, gear and a research node | `AbilityEffect::Tamper`, `TamperKind`, `components::Tampered`, `Game::decision_temperature`, `Game::acts_for_hostiles`, `Game::taken_over`, `Decoy`/`Game::sees_decoy`/`tactical_strike_decoy`, `Game::tactical_forecast` all resolve in `crates/engine`; the tamper block and decoy drawing resolve in `crates/gui`; `assets/research/model_inspection.ron` and eleven routine `.ron` files in `assets/abilities/`. Not yet played at the keyboard — see the plan's closing note |
+| `2026-09-16-tactical-cover-design` | A boulder on the attacker's side of a defender makes them harder to hit at range, and walking round it is flanking for free | `reach::cover_between`, `Game::defender_profile_against`, `Swing::cover_ignored`, `AbilityShape::ignores_cover`, `TACTICAL_AI_COVER_WEIGHT`/`_TIEBREAK`, `TacticalBody::in_cover`, `TacticalView::covered` and `Game::body_in_cover` all resolve in `crates/engine`; the shield mark and the covered-destination wash resolve in `crates/gui/src/render/tactical.rs`. No save change and no new cell kind. The board density that makes it reachable is a census, `cover_is_reachable_on_every_biome_a_fight_opens_on`, not a `docs/measurements/` file. Not yet played at the keyboard |
 
 ## Four rows that need a footnote
 

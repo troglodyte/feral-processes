@@ -1350,3 +1350,147 @@ fn landing_a_fumble_rung_spends_no_rng() {
          however many fumbles it contained"
     );
 }
+
+// ------------------------------------------------------------ partial cover
+
+/// A fight on a hand-written board, with the player and one hostile placed
+/// by hand. Generated boards put cover where the seed says; where it falls
+/// is the whole of what these tests are about.
+pub(super) fn cover_fight(
+    seed: u32,
+    rows: &[&str],
+    player_at: (i32, i32),
+    wild_at: (i32, i32),
+) -> (Game, Entity, Entity) {
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::Board;
+
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = crate::tests::tactical::tactical_fight(&mut game, 1, 40)[0];
+    let player = game.player_entity();
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        battle.board = Board::from_rows(rows);
+        assert!(
+            battle.move_to(player, player_at),
+            "the player would not stand"
+        );
+        assert!(battle.move_to(wild, wild_at), "the hostile would not stand");
+    }
+    (game, player, wild)
+}
+
+/// A boulder on the attacker's side of the defender, with the two of them on
+/// a clear vertical.
+pub(super) const COVERED_BOARD: [&str; 9] = [
+    ".........",
+    ".........",
+    ".........",
+    "...#.....",
+    ".........",
+    ".........",
+    ".........",
+    ".........",
+    ".........",
+];
+
+fn plain_swing(game: &Game, body: Entity) -> battle::Swing {
+    battle::Swing::plain(game.natural_range_of(body))
+}
+
+#[test]
+fn cover_raises_the_defenders_evasion() {
+    let (game, player, wild) = cover_fight(900, &COVERED_BOARD, (4, 1), (4, 4));
+    let swing = plain_swing(&game, wild);
+    let plain = game.combatant_profile(wild, swing).evasion;
+    let covered = game.defender_profile_against(player, wild, swing).evasion;
+    let expected = plain * (100 + crate::tuning::COVER_EVASION_PERCENT) as f64 / 100.0;
+    assert!(
+        (covered - expected).abs() < 1e-9,
+        "{covered} should be {expected}, the constant's ratio over {plain}"
+    );
+}
+
+/// **The flanking property**, and the test that matters most: the boulder
+/// does not move, the attacker does, and the protection is gone.
+#[test]
+fn moving_the_attacker_around_the_boulder_removes_the_cover() {
+    let (mut game, player, wild) = cover_fight(901, &COVERED_BOARD, (4, 1), (4, 4));
+    let swing = plain_swing(&game, wild);
+    let before = game.defender_profile_against(player, wild, swing).evasion;
+
+    {
+        let mut battle = game.world.resource_mut::<crate::tactical::TacticalBattle>();
+        assert!(
+            battle.move_to(player, (4, 7)),
+            "the player would not walk round"
+        );
+    }
+
+    let after = game.defender_profile_against(player, wild, swing).evasion;
+    assert!(
+        before > after,
+        "the boulder was cover and should have stopped being it"
+    );
+    assert_eq!(
+        after,
+        game.combatant_profile(wild, swing).evasion,
+        "flanked, the defender is on its plain profile"
+    );
+}
+
+/// The group model has no board, so the new door answers exactly what
+/// `combatant_profile` does — an omission rather than a branch.
+#[test]
+fn cover_changes_nothing_in_the_group_model() {
+    let mut game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let player = game.player_entity();
+    let swing = plain_swing(&game, wild);
+    assert_eq!(
+        game.defender_profile_against(player, wild, swing).evasion,
+        game.combatant_profile(wild, swing).evasion
+    );
+}
+
+/// The raise has to reach the roll and not merely the profile. A seeded
+/// sweep rather than one swing, because a single roll cannot see a
+/// probability. Set `COVER_EVASION_PERCENT` to 0 and this fails.
+#[test]
+fn the_evasion_raise_reaches_the_roll() {
+    const OPEN_BOARD: [&str; 9] = [
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+    ];
+
+    fn hits(rows: &[&str]) -> u32 {
+        let (mut game, player, wild) = cover_fight(903, rows, (4, 1), (4, 4));
+        let swing = plain_swing(&game, player);
+        let mut landed = 0;
+        for _ in 0..3000 {
+            game.world.get_mut::<Stats>(wild).unwrap().hp = 100_000;
+            if game
+                .resolve_and_apply_attack(player, wild, swing)
+                .damage_to_defender()
+                > 0
+            {
+                landed += 1;
+            }
+        }
+        landed
+    }
+
+    let open = hits(&OPEN_BOARD);
+    let covered = hits(&COVERED_BOARD);
+    assert!(
+        covered < open,
+        "{covered} hits in cover should be below {open} in the open"
+    );
+}

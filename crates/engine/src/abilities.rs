@@ -287,6 +287,23 @@ pub enum AbilityShape {
     Radius { radius: u32 },
 }
 
+impl AbilityShape {
+    /// Whether a routine of this shape ignores a defender's partial cover.
+    ///
+    /// **A blast flushes a body out from behind its boulder**; everything
+    /// else is a shot, and cover is what a shot is refused by.
+    ///
+    /// Exhaustive — `cell_mark`'s rule. A fifth shape reached through a `_`
+    /// arm would ship on whichever answer the fallback happened to be, and
+    /// a routine that quietly ignores cover reads as cover not working.
+    pub fn ignores_cover(self) -> bool {
+        match self {
+            AbilityShape::Radius { .. } => true,
+            AbilityShape::Single | AbilityShape::Line { .. } | AbilityShape::Cone { .. } => false,
+        }
+    }
+}
+
 /// How far from the invoker a routine may be aimed, in cells, inclusive at
 /// both ends.
 ///

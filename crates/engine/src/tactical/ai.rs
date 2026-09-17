@@ -27,13 +27,14 @@ use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
-use crate::tactical::reach::{distance, line_of_sight};
+use crate::tactical::reach::{cover_between, distance, line_of_sight};
 use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
-    ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT,
-    TACTICAL_AI_REACH_SCORE, TACTICAL_AI_REACTION_WEIGHT, TACTICAL_AI_TEMPERATURE,
-    TACTICAL_FIELD_RADIUS,
+    ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_COVER_TIEBREAK,
+    TACTICAL_AI_COVER_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT, TACTICAL_AI_REACH_SCORE,
+    TACTICAL_AI_REACTION_WEIGHT, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
+    TACTICAL_MELEE_RANGE,
 };
 
 /// What the acting body means to do this turn.
@@ -174,7 +175,37 @@ fn cell_score(
         .iter()
         .filter(|&&a| distance(cell, a) <= TACTICAL_FIELD_RADIUS)
         .count();
-    cell_merit(board, cell, band, targets) - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+    // **The melee half of the cover term, and it belongs here rather than in
+    // merit.** `walk_to_best_cell` uses merit as the candidate filter, so a
+    // melee body that could leave a closing cell for a covered one would
+    // stall behind boulders instead of closing — the sidestep pathology the
+    // filter exists to prevent. Here it only chooses between cells that were
+    // already worth walking to.
+    let shelter = if band.max <= TACTICAL_MELEE_RANGE {
+        TACTICAL_AI_COVER_TIEBREAK * cover_share(board, cell, targets)
+    } else {
+        0.0
+    };
+    cell_merit(board, cell, band, targets) + shelter - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+}
+
+/// The fraction of `targets` that a body standing at `cell` would have cover
+/// against.
+///
+/// A call into `reach::cover_between` with the *target* as the attacker and
+/// the candidate cell as the defender — the same function the roll reads, so
+/// the AI cannot come to believe in cover the roll would not grant. The
+/// denominator is every target, since `cover_between` asks sight itself and
+/// a target that cannot see the cell is not a shot to be sheltered from.
+fn cover_share(board: &Board, cell: (i32, i32), targets: &[(i32, i32)]) -> f32 {
+    if targets.is_empty() {
+        return 0.0;
+    }
+    let sheltered = targets
+        .iter()
+        .filter(|&&t| cover_between(board, t, cell))
+        .count();
+    sheltered as f32 / targets.len() as f32
 }
 
 /// The part of `cell_score` that is a reason to walk: the reach bonus and
@@ -198,7 +229,16 @@ fn cell_merit(board: &Board, cell: (i32, i32), band: AbilityRange, targets: &[(i
         .min()
         .unwrap_or(0);
 
+    // A ranged body has a reason to walk for cover; a melee one does not,
+    // and its half of the term is `cell_score`'s.
+    let shelter = if band.max > TACTICAL_MELEE_RANGE {
+        TACTICAL_AI_COVER_WEIGHT * cover_share(board, cell, targets)
+    } else {
+        0.0
+    };
+
     (if hits { TACTICAL_AI_REACH_SCORE } else { 0.0 }) - TACTICAL_AI_CLOSING_WEIGHT * gap as f32
+        + shelter
 }
 
 impl Game {
@@ -862,7 +902,11 @@ impl Game {
     fn expected_reaction_damage(&self, reactor: Entity, mover: Entity) -> f32 {
         let swing = crate::battle::Swing::reaction(self.natural_range_of(reactor));
         let attacker = self.combatant_profile(reactor, swing);
-        let defender = self.combatant_profile(
+        // A call rather than a copy: a reaction reaches `TACTICAL_MELEE_RANGE`
+        // and cover's first rule refuses melee, so this is a no-op today —
+        // and stays correct if that rule ever moves.
+        let defender = self.defender_profile_against(
+            reactor,
             mover,
             crate::battle::Swing::plain(self.natural_range_of(mover)),
         );
@@ -1103,6 +1147,78 @@ mod tests {
 
     const MELEE: AbilityRange = AbilityRange { min: 0, max: 1 };
     const STANDOFF: AbilityRange = AbilityRange { min: 3, max: 6 };
+
+    /// A 12-cell board with one boulder at (5,3) — on the target's side of
+    /// (4,4), and no neighbour of (4,5) at all. The two candidate cells are
+    /// otherwise identical: both four cells from the target at (8,4), both
+    /// inside `STANDOFF`, both with a clear line to it.
+    fn one_boulder() -> Board {
+        let mut rows = vec![".".repeat(12); 12];
+        rows[3].replace_range(5..6, "#");
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        Board::from_rows(&rows)
+    }
+
+    const COVERED: (i32, i32) = (4, 4);
+    const EXPOSED: (i32, i32) = (4, 5);
+    const TARGET: [(i32, i32); 1] = [(8, 4)];
+
+    /// **The whole of what makes a ranged body walk for cover.**
+    /// `scored_cells` uses merit as the candidate filter, so a term that
+    /// lived only in `cell_score` would never open the cell as a candidate.
+    #[test]
+    fn a_ranged_cell_with_cover_outscores_an_equal_one_without() {
+        let board = one_boulder();
+        let sheltered = cell_merit(&board, COVERED, STANDOFF, &TARGET);
+        let open = cell_merit(&board, EXPOSED, STANDOFF, &TARGET);
+        assert!(
+            sheltered > open,
+            "the covered cell scored {sheltered}, the exposed one {open}"
+        );
+    }
+
+    /// The three terms are read against each other, and this is where that
+    /// is checked: full cover must never be worth walking out of reach for,
+    /// and must be worth more than one step of closing or no body would ever
+    /// take a cell for it.
+    #[test]
+    fn cover_is_worth_less_than_reach_and_more_than_a_step_of_closing() {
+        let board = one_boulder();
+        let gained = cell_merit(&board, COVERED, STANDOFF, &TARGET)
+            - cell_merit(&board, EXPOSED, STANDOFF, &TARGET);
+        assert!(
+            gained < TACTICAL_AI_REACH_SCORE,
+            "cover worth {gained} would buy a cell that cannot fire"
+        );
+        assert!(
+            gained > TACTICAL_AI_CLOSING_WEIGHT,
+            "cover worth {gained} loses to a single step of closing"
+        );
+    }
+
+    /// **A melee body's cover is a tie-break and never a reason to walk.**
+    /// In merit — the candidate filter — the boulder is worth nothing to it,
+    /// so it cannot stall behind one instead of closing; in the score, which
+    /// only ever chooses among cells it already had a reason to walk to, it
+    /// breaks the tie.
+    #[test]
+    fn a_melee_bands_cover_is_a_tie_break_and_not_a_reason_to_walk() {
+        let board = one_boulder();
+        assert_eq!(
+            cell_merit(&board, COVERED, MELEE, &TARGET),
+            cell_merit(&board, EXPOSED, MELEE, &TARGET),
+            "a boulder opened a candidate cell for a melee body"
+        );
+        assert!(
+            cell_score(&board, COVERED, MELEE, &TARGET, &[])
+                > cell_score(&board, EXPOSED, MELEE, &TARGET, &[]),
+            "between two cells it was already walking to, the covered one wins"
+        );
+        const _: () = assert!(
+            TACTICAL_AI_COVER_TIEBREAK < TACTICAL_AI_CROWDING_WEIGHT,
+            "a tie-break that outvotes crowding is not a tie-break"
+        );
+    }
 
     /// The term the whole standoff case rests on. A distance-to-target score
     /// would read "one cell away" as nearly perfect for a routine that

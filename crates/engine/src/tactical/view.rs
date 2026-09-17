@@ -67,6 +67,14 @@ pub struct TacticalBody {
     /// can leak it is the presentation half of "a body that approaches
     /// unseen", and is deliberately not built yet.
     pub cloaked: bool,
+    /// Whether this body has partial cover against the body whose turn it
+    /// is, and then only while that body is hostile.
+    ///
+    /// **Off on the player's own turn**, where the aim has not been chosen
+    /// yet: app-core turns the mark on for the hostile being aimed at
+    /// through `Game::body_in_cover` instead. Off on a finished board too —
+    /// see `TacticalView::frozen`.
+    pub in_cover: bool,
 }
 
 /// A `Tampered` slot's own tag, in the strip's short vocabulary — see the
@@ -176,6 +184,10 @@ pub struct TacticalView {
     pub provoking: Vec<(i32, i32)>,
     /// Every Hallucination fake on the board, both sides'.
     pub decoys: Vec<DecoyView>,
+    /// The subset of `reachable` that has cover against at least one hostile
+    /// the acting body can see — built the way `provoking` is, one call per
+    /// cell into the rule the roll reads.
+    pub covered: Vec<(i32, i32)>,
 }
 
 impl TacticalView {
@@ -189,6 +201,14 @@ impl TacticalView {
     /// and a Hallucination's fakes are all things the AI would still be
     /// acting on, and none of them survive to a board with no actor left.
     pub fn frozen(self) -> Self {
+        let bodies = self
+            .bodies
+            .into_iter()
+            .map(|body| TacticalBody {
+                in_cover: false,
+                ..body
+            })
+            .collect();
         let order = self
             .order
             .into_iter()
@@ -205,6 +225,8 @@ impl TacticalView {
             allowance: 0,
             reachable: Vec::new(),
             provoking: Vec::new(),
+            covered: Vec::new(),
+            bodies,
             order,
             decoys: Vec::new(),
             ..self
@@ -223,6 +245,24 @@ impl Game {
             .as_ref()?
             .board
             .clone()
+    }
+
+    /// Whether `defender` has cover against a shot from `attacker`.
+    ///
+    /// **The door app-core lights the aim mark through**, while the player
+    /// is aiming at a particular hostile and the view's own `in_cover` is
+    /// off. It agrees with the roll by construction: this and
+    /// `defender_profile_against` both call `reach::cover_between`, and
+    /// neither reimplements the arc.
+    pub(crate) fn body_in_cover(&self, attacker: Entity, defender: Entity) -> bool {
+        self.world
+            .get_resource::<TacticalBattle>()
+            .and_then(|battle| {
+                let from = battle.cell_of(attacker)?;
+                let at = battle.cell_of(defender)?;
+                Some(reach::cover_between(&battle.board, from, at))
+            })
+            .unwrap_or(false)
     }
 
     /// Whether a tactical fight is open.
@@ -263,9 +303,13 @@ impl Game {
             })
             .collect();
 
+        // Only a hostile's turn earns the standing mark. On the player's own
+        // turn nothing has been aimed yet, and app-core lights the aimed
+        // hostile through `body_in_cover` instead.
+        let marks_cover_against = actor.filter(|&a| self.is_hostile(a));
         let bodies: Vec<TacticalBody> = placed
             .iter()
-            .map(|&(entity, cell)| self.body_view(entity, cell, player_power))
+            .map(|&(entity, cell)| self.body_view(entity, cell, player_power, marks_cover_against))
             .collect();
         let order: Vec<TurnRow> = initiative
             .iter()
@@ -300,6 +344,27 @@ impl Game {
             })
             .unwrap_or_default();
 
+        // `provoking`'s pattern: one call per cell into the one rule, so
+        // the wash and the roll cannot disagree about which cells shelter.
+        let covered: Vec<(i32, i32)> = actor
+            .map(|a| {
+                let hostiles: Vec<(i32, i32)> = placed
+                    .iter()
+                    .filter(|&&(e, _)| e != a && self.is_hostile(e) != self.is_hostile(a))
+                    .map(|&(_, cell)| cell)
+                    .collect();
+                reachable
+                    .iter()
+                    .copied()
+                    .filter(|&cell| {
+                        hostiles
+                            .iter()
+                            .any(|&from| reach::cover_between(&board, from, cell))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Some(TacticalView {
             board,
             bodies,
@@ -312,6 +377,7 @@ impl Game {
             reachable,
             provoking,
             decoys,
+            covered,
         })
     }
 
@@ -391,7 +457,13 @@ impl Game {
             .collect()
     }
 
-    fn body_view(&self, entity: Entity, cell: (i32, i32), player_power: i32) -> TacticalBody {
+    fn body_view(
+        &self,
+        entity: Entity,
+        cell: (i32, i32),
+        player_power: i32,
+        attacker: Option<Entity>,
+    ) -> TacticalBody {
         let glyph = self.world.get::<Glyph>(entity).copied();
         let stats = self.world.get::<Stats>(entity);
         let is_player = self.world.get::<Player>(entity).is_some();
@@ -425,6 +497,7 @@ impl Game {
             hp_fraction: stats.map(|s| s.hp_fraction()),
             level: self.world.get::<Experience>(entity).map(|e| e.level),
             cloaked: self.is_cloaked(entity),
+            in_cover: attacker.is_some_and(|a| self.body_in_cover(a, entity)),
         }
     }
 

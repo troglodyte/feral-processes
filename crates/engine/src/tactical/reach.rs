@@ -16,11 +16,11 @@ use crate::abilities::{AbilityRange, AbilityShape};
 use crate::components::Creature;
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
-use crate::tactical::map::Board;
+use crate::tactical::map::{BattleCell, Board};
 use crate::tactical::{TacticalBattle, deploy};
 use crate::tuning::{
-    DEFAULT_BASE_SPEED, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN,
-    TACTICAL_MOVE_SPEED_STEP,
+    DEFAULT_BASE_SPEED, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX,
+    TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP,
 };
 use crate::world::NEIGHBOURS;
 
@@ -181,6 +181,46 @@ pub fn distance(a: (i32, i32), b: (i32, i32)) -> u32 {
 pub fn in_range(from: (i32, i32), aim: (i32, i32), range: AbilityRange) -> bool {
     let d = distance(from, aim);
     d >= range.min && d <= range.max
+}
+
+/// Whether the body at `defender` has partial cover against a shot from
+/// `attacker`.
+///
+/// **The one rule that decides cover.** The roll, the AI and both telegraph
+/// marks are all calls to this; a second copy of the arc test is the defect
+/// the whole feature is shaped to prevent.
+///
+/// Three conditions, ordered cheapest first because only the last walks
+/// cells:
+///
+/// 1. The two are further apart than `TACTICAL_MELEE_RANGE`. A boulder is no
+///    help against someone already standing on top of you.
+/// 2. One of the defender's eight neighbours is `BattleCell::Cover` **on the
+///    attacker's side** — the dot product of (neighbour - defender) with
+///    (attacker - defender) is **strictly positive**. Strictly is the whole
+///    of the ninety-degree rule: a boulder exactly abeam scores zero and is
+///    beside you rather than between you and the shot. This is deliberately
+///    the opposite choice from `shape_cells`' cone epsilon, which admits
+///    equality because an eight-way grid's diagonals sit exactly on the
+///    wedge — there is no grid artefact to rescue here.
+/// 3. The attacker can see the defender at all. A shot that cannot be taken
+///    needs no modifier.
+///
+/// Cover is read off `BattleCell::Cover` rather than `blocks_sight()`. The
+/// two are the same predicate today, and `blocks_sight` is the one that
+/// would grow a second member if a fifth cell kind ever landed — a glass
+/// wall would stop a shot without hiding anybody. Off-board neighbours read
+/// as `Blocked` through `Board::cell`, so the scan needs no bounds check.
+pub fn cover_between(board: &Board, attacker: (i32, i32), defender: (i32, i32)) -> bool {
+    if distance(attacker, defender) <= TACTICAL_MELEE_RANGE {
+        return false;
+    }
+    let toward = (attacker.0 - defender.0, attacker.1 - defender.1);
+    let shielded = NEIGHBOURS.iter().any(|&(dx, dy)| {
+        dx * toward.0 + dy * toward.1 > 0
+            && board.cell(defender.0 + dx, defender.1 + dy) == BattleCell::Cover
+    });
+    shielded && line_of_sight(board, attacker, defender)
 }
 
 /// Whether anything standing at `from` can see `to`.

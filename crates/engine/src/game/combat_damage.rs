@@ -172,6 +172,9 @@ impl Game {
     /// to ask about. So this wraps that function rather than copying it,
     /// and nothing moves out of it.
     ///
+    /// A swing carrying `cover_ignored` gets the plain profile — a blast
+    /// flushes a body out from behind its boulder.
+    ///
     /// `get_resource`, not `resource`: this runs in the group model too,
     /// where there is no board, and a panic there would be the whole group
     /// model.
@@ -183,6 +186,9 @@ impl Game {
         swing: battle::Swing,
     ) -> battle::Combatant {
         let mut profile = self.combatant_profile(defender, swing);
+        if swing.cover_ignored {
+            return profile;
+        }
         let covered = self
             .world
             .get_resource::<TacticalBattle>()

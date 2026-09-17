@@ -3641,3 +3641,73 @@ fn cover_is_reachable_on_every_biome_a_fight_opens_on() {
         );
     }
 }
+
+/// Which attacks cover applies to. The fixture is `combat_status`'s, since
+/// these are questions about a swing rather than about a board.
+mod cover_by_shape {
+    use super::*;
+    use crate::abilities::AbilityShape;
+    use crate::battle;
+
+    fn shaped_swing(game: &Game, body: Entity, shape: AbilityShape) -> battle::Swing {
+        battle::Swing {
+            cover_ignored: shape.ignores_cover(),
+            ..battle::Swing::plain(game.natural_range_of(body))
+        }
+    }
+
+    fn covered(game: &Game, attacker: Entity, defender: Entity, shape: AbilityShape) -> bool {
+        let swing = shaped_swing(game, defender, shape);
+        game.defender_profile_against(attacker, defender, swing)
+            .evasion
+            > game.combatant_profile(defender, swing).evasion
+    }
+
+    /// A blast flushes a body out from behind its boulder.
+    #[test]
+    fn a_blast_ignores_cover() {
+        let (game, player, wild) = crate::tests::combat_status::cover_fight(
+            904,
+            &crate::tests::combat_status::COVERED_BOARD,
+            (4, 1),
+            (4, 4),
+        );
+        assert!(!covered(
+            &game,
+            player,
+            wild,
+            AbilityShape::Radius { radius: 1 }
+        ));
+    }
+
+    /// Everything that is a shot rather than a blast is refused by cover.
+    #[test]
+    fn every_other_shape_is_penalised_by_cover() {
+        let (game, player, wild) = crate::tests::combat_status::cover_fight(
+            904,
+            &crate::tests::combat_status::COVERED_BOARD,
+            (4, 1),
+            (4, 4),
+        );
+        for shape in [
+            AbilityShape::Single,
+            AbilityShape::Line { length: 4 },
+            AbilityShape::Cone {
+                length: 4,
+                degrees: 90,
+            },
+        ] {
+            assert!(
+                covered(&game, player, wild, shape),
+                "{shape:?} should be refused by cover"
+            );
+        }
+    }
+
+    /// **The polarity regression.** `false` is "cover applies", so a
+    /// `Swing::default()` written later cannot switch the feature off.
+    #[test]
+    fn a_default_swing_still_honours_cover() {
+        assert!(!battle::Swing::default().cover_ignored);
+    }
+}

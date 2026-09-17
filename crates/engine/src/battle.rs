@@ -87,6 +87,18 @@ pub struct Swing {
     /// so a `Swing::default()` written later cannot silently switch the
     /// fumble ladder off.
     pub free: bool,
+    /// Whether this swing ignores the defender's partial cover.
+    ///
+    /// **The polarity is `free`'s, and for `free`'s reason.** `false` —
+    /// cover applies — is what a `Swing::default()` written later answers,
+    /// so a construction site using `..Default::default()` cannot silently
+    /// delete the feature. A `cover_applies` field would default to
+    /// *ignored* and do exactly that.
+    ///
+    /// Only a `Radius` sets it: a blast flushes a body out from behind its
+    /// boulder. A `Single`, a `Line` and a `Cone` are all shots, and cover
+    /// is what a shot is refused by.
+    pub cover_ignored: bool,
 }
 
 impl Swing {
@@ -97,6 +109,7 @@ impl Swing {
             range,
             accuracy: 0,
             free: false,
+            cover_ignored: false,
         }
     }
 

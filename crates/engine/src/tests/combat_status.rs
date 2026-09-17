@@ -1356,7 +1356,7 @@ fn landing_a_fumble_rung_spends_no_rng() {
 /// A fight on a hand-written board, with the player and one hostile placed
 /// by hand. Generated boards put cover where the seed says; where it falls
 /// is the whole of what these tests are about.
-fn cover_fight(
+pub(super) fn cover_fight(
     seed: u32,
     rows: &[&str],
     player_at: (i32, i32),
@@ -1382,7 +1382,7 @@ fn cover_fight(
 
 /// A boulder on the attacker's side of the defender, with the two of them on
 /// a clear vertical.
-const COVERED_BOARD: [&str; 9] = [
+pub(super) const COVERED_BOARD: [&str; 9] = [
     ".........",
     ".........",
     ".........",

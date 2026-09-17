@@ -1547,6 +1547,12 @@ impl Game {
                 needs_target: false,
             },
             PartyCommand {
+                kind: PartyCommandKind::AutoResolve,
+                key: 'R',
+                label: "[R]esolve".to_string(),
+                needs_target: false,
+            },
+            PartyCommand {
                 kind: PartyCommandKind::JackOut,
                 key: 'j',
                 label: "[j]ack out".to_string(),

@@ -85,13 +85,13 @@ use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
 use feral_processes_engine::{
-    AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
-    ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, Entity,
-    EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
-    HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption,
-    RigToolView, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
-    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
-    WorkOrder, WorkOrderReport, WorkProfile, condense,
+    AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
+    ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
+    DispatchReach, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
+    FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP,
+    MessageSource, ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal, RouteReport,
+    SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
+    TransferCarrier, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

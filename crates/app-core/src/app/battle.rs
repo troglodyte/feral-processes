@@ -57,9 +57,10 @@ impl App {
         }
 
         // Party-wide commands are matched on the raw char first, so uppercase
-        // `A`/`D` stay distinct from the lowercase per-slot Attack/Defend. The
-        // lowercase retry is what lets a shifted `J` still jack out; `a`/`d`
-        // can't match it, so they fall through to the per-slot menu below.
+        // `A`/`D`/`R` stay distinct from the lowercase per-slot Attack/Defend.
+        // The lowercase retry is what lets a shifted `J` still jack out;
+        // `a`/`d` can't match it, so they fall through to the per-slot menu
+        // below.
         let party = self
             .game
             .as_ref()
@@ -150,6 +151,7 @@ impl App {
                 self.push_battle_outcome_sounds(sound, still_active);
             }
             PartyCommandKind::AllDefend => self.plan_every_slot(BattleAction::Defend),
+            PartyCommandKind::AutoResolve => self.auto_resolve(),
             PartyCommandKind::AllAttack => {
                 if needs_target {
                     self.pending_party_attack = true;
@@ -179,6 +181,36 @@ impl App {
         let still_active = game.has_active_battle();
         self.settle_after_round(still_active);
         self.push_battle_outcome_sounds(None, still_active);
+    }
+
+    /// Plays the open fight out to its end with no pacing — `[R]` on either
+    /// battle screen — whichever combat model holds it.
+    ///
+    /// **Which model is read off `self.mode` before calling the engine**,
+    /// not after: a fight that closes takes both `BattleState` and
+    /// `TacticalBattle` with it, so nothing is left behind afterward to ask.
+    pub(crate) fn auto_resolve(&mut self) {
+        let tactical = self.mode == Mode::TacticalBattle;
+        let Some(game) = &mut self.game else { return };
+        match game.auto_resolve_battle() {
+            AutoResolve::Stalled => {
+                self.refuse("Couldn't settle it — finish by hand.");
+            }
+            AutoResolve::Finished if tactical => {
+                self.settle_tactical_end();
+            }
+            AutoResolve::Finished => {
+                // Order matters: `settle_after_round` restarts the reveal,
+                // which `finish_reveal` then completes so the results
+                // appear at once instead of scrolling in; the sounds call
+                // runs `check_game_over`. `false` rather than a re-read of
+                // `has_active_battle` — `Finished` already means the fight
+                // is closed.
+                self.settle_after_round(false);
+                self.finish_reveal();
+                self.push_battle_outcome_sounds(None, false);
+            }
+        }
     }
 
     /// Picks which enemy group the action chosen in `Mode::Battle` hits —

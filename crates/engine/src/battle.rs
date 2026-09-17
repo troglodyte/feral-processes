@@ -547,6 +547,9 @@ pub struct AllyOption {
 pub enum PartyCommandKind {
     AllAttack,
     AllDefend,
+    /// Plays the fight out to its end with no pacing — `[R]` on the group
+    /// roster. See `Game::auto_resolve_battle`.
+    AutoResolve,
     JackOut,
 }
 

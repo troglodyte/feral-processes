@@ -453,3 +453,55 @@ fn a_walk_that_provokes_is_worth_less_than_one_that_does_not() {
         "a body with no reaction left was still priced as a threat"
     );
 }
+
+/// The telegraph and the act have to agree, on both halves: the rows say
+/// what invoking here will provoke, and a capture's row says nothing.
+#[test]
+fn the_routine_rows_say_what_invoking_here_provokes() {
+    let mut game = game();
+    let (player, _hostile) = face_off(&mut game);
+    game.world
+        .entity_mut(player)
+        .insert(crate::components::Routines(vec![
+            "mirror_restore".to_string(),
+            "decompile".to_string(),
+        ]));
+
+    let rows = game.tactical_routine_options();
+    let heal = rows
+        .iter()
+        .find(|row| row.name.contains("Patch"))
+        .expect("the heal is offered");
+    assert_eq!(heal.provokes, 1, "the row did not price the hostile beside");
+    let capture = rows
+        .iter()
+        .find(|row| row.name.to_lowercase().contains("decompile"))
+        .expect("the capture is offered");
+    assert_eq!(
+        capture.provokes, 0,
+        "a capture's row promised a cost the act does not charge"
+    );
+}
+
+/// The movement telegraph is a call into the term the AI reads, so the
+/// cells the player is warned about are the cells a hostile would price.
+#[test]
+fn the_movement_overlay_marks_the_cells_that_provoke() {
+    let mut game = game();
+    let (player, _hostile) = face_off(&mut game);
+    let at = cell(&game, player);
+    let view = game.tactical_view().expect("a fight is open");
+
+    assert!(
+        view.provoking.iter().all(|c| view.reachable.contains(c)),
+        "a cell was marked as provoking that could not be walked to"
+    );
+    assert!(
+        view.provoking.contains(&(at.0 - 1, at.1)),
+        "stepping out of reach was not marked"
+    );
+    assert!(
+        !view.provoking.contains(&(at.0, at.1 + 1)),
+        "a step that stays in reach was marked as costing something"
+    );
+}

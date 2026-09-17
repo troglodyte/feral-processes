@@ -560,6 +560,14 @@ pub struct SpecialOption {
     /// rather than only reporting it through `unavailable` once it is too
     /// late to choose differently. 0 means no cooldown at all.
     pub cooldown: u32,
+    /// How many bodies would react to this being invoked from where the
+    /// actor stands — a battle map's question, and 0 in the group model,
+    /// which has no reach to leave and no cell to invoke from.
+    ///
+    /// A field rather than a clause appended to `detail`: the row is laid
+    /// out in columns, and a figure folded into prose is the substring that
+    /// pushes a row off the end of its box.
+    pub provokes: usize,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

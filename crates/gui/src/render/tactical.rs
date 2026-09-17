@@ -276,6 +276,22 @@ pub(super) fn draw_tactical_map(
                 tile_px,
                 palette::PLAN,
             );
+            // **Over the reach wash, not instead of it.** A provoking cell is
+            // still somewhere the body may step; what is being said is that
+            // walking there will be swung at, which is `THREAT`'s own
+            // meaning — inbound harm — and the one channel in this pane that
+            // already carries it. The two washes stack deliberately: the
+            // blue answers *where*, the red answers *at what cost*, and a
+            // cell that is neither reachable nor provoking gets neither.
+            draw_cell_field(
+                painter,
+                &view.provoking,
+                cell,
+                px,
+                py,
+                tile_px,
+                palette::THREAT,
+            );
         }
         // Where a `Radius` routine's centre may legally land. `placeable` is
         // already empty for every shape but `Radius`

@@ -12,7 +12,7 @@ use crate::tests::support::{
     equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
 };
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::{Entity, With};
 
 fn game() -> Game {
     Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -4668,4 +4668,106 @@ mod squad_capture {
             "an emptied squad must have zero Integrity even though 1 point was left over"
         );
     }
+}
+
+/// A squad is never saved, and its members are unchanged by a save made
+/// mid-fight — `#[serde(skip)]` on `Squad` would leave this green against
+/// nothing, since `Squad` derives no `Serialize` at all and there is no RON
+/// round trip to catch that omission; this needs a real save/load.
+#[test]
+fn a_squad_is_not_saved_and_its_members_are_unchanged() {
+    let mut game = game();
+    let pack = tactical_pack(&mut game, 9, 40);
+    game.open_tactical_battle(pack.clone());
+
+    // `pack`'s own tiles, not a query over every `Hostile` in the world —
+    // ambient habitat spawns near the player would otherwise swamp the
+    // count, and entity ids are not stable across a save, so the tile each
+    // member stood on is what ties a pre-save row to its post-load one.
+    let tiles: std::collections::BTreeSet<(i32, i32)> = pack
+        .iter()
+        .map(|&e| {
+            let p = game.world.get::<Position>(e).unwrap();
+            (p.x, p.y)
+        })
+        .collect();
+    assert_eq!(tiles.len(), 9, "fixture: nine distinct member tiles");
+
+    let before: Vec<(Position, Stats)> = {
+        let mut query = game
+            .world
+            .query_filtered::<(&Position, &Stats), With<Hostile>>();
+        let mut rows: Vec<(Position, Stats)> = query
+            .iter(&game.world)
+            .filter(|(p, _)| tiles.contains(&(p.x, p.y)))
+            .map(|(p, s)| (*p, *s))
+            .collect();
+        rows.sort_by_key(|(p, _)| (p.x, p.y));
+        rows
+    };
+    // The squad shell has no `Position`, so it never appears in `before`
+    // above — nine members, not nine plus a squad.
+    assert_eq!(
+        before.len(),
+        9,
+        "fixture: the squad's members alone carry Position"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_squad_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after: Vec<(Position, Stats)> = {
+        let mut query = loaded
+            .world
+            .query_filtered::<(&Position, &Stats), With<Hostile>>();
+        let mut rows: Vec<(Position, Stats)> = query
+            .iter(&loaded.world)
+            .filter(|(p, _)| tiles.contains(&(p.x, p.y)))
+            .map(|(p, s)| (*p, *s))
+            .collect();
+        rows.sort_by_key(|(p, _)| (p.x, p.y));
+        rows
+    };
+    assert_eq!(
+        after.len(),
+        9,
+        "a save made mid-fight must restore exactly the nine members, no squad shell"
+    );
+    for ((before_pos, before_stats), (after_pos, after_stats)) in before.iter().zip(&after) {
+        assert_eq!(
+            before_pos, after_pos,
+            "a member's own Position must survive the round trip"
+        );
+        // `Stats` derives no `PartialEq`, so its fields are compared by hand.
+        assert_eq!(before_stats.hp, after_stats.hp);
+        assert_eq!(before_stats.max_hp, after_stats.max_hp);
+        assert_eq!(before_stats.atk, after_stats.atk);
+        assert_eq!(before_stats.mitigation, after_stats.mitigation);
+    }
+
+    // And no entity anywhere in the loaded world carries `components::Squad`
+    // — the component itself never reaches the save format at all.
+    let mut squads = loaded.world.query::<&Squad>();
+    assert_eq!(
+        squads.iter(&loaded.world).count(),
+        0,
+        "a loaded save must never contain a Squad"
+    );
+
+    // A broader net than the tile match above: whatever tile a squad's
+    // combined stat block might land on if it ever gained a Position by
+    // mistake, its distinctive summed `max_hp` (5 members at 40 each) must
+    // not appear anywhere in the loaded world's Hostile roster.
+    let mut all_hostiles = loaded
+        .world
+        .query_filtered::<&Stats, (With<Hostile>, With<Position>)>();
+    assert!(
+        all_hostiles.iter(&loaded.world).all(|s| s.max_hp != 200),
+        "a squad's combined stat block reached the save under some other tile"
+    );
 }

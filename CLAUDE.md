@@ -979,6 +979,18 @@ relying on one, and correct all three places if it has moved.
 - **`AbilityEffect::tactical_only` is the group model's filter, applied at
   every chooser that is not a battle map**, and `use_ability`'s `Tamper` arm
   is `unreachable!` because of it.
+- **A reaction is one budget, two triggers and one door** — `Game::provoke`,
+  refunded in `TacticalBattle::begin_turn` because the cursor moves in two
+  places and only one of them is `end_turn`.
+- **A reaction reaches `TACTICAL_MELEE_RANGE` and never `Game::swing_range`**,
+  because a reaction at weapon range is overwatch.
+- **A reaction's swing is free and cannot fumble**, `battle::
+  resolve_free_attack` — the Opening rung's non-recursion rule with a second
+  caller.
+- **A routine cut off by a reaction fizzles and is not refused**, keeping the
+  Power and the cooldown the charge already took; a capture provokes nobody.
+- **A reaction can close the fight under the action that provoked it**, so
+  `provoke` answers *still on the board* rather than *still alive*.
 
 ### Items, gear and economy
 

@@ -1106,6 +1106,51 @@
   and the check is already a no-op, which is what keeps
   `TACTICAL_MELEE_RANGE` from being restated a fourth time. See
   `seam:game-swing-range-is-the-one-door-for-how-far-a-body-swings`.
+- **A reaction is one budget, two triggers and one door, and the refund is at
+  a body's own turn.** Every body carries one reaction a round; leaving a
+  hostile's melee reach provokes it and so does invoking beside one, and
+  `Game::provoke` is where both land so the swing, the charge, the order and
+  the stopping rule are written once. **The refund is `TacticalBattle::
+  begin_turn` and not the hand-on**, which is the design's own wording and is
+  wrong for the reason `hand_on_turn`'s doc already gives: the cursor moves in
+  two places, and a body dying on the last rung starts the next round from
+  inside `remove` with no `end_turn` reached — so a refund hung off the
+  hand-on misses whoever the wrap landed on, and one body cannot react for a
+  round for a reason nothing on screen explains. It cost one reordering,
+  `remove` wrapping before it begins the turn, because `begin_turn` reads
+  `actor()` to know whose budget to hand back. **Reach is
+  `TACTICAL_MELEE_RANGE` and deliberately not `Game::swing_range`** — this is
+  the one place in `tactical/` that reads the constant rather than asking how
+  far a body swings, because a reaction at weapon range is overwatch, a
+  different feature, and a reach weapon must not make its holder a three-cell
+  tripwire. **The swing is free and cannot fumble**, the Opening rung's
+  non-recursion rule finding a second caller in
+  `battle::resolve_free_attack`; `Swing::free`'s polarity is the Default-safe
+  one, so a `Swing::default()` written later cannot switch the ladder off. **A
+  cut-off routine fizzles rather than being refused**: the provocation is
+  below the charge, so the Power and the cooldown are gone and nothing lands,
+  which is the rest interrupt's shape — and `Decompile` provokes nobody,
+  because a capture's whole cost is already its catalyst. The trap found three
+  times in the building is that **a reaction can close the fight under the
+  action that provoked it**: `provoke` answers *still on the board* rather
+  than `creature_alive`, because a Forgiving player is rebooted by the tick
+  the reap rides and reads as alive with no cell, and the caller then walks
+  into a `TacticalBattle` that is gone. `step_along_walk`'s refusal arm is the
+  same trap mirrored — it commits an empty walk, which after a fatal reaction
+  would commit it to *the next body*. The AI term rides **merit** and not just
+  the score (`walk_risk` inside `scored_cells`), because the filter is what
+  makes staying put the default and a cell that costs three Integrity on the
+  way out is not a reason to leave the one you are on; the damage is a *call*
+  to `battle::expected_damage` and an expectation rather than a roll, so
+  temperature zero stays stream-neutral. **What the design asks for and is not
+  built**: discounting a *routine's* value by its expected reaction damage,
+  because `tactical_intent` has no value scale to discount — it answers Some
+  or None — so it would mean inventing a routine-versus-swing comparison the
+  model does not have. And `docs/measurements/2026-09-17-tactical-reactions-arena-blind.md`
+  is the instrument's own blind spot: **zero reactions fire in fifty reps** of
+  the only tactical arena scenario, because the planner holds its ground once
+  in reach and nothing there invokes in melee. See
+  `seam:a-reaction-is-one-budget-two-triggers-and-one-door`.
 - **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
   fifth `EffectKind`.** `VisualEffect`'s whole shape is a *world* tile, and a
   board cell pushed into `EffectQueue` pins a flash to an unrelated tile out

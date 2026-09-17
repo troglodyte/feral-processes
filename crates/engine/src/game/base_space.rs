@@ -307,9 +307,28 @@ impl Game {
     /// `the_map_and_the_examine_ray_agree_about_a_wall` pins it anyway,
     /// because "by construction" is exactly the kind of claim that stops
     /// being true when someone lets the ray run through rock.
+    ///
+    /// **A finish underfoot is named first.** The cell one step along
+    /// `(dx, dy)` — the ray's own first stop — is checked for a finish
+    /// before the ray runs at all, since a finished floor is walkable and
+    /// the ray would otherwise step straight over it looking for the wall
+    /// beyond. A finish with no rock in range still answers `Some`, so
+    /// examining a fully floored, fully finished room says something.
     pub fn describe_base_rock(&self, dx: i32, dy: i32, range: i32) -> Option<String> {
-        let (mut x, mut y) = self.base_pos()?;
+        let (bx, by) = self.base_pos()?;
         let seed = self.world.resource::<BaseGrid>().seed();
+        let finish_name = {
+            let grid = self.world.resource::<BaseGrid>();
+            grid.finish_at(bx + dx, by + dy).cloned()
+        }
+        .and_then(|id| {
+            self.world
+                .resource::<crate::floors::FloorDb>()
+                .get(&id)
+                .map(|def| def.name.clone())
+        });
+
+        let (mut x, mut y) = (bx, by);
         for _ in 0..range {
             x += dx;
             y += dy;
@@ -319,13 +338,17 @@ impl Game {
                     .world
                     .resource::<crate::rock::RockDb>()
                     .kind_at(seed, x, y);
-                return Some(format!(
+                let rock_line = format!(
                     "{}. It takes at least {} swings to cut through.",
                     def.name, def.min_swings
-                ));
+                );
+                return Some(match &finish_name {
+                    Some(name) => format!("{name} underfoot; {rock_line}"),
+                    None => rock_line,
+                });
             }
         }
-        None
+        finish_name.map(|name| format!("{name} underfoot."))
     }
 
     /// Whether the player's step into solid rock cuts it. See

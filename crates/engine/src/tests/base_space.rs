@@ -4905,3 +4905,111 @@ fn spend_substrate_below_the_count_moves_nothing_from_either_store() {
         "nothing should have been applied"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Floor finishes: the engine's view of a finish
+// ---------------------------------------------------------------------------
+
+/// `view_finishes_at` must walk the same grid `view_tiles_at` does, or gui's
+/// two lookups on one coordinate would silently disagree about its shape.
+#[test]
+fn view_finishes_at_has_view_tiles_ats_own_shape() {
+    let mut game = game_at_the_frontier(4400);
+    let (cx, cy) = game.base_pos().unwrap();
+    let tiles = game.view_tiles_at((cx, cy), 3, 2);
+    let finishes = game.view_finishes_at((cx, cy), 3, 2);
+
+    assert_eq!(finishes.len(), tiles.len());
+    for (t_row, f_row) in tiles.iter().zip(finishes.iter()) {
+        assert_eq!(t_row.len(), f_row.len());
+    }
+}
+
+/// A finish resolves at exactly the index `view_tiles_at` draws that cell's
+/// `Biome::Platform` at — the property that lets gui zip the two grids with
+/// no coordinate translation of its own.
+#[test]
+fn a_finished_cell_lands_at_view_tiles_ats_own_index() {
+    let mut game = game_at_the_frontier(4401);
+    let (cx, cy) = game.base_pos().unwrap();
+    // The player's own standing tile is already laid floor — the pocket.
+    assert!(game.world.resource_mut::<base_grid::BaseGrid>().set_finish(
+        cx,
+        cy,
+        FloorId::from("cobalt_carpet")
+    ));
+
+    let half = 3;
+    let tiles = game.view_tiles_at((cx, cy), half, half);
+    let finishes = game.view_finishes_at((cx, cy), half, half);
+
+    let (row, col) = (half as usize, half as usize);
+    assert_eq!(
+        tiles[row][col].biome,
+        Biome::Platform,
+        "the fixture's own cell"
+    );
+    let finish = finishes[row][col]
+        .as_ref()
+        .expect("the centre cell was just finished");
+    assert_eq!(finish.name, "Cobalt Carpet");
+}
+
+/// Base space's own view has no meaning anywhere else, so it must not leak a
+/// finish onto a zone-surface coordinate that merely aliases one.
+#[test]
+fn view_finishes_at_is_all_none_off_base_space() {
+    let game = game(4402);
+    let finishes = game.view_finishes_at((0, 0), 2, 2);
+    assert!(
+        finishes.iter().flatten().all(|f| f.is_none()),
+        "the party is on the surface; nothing here should resolve"
+    );
+}
+
+/// A finish underfoot is named ahead of the wall beyond it — the shape
+/// correction 8 asks for: the ray's own first stop is checked for a finish
+/// before the ray runs.
+#[test]
+fn describe_base_rock_names_the_finish_before_the_wall_beyond_it() {
+    let mut game = game(4403);
+    stand_in_base_at(&mut game, 0, 0);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(1, 0);
+        assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
+        // (2, 0) is left solid by construction — the wall beyond the finish.
+    }
+
+    let line = game
+        .describe_base_rock(1, 0, 5)
+        .expect("a finish plus a wall beyond it must still answer");
+    assert!(
+        line.starts_with("Cobalt Carpet underfoot; "),
+        "the finish must be named first: {line}"
+    );
+    assert!(
+        line.contains("swings to cut through"),
+        "the rock line must still follow: {line}"
+    );
+}
+
+/// A finish with no rock in range still answers `Some` — an examined room
+/// that is fully floored and fully finished is not silence.
+#[test]
+fn describe_base_rock_names_a_finish_with_no_rock_in_range() {
+    let mut game = game(4404);
+    stand_in_base_at(&mut game, 0, 0);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        for step in 1..=5 {
+            grid.lay_floor(step, 0);
+        }
+        assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
+    }
+
+    let line = game
+        .describe_base_rock(1, 0, 5)
+        .expect("a finish alone must still answer Some");
+    assert_eq!(line, "Cobalt Carpet underfoot.");
+}

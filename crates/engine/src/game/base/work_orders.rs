@@ -760,6 +760,13 @@ pub(crate) fn queue_needs(
     needed
 }
 
+/// Which of the two things `Game::announce_dig_dry` ran out of Blank
+/// Substrate for — the two wordings share everything but this.
+enum DigDryReason {
+    Tile,
+    Finish,
+}
+
 impl Game {
     /// One tick of base labour: complete what is done, drop what is no
     /// longer wanted, fill what is.
@@ -1584,7 +1591,7 @@ impl Game {
     /// fetch is a shelf to fill.
     ///
     /// **The latch clears the tick a source appears**, in `build_wants`
-    /// above — `dig_wants`' `substrate_in_stock` is the same idea applied
+    /// above — `dig_wants`' `substrate_available` is the same idea applied
     /// to `DigSite::announced_dry`, because the same failure mode reaches
     /// both: said once and never again, a base that ran dry early would
     /// stay silent about running dry later, whether the drought is a bill
@@ -1657,64 +1664,72 @@ impl Game {
         }
     }
 
-    /// Every marked dig site that wants a body, in tile order.
+    /// Every marked dig site that wants a body — cut and tile sites first,
+    /// each block in tile order, then finish and strip sites, each block in
+    /// tile order too. **Finish wants sit after cut and tile wants
+    /// deliberately**: under `truncate(staff.len())` a short-handed base
+    /// keeps holding its floor before it decorates it.
     ///
-    /// **A dry floor job is not a want**, `build_is_workable`'s rule crossed
-    /// over: a body pinned to a cut cell it cannot floor is a body that
-    /// cannot go run the Lathe that would press it a Blank Substrate, and a
+    /// **A dry job is not a want**, `build_is_workable`'s rule crossed over:
+    /// a body pinned to a job it cannot afford is a body that cannot go run
+    /// the Lathe that would press it more Blank Substrate, and a
     /// one-program base stops for the rest of the run exactly the way an
-    /// unconditionally-listed `BuildSite` used to. This reverses this
-    /// function's own earlier doc, which called that "a real and separate
-    /// question this does not answer" — it is answered now, the same way.
+    /// unconditionally-listed `BuildSite` used to. A marked *solid* cell
+    /// needs no substrate at all — cutting spends none — and a `Strip` mark
+    /// needs none either, so only a tile job (`>= 1`) and an `Apply` job
+    /// (`>= FLOOR_FINISH_COST`) can be dry.
     ///
-    /// **A marked *solid* cell needs no substrate at all** — cutting spends
-    /// none, only flooring does — so the check reads the grid, not the
-    /// mark. Gate it unconditionally on `substrate_in_stock` instead and the
-    /// day the base runs dry of Blank Substrate is the day every cut job in
-    /// it stops too, which reads as the whole excavation crew being broken
-    /// rather than one shelf being empty.
-    ///
-    /// **The report moves here too, and with it the whole of
+    /// **The report lives here too, and with it the whole of
     /// `DigSite::announced_dry`'s upkeep** — one latch, one writer, rather
-    /// than split across this function and `Game::crew_lays_tile` the way
-    /// the prerequisite to this change left them. `build_wants`' reasoning
-    /// carries over unchanged: a dropped site is never posted, so
-    /// `crew_lays_tile` never runs for it and nobody else is left to say the
-    /// base is dry. `Game::announce_dig_dry` is `Game::announce_dry`'s twin
-    /// and owns both the setting and the clearing of the latch, asked fresh
-    /// every tick regardless of whose turn it is to swing — which is what
-    /// lets a later drought at the same site still be news, the property
-    /// the prerequisite branch added and this one must not lose.
-    /// `crew_lays_tile` keeps its own `spend_one_substrate` call for the one
-    /// race this cannot see — two floor jobs completing on the same tick
-    /// against a single surviving unit, since `substrate_in_stock` only
-    /// answers "does one exist", not "one for every job about to ask" — but
-    /// that failure is silent now, `run_build_crew`'s `Errand::Dry` rule:
-    /// this function already said the bulk of what there was to say, from
-    /// the one place that can see every site every tick.
+    /// than split across this function and the crew's own spend. A dropped
+    /// site is never posted, so nobody else is left to say the base is dry.
+    /// `Game::announce_dig_dry` owns both the setting and the clearing of the
+    /// latch, asked fresh every tick regardless of whose turn it is to
+    /// swing — which is what lets a later drought at the same site still be
+    /// news. The crew keeps its own `spend_substrate` call for the one race
+    /// this cannot see — two jobs completing on the same tick against a
+    /// single surviving batch, since `substrate_available` only answers
+    /// "how much exists right now", not "enough for every job about to
+    /// ask" — but that failure is silent, `run_build_crew`'s `Errand::Dry`
+    /// rule: this function already said the bulk of what there was to say,
+    /// from the one place that can see every site every tick.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let blocked = self.structure_tiles();
-        let marked: Vec<(Position, Entity)> = {
+        let marked: Vec<(Position, Entity, Option<FinishOrder>)> = {
             let mut query = self.world.query::<(Entity, &DigSite, &Position)>();
             query
                 .iter(&self.world)
                 .filter(|(_, dig, _)| dig.marked)
-                .map(|(e, _, p)| (*p, e))
+                .map(|(e, dig, p)| (*p, e, dig.finish.clone()))
                 .collect()
         };
-        let substrate = self.substrate_in_stock();
+        let available = self.substrate_available();
         let grid = self.world.resource::<BaseGrid>();
-        let mut sites: Vec<(i32, i32, Entity)> = marked
+        let mut sites: Vec<(i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
-            .filter(|(p, _)| hauling::has_station(grid, *p, &blocked))
-            .map(|(p, e)| (p.x, p.y, e))
+            .filter(|(p, ..)| hauling::has_station(grid, *p, &blocked))
+            .map(|(p, e, f)| (p.x, p.y, e, f))
             .collect();
-        sites.sort_unstable();
+        // Cut/tile sites (`finish: None`) sort before finish/strip sites,
+        // each block by `(x, y)` — see this function's own doc.
+        sites.sort_unstable_by_key(|(x, y, _, f)| (f.is_some(), *x, *y));
         let mut wants = Vec::with_capacity(sites.len());
-        for (x, y, site) in sites {
-            let needs_floor = !self.world.resource::<BaseGrid>().is_solid(x, y);
-            if needs_floor && !substrate {
-                self.announce_dig_dry(site, x, y);
+        for (x, y, site, finish) in sites {
+            let dry = match &finish {
+                None => {
+                    let needs_floor = !self.world.resource::<BaseGrid>().is_solid(x, y);
+                    needs_floor && available < 1
+                }
+                Some(FinishOrder::Apply(_)) => available < crate::tuning::FLOOR_FINISH_COST,
+                Some(FinishOrder::Strip) => false,
+            };
+            if dry {
+                let reason = if finish.is_some() {
+                    DigDryReason::Finish
+                } else {
+                    DigDryReason::Tile
+                };
+                self.announce_dig_dry(site, x, y, reason);
                 continue;
             }
             if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
@@ -1725,13 +1740,15 @@ impl Game {
         wants
     }
 
-    /// Says once that there is nothing anywhere to floor `site`'s cut cell
-    /// with. `Game::announce_dry`'s twin — the same latch rule, on
+    /// Says once that there is nothing anywhere to floor or finish `site`'s
+    /// cell with. `Game::announce_dry`'s twin — the same latch rule, on
     /// `DigSite::announced_dry` rather than `BuildSite::announced_dry` — and
     /// a second function rather than a shared one because a dig site names
     /// a cell, not a bill of materials: there is no `outstanding()` to read
-    /// back and format, only the one item every floor job spends.
-    fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32) {
+    /// back and format, only the one item every floor or finish job spends.
+    /// `reason` is the only difference between the two wordings; both name
+    /// the item.
+    fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32, reason: DigDryReason) {
         if self
             .world
             .get::<DigSite>(site)
@@ -1744,24 +1761,30 @@ impl Game {
         }
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
         let name = self.item_name(&substrate).to_string();
-        self.log_base(format!(
-            "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} in store."
-        ));
+        let line = match reason {
+            DigDryReason::Tile => format!(
+                "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} in store."
+            ),
+            DigDryReason::Finish => format!(
+                "Your crew has nothing to finish the floor at ({x}, {y}) with — no {name} in store."
+            ),
+        };
+        self.log_base(line);
     }
 
-    /// Whether a Blank Substrate exists anywhere `Game::crew_lays_tile`
-    /// could reach it — the base's own stores, then the player's pack —
-    /// without spending one. `dig_wants`' read, kept separate from
-    /// `Game::spend_one_substrate` because that one has to remove the unit
-    /// it finds and this one must not.
-    fn substrate_in_stock(&self) -> bool {
+    /// How many Blank Substrate a floor or finish job could spend without
+    /// moving any of them — the base's own stores, then the player's pack.
+    /// `dig_wants`' read, kept separate from `Game::spend_substrate` because
+    /// that one has to remove what it finds and this one must not.
+    pub(crate) fn substrate_available(&self) -> u32 {
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-        if base_holding(self, &substrate) > 0 {
-            return true;
-        }
-        self.world
+        let base = base_holding(self, &substrate);
+        let pack = self
+            .world
             .get::<Inventory>(self.player_entity())
-            .is_some_and(|inv| inv.count(&substrate) > 0)
+            .map(|inv| inv.count(&substrate))
+            .unwrap_or(0);
+        base + pack
     }
 
     /// Drifts every staff member with no post one tile around the base.

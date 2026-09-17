@@ -202,10 +202,6 @@ impl BaseGrid {
 
     /// Paints `id` over `(x, y)`, refusing — and changing nothing — unless
     /// the cell is laid floor. Overwrites whatever finish was already there.
-    ///
-    /// `#[allow(dead_code)]` until `Game::set_mark`'s finish arm calls it —
-    /// the next commit in this sequence.
-    #[allow(dead_code)]
     pub(crate) fn set_finish(&mut self, x: i32, y: i32, id: FloorId) -> bool {
         if !self.is_floor(x, y) {
             return false;
@@ -216,9 +212,6 @@ impl BaseGrid {
 
     /// Strips `(x, y)`'s finish, if it has one, leaving the cell `Floor`.
     /// Reports whether a finish was actually removed.
-    ///
-    /// `#[allow(dead_code)]`, `set_finish`'s own reason.
-    #[allow(dead_code)]
     pub(crate) fn clear_finish(&mut self, x: i32, y: i32) -> bool {
         self.finishes.remove(&(x, y)).is_some()
     }

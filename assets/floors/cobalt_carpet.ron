@@ -1,0 +1,7 @@
+(
+    id: "cobalt_carpet",
+    name: "Cobalt Carpet",
+    description: "A deep blue weave, laid over the tile.",
+    shade: Cobalt,
+    comfort: Some("at_ease_on"),
+)

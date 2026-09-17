@@ -2817,6 +2817,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // mechanism the morale errand is built out of: morale has no reserve
         // to refill, so recuperating *is* coming away fond of the amenity.
         ("unwound_at", K::Structure),
+        // `Game::note_comforts`, off `tick_inner` on the same period as
+        // `note_postings` — a program standing on a finish whose `comfort`
+        // names this def.
+        ("at_ease_on", K::BaseTile),
     ]
 };
 
@@ -2996,6 +3000,61 @@ fn every_shipped_memory_def_is_well_formed() {
             "{id} has a strike_cap of 0, so every strike of it is worth nothing"
         );
     }
+}
+
+/// A finish naming a `comfort` id nothing in `assets/memories/` defines
+/// would make `Game::note_comforts` a silent no-op for it — `remember`'s
+/// resolve-first rule swallows a dangling id rather than panicking, so
+/// nothing else in the build would say so.
+#[test]
+fn every_shipped_floor_comfort_names_a_shipped_memory() {
+    use crate::floors::FloorDb;
+    use crate::memories::MemoryDb;
+
+    let (floors, _) = FloorDb::load_dir(&test_assets_dir().join("floors")).unwrap();
+    let (memories, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    assert!(
+        floors.iter().count() > 0,
+        "the census must walk a real catalogue"
+    );
+
+    for def in floors.iter() {
+        let Some(comfort) = &def.comfort else {
+            continue;
+        };
+        let mem = memories
+            .all()
+            .find(|m| m.id.as_str() == comfort)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} names comfort {comfort:?}, which no shipped memory defines",
+                    def.id.as_str()
+                )
+            });
+        assert_eq!(
+            mem.subject,
+            crate::memories::MemorySubjectKind::BaseTile,
+            "{} names comfort {comfort:?}, whose subject is not BaseTile",
+            def.id.as_str()
+        );
+    }
+}
+
+/// The shipped set must cover both halves of `comfort`, or one branch of
+/// `Game::note_comforts` is untested against real content.
+#[test]
+fn shipped_floors_include_one_with_and_one_without_comfort() {
+    use crate::floors::FloorDb;
+
+    let (floors, _) = FloorDb::load_dir(&test_assets_dir().join("floors")).unwrap();
+    assert!(
+        floors.iter().any(|d| d.comfort.is_some()),
+        "no shipped finish declares a comfort"
+    );
+    assert!(
+        floors.iter().any(|d| d.comfort.is_none()),
+        "every shipped finish declares a comfort — nothing is purely cosmetic"
+    );
 }
 
 /// `stack_decay` is a ratio in `(0, 1]`: at 1 it is inert (the linear

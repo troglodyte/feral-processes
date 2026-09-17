@@ -15,6 +15,7 @@ pub mod descriptions;
 pub mod difficulty;
 pub mod disposition;
 pub mod environment;
+pub mod floors;
 mod game;
 pub mod handles;
 pub mod help;

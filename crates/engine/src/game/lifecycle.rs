@@ -430,6 +430,7 @@ impl Game {
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
+            floors: floor_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -467,6 +468,7 @@ impl Game {
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
+        world.insert_resource(floor_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -1038,6 +1040,7 @@ impl Game {
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
+            floors: floor_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -1093,6 +1096,7 @@ impl Game {
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
+        world.insert_resource(floor_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -2685,6 +2689,7 @@ struct AssetDbs {
     structures: StructureDb,
     research: ResearchDb,
     rock: crate::rock::RockDb,
+    floors: crate::floors::FloorDb,
     items: ItemDb,
     perks: PerkDb,
     talents: crate::talents::TalentDb,
@@ -2812,6 +2817,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // the swing floor, which is a bug fix and not content.
     let (rock, rock_warnings) = crate::rock::RockDb::load_dir(&assets_dir.join("rock"))?;
     warnings.extend(rock_warnings);
+    // Same absent-is-silent rule again — see `MemoryDb`'s own doc. An empty
+    // catalogue offers no brush and leaves every laid tile plain, which is
+    // the pre-finish game.
+    let (floors, floor_warnings) = crate::floors::FloorDb::load_dir(&assets_dir.join("floors"))?;
+    warnings.extend(floor_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -2853,6 +2863,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         structures,
         research,
         rock,
+        floors,
         items,
         perks,
         affixes,

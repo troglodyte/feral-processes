@@ -147,9 +147,10 @@ but not what makes a program remember.
 | `cutting_rock` | − | `Activity` | a stretch of service on the dig crew |
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 | `unwound_at` | + | `Structure` | a stretch spent standing at an amenity, in a mood bad enough to have gone there |
+| `at_ease_on` | + | `BaseTile` | a stretch of standing on a floor finish whose `comfort` names it (`assets/floors/README.md`) |
 
 They are chosen to cover both valences and every subject kind, not because
-these fourteen are the interesting content. `Nothing`, `Program`, `Species`
+these fifteen are the interesting content. `Nothing`, `Program`, `Species`
 and `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
 

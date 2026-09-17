@@ -30,6 +30,16 @@ impl Game {
             .collect()
     }
 
+    /// Every loaded finish, id-sorted (`FloorDb::iter`'s own order) — the
+    /// brush cycle's and the sprite editor's shared read of the catalogue.
+    pub fn floor_defs(&self) -> Vec<crate::floors::FloorDef> {
+        self.world
+            .resource::<crate::floors::FloorDb>()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
     /// Every loaded item definition, id-sorted (see `ItemDb::all`).
     ///
     /// It was `cfg(test)` on the stated grounds that nothing outside the

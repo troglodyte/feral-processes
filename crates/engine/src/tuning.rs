@@ -2924,6 +2924,11 @@ pub const BASE_ENTROPY_REFILL_TICKS: u64 = 300;
 /// it said under `docs/measurements/`.
 pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 
+/// How many Blank Substrate a finish costs, on top of the one the tile
+/// itself already spent — `floors::FloorDb`'s one price, since there is no
+/// per-finish `cost` field (see `assets/floors/README.md`).
+pub const FLOOR_FINISH_COST: u32 = 3;
+
 /// How many ticks of construction each unit of material in a structure's
 /// build cost is worth — see `components::BuildSite::required_ticks`.
 ///

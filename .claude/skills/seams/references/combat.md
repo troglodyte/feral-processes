@@ -1468,3 +1468,37 @@
   `Hallucination Group` may ship with no Single rung — one more `.filter`
   clause beside `Summon`'s existing exemption. See
   `seam:ability-effect-tactical-only-is-the-group-models-filter`.
+
+- **`reach::cover_between` is the only thing that decides partial cover, and
+  the arc test is a dot product that must be strictly positive.** A boulder
+  beside the defender is only cover if it is on the *attacker's* side, which
+  is the whole of what makes walking around it flanking; a `>= 0` comparison
+  admits a boulder exactly abeam and hands out cover for standing next to a
+  rock. That is deliberately the opposite choice from `shape_cells`' cone
+  epsilon, which admits equality because an eight-way grid's diagonals sit
+  exactly on the wedge — there is no grid artefact to rescue here. The rule
+  reads `BattleCell::Cover` and not `blocks_sight()`, because the two are the
+  same predicate only today and `blocks_sight` is the one a fifth kind would
+  join. The evasion it buys enters at `Game::defender_profile_against`, which
+  **wraps** `combatant_profile` rather than copying it: cover is a property
+  of the pair and `combatant_profile` takes one entity by design, so the
+  Exposed rung stays where it is. That door reads
+  `world.get_resource::<TacticalBattle>()` and never `resource::<_>()` — it
+  runs in the group model too, where a panic would be the whole group model.
+  The flag that switches it off is `Swing::cover_ignored` and not
+  `cover_applies`, for `Swing::free`'s reason: `Default` makes `false` the
+  answer a later `..Default::default()` gives, and that has to be the answer
+  that keeps the feature. The AI's term splits across two functions on
+  purpose — `cell_merit` for a ranged band, because `scored_cells` uses merit
+  as the candidate filter and a cover term anywhere else never opens a
+  covered cell as a candidate; `cell_score` for a melee one, because a
+  covered cell opened as a *candidate* is the sidestep pathology that filter
+  was added to fix, and a melee body would stall behind boulders instead of
+  closing. Both weights are read against the terms beside them
+  (`TACTICAL_AI_REACH_SCORE`, `TACTICAL_AI_CLOSING_WEIGHT`,
+  `TACTICAL_AI_CROWDING_WEIGHT`) and not against what cover is worth in the
+  roll. The telegraph is two thin calls into the same rule —
+  `TacticalBody::in_cover` for a body on a hostile's turn and
+  `Game::body_in_cover` for the one the player is aiming at — and both, with
+  `TacticalView::covered`, are cleared by `TacticalView::frozen`. See
+  `seam:tactical-cover`.

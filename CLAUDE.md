@@ -991,6 +991,10 @@ relying on one, and correct all three places if it has moved.
   Power and the cooldown the charge already took; a capture provokes nobody.
 - **A reaction can close the fight under the action that provoked it**, so
   `provoke` answers *still on the board* rather than *still alive*.
+- **Partial cover is one predicate, `reach::cover_between`**, whose arc test
+  is a strictly-positive dot product and whose evasion enters at
+  `Game::defender_profile_against`, the wrapper around `combatant_profile`
+  that the AI, both telegraph marks and the roll all read through.
 
 ### Items, gear and economy
 

@@ -1255,46 +1255,63 @@ mod tests {
     /// rather than a hope. Built through `action_bar_line`, the same
     /// function `draw_battle` calls, so this measures what is actually
     /// drawn.
+    ///
+    /// **The worst case, built directly** rather than fished for with a
+    /// seed search: `action_bar_line` is pure, and a seeded fight always
+    /// carries usable items, so `[u]se item (no usable items)` — the only
+    /// `unavailable` reason `battle_action_options` can produce, and the
+    /// widest row on the bar — was never measured before. All four options
+    /// and all four party commands, every one of them advertised at once,
+    /// which is the actual ceiling this line can reach.
     #[test]
     fn the_group_action_bar_fits_the_screen() {
-        use feral_processes_app_core::GameKey;
-        use feral_processes_engine::DifficultyMode;
+        use feral_processes_engine::battle::{ActionKind, PartyCommandKind, TargetSpec};
 
-        fn adjacent_hostile(game: &mut Game) -> Option<GameKey> {
-            let player = game.player_status().position;
-            game.view_entities(12, 12)
-                .into_iter()
-                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
-                .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1)
-                .map(|e| match (e.pos.0 - player.0, e.pos.1 - player.1) {
-                    (1, 0) => GameKey::Right,
-                    (-1, 0) => GameKey::Left,
-                    (0, 1) => GameKey::Down,
-                    _ => GameKey::Up,
-                })
-        }
-
-        let assets_dir = crate::render::test_support::test_assets_dir();
-        let (seed, direction) = (0..200u32)
-            .find_map(|seed| {
-                let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok()?;
-                adjacent_hostile(&mut game).map(|dir| (seed, dir))
-            })
-            .expect("no seed under 200 put a wild program next to the player");
-
-        let game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).unwrap();
-        let mut app = crate::render::test_support::playing_app_around(game);
-        app.handle_key(direction);
-        assert_eq!(
-            app.mode,
-            feral_processes_app_core::Mode::Battle,
-            "the seeded hostile did not open a fight"
-        );
-
-        let game = app.game.as_ref().unwrap();
-        let view = game.battle_view().expect("the fight is open");
-        let party_commands = game.battle_party_commands();
-        let line = action_bar_line(&view.options, &party_commands);
+        let option = |kind, key, label: &str, target, unavailable: Option<&str>| ActionOption {
+            kind,
+            key,
+            label: label.to_string(),
+            detail: String::new(),
+            target,
+            unavailable: unavailable.map(str::to_string),
+        };
+        let options = vec![
+            option(
+                ActionKind::Attack,
+                'a',
+                "[a]ttack",
+                TargetSpec::EnemyGroup,
+                None,
+            ),
+            option(ActionKind::Defend, 'd', "[d]efend", TargetSpec::None, None),
+            option(
+                ActionKind::Special,
+                's',
+                "[s]pecial",
+                TargetSpec::SpecialAbility,
+                None,
+            ),
+            option(
+                ActionKind::UseItem,
+                'u',
+                "[u]se item",
+                TargetSpec::InventoryItem,
+                Some("no usable items"),
+            ),
+        ];
+        let command = |kind, key, label: &str, needs_target| PartyCommand {
+            kind,
+            key,
+            label: label.to_string(),
+            needs_target,
+        };
+        let party_commands = vec![
+            command(PartyCommandKind::AllAttack, 'A', "[A]ll attack", false),
+            command(PartyCommandKind::AllDefend, 'D', "[D] all defend", false),
+            command(PartyCommandKind::AutoResolve, 'R', "[R]esolve", false),
+            command(PartyCommandKind::JackOut, 'j', "[j]ack out", false),
+        ];
+        let line = action_bar_line(&options, &party_commands);
 
         for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
             let m = ui_metrics(h);

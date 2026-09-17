@@ -826,6 +826,12 @@ pub struct DigSiteSave {
     pub position: (i32, i32),
     pub durability: u32,
     pub marked: bool,
+    /// `#[serde(default)]`, additive under field-named RON — no
+    /// `SAVE_FORMAT_VERSION` bump. `None` on any save written before this
+    /// field existed, which is exactly the plain cut-or-tile mark it always
+    /// was.
+    #[serde(default)]
+    pub finish: Option<crate::components::FinishOrder>,
 }
 
 /// A structure the player has asked for that the base has not raised yet —

@@ -1902,7 +1902,7 @@ fn raid_check_never_targets_a_dig_site_even_as_the_only_durability_holder() {
     for e in existing {
         game.world.despawn(e);
     }
-    game.toggle_mark_box((4, 4), (4, 4));
+    game.toggle_mark_box((4, 4), (4, 4), None);
     let site = game.dig_site_at(4, 4).expect("marking spawns a dig site");
     let full = game.world.get::<Durability>(site).unwrap().hp;
 

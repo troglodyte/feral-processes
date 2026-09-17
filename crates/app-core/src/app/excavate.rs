@@ -60,7 +60,9 @@ impl App {
                 match self.excavate_anchor.take() {
                     Some(anchor) => {
                         if let Some(game) = &mut self.game {
-                            game.toggle_mark_box(anchor, (cx, cy));
+                            // The brush is wired through once `App` carries
+                            // one — for now every commit is the plain mark.
+                            game.toggle_mark_box(anchor, (cx, cy), None);
                         }
                     }
                     None => self.excavate_anchor = Some((cx, cy)),

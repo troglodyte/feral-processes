@@ -792,6 +792,7 @@ impl Game {
                     // exactly when the player should be told again.
                     announced_stuck: false,
                     announced_dry: false,
+                    finish: d.finish,
                 },
                 Durability {
                     // Clamped rather than trusted, the same way a nest's is
@@ -2083,6 +2084,7 @@ impl Game {
                 position: (pos.x, pos.y),
                 durability: durability.hp,
                 marked: site.marked,
+                finish: site.finish.clone(),
             });
         }
         dig_sites

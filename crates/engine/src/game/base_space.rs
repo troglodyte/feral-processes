@@ -502,21 +502,25 @@ impl Game {
     /// is already marked clears, an unmarked one marks. That is the whole of
     /// why there is no second erase verb — settled decision 4 — and it is
     /// also why the anchor is read *before* anything in the box is written.
+    /// Clearing ignores `brush` entirely: whatever kind of mark a cell in the
+    /// box carries, clearing removes it.
     ///
     /// The box is normalised rather than assumed ordered: a plan drawn
     /// up-left is the same plan drawn down-right, and a cursor the player
     /// dragged backwards is the ordinary case rather than the corner one.
     ///
-    /// A `Floor` cell takes no mark. There is nothing left to do to it, and a
-    /// site spawned over one would be a mark the crew could never clear.
-    pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32)) {
+    /// `brush` is the excavate screen's current tool: `None` is the plain
+    /// cut-or-tile brush, which takes solid and open cells and skips laid
+    /// floor exactly as before this feature; `Some` is a finish or a strip,
+    /// which take laid floor and skip everything else — `set_mark`'s table.
+    pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32), brush: Option<&FinishOrder>) {
         let mut sites = self.dig_sites_by_tile();
         let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         for y in y0..=y1 {
             for x in x0..=x1 {
-                self.set_mark(&mut sites, x, y, marking);
+                self.set_mark(&mut sites, x, y, marking, brush);
             }
         }
     }
@@ -573,20 +577,69 @@ impl Game {
     /// Writes one cell's mark, spawning or retiring its `DigSite` as needed.
     ///
     /// The durability a *marked* site is born with is the cell's own state:
-    /// a solid cell has the whole wall left to cut, an already-open one has
-    /// none — its mark means floor it. Clearing retires the site unless it is
-    /// still holding chip progress, so an unmarked wall the player had
-    /// started on does not heal.
-    fn set_mark(&mut self, sites: &mut HashMap<(i32, i32), Entity>, x: i32, y: i32, marked: bool) {
+    /// a solid cell has the whole wall left to cut, an already-open or
+    /// already-floored one has none — its mark means floor it, or finish it.
+    /// Clearing retires the site unless it is still holding chip progress, so
+    /// an unmarked wall the player had started on does not heal.
+    ///
+    /// **`brush` decides both which cells this pass may touch and what it
+    /// writes**, exactly the design's table: `None` marks solid and open
+    /// cells for cutting or tiling and skips laid floor, `Some(Apply(id))`
+    /// marks floor that does not already wear `id` and skips everything
+    /// else, `Some(Strip)` marks floor that wears *some* finish and skips a
+    /// bare one. A cell the brush has nothing to say about is left exactly
+    /// as it was — no site spawned, no existing one touched.
+    fn set_mark(
+        &mut self,
+        sites: &mut HashMap<(i32, i32), Entity>,
+        x: i32,
+        y: i32,
+        marked: bool,
+        brush: Option<&FinishOrder>,
+    ) {
         let grid = self.world.resource::<BaseGrid>();
-        if grid.is_floor(x, y) {
-            return;
-        }
         let solid = grid.is_solid(x, y);
+        let floor = grid.is_floor(x, y);
+
+        // The order to write onto the mark, or `None` to leave this cell
+        // untouched — decided from the *committed* grid, never from a
+        // pending `DigSite`, so replacing a finish always targets what is
+        // actually laid rather than a job still queued behind it.
+        let order = if marked {
+            match brush {
+                None => {
+                    if floor {
+                        return;
+                    }
+                    None
+                }
+                Some(FinishOrder::Apply(id)) => {
+                    if !floor || grid.finish_at(x, y) == Some(id) {
+                        return;
+                    }
+                    Some(FinishOrder::Apply(id.clone()))
+                }
+                Some(FinishOrder::Strip) => {
+                    if !floor || grid.finish_at(x, y).is_none() {
+                        return;
+                    }
+                    Some(FinishOrder::Strip)
+                }
+            }
+        } else {
+            None
+        };
+
         match sites.get(&(x, y)).copied() {
             Some(site) => {
                 if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
                     dig.marked = marked;
+                    // Overwrites whatever the site's `finish` carried —
+                    // clearing writes `None` through `order` above, and
+                    // marking with a different brush replaces it, so a site
+                    // never keeps a stale order for a kind it is no longer
+                    // asked to be.
+                    dig.finish = order;
                 }
                 // An unmarked site earns its keep by holding chip progress,
                 // and *both* ends of the meter hold none. A full meter is a
@@ -595,7 +648,9 @@ impl Game {
                 // a marked `Open` cell, and `strike_rock` refills it on the
                 // next swing anyway. Keeping either leaves an entity drawn
                 // nowhere, wanted by nobody, and written to every save from
-                // then on.
+                // then on. A finish or strip mark never holds chip progress
+                // — there is no rock left to cut — so clearing one always
+                // despawns it.
                 let holds_progress = self
                     .world
                     .get::<Durability>(site)
@@ -613,6 +668,7 @@ impl Game {
                         marked: true,
                         announced_stuck: false,
                         announced_dry: false,
+                        finish: order,
                     },
                     Durability {
                         hp: if solid { max_hp } else { 0 },

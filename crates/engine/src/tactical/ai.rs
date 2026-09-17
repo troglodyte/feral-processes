@@ -32,7 +32,8 @@ use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
     ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT,
-    TACTICAL_AI_REACH_SCORE, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
+    TACTICAL_AI_REACH_SCORE, TACTICAL_AI_REACTION_WEIGHT, TACTICAL_AI_TEMPERATURE,
+    TACTICAL_FIELD_RADIUS,
 };
 
 /// What the acting body means to do this turn.
@@ -782,10 +783,22 @@ impl Game {
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
         let standing = cell_merit(&battle.board, from, band, &sides.targets);
+        // **The reaction cost rides merit, not just the score**, so it is
+        // read by the candidate filter as well as by the draw: a cell worth
+        // one step of closing that costs three Integrity on the way out is
+        // not a reason to leave the cell you are on. Standing still carries
+        // none of it — a body that holds walks nowhere and provokes nobody —
+        // which is what makes the filter the right place for it.
+        //
+        // Kept out of `cell_merit` itself, which is pure and has no fight to
+        // ask: this is a term over the *path*, not over the cell.
         let mut cells: Vec<(i32, i32)> = field
             .keys()
             .copied()
-            .filter(|&cell| cell_merit(&battle.board, cell, band, &sides.targets) > standing)
+            .filter(|&cell| {
+                cell_merit(&battle.board, cell, band, &sides.targets) - self.walk_risk(actor, cell)
+                    > standing
+            })
             .collect();
         if cells.is_empty() {
             cells.push(from);
@@ -796,9 +809,64 @@ impl Game {
         cells.sort_by_key(|&(x, y)| (y, x));
         let scores: Vec<f32> = cells
             .iter()
-            .map(|&cell| cell_score(&battle.board, cell, band, &sides.targets, &sides.allies))
+            .map(|&cell| {
+                cell_score(&battle.board, cell, band, &sides.targets, &sides.allies)
+                    - self.walk_risk(actor, cell)
+            })
             .collect();
         (cells, scores)
+    }
+
+    /// What walking from where `actor` stands to `to` is expected to cost it
+    /// in reactions, on `cell_merit`'s own scale.
+    ///
+    /// **Summed over the walk's steps**, because a path that crosses two
+    /// bodies' reach provokes both, and a body picking a destination is
+    /// picking the whole path to it.
+    ///
+    /// The damage is a *call* to `battle::expected_damage` over the real
+    /// profiles rather than a second model of what a swing is worth — the
+    /// rule `balance_sim` has been bitten by four times. It is an
+    /// expectation and not a roll, so this spends no `GameRng` and
+    /// `tactical_ai_turn_at(0.0)` is still stream-neutral.
+    pub(crate) fn walk_risk(&self, actor: Entity, to: (i32, i32)) -> f32 {
+        let path = self.path_for(actor, to);
+        if path.is_empty() {
+            return 0.0;
+        }
+        let Some(mut at) = self.world.resource::<TacticalBattle>().cell_of(actor) else {
+            return 0.0;
+        };
+        // Spent reactions are read as they stand now. A walk planned this
+        // turn cannot know what the rest of the round will spend, and the
+        // body's own turn is the moment the question is being asked.
+        let mut risk = 0.0;
+        for step in path {
+            risk += self.provocation(actor, at, step);
+            at = step;
+        }
+        risk * TACTICAL_AI_REACTION_WEIGHT
+    }
+
+    /// The Integrity `actor` can expect to lose to reactions if it steps
+    /// from `from` to `to` — the door the AI's walk scoring and the gui's
+    /// movement telegraph both read.
+    pub(crate) fn provocation(&self, actor: Entity, from: (i32, i32), to: (i32, i32)) -> f32 {
+        self.step_reactors(actor, from, to)
+            .into_iter()
+            .map(|reactor| self.expected_reaction_damage(reactor, actor))
+            .sum()
+    }
+
+    /// One reaction's expected Integrity, RNG-free.
+    fn expected_reaction_damage(&self, reactor: Entity, mover: Entity) -> f32 {
+        let swing = crate::battle::Swing::reaction(self.natural_range_of(reactor));
+        let attacker = self.combatant_profile(reactor, swing);
+        let defender = self.combatant_profile(
+            mover,
+            crate::battle::Swing::plain(self.natural_range_of(mover)),
+        );
+        crate::battle::expected_damage(attacker, defender) as f32
     }
 
     /// The path `actor` walks to reach `to`, descended from the field

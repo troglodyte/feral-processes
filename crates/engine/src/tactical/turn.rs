@@ -255,7 +255,7 @@ impl Game {
         from: (i32, i32),
         to: (i32, i32),
     ) -> Vec<Entity> {
-        self.reactors(mover, |at| {
+        self.reactors(mover, from, |at| {
             reach::distance(at, from) <= TACTICAL_MELEE_RANGE
                 && reach::distance(at, to) > TACTICAL_MELEE_RANGE
         })
@@ -271,7 +271,7 @@ impl Game {
         else {
             return Vec::new();
         };
-        self.reactors(mover, |at| {
+        self.reactors(mover, from, |at| {
             reach::distance(at, from) <= TACTICAL_MELEE_RANGE
         })
     }
@@ -292,16 +292,18 @@ impl Game {
     /// the board is overwatch, which is a different feature; this is the one
     /// place in tactical code that reads `TACTICAL_MELEE_RANGE` rather than
     /// asking how far a body swings, and it is deliberate.
-    fn reactors(&self, mover: Entity, trigger: impl Fn((i32, i32)) -> bool) -> Vec<Entity> {
+    fn reactors(
+        &self,
+        mover: Entity,
+        cell: (i32, i32),
+        trigger: impl Fn((i32, i32)) -> bool,
+    ) -> Vec<Entity> {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return Vec::new();
         };
         if self.is_cloaked(mover) {
             return Vec::new();
         }
-        let Some(cell) = battle.cell_of(mover) else {
-            return Vec::new();
-        };
         let mover_side = self.acts_for_hostiles(mover);
         battle
             .initiative()

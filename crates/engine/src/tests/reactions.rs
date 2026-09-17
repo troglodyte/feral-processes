@@ -386,3 +386,70 @@ fn a_fizzled_routine_keeps_its_price_and_lands_nothing() {
     }
     panic!("no reaction cut the invocation off in 24 rounds against 500 Attack");
 }
+
+/// The forecast and the fight have to agree: what `provocation` says a step
+/// will cost is what taking that step actually spends.
+///
+/// Both directions, because a prediction that answered "yes" to everything
+/// would pass a test that only asked about the provoking step.
+#[test]
+fn provocation_predicts_what_a_step_really_does() {
+    let mut game = game();
+    let (player, hostile) = face_off(&mut game);
+    let at = cell(&game, player);
+    let out = (at.0 - 1, at.1);
+    let alongside = (at.0, at.1 + 1);
+
+    assert!(
+        game.provocation(player, at, out) > 0.0,
+        "stepping out of reach was predicted free"
+    );
+    assert_eq!(
+        game.provocation(player, at, alongside),
+        0.0,
+        "a step that stays in reach was predicted to cost something"
+    );
+
+    assert_eq!(game.tactical_step((0, 1)), StepOutcome::Moved);
+    assert!(
+        !game
+            .world
+            .resource::<TacticalBattle>()
+            .reaction_spent(hostile),
+        "the step the prediction called free provoked anyway"
+    );
+    assert_eq!(game.tactical_step((0, -1)), StepOutcome::Moved);
+    assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Moved);
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .reaction_spent(hostile),
+        "the step the prediction priced provoked nobody"
+    );
+}
+
+/// The term the walk scoring reads: a destination whose path leaves a
+/// reactor's reach is worth less than the same destination when nothing can
+/// react — and a reaction already spent is nothing that can react.
+#[test]
+fn a_walk_that_provokes_is_worth_less_than_one_that_does_not() {
+    let mut game = game();
+    let (player, hostile) = face_off(&mut game);
+    let at = cell(&game, player);
+    let out = (at.0 - 1, at.1);
+
+    let risked = game.walk_risk(player, out);
+    assert!(
+        risked > 0.0,
+        "walking out of a hostile's reach was scored as free"
+    );
+
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .spend_reaction(hostile);
+    assert_eq!(
+        game.walk_risk(player, out),
+        0.0,
+        "a body with no reaction left was still priced as a threat"
+    );
+}

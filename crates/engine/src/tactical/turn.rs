@@ -196,7 +196,11 @@ impl Game {
         let to = (from.0 + dir.0, from.1 + dir.1);
         let spent = battle.spent();
         let cost = battle.board.cell(to.0, to.1).movement_cost();
-        let inside = battle.board.in_bounds(to.0, to.1);
+        // A body departs if any footprint cell anchored at `to` leaves the
+        // board — one cell today, without a `Squad`, so this is the same
+        // check `in_bounds(to)` alone made.
+        let footprint = battle.footprint_cells(actor, to);
+        let inside = footprint.iter().all(|&(x, y)| battle.board.in_bounds(x, y));
 
         if !inside {
             self.depart_tactical(actor);
@@ -255,9 +259,9 @@ impl Game {
         from: (i32, i32),
         to: (i32, i32),
     ) -> Vec<Entity> {
-        self.reactors(mover, from, |at| {
-            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
-                && reach::distance(at, to) > TACTICAL_MELEE_RANGE
+        self.reactors(mover, from, |cells| {
+            reach::gap(cells, &[from]) <= TACTICAL_MELEE_RANGE
+                && reach::gap(cells, &[to]) > TACTICAL_MELEE_RANGE
         })
     }
 
@@ -271,22 +275,23 @@ impl Game {
         else {
             return Vec::new();
         };
-        self.reactors(mover, from, |at| {
-            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
+        self.reactors(mover, from, |cells| {
+            reach::gap(cells, &[from]) <= TACTICAL_MELEE_RANGE
         })
     }
 
     /// The half both triggers share: who is *able* to react to `mover` at
-    /// all, in initiative order, out of the bodies whose cell `trigger`
+    /// all, in initiative order, out of the bodies whose footprint `trigger`
     /// accepts.
     ///
     /// Four conditions, and each is somebody else's rule rather than a new
     /// one. An enemy of the mover, read through `acts_for_hostiles` so an
     /// injected body reacts for the side it now believes it is on. Its
     /// reaction unspent. Line of sight to the mover, `tactical_attack`'s own
-    /// gate. And the mover nameable at all — **a cloaked body provokes
-    /// nobody**, which is not a special case here but the same filter that
-    /// sits at the five doors that name a body.
+    /// gate — any cell of the reactor's footprint to `cell`, one cell today
+    /// without a `Squad`. And the mover nameable at all — **a cloaked body
+    /// provokes nobody**, which is not a special case here but the same
+    /// filter that sits at the five doors that name a body.
     ///
     /// **Melee reach and not `Game::swing_range`.** A reaction from across
     /// the board is overwatch, which is a different feature; this is the one
@@ -296,7 +301,7 @@ impl Game {
         &self,
         mover: Entity,
         cell: (i32, i32),
-        trigger: impl Fn((i32, i32)) -> bool,
+        trigger: impl Fn(&[(i32, i32)]) -> bool,
     ) -> Vec<Entity> {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return Vec::new();
@@ -314,9 +319,12 @@ impl Game {
             .filter(|&body| !battle.reaction_spent(body))
             .filter(|&body| self.creature_alive(body))
             .filter(|&body| {
-                battle
-                    .cell_of(body)
-                    .is_some_and(|at| trigger(at) && reach::line_of_sight(&battle.board, at, cell))
+                let cells = battle.cells_of(body);
+                !cells.is_empty()
+                    && trigger(&cells)
+                    && cells
+                        .iter()
+                        .any(|&at| reach::line_of_sight(&battle.board, at, cell))
             })
             .collect()
     }
@@ -454,7 +462,12 @@ impl Game {
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
             return false;
         };
-        if actor == target || reach::distance(from, at) > self.swing_range(actor) {
+        // `gap` rather than `distance`, and both bodies' whole footprints
+        // rather than their anchors alone — one cell each today, without a
+        // `Squad`, so this is the same range test until task 4.
+        let actor_cells = battle.cells_of(actor);
+        let target_cells = battle.cells_of(target);
+        if actor == target || reach::gap(&actor_cells, &target_cells) > self.swing_range(actor) {
             return false;
         }
         // **Unconditional, with no melee branch.** `line_of_sight` excludes
@@ -462,9 +475,17 @@ impl Game {
         // already a no-op — one rule, and no second place
         // `TACTICAL_MELEE_RANGE` has to be restated. Cover earns a second
         // job for free.
+        //
+        // **Any cell of one footprint to any cell of the other**, rather
+        // than anchor-to-anchor — the same single pair today.
         {
             let battle = self.world.resource::<TacticalBattle>();
-            if !reach::line_of_sight(&battle.board, from, at) {
+            let sees = actor_cells.iter().any(|&a| {
+                target_cells
+                    .iter()
+                    .any(|&t| reach::line_of_sight(&battle.board, a, t))
+            });
+            if !sees {
                 return false;
             }
         }

@@ -135,13 +135,15 @@ fn art_label(art: SpriteArt) -> &'static str {
 /// role colour's fallback — reused rather than naming `hud::palette::PLAYER`
 /// a second time.
 ///
-/// A floor finish's `Shade` arm is not resolved yet — a finish previews as
-/// the neutral player fallback until the map itself can draw one.
-fn subject_hue(tint: SubjectTint) -> Color {
-    match tint {
+/// A floor finish's `Shade` arm resolves through `terrain::shade_color`, the
+/// same table `draw_finish` paints the map with — a finish previewed in one
+/// hue here and drawn in another on the base would be exactly the drift the
+/// HUD seam's rule exists to catch.
+fn subject_hue(tint: &SubjectTint) -> Color {
+    match *tint {
         SubjectTint::Glyph(Some(c)) => glyph_color(c),
         SubjectTint::Glyph(None) => player_look_color(None),
-        SubjectTint::Shade(_) => player_look_color(None),
+        SubjectTint::Shade(shade) => super::terrain::shade_color(shade),
     }
 }
 
@@ -169,7 +171,7 @@ fn draw_subject_row(
             TextRun {
                 text: &subject.glyph.to_string(),
                 bold: false,
-                color: subject_hue(subject.tint),
+                color: subject_hue(&subject.tint),
             },
             TextRun {
                 text: &tail,
@@ -333,7 +335,7 @@ pub(super) fn draw_sprite_editor(app: &mut App, painter: &Painter, m: &Metrics) 
                 .sprite_subjects()
                 .into_iter()
                 .find(|s| s.name == view.subject)
-                .map(|s| subject_hue(s.tint))
+                .map(|s| subject_hue(&s.tint))
                 .unwrap_or(TEXT);
             draw_sprite_editor_session(&view, zoom, hue, painter, m);
         }

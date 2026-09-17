@@ -61,11 +61,21 @@ machine-status outlines stay legible over them (Platform's own argument):
 | `Moss` | 0.14, 0.30, 0.12 |
 | `Olive` | 0.28, 0.28, 0.08 |
 | `Ochre` | 0.40, 0.26, 0.06 |
-| `Umber` | 0.24, 0.16, 0.10 |
+| `Umber` | 0.36, 0.30, 0.18 |
 | `Wine` | 0.32, 0.06, 0.20 |
 | `Plum` | 0.28, 0.10, 0.34 |
 | `Violet` | 0.20, 0.12, 0.45 |
 | `Slate` | 0.20, 0.23, 0.27 |
+
+`Umber` was retuned from an original 0.24, 0.16, 0.10 during implementation:
+the separation census below measured it 0.060 from `Entropy` brightened by
+2.6 (real shipped rock reaches shade 3.0, where the gap was 0.075) —
+functionally the same colour as an ordinary wall. The value above is picked
+by the same measurement, maximizing Umber's own minimum distance across a
+handful of brown/sand/earth candidates; its nearest neighbour is now
+`Olive` at 0.130, and the census's system-wide floor turned out to be
+`Wine` against brightened `Entropy` at 0.099 regardless — see
+`FINISH_SHADE_MIN_SEPARATION`'s own comment in `terrain.rs`.
 
 **This amends the hue rule for finished floor only.** The map's rule is
 cool = walkable, hot = blocked (`terrain.rs`, `biome_tint`). Warm finishes

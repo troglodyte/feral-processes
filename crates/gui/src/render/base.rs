@@ -51,6 +51,11 @@ const MARK_FILL: Color = wash(0.18);
 const MARK_EDGE: Color = wash(0.45);
 const PREVIEW_FILL: Color = wash(0.35);
 
+/// The excavate brush's header line, in from the map pane's own corner —
+/// not the window's, which is what a literal `0.0` would draw under.
+const EXCAVATE_LABEL_INSET: f32 = 4.0;
+const EXCAVATE_LABEL_SIZE: u16 = 14;
+
 /// The ring the party's own tile wears while cutting tools are armed.
 ///
 /// The plan's hue at full alpha, because a mark and a swing are the same
@@ -219,6 +224,12 @@ pub(super) fn draw_playing_base(
             cursor,
             anchor: app.excavate_anchor,
         });
+    // Gated on the mode rather than left to `excavate_brush_label`'s own
+    // `None`, `plan`'s reason: a brush left over from the last visit must
+    // not draw a header on the ordinary playing map.
+    let excavate_label = app
+        .excavate_brush_label()
+        .filter(|_| app.mode == Mode::Excavate);
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the
@@ -379,6 +390,7 @@ pub(super) fn draw_playing_base(
             glyph_px,
             &status,
             plan,
+            excavate_label,
             // The party's own cell unless the camera has been sent
             // somewhere: `base_pos` is `Some` only in base space, which is
             // exactly where the pinned `Position` is the wrong answer.
@@ -528,6 +540,7 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
+    excavate_label: Option<String>,
     center: (i32, i32),
     reveal: bool,
 ) -> Vec<EntityView> {
@@ -570,6 +583,9 @@ fn draw_surface_map(
     let floor = vignette_floor(status.power);
     let (off_x, off_y) = fx.camera_offset(center, painter.delta(), Some(crate::fx::CAMERA_MAX_LAG));
     let tiles = game.view_tiles_at(center, hw, hh);
+    // Same indexing as `tiles`, `Game::view_finishes_at`'s own guarantee —
+    // read once per frame, beside it, rather than per tile.
+    let finishes = game.view_finishes_at(center, hw, hh);
     let entities: Vec<_> = game
         .view_entities_at(center, hw, hh)
         .into_iter()
@@ -814,7 +830,13 @@ fn draw_surface_map(
             // damage-dimmed colour, and a biome pattern drawn through it would
             // muddy the durability read.
             if !occupied {
-                draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world);
+                // A finish is a pattern painted over laid floor, not a
+                // second biome — `draw_biome`'s own `Platform` arm is what a
+                // cell with no finish still gets.
+                match (tile.biome, finishes[ry][rx].as_ref()) {
+                    (Biome::Platform, Some(finish)) => draw_finish(painter, cell, finish, dim),
+                    _ => draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world),
+                }
                 draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig, cloud);
             }
             // A structure the crew has not raised yet: a flat dark slab with
@@ -1203,6 +1225,7 @@ fn draw_surface_map(
             painter,
             &marked,
             plan,
+            excavate_label.as_deref(),
             |world| {
                 tile_origin_px(
                     world,
@@ -1276,10 +1299,25 @@ fn draw_excavation_plan(
     painter: &Painter,
     marked: &[DigMark],
     plan: Option<PlanCursor>,
+    label: Option<&str>,
     at: impl Fn((i32, i32)) -> (f32, f32),
     tile_px: f32,
     pane: Rect,
 ) {
+    // The brush's own line, inside the pane's top-left corner — `pane.x`/
+    // `pane.y` rather than a literal `0.0`, which would draw under the
+    // status bar. Drawn unconditionally on `label` rather than gated on
+    // `plan`: the brush is set and read independently of the box being
+    // previewed right now.
+    if let Some(label) = label {
+        painter.ui(
+            label,
+            pane.x + EXCAVATE_LABEL_INSET,
+            pane.y + EXCAVATE_LABEL_INSET,
+            EXCAVATE_LABEL_SIZE,
+            TEXT,
+        );
+    }
     let size = tile_px - 1.0;
     // Answers where the cell landed, or `None` when it was culled — the
     // marks loop below needs the origin to put a cut meter on, and culling
@@ -1356,10 +1394,14 @@ mod tests {
     use super::history::*;
     use super::*;
     use crate::paint::SpriteTable;
-    use crate::paint::{painted_images, painted_text, with_painter, with_sprites};
+    use crate::paint::{
+        painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
+        with_painter, with_sprites,
+    };
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
     use feral_processes_engine::components::{GlyphColor, MachineStatus, POWER_MAX};
+    use feral_processes_engine::floors::FloorShade;
     use feral_processes_engine::{CharacterChoice, DifficultyMode, Game};
 
     fn test_assets() -> std::path::PathBuf {
@@ -2297,6 +2339,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -2345,6 +2388,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -2611,6 +2655,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -2659,6 +2704,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -2794,6 +2840,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 center,
                 reveal,
@@ -2936,6 +2983,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3050,6 +3098,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3087,6 +3136,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -3176,6 +3226,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3232,6 +3283,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -3533,6 +3585,219 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Floor finishes: the separation census and draw_finish
+    // ---------------------------------------------------------------------
+
+    fn euclid_dist(a: Color, b: Color) -> f32 {
+        ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
+    }
+
+    /// Every reference a `FloorShade` must clear `FINISH_SHADE_MIN_SEPARATION`
+    /// from, as the spec's separation rule states it: an exposed rock face at
+    /// every brightness a shipped kind or a mod's headroom could reach,
+    /// `Excavated` and plain `Platform`, `THREAT`, the critical damage wash
+    /// (`Fx::structure_condition`'s red lift over a plain slab), and every
+    /// other shade. `exclude` is the shade under test, so it is not compared
+    /// against itself.
+    fn finish_shade_references(exclude: FloorShade) -> Vec<(String, Color)> {
+        let mut refs = vec![
+            ("Excavated".to_string(), biome_tint(Biome::Excavated)),
+            ("Platform".to_string(), biome_tint(Biome::Platform)),
+            ("THREAT".to_string(), hud::palette::THREAT),
+            ("damage_wash".to_string(), {
+                let bg = at_level(biome_tint(Biome::Platform), GROUND_LEVEL);
+                Color::new((bg.r + GROUND_LEVEL).min(1.0), bg.g, bg.b, bg.a)
+            }),
+        ];
+        let mut f = 1.0;
+        while f <= 4.0 + 1e-6 {
+            refs.push((
+                format!("Entropy*{f:.1}"),
+                brighten(biome_tint(Biome::Entropy), f),
+            ));
+            f += 0.1;
+        }
+        for shade in FloorShade::ALL {
+            if shade != exclude {
+                refs.push((format!("{shade:?}"), shade_color(shade)));
+            }
+        }
+        refs
+    }
+
+    /// **The census.** Every shade must read as itself and not as a wall, a
+    /// hazard, or another shade — `biome_tint`'s own load-bearing promise,
+    /// carried over to a palette that shares the map with rock. Mutation-
+    /// tested by putting `Umber` back at its original 0.24, 0.16, 0.10 (see
+    /// `shade_color`'s own comment) and confirming this names it and
+    /// `Entropy*2.6`.
+    #[test]
+    fn every_finish_shade_clears_its_minimum_separation() {
+        for shade in FloorShade::ALL {
+            let c = shade_color(shade);
+            let (name, d) = finish_shade_references(shade)
+                .into_iter()
+                .map(|(name, rc)| (name, euclid_dist(c, rc)))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                .expect("the reference list is never empty");
+            assert!(
+                d >= FINISH_SHADE_MIN_SEPARATION,
+                "{shade:?} is only {d:.4} from {name}, short of the {FINISH_SHADE_MIN_SEPARATION} floor"
+            );
+        }
+    }
+
+    fn a_finish_view(sprite: &str) -> feral_processes_engine::views::FinishView {
+        feral_processes_engine::views::FinishView {
+            shade: FloorShade::Cobalt,
+            sprite: sprite.to_string(),
+            name: "Cobalt Carpet".to_string(),
+        }
+    }
+
+    #[test]
+    fn draw_finish_draws_the_fill_the_edge_and_the_sprite() {
+        let mut table = SpriteTable::default();
+        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        let finish = a_finish_view("cobalt_carpet");
+        let r = Rect::new(0.0, 0.0, 32.0, 32.0);
+        let (_, shapes) = with_sprites(table, |p| draw_finish(p, r, &finish, 1.0));
+
+        let shade = shade_color(FloorShade::Cobalt);
+        assert!(
+            painted_rect_fill_count(&shapes, shade) > 0,
+            "the fill layer must paint the shade itself at dim 1.0"
+        );
+        assert!(
+            painted_rect_stroke_count(&shapes, at_level(shade, FINISH_EDGE_LEVEL)) > 0,
+            "the edge ring must be the shade scaled by FINISH_EDGE_LEVEL"
+        );
+        assert_eq!(
+            painted_images(&shapes).len(),
+            1,
+            "the sprite must draw one textured mesh"
+        );
+    }
+
+    /// The overdraw trap this feature shares with `sprite`: a fill and an
+    /// edge drawn under a sprite that never arrives must not vanish with it.
+    #[test]
+    fn draw_finish_with_no_sprite_draws_the_fill_and_edge_alone() {
+        let finish = a_finish_view("no_such_sprite");
+        let r = Rect::new(0.0, 0.0, 32.0, 32.0);
+        let (_, shapes) = with_painter(|p| draw_finish(p, r, &finish, 1.0));
+
+        let shade = shade_color(FloorShade::Cobalt);
+        assert!(painted_rect_fill_count(&shapes, shade) > 0);
+        assert!(painted_rect_stroke_count(&shapes, at_level(shade, FINISH_EDGE_LEVEL)) > 0);
+        assert_eq!(
+            painted_images(&shapes).len(),
+            0,
+            "no sprite is registered under this name, so nothing should be textured"
+        );
+    }
+
+    /// A founded base with a real finish, staged the way `drawn_base_at`
+    /// stages a pending build site: through the save text itself, since
+    /// `BaseGrid::set_finish` is `pub(crate)` to the engine. `at` must be a
+    /// laid-floor cell that is not the Home's own tile, or the structure's
+    /// glyph would take the `occupied` gate before the finish ever could.
+    fn drawn_base_with_finish(
+        sprites: SpriteTable,
+        finish_id: &str,
+        at: (i32, i32),
+    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "fp_gui_base_finish_{}_{unique}.sav",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let patched = text.replacen(
+            "finishes: {},",
+            &format!("finishes: {{({}, {}): \"{finish_id}\"}},", at.0, at.1),
+            1,
+        );
+        assert_ne!(
+            text, patched,
+            "a fresh base's finishes map was not the empty `{{}}` this patch expects"
+        );
+        std::fs::write(&path, patched).unwrap();
+        game = Game::load(&path, &test_assets()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(sprites, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                None,
+                status.position,
+                false,
+            );
+        });
+        shapes
+    }
+
+    /// The wiring `draw_finish`'s own unit tests cannot see: that a real,
+    /// finished `Platform` cell reached through `Game::view_finishes_at`
+    /// actually routes to `draw_finish` rather than `draw_biome`.
+    #[test]
+    fn a_real_finished_cell_draws_through_the_full_pipeline() {
+        let mut table = SpriteTable::default();
+        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        let shapes = drawn_base_with_finish(table, "cobalt_carpet", (3, 3));
+
+        let shade = shade_color(FloorShade::Cobalt);
+        assert!(
+            painted_rect_stroke_count(&shapes, at_level(shade, FINISH_EDGE_LEVEL)) > 0,
+            "the tile loop did not reach draw_finish for a real finished cell"
+        );
+        assert_eq!(
+            painted_images(&shapes).len(),
+            1,
+            "the finish's sprite must draw exactly once"
+        );
+    }
+
+    /// **The regression check.** An ordinary, unfinished `Platform` cell —
+    /// the pocket a founded Home lays, untouched — must draw no finish edge
+    /// of any shade and no floor-finish sprite: wiring `draw_finish` in must
+    /// not touch the plain floor path `draw_biome` still owns.
+    #[test]
+    fn a_plain_platform_cell_still_draws_the_slab() {
+        let shapes = drawn_base(0.0, false);
+        for shade in FloorShade::ALL {
+            assert_eq!(
+                painted_rect_stroke_count(&shapes, at_level(shade_color(shade), FINISH_EDGE_LEVEL)),
+                0,
+                "a plain floor cell drew {shade:?}'s edge ring"
+            );
+        }
+        assert_eq!(
+            painted_images(&shapes).len(),
+            0,
+            "a plain floor cell must not draw a floor-finish sprite"
+        );
     }
 
     /// The rim is the edge of the world: it is drawn exactly where
@@ -3883,6 +4148,7 @@ mod tests {
                     p,
                     marks,
                     None,
+                    None,
                     |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
                     CELL,
                     pane,
@@ -3915,6 +4181,42 @@ mod tests {
             }]),
             0,
             "a mark off the pane is culled, meter and all"
+        );
+    }
+
+    /// The brush's header: drawn when the label is `Some`, absent when it is
+    /// `None` — `App::excavate_brush_label`'s own contract, an empty
+    /// `FloorDb` included, reached one layer down from where `App` decides
+    /// it.
+    #[test]
+    fn the_excavate_header_draws_the_label_only_when_some() {
+        let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let draw = |label: Option<&str>| {
+            with_painter(|p| {
+                draw_excavation_plan(
+                    p,
+                    &[],
+                    None,
+                    label,
+                    |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
+                    CELL,
+                    pane,
+                )
+            })
+            .1
+        };
+
+        let shapes = draw(Some("Brush: Cobalt Carpet [F]"));
+        assert!(
+            painted_text(&shapes).contains(&"Brush: Cobalt Carpet [F]".to_string()),
+            "a Some label must be drawn"
+        );
+
+        let shapes = draw(None);
+        assert!(
+            painted_text(&shapes).is_empty(),
+            "a None label must draw nothing at all: {:?}",
+            painted_text(&shapes)
         );
     }
 
@@ -4057,7 +4359,8 @@ mod tests {
                 // that has arrived.
                 for _ in 0..2 {
                     draw_surface_map(
-                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center, false,
+                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, None, center,
+                        false,
                     );
                 }
             });

@@ -42,6 +42,18 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.200
+
+**Walking away from something you are standing next to now costs you a free
+hit, and so does running a routine under its nose.** Every body in a battle
+map fight gets one of these a round, refunded when its own turn comes round,
+so backing out of a melee is a decision rather than a free move. The cells
+that will cost you are marked on the movement overlay before you step, and
+each routine row says how many bodies it would provoke; a capture provokes
+nobody. A routine cut off this way is spent — the Power and the cooldown are
+gone and nothing lands. The free swing itself can never fumble, so one bad
+roll cannot cascade into an exchange nobody can stop.
+
 ## 0.13.199
 
 **Your dig crew can now finish a laid floor: pick a brush with [F] while

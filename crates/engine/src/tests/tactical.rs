@@ -2,7 +2,7 @@
 
 use crate::Experience;
 use crate::Game;
-use crate::components::{Creature, Hostile, Position, Rarity, Stats, StatusEffects};
+use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, StatusEffects};
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
@@ -4050,5 +4050,68 @@ mod cover_telegraph {
         let frozen = game.tactical_view().expect("a fight is open").frozen();
         assert!(frozen.covered.is_empty());
         assert!(frozen.bodies.iter().all(|b| !b.in_cover));
+    }
+}
+
+/// Task 3: the `Squad` arm inside the existing `Game::effective_atk` door —
+/// see `docs/superpowers/plans/2026-09-17-tactical-squads.md`. A bare
+/// fixture rather than a real `Game::spawn_squad` (task 4's), since this
+/// arm only ever reads the entity's own `Squad`-presence and `Stats`.
+mod squad_effective_atk {
+    use super::*;
+
+    fn squad_body(game: &mut Game, hp: i32, max_hp: i32, atk: i32) -> Entity {
+        game.world
+            .spawn((
+                Creature {
+                    species: generic_species().id,
+                },
+                Hostile,
+                Stats {
+                    hp,
+                    max_hp,
+                    atk,
+                    mitigation: 0,
+                },
+                Squad {
+                    members: Vec::new(),
+                    formation: 0,
+                },
+            ))
+            .id()
+    }
+
+    #[test]
+    fn a_squads_attack_falls_with_its_own_integrity() {
+        let mut game = game();
+        let full = squad_body(&mut game, 100, 100, 40);
+        assert_eq!(
+            game.effective_atk(full),
+            40,
+            "a squad at full Integrity should hit for its raw atk"
+        );
+
+        let half = squad_body(&mut game, 50, 100, 40);
+        assert_eq!(
+            game.effective_atk(half),
+            20,
+            "a squad at half Integrity should hit for half its raw atk"
+        );
+
+        let empty = squad_body(&mut game, 0, 100, 40);
+        assert_eq!(
+            game.effective_atk(empty),
+            0,
+            "a squad at zero Integrity should hit for nothing"
+        );
+    }
+
+    /// The door's existing behaviour for anything without a `Squad` — a
+    /// wild body's `effective_atk` is untouched by this arm.
+    #[test]
+    fn a_lone_body_is_untouched_by_the_squad_scale() {
+        let mut game = game();
+        let lone = body(&mut game, &generic_species().id);
+        assert_eq!(game.effective_atk(lone), 3);
     }
 }

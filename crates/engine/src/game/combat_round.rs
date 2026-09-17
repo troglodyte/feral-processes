@@ -1751,6 +1751,20 @@ impl Game {
             .map(|a| a.power)
             .unwrap_or(0);
         let field_bonus = self.field_buff_power(entity, FieldBuffKind::Atk);
+        // A squad's attack falls with its own Integrity, the way a pack
+        // thins as members drop one at a time — `Stats::atk * hp / max_hp`,
+        // scaling the raw base figure alone. A buff landing on a squad
+        // (nothing grants one today) still adds its full power on top,
+        // exactly as it would for any other body.
+        if self.world.get::<Squad>(entity).is_some() {
+            let frac = self
+                .world
+                .get::<Stats>(entity)
+                .map(|s| s.hp_fraction())
+                .unwrap_or(0.0);
+            let scaled = ((base as f32) * frac).round() as i32;
+            return scaled + bonus + field_bonus;
+        }
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }

@@ -443,6 +443,41 @@ fn r_is_not_a_second_way_into_the_picker() {
     assert_eq!(app.status_line, None);
 }
 
+/// `[R]`, uppercase, plays the fight out to its end with no pacing — the
+/// battle-map door onto `App::auto_resolve`, same as the group roster's.
+#[test]
+fn r_on_the_players_turn_opens_the_results() {
+    let mut app = fighting(9133);
+    wait_for_the_player(&mut app);
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert!(
+        matches!(app.mode, Mode::TacticalResult | Mode::GameOver),
+        "expected the results popup (or a permadeath game over), got {:?}",
+        app.mode
+    );
+}
+
+/// Auto-attack's "any key stops it" rule sits above every action, `[R]`
+/// included: it only stops the robot, it does not also resolve the fight.
+#[test]
+fn r_while_auto_attack_runs_only_stops_it() {
+    let mut app = fighting(9134);
+    open_on_a_wild_turn(&mut app);
+    app.handle_key(GameKey::Char('A'));
+    assert!(app.tactical_auto, "[A] did not arm on a wild body's turn");
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert!(!app.tactical_auto, "[R] did not stop auto-attack");
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    assert!(
+        app.game.as_ref().unwrap().has_active_battle(),
+        "the fight must still be open — [R] only stopped auto-attack"
+    );
+}
+
 /// The cursor takes the same eight directions the body walks: a numpad that
 /// steers a body but not the cursor it aims with reads as one of the two
 /// being broken.

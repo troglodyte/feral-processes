@@ -792,6 +792,8 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         // shared `s` stop reading as the same key.
         ("s".to_string(), "special".to_string()),
         ("E".to_string(), "end turn".to_string()),
+        // Before `A`, which stays last per its own comment below.
+        ("R".to_string(), "resolve".to_string()),
         // Last, because `strip::fitting` drops from the end and this is the
         // row that may go — but it does not go at 1280x720, which is
         // `the_action_bar_fits_the_log_pane`'s measurement and not a hope.

@@ -107,6 +107,10 @@ impl App {
                 }
                 self.after_tactical_action();
             }
+            // Uppercase, `E`'s reason — and free here: `r` already backs out
+            // of nothing on this screen (`r_is_not_a_second_way_into_the_
+            // picker`), so the shift-slip costs nothing either.
+            GameKey::Char('R') => self.auto_resolve(),
             _ => {}
         }
     }

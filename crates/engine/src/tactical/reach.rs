@@ -89,7 +89,15 @@ pub fn movement_field(
     // Gathered once rather than scanned per successor: the walk asks about
     // every neighbour of every cell it reaches, and `occupant` is a linear
     // scan over the fight's whole roster.
-    let occupied: HashSet<(i32, i32)> = battle.bodies().map(|(_, cell)| cell).collect();
+    //
+    // **Every cell of every other body**, via `cells_of` rather than
+    // `cell_of` — a wall the size of a footprint, not just its anchor.
+    // Footprint hardcodes to one without a `Squad`, so this is the same set
+    // `cell_of` built until task 4 gives a body a wider one.
+    let occupied: HashSet<(i32, i32)> = battle
+        .bodies()
+        .flat_map(|(other, _)| battle.cells_of(other))
+        .collect();
     let board = &battle.board;
 
     // The radius is the budget. `walk_field` bounds a Chebyshev box and not
@@ -112,8 +120,16 @@ pub fn movement_field(
 ///
 /// **The one definition the decoy strike door and the AI's choice of decoy
 /// share**, so the AI never names a decoy the door would refuse it.
+///
+/// The range test reads `gap` rather than `distance` — a value-identical
+/// substitution while every footprint is one cell, and what lets this stay
+/// correct without a second edit once a caller passes a real footprint
+/// instead of a single cell. `from`/`to` stay single cells for now: the two
+/// production callers (`tactical::ai`'s `best_swing` and
+/// `Game::tactical_strike_decoy`) and every test here hand it one, and a
+/// decoy is never a footprint.
 pub fn swing_reaches(board: &Board, from: (i32, i32), to: (i32, i32), range: u32) -> bool {
-    distance(from, to) <= range && line_of_sight(board, from, to)
+    gap(&[from], &[to]) <= range && line_of_sight(board, from, to)
 }
 
 /// The cells a body at `from` walks through to reach `to`, in the order it
@@ -175,6 +191,38 @@ pub fn path_to(
 /// walk that closed it.
 pub fn distance(a: (i32, i32), b: (i32, i32)) -> u32 {
     (a.0 - b.0).abs().max((a.1 - b.1).abs()) as u32
+}
+
+/// The closest approach between two footprints, in steps — zero when they
+/// share a cell, as a body does with itself.
+///
+/// **The footprint generalisation of `distance`**, which stays the
+/// cell-to-cell primitive this is built from. Every reader that measured
+/// body-to-body with `distance` now measures footprint-to-footprint with
+/// this, and for a footprint of one on both sides — every body today,
+/// without a `Squad` — this is exactly `distance` of the two anchors.
+///
+/// `u32::MAX` for an empty side rather than zero: every caller here already
+/// refuses before reaching this when a body has no cell at all, so an empty
+/// slice is unreachable in practice, and failing closed (unreachable, not
+/// adjacent) is the safer answer for a bug that gets here anyway.
+pub fn gap(a: &[(i32, i32)], b: &[(i32, i32)]) -> u32 {
+    a.iter()
+        .flat_map(|&x| b.iter().map(move |&y| distance(x, y)))
+        .min()
+        .unwrap_or(u32::MAX)
+}
+
+/// The cell of `cells` nearest `to`, ties toward the board's own reading
+/// order (y, then x).
+///
+/// `gap`'s single-sided form, for a door like `cover_between` that takes one
+/// cell from a caller holding a defender's whole footprint.
+pub(crate) fn nearest_cell(cells: &[(i32, i32)], to: (i32, i32)) -> Option<(i32, i32)> {
+    cells
+        .iter()
+        .copied()
+        .min_by_key(|&(x, y)| (distance((x, y), to), y, x))
 }
 
 /// Whether `aim` is a cell `from` may aim a routine of this `range` at.
@@ -385,6 +433,13 @@ pub fn recipients(
 /// `recipients`' twice over: a `Line` or `Cone` leaves from `from`, and the
 /// invoker is caught by its own blast where it *will* stand, not where it
 /// stands now.
+///
+/// **A body is caught if any of its cells is covered, and caught once** —
+/// `footprint_hit` is asked once per body, not once per covered cell, which
+/// is what keeps a blast covering two cells of one footprint from hitting it
+/// twice. Every footprint but the actor's hypothetical one is read off
+/// `cells_of`; the actor's own is anchored at `from` rather than at its real
+/// cell, which is the whole of the substitution above.
 pub fn recipients_from(
     battle: &TacticalBattle,
     actor: Entity,
@@ -397,10 +452,26 @@ pub fn recipients_from(
         .collect();
     battle
         .bodies()
-        .map(|(entity, cell)| (entity, if entity == actor { from } else { cell }))
-        .filter(|(_, cell)| covered.contains(cell))
         .map(|(entity, _)| entity)
+        .filter(|&entity| {
+            let footprint = if entity == actor {
+                battle.footprint_cells(actor, from)
+            } else {
+                battle.cells_of(entity)
+            };
+            footprint_hit(&footprint, &covered)
+        })
         .collect()
+}
+
+/// Whether a footprint of `cells` is caught by `covered` — any one of them,
+/// asked once per body rather than once per cell.
+///
+/// A free function rather than inlined at `recipients_from`'s one call site,
+/// so its own test can hand it a hand-built two-cell footprint with no
+/// `Squad` behind it — `footprint_of` hardcodes one cell today.
+pub(crate) fn footprint_hit(cells: &[(i32, i32)], covered: &HashSet<(i32, i32)>) -> bool {
+    cells.iter().any(|cell| covered.contains(cell))
 }
 
 #[cfg(test)]
@@ -925,5 +996,82 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    /// Two adjacent 2x2 footprints are one step apart at their nearest
+    /// corners — constructed directly since no `Squad` exists yet to seat a
+    /// real multi-cell body.
+    #[test]
+    fn gap_between_two_adjacent_footprints_is_one() {
+        let a = [(0, 0), (1, 0), (0, 1), (1, 1)];
+        let b = [(2, 0), (3, 0), (2, 1), (3, 1)];
+        assert_eq!(gap(&a, &b), 1);
+    }
+
+    /// A single cell diagonally touching a 2x2 block is one step from its
+    /// nearest corner.
+    #[test]
+    fn gap_to_a_diagonally_touching_cell_is_one() {
+        let a = [(0, 0), (1, 0), (0, 1), (1, 1)];
+        let b = [(2, 2)];
+        assert_eq!(gap(&a, &b), 1);
+    }
+
+    /// A body is no distance from itself.
+    #[test]
+    fn gap_of_a_footprint_with_itself_is_zero() {
+        let a = [(0, 0), (1, 0), (0, 1), (1, 1)];
+        assert_eq!(gap(&a, &a), 0);
+    }
+
+    /// `gap` of two single cells is exactly `distance` — the case every
+    /// existing footprint-of-one reader relies on for behaviour to stay
+    /// unchanged while `footprint_of` is hardcoded.
+    #[test]
+    fn gap_of_two_single_cells_is_distance() {
+        assert_eq!(gap(&[(2, 3)], &[(7, 1)]), distance((2, 3), (7, 1)));
+    }
+
+    #[test]
+    fn nearest_cell_picks_the_closest_of_a_footprint() {
+        let cells = [(0, 0), (5, 5)];
+        assert_eq!(nearest_cell(&cells, (6, 6)), Some((5, 5)));
+        assert_eq!(nearest_cell(&cells, (0, 1)), Some((0, 0)));
+    }
+
+    #[test]
+    fn nearest_cell_of_an_empty_footprint_is_none() {
+        assert_eq!(nearest_cell(&[], (0, 0)), None);
+    }
+
+    /// A blast covering two cells of one footprint hits it once —
+    /// `footprint_hit` asks "any", and `recipients_from` calls it once per
+    /// body rather than once per covered cell. Hand-built since no `Squad`
+    /// exists yet to seat a real multi-cell body.
+    #[test]
+    fn a_footprint_is_hit_when_any_of_its_cells_is_covered() {
+        let footprint = [(2, 2), (3, 2)];
+        let covered: HashSet<(i32, i32)> = [(2, 2), (3, 2), (9, 9)].into_iter().collect();
+        assert!(footprint_hit(&footprint, &covered));
+    }
+
+    /// Deleting the rule down to "check the first cell" would still pass the
+    /// case above, so pin the one where only the footprint's *second* cell
+    /// is covered.
+    #[test]
+    fn a_footprint_is_hit_through_a_cell_other_than_its_first() {
+        let footprint = [(2, 2), (3, 2)];
+        let covered: HashSet<(i32, i32)> = [(3, 2)].into_iter().collect();
+        assert!(
+            footprint_hit(&footprint, &covered),
+            "only the footprint's first cell was checked"
+        );
+    }
+
+    #[test]
+    fn a_footprint_with_no_covered_cell_is_not_hit() {
+        let footprint = [(2, 2), (3, 2)];
+        let covered: HashSet<(i32, i32)> = [(9, 9)].into_iter().collect();
+        assert!(!footprint_hit(&footprint, &covered));
     }
 }

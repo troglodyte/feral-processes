@@ -1766,7 +1766,8 @@ impl Game {
                 "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} in store."
             ),
             DigDryReason::Finish => format!(
-                "Your crew has nothing to finish the floor at ({x}, {y}) with — no {name} in store."
+                "Your crew can't finish the floor at ({x}, {y}) — it needs {} {name} in store.",
+                crate::tuning::FLOOR_FINISH_COST
             ),
         };
         self.log_base(line);

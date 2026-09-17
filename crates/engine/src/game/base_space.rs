@@ -873,6 +873,25 @@ impl Game {
                     self.world.despawn(site);
                     return;
                 }
+                // A mod removed this finish since the order was written —
+                // `restore_dig_sites` already drops one of these at load,
+                // but a live `DigSite` can still carry one from a save
+                // written before that check existed. `BaseGrid::set_finish`
+                // does not validate the id, so this must, or a name
+                // nothing can display gets painted onto the grid and
+                // charged for.
+                if self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(&id)
+                    .is_none()
+                {
+                    self.world.despawn(site);
+                    self.log_base(format!(
+                        "The finish planned for ({x}, {y}) is no longer installed — the order is dropped."
+                    ));
+                    return;
+                }
                 let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
                 if !self.spend_substrate(&substrate, crate::tuning::FLOOR_FINISH_COST) {
                     // `dig_wants` already judged this workable a moment ago
@@ -896,11 +915,13 @@ impl Game {
                 ));
             }
             FinishOrder::Strip => {
-                self.world.resource_mut::<BaseGrid>().clear_finish(x, y);
+                let removed = self.world.resource_mut::<BaseGrid>().clear_finish(x, y);
                 self.world.despawn(site);
-                self.log_base(format!(
-                    "Your crew strips the finish from the floor at ({x}, {y})."
-                ));
+                if removed {
+                    self.log_base(format!(
+                        "Your crew strips the finish from the floor at ({x}, {y})."
+                    ));
+                }
             }
         }
     }

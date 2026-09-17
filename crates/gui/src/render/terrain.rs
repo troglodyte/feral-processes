@@ -378,13 +378,17 @@ pub(super) const FINISH_SHADE_MIN_SEPARATION: f32 = 0.09;
 /// finish with no art still has to read as the finish through the fill and
 /// the edge alone.
 ///
-/// The edge and the sprite tint are the shade at full strength, not scaled
-/// by `dim`: the carved pattern is meant to read the same regardless of
-/// where the vignette happens to fall, the way the mark's own wash
-/// (`draw_excavation_plan`) is drawn flat over the tiles it sits on.
+/// **The edge and the sprite tint are scaled by `dim` too.** Shipped finish
+/// sprites are opaque squares, not translucent overlays — a sprite tinted
+/// at the shade's full strength paints clean over the dimmed fill beneath
+/// it, and a finished tile stops answering to the Power vignette and cloud
+/// dimming the way a plain floor tile does. `at_level(shade, dim)` is
+/// `draw_biome`'s own scaling, applied here to all three layers rather than
+/// the fill alone.
 pub(super) fn draw_finish(painter: &Painter, r: Rect, finish: &FinishView, dim: f32) {
     let shade = shade_color(finish.shade);
-    draw_slab(painter, r, at_level(shade, dim));
+    let shade = at_level(shade, dim);
+    draw_slab(painter, r, shade);
     let i = r.w * 0.12;
     let (ix, iy, iw, ih) = (r.x + i, r.y + i, r.w - 2.0 * i, r.h - 2.0 * i);
     painter.rect_lines(

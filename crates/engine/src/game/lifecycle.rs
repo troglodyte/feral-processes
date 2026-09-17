@@ -783,6 +783,24 @@ impl Game {
 
     fn restore_dig_sites(&mut self, sites: Vec<save::DigSiteSave>) {
         for d in sites {
+            // `BaseGrid::prune_finishes`'s rule, reached a second way: an
+            // `Apply` order naming an id the loaded `FloorDb` no longer
+            // resolves must not become a live `DigSite` the crew can never
+            // finish. Same message shape as `prune_finishes`'s own drops,
+            // logged through the same sink.
+            if let Some(FinishOrder::Apply(id)) = &d.finish
+                && self
+                    .world
+                    .resource::<crate::floors::FloorDb>()
+                    .get(id)
+                    .is_none()
+            {
+                self.log(format!(
+                    "dropped floor finish {id:?} at ({}, {}): no such finish is loaded",
+                    d.position.0, d.position.1
+                ));
+                continue;
+            }
             let wall = self.wall_at(d.position.0, d.position.1);
             self.world.spawn((
                 DigSite {

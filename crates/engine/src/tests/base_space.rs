@@ -4641,6 +4641,47 @@ fn an_apply_site_below_cost_spends_nothing_and_is_not_a_want() {
     );
 }
 
+/// The dry-finish announcement must name what the job actually needs, not
+/// claim the store is empty: `give` below leaves `FLOOR_FINISH_COST - 1`
+/// (more than zero) Blank Substrate in reach, so "no Blank Substrate in
+/// store" is simply false the moment any amount short of the cost is held.
+#[test]
+fn a_dry_finish_names_the_cost_rather_than_claiming_the_store_is_empty() {
+    let (mut game, _staff) = base_with_a_crew(3273, 1);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(WALL.0, WALL.1);
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, WALL, Some(&apply));
+    give(
+        &mut game,
+        &ItemId::from(ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST - 1,
+    );
+
+    pass(&mut game, 1);
+
+    let said = game.message_history(20).iter().any(|line| {
+        line.text.contains(&format!(
+            "needs {} Blank Substrate",
+            crate::tuning::FLOOR_FINISH_COST
+        ))
+    });
+    assert!(
+        said,
+        "the announcement must name the cost ({})",
+        crate::tuning::FLOOR_FINISH_COST
+    );
+    let claimed_empty = game
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("no Blank Substrate in store"));
+    assert!(
+        !claimed_empty,
+        "the store is not empty — the crew is short of the cost, not out of the item"
+    );
+}
+
 /// Replacing spends the full cost again; nothing is refunded for the finish
 /// that was already there.
 #[test]
@@ -4753,7 +4794,7 @@ fn a_dry_apply_site_announces_once_across_several_ticks() {
     let dry_lines = |g: &Game| {
         g.message_history(400)
             .into_iter()
-            .filter(|m| m.text.contains("nothing to finish"))
+            .filter(|m| m.text.contains("can't finish the floor"))
             .map(|m| m.repeats)
             .sum::<usize>()
     };
@@ -4790,6 +4831,50 @@ fn a_strip_site_is_a_want_with_zero_substrate() {
     );
 }
 
+/// `BaseGrid::clear_finish` reports whether it actually removed anything,
+/// and the crew's own log must agree — a `Strip` site landing on a cell
+/// something else already stripped must say nothing rather than claim a
+/// strip that did not happen.
+#[test]
+fn stripping_an_already_bare_cell_logs_nothing() {
+    let mut game = game_at_the_frontier(9103);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(WALL.0, WALL.1);
+        grid.set_finish(WALL.0, WALL.1, FloorId::from("cobalt_carpet"));
+    }
+    game.toggle_mark_box(WALL, WALL, Some(&FinishOrder::Strip));
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("a marked floor cell has a dig site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: WALL.0 - 1,
+            y: WALL.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    // Gone before the crew's cycle lands, so `clear_finish` below finds
+    // nothing left to remove.
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .clear_finish(WALL.0, WALL.1);
+
+    run_to_landing(&mut game);
+
+    let said = game
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("strips the finish"));
+    assert!(!said, "nothing was stripped, so nothing should be logged");
+}
+
 /// `BaseGrid::revert` is the only way to make this cell — nothing in play
 /// takes a `Floor` cell back — but the store must still hold "a finish
 /// implies floor" if it ever happens.
@@ -4816,6 +4901,73 @@ fn a_cell_that_stopped_being_floor_despawns_an_apply_site_uncharged() {
     );
 }
 
+/// A stale `Apply` order — an id `FloorDb` no longer resolves — must never
+/// reach `BaseGrid::set_finish`: the crew despawns the site uncharged
+/// rather than painting a finish nothing can name. `set_mark` never checks
+/// `FloorDb` at all, so this fixture can hand the crew the bad order
+/// directly, the same way a save from before this check existed could.
+#[test]
+fn crew_finishes_an_unresolvable_apply_uncharged_and_despawns_it() {
+    let bogus = FloorId::from("no_such_finish");
+    let (mut game, _digger) = a_posted_finisher(9101, WALL, FinishOrder::Apply(bogus));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let before = count_item(&game, ids::BLANK_SUBSTRATE);
+
+    run_to_landing(&mut game);
+
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        before,
+        "an unresolvable finish must spend nothing"
+    );
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .finish_at(WALL.0, WALL.1)
+            .is_none(),
+        "the grid must never wear a finish FloorDb cannot resolve"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "the stale site must be despawned"
+    );
+}
+
+/// A save made while `cobalt_carpet` was installed, loaded after a mod
+/// dropped it: `restore_dig_sites` must prune the stale `Apply` order
+/// rather than spawn a `DigSite` the crew can never finish —
+/// `BaseGrid::prune_finishes`'s rule, reached a second way for the order
+/// rather than the grid's own `finishes` map.
+#[test]
+fn a_restored_apply_naming_a_dropped_finish_is_pruned_at_load() {
+    let finish = FloorId::from("cobalt_carpet");
+    let (mut game, _digger) = a_posted_finisher(9102, WALL, FinishOrder::Apply(finish));
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_apply_finish_dropped_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let assets = assets_dir_missing_floor("apply_finish_dropped", "cobalt_carpet.ron");
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.dig_site_at(WALL.0, WALL.1).is_none(),
+        "an Apply order naming a dropped finish must not survive the load"
+    );
+    let warned = loaded
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("no such finish is loaded"));
+    assert!(
+        warned,
+        "the drop must be logged, the way prune_finishes's own drops are"
+    );
+}
+
 /// With one tile site and one finish site and a single worker, the tile
 /// site is worked first — `dig_wants`' own ordering rule.
 #[test]
@@ -4829,7 +4981,11 @@ fn with_one_worker_the_tile_site_is_worked_before_the_finish_site() {
     game.toggle_mark_box(tile_cell, tile_cell, None);
     // Touches the now-Open `tile_cell`, so it has a station of its own —
     // laid directly rather than dug, since only the ordering is under test.
-    let finish_cell = (tile_cell.0, tile_cell.1 + 1);
+    // `y - 1` rather than `y + 1`: a plain `(x, y)` sort would then rank
+    // this cell *first*, so the assertion below only passes because
+    // `dig_wants`' sort key puts a finish want (`f.is_some()`) after a tile
+    // want regardless of position.
+    let finish_cell = (tile_cell.0, tile_cell.1 - 1);
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .lay_floor(finish_cell.0, finish_cell.1);

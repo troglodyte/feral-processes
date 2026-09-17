@@ -390,7 +390,6 @@ pub(super) fn draw_playing_base(
             glyph_px,
             &status,
             plan,
-            excavate_label,
             // The party's own cell unless the camera has been sent
             // somewhere: `base_pos` is `Some` only in base space, which is
             // exactly where the pinned `Position` is the wrong answer.
@@ -412,13 +411,26 @@ pub(super) fn draw_playing_base(
         // **In this branch alone**, after the frame so it sits over the map:
         // the Stack's frame map owns this corner underground, and a
         // tactical board is the fight.
-        hud::stock_block::draw_stock_block(
+        let stock_rect = hud::stock_block::draw_stock_block(
             regions.map_pane,
             research.as_ref(),
             &stock_rows,
             painter,
             m,
         );
+        // **After the frame and the stock block, both of which claim this
+        // same corner** — drawing the label first, as the marks pass used
+        // to, put it under whichever of the two also landed there. The
+        // label's own gate is base space, `base_pos.is_some()`'s reason.
+        if game.base_pos().is_some() {
+            draw_excavate_label(
+                regions.map_pane,
+                excavate_label.as_deref(),
+                stock_rect,
+                painter,
+                m,
+            );
+        }
     }
     // **After the frame, so it sits over the map rather than under it**, and
     // outside the branch because it is the same block in both — though
@@ -540,7 +552,6 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
-    excavate_label: Option<String>,
     center: (i32, i32),
     reveal: bool,
 ) -> Vec<EntityView> {
@@ -1225,7 +1236,6 @@ fn draw_surface_map(
             painter,
             &marked,
             plan,
-            excavate_label.as_deref(),
             |world| {
                 tile_origin_px(
                     world,
@@ -1287,6 +1297,43 @@ pub(super) struct PlanCursor {
     pub anchor: Option<(i32, i32)>,
 }
 
+/// The brush's own header, in the map pane's top-left corner — the same
+/// corner the frame's THREAT strip and the stock block both claim first.
+/// **Call after both**, and pass the stock block's own returned rect: the
+/// label lands below it when one was drawn, or below the frame's strip
+/// quad (`strip_inset`) when the corner is otherwise empty. Drawn
+/// unconditionally on `label` rather than gated on a plan being previewed:
+/// the brush is set and read independently of that.
+///
+/// The origin is always derived from `pane` and the block it sits under,
+/// never a literal offset — a literal draws under one or the other of them
+/// the moment either is present, which is what shipped this needing a
+/// fix.
+fn draw_excavate_label(
+    pane: Rect,
+    label: Option<&str>,
+    stock_rect: Option<Rect>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(label) = label else { return };
+    let top = match stock_rect {
+        Some(rect) => rect.y + rect.h,
+        None => pane.y + hud::layout::strip_inset(m),
+    };
+    // `painter.ui` takes a baseline, not a top — `compass_block`'s own
+    // `size * 0.8` conversion, so `top` reads as the ink's actual top edge
+    // rather than landing `EXCAVATE_LABEL_SIZE` short of it.
+    let baseline = top + EXCAVATE_LABEL_SIZE as f32 * 0.8;
+    painter.ui(
+        label,
+        pane.x + EXCAVATE_LABEL_INSET,
+        baseline,
+        EXCAVATE_LABEL_SIZE,
+        TEXT,
+    );
+}
+
 /// The marks, the box being previewed, and the cursor — one pass over world
 /// coordinates after the tile loop, the same shape the spark pass takes.
 ///
@@ -1299,25 +1346,10 @@ fn draw_excavation_plan(
     painter: &Painter,
     marked: &[DigMark],
     plan: Option<PlanCursor>,
-    label: Option<&str>,
     at: impl Fn((i32, i32)) -> (f32, f32),
     tile_px: f32,
     pane: Rect,
 ) {
-    // The brush's own line, inside the pane's top-left corner — `pane.x`/
-    // `pane.y` rather than a literal `0.0`, which would draw under the
-    // status bar. Drawn unconditionally on `label` rather than gated on
-    // `plan`: the brush is set and read independently of the box being
-    // previewed right now.
-    if let Some(label) = label {
-        painter.ui(
-            label,
-            pane.x + EXCAVATE_LABEL_INSET,
-            pane.y + EXCAVATE_LABEL_INSET,
-            EXCAVATE_LABEL_SIZE,
-            TEXT,
-        );
-    }
     let size = tile_px - 1.0;
     // Answers where the cell landed, or `None` when it was culled — the
     // marks loop below needs the origin to put a cut meter on, and culling
@@ -1396,7 +1428,7 @@ mod tests {
     use crate::paint::SpriteTable;
     use crate::paint::{
         painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
-        with_painter, with_sprites,
+        painted_text_boxes, with_painter, with_sprites,
     };
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
@@ -2339,7 +2371,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -2388,7 +2419,6 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
-                None,
                 None,
                 status.position,
                 false,
@@ -2655,7 +2685,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -2704,7 +2733,6 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
-                None,
                 None,
                 status.position,
                 false,
@@ -2840,7 +2868,6 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
-                None,
                 None,
                 center,
                 reveal,
@@ -2983,7 +3010,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -3098,7 +3124,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -3136,7 +3161,6 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
-                None,
                 None,
                 status.position,
                 false,
@@ -3226,7 +3250,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -3283,7 +3306,6 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
-                None,
                 None,
                 status.position,
                 false,
@@ -3682,6 +3704,37 @@ mod tests {
         );
     }
 
+    /// Shipped floor-finish sprites are opaque, so a sprite tinted at the
+    /// shade's full strength paints clean over the dimmed fill beneath it —
+    /// the finish would stop answering to the Power vignette and to cloud
+    /// dimming the way a plain floor tile does. The edge ring and the
+    /// sprite tint must both fall with `dim`, not just the fill.
+    #[test]
+    fn draw_finish_dims_the_edge_and_the_sprite_along_with_the_fill() {
+        let mut table = SpriteTable::default();
+        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        let finish = a_finish_view("cobalt_carpet");
+        let r = Rect::new(0.0, 0.0, 32.0, 32.0);
+
+        let (_, bright) = with_sprites(table.clone(), |p| draw_finish(p, r, &finish, 1.0));
+        let (_, dim) = with_sprites(table, |p| draw_finish(p, r, &finish, 0.5));
+
+        let tint = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
+            painted_images(shapes)
+                .first()
+                .expect("the sprite must draw one textured mesh")
+                .2
+        };
+        let bright_tint = tint(&bright);
+        let dim_tint = tint(&dim);
+        assert!(
+            dim_tint.r() < bright_tint.r()
+                && dim_tint.g() < bright_tint.g()
+                && dim_tint.b() < bright_tint.b(),
+            "a dimmer draw must tint the sprite darker: {dim_tint:?} vs {bright_tint:?}"
+        );
+    }
+
     /// The overdraw trap this feature shares with `sprite`: a fill and an
     /// edge drawn under a sprite that never arrives must not vanish with it.
     #[test]
@@ -3750,7 +3803,6 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
-                None,
                 status.position,
                 false,
             );
@@ -3761,21 +3813,43 @@ mod tests {
     /// The wiring `draw_finish`'s own unit tests cannot see: that a real,
     /// finished `Platform` cell reached through `Game::view_finishes_at`
     /// actually routes to `draw_finish` rather than `draw_biome`.
+    ///
+    /// The edge's colour is checked by **channel ratio**, not against a
+    /// literal `at_level(shade, FINISH_EDGE_LEVEL)`: a real tile's `dim` is
+    /// `tile_shade`'s own per-tile jitter times the vignette, so it is
+    /// essentially never exactly `1.0` — `draw_finish_dims_the_edge_and_
+    /// the_sprite_along_with_the_fill` is what pins the edge and the
+    /// sprite to a *known* `dim`, and this test only needs to know the
+    /// ratio survived whatever `dim` this tile actually landed at.
     #[test]
     fn a_real_finished_cell_draws_through_the_full_pipeline() {
         let mut table = SpriteTable::default();
         table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
         let shapes = drawn_base_with_finish(table, "cobalt_carpet", (3, 3));
 
-        let shade = shade_color(FloorShade::Cobalt);
-        assert!(
-            painted_rect_stroke_count(&shapes, at_level(shade, FINISH_EDGE_LEVEL)) > 0,
-            "the tile loop did not reach draw_finish for a real finished cell"
-        );
         assert_eq!(
             painted_images(&shapes).len(),
             1,
             "the finish's sprite must draw exactly once"
+        );
+
+        let shade = shade_color(FloorShade::Cobalt);
+        // Tolerance 2, not 1: the edge is `dim` scaled twice over (once for
+        // the ambient tile shade, once for `FINISH_EDGE_LEVEL`), and each
+        // `at_level` call rounds to a `u8` independently.
+        let found = shapes.iter().any(|cs| match &cs.shape {
+            bevy_egui::egui::Shape::Rect(r) if r.stroke.width > 0.0 && r.stroke.color.r() > 0 => {
+                let k = r.stroke.color.r() as f32 / 255.0 / (shade.r * FINISH_EDGE_LEVEL);
+                let expect =
+                    |channel: f32| (channel * FINISH_EDGE_LEVEL * k * 255.0).round() as i32;
+                (r.stroke.color.g() as i32 - expect(shade.g)).abs() <= 2
+                    && (r.stroke.color.b() as i32 - expect(shade.b)).abs() <= 2
+            }
+            _ => false,
+        });
+        assert!(
+            found,
+            "the tile loop did not reach draw_finish for a real finished cell"
         );
     }
 
@@ -4148,7 +4222,6 @@ mod tests {
                     p,
                     marks,
                     None,
-                    None,
                     |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
                     CELL,
                     pane,
@@ -4191,20 +4264,9 @@ mod tests {
     #[test]
     fn the_excavate_header_draws_the_label_only_when_some() {
         let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
-        let draw = |label: Option<&str>| {
-            with_painter(|p| {
-                draw_excavation_plan(
-                    p,
-                    &[],
-                    None,
-                    label,
-                    |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
-                    CELL,
-                    pane,
-                )
-            })
-            .1
-        };
+        let m = ui_metrics(900.0);
+        let draw =
+            |label: Option<&str>| with_painter(|p| draw_excavate_label(pane, label, None, p, &m)).1;
 
         let shapes = draw(Some("Brush: Cobalt Carpet [F]"));
         assert!(
@@ -4217,6 +4279,55 @@ mod tests {
             painted_text(&shapes).is_empty(),
             "a None label must draw nothing at all: {:?}",
             painted_text(&shapes)
+        );
+    }
+
+    /// **The label sits under the frame's THREAT strip and the stock block,
+    /// not through either of them.** Both draw into the map pane's
+    /// top-left corner before the label does — `the_block_clears_the_
+    /// threat_readout_it_sits_beneath`'s trap, one door further down the
+    /// stack: a label drawn at a literal offset from the pane lands under
+    /// whichever of the two is present.
+    #[test]
+    fn the_excavate_label_clears_the_frame_and_the_stock_block() {
+        let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
+        let m = ui_metrics(900.0);
+        let label = "Brush: Cobalt Carpet [F]";
+
+        // No stock block drawn this frame: the label must still clear the
+        // THREAT strip's own quad.
+        let (_, shapes) = with_painter(|p| draw_excavate_label(pane, Some(label), None, p, &m));
+        let boxes = painted_text_boxes(&shapes);
+        let (_, _, rect) = boxes
+            .iter()
+            .find(|(_, t, _)| t == label)
+            .expect("the label was drawn");
+        assert!(
+            rect.y >= pane.y + hud::layout::strip_inset(&m) - 0.001,
+            "the label at {} draws under the THREAT strip's quad reaching {}",
+            rect.y,
+            pane.y + hud::layout::strip_inset(&m)
+        );
+
+        // A stock block is drawn this frame: the label must start below it.
+        let stock_rect = Rect::new(
+            pane.x + m.inset,
+            pane.y + hud::layout::strip_inset(&m),
+            200.0,
+            80.0,
+        );
+        let (_, shapes) =
+            with_painter(|p| draw_excavate_label(pane, Some(label), Some(stock_rect), p, &m));
+        let boxes = painted_text_boxes(&shapes);
+        let (_, _, rect) = boxes
+            .iter()
+            .find(|(_, t, _)| t == label)
+            .expect("the label was drawn");
+        assert!(
+            rect.y >= stock_rect.y + stock_rect.h - 0.001,
+            "the label at {} draws over the stock block reaching {}",
+            rect.y,
+            stock_rect.y + stock_rect.h
         );
     }
 
@@ -4359,8 +4470,7 @@ mod tests {
                 // that has arrived.
                 for _ in 0..2 {
                     draw_surface_map(
-                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, None, center,
-                        false,
+                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center, false,
                     );
                 }
             });

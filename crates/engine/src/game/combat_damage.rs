@@ -231,7 +231,10 @@ impl Game {
         );
         let outcome = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            battle::resolve_attack(attacker_profile, defender_profile, &mut rng.0)
+            match swing.free {
+                true => battle::resolve_free_attack(attacker_profile, defender_profile, &mut rng.0),
+                false => battle::resolve_attack(attacker_profile, defender_profile, &mut rng.0),
+            }
         };
         let rolled = outcome.damage_to_defender();
         if rolled <= 0 {

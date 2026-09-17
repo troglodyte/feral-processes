@@ -61,6 +61,7 @@ mod policy;
 mod power;
 mod racks;
 mod raids;
+mod reactions;
 mod refactor;
 mod research;
 mod research_graph;

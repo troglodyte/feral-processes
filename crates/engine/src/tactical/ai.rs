@@ -228,7 +228,7 @@ impl Game {
     /// An injected hostile's policy runs as if it stood on the party's
     /// side: `Hostile(actor) != Injected(actor)` is true only when the two
     /// disagree, which is exactly the case a `prompt_injection` lands.
-    fn acts_for_hostiles(&self, actor: Entity) -> bool {
+    pub(crate) fn acts_for_hostiles(&self, actor: Entity) -> bool {
         let hostile = self.world.get::<Hostile>(actor).is_some();
         let injected = self
             .world

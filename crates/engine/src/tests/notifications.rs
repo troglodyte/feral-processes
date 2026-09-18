@@ -353,6 +353,26 @@ fn tutorials_latch_and_milestones_do_not() {
     }
 }
 
+/// Final review F7: `NotificationKind::LearnedImage`'s latch key read
+/// `milestone_learned_image` despite grouping with the `OnceEver` tutorials
+/// above it — every one of that group's siblings carries a `tutorial_`
+/// prefix, and this one didn't. `latch_key`'s own doc says the string is
+/// what matters, but a string that contradicts its own group's naming is
+/// exactly the kind of drift a census exists to catch — this checks the
+/// convention `tutorials_latch_and_milestones_do_not` checks the policy for.
+#[test]
+fn every_oncever_latch_key_carries_the_tutorial_prefix() {
+    for kind in NotificationKind::all() {
+        if kind.def().repeat == Repeat::OnceEver {
+            assert!(
+                kind.latch_key().starts_with("tutorial_"),
+                "{kind} is OnceEver but its latch key {:?} doesn't carry the group's prefix",
+                kind.latch_key()
+            );
+        }
+    }
+}
+
 /// `Notifications` is session state and must never reach the save. Asserted
 /// by pushing one and reloading, because "I did not add a save field" is not
 /// something a round trip can see on its own.

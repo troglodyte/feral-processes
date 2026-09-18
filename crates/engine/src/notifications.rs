@@ -104,10 +104,13 @@ pub enum NotificationKind {
     ///
     /// `OnceEver`: what the player is being told is that the mechanic now
     /// exists for them, not news about a moment that keeps happening — so it
-    /// groups with the tutorials above despite its `milestone_learned_image`
-    /// latch key (todo #100 Task 5's own naming). `latch_key`'s own doc is
-    /// why the string is what matters and the variant name and grouping are
-    /// not — see `tutorials_latch_and_milestones_do_not`.
+    /// groups with the tutorials above, and its `tutorial_learned_image`
+    /// latch key matches that grouping (final review F7; it read
+    /// `milestone_learned_image` from Task 5 through the final review,
+    /// unreleased in every build that shipped it, so the rename cost no
+    /// save). `latch_key`'s own doc is why the string is what matters and
+    /// the variant name and grouping are not — see
+    /// `tutorials_latch_and_milestones_do_not`.
     LearnedImage,
 
     // --- Milestones: `Always`, news about a moment that has happened again ---
@@ -479,9 +482,7 @@ impl NotificationKind {
             // these two strings are a file format from here on.
             NotificationKind::LowPower => "tutorial_low_power",
             NotificationKind::DownedProgram => "tutorial_downed_program",
-            // New too, and `OnceEver` despite the prefix — see the
-            // variant's own doc for why the key reads as a milestone.
-            NotificationKind::LearnedImage => "milestone_learned_image",
+            NotificationKind::LearnedImage => "tutorial_learned_image",
             NotificationKind::Breach => "milestone_breach",
             // New, and `Always` besides, so nothing is ever latched here.
             NotificationKind::SweepsBegin => "milestone_sweeps_begin",

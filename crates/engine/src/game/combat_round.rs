@@ -709,12 +709,10 @@ impl Game {
         entity: Entity,
         distance: Option<u32>,
     ) -> Option<AbilityDef> {
-        let species_id = self.world.get::<Creature>(entity)?.species.clone();
-        let all = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .map(|s| s.basic_attacks())?;
+        let all = match self.kit_of(entity) {
+            Kit::Unarmed => return None,
+            Kit::Innate(def) => def.basic_attacks(),
+        };
         let moves: Vec<AbilityDef> = match distance {
             None => all,
             Some(d) => all

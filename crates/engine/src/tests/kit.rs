@@ -79,3 +79,35 @@ fn the_unarmed_player_swings_at_arms_length() {
     let game = game();
     assert_eq!(game.swing_range(game.player_entity()), TACTICAL_MELEE_RANGE);
 }
+
+/// The two readers that guard their `Unarmed` arm on the player: a body
+/// with no species to borrow from is not handed the player's strike name
+/// or the player's class affinity.
+#[test]
+fn a_stray_body_swings_a_raw_signal_burst() {
+    let mut game = game();
+    let stray = body(&mut game, "no_such_species");
+    let (name, band) = game.swing_move_at(stray, None);
+    assert_eq!(name, "a raw signal burst");
+    assert_eq!(band, PLAYER_UNARMED_DAMAGE);
+}
+
+/// A Medic, so the player's `Heal` affinity sits above neutral and a stray
+/// body handed the player's arm would read above neutral too.
+#[test]
+fn a_stray_body_has_no_class_affinity() {
+    let choice = crate::CharacterChoice {
+        class: Some(crate::classes::PlayerClass::Medic),
+        ..crate::CharacterChoice::default()
+    };
+    let mut game =
+        Game::new_with(4, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
+    let stray = body(&mut game, "no_such_species");
+    let heal = crate::abilities::AbilityEffect::Heal {
+        power: 10,
+        spread: 0,
+    };
+    let neutral = crate::tuning::AFFINITY_NEUTRAL;
+    assert!(game.ability_affinity(game.player_entity(), &heal) > neutral);
+    assert_eq!(game.ability_affinity(stray, &heal), neutral);
+}

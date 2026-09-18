@@ -216,6 +216,30 @@ impl Game {
         granted
     }
 
+    /// What an `Image` tool would teach off `program` — the one derivation
+    /// the screen's preview (`extraction_options`) and the grant
+    /// (`extract_image_from_program`) both call, so a quoted species and a
+    /// learned one cannot differ (constraints.md decision 6). `None` means
+    /// the player already holds `program.species`'s image
+    /// (`resources::EmulationImages`) — the refusal `extract_program`
+    /// answers with, before anything is spent.
+    ///
+    /// Unlike `extraction_yield`, this reads no tool at all: an `Image` tool
+    /// has no `yields` pool and no tier scaling to apply, `Routines`'
+    /// category own reason for the same omission.
+    pub fn image_yield(&self, program: &DownedProgram) -> Option<SpeciesId> {
+        let known = self
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(&program.species);
+        if known {
+            None
+        } else {
+            Some(program.species.clone())
+        }
+    }
+
     /// Whether a downed program may yield `item` at all.
     ///
     /// One rule, and it is the research currency: research is earned by
@@ -520,6 +544,58 @@ impl Game {
         Ok(())
     }
 
+    /// The `Image` branch of `extract_program` (todo #100 Task 5): teaches
+    /// `program.species`'s image into `resources::EmulationImages` instead
+    /// of granting an item. Refused, before anything is spent, when
+    /// `image_yield` answers `None` — the species is already known — the
+    /// same per-refusal rule the `Routines` branch's empty-pool check takes.
+    fn extract_image_from_program(
+        &mut self,
+        index: usize,
+        program: &DownedProgram,
+        tool: &ToolDef,
+    ) -> Result<(), String> {
+        let Some(species) = self.image_yield(program) else {
+            return Err("You already have that image.".to_string());
+        };
+
+        let player = self.player_entity();
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+
+        self.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(species.clone());
+
+        let label = self.downed_program_label(program);
+        let name = self.species_name(&species).to_string();
+        self.log_kind(
+            MessageKind::Loot,
+            format!(
+                "You image-capture {label} with the {}: you can now emulate a {name}.",
+                tool.name
+            ),
+        );
+        self.notify(crate::notifications::NotificationKind::LearnedImage);
+
+        // Quoted once, before the loop — `extract_gear_from_program`'s own
+        // reason: a bench demolished mid-extraction must not change what
+        // this use was already priced at.
+        let ticks = self.extraction_ticks(tool);
+        for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
+
+        Ok(())
+    }
+
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
     /// whole list. The species' display name falls back to the raw id for a
     /// mod species since removed, `downed_program_label`'s own tolerance,
@@ -589,6 +665,10 @@ impl Game {
                             self.extraction_yield(&program, &tool),
                         )
                     }
+                    ToolCategory::Image => match self.image_yield(&program) {
+                        Some(species) => crate::views::ExtractionPreview::Image(species),
+                        None => crate::views::ExtractionPreview::NothingToLearn,
+                    },
                 };
                 crate::views::ExtractionOptionView {
                     ticks: self.extraction_ticks(&tool),
@@ -657,6 +737,14 @@ impl Game {
         // the two share nothing but the program's removal.
         if tool_def.category == ToolCategory::Gear {
             return self.extract_gear_from_program(index, &program, &tool_def);
+        }
+
+        // The `Image` category takes a fourth branch (todo #100 Task 5): no
+        // `yields` pool, and its own refusal — the species already known —
+        // has to land above the removal too, or a program teaches nothing
+        // it hasn't already taught.
+        if tool_def.category == ToolCategory::Image {
+            return self.extract_image_from_program(index, &program, &tool_def);
         }
 
         let granted = self.extraction_yield(&program, &tool_def);

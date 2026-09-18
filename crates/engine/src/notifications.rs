@@ -98,6 +98,17 @@ pub enum NotificationKind {
     /// is standing, and a player three biomes away must not be told
     /// something happened to them that didn't.
     FirstStatic,
+    /// The player extracts their first image — `Game::
+    /// extract_image_from_program`, the `Image` tool category's own door
+    /// (todo #100 Task 5).
+    ///
+    /// `OnceEver`: what the player is being told is that the mechanic now
+    /// exists for them, not news about a moment that keeps happening — so it
+    /// groups with the tutorials above despite its `milestone_learned_image`
+    /// latch key (todo #100 Task 5's own naming). `latch_key`'s own doc is
+    /// why the string is what matters and the variant name and grouping are
+    /// not — see `tutorials_latch_and_milestones_do_not`.
+    LearnedImage,
 
     // --- Milestones: `Always`, news about a moment that has happened again ---
     /// A portal holds and a new sector resolves — `Game::enter_next_zone`.
@@ -209,7 +220,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 16] {
+    pub fn all() -> [NotificationKind; 17] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -219,6 +230,7 @@ impl NotificationKind {
             NotificationKind::LowPower,
             NotificationKind::DownedProgram,
             NotificationKind::FirstStatic,
+            NotificationKind::LearnedImage,
             NotificationKind::Breach,
             NotificationKind::SweepsBegin,
             NotificationKind::ContractClosed,
@@ -338,6 +350,19 @@ impl NotificationKind {
                 color: GlyphColor::Orange,
                 repeat: Repeat::OnceEver,
             },
+            NotificationKind::LearnedImage => NotificationDef {
+                title: "Image Learned",
+                body: "You captured an image — a downed program's shape and stats, kept for \
+                       later. Run your Emulate routine to wear it for a while: it swaps your \
+                       attack, mitigation, reach and routines for the image's own, and \
+                       everything else about you stays yours.\n\nEvery image you extract is \
+                       another shape to become. You can only wear one at a time, and dropping \
+                       it back off costs a turn.",
+                sprite: None,
+                glyph: 'i',
+                color: GlyphColor::Cyan,
+                repeat: Repeat::OnceEver,
+            },
             NotificationKind::Breach => NotificationDef {
                 title: "Breach",
                 body: "The portal holds long enough. A new sector resolves around you — new \
@@ -454,6 +479,9 @@ impl NotificationKind {
             // these two strings are a file format from here on.
             NotificationKind::LowPower => "tutorial_low_power",
             NotificationKind::DownedProgram => "tutorial_downed_program",
+            // New too, and `OnceEver` despite the prefix — see the
+            // variant's own doc for why the key reads as a milestone.
+            NotificationKind::LearnedImage => "milestone_learned_image",
             NotificationKind::Breach => "milestone_breach",
             // New, and `Always` besides, so nothing is ever latched here.
             NotificationKind::SweepsBegin => "milestone_sweeps_begin",

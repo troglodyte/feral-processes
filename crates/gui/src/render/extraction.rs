@@ -175,6 +175,15 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
                     continuation_lines(&outcome),
                 )
             }
+            // Naming the species is the point here, unlike `Routine` above —
+            // spec §4 "Learning an image": the row reads "image: Scrapper".
+            ExtractionPreview::Image(species) => (
+                format!(
+                    "{head_prefix}: image of {} {ticks_suffix}",
+                    game.species_name(species)
+                ),
+                Vec::new(),
+            ),
         };
         rows.push(item_row(head, i == selected));
         for line in continuations {
@@ -552,6 +561,39 @@ mod tests {
         assert!(
             joined.contains(&expected_item_name),
             "a Gear tool's rows should name its candidate item {expected_item_name:?}: {joined:?}"
+        );
+    }
+
+    /// An `Image` tool's row names the species it would teach — the
+    /// renderer's own new arm for `ExtractionPreview::Image` (todo #100
+    /// Task 5), exercised through a real installed `image_capture` rather
+    /// than a hand-built preview.
+    #[test]
+    fn an_image_row_names_the_species() {
+        let probe = Game::new(9705, DifficultyMode::Forgiving, &assets_dir()).unwrap();
+        let species = probe
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one shipped species");
+
+        let held = vec![program(&species.id, 3, Rarity::Ordinary)];
+        let game = game_with_state(
+            9706,
+            held,
+            Some(vec![ToolId("image_capture".to_string())]),
+            None,
+        );
+        let rows = extraction_options_rows(&game, 0, 0);
+        let joined: String = rows
+            .iter()
+            .map(row_label_text)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            joined.contains(&species.name),
+            "an Image tool's row should name the species it would teach {:?}: {joined:?}",
+            species.name
         );
     }
 }

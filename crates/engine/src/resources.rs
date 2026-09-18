@@ -2019,9 +2019,12 @@ pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
 
 /// The images the player has learned — `Game::emulation_options()`'s
 /// source, and the "no images known" half of `ability_unavailable`'s
-/// `AbilityEffect::Emulate` refusal (todo #100 Task 4). Empty by default and
-/// not yet part of the save: Task 5 adds the field and the writer that fills
-/// this from it.
+/// `AbilityEffect::Emulate` refusal (todo #100 Task 4). Written by
+/// `Game::extract_image_from_program`, the `Image` tool category's own door
+/// (todo #100 Task 5). Saved as `SaveData::emulation_images`, a sorted
+/// `Vec` behind `#[serde(default)]` — a `BTreeSet` for the same reason
+/// `KnownTools`/`KnownRoutines` are, so the encoded bytes never depend on
+/// set iteration order.
 #[derive(Resource, Default, Clone)]
 pub struct EmulationImages(pub BTreeSet<crate::species::SpeciesId>);
 

@@ -3093,6 +3093,224 @@ fn the_preview_quotes_gear_chances_verbatim() {
 }
 
 // ---------------------------------------------------------------------------
+// Todo #100 Task 5: `ToolCategory::Image`, `Game::image_yield` and
+// `extract_program`'s `Image` branch — learning an image.
+// ---------------------------------------------------------------------------
+
+/// The shipped Image tool, installed into the player's one slot —
+/// `install_harness_puller`'s pattern: this bypasses research and forging
+/// deliberately, since what is under test is the branch, not the door.
+fn install_image_capture(game: &mut Game) -> ToolId {
+    let id = ToolId("image_capture".to_string());
+    assert!(
+        game.world.resource::<ToolDb>().get(id.as_str()).is_some(),
+        "image_capture.ron must load before this test can install it"
+    );
+    let player = game.player_entity();
+    game.world.get_mut::<Tools>(player).unwrap().0 = vec![id.clone()];
+    id
+}
+
+#[test]
+fn image_extraction_teaches_the_species_and_consumes_the_program() {
+    let mut game = Game::new(4600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    let tool_id = install_image_capture(&mut game);
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(&prog.species),
+        "test premise: the species must start unknown"
+    );
+
+    game.extract_program(0, &tool_id)
+        .expect("nothing here refuses the extraction");
+
+    assert!(
+        game.world
+            .get::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .is_empty(),
+        "the extracted program must be removed from the store"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(&prog.species),
+        "the program's own species must be learned"
+    );
+}
+
+#[test]
+fn image_extraction_refuses_a_species_already_known_and_spends_nothing() {
+    let mut game = Game::new(4601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    game.world
+        .resource_mut::<crate::resources::EmulationImages>()
+        .0
+        .insert(prog.species.clone());
+    let tool_id = install_image_capture(&mut game);
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.extract_program(0, &tool_id);
+
+    assert!(
+        result.is_err(),
+        "a species already known must refuse the extraction"
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        before_tools,
+        "the tool must remain installed and untouched"
+    );
+}
+
+#[test]
+fn image_extraction_options_preview_matches_what_extract_program_actually_learns() {
+    // The screen's whole safety property, `image_yield`'s own reason: a
+    // quoted species and a learned one cannot differ.
+    let mut game = Game::new(4602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    let tool_id = install_image_capture(&mut game);
+
+    let options = game.extraction_options(0);
+    let option = options
+        .iter()
+        .find(|o| o.tool == tool_id)
+        .expect("the installed Image tool should have a row");
+    let views::ExtractionPreview::Image(previewed) = &option.preview else {
+        panic!(
+            "an Image tool with an unknown species must preview Image, got {:?}",
+            option.preview
+        );
+    };
+    let previewed = previewed.clone();
+
+    game.extract_program(0, &tool_id)
+        .expect("nothing here refuses the extraction");
+
+    assert!(
+        game.world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(&previewed),
+        "the previewed species must equal the one actually learned"
+    );
+}
+
+#[test]
+fn image_extraction_options_preview_nothing_to_learn_when_already_known() {
+    let mut game = Game::new(4603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    game.world
+        .resource_mut::<crate::resources::EmulationImages>()
+        .0
+        .insert(prog.species.clone());
+    let tool_id = install_image_capture(&mut game);
+
+    let options = game.extraction_options(0);
+    let option = options
+        .iter()
+        .find(|o| o.tool == tool_id)
+        .expect("the installed Image tool should have a row");
+
+    assert!(
+        matches!(option.preview, views::ExtractionPreview::NothingToLearn),
+        "an already-known species must preview NothingToLearn, got {:?}",
+        option.preview
+    );
+}
+
+#[test]
+fn image_yield_spends_no_gamerng_draw() {
+    assert!(
+        rng_unadvanced_by(4604, |game| {
+            let prog = program(70, Rarity::Gold, 20);
+            let _ = game.image_yield(&prog);
+        }),
+        "image_yield must not draw from the shared GameRng stream"
+    );
+}
+
+#[test]
+fn image_extraction_notifies_once_across_two_different_images() {
+    let mut game = Game::new(4605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    while game.take_notification().is_some() {}
+    let tool_id = install_image_capture(&mut game);
+
+    let mut first = program(70, Rarity::Gold, 20);
+    first.species = "scrapper".to_string();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![first];
+    game.extract_program(0, &tool_id)
+        .expect("nothing here refuses the first extraction");
+    assert_eq!(
+        game.notifications_pending(),
+        1,
+        "learning the first image must notify"
+    );
+    while game.take_notification().is_some() {}
+
+    let mut second = program(70, Rarity::Gold, 20);
+    second.species = "sentinel".to_string();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![second];
+    game.extract_program(0, &tool_id)
+        .expect("nothing here refuses the second extraction");
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "a second, different image must not notify again — Repeat::OnceEver"
+    );
+}
+
+#[test]
+fn emulation_images_survive_a_save_load_round_trip() {
+    // Save -> load, not a RON round trip: `SaveData::emulation_images` is
+    // `#[serde(default)]`, and only `Game::save`/`Game::load` exercise the
+    // path that would silently drop a skipped field.
+    let mut game = Game::new(4606, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let expected: std::collections::BTreeSet<crate::species::SpeciesId> =
+        ["scrapper".to_string(), "sentinel".to_string()].into();
+    game.world
+        .resource_mut::<crate::resources::EmulationImages>()
+        .0 = expected.clone();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_emulation_images_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0,
+        expected,
+        "a two-image known set must come back exactly as saved"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Research data is never extractable. The rule keys on the item carrying
 // `EconomyRole::ResearchCurrency`, never on the id `"research_data"` —
 // `EconomyRole`'s own doc is that engine logic asks for the item with a role
@@ -3550,9 +3768,10 @@ fn a_standing_tool_survives_save_and_load() {
     );
 }
 
-/// The two refused categories are refused *above* the write, so a standing
-/// tool can never be one of them — asserted on the field after the refusal
-/// rather than on the refusal alone.
+/// The three refused categories — `Routines`, `Gear` and `Image` (todo
+/// #100 Task 5) — are refused *above* the write, so a standing tool can
+/// never be one of them — asserted on the field after the refusal rather
+/// than on the refusal alone.
 #[test]
 fn a_refused_load_sets_no_standing_tool() {
     let (mut game, rig) = player_beside_a_rig_holding(1);
@@ -3560,6 +3779,23 @@ fn a_refused_load_sets_no_standing_tool() {
     assert!(
         game.install_rig_tool(rig, &clamp("routine_reader"))
             .is_err()
+    );
+    assert_eq!(standing_tool_of(&game, rig), None);
+}
+
+/// The `Image` category takes the same rig refusal as `Routines` and
+/// `Gear`, for the reason `rig_runs`' own doc gives: what it teaches is
+/// granted to the player, not routed into the rig's `Stock::output`.
+#[test]
+fn a_rig_refuses_an_image_tool() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "image_capture");
+    let err = game
+        .install_rig_tool(rig, &clamp("image_capture"))
+        .expect_err("an Image tool must be refused for a rig");
+    assert!(
+        err.contains("work for your hands"),
+        "got: {err}, expected the category refusal"
     );
     assert_eq!(standing_tool_of(&game, rig), None);
 }

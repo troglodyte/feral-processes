@@ -1299,6 +1299,13 @@ pub struct SaveData {
     /// costs no version bump.
     #[serde(default)]
     pub known_tools: Vec<ToolId>,
+    /// The images the player has learned — see `resources::EmulationImages`
+    /// (todo #100 Task 5). Sorted on write for `known_tools`' own reason,
+    /// and `#[serde(default)]` for the same one: this field was born after
+    /// the save became field-named RON, so a save written before it existed
+    /// loads with an empty set and costs no version bump.
+    #[serde(default)]
+    pub emulation_images: Vec<crate::species::SpeciesId>,
     /// Which routine families the player has discovered — see
     /// `resources::DiscoveredRoutines`. `#[serde(default)]` so a save
     /// written before todo #101 loads with an empty set: nothing was
@@ -1841,6 +1848,7 @@ mod tests {
             research_progress: Vec::new(),
             known_routines: Vec::new(),
             known_tools: Vec::new(),
+            emulation_images: Vec::new(),
             discovered_routines: Vec::new(),
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,

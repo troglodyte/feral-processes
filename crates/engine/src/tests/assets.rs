@@ -4074,6 +4074,14 @@ fn every_non_routines_tool_has_a_non_empty_yield_pool() {
                     def.id
                 );
             }
+            ToolCategory::Image => {
+                assert!(
+                    def.yields.is_empty(),
+                    "tool {:?} is category Image and must not declare a yields pool — it \
+                     teaches the downed program's species instead",
+                    def.id
+                );
+            }
         }
     }
     assert!(
@@ -4295,6 +4303,36 @@ fn a_routines_tool_ships_an_empty_yield_pool() {
         assert!(
             def.yields.is_empty(),
             "{} is a Routines tool with a yield pool that will never be read",
+            def.id
+        );
+    }
+}
+
+/// An `Image` category with no tool in it would ship the whole fourth
+/// branch as unreachable content (todo #100 Task 5) —
+/// `every_non_routines_tool_has_a_non_empty_yield_pool` only says what an
+/// `Image` tool is *exempt* from, never that one exists.
+#[test]
+fn a_shipped_tool_captures_an_image() {
+    let game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    assert!(
+        tools.all().any(|def| def.category == ToolCategory::Image),
+        "no shipped tool takes the image branch"
+    );
+}
+
+/// An `Image` tool reads no yield pool at all — `a_routines_tool_ships_an_
+/// empty_yield_pool`'s own reason, isolated to its own category so a
+/// reviewer reading a failure knows which half broke.
+#[test]
+fn an_image_tool_ships_an_empty_yield_pool() {
+    let game = Game::new(4212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    for def in tools.all().filter(|d| d.category == ToolCategory::Image) {
+        assert!(
+            def.yields.is_empty(),
+            "{} is an Image tool with a yield pool that will never be read",
             def.id
         );
     }

@@ -293,6 +293,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::FirstTownRaid => "Game::run_town_raid",
             NotificationKind::FirstWorkOrder => "Game::queue_work_order",
             NotificationKind::FirstStatic => "Game::move_player, the movement hook",
+            NotificationKind::LearnedImage => "Game::extract_image_from_program",
             NotificationKind::LowPower => "Game::note_low_power, once a tick",
             NotificationKind::DownedProgram => "Game::bench_or_dissolve, the benched arm",
             NotificationKind::Breach => "Game::enter_next_zone",
@@ -331,7 +332,8 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::FirstWorkOrder
             | NotificationKind::FirstStatic
             | NotificationKind::LowPower
-            | NotificationKind::DownedProgram => Repeat::OnceEver,
+            | NotificationKind::DownedProgram
+            | NotificationKind::LearnedImage => Repeat::OnceEver,
             // The chain runs on every new game, so a briefing latched across
             // runs would leave a second playthrough's missions unexplained —
             // and a world holds more than one town, so a city announcing

@@ -34,6 +34,8 @@ research, forging and installing more.
     //               see "The Routines category" below
     //   Gear        the program's worn equipment, not a pool at all —
     //               see "The Gear category" below
+    //   Image       the program's own species, not an item at all — see
+    //               "The Image category" below
     //
     // Fixed and closed: the engine groups the tool screen by this field, so
     // there is no free-text category to invent.
@@ -123,6 +125,28 @@ A miss pays nothing — no consolation pool, no fallback yield — and the
 program and the ticks are spent regardless, the same as any other pull.
 
 `harness_puller.ron` ships in this category.
+
+## The `Image` category
+
+An `Image` tool has no `yields` either. What it teaches is the downed
+program's own species (`items::DownedProgram::species`) — an entry in
+`resources::EmulationImages`, not an item, so nothing lands in `Inventory`
+or a `Stock`. `Game::image_yield` is the one derivation both the tool
+screen's preview and the act (`Game::extract_image_from_program`,
+`extract_program`'s `Image` branch) read: `Some(species)` to teach, `None`
+when that species' image is already known — the refusal `extract_program`
+answers with, before the program is spent.
+
+A species already known pays nothing and the program and the ticks are
+spent regardless — the same shape a `Gear` tool's miss takes, except this
+refusal fires *before* the program is removed rather than after a roll.
+
+Once learned, an image is worn through the Emulate routine
+(`assets/abilities/emulate.ron`), which swaps the player's attack,
+mitigation, reach and routines for the image's own for a fixed number of
+rounds.
+
+`image_capture.ron` ships in this category.
 
 ## The starter tool
 

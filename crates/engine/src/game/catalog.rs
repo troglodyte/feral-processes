@@ -940,6 +940,20 @@ impl Game {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }
 
+    /// The display name for `id`, falling back to the raw id if the species
+    /// set doesn't define it (a save referencing a since-removed mod
+    /// species) — `item_name`'s own fallback, over `SpeciesDb` rather than
+    /// `ItemDb`. The extraction screen's `Image` preview and the
+    /// `LearnedImage` notification both name a species through this rather
+    /// than each resolving `SpeciesDb` on its own (todo #100 Task 5).
+    pub fn species_name<'a>(&'a self, id: &'a SpeciesId) -> &'a str {
+        self.world
+            .resource::<SpeciesDb>()
+            .get(id.as_str())
+            .map(|d| d.name.as_str())
+            .unwrap_or_else(|| id.as_str())
+    }
+
     /// The perk picker's sections: a heading and the defs under it, in the
     /// order `assets/perks/groups.ron` lists them. A heading is the empty
     /// string for the trailing bucket of anything no section names — see

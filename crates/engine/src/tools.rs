@@ -42,12 +42,14 @@ impl std::fmt::Display for ToolId {
 /// itself decides behaviour, `render/stack.rs`'s `cell_mark` rule: a
 /// catch-all arm would ship a fifth category blank.
 ///
-/// `Routines` is the one category with no yield pool — a tool in it takes
-/// the routine branch (`Game::take_routine`'s two paths, shared with the
-/// tamed-program door) instead of drawing from `ToolDef::yields`. The
-/// Routine Reader ships in that category as of phase 3, so
-/// `every_non_routines_tool_has_a_non_empty_yield_pool` exercises both
-/// sides of its own exclusion.
+/// `Routines` and `Image` are the two categories with no yield pool — a
+/// `Routines` tool takes the routine branch (`Game::take_routine`'s two
+/// paths, shared with the tamed-program door) instead of drawing from
+/// `ToolDef::yields`, and an `Image` tool teaches the downed program's
+/// species instead (`Game::image_yield`, todo #100 Task 5) — neither reads
+/// an item pool at all. The Routine Reader ships in the `Routines` category
+/// as of phase 3, so `every_non_routines_tool_has_a_non_empty_yield_pool`
+/// exercises both sides of its own exclusion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolCategory {
     Materials,
@@ -55,6 +57,7 @@ pub enum ToolCategory {
     Cores,
     Routines,
     Gear,
+    Image,
 }
 
 impl ToolCategory {
@@ -68,6 +71,7 @@ impl ToolCategory {
             ToolCategory::Cores => "Cores",
             ToolCategory::Routines => "Routines",
             ToolCategory::Gear => "Gear",
+            ToolCategory::Image => "Image",
         }
     }
 }
@@ -328,6 +332,7 @@ mod tests {
             ToolCategory::Cores,
             ToolCategory::Routines,
             ToolCategory::Gear,
+            ToolCategory::Image,
         ] {
             assert!(
                 !category.as_str().is_empty(),

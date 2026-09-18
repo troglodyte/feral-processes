@@ -1740,6 +1740,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         research_progress: Vec::new(),
         known_routines: Vec::new(),
         known_tools: Vec::new(),
+        emulation_images: Vec::new(),
         discovered_routines: Vec::new(),
         link_sites: Vec::new(),
         locale: crate::resources::Locale::Surface,

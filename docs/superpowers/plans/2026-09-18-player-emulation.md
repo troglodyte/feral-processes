@@ -39,6 +39,8 @@
 9. **The research shortcut.** `exclusive: true` is not usable (an exclusive routine never enters `KnownRoutines`). `creation_shelf` has no filter for ability disks. Task 4 first checks whether installing an etched disk is gated by `Game::node_researched`; if it is, nothing changes; if not, `creation_shelf` and `stock_pool` exclude the `emulate` disk and a test asserts both.
 10. **`ConRead::of(difficulty, is_boss, drew_sprite)` already takes the boss flag** — pass `true` for an emulated tile; no signature change.
 
+11. **Readers Part A's review found beyond the spec's list.** Task 3 decides each, as a `Kit` match or a stated reason it stays keyed on who the body is: `attacks_for` (`game/combat.rs`, swings per turn from class or `affinity_class`), `combat_speed`/`species_base_speed` (`game/combat.rs`), and `movement_allowance` (`tactical/reach.rs`). `roll_species_move_in_range` was converted in Part A.
+
 ---
 
 # Part A — the seam, no behaviour change (release on its own)

@@ -2030,11 +2030,20 @@ pub struct EmulationImages(pub BTreeSet<crate::species::SpeciesId>);
 /// `Game::use_ability` is the one door every routine shares, so widening its
 /// signature to carry this for one effect would touch every other caller —
 /// this resource is the smaller threading instead (constraints.md decision
-/// 8). `Game::resolve_one_action`'s Special branch and
-/// `Game::run_tactical_routine`'s Emulate branch each set it immediately
-/// before the single `use_ability` call that reads it and clear it
-/// immediately after, in one unbroken span with no refusal in between — so a
-/// stale image can never survive past the invocation that set it.
+/// 8). `Game::resolve_one_action`'s Special branch and `Game::
+/// tactical_emulate` each set it immediately before the call that can reach
+/// `use_ability`'s `Emulate` arm, which reads and clears it in the same
+/// `mem::take` — so a successful invocation cannot leave a stale value.
+///
+/// **A refusal cannot leave one either**, because both callers only set it
+/// after every refusal of their own has already passed. What can — and
+/// once did — is a *fizzle*: `run_tactical_routine`'s reactor/provoke check
+/// sits between the set and `use_ability`, and only `Decompile` is exempt
+/// from it, so an adjacent hostile's reaction can cut Emulate off before
+/// `use_ability` is ever reached. `tactical_emulate` clears this
+/// unconditionally right after calling `run_tactical_routine` for exactly
+/// that path — the group model has no equivalent gap, since `resolve_one_
+/// action` does not provoke a reaction between the set and the call.
 #[derive(Resource, Default)]
 pub struct PendingEmulateImage(pub Option<crate::species::SpeciesId>);
 

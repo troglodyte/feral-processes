@@ -705,6 +705,14 @@ impl Game {
     ///
     /// Reports whether it ran. A run ends the turn through `Game::
     /// run_tactical_routine`, exactly as every other routine does.
+    ///
+    /// **Clears `resources::PendingEmulateImage` unconditionally on the way
+    /// out**, not only trusting `use_ability`'s own clear. Emulate is not
+    /// exempted from the reactor/provoke check inside `run_tactical_routine`
+    /// (only `Decompile` is), so an adjacent hostile's reaction can fizzle
+    /// the invocation before it ever reaches `use_ability` — the group
+    /// model's `resolve_one_action` has this same second clear for the
+    /// identical reason.
     pub fn tactical_emulate(&mut self, index: usize, species: &SpeciesId) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -735,13 +743,18 @@ impl Game {
         {
             return false;
         }
-        // Set immediately before the one call that reads it, and cleared by
-        // `use_ability`'s own `Emulate` arm on the way out — see
-        // `resources::PendingEmulateImage`'s doc.
+        // Set immediately before the one call that reads it. Cleared twice
+        // on the way out: `use_ability`'s own `Emulate` arm clears it on the
+        // run path, and the unconditional clear below catches the fizzle
+        // path, where a reaction cuts the invocation off before `use_ability`
+        // is ever reached — see `resources::PendingEmulateImage`'s doc.
         self.world
             .resource_mut::<crate::resources::PendingEmulateImage>()
             .0 = Some(species.clone());
         self.run_tactical_routine(actor, &ability, from, 0);
+        self.world
+            .resource_mut::<crate::resources::PendingEmulateImage>()
+            .0 = None;
         true
     }
 

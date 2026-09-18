@@ -1041,4 +1041,105 @@ mod emulation_tests {
             "tactical_revert must log the same line the group model does"
         );
     }
+
+    /// Seats `hostile` on an orthogonal neighbour of `player`'s current
+    /// cell — `deploy::plan` does not seat a freshly opened fight's two
+    /// sides adjacent to each other, so a reaction test has to move one of
+    /// them there itself (`tests::reactions::face_off`'s own reason).
+    fn seat_adjacent(game: &mut crate::Game, player: Entity, hostile: Entity) {
+        let neighbour = {
+            let battle = game.world.resource::<crate::tactical::TacticalBattle>();
+            let at = battle.cell_of(player).expect("the player stands somewhere");
+            [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .map(|(dx, dy)| (at.0 + dx, at.1 + dy))
+                .find(|&cell| {
+                    battle.board.walkable(cell.0, cell.1) && battle.occupant(cell).is_none()
+                })
+                .expect("the player's fixture cell has no free orthogonal neighbour")
+        };
+        assert!(
+            game.world
+                .resource_mut::<crate::tactical::TacticalBattle>()
+                .move_to(hostile, neighbour),
+            "seating the hostile beside the player failed"
+        );
+    }
+
+    /// The fix for review round 1's finding: `run_tactical_routine`'s
+    /// reactor/provoke check is not exempted for Emulate (only `Decompile`
+    /// is), so an adjacent hostile's reaction can fizzle the invocation
+    /// before `use_ability` — and its own clear — is ever reached.
+    /// `Game::tactical_emulate` must clear `PendingEmulateImage`
+    /// unconditionally on its way out, not only rely on `use_ability`'s.
+    #[test]
+    fn a_reaction_fizzle_clears_the_pending_image() {
+        let mut game = game();
+        let player = game.player_entity();
+        let pack = tactical_fight(&mut game, 1, 4000);
+        let hostile = pack[0];
+        seat_adjacent(&mut game, player, hostile);
+        // Overwhelming, `tests::reactions::a_fizzled_routine_keeps_its_
+        // price_and_lands_nothing`'s own number — the fixture the fizzle
+        // path is proven reachable with, at the same seed.
+        game.world.get_mut::<Stats>(hostile).unwrap().atk = 500;
+        game.world
+            .entity_mut(player)
+            .insert(Routines(vec!["emulate".to_string()]));
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        assert!(wait_for_turn(&mut game, player));
+
+        for _ in 0..24 {
+            // A body already emulating from a prior, non-fizzled iteration
+            // has nothing to invoke — start every attempt from the same
+            // state the fixture needs.
+            game.world.entity_mut(player).remove::<Emulation>();
+            game.world.entity_mut(player).remove::<AbilityCooldowns>();
+            game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+            game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+
+            let index = game
+                .actor_abilities(player)
+                .iter()
+                .position(|a| a.id == "emulate")
+                .expect("emulate is installed");
+            let before = game.message_history(usize::MAX).len();
+
+            assert!(game.tactical_emulate(index, &def.id));
+
+            let cut_off = game
+                .message_history(usize::MAX)
+                .into_iter()
+                .skip(before)
+                .any(|line| line.text.contains("is cut off"));
+            if cut_off {
+                assert!(
+                    game.world
+                        .resource::<crate::resources::PendingEmulateImage>()
+                        .0
+                        .is_none(),
+                    "a fizzled Emulate invocation must not leave a stale \
+                     pending image behind"
+                );
+                assert!(
+                    game.world.get::<Emulation>(player).is_none(),
+                    "a fizzled invocation must not have installed the image either"
+                );
+                return;
+            }
+            assert!(
+                game.world
+                    .get_resource::<crate::tactical::TacticalBattle>()
+                    .is_some(),
+                "the fight closed without the invocation ever being cut off"
+            );
+            game.tactical_end_turn();
+            assert!(wait_for_turn(&mut game, player));
+        }
+        panic!("no reaction cut Emulate off in 24 rounds against 500 Attack");
+    }
 }

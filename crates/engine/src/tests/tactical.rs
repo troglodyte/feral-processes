@@ -4477,6 +4477,52 @@ mod squads {
         );
     }
 
+    /// **A squad is a combatant, so a condition has somewhere to live on
+    /// it.** `Game::arm_status` is a documented silent no-op on a body with
+    /// no `StatusEffects`, while `use_ability`'s `Debuff` arm logs
+    /// unconditionally — so without the component the player reads that a
+    /// squad's validation was stripped and nothing at all happened. The
+    /// second assertion is `Exposed`, the rung with a live effect in every
+    /// fight: read through `combatant_profile` it lowers evasion, and a
+    /// squad that cannot hold the condition is simply immune to it.
+    #[test]
+    fn a_condition_lands_on_a_squad_and_costs_it_its_evasion() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 9, 40);
+        game.open_tactical_battle(pack);
+        let squad = seated_squad(&game);
+        let player = game.player_entity();
+
+        let plain = game
+            .defender_profile_against(
+                player,
+                squad,
+                crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0)),
+            )
+            .evasion;
+        game.arm_status(squad, crate::components::StatusKind::Exposed, 2, 0);
+
+        assert_eq!(
+            game.world
+                .get::<StatusEffects>(squad)
+                .and_then(|s| s.active)
+                .map(|a| a.kind),
+            Some(crate::components::StatusKind::Exposed),
+            "the condition had nowhere to live on the squad"
+        );
+        let exposed = game
+            .defender_profile_against(
+                player,
+                squad,
+                crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0)),
+            )
+            .evasion;
+        assert!(
+            exposed < plain,
+            "Exposed cost the squad nothing: {exposed} against {plain}"
+        );
+    }
+
     /// A squad's death pays each remaining member's own kill — the same XP
     /// five separate kills would pay, not one kill priced off the squad's
     /// inflated combined `Stats`. The player's `atk` is boosted to a

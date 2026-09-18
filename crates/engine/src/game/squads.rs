@@ -23,6 +23,26 @@ impl Game {
     /// entity that would vanish there is a trap for whoever later wires one
     /// up.
     ///
+    /// **The census against `spawn_wild_creature_scaled`'s own tuple**, which
+    /// is what a body on a battle map otherwise is. Four of its components
+    /// are deliberately absent and one had to come across:
+    ///
+    /// - `StatusEffects` — **here, and not an omission.** `Game::arm_status`
+    ///   does nothing at all on a body without it while `use_ability`'s
+    ///   `Debuff` arm logs unconditionally, so a squad missing it reads the
+    ///   line and takes the condition anyway; `Exposed` has a live effect in
+    ///   `combatant_profile`, so a squad would simply have been immune to it.
+    /// - `Position` and `WanderAi` — a squad exists only inside a fight, is
+    ///   never on the zone map and never wanders. `Position`'s absence is
+    ///   load-bearing (above); `WanderAi`'s is merely unused.
+    /// - `ZonePortal` — display only (`zone_tagged_name`), and a squad's own
+    ///   name is `Game::entity_label`'s.
+    /// - `Potential` — both readers that could see a hostile are nemesis
+    ///   naming, which defaults to `Potential::NEUTRAL` and which no squad
+    ///   reaches: a nemesis is promoted from a body that survived, and a
+    ///   squad never leaves the fight it formed in.
+    /// - `Boss` — a boss is its own group and never folds.
+    ///
     /// `members` themselves are never touched: they keep their own
     /// `Position` and `Stats` and are never placed on the board, which is
     /// what keeps them from being targeted, drawn or given a turn while the
@@ -76,6 +96,7 @@ impl Game {
             rarity,
             routines,
             cooldowns,
+            StatusEffects::default(),
             Squad {
                 members: members.to_vec(),
                 formation,

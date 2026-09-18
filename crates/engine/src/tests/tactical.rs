@@ -1683,6 +1683,17 @@ fn a_routines_cooldown_arms_the_action_it_runs_in_not_the_turn_it_ends() {
 /// handed on: a body with two actions that kills itself with the first still
 /// does not get a second — the body behind it acts next, exactly as it does
 /// with one action.
+///
+/// **The body dies on the *last* rung, and the round's upkeep is the
+/// assertion.** Who acts next cannot tell the identity check from its
+/// absence: `remove` has already handed the turn on either way, so the
+/// cursor names the same body whichever branch `hand_on_turn` takes. What
+/// the identity check is *for* is that the branch it guards reads the dead
+/// body's turn off the next body's fresh `actions_left` and returns early —
+/// silently skipping the round upkeep, which is exactly the case
+/// `hand_on_turn`'s own doc names. On the last rung `TacticalBattle::remove`
+/// wraps the round itself, so the upkeep is owed and its world tick is what
+/// makes the skip visible.
 #[test]
 fn a_body_with_two_actions_that_kills_itself_on_the_first_gets_no_second() {
     let mut game = game();
@@ -1691,7 +1702,26 @@ fn a_body_with_two_actions_that_kills_itself_on_the_first_gets_no_second() {
     let actor = crate::tests::support::spawn_tamed(&mut game, 40, 3);
     crate::tests::support::enlist(&mut game, actor);
     tactical_fight(&mut game, 1, 400);
+
+    // Seated last, so its death wraps the round inside `remove`.
+    let mut order: Vec<Entity> = game
+        .world
+        .resource::<TacticalBattle>()
+        .initiative()
+        .to_vec();
+    order.retain(|&e| e != actor);
+    order.push(actor);
+    let next = order[0];
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(order);
+
     assert!(wait_for_turn(&mut game, actor));
+    assert_eq!(
+        game.tactical_actor(),
+        Some(actor),
+        "fixture: the dying body must be the one acting"
+    );
     only_routine(&mut game, actor, "cascade_overflow");
     game.world
         .resource_mut::<TacticalBattle>()
@@ -1706,8 +1736,9 @@ fn a_body_with_two_actions_that_kills_itself_on_the_first_gets_no_second() {
             .move_to(actor, alone)
     );
     game.world.get_mut::<Stats>(actor).unwrap().hp = 1;
-    let next = after(&mut game, actor);
     crate::tests::support::force_the_next_attack_to_land(&mut game);
+    let round_before = game.world.resource::<TacticalBattle>().round;
+    let tick_before = game.world.resource::<crate::resources::GameClock>().tick;
 
     assert!(
         game.tactical_use_routine(0, alone),
@@ -1721,6 +1752,18 @@ fn a_body_with_two_actions_that_kills_itself_on_the_first_gets_no_second() {
         game.tactical_actor(),
         Some(next),
         "the dead body's second action resurrected its turn"
+    );
+    let battle = game.world.resource::<TacticalBattle>();
+    assert_eq!(
+        battle.round,
+        round_before + 1,
+        "fixture: a death on the last rung must wrap the round"
+    );
+    assert_eq!(
+        game.world.resource::<crate::resources::GameClock>().tick,
+        tick_before + 1,
+        "the round's upkeep was skipped — the dead body's hand-on read the \
+         next body's fresh action budget as its own open turn"
     );
 }
 
@@ -4287,6 +4330,125 @@ mod squads {
         assert_eq!(
             battle.spec.bodies, seated,
             "the spec counted bodies where the board holds cells"
+        );
+    }
+
+    /// **The opening bearing is unchanged by folding.** `squads::plan` runs
+    /// inside `open_tactical_battle_at`, after the bearing is already in
+    /// hand, and that placement is the whole of what keeps a squad away from
+    /// the two sites it would degrade silently: `Game::gather_pack` answers
+    /// a pack of one for an anchor with no `Position`, and
+    /// `open_tactical_battle` derives its bearing from `pack[0]`'s tile,
+    /// which a squad does not have — so a pack folded one call earlier is
+    /// seated on a degenerate zero vector, with both ranks on the board's
+    /// centre.
+    ///
+    /// Through the *deriving* door, and measured against a pack that cannot
+    /// fold: four of a kind never make a set, so the two fights differ in
+    /// whether anything folded and in nothing else.
+    #[test]
+    fn folding_a_pack_does_not_move_the_bearing_it_is_seated_on() {
+        /// Mean x of the player's rank, then of the wild one.
+        /// `tactical_pack` stands east of the player, so a bearing derived
+        /// from the pack's own tiles seats the wild rank at the greater x.
+        fn ranks(game: &Game) -> (f32, f32) {
+            let battle = game.world.resource::<TacticalBattle>();
+            let player = game.player_entity();
+            let party: Vec<i32> = battle
+                .bodies()
+                .filter(|&(e, _)| e == player)
+                .map(|(_, cell)| cell.0)
+                .collect();
+            let wild: Vec<i32> = battle
+                .bodies()
+                .filter(|&(e, _)| game.world.get::<Hostile>(e).is_some())
+                .map(|(_, cell)| cell.0)
+                .collect();
+            assert!(!party.is_empty() && !wild.is_empty());
+            (
+                party.iter().sum::<i32>() as f32 / party.len() as f32,
+                wild.iter().sum::<i32>() as f32 / wild.len() as f32,
+            )
+        }
+
+        let mut folded = game();
+        let pack = tactical_pack(&mut folded, 5, 10);
+        folded.open_tactical_battle(pack);
+        assert!(
+            folded
+                .world
+                .resource::<TacticalBattle>()
+                .bodies()
+                .any(|(e, _)| folded.world.get::<Squad>(e).is_some()),
+            "fixture: five of a kind must fold"
+        );
+
+        let mut unfolded = game();
+        let pack = tactical_pack(&mut unfolded, 4, 10);
+        unfolded.open_tactical_battle(pack);
+        assert!(
+            unfolded
+                .world
+                .resource::<TacticalBattle>()
+                .bodies()
+                .all(|(e, _)| unfolded.world.get::<Squad>(e).is_none()),
+            "fixture: four of a kind must not fold"
+        );
+
+        let (folded_party, folded_wild) = ranks(&folded);
+        let (plain_party, plain_wild) = ranks(&unfolded);
+        assert_eq!(
+            (folded_party, folded_wild),
+            (plain_party, plain_wild),
+            "folding moved the ranks the bearing seats"
+        );
+        assert!(
+            plain_wild > plain_party,
+            "fixture: the eastward bearing must seat the wild rank east"
+        );
+    }
+
+    /// A blast covering two cells of one footprint hits it **once** —
+    /// `reach::recipients`' `footprint_hit`, asked per body rather than per
+    /// covered cell. Against a real squad, because task 1's own test for
+    /// this used a hand-built cell list and stayed green with every
+    /// footprint at one.
+    #[test]
+    fn a_blast_over_two_cells_of_a_squads_block_catches_it_once() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 5, 40);
+        game.open_tactical_battle(pack);
+        let squad = seated_squad(&game);
+        let player = game.player_entity();
+
+        let anchor = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(squad)
+            .expect("the squad is seated");
+        let cells = crate::tactical::footprint_cells_at(anchor, 2);
+        let shape = crate::abilities::AbilityShape::Radius { radius: 1 };
+        let covered = crate::tactical::reach::shape_cells(
+            &game.world.resource::<TacticalBattle>().board,
+            anchor,
+            anchor,
+            shape,
+        );
+        assert!(
+            cells.iter().filter(|c| covered.contains(c)).count() >= 2,
+            "fixture: the blast must cover more than one cell of the block"
+        );
+
+        let caught = crate::tactical::reach::recipients(
+            game.world.resource::<TacticalBattle>(),
+            player,
+            anchor,
+            shape,
+        );
+        assert_eq!(
+            caught.iter().filter(|&&e| e == squad).count(),
+            1,
+            "the squad was caught once per covered cell rather than once"
         );
     }
 

@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.204
+
+**Nothing changes in play.** This release prepares the code for player
+emulation (todo #100), in which the player fights with a learned species'
+own attacks, reach and affinities for a few rounds. The four places that
+each worked out what a body fights with (its swing, its damage band, its
+reach and its routine affinity) now ask one question, so emulation can
+be added in one place.
+
 ## 0.13.203
 
 **An opportunity attack on a battle map now shows a `!` over the body that

@@ -23,6 +23,8 @@ keep the knowledge, so anything you have researched can be forged again.
 - The Gear Puller takes the worn kit. It rolls that program's own gear chances, and what lands
   is a real find — it can be rare, it can carry names, and it rolls for quality exactly like a
   piece that dropped at a kill.
+- The Image Extractor reads the program's whole shape and stats rather than a piece of it, and
+  teaches you to emulate that species for as long as a run lasts. See [emulation](emulation).
 
 What a body is worth is a property of the body. Its level, the rarity it rolled and how cleanly it
 went down all feed the same figure, so a Prismatic taken at full health is worth more through the

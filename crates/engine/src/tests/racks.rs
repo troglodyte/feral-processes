@@ -1,6 +1,6 @@
 //! The Quarantine Rack: `components::Racked`, its tier-derived ceiling, and
 //! the carrier half of the `c` transfer basket. See
-//! `docs/superpowers/specs/2026-09-10-quarantine-rack-design.md`.
+//! `docs/superpowers/archive/specs/2026-09-10-quarantine-rack-design.md`.
 
 use super::support::*;
 use crate::components::Racked;

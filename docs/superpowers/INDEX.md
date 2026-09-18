@@ -46,7 +46,6 @@ spec resolves to a release tag.
 | `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
 | `2026-09-16-player-emulation-design` | approved, **unbuilt**; no plan yet; after #101 | `Game::kit_of` and `components::Emulation` exist nowhere |
 | `2026-09-16-routine-research-tree-design` | **built**; path-pinned | `v0.13.196`; `ResearchTree`, `DiscoveredRoutines` and `crates/engine/src/routine_tree.rs` resolve in `crates/engine` |
-| `2026-09-16-floor-finishes-design` | approved, **unbuilt**; no plan yet | `assets/floors/` and `FloorDb` exist nowhere |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
@@ -104,7 +103,9 @@ shipped or been superseded. A nineteenth was written the same day for
 settlement growth and deleted at its landing, which is the convention working
 as intended rather than a fourth purge: a plan lives exactly as long as the
 work it directs. `plans/` is empty and the directory is gone until the next
-plan is written. They are write-once scaffolding superseded by the
+plan is written. Eighteen more accumulated between 2026-09-07
+and 2026-09-17 without being deleted at their landings, and all eighteen
+went on 2026-09-18, each verified shipped against `crates/` and `assets/`. They are write-once scaffolding superseded by the
 code they produced, nothing outside the directory cites one, and git history
 holds them: `git log --diff-filter=D -- 'docs/superpowers/plans/*'` finds the
 deletions and `git show <commit>^:<path>` reads any of them back.
@@ -291,6 +292,31 @@ its path, so it moved on its own.
 | `2026-09-15-ai-tamper-routines-design` | Five battle-map routines that tamper with the hostile AI's decision-maker (temperature, forecast, side, sight), plus flavour routines, gear and a research node | `AbilityEffect::Tamper`, `TamperKind`, `components::Tampered`, `Game::decision_temperature`, `Game::acts_for_hostiles`, `Game::taken_over`, `Decoy`/`Game::sees_decoy`/`tactical_strike_decoy`, `Game::tactical_forecast` all resolve in `crates/engine`; the tamper block and decoy drawing resolve in `crates/gui`; `assets/research/model_inspection.ron` and eleven routine `.ron` files in `assets/abilities/`. Not yet played at the keyboard — see the plan's closing note |
 | `2026-09-16-tactical-cover-design` | A boulder on the attacker's side of a defender makes them harder to hit at range, and walking round it is flanking for free | `reach::cover_between`, `Game::defender_profile_against`, `Swing::cover_ignored`, `AbilityShape::ignores_cover`, `TACTICAL_AI_COVER_WEIGHT`/`_TIEBREAK`, `TacticalBody::in_cover`, `TacticalView::covered` and `Game::body_in_cover` all resolve in `crates/engine`; the shield mark and the covered-destination wash resolve in `crates/gui/src/render/tactical.rs`. No save change and no new cell kind. The board density that makes it reachable is a census, `cover_is_reachable_on_every_biome_a_fight_opens_on`, not a `docs/measurements/` file. Not yet played at the keyboard |
 | `2026-09-16-tactical-squads-design` | Five wild programs of one species fold into one 2x2 body with a combined stat block, two actions a turn and a `^` mark, on battle maps alone | `tuning::FORMATIONS`, `tactical::squads::plan`, `components::Squad`, `Game::spawn_squad`/`disband_squad`/`decompile_squad`, `TacticalBattle::cells_of`/`footprint_of`/`set_shape`, `reach::gap` and `actions_left` all resolve in `crates/engine`; the footprint draw, the bottom-right squad mark and the footprint-centred camera resolve in `crates/gui`. No save change — a squad carries no world `Position` and no `Tamed`, the omission that keeps it out of `save.rs`, asserted by a real save/load test. `docs/measurements/2026-09-17-tactical-squads.md` is the arena pair, re-run after a review found the squad's movement and reach both defective; it supersedes a contaminated first run. `swing_share` stays at 0.5, below the parity its own doc describes, deliberately and with the evidence recorded. Not yet played at the keyboard |
+
+## The specs archived on 2026-09-18
+
+Fourteen built specs that had stayed in `specs/` past their landings — the
+habit above lapsed for a fortnight. Each was checked by resolving its symbols
+in the tree. One path citation moved with them: `tests/racks.rs`' `//!` line,
+so no fourth exception. The quarantine rack's own `**Status:**` header still
+said "not implemented" and was corrected in the move.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-07-tamed-program-build-requirement-design` | A build that runs a job costs a tamed program | `StructureDef::costs_no_program`, `Mode::BuildProgram` |
+| `2026-09-08-program-build-quality-design` | A structure remembers how well it was built | `components::BuildQuality`, `BUILD_QUALITY_PER_RARITY_RUNG` |
+| `2026-09-08-research-materials-design` | A research node's material bill | `ResearchDef::materials` |
+| `2026-09-08-staff-tantrums-design` | A disgruntled program acts out | `resources::Brawls`, `EffectKind::Brawl` |
+| `2026-09-10-power-cell-ladder-design` | Power cells above the first | `assets/items/buffered_cell.ron`, `sustain_cell.ron`; `v0.13.147` |
+| `2026-09-10-quarantine-rack-design` | A rack that holds downed programs | `structures::RackDef`, `components::Racked`, `assets/structures/quarantine_rack.ron` |
+| `2026-09-10-research-graph-view-design` | The research tree as a flow chart | `views::ResearchGraph`, `Game::research_graph`, `render/research_graph.rs` |
+| `2026-09-11-research-as-a-project-design` | Research is one project at a time, paid by work orders | `resources::ActiveResearch`, `WorkOrder::for_research` |
+| `2026-09-12-battle-summons-design` | A routine that fields a body mid-fight | `components::Summoned`, `assets/abilities/fork_program.ron`; `v0.13.173` |
+| `2026-09-12-weapon-range-and-bolts-design` | Ranged weapons and the bolt cue | `ItemDef::range`, `BoltCue`, `TACTICAL_RANGED_MOVE_RANGE`; `v0.13.172` |
+| `2026-09-16-auto-resolve-combat-design` | `[R]` plays the rest of a fight out | `game/auto_resolve.rs`, `AUTO_RESOLVE_ROUND_CAP` |
+| `2026-09-16-floor-finishes-design` | A finish laid over base floor | `crates/engine/src/floors.rs` (`FloorDb`, `FloorShade`), `assets/floors/` |
+| `2026-09-16-handles-and-memory-schema-design` | A program's handle, and the memory schema under mood | `handles::of`, `memories::mood` |
+| `2026-09-16-tactical-reactions-design` | A reaction swing when a body leaves reach | `Game::provoke`, `battle::resolve_free_attack` |
 
 ## Four rows that need a footnote
 

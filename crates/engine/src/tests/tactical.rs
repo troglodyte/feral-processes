@@ -4363,6 +4363,120 @@ mod squads {
         );
     }
 
+    /// **The AI measures reach the way the door that honours it does.**
+    /// `Game::tactical_attack` reads `reach::gap` over both footprints; a
+    /// planner reading anchor-to-anchor declines the very swing that door
+    /// would take. For a 2x2 squad anchored at A with the player at
+    /// (A.x+2, A.y+1) the gap is 1 and the anchor distance is 2, so at
+    /// melee reach the squad holds its ground and swings — a body that
+    /// walks instead, or that finds nothing to swing at and hands the turn
+    /// on, is the disagreement.
+    #[test]
+    fn a_squad_swings_from_a_cell_its_footprint_reaches_and_its_anchor_does_not() {
+        let mut game = game();
+        // `generic_species` and not the shipped roster's first entry: the
+        // swing has to be a *melee* one for anchor distance 2 to be out of
+        // reach at all, and a species whose basic attack is `ranged` would
+        // make the whole fixture vacuous.
+        game.world
+            .resource_mut::<SpeciesDb>()
+            .insert(generic_species());
+        // Five of a kind: one squad and no leftover singles, so nothing
+        // else on the wild side can spend a turn between the fight opening
+        // and the squad's own.
+        let at = *game.world.get::<Position>(game.player_entity()).unwrap();
+        let pack: Vec<Entity> = (0..5)
+            .map(|i| {
+                game.world
+                    .spawn((
+                        Creature {
+                            species: crate::tests::support::GENERIC_SPECIES_ID.to_string(),
+                        },
+                        Hostile,
+                        Position {
+                            x: at.x + 1 + i,
+                            y: at.y,
+                        },
+                        Stats {
+                            hp: 40,
+                            max_hp: 40,
+                            atk: 1,
+                            mitigation: 0,
+                        },
+                        StatusEffects::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+        game.open_tactical_battle(pack);
+        let squad = seated_squad(&game);
+        let player = game.player_entity();
+        assert_eq!(
+            game.swing_range(squad),
+            crate::tuning::TACTICAL_MELEE_RANGE,
+            "fixture: a squad that swings further than one cell reaches the anchor distance anyway"
+        );
+        assert!(
+            wait_for_turn(&mut game, squad),
+            "the squad never got a turn"
+        );
+
+        let anchor = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(squad)
+            .expect("the squad is seated");
+        // Every cell two anchor-steps away whose nearest footprint cell is
+        // one — the first that is free, since a generated board decides
+        // which of them exists.
+        let spot = [
+            (anchor.0 + 2, anchor.1 + 1),
+            (anchor.0 + 1, anchor.1 + 2),
+            (anchor.0 + 2, anchor.1 + 2),
+            (anchor.0 + 2, anchor.1 - 1),
+            (anchor.0 - 1, anchor.1 + 2),
+        ]
+        .into_iter()
+        .find(|&cell| {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle.board.walkable(cell.0, cell.1) && battle.occupant(cell).is_none()
+        })
+        .expect("no free cell at gap 1 and anchor distance 2");
+        assert_eq!(
+            crate::tactical::reach::gap(&crate::tactical::footprint_cells_at(anchor, 2), &[spot]),
+            1,
+            "fixture: the player must stand one cell off the squad's block"
+        );
+        assert_eq!(
+            crate::tactical::reach::distance(anchor, spot),
+            2,
+            "fixture: and two cells off its anchor"
+        );
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, spot)
+        );
+
+        let beat = game.tactical_ai_beat();
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.cell_of(squad),
+            Some(anchor),
+            "the squad walked away from a swing it could already take: {beat:?}"
+        );
+        assert_eq!(
+            battle.actions_left(),
+            1,
+            "the squad spent no action on a target its footprint reaches: {beat:?}"
+        );
+        assert_eq!(
+            game.tactical_actor(),
+            Some(squad),
+            "the squad has a second action owed and should still be acting"
+        );
+    }
+
     /// A squad's death pays each remaining member's own kill — the same XP
     /// five separate kills would pay, not one kill priced off the squad's
     /// inflated combined `Stats`. The player's `atk` is boosted to a

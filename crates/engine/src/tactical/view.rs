@@ -485,10 +485,11 @@ impl Game {
         let range = ability.tactical_range();
         let battle = self.world.resource::<TacticalBattle>();
         let board = &battle.board;
+        let actor_cells = battle.cells_of(actor);
         board
             .cells()
             .filter_map(|(cell, _)| {
-                (reach::in_range(from, cell, range)
+                (reach::in_range(&actor_cells, cell, range)
                     && reach::aim_in_sight(board, from, cell, shape))
                 .then_some(cell)
             })

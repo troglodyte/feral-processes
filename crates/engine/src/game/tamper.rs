@@ -287,7 +287,12 @@ impl Game {
         let Some(from) = battle.cell_of(actor) else {
             return false;
         };
-        if !reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor)) {
+        if !reach::swing_reaches(
+            &battle.board,
+            &battle.cells_of(actor),
+            &[cell],
+            self.swing_range(actor),
+        ) {
             return false;
         }
 

@@ -128,21 +128,23 @@ pub fn movement_field(
     field
 }
 
-/// Whether a swing of `range` from `from` reaches `to`: in range, and in
-/// sight.
+/// Whether a swing of `range` from the footprint `from` reaches the
+/// footprint `to`: in range, and in sight.
 ///
-/// **The one definition the decoy strike door and the AI's choice of decoy
-/// share**, so the AI never names a decoy the door would refuse it.
+/// **The one definition every door that takes a swing shares** —
+/// `Game::tactical_attack`, `Game::tactical_strike_decoy` and the AI's own
+/// `best_swing`, so a planner can never decline a swing the door would take
+/// or name one it would refuse.
 ///
-/// The range test reads `gap` rather than `distance` — a value-identical
-/// substitution while every footprint is one cell, and what lets this stay
-/// correct without a second edit once a caller passes a real footprint
-/// instead of a single cell. `from`/`to` stay single cells for now: the two
-/// production callers (`tactical::ai`'s `best_swing` and
-/// `Game::tactical_strike_decoy`) and every test here hand it one, and a
-/// decoy is never a footprint.
-pub fn swing_reaches(board: &Board, from: (i32, i32), to: (i32, i32), range: u32) -> bool {
-    gap(&[from], &[to]) <= range && line_of_sight(board, from, to)
+/// Both sides are footprints: `gap` for the range, and sight from **any**
+/// cell of one to any cell of the other. A single-celled body is a slice of
+/// one, which is the same test it always read; a decoy is a cell rather than
+/// a body and is passed the same way.
+pub fn swing_reaches(board: &Board, from: &[(i32, i32)], to: &[(i32, i32)], range: u32) -> bool {
+    gap(from, to) <= range
+        && from
+            .iter()
+            .any(|&a| to.iter().any(|&b| line_of_sight(board, a, b)))
 }
 
 /// The cells a body at `from` walks through to reach `to`, in the order it
@@ -238,9 +240,17 @@ pub(crate) fn nearest_cell(cells: &[(i32, i32)], to: (i32, i32)) -> Option<(i32,
         .min_by_key(|&(x, y)| (distance((x, y), to), y, x))
 }
 
-/// Whether `aim` is a cell `from` may aim a routine of this `range` at.
-pub fn in_range(from: (i32, i32), aim: (i32, i32), range: AbilityRange) -> bool {
-    let d = distance(from, aim);
+/// Whether `aim` is a cell the footprint `from` may aim a routine of this
+/// `range` at.
+///
+/// **`gap` and not `distance`**, so a squad's band is measured from whichever
+/// of its cells is nearest the aim — and measured that way by all three of
+/// its readers, which are `Game::tactical_use_routine`'s refusal, the aim
+/// outline (`Game::tactical_placeable_cells`) and `tactical::ai`'s
+/// `best_aim`. A planner reading the band off the anchor while the door read
+/// it off the footprint would offer aims the door refuses.
+pub fn in_range(from: &[(i32, i32)], aim: (i32, i32), range: AbilityRange) -> bool {
+    let d = gap(from, &[aim]);
     d >= range.min && d <= range.max
 }
 
@@ -1015,10 +1025,59 @@ mod tests {
     #[test]
     fn a_range_is_inclusive_at_both_ends_and_measured_in_steps() {
         let range = AbilityRange { min: 2, max: 3 };
-        assert!(!in_range((0, 0), (1, 1), range), "point blank was allowed");
-        assert!(in_range((0, 0), (2, 2), range));
-        assert!(in_range((0, 0), (3, 0), range));
-        assert!(!in_range((0, 0), (4, 4), range), "out of reach was allowed");
+        assert!(
+            !in_range(&[(0, 0)], (1, 1), range),
+            "point blank was allowed"
+        );
+        assert!(in_range(&[(0, 0)], (2, 2), range));
+        assert!(in_range(&[(0, 0)], (3, 0), range));
+        assert!(
+            !in_range(&[(0, 0)], (4, 4), range),
+            "out of reach was allowed"
+        );
+    }
+
+    /// A footprint's band is measured from whichever of its cells is
+    /// nearest, so the door, the aim outline and the AI all agree about what
+    /// a 2x2 body may throw a routine at.
+    #[test]
+    fn a_range_is_measured_from_a_footprints_nearest_cell() {
+        let range = AbilityRange { min: 0, max: 2 };
+        let block = crate::tactical::footprint_cells_at((0, 0), 2);
+        assert!(
+            in_range(&block, (3, 1), range),
+            "a block's near edge is two away"
+        );
+        assert!(
+            !in_range(&[(0, 0)], (3, 1), range),
+            "fixture: the anchor alone is three away"
+        );
+    }
+
+    /// And so is a swing — the range off both footprints, and sight from any
+    /// cell of one to any cell of the other.
+    #[test]
+    fn a_swing_reaches_between_the_nearest_cells_of_two_footprints() {
+        let board = Board::from_rows(&["......", "..#...", "......", "......", "......", "......"]);
+        let block = crate::tactical::footprint_cells_at((0, 0), 2);
+        assert!(
+            swing_reaches(&board, &block, &[(2, 0)], 1),
+            "a block is one step from the cell beyond its near edge"
+        );
+        assert!(
+            !swing_reaches(&board, &[(0, 0)], &[(2, 0)], 1),
+            "fixture: the anchor alone is two away"
+        );
+        // Sight from any cell to any cell: the boulder at (2, 1) hides
+        // (5, 1) from the block's (1, 1) but not from its (1, 0).
+        assert!(
+            !swing_reaches(&board, &[(1, 1)], &[(5, 1)], 4),
+            "fixture: one cell of the block is blind to it"
+        );
+        assert!(
+            swing_reaches(&board, &block, &[(5, 1)], 4),
+            "a block sees what any one of its cells sees"
+        );
     }
 
     /// Full friendly fire: nothing in `recipients` reads `Hostile`, and

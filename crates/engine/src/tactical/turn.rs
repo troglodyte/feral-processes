@@ -515,33 +515,24 @@ impl Game {
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
             return false;
         };
-        // `gap` rather than `distance`, and both bodies' whole footprints
-        // rather than their anchors alone — one cell each without a
-        // `Squad`, so an ordinary swing reads exactly the same range test
-        // it always did.
+        // **A call into `reach::swing_reaches`, which is the one definition
+        // of what a swing reaches** — the range over both whole footprints
+        // rather than their anchors, and the sight line unconditional, with
+        // no melee branch: `line_of_sight` excludes its endpoints, so for
+        // neighbours its loop is empty and asking is already a no-op. The
+        // AI's `best_swing` and the decoy strike door read the same
+        // function, so no planner can decline a swing this would take.
         let actor_cells = battle.cells_of(actor);
         let target_cells = battle.cells_of(target);
-        if actor == target || reach::gap(&actor_cells, &target_cells) > self.swing_range(actor) {
-            return false;
-        }
-        // **Unconditional, with no melee branch.** `line_of_sight` excludes
-        // its endpoints, so for neighbours its loop is empty and this is
-        // already a no-op — one rule, and no second place
-        // `TACTICAL_MELEE_RANGE` has to be restated. Cover earns a second
-        // job for free.
-        //
-        // **Any cell of one footprint to any cell of the other**, rather
-        // than anchor-to-anchor — the same single pair today.
+        if actor == target
+            || !reach::swing_reaches(
+                &battle.board,
+                &actor_cells,
+                &target_cells,
+                self.swing_range(actor),
+            )
         {
-            let battle = self.world.resource::<TacticalBattle>();
-            let sees = actor_cells.iter().any(|&a| {
-                target_cells
-                    .iter()
-                    .any(|&t| reach::line_of_sight(&battle.board, a, t))
-            });
-            if !sees {
-                return false;
-            }
+            return false;
         }
         if self.is_cloaked(target) {
             return false;
@@ -726,7 +717,8 @@ impl Game {
         if self.ability_unavailable(actor, &ability).is_some() {
             return false;
         }
-        if !reach::in_range(from, aim, ability.tactical_range()) {
+        let actor_cells = self.world.resource::<TacticalBattle>().cells_of(actor);
+        if !reach::in_range(&actor_cells, aim, ability.tactical_range()) {
             return false;
         }
         // The other half of "may this be aimed there", and a refusal rather

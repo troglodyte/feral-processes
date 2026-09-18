@@ -71,6 +71,42 @@ pub struct EmulationOption {
 }
 
 impl Game {
+    /// The attack and mitigation an emulating `entity` actually fights
+    /// with: `stats` (the species' own figure, already scaled to level and
+    /// fidelity) plus worn gear plus the `components::BoughtStats` receipt
+    /// — final review F5 (U2 "keep bought stats"). One call shared by
+    /// `effective_atk`/`effective_mitigation`'s `Kit::Emulated` arm and
+    /// `emulation_options`' preview, so a quoted figure and a fought one
+    /// cannot differ, `constraints.md` decision 4's reason for `gear_bonus`
+    /// extended to the second addend.
+    ///
+    /// **Gear** has to be added back rather than read off `Stats`, because
+    /// an emulation's base *replaces* `Stats::atk`/`Stats::mitigation`
+    /// outright — `apply_equipment_delta` bakes gear into `Stats` for an
+    /// ordinary body, which this bypasses.
+    ///
+    /// **`BoughtStats`** is a receipt for `Perk::Attacker`/`Perk::Defender`
+    /// and a talent `Stat` node (`unlock_perk`, `bake_talent_stat`) — both
+    /// bake their gain into `Stats` *and* record it here, which is what
+    /// makes it safe to add back on top of a base that has replaced
+    /// `Stats` entirely. **The creation stat pool is deliberately not
+    /// included**: `apply_creation_stats` writes straight into `Stats` at
+    /// character creation and never touches `BoughtStats`, so there is no
+    /// receipt to read — inventing one here would attribute a stat to a
+    /// door that never granted it.
+    pub(crate) fn emulated_base(&self, entity: Entity, stats: &EmulatedStats) -> (i32, i32) {
+        let gear = self.gear_bonus(entity);
+        let bought = self
+            .world
+            .get::<crate::components::BoughtStats>(entity)
+            .copied()
+            .unwrap_or_default();
+        (
+            stats.atk + gear.atk + bought.atk,
+            stats.mitigation + gear.mitigation + bought.mitigation,
+        )
+    }
+
     /// Every image the player has learned, sorted by name — the image
     /// picker's one source (todo #100 Task 6). Reads the same
     /// `resources::EmulationImages` `Game::ability_unavailable`'s "no
@@ -89,12 +125,13 @@ impl Game {
             .filter_map(|species| {
                 let def = db.get(species)?;
                 let stats = emulated_stats(def, level, fidelity);
+                let (atk, mitigation) = self.emulated_base(player, &stats);
                 Some(EmulationOption {
                     species: species.clone(),
                     name: def.name.clone(),
                     glyph: def.glyph,
-                    atk: stats.atk,
-                    mitigation: stats.mitigation,
+                    atk,
+                    mitigation,
                 })
             })
             .collect();

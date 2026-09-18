@@ -372,6 +372,122 @@ mod emulation_tests {
         );
     }
 
+    /// Final review F5 (U2): a bought stat stays yours while you're wearing
+    /// someone else's kit — `components::BoughtStats` is the receipt
+    /// `Perk::Attacker`/`Perk::Defender` and a talent `Stat` node write, and
+    /// `worn_gear_still_adds_atk_and_mitigation_while_emulating`'s sibling.
+    #[test]
+    fn bought_attacker_levels_still_add_atk_while_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+        let atk_before = game.effective_atk(player);
+
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::Attacker).unwrap();
+
+        assert_eq!(
+            game.effective_atk(player),
+            atk_before + crate::tuning::ATTACKER_BONUS_PER_LEVEL,
+            "a bought Attacker level must land on top of the emulated base"
+        );
+    }
+
+    /// U2's other axis, `Perk::Defender`'s own `BoughtStats::mitigation`.
+    #[test]
+    fn bought_defender_levels_still_add_mitigation_while_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+        let mitigation_before = game.effective_mitigation(player);
+
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::Defender).unwrap();
+
+        assert_eq!(
+            game.effective_mitigation(player),
+            mitigation_before + crate::tuning::DEFENDER_BONUS_PER_LEVEL,
+            "a bought Defender level must land on top of the emulated base"
+        );
+    }
+
+    /// The creation stat pool is deliberately excluded: `apply_creation_
+    /// stats` bakes it straight into `Stats` at character creation and
+    /// never writes `BoughtStats`, so there is no receipt for
+    /// `emulated_base` to read — U2 says "if it is receipted there", and
+    /// verifying that it is not is this test's whole job.
+    #[test]
+    fn the_creation_stat_pool_writes_no_bought_stats_receipt() {
+        let choice = crate::CharacterChoice {
+            stats: [1, 0, 0, 0],
+            ..crate::CharacterChoice::default()
+        };
+        let game = Game::new_with(4, DifficultyMode::Forgiving, &test_assets_dir(), &choice)
+            .expect("a 1-point Atk spend is affordable at CREATION_STAT_POINTS");
+        let player = game.player_entity();
+        assert!(
+            game.world.get::<Stats>(player).unwrap().atk > crate::tuning::PLAYER_BASE_STATS.atk,
+            "test premise: the creation spend must have actually raised Stats::atk"
+        );
+        assert_eq!(
+            game.world
+                .get::<BoughtStats>(player)
+                .copied()
+                .unwrap_or_default()
+                .atk,
+            0,
+            "the creation stat pool must not write a BoughtStats receipt"
+        );
+    }
+
+    /// The preview and the fight must read the identical figure once a
+    /// bought stat and worn gear are both in play — F5's whole point.
+    #[test]
+    fn emulation_options_preview_equals_the_fight_figure_with_gear_and_bought_stats() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::Attacker).unwrap();
+        game.unlock_perk(Perk::Defender).unwrap();
+        equip_weapon(&mut game, player, "shim_blade");
+        equip_armor(&mut game, player, "ablative_plating");
+
+        let option = game
+            .emulation_options()
+            .into_iter()
+            .find(|o| o.species == def.id)
+            .expect("the learned image appears in the options");
+
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+
+        assert_eq!(
+            option.atk,
+            game.effective_atk(player),
+            "the preview's atk must equal what the fight actually uses"
+        );
+        assert_eq!(
+            option.mitigation,
+            game.effective_mitigation(player),
+            "the preview's mitigation must equal what the fight actually uses"
+        );
+    }
+
     /// The cap is applied inside `effective_mitigation` itself, so a body
     /// summing to more than `MAX_MITIGATION_PERCENT` while emulating is held
     /// down exactly as any other body's is.

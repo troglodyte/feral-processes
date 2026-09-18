@@ -1838,12 +1838,10 @@ impl Game {
     /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
         let base = match self.kit_of(entity) {
-            // Gear is already baked into `Stats` for an ordinary body
-            // (`apply_equipment_delta`), but an emulation's base replaces
-            // `Stats::atk` outright, so its worn bonus has to be added back
-            // here — `gear_bonus`, never recomputed (constraints.md
-            // decision 4).
-            Kit::Emulated { stats, .. } => stats.atk + self.gear_bonus(entity).atk,
+            // `Game::emulated_base` — gear and the `BoughtStats` receipt
+            // (U2) both have to be added back, since an emulation's base
+            // replaces `Stats::atk` outright.
+            Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).0,
             Kit::Unarmed | Kit::Innate(_) => {
                 self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0)
             }
@@ -1909,9 +1907,10 @@ impl Game {
     pub(crate) fn effective_mitigation(&self, entity: Entity) -> i32 {
         let base = match self.kit_of(entity) {
             // `effective_atk`'s reason: an emulation's base replaces
-            // `Stats::mitigation` outright, so the worn bonus is added back
-            // from `gear_bonus` rather than read off `Stats`.
-            Kit::Emulated { stats, .. } => stats.mitigation + self.gear_bonus(entity).mitigation,
+            // `Stats::mitigation` outright, so gear and the `BoughtStats`
+            // receipt are both added back through `Game::emulated_base`
+            // rather than read off `Stats`.
+            Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).1,
             Kit::Unarmed | Kit::Innate(_) => self
                 .world
                 .get::<Stats>(entity)

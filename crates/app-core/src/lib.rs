@@ -2209,9 +2209,16 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
                 (None, Some(group)) => SpecialTarget::EnemyGroup { group },
                 (None, None) => return None,
             },
+            // An Emulate invocation never reaches this arm: its target is
+            // `WholeParty`, which opens no ally/group picker at all and so
+            // commits through `handle_battle_special_key`'s
+            // `SpecialTargeting::None` branch instead — the image picker
+            // this needs is todo #100 Task 6's.
+            image: None,
         }),
         ActionKind::Defend => Some(BattleAction::Defend),
         ActionKind::UseItem => Some(BattleAction::UseItem { item: c.item? }),
+        ActionKind::Revert => Some(BattleAction::Revert),
     }
 }
 

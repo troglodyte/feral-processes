@@ -57,7 +57,51 @@ pub(crate) fn innate_routine_ids(
         .collect()
 }
 
+/// One image the player has learned, as `Game::emulation_options()`'s row
+/// — spec §4 "Invoking". `atk`/`mitigation` are `progression::
+/// emulated_stats` at the player's own current level and fidelity, a call
+/// rather than a copy, so the figure this shows can never disagree with
+/// what invoking the row actually installs.
+pub struct EmulationOption {
+    pub species: SpeciesId,
+    pub name: String,
+    pub glyph: char,
+    pub atk: i32,
+    pub mitigation: i32,
+}
+
 impl Game {
+    /// Every image the player has learned, sorted by name — the image
+    /// picker's one source (todo #100 Task 6). Reads the same
+    /// `resources::EmulationImages` `Game::ability_unavailable`'s "no
+    /// images known" refusal does, so a screen that opens has rows and a
+    /// refusal that fires does not disagree about which is true.
+    pub fn emulation_options(&self) -> Vec<EmulationOption> {
+        let player = self.player_entity();
+        let level = self.ability_user_level(player);
+        let fidelity = emulation_fidelity_level(self.world.get::<Perks>(player));
+        let db = self.world.resource::<SpeciesDb>();
+        let mut options: Vec<EmulationOption> = self
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .iter()
+            .filter_map(|species| {
+                let def = db.get(species)?;
+                let stats = emulated_stats(def, level, fidelity);
+                Some(EmulationOption {
+                    species: species.clone(),
+                    name: def.name.clone(),
+                    glyph: def.glyph,
+                    atk: stats.atk,
+                    mitigation: stats.mitigation,
+                })
+            })
+            .collect();
+        options.sort_by(|a, b| a.name.cmp(&b.name));
+        options
+    }
+
     pub(crate) fn kit_of(&self, entity: Entity) -> Kit<'_> {
         if let Some(emulation) = self.world.get::<Emulation>(entity)
             && let Some(def) = self.world.resource::<SpeciesDb>().get(&emulation.species)

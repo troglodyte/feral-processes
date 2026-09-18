@@ -465,11 +465,22 @@ pub enum BattleAction {
         /// Who it lands on, which side depending on the ability — see
         /// `species::SpecialAbility::targeting`.
         target: SpecialTarget,
+        /// Which image an `AbilityEffect::Emulate` invocation adopts.
+        /// `None` for every other effect — constraints.md decision 8's
+        /// "every construction site gets `image: None`". Carried on the
+        /// action rather than collected by a second `TargetSpec` picker,
+        /// since Emulate's own `target: WholeParty` already opens none.
+        image: Option<crate::species::SpeciesId>,
     },
     Defend,
     UseItem {
         item: ItemId,
     },
+    /// Drops the acting member's `components::Emulation` — spec §4
+    /// "Changing back". Carries no fields: there is nothing to choose, and
+    /// `Game::battle_action_options`/`Game::tactical_revert` are the two
+    /// doors that decide whether the row is even offered.
+    Revert,
 }
 
 /// Which picker the UI opens after an ability is chosen — see
@@ -511,6 +522,7 @@ pub enum ActionKind {
     Special,
     Defend,
     UseItem,
+    Revert,
 }
 
 /// What the UI must collect before an `ActionKind` becomes a

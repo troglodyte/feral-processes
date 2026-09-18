@@ -528,6 +528,10 @@ impl Game {
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
+        // Empty until Task 5 wires learning an image into the save; not yet
+        // itself a save field (todo #100 Task 4).
+        world.insert_resource(crate::resources::EmulationImages::default());
+        world.insert_resource(crate::resources::PendingEmulateImage::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -1195,6 +1199,10 @@ impl Game {
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
+        // Empty until Task 5 wires learning an image into the save; not yet
+        // itself a save field (todo #100 Task 4).
+        world.insert_resource(crate::resources::EmulationImages::default());
+        world.insert_resource(crate::resources::PendingEmulateImage::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());

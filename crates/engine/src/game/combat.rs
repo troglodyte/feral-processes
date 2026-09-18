@@ -848,7 +848,10 @@ impl Game {
         // acting member's abilities to spend. Both resolve to `None` at
         // resolve time and silently cost the member its round — while still
         // charging for it — so they are refused here instead.
-        if let BattleAction::Special { ability, target } = &action {
+        if let BattleAction::Special {
+            ability, target, ..
+        } = &action
+        {
             if let battle::SpecialTarget::Ally { slot: ally } = target
                 && *ally >= planned_len
             {
@@ -1316,12 +1319,23 @@ impl Game {
     /// A tactical-only effect is the third exclusion: `AbilityEffect::
     /// tactical_only`'s reason — no AI ever chooses a Tamper, and a proc
     /// roll is exactly that.
+    ///
+    /// `Emulate` is the fourth, and for `Decompile`'s reason again: a proc
+    /// is free (`proc_wielded_routine`'s own doc), and its `OneAlly` target
+    /// always resolves to the player (slot 0) regardless of which program
+    /// is wielded — so a companion carrying it would let a proc re-emulate
+    /// for the player at no Power and no turn, undercutting Revert costing
+    /// both. Only the player ever installs Emulate through research, but a
+    /// mod's talent tree or species kit could still hand it to a companion,
+    /// which is exactly the "AI never chooses Emulate for a companion body"
+    /// rule.
     pub(crate) fn wieldable_routines(&self, entity: Entity) -> Vec<AbilityDef> {
         self.actor_abilities(entity)
             .into_iter()
             .filter(|d| !d.effect.field_only())
             .filter(|d| !matches!(d.effect, AbilityEffect::Decompile))
             .filter(|d| !d.effect.tactical_only())
+            .filter(|d| !matches!(d.effect, AbilityEffect::Emulate { .. }))
             .collect()
     }
 
@@ -1397,6 +1411,26 @@ impl Game {
             }
             if self.pet_count() >= self.pet_capacity() {
                 return Some("roster is full".to_string());
+            }
+        }
+        // Emulate's own two refusals — spec §4 "Invoking". `Emulation`
+        // itself would already keep it off `entity`'s `actor_abilities`
+        // (`Kit::Emulated`'s species list has no Emulate entry), so the
+        // second check is unreachable through the ordinary picker; it stays
+        // here anyway as the one door every caller of this function shares,
+        // rather than trusting that every future caller re-derives the same
+        // answer from `Kit`.
+        if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+            if self.world.get::<Emulation>(entity).is_some() {
+                return Some("already emulating".to_string());
+            }
+            if self
+                .world
+                .resource::<crate::resources::EmulationImages>()
+                .0
+                .is_empty()
+            {
+                return Some("no images known".to_string());
             }
         }
         None
@@ -1555,6 +1589,21 @@ impl Game {
                 label: "[s]pecial".to_string(),
                 detail: self.ability_label(entity),
                 target: TargetSpec::SpecialAbility,
+                unavailable: None,
+            });
+        }
+
+        // Only while emulating — spec §4 "Changing back". Hidden rather
+        // than greyed, `Special`'s own reason: a party member not emulating
+        // has nothing to revert, and a permanently-there row would teach
+        // nothing new.
+        if self.world.get::<Emulation>(entity).is_some() {
+            options.push(ActionOption {
+                kind: ActionKind::Revert,
+                key: 'r',
+                label: "[r]evert".to_string(),
+                detail: "Drop your current emulation".to_string(),
+                target: TargetSpec::None,
                 unavailable: None,
             });
         }

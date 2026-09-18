@@ -11,9 +11,10 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Player, Squad, Stats};
+use crate::components::{Emulation, Hostile, Player, Squad, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
+use crate::species::SpeciesId;
 use crate::tactical::map::{BattleSpec, generate};
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
 use crate::tuning::{FORMATIONS, TACTICAL_MELEE_RANGE};
@@ -690,6 +691,89 @@ impl Game {
         true
     }
 
+    /// Runs the acting body's routine at `index` — which must resolve to
+    /// `AbilityEffect::Emulate` — adopting `species`'s kit. `tactical_
+    /// use_routine`'s sibling rather than a caller of it: Emulate has no
+    /// aim, so there is no cell to collect or check, and every refusal here
+    /// is Emulate's own instead of `tactical_use_routine`'s six.
+    ///
+    /// **Every refusal lands before anything is spent**, `tactical_use_
+    /// routine`'s own rule: no fight, nobody acting, no actions left, no
+    /// such routine, whatever `ability_unavailable` says (no images known,
+    /// already emulating, on cooldown, short of Power), and `species`
+    /// itself not among the learned images.
+    ///
+    /// Reports whether it ran. A run ends the turn through `Game::
+    /// run_tactical_routine`, exactly as every other routine does.
+    pub fn tactical_emulate(&mut self, index: usize, species: &SpeciesId) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.actions_left() == 0 {
+            return false;
+        }
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        let Some(ability) = self.actor_abilities(actor).into_iter().nth(index) else {
+            return false;
+        };
+        if !matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+            return false;
+        }
+        if self.ability_unavailable(actor, &ability).is_some() {
+            return false;
+        }
+        if !self
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(species)
+        {
+            return false;
+        }
+        // Set immediately before the one call that reads it, and cleared by
+        // `use_ability`'s own `Emulate` arm on the way out — see
+        // `resources::PendingEmulateImage`'s doc.
+        self.world
+            .resource_mut::<crate::resources::PendingEmulateImage>()
+            .0 = Some(species.clone());
+        self.run_tactical_routine(actor, &ability, from, 0);
+        true
+    }
+
+    /// Drops the acting body's emulation — spec §4 "Changing back",
+    /// `tactical_defend`'s shape. No Power, no cooldown: the turn already
+    /// spent by choosing this is the whole cost.
+    ///
+    /// Refused while not emulating, which is what keeps the row app-core
+    /// draws (todo #100 Task 6) from ever being able to spend a turn on
+    /// nothing — `Game::drop_emulation` alone would have silently done
+    /// exactly that, since it is a no-op with nothing to remove.
+    pub fn tactical_revert(&mut self) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.actions_left() == 0 {
+            return false;
+        }
+        if self.world.get::<Emulation>(actor).is_none() {
+            return false;
+        }
+
+        let round_before = battle.round;
+        self.drop_emulation(actor, "You drop the emulation.");
+        self.world.resource_mut::<TacticalBattle>().spend_action();
+        self.hand_on_turn(actor, round_before);
+        true
+    }
+
     /// The acting body runs the routine at `index` in its own
     /// `Game::actor_abilities`, aimed at `aim`.
     ///
@@ -729,6 +813,15 @@ impl Game {
             return false;
         };
         if ability.effect.field_only() || ability.is_passive() {
+            return false;
+        }
+        // Emulate has no aim to check — `Game::tactical_emulate` is its own
+        // door, since this one exists to collect and validate one. Reached
+        // through this door instead it would still spend the Power, the
+        // cooldown and the turn, with no `resources::PendingEmulateImage`
+        // ever set to give `use_ability`'s arm anything to install — exactly
+        // the wasted round every refusal above exists to prevent.
+        if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
             return false;
         }
         if self.ability_unavailable(actor, &ability).is_some() {
@@ -995,6 +1088,14 @@ impl Game {
             // recipient loop, which carries the `unreachable!` arm this
             // branch is what makes actually unreachable.
             self.apply_tamper(actor, ability, kind, duration, aim);
+        } else if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+            // No aim: the recipient is the acting body alone, exactly as
+            // the group model's own Special branch builds it, and the image
+            // is read from `resources::PendingEmulateImage` — set by
+            // `Game::tactical_emulate`, the only caller, immediately before
+            // this call, and cleared by `use_ability`'s own arm on the way
+            // out.
+            self.use_ability(ability, actor, &name, &[actor]);
         } else {
             let shape = ability.tactical_shape();
             // Taken **before** the routine resolves: it can kill its own

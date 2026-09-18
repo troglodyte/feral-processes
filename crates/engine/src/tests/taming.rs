@@ -122,6 +122,7 @@ fn decompiling_with_no_catalyst_is_refused_without_naming_a_shipped_item() {
             BattleAction::Special {
                 ability: index,
                 target: battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .unwrap_err();
@@ -427,6 +428,7 @@ fn a_boss_is_refused_as_a_decompile_target() {
             BattleAction::Special {
                 ability,
                 target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .expect_err("a boss must be refused as a decompile target");
@@ -466,6 +468,7 @@ fn a_lairs_guardian_is_refused_as_a_decompile_target() {
             BattleAction::Special {
                 ability,
                 target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .expect_err("a lair guardian must be refused as a decompile target");

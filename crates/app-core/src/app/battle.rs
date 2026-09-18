@@ -405,9 +405,14 @@ impl App {
                 } else {
                     SpecialTarget::AllEnemies
                 };
+                // No image picker yet — todo #100 Task 6. An Emulate row
+                // reaching this branch today would commit with no image and
+                // find nothing to insert; the picker is what makes it
+                // reachable at all.
                 let action = BattleAction::Special {
                     ability: chosen.index,
                     target,
+                    image: None,
                 };
                 self.pending_battle_action = None;
                 self.pending_special_ability = None;

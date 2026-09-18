@@ -2017,6 +2017,27 @@ pub struct CompassBearing(pub Option<crate::settlements::CompassTarget>);
 #[derive(Resource, Default)]
 pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
 
+/// The images the player has learned — `Game::emulation_options()`'s
+/// source, and the "no images known" half of `ability_unavailable`'s
+/// `AbilityEffect::Emulate` refusal (todo #100 Task 4). Empty by default and
+/// not yet part of the save: Task 5 adds the field and the writer that fills
+/// this from it.
+#[derive(Resource, Default, Clone)]
+pub struct EmulationImages(pub BTreeSet<crate::species::SpeciesId>);
+
+/// The image an in-flight `AbilityEffect::Emulate` invocation is installing.
+///
+/// `Game::use_ability` is the one door every routine shares, so widening its
+/// signature to carry this for one effect would touch every other caller —
+/// this resource is the smaller threading instead (constraints.md decision
+/// 8). `Game::resolve_one_action`'s Special branch and
+/// `Game::run_tactical_routine`'s Emulate branch each set it immediately
+/// before the single `use_ability` call that reads it and clear it
+/// immediately after, in one unbroken span with no refusal in between — so a
+/// stale image can never survive past the invocation that set it.
+#[derive(Resource, Default)]
+pub struct PendingEmulateImage(pub Option<crate::species::SpeciesId>);
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

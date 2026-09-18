@@ -4,7 +4,7 @@
 //! before they became matches on `Kit`, so converting them has a witness.
 
 use super::support::*;
-use super::tactical::{body, log_texts, tactical_fight};
+use super::tactical::{body, log_texts, tactical_fight, wait_for_turn};
 use crate::abilities::AbilityId;
 use crate::components::Perks;
 use crate::game::kit::Kit;
@@ -231,6 +231,40 @@ mod emulated_stats_tests {
 /// `Kit::Emulated` and every reader answering it, todo #100 Task 3.
 mod emulation_tests {
     use super::*;
+
+    /// Two distinct shipped species, id-ordered so the pair is stable
+    /// across a run — for tests that need to tell "this image" from
+    /// "the other one" rather than caring which is which.
+    fn two_species(game: &Game) -> (crate::species::SpeciesDef, crate::species::SpeciesDef) {
+        let mut all = game.species_defs();
+        all.sort_by(|a, b| a.id.cmp(&b.id));
+        assert!(
+            all.len() >= 2,
+            "the fixture needs at least two shipped species"
+        );
+        (all[0].clone(), all[1].clone())
+    }
+
+    /// The ordinary hunger drain one round's own `tick()` costs the player
+    /// regardless of what action it spent — `systems::needs_tick_system`,
+    /// unrelated to routines or Power charges. A "costs no Power" assertion
+    /// has to subtract this or it is really asserting "costs no Power
+    /// *and* nobody ever gets hungry", which is false of every action.
+    fn ambient_hunger_drain(game: &Game, player: Entity) -> f32 {
+        crate::systems::power_drain_per_tick(crate::perks::power_drain_multiplier(
+            game.world.get::<Perks>(player),
+        ))
+    }
+
+    /// The index of the (already-installed) Emulate ability in the
+    /// player's own Special menu.
+    fn emulate_index(game: &Game) -> usize {
+        game.battle_special_options(0)
+            .into_iter()
+            .find(|o| o.name == "Emulate")
+            .expect("Emulate must be offered")
+            .index
+    }
 
     /// A hostile with `hp` and `atk` set by hand, standing far enough away
     /// that nothing else in the world touches it.
@@ -641,6 +675,370 @@ mod emulation_tests {
         assert!(
             game.world.get::<Emulation>(player).is_none(),
             "a jack-out must clear the emulation"
+        );
+    }
+
+    /// Spec §4 "Invoking": `emulation_options` reads `emulated_stats` as a
+    /// call rather than a copy, so this row and what invoking it installs
+    /// can never disagree.
+    #[test]
+    fn emulation_options_rows_carry_emulated_stats_figures() {
+        let mut game = game();
+        let player = game.player_entity();
+        game.world.get_mut::<Experience>(player).unwrap().level = 8;
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+
+        let options = game.emulation_options();
+        let row = options
+            .iter()
+            .find(|o| o.species == def.id)
+            .expect("the learned image appears in the options");
+
+        let level = game.ability_user_level(player);
+        let fidelity = emulation_fidelity_level(game.world.get::<Perks>(player));
+        let expected = emulated_stats(&def, level, fidelity);
+        assert_eq!(row.atk, expected.atk);
+        assert_eq!(row.mitigation, expected.mitigation);
+        assert_eq!(row.name, def.name);
+        assert_eq!(row.glyph, def.glyph);
+    }
+
+    #[test]
+    fn emulation_options_are_sorted_by_name() {
+        let mut game = game();
+        let (a, b) = two_species(&game);
+        {
+            let mut images = game
+                .world
+                .resource_mut::<crate::resources::EmulationImages>();
+            images.0.insert(a.id.clone());
+            images.0.insert(b.id.clone());
+        }
+
+        let names: Vec<String> = game
+            .emulation_options()
+            .into_iter()
+            .map(|o| o.name)
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(names, sorted, "emulation_options must be sorted by name");
+    }
+
+    #[test]
+    fn emulate_is_refused_with_no_images_known() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let ability = game
+            .world
+            .resource::<crate::abilities::AbilityDb>()
+            .get("emulate")
+            .unwrap()
+            .clone();
+        assert_eq!(
+            game.ability_unavailable(player, &ability),
+            Some("no images known".to_string())
+        );
+    }
+
+    #[test]
+    fn emulate_is_refused_while_already_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+        let ability = game
+            .world
+            .resource::<crate::abilities::AbilityDb>()
+            .get("emulate")
+            .unwrap()
+            .clone();
+        assert_eq!(
+            game.ability_unavailable(player, &ability),
+            Some("already emulating".to_string())
+        );
+    }
+
+    #[test]
+    fn invoking_emulate_in_the_group_model_inserts_the_component() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+
+        let index = emulate_index(&game);
+        resolve_round_with(
+            &mut game,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::WholeParty,
+                image: Some(def.id.clone()),
+            },
+        );
+
+        match game.world.get::<Emulation>(player) {
+            Some(emulation) => assert_eq!(emulation.species, def.id),
+            None => panic!("expected the player to be emulating"),
+        }
+        assert!(
+            log_texts(&game)
+                .iter()
+                .any(|t| t == &format!("You emulate a {}.", def.name)),
+            "invoking must log the image's name"
+        );
+    }
+
+    /// Decision 8's own trap: a pending image must never survive past the
+    /// invocation that set it. Two invocations of different images, with a
+    /// Revert between them, must each install exactly their own — not the
+    /// other's.
+    #[test]
+    fn each_invocation_installs_its_own_image_never_a_stale_one() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let (a, b) = two_species(&game);
+        {
+            let mut images = game
+                .world
+                .resource_mut::<crate::resources::EmulationImages>();
+            images.0.insert(a.id.clone());
+            images.0.insert(b.id.clone());
+        }
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+
+        let index_a = emulate_index(&game);
+        resolve_round_with(
+            &mut game,
+            BattleAction::Special {
+                ability: index_a,
+                target: battle::SpecialTarget::WholeParty,
+                image: Some(a.id.clone()),
+            },
+        );
+        assert_eq!(
+            game.world
+                .get::<Emulation>(player)
+                .map(|e| e.species.clone()),
+            Some(a.id.clone())
+        );
+
+        resolve_round_with(&mut game, BattleAction::Revert);
+        assert!(game.world.get::<Emulation>(player).is_none());
+        // Emulate's own cooldown (4 rounds) is a separate refusal from
+        // decision 8's pending-image concern this test is isolating —
+        // cleared here so the second invocation reaches `use_ability` at
+        // all rather than being refused by `battle_set_action` first.
+        game.world.entity_mut(player).remove::<AbilityCooldowns>();
+
+        let index_b = emulate_index(&game);
+        resolve_round_with(
+            &mut game,
+            BattleAction::Special {
+                ability: index_b,
+                target: battle::SpecialTarget::WholeParty,
+                image: Some(b.id.clone()),
+            },
+        );
+        assert_eq!(
+            game.world
+                .get::<Emulation>(player)
+                .map(|e| e.species.clone()),
+            Some(b.id.clone()),
+            "the second invocation must install its own image, never a stale one \
+             left over from the first"
+        );
+    }
+
+    #[test]
+    fn revert_is_offered_only_while_emulating_in_the_group_model() {
+        let mut game = game();
+        let player = game.player_entity();
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+
+        assert!(
+            !game
+                .battle_action_options(0)
+                .iter()
+                .any(|o| o.kind == battle::ActionKind::Revert),
+            "Revert must not be offered while not emulating"
+        );
+
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+        assert!(
+            game.battle_action_options(0)
+                .iter()
+                .any(|o| o.kind == battle::ActionKind::Revert),
+            "Revert must be offered while emulating"
+        );
+    }
+
+    #[test]
+    fn revert_removes_emulation_and_costs_no_power_in_the_group_model() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 5,
+        });
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+        let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+        let drain = ambient_hunger_drain(&game, player);
+        resolve_round_with(&mut game, BattleAction::Revert);
+
+        assert!(game.world.get::<Emulation>(player).is_none());
+        assert_eq!(
+            game.world.get::<PowerReserve>(player).unwrap().get(),
+            power_before - drain,
+            "Revert must cost no Power beyond the round's ordinary hunger drain"
+        );
+        assert!(
+            log_texts(&game)
+                .iter()
+                .any(|t| t == "You drop the emulation."),
+            "Revert must log the line spec §4 gives it"
+        );
+    }
+
+    #[test]
+    fn tactical_use_routine_refuses_emulate_since_it_has_no_aim() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+
+        let index = game
+            .actor_abilities(player)
+            .iter()
+            .position(|a| a.id == "emulate")
+            .expect("emulate is installed");
+        let cell = game
+            .world
+            .resource::<crate::tactical::TacticalBattle>()
+            .cell_of(player)
+            .unwrap();
+
+        assert!(!game.tactical_use_routine(index, cell));
+        assert!(game.world.get::<Emulation>(player).is_none());
+    }
+
+    #[test]
+    fn tactical_emulate_inserts_the_component() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+
+        let index = game
+            .actor_abilities(player)
+            .iter()
+            .position(|a| a.id == "emulate")
+            .expect("emulate is installed");
+
+        assert!(game.tactical_emulate(index, &def.id));
+        match game.world.get::<Emulation>(player) {
+            Some(emulation) => assert_eq!(emulation.species, def.id),
+            None => panic!("expected the player to be emulating"),
+        }
+    }
+
+    #[test]
+    fn tactical_emulate_is_refused_with_an_unknown_image() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        // Deliberately not inserted into `EmulationImages`.
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+
+        let index = game
+            .actor_abilities(player)
+            .iter()
+            .position(|a| a.id == "emulate")
+            .expect("emulate is installed");
+
+        assert!(!game.tactical_emulate(index, &def.id));
+        assert!(game.world.get::<Emulation>(player).is_none());
+    }
+
+    #[test]
+    fn tactical_revert_is_refused_while_not_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+
+        assert!(!game.tactical_revert());
+    }
+
+    #[test]
+    fn tactical_revert_removes_emulation_and_costs_no_power() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 5,
+        });
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+        let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+        let drain = ambient_hunger_drain(&game, player);
+
+        assert!(game.tactical_revert());
+
+        assert!(game.world.get::<Emulation>(player).is_none());
+        assert_eq!(
+            game.world.get::<PowerReserve>(player).unwrap().get(),
+            power_before - drain,
+            "tactical_revert must cost no Power beyond the round's ordinary hunger drain"
+        );
+        assert!(
+            log_texts(&game)
+                .iter()
+                .any(|t| t == "You drop the emulation."),
+            "tactical_revert must log the same line the group model does"
         );
     }
 }

@@ -534,7 +534,8 @@ fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
         ),
         Some(BattleAction::Special {
             ability: 1,
-            target: SpecialTarget::EnemyGroup { group: 2 }
+            target: SpecialTarget::EnemyGroup { group: 2 },
+            image: None,
         })
     );
     assert_eq!(
@@ -548,7 +549,8 @@ fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
         ),
         Some(BattleAction::Special {
             ability: 0,
-            target: SpecialTarget::Ally { slot: 3 }
+            target: SpecialTarget::Ally { slot: 3 },
+            image: None,
         }),
         "a buff aimed at a party member targets that slot, with no group involved"
     );

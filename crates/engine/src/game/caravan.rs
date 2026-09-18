@@ -495,7 +495,11 @@ impl Game {
     /// the "just target the species" shortcut that boundary exists to break,
     /// and `exclusive_pool` is the one thing that cannot be etched at home —
     /// a caravan is convenience, and convenience must not be the way past
-    /// either boundary.
+    /// either boundary. A third, `abilities::ability_disk_shelved` (todo
+    /// #100 Task 4 decision 9), keeps Emulate's disk off this shelf for the
+    /// same reason it's off the creation one: unlocking it is the routine
+    /// tree's own gate, and a caravan selling the disk would sell straight
+    /// past it.
     fn routine_disk_pool(&self) -> Vec<String> {
         let db = self.world.resource::<AbilityDb>();
         let hunt_only: Vec<&str> = db
@@ -505,6 +509,7 @@ impl Game {
             .collect();
         db.all()
             .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
+            .filter(|def| crate::abilities::ability_disk_shelved(def))
             .map(|def| def.id.clone())
             .collect()
     }

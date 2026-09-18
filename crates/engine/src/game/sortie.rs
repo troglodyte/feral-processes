@@ -662,6 +662,12 @@ impl Game {
             // model-blind through `use_ability`, which has no seat for one
             // outside a real tactical battle.
             .filter(|d| !d.effect.tactical_only())
+            // Only the player emulates. `WholeParty` falls into this
+            // function's `_ => vec![front]` arm below, which would install
+            // `components::Emulation` on the hostile the squad is fighting
+            // — a dispatched companion is exactly the "AI never chooses
+            // Emulate for a companion body" case.
+            .filter(|d| !matches!(d.effect, crate::abilities::AbilityEffect::Emulate { .. }))
             .find(|d| self.ability_unavailable(actor, d).is_none());
         match choice {
             Some(ability) => {

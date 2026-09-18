@@ -96,6 +96,7 @@ pub use game::catalog::program_tier_required;
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;
+pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
 /// Every sentence the town page's aid rows can carry — exported so the

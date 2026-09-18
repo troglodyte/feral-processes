@@ -326,7 +326,9 @@ impl Game {
     ) -> (ActionKind, Option<String>, Option<usize>) {
         match action {
             BattleAction::Attack { .. } => (ActionKind::Attack, None, None),
-            BattleAction::Special { ability, target } => {
+            BattleAction::Special {
+                ability, target, ..
+            } => {
                 let abilities = self.actor_abilities(actor);
                 let name = abilities
                     .get(*ability)
@@ -339,6 +341,7 @@ impl Game {
                 (ActionKind::Special, name, slot)
             }
             BattleAction::Defend => (ActionKind::Defend, None, None),
+            BattleAction::Revert => (ActionKind::Revert, None, None),
             BattleAction::UseItem { item } => (ActionKind::Item, Some(item.to_string()), None),
         }
     }

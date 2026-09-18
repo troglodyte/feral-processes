@@ -735,6 +735,7 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Symlink
             | E::Summon { .. }
             | E::Cloak { .. }
+            | E::Emulate { .. }
             | E::Tamper { .. } => continue,
         };
         checked += 1;
@@ -787,6 +788,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             | E::Symlink
             | E::Summon { .. }
             | E::Cloak { .. }
+            | E::Emulate { .. }
             // A tamper always lands — the forecast is the feature, and a
             // tamper that could fumble would turn a guaranteed read into a
             // gamble.
@@ -962,6 +964,12 @@ fn without_version_tag(name: &str) -> &str {
 /// `summon_target_mismatch` pins it to so that a picker never opens on it —
 /// it names nobody. Suffixing one "Party" would be telling the player it
 /// lands on their party, which is the one thing it does not do.
+///
+/// **`Emulate` is excluded for the same reason.** Its `target: WholeParty`
+/// is the same no-picker shape, chosen because the effect names its own
+/// recipient (the acting body) directly rather than trusting
+/// `Game::ability_recipients` — see the variant's own doc — and "Emulate
+/// Party" would tell the player it lands on their party too.
 #[test]
 fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
     let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -969,7 +977,13 @@ fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .filter(|d| !matches!(d.effect, crate::abilities::AbilityEffect::Summon { .. }))
+        .filter(|d| {
+            !matches!(
+                d.effect,
+                crate::abilities::AbilityEffect::Summon { .. }
+                    | crate::abilities::AbilityEffect::Emulate { .. }
+            )
+        })
     {
         let expected = scope_word(def.target);
         let base = without_version_tag(&def.name);
@@ -1015,6 +1029,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             | E::Phase
             | E::Jump
             | E::Summon { .. }
+            | E::Emulate { .. }
             | E::Symlink => false,
         };
         assert_eq!(
@@ -1082,6 +1097,11 @@ fn no_two_shipped_abilities_share_a_display_name() {
 /// research-taught and enters neither, so Heat Injection Group and
 /// Hallucination Group are free to have no Single rung nothing would ever
 /// need.
+///
+/// **`Emulate` is excluded for `Summon`'s reason.** It is a single
+/// research-taught rung with `target: WholeParty` and no cheaper sibling
+/// scope was ever going to exist for it — there is exactly one way to adopt
+/// an image, not a Single/Group/Everyone ladder of them.
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1094,7 +1114,11 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         .filter(|d| {
             !d.effect.field_only()
                 && !d.exclusive
-                && !matches!(d.effect, crate::abilities::AbilityEffect::Summon { .. })
+                && !matches!(
+                    d.effect,
+                    crate::abilities::AbilityEffect::Summon { .. }
+                        | crate::abilities::AbilityEffect::Emulate { .. }
+                )
                 && !d.effect.tactical_only()
         })
     {
@@ -4694,7 +4718,10 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
         !gated.is_empty(),
         "the tree unlocks no recipes at all, so this census proves nothing"
     );
-    let shelf = game.world.resource::<ItemDb>().creation_shelf();
+    let shelf = game
+        .world
+        .resource::<ItemDb>()
+        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
     for row in &shelf {
         assert!(
             !gated.contains(&&row.id),
@@ -4705,6 +4732,26 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
             row.price
         );
     }
+}
+
+/// The Emulate disk is the one etched disk barred from the creation shelf —
+/// `abilities::ability_disk_shelved` (todo #100 Task 4 decision 9).
+/// `Game::install_disk` never checks `Game::node_researched`, so an
+/// ordinary routine's disk being offered here is accepted, existing
+/// behaviour; this asserts the one exception rather than every disk, since
+/// asserting every disk is barred would be asserting something false.
+#[test]
+fn the_creation_shelf_never_offers_the_emulate_disk() {
+    let game = Game::new(958, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let shelf = game
+        .world
+        .resource::<ItemDb>()
+        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
+    let emulate_disk = crate::items::ItemId::etched("emulate");
+    assert!(
+        shelf.iter().all(|row| row.id != emulate_disk),
+        "the Emulate disk must never be offered on the creation shelf"
+    );
 }
 
 /// The two shipped fork routines. `every_runnable_routine_is_priced_in_power`

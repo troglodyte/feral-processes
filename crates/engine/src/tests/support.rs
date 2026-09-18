@@ -309,6 +309,7 @@ pub(super) fn player_decompiles(game: &mut Game) {
         BattleAction::Special {
             ability: index,
             target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+            image: None,
         },
     );
 }
@@ -323,7 +324,15 @@ pub(super) fn companion_uses_special(
     ability: usize,
     target: battle::SpecialTarget,
 ) {
-    companion_acts(game, companion, BattleAction::Special { ability, target });
+    companion_acts(
+        game,
+        companion,
+        BattleAction::Special {
+            ability,
+            target,
+            image: None,
+        },
+    );
 }
 
 /// Resolves a round in which `companion` takes `action` and everyone else

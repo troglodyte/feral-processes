@@ -524,8 +524,26 @@ impl Game {
         // again, and a mirrored buff has to expire or its `duration` is
         // decoration.
         self.tick_combat_buff(entity);
+        self.tick_emulation(entity);
         self.tick_ability_cooldowns(entity);
         self.tick_cloak(entity);
+    }
+
+    /// Ages an emulation by one round, dropping it and logging the lapse
+    /// once `rounds_left` reaches zero (todo #100 Task 3). Only the player
+    /// ever carries `components::Emulation`, but `Cloaked`'s own idiom
+    /// applies: absent is a no-op, so every body may be asked.
+    fn tick_emulation(&mut self, entity: Entity) {
+        let lapsed = {
+            let Some(mut emulation) = self.world.get_mut::<Emulation>(entity) else {
+                return;
+            };
+            emulation.rounds_left = emulation.rounds_left.saturating_sub(1);
+            emulation.rounds_left == 0
+        };
+        if lapsed {
+            self.drop_emulation(entity, "Your emulation lapses.");
+        }
     }
 
     /// Ages a cloak by one round, dropping it when the count runs out.

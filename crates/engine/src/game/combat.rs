@@ -2,7 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
-use crate::game::kit::Kit;
+use crate::game::kit::{self, Kit};
 use crate::tactical::TacticalBattle;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
@@ -106,7 +106,7 @@ impl Game {
         }
         match self.kit_of(actor) {
             Kit::Unarmed => crate::tuning::TACTICAL_MELEE_RANGE,
-            Kit::Innate(species) => species
+            Kit::Innate(species) | Kit::Emulated { def: species, .. } => species
                 .basic_attacks()
                 .iter()
                 .map(|a| match a.ranged {
@@ -172,6 +172,13 @@ impl Game {
     /// A wild program carrying no `Experience` reads the zone's level, which
     /// is what `ability_user_level` already does for every other magnitude
     /// in combat.
+    ///
+    /// **Deliberately keyed on `PlayerIdentity`, not `Kit` (todo #100 Task
+    /// 3's decision 11).** A second swing is the fighter's own training —
+    /// the class that earned it — not a property of the form worn this
+    /// round, so an emulating player keeps their own class's swing count
+    /// rather than borrowing the image's. `game/kit.rs`'s doc is the fuller
+    /// version of this rule; `routine_slots` is its other member.
     pub(crate) fn attacks_for(&self, entity: Entity) -> u32 {
         // `ability_user_level` is already the one answer to "what level is
         // this body?", falling back to the zone for a wild program that
@@ -687,6 +694,11 @@ impl Game {
     /// handed everything else the default — which left the player acting
     /// first against an average opponent and yet hitting and dodging as
     /// though a shade slower than one.
+    ///
+    /// **Deliberately keyed on identity, not `Kit` (todo #100 Task 3's
+    /// decision 11).** An emulating player keeps their own pace — speed is
+    /// the fighter's own reflexes, not the borrowed form's, `attacks_for`'s
+    /// reason and `game/kit.rs`'s doc.
     pub(crate) fn combat_speed(&self, entity: Entity) -> i32 {
         if entity == self.player_entity() {
             PLAYER_BASE_SPEED
@@ -695,6 +707,9 @@ impl Game {
         }
     }
 
+    /// `entity`'s species `base_speed`. Reads `Creature` directly rather
+    /// than `Kit`, `combat_speed`'s reason: an emulation does not lend the
+    /// player its pace.
     pub(crate) fn species_base_speed(&self, entity: Entity) -> i32 {
         self.world
             .get::<Creature>(entity)
@@ -1020,13 +1035,8 @@ impl Game {
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|s| s.abilities.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|a| a.level <= level)
-            .map(|a| a.id)
-            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
-            .collect();
+            .map(|def| kit::innate_routine_ids(def, level, self.world.resource::<AbilityDb>()))
+            .unwrap_or_default();
         // After the species kit, so a talent takes the slot the kit left over
         // rather than one the kit needed.
         declared.extend(self.talent_abilities(entity));
@@ -1200,6 +1210,13 @@ impl Game {
         };
         let species = match self.kit_of(actor) {
             Kit::Innate(def) => def.affinities.get(kind),
+            // The form is the whole kit: an emulation's own affinity
+            // applies **instead** of the class affinity, and — unlike the
+            // `Innate` arm below — without `talent_affinity_mult` either,
+            // since talents are a companion's axis and the player never has
+            // one to apply. Species files are already clamped to
+            // `AFFINITY_MAX` at load, so no re-clamp is needed here.
+            Kit::Emulated { def, .. } => return def.affinities.get(kind),
             Kit::Unarmed if actor != self.player_entity() => AFFINITY_NEUTRAL,
             // `affinity_with_perk` is the class-plus-perk combination,
             // clamped — the one place it's computed. `player_affinity_for`
@@ -1249,15 +1266,34 @@ impl Game {
     /// installed at tame/fuse time and topped up on the level-ups that reach
     /// a species unlock (`install_innate_routines`,
     /// `install_unlocked_routines`); nothing is resolved here.
+    ///
+    /// **`Kit::Emulated` reads the species list live instead of
+    /// `Routines`** — the player's own installed kit is untouched underneath
+    /// and returns the moment the emulation ends. `innate_routine_ids` is
+    /// the same level filter a companion's own kit install uses; capped at
+    /// `routine_slots`, which stays keyed on the player regardless of what
+    /// they are wearing (see `game/kit.rs`'s doc).
     pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
         let db = self.world.resource::<AbilityDb>();
-        self.world
-            .get::<Routines>(entity)
-            .map(|r| r.0.as_slice())
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|id| db.get(id).cloned())
-            .collect()
+        match self.kit_of(entity) {
+            Kit::Emulated { def, .. } => {
+                let level = self.ability_user_level(entity);
+                let slots = self.routine_slots(entity);
+                kit::innate_routine_ids(def, level, db)
+                    .into_iter()
+                    .filter_map(|id| db.get(&id).cloned())
+                    .take(slots)
+                    .collect()
+            }
+            Kit::Unarmed | Kit::Innate(_) => self
+                .world
+                .get::<Routines>(entity)
+                .map(|r| r.0.as_slice())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|id| db.get(id).cloned())
+                .collect(),
+        }
     }
 
     /// The routines a program wielded as a weapon could actually fire —

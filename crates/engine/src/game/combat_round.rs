@@ -578,7 +578,7 @@ impl Game {
                 return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
             }
             Kit::Unarmed => return ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
-            Kit::Innate(_) => {}
+            Kit::Innate(_) | Kit::Emulated { .. } => {}
         }
         let rolled = self
             .roll_species_move_in_range(entity, distance)
@@ -711,7 +711,7 @@ impl Game {
     ) -> Option<AbilityDef> {
         let all = match self.kit_of(entity) {
             Kit::Unarmed => return None,
-            Kit::Innate(def) => def.basic_attacks(),
+            Kit::Innate(def) | Kit::Emulated { def, .. } => def.basic_attacks(),
         };
         let moves: Vec<AbilityDef> = match distance {
             None => all,
@@ -1767,7 +1767,17 @@ impl Game {
     /// instead, and a companion has neither a wield of its own nor a
     /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
-        let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
+        let base = match self.kit_of(entity) {
+            // Gear is already baked into `Stats` for an ordinary body
+            // (`apply_equipment_delta`), but an emulation's base replaces
+            // `Stats::atk` outright, so its worn bonus has to be added back
+            // here — `gear_bonus`, never recomputed (constraints.md
+            // decision 4).
+            Kit::Emulated { stats, .. } => stats.atk + self.gear_bonus(entity).atk,
+            Kit::Unarmed | Kit::Innate(_) => {
+                self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0)
+            }
+        };
         let bonus = self
             .world
             .get::<CombatBuff>(entity)
@@ -1827,11 +1837,17 @@ impl Game {
     /// `DEFEND_MITIGATION_BONUS`, and a field buff landing on that same
     /// power must not be mistaken for one.
     pub(crate) fn effective_mitigation(&self, entity: Entity) -> i32 {
-        let base = self
-            .world
-            .get::<Stats>(entity)
-            .map(|s| s.mitigation)
-            .unwrap_or(0);
+        let base = match self.kit_of(entity) {
+            // `effective_atk`'s reason: an emulation's base replaces
+            // `Stats::mitigation` outright, so the worn bonus is added back
+            // from `gear_bonus` rather than read off `Stats`.
+            Kit::Emulated { stats, .. } => stats.mitigation + self.gear_bonus(entity).mitigation,
+            Kit::Unarmed | Kit::Innate(_) => self
+                .world
+                .get::<Stats>(entity)
+                .map(|s| s.mitigation)
+                .unwrap_or(0),
+        };
         let bonus = self
             .world
             .get::<CombatBuff>(entity)

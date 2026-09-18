@@ -25,7 +25,7 @@ use crate::{
     App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
-use feral_processes_engine::battle::SpecialOption;
+use feral_processes_engine::battle::{SpecialOption, SpecialTargeting};
 use feral_processes_engine::tactical::ai::AiBeat;
 use feral_processes_engine::tactical::turn::StepOutcome;
 
@@ -111,6 +111,23 @@ impl App {
             // of nothing on this screen (`r_is_not_a_second_way_into_the_
             // picker`), so the shift-slip costs nothing either.
             GameKey::Char('R') => self.auto_resolve(),
+            // Uppercase, `E`'s reason again — `Game::tactical_revert`'s own
+            // refusal while nothing is emulating is silent here exactly as
+            // `d`'s is: `d` above never checks its own bool either, and a
+            // key with no submenu to open follows that shape rather than
+            // `s`'s, which refuses aloud only because it is deciding whether
+            // to open one. `V` and not the group model's lowercase `r`: that
+            // letter already selects a row on the routine list one screen
+            // over, and `battle_action_options` itself made Revert's key
+            // lowercase only because it is a row in an action *list* — this
+            // screen has no such list, `d`'s and `s`'s own reason for being
+            // lowercase.
+            GameKey::Char('V') => {
+                if let Some(game) = &mut self.game {
+                    game.tactical_revert();
+                }
+                self.after_tactical_action();
+            }
             _ => {}
         }
     }
@@ -130,9 +147,45 @@ impl App {
             self.refuse(why);
             return;
         }
+        // Emulate has no cell to aim — `Game::tactical_emulate` is its own
+        // door — so it leaves here for `Mode::TacticalEmulate` instead of
+        // `Mode::TacticalAim`, todo #100 Task 6.
+        if option.targeting == SpecialTargeting::Image {
+            self.pending_tactical_emulate = Some(option.index);
+            self.menu_selected = 0;
+            self.mode = Mode::TacticalEmulate;
+            return;
+        }
         // `SpecialOption::index` is a position in `actor_abilities`, which
         // is what `tactical_use_routine` indexes — never the row.
         self.open_tactical_aim(TacticalIntent::Routine(option.index));
+    }
+
+    /// Picks which learned image the routine chosen in
+    /// `Mode::TacticalRoutine` invokes, then commits straight through
+    /// `Game::tactical_emulate` — todo #100 Task 6. Esc returns to the
+    /// routine list, spending nothing, the same shape a cancelled aim has.
+    pub(crate) fn handle_tactical_emulate_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_tactical_emulate = None;
+            self.mode = Mode::TacticalRoutine;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let options = game.emulation_options();
+        let Some(idx) = self.selected_index(key, options.len()) else {
+            return;
+        };
+        let Some(index) = self.pending_tactical_emulate.take() else {
+            return;
+        };
+        let species = options[idx].species.clone();
+        self.mode = Mode::TacticalBattle;
+        let Some(game) = &mut self.game else { return };
+        if !game.tactical_emulate(index, &species) {
+            self.refuse("Couldn't emulate that.");
+        }
+        self.after_tactical_action();
     }
 
     /// Moves the cell cursor and commits what was chosen to it.
@@ -368,6 +421,7 @@ impl App {
             return false;
         }
         self.pending_tactical = None;
+        self.pending_tactical_emulate = None;
         self.tactical_cursor = None;
         self.tactical_carry = 0.0;
         // Per fight: the next one opens hands-on however this one ended.

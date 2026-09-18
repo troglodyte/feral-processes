@@ -491,7 +491,14 @@ pub enum SpecialTargeting {
     Ally,
     /// Lands on an enemy group.
     Enemy,
-    /// PowerReserve no choice at all — it resolves the moment it is picked.
+    /// Picks a learned image to invoke — `Game::emulation_options()`'s list
+    /// (todo #100 Task 6). `AbilityTarget::targeting` cannot answer this:
+    /// Emulate is authored `target: WholeParty` (the shape that opens no
+    /// ally/group picker, `Summon`'s reason), so `special_options_for`
+    /// overrides it for `AbilityEffect::Emulate` alone rather than widening
+    /// `AbilityTarget` for one ability.
+    Image,
+    /// No choice at all — it resolves the moment it is picked.
     None,
 }
 

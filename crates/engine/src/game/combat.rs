@@ -1515,7 +1515,17 @@ impl Game {
                 index,
                 name: ability.name.clone(),
                 detail: ability.description.clone(),
-                targeting: ability.target.targeting(),
+                // Emulate is authored `target: WholeParty` — the shape that
+                // opens no picker at all — but it needs one anyway, an
+                // image rather than an ally or a group. `AbilityTarget::
+                // targeting` cannot say that; it knows nothing about
+                // effects. Overridden here instead of widening
+                // `AbilityTarget` for one ability (todo #100 Task 6).
+                targeting: if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+                    crate::battle::SpecialTargeting::Image
+                } else {
+                    ability.target.targeting()
+                },
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),
                 cooldown: ability.cooldown,

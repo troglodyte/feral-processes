@@ -1222,6 +1222,7 @@ impl Game {
                         icon: identity.and_then(|i| i.icon.clone()),
                     }
                 });
+                let form = self.form_look(entity);
                 // `sprite_name()` is the one expression of the
                 // override-or-id fallback (see its doc comment on both
                 // defs) — an entity with neither component resolves to
@@ -1280,6 +1281,7 @@ impl Game {
                     label,
                     is_player,
                     look,
+                    form,
                     is_tamed,
                     is_companion,
                     is_hostile,

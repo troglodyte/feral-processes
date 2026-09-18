@@ -1349,8 +1349,18 @@ pub enum Mode {
     ///
     /// A picker, drawn as a popup over the battle map like every other
     /// list. A shaped routine leaves here for `Mode::TacticalAim` rather
-    /// than resolving, since where it is aimed is what a shape is for.
+    /// than resolving, since where it is aimed is what a shape is for — and
+    /// an Emulate row leaves here for `Mode::TacticalEmulate` instead, since
+    /// what it needs picked next is an image, not a cell.
     TacticalRoutine,
+    /// Picking which learned image to invoke, entered from
+    /// `Mode::TacticalRoutine` when the chosen routine's
+    /// `SpecialTargeting` is `Image` — todo #100 Task 6. Esc returns to the
+    /// routine list, spending nothing, `Mode::BattleAlly`'s own shape one
+    /// picker over. A row picked here commits straight through
+    /// `Game::tactical_emulate`, which has no cell to aim, so this never
+    /// hands off to `Mode::TacticalAim`.
+    TacticalEmulate,
     /// The cell cursor, entered from `Mode::TacticalBattle` for a swing or
     /// from `Mode::TacticalRoutine` for a routine.
     ///
@@ -1410,6 +1420,11 @@ pub enum Mode {
     /// `Mode::BattleSpecial` when the chosen ability is `Ally`-targeted,
     /// where an enemy-targeted one goes to `Mode::BattleTarget` instead.
     BattleAlly,
+    /// Picking which learned image to invoke. Entered from
+    /// `Mode::BattleSpecial` when the chosen ability's `SpecialTargeting`
+    /// is `Image` — todo #100 Task 6, `Mode::BattleAlly`'s own shape one
+    /// step over. Esc returns to `Mode::BattleSpecial`, spending nothing.
+    BattleEmulate,
     /// Where every fight ends — won, jacked out of, or survived. Shows the
     /// closing party roster (`Game::battle_result_party`, since
     /// `BattleState` is gone by now) over the pruned results scrolling in,
@@ -1961,6 +1976,7 @@ impl Mode {
             | Mode::BattleItem
             | Mode::BattleSpecial
             | Mode::BattleAlly
+            | Mode::BattleEmulate
             // The results page draws the closing roster and its bars are
             // still settling as the last lines scroll in, so wiping the
             // ghost trail here would cut the animation off at the moment
@@ -1975,6 +1991,7 @@ impl Mode {
             // tactical fight is drawn on the map.
             Mode::TacticalBattle
             | Mode::TacticalRoutine
+            | Mode::TacticalEmulate
             | Mode::TacticalAim
             | Mode::TacticalResult
             | Mode::MainMenu
@@ -2388,6 +2405,13 @@ pub struct App {
     /// `Mode::TacticalAim`, and taken rather than read on commit so a
     /// second Enter cannot spend the same action twice.
     pub pending_tactical: Option<TacticalIntent>,
+    /// The routine index (a position in `actor_abilities`, `TacticalIntent::
+    /// Routine`'s own reading) awaiting an image from `Mode::TacticalEmulate`
+    /// — todo #100 Task 6. `None` outside that mode: Emulate has no cell to
+    /// aim, so it never reaches `pending_tactical`, and this is its own
+    /// door instead of a `TacticalIntent` variant that would carry a cell
+    /// `commit_tactical_aim` never has anything to fill.
+    pub pending_tactical_emulate: Option<usize>,
     /// Seconds owed toward the wild side's next beat.
     ///
     /// **Seconds and not beats**, because a tactical fight has two rates: a

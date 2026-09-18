@@ -117,6 +117,20 @@ impl Game {
             .map_or(Kit::Unarmed, Kit::Innate)
     }
 
+    /// What `entity` draws instead of its own glyph while emulating —
+    /// `EntityView::form`/`tactical::TacticalBody::form`'s one source (todo
+    /// #100 Task 6), so the surface map and the battle board read the same
+    /// answer. `None` for anything not carrying `components::Emulation`,
+    /// which today is every body but the player.
+    pub(crate) fn form_look(&self, entity: Entity) -> Option<FormLook> {
+        let emulation = self.world.get::<Emulation>(entity)?;
+        let def = self.world.resource::<SpeciesDb>().get(&emulation.species)?;
+        Some(FormLook {
+            glyph: def.glyph,
+            sprite: Some(def.sprite_name().to_string()),
+        })
+    }
+
     /// Removes `entity`'s emulation and logs `line` — the lapse's door and
     /// Revert's (todo #100 Task 4). No-op when nothing is emulating, so
     /// either caller can reach for it unconditionally without checking

@@ -982,6 +982,28 @@ pub struct PlayerLook {
     pub icon: Option<PlayerIcon>,
 }
 
+/// What an emulating player draws instead of their own `@` — `game::kit::
+/// Game::form_look`'s one answer, carried on `EntityView::form` and
+/// `tactical::TacticalBody::form` alike so the surface map and the battle
+/// board cannot disagree about what an image looks like. `None` for every
+/// body that is not emulating; only the player ever carries
+/// `components::Emulation`, so this is `Some` for the player alone and
+/// never for a hostile or a companion.
+///
+/// **Not `is_boss: true`** — that flag also feeds XP and con logic, so
+/// reusing it would price an emulation as an apex spawn. The boss *styling*
+/// (magenta ink, con read in the earmark) is drawn by reading `form.is_
+/// some()` at the same two places `is_boss` already is, not by setting
+/// `is_boss` itself.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FormLook {
+    pub glyph: char,
+    /// `SpeciesDef::sprite_name`'s resolved name — always `Some`, the same
+    /// "try it, fall back to the glyph" contract every other sprite name on
+    /// `EntityView` carries, so `assets/sprites/` stays optional.
+    pub sprite: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct EntityView {
     pub entity: Entity,
@@ -1018,6 +1040,10 @@ pub struct EntityView {
     /// `is_player` is true, `None` for every other entity. See
     /// `PlayerLook`.
     pub look: Option<PlayerLook>,
+    /// What the player draws instead of `look`/`glyph` while emulating —
+    /// see `FormLook`. `None` for every entity that is not the emulating
+    /// player, `look`'s own shape.
+    pub form: Option<FormLook>,
     pub is_tamed: bool,
     pub is_companion: bool,
     pub is_hostile: bool,

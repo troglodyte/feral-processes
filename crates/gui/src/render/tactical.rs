@@ -30,6 +30,7 @@ use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_app_core::{Mode, menu_shortcut};
+use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
 
@@ -603,7 +604,15 @@ fn draw_body(
     let authored = super::glyph_color(body.color);
     // The player's `@` is a role, read off `is_player` and never off the
     // hue they happen to have spawned with.
-    let mut ink = if body.is_player {
+    //
+    // **`form` outranks it, todo #100 Task 6**: while emulating, the image
+    // spends the same boss magenta the surface map's own tile does — see
+    // `views::FormLook`'s doc for why this isn't `is_boss: true` instead —
+    // checked first so an emulating player's own role colour doesn't win
+    // the cell back.
+    let mut ink = if body.form.is_some() {
+        super::marks::boss_color()
+    } else if body.is_player {
         palette::PLAYER
     } else {
         authored
@@ -614,17 +623,40 @@ fn draw_body(
     let inset = sprite_inset(cell_px, body_glyph_px);
     // **The sprite call's own answer**, never `sprite.is_some()`: a name the
     // table has nothing under falls back to the glyph, and that glyph is
-    // free to carry the con rung.
-    let drew_sprite = body.sprite.as_deref().is_some_and(|name| {
+    // free to carry the con rung. `form`'s own sprite outranks `body.sprite`
+    // for the same reason `ink` above does.
+    let sprite = body
+        .form
+        .as_ref()
+        .and_then(|f| f.sprite.as_deref())
+        .or(body.sprite.as_deref());
+    let drew_sprite = sprite.is_some_and(|name| {
         painter.sprite(name, px + inset, py + inset, body_glyph_px as f32, ink)
     });
-    let con = ConRead::of(body.difficulty, body.is_boss, drew_sprite);
+    let con = ConRead::of(
+        body.difficulty,
+        body.is_boss || body.form.is_some(),
+        drew_sprite,
+    );
     if !drew_sprite {
-        let glyph = body.glyph.to_string();
+        let glyph = body
+            .form
+            .as_ref()
+            .map_or(body.glyph, |f| f.glyph)
+            .to_string();
         let dims = painter.measure_map(&glyph, body_glyph_px);
         let tx = px + (cell_px - dims.width) / 2.0;
         let ty = py + (cell_px + dims.height) / 2.0;
         painter.map(&glyph, tx, ty, body_glyph_px, con.glyph_ink(ink, 1.0));
+    }
+    // The player-colour outline the surface map's own tile keeps while
+    // emulating — `render/base.rs`'s doc has the argument for why a corner
+    // mark would misread as the nemesis mark on that board; this board has
+    // no nemesis mark to be confused with, but the same outline keeps the
+    // two grids agreeing about what an image looks like.
+    if body.is_player && body.form.is_some() {
+        let colour = super::player_look_color(body.look.as_ref().and_then(|look| look.colour));
+        painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, colour);
     }
     // The rare-spawn tier's own bar — see `marks::draw_rarity_bar`. Drawn
     // before the earmark below, which drops clear of it exactly as the
@@ -901,6 +933,16 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         // fight model naming the same verb differently is what makes the
         // shared `s` stop reading as the same key.
         ("s".to_string(), "special".to_string()),
+    ];
+    // Only while the acting body is emulating (todo #100 Task 6) —
+    // `Special`'s own reason: a body not emulating has nothing to revert,
+    // and a permanently-there row would teach nothing new. Uppercase, and
+    // between `s` and `E` for the same reason `battle_action_options`
+    // offers the group model's own Revert row right after Special.
+    if acting_body(view).is_some_and(|b| b.form.is_some()) {
+        rows.push(("V".to_string(), "revert".to_string()));
+    }
+    rows.extend([
         ("E".to_string(), "end turn".to_string()),
         // Before `A`, which stays last per its own comment below.
         ("R".to_string(), "resolve".to_string()),
@@ -908,7 +950,7 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         // row that may go — but it does not go at 1280x720, which is
         // `the_action_bar_fits_the_log_pane`'s measurement and not a hope.
         ("A".to_string(), "auto-attack".to_string()),
-    ];
+    ]);
     if view.acted {
         // The auto and resolve rows survive a spent turn: arming either is
         // not an action, and a turn with nothing left to spend is exactly
@@ -948,6 +990,39 @@ pub(super) fn draw_tactical_routines(
     }
     draw_popup(
         "Run a Routine",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
+/// Which learned image does Emulate invoke? `draw_tactical_routines`'s
+/// shape one picker over — todo #100 Task 6. The figures shown are
+/// `Game::emulation_options`'s own `atk`/`mitigation`, a call rather than a
+/// second formula, so this can never quote a number invoking the row
+/// installs a different one from.
+pub(super) fn draw_tactical_emulate(
+    options: &[EmulationOption],
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row("Invoke which image?")];
+    for (i, option) in options.iter().enumerate() {
+        let label = format!(
+            "[{}] {} — ATK {} MIT {}",
+            menu_shortcut(i),
+            option.name,
+            option.atk,
+            option.mitigation
+        );
+        rows.push(item_row(label, i == selected));
+    }
+    draw_popup(
+        "Invoke an Image",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1032,6 +1107,88 @@ mod tests {
         Rect::new(0.0, 0.0, 800.0, 600.0)
     }
 
+    /// Advances the wild side one turn at a time until the board hands the
+    /// turn to the player — `crates/app-core/src/tests/tactical.rs`'s
+    /// `wait_for_the_player`, copied rather than shared across crates.
+    fn wait_for_the_player(game: &mut Game) {
+        for _ in 0..64 {
+            if game.tactical_awaits_input() {
+                return;
+            }
+            assert!(
+                game.tactical_ai_turn(),
+                "nobody is acting and it is not the player"
+            );
+        }
+        panic!("the turn never came round to the player");
+    }
+
+    /// `fighting()`, with the player already emulating a known image —
+    /// todo #100 Task 6. `resources::EmulationImages` has no public writer
+    /// short of a real extraction, unlike `KnownRoutines` (`CharacterChoice::
+    /// routine`, `abilities::install_starter`'s own door), so this writes
+    /// the image straight into `save::SaveData::emulation_images` and
+    /// reloads — `savetool`'s own dump-edit-pack shape, entirely through
+    /// the engine's public `save::` functions, never `Game::world`.
+    fn emulating_fight() -> Game {
+        use feral_processes_engine::battle::SpecialTargeting;
+        use feral_processes_engine::save;
+        use feral_processes_engine::{CharacterChoice, DifficultyMode};
+
+        for seed in 0..200u32 {
+            let choice = CharacterChoice {
+                routine: Some("emulate".to_string()),
+                ..CharacterChoice::default()
+            };
+            let mut game = Game::new_with(seed, DifficultyMode::Forgiving, &assets(), &choice)
+                .expect("the assets parse");
+            let species = game
+                .species_defs()
+                .into_iter()
+                .next()
+                .expect("at least one species ships")
+                .id;
+
+            let tmp = std::env::temp_dir().join(format!(
+                "fp_gui_emulating_fight_{}_{seed}.bin",
+                std::process::id()
+            ));
+            game.save(&tmp).expect("the fixture must save");
+            let mut data = save::load_from_file(&tmp).expect("the fixture save must load back");
+            data.emulation_images.push(species.clone());
+            save::save_to_file(&tmp, &data).expect("the edited save must write back");
+            let mut game = Game::load(&tmp, &assets()).expect("the edited save must load");
+            let _ = std::fs::remove_file(&tmp);
+
+            let mut profile = game.profile().clone();
+            profile.tactical_battles = true;
+            game.install_profile(profile);
+
+            let at = game.player_status().position;
+            let target = game
+                .view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - at.0).abs() + (e.pos.1 - at.1).abs() == 1);
+            let Some(target) = target else { continue };
+            game.move_player(target.pos.0 - at.0, target.pos.1 - at.1);
+            if !game.in_tactical_battle() {
+                continue;
+            }
+
+            wait_for_the_player(&mut game);
+            let index = game
+                .tactical_routine_options()
+                .into_iter()
+                .find(|o| o.targeting == SpecialTargeting::Image)
+                .expect("emulate must be offered")
+                .index;
+            assert!(game.tactical_emulate(index, &species));
+            return game;
+        }
+        panic!("no seed under 200 put a lone wild program next to the player");
+    }
+
     /// A game standing in a tactical fight around one freshly-folded squad
     /// and nothing else — five of a kind is the shipped formation's own
     /// threshold (`tuning::FORMATIONS[0].members`), so the whole pack folds
@@ -1080,6 +1237,60 @@ mod tests {
                 body.glyph
             );
         }
+    }
+
+    /// The overdraw trap, `every_body_on_the_board_is_drawn`'s companion,
+    /// for an emulating player's own body (todo #100 Task 6): the image's
+    /// sprite must draw, and neither the player's `@` nor the image's own
+    /// glyph as text may still be underneath it — plus the player-colour
+    /// outline the con read and the boss magenta both leave the player
+    /// findable through.
+    #[test]
+    fn the_emulating_players_body_draws_its_form_and_outline() {
+        use crate::paint::{SpriteTable, painted_rect_stroke_count, with_sprites};
+
+        let mut game = emulating_fight();
+        let view = game.tactical_view().expect("the fight is open");
+        let player = view
+            .bodies
+            .iter()
+            .find(|b| b.is_player)
+            .expect("the player is on the board");
+        let form = player.form.clone().expect("the fixture must be emulating");
+        let mut table = SpriteTable::default();
+        table.insert(
+            form.sprite
+                .clone()
+                .expect("the fixture's image has a sprite name"),
+            bevy_egui::egui::TextureId::User(9),
+        );
+
+        let mut fx = Fx::new();
+        let (_, shapes) = with_sprites(table, |p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let images = crate::paint::painted_images(&shapes);
+        let painted = painted_text(&shapes);
+
+        assert_eq!(images.len(), 1, "exactly one sprite, the image's own");
+        assert!(
+            !painted.iter().any(|t| t == "@"),
+            "the '@' must give way to the form, not sit under it: {painted:?}"
+        );
+        let form_glyph = form.glyph.to_string();
+        assert!(
+            !painted.iter().any(|t| t == &form_glyph),
+            "the form's own glyph must not draw as text under its sprite \
+             either, or the sprite has drawn beside it rather than in place \
+             of it: {painted:?}"
+        );
+
+        let outline = super::super::player_look_color(player.look.as_ref().and_then(|l| l.colour));
+        assert!(
+            painted_rect_stroke_count(&shapes, outline) > 0,
+            "the emulating player's own body must keep an outline in their \
+             colour, since the hue is spent on boss magenta"
+        );
     }
 
     /// A finished tactical fight ends in a popup over its own board, and

@@ -202,6 +202,11 @@ impl Game {
         let mut pool: Vec<String> = db
             .all()
             .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
+            // Final review F2: the same door `ItemDb::creation_shelf` and
+            // `Game::routine_disk_pool` already go through — a disk shelf
+            // that skips it sells straight past whatever it exists to
+            // gate (Emulate, today).
+            .filter(|def| crate::abilities::ability_disk_shelved(def))
             .map(|def| def.id.clone())
             .collect();
 

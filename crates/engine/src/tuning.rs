@@ -5333,6 +5333,33 @@ pub fn routine_research_cost(scope_rank: u8, version: (u32, u32), zone: u32) -> 
         + ROUTINE_RESEARCH_VERSION_STEP * version.0.saturating_sub(1)
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Player emulation
+// ─────────────────────────────────────────────────────────────────────────
+//
+// See `progression::emulated_stats` (todo #100). An emulation grows the
+// image's species to the player's level and then multiplies attack and
+// mitigation by the same figure, so a wild program of the same species and
+// level is always the weaker of the two.
+
+/// The flat multiplier `progression::emulated_stats` applies to both attack
+/// and mitigation, on top of the species' own growth. Kept above 1.0 so an
+/// emulation always beats a wild program of the same species at the same
+/// level — the strength the feature exists to sell. A guess, not a
+/// measurement: `balance_sim` models no abilities, so this is retuned
+/// against the arena (todo #100 Task 7).
+pub const EMULATION_EDGE: f32 = 1.25;
+
+/// Added to `EMULATION_EDGE` per level of `Perk::EmulationFidelity`. A
+/// guess alongside `EMULATION_EDGE`, for the same reason.
+pub const EMULATION_EDGE_PER_PERK_LEVEL: f32 = 0.1;
+
+/// How many rounds `AbilityEffect::Emulate` holds an image for, once that
+/// effect exists (todo #100 Task 3). This is the default the ability file
+/// authors — the `.ron` file is the source of truth once it is written, and
+/// this constant only says what a fresh one should start at.
+pub const EMULATION_ROUNDS: u32 = 10;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,7 +6,7 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 **This directory is a catalogue, not a content directory.** Unlike species,
 structures, items and abilities, you cannot add a perk by dropping in a new
-file — the eighteen that exist are fixed, and each file here only controls what
+file — the twenty that exist are fixed, and each file here only controls what
 one of them is *called*, how it *reads*, and what it *costs*. A file naming
 anything else fails to parse and is skipped.
 
@@ -20,14 +20,16 @@ straight to your stats at purchase time, Obfuscation into what a Trace source
 costs, Process Pool into the roster capacity, Teardown into a teardown's yield,
 Failover into the base-wide repair rate, Tighten Tolerances into the floor a
 compiled copy of gear rolls its quality off, Target Lock into the flat
-Accuracy every attack you make carries, and the five `*_affinity` perks
+Accuracy every attack you make carries, Scheduler into a forked program's
+rarity roll, Emulation Fidelity into the multiplier an emulated image's
+attack and mitigation are scaled by, and the five `*_affinity` perks
 each multiply one `AffinityKind` category's magnitude for your own invocations only
 — see below. There is no `effect:` field that could cover those without
-becoming a programming language. So a nineteenth perk means a new `Perk`
+becoming a programming language. So a twenty-first perk means a new `Perk`
 variant in `crates/engine/src/perks.rs` plus a hook wherever its effect
 belongs — see the repo's `CLAUDE.md`.
 
-**Five of the eighteen reach subsystems the rest never touch.** Obfuscation
+**Five of the twenty reach subsystems the rest never touch.** Obfuscation
 reduces what every Trace source adds while you are in the Stack, floored so a
 source always costs *something* — deliberately unlike Low Power Mode, which
 is allowed to stop hunger draining entirely, because Trace is the Stack's
@@ -83,7 +85,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
 
 ```ron
 (
-    // Which perk this file describes. One of exactly these eighteen, written
+    // Which perk this file describes. One of exactly these twenty, written
     // as a bare identifier (not a quoted string):
     //
     //   KeenScavenger   raises a mining node's per-cycle success chance
@@ -107,6 +109,9 @@ say so in the `description` too — nothing keeps the two in sync for you.
     //   Failover        repairs your structures with no Patch Node standing
     //   TightenTolerances raises the quality gear you compile rolls at
     //   TargetLock      raises the Accuracy of every attack you make
+    //   Scheduler       widens a forked program's rarity roll and ceiling
+    //   EmulationFidelity raises the multiplier an emulated image's attack
+    //                   and mitigation are scaled by
     //
     // Two files naming the same perk is not an error; the last one loaded
     // wins, and which that is depends on directory order — so don't.
@@ -162,7 +167,7 @@ entries, so it never has to parse as a perk. Both fields are required.
 
 **It is the one statement of a section's heading, its contents and its
 position**, which is why the grouping is not a `group:` field on each of the
-eighteen catalogue files. Membership alone orders nothing — a per-perk
+twenty catalogue files. Membership alone orders nothing — a per-perk
 label would need a second rule for which heading comes first, and two
 authored halves of one layout drift apart the first time someone edits only
 one of them.

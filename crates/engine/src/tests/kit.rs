@@ -5,12 +5,23 @@
 
 use super::support::*;
 use super::tactical::body;
+use crate::components::Perks;
 use crate::game::kit::Kit;
+use crate::perks::{Perk, emulation_fidelity_level};
+use crate::progression::{emulated_stats, stats_after_levels};
 use crate::tuning::{PLAYER_UNARMED_DAMAGE, TACTICAL_MELEE_RANGE};
-use crate::{DifficultyMode, Game};
+use crate::{DifficultyMode, Game, components::Stats};
 
 fn game() -> Game {
     Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+fn drone(game: &Game) -> crate::species::SpeciesDef {
+    game.world
+        .resource::<crate::species::SpeciesDb>()
+        .get("drone")
+        .unwrap()
+        .clone()
 }
 
 fn innate_species(game: &Game, entity: bevy_ecs::entity::Entity) -> Option<String> {
@@ -110,4 +121,108 @@ fn a_stray_body_has_no_class_affinity() {
     let neutral = crate::tuning::AFFINITY_NEUTRAL;
     assert!(game.ability_affinity(game.player_entity(), &heal) > neutral);
     assert_eq!(game.ability_affinity(stray, &heal), neutral);
+}
+
+/// `progression::emulated_stats`: an emulation's strength, todo #100 Task 2.
+mod emulated_stats_tests {
+    use super::*;
+
+    /// `EMULATION_EDGE` is above 1.0, so an emulation beats a wild program
+    /// of the same species at the same level — see the constant's doc.
+    #[test]
+    fn an_emulations_atk_exceeds_the_wild_growth_it_is_built_on() {
+        let game = game();
+        let def = drone(&game);
+        let base = Stats {
+            hp: def.base_hp,
+            max_hp: def.base_hp,
+            atk: def.base_atk,
+            mitigation: def.base_mitigation,
+        };
+        let grown = stats_after_levels(base, 9, def.growth_multiplier);
+
+        let emulated = emulated_stats(&def, 10, 0);
+
+        assert!(
+            emulated.atk > grown.atk,
+            "emulated atk {} should beat the wild growth it is scaled from ({})",
+            emulated.atk,
+            grown.atk
+        );
+    }
+
+    /// Species base stats are level 1, so growing "to the player's level"
+    /// is `levels_gained = player_level - 1`.
+    #[test]
+    fn growth_stops_one_level_short_of_the_player_level() {
+        let game = game();
+        let def = drone(&game);
+
+        let level_one = emulated_stats(&def, 1, 0);
+        let level_two = emulated_stats(&def, 2, 0);
+
+        assert_eq!(
+            level_one.atk,
+            (def.base_atk as f32 * crate::tuning::EMULATION_EDGE).round() as i32,
+            "at player level 1 the species has gained no levels yet"
+        );
+        assert!(
+            level_two.atk > level_one.atk,
+            "a level 2 player should grow the image past its level-1 figure"
+        );
+    }
+
+    #[test]
+    fn each_fidelity_level_raises_atk() {
+        let game = game();
+        let def = drone(&game);
+
+        let unperked = emulated_stats(&def, 10, 0);
+        let one_level = emulated_stats(&def, 10, 1);
+        let two_levels = emulated_stats(&def, 10, 2);
+
+        assert!(one_level.atk > unperked.atk);
+        assert!(two_levels.atk > one_level.atk);
+    }
+
+    /// Mitigation is percentage points and never scaled by level (see
+    /// `components::Stats::mitigation`), but it does take the same
+    /// fidelity multiplier as attack, rounded — the cap stays
+    /// `Game::effective_mitigation`'s job.
+    #[test]
+    fn mitigation_is_unscaled_by_level_but_takes_the_multiplier() {
+        let game = game();
+        let def = drone(&game);
+
+        let low_level = emulated_stats(&def, 1, 0);
+        let high_level = emulated_stats(&def, 40, 0);
+        assert_eq!(
+            low_level.mitigation, high_level.mitigation,
+            "mitigation must not grow with the player's level"
+        );
+        assert_eq!(
+            low_level.mitigation,
+            (def.base_mitigation as f32 * crate::tuning::EMULATION_EDGE).round() as i32
+        );
+
+        let perked = emulated_stats(&def, 1, 3);
+        assert!(
+            perked.mitigation > low_level.mitigation,
+            "a higher fidelity level should still raise mitigation via the multiplier"
+        );
+    }
+
+    /// `emulation_fidelity_level` is the perk's named query —
+    /// `every_perk_has_a_query_that_answers_what_it_is_worth` (perks.rs)
+    /// fails to compile until `Perk::EmulationFidelity` has one.
+    #[test]
+    fn emulation_fidelity_level_reads_the_perk() {
+        assert_eq!(emulation_fidelity_level(None), 0);
+
+        let bought = Perks {
+            points: 0,
+            unlocked: vec![Perk::EmulationFidelity, Perk::EmulationFidelity],
+        };
+        assert_eq!(emulation_fidelity_level(Some(&bought)), 2);
+    }
 }

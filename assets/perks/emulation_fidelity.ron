@@ -1,0 +1,6 @@
+(
+    id: EmulationFidelity,
+    name: "Emulation Fidelity",
+    description: "Your emulations run truer to source. +10 percentage points to an emulated image's attack and mitigation multiplier per level.",
+    cost: 3,
+)

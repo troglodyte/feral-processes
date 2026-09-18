@@ -60,18 +60,39 @@ impl Game {
     /// A species the `SpeciesDb` doesn't know falls back to
     /// `DEFAULT_TAMING_DIFFICULTY` rather than refusing, which is what the
     /// battle view already did.
+    ///
+    /// **A squad is priced as the body a capture actually takes.** What
+    /// leaves a `components::Squad` is one member, so `power_ratio` and the
+    /// species' resistance are read off the lead rather than off the summed
+    /// block — against five bodies' `Stats::power` every attempt sat on
+    /// `CAPTURE_CHANCE_MIN` and the feature was unreachable. The other two
+    /// terms stay the squad's own: its Integrity fraction is what the spec
+    /// prices the attempt at, and `prior_attempts` is keyed to the thing the
+    /// player is aiming at and quoted back on screen. Here rather than in
+    /// `decompile_squad` because this is the one place the four are
+    /// assembled, so the sites that *show* the odds move with the one that
+    /// rolls them.
     pub(crate) fn target_resistance(&self, entity: Entity) -> Option<TargetResistance> {
         let stats = self.world.get::<Stats>(entity)?;
+        let priced_as = self
+            .world
+            .get::<Squad>(entity)
+            .and_then(|squad| squad.members.first().copied())
+            .unwrap_or(entity);
+        let power = self
+            .world
+            .get::<Stats>(priced_as)
+            .map_or_else(|| stats.power(), |s| s.power());
         Some(TargetResistance {
             hp_fraction: stats.hp_fraction(),
             taming_difficulty: self
                 .world
-                .get::<Creature>(entity)
+                .get::<Creature>(priced_as)
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .map(|s| s.taming_difficulty)
                 .unwrap_or(DEFAULT_TAMING_DIFFICULTY),
             prior_attempts: self.decompile_attempts(entity),
-            power_ratio: power_ratio(stats.power(), self.player_power()) as f32,
+            power_ratio: power_ratio(power, self.player_power()) as f32,
         })
     }
 

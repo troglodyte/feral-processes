@@ -4523,6 +4523,56 @@ mod squads {
         );
     }
 
+    /// **A squad's capture is priced as the lead, not as the summed block.**
+    /// The spec and `decompile_squad`'s own doc both say the roll is taken
+    /// as though for the lead at the squad's Integrity fraction, and
+    /// `TargetResistance::power_ratio` is the term that was reading five
+    /// bodies' `Stats::power` instead of one — enough to bury every attempt
+    /// at `CAPTURE_CHANCE_MIN`.
+    ///
+    /// Read off the odds rather than off a roll: at full Integrity the two
+    /// differ in `power_ratio` alone, so the quoted chances must be equal to
+    /// the float.
+    #[test]
+    fn a_squads_capture_is_priced_as_its_lead_and_not_as_the_summed_block() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 5, 40);
+        game.open_tactical_battle(pack);
+        let squad = seated_squad(&game);
+        let lead = game.world.get::<Squad>(squad).unwrap().members[0];
+        crate::tests::support::set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+
+        let squad_power = game.world.get::<Stats>(squad).unwrap().power();
+        let lead_power = game.world.get::<Stats>(lead).unwrap().power();
+        assert!(
+            squad_power > lead_power,
+            "fixture: a squad's block must outweigh one member's, or this says nothing"
+        );
+
+        let squad_at = game.target_resistance(squad).unwrap();
+        let lead_at = game.target_resistance(lead).unwrap();
+        assert_eq!(
+            squad_at.power_ratio, lead_at.power_ratio,
+            "the squad's roll is priced against its whole summed block"
+        );
+        assert_eq!(
+            squad_at.hp_fraction, 1.0,
+            "fixture: the squad is at full Integrity, so only power_ratio can differ"
+        );
+
+        let (_, potency) = game
+            .taming_catalyst()
+            .expect("the fixture stocked a catalyst");
+        let bonuses = game.player_decompiler_bonuses();
+        let as_a_squad = crate::taming::capture_chance(potency, squad_at, bonuses);
+        let as_the_lead = crate::taming::capture_chance(potency, lead_at, bonuses);
+        assert_eq!(as_a_squad, as_the_lead);
+        assert!(
+            as_a_squad > crate::tuning::CAPTURE_CHANCE_MIN,
+            "a squad priced off its block sits on the floor at {as_a_squad}"
+        );
+    }
+
     /// A squad's death pays each remaining member's own kill — the same XP
     /// five separate kills would pay, not one kill priced off the squad's
     /// inflated combined `Stats`. The player's `atk` is boosted to a
@@ -4725,9 +4775,17 @@ mod disbanding {
 mod squad_capture {
     use super::*;
 
-    /// A 9-of-a-kind squad, with the player's decompiler primed to land
-    /// almost every attempt (`DECOMPILER_SKILL_BONUS`, `CAPTURE_CHANCE_MAX`)
-    /// so the test's own retry loop stays short.
+    /// A 9-of-a-kind squad and a pack of catalysts.
+    ///
+    /// **The decompiler is left at whatever the player starts with**, so the
+    /// odds this rolls against are the real ones — around 0.19 at full
+    /// Integrity, rising as the squad is worn down. It used to force
+    /// `skill = 2000` to keep the retry loop short, and that clamped every
+    /// attempt at `CAPTURE_CHANCE_MAX`: a squad priced against its whole
+    /// summed block rolls `CAPTURE_CHANCE_MIN` instead, and the clamp made
+    /// the two indistinguishable, so this test read as covering the odds and
+    /// covered nothing about them. At the real rate the loop below spends 15
+    /// of its 40 attempts.
     fn squad_ready_to_capture(game: &mut Game) -> Entity {
         // Capturing all five members would otherwise run into
         // `BASE_PET_CAPACITY` (3) long before the squad runs out of
@@ -4746,14 +4804,6 @@ mod squad_capture {
         };
         let player = game.player_entity();
         only_routine(game, player, "decompile");
-        // Pushed well past `CAPTURE_CHANCE_MAX`'s clamp rather than tuned to
-        // a plausible in-game figure: this fixture wants the roll to be a
-        // formality so the fixed-seed retry loop below stays short, not to
-        // model a real decompiler build.
-        game.world
-            .get_mut::<crate::components::Decompiler>(player)
-            .unwrap()
-            .skill = 2000;
         crate::tests::support::set_inventory(game, &[(crate::items::ids::ICE_BREAKER, 50)]);
         squad
     }

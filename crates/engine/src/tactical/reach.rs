@@ -355,6 +355,16 @@ pub fn aim_in_sight(board: &Board, from: (i32, i32), aim: (i32, i32), shape: Abi
 /// `Board::blocks_sight` — a `Cover` cell, and nothing else. `Single` names
 /// one cell, and whether that cell may be aimed at is `aim_in_sight`'s
 /// question rather than this function's.
+///
+/// **`from` is the invoker's anchor and not its nearest footprint cell**, the
+/// one door a squad's block is not read through. Every caller passes the same
+/// anchor, so nothing can disagree about it, and no shipped ability authors a
+/// `Line` or a `Cone` — every shape is derived from `AbilityTarget` as
+/// `Single` or `Radius`, which are aimed rather than walked out. A mod that
+/// authors one **and** grants it to a species that folds would walk it from
+/// the block's top-left corner instead of the edge it is fired from; the fix
+/// is a footprint here and at `aim_in_sight`, not a special case at the
+/// caller.
 pub fn shape_cells(
     board: &Board,
     from: (i32, i32),

@@ -273,7 +273,21 @@ impl TacticalBattle {
     /// how many actions it gets a turn. Called once, when it is seated
     /// (`Game::open_tactical_battle_at`), never again: a squad keeps its
     /// formation to the end whatever its Integrity.
+    ///
+    /// **Shaping comes before seating**, and the assert is what holds it:
+    /// `place` validates the footprint it knows about, so a body seated
+    /// while still reading as one cell has its block checked against
+    /// nothing, and a widening `set_shape` afterwards can leave two bodies
+    /// overlapping with no refusal anywhere. Today the one caller is
+    /// correct only because `deploy::plan` reserved a clear block two files
+    /// away; this makes the rule local to the type, so a second seating
+    /// site cannot get it wrong quietly.
     pub(crate) fn set_shape(&mut self, body: Entity, footprint: u8, actions: u8) {
+        debug_assert!(
+            self.cell_of(body).is_none(),
+            "a body's shape must be set before it is seated, or `place` \
+             checked a footprint it did not yet know about"
+        );
         self.shapes.insert(body, BodyShape { footprint, actions });
     }
 
@@ -631,6 +645,22 @@ mod tests {
             .expect("a board with no ground")
     }
 
+    /// The first anchor a whole `footprint`x`footprint` block stands on —
+    /// [`first_open`](first_open) answers for one cell, which is not the
+    /// same question once a body is wider than that.
+    fn first_open_block(battle: &TacticalBattle, footprint: u8) -> (i32, i32) {
+        battle
+            .board
+            .cells()
+            .map(|(c, _)| c)
+            .find(|&c| {
+                footprint_cells_at(c, footprint)
+                    .iter()
+                    .all(|&(x, y)| battle.board.walkable(x, y))
+            })
+            .expect("a board with no room for a block")
+    }
+
     #[test]
     fn two_bodies_never_share_a_cell() {
         let (mut battle, bodies) = fight();
@@ -706,17 +736,15 @@ mod tests {
         assert_eq!(battle.cell_of(bodies[0]), Some(a));
     }
 
-    /// A body that dies or walks off the edge leaves, and takes its cell
-    /// with it.
     /// A body's shape leaves with it. Entity ids are reused, so a stale
     /// entry is not merely untidy — the next body handed that id would seat
     /// at the dead one's footprint.
     #[test]
     fn a_removed_body_takes_its_shape_with_it() {
         let (mut battle, bodies) = fight();
-        let cell = first_open(&battle);
+        let cell = first_open_block(&battle, 2);
         battle.set_shape(bodies[0], 2, 2);
-        battle.place(bodies[0], cell);
+        assert!(battle.place(bodies[0], cell), "the 2x2 block had no room");
         assert_eq!(battle.footprint_of(bodies[0]), 2);
 
         battle.remove(bodies[0]);
@@ -727,6 +755,8 @@ mod tests {
         );
     }
 
+    /// A body that dies or walks off the edge leaves, and takes its cell
+    /// with it.
     #[test]
     fn a_removed_body_frees_its_cell() {
         let (mut battle, bodies) = fight();
@@ -928,9 +958,9 @@ mod tests {
     #[test]
     fn a_seated_shape_is_what_footprint_of_and_begin_turn_read() {
         let (mut battle, bodies) = fight();
-        let cell = first_open(&battle);
-        battle.place(bodies[0], cell);
+        let cell = first_open_block(&battle, 2);
         battle.set_shape(bodies[0], 2, 2);
+        assert!(battle.place(bodies[0], cell), "the 2x2 block had no room");
         assert_eq!(battle.footprint_of(bodies[0]), 2);
         assert_eq!(
             battle.cells_of(bodies[0]).len(),
@@ -944,6 +974,39 @@ mod tests {
             2,
             "begin_turn (run by set_initiative) must read the seated shape"
         );
+    }
+
+    /// Seating checks the whole block, and `TacticalBattle` is where that is
+    /// enforced — `deploy::plan` reserving a clear block is what makes the
+    /// one production caller safe today, so this pins the rule without it.
+    ///
+    /// The overlap is on the footprint's *second* cell and its anchor is
+    /// free, so a check that reads the anchor alone accepts it.
+    #[test]
+    fn seating_a_shaped_body_refuses_a_block_another_body_is_standing_in() {
+        let spec = BattleSpec {
+            world_seed: 5,
+            site: (0, 0),
+            tick: 10,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 4,
+        };
+        let mut world = World::new();
+        let (sitting, squad) = (world.spawn_empty().id(), world.spawn_empty().id());
+        let mut battle = TacticalBattle::open(spec, Board::from_rows(&["....."; 5]));
+        assert!(battle.place(sitting, (1, 1)));
+
+        battle.set_shape(squad, 2, 2);
+        assert!(
+            !battle.place(squad, (0, 0)),
+            "a 2x2 block was seated over a body standing in its far corner"
+        );
+
+        // The same anchor at the ordinary footprint is free, so the refusal
+        // above is the block's doing and not the anchor's.
+        let ordinary = world.spawn_empty().id();
+        assert!(battle.place(ordinary, (0, 0)));
     }
 
     /// A body `set_shape` never touched still reads footprint 1, action 1 —

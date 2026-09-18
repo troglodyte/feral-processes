@@ -120,6 +120,14 @@ const HEAL_MARK_BOUNCES: f32 = 2.0;
 /// How high a heal mark bounces, as a fraction of a tile.
 const HEAL_MARK_HEIGHT: f32 = 0.55;
 
+/// How long a reaction's `!` lives. Shorter than a heal's mark: it has to
+/// be read beside the swing it announces, not after it.
+pub const REACTION_MARK_SECONDS: f64 = 0.6;
+/// How high a reaction's `!` pops, as a fraction of a tile.
+const REACTION_MARK_HEIGHT: f32 = 0.4;
+/// The share of its life a reaction's `!` spends rising before it holds.
+const REACTION_MARK_RISE: f32 = 0.2;
+
 /// How far a damaged structure's glyph is allowed to dim toward grey. Below
 /// this it stops reading as a structure at all.
 const MIN_TINT: f32 = 0.45;
@@ -532,10 +540,17 @@ fn heal_mark_height(t: f32) -> f32 {
     HEAL_MARK_HEIGHT * (std::f32::consts::PI * HEAL_MARK_BOUNCES * t).sin().abs()
 }
 
-/// A heal mark fades linearly across its whole life, `draw_floats`' own
-/// curve — there is no separate hold, since two bounces already give the
+/// How high a reaction's `!` sits above its rest position at `t`: a snap
+/// up over `REACTION_MARK_RISE`, then held while it fades — a pop rather
+/// than a heal's bounce, so the two marks never read as the same news.
+fn reaction_mark_height(t: f32) -> f32 {
+    REACTION_MARK_HEIGHT * (t / REACTION_MARK_RISE).min(1.0)
+}
+
+/// A cell mark fades linearly across its whole life, `draw_floats`' own
+/// curve — there is no separate hold, since the motion already gives the
 /// eye enough time to catch it.
-fn heal_mark_alpha(t: f32) -> f32 {
+fn cell_mark_alpha(t: f32) -> f32 {
     (1.0 - t).clamp(0.0, 1.0)
 }
 
@@ -590,13 +605,58 @@ struct TileFlash {
     start: f64,
 }
 
-/// A green `+` bouncing over a body that was healed on a tactical battle
-/// map, drawn from a `TacticalFxCue` the engine queued and forgot —
-/// `TileFlash`'s counterpart for the one kind of tactical fx that draws
-/// nothing like a wash or a spark burst.
-struct HealMark {
+/// A glyph lifted over a body's cell on a tactical battle map, drawn from a
+/// `TacticalFxCue` the engine queued and forgot — `TileFlash`'s counterpart
+/// for the kinds of tactical fx that draw nothing like a wash or a spark
+/// burst.
+struct CellMark {
     pos: (i32, i32),
+    kind: MarkKind,
     start: f64,
+}
+
+/// What a `CellMark` is, and so everything about how it draws. The glyph,
+/// the hue, the life and the motion are the whole of the difference between
+/// two marks, which is why they are one list and one draw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MarkKind {
+    /// A green `+` bouncing over a body that was healed. `HEALTHY` rather
+    /// than a new palette role — Integrity coming back is what it means.
+    Heal,
+    /// A `!` popping over a body that took an opportunity swing.
+    /// `ATTENTION`, not `THREAT`: the reactor may be on the player's side,
+    /// and `THREAT` is reserved for a structure taking a hit.
+    Reaction,
+}
+
+impl MarkKind {
+    fn glyph(self) -> &'static str {
+        match self {
+            MarkKind::Heal => "+",
+            MarkKind::Reaction => "!",
+        }
+    }
+
+    fn color(self) -> Color {
+        match self {
+            MarkKind::Heal => palette::HEALTHY,
+            MarkKind::Reaction => palette::ATTENTION,
+        }
+    }
+
+    fn seconds(self) -> f64 {
+        match self {
+            MarkKind::Heal => HEAL_MARK_SECONDS,
+            MarkKind::Reaction => REACTION_MARK_SECONDS,
+        }
+    }
+
+    fn height(self, t: f32) -> f32 {
+        match self {
+            MarkKind::Heal => heal_mark_height(t),
+            MarkKind::Reaction => reaction_mark_height(t),
+        }
+    }
 }
 
 /// A body walking across base space, drawn from a `TransitCue` the engine
@@ -664,7 +724,7 @@ pub struct Fx {
     now: f64,
     flashes: Vec<TileFlash>,
     tactical_flashes: Vec<TileFlash>,
-    heal_marks: Vec<HealMark>,
+    cell_marks: Vec<CellMark>,
     walkers: Vec<Walker>,
     bolts: Vec<Bolt>,
     floats: Vec<FloatingNumber>,
@@ -682,7 +742,7 @@ impl Fx {
             now: 0.0,
             flashes: Vec::new(),
             tactical_flashes: Vec::new(),
-            heal_marks: Vec::new(),
+            cell_marks: Vec::new(),
             walkers: Vec::new(),
             bolts: Vec::new(),
             floats: Vec::new(),
@@ -744,8 +804,14 @@ impl Fx {
                         kind: EffectKind::Hit,
                         start: now,
                     }),
-                    TacticalFxKind::Heal => self.heal_marks.push(HealMark {
+                    TacticalFxKind::Heal => self.cell_marks.push(CellMark {
                         pos: cue.pos,
+                        kind: MarkKind::Heal,
+                        start: now,
+                    }),
+                    TacticalFxKind::Reaction => self.cell_marks.push(CellMark {
+                        pos: cue.pos,
+                        kind: MarkKind::Reaction,
                         start: now,
                     }),
                 }
@@ -755,8 +821,7 @@ impl Fx {
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.tactical_flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
-        self.heal_marks
-            .retain(|h| now - h.start < HEAL_MARK_SECONDS);
+        self.cell_marks.retain(|m| now - m.start < m.kind.seconds());
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
         self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
@@ -768,7 +833,7 @@ impl Fx {
             // fights, and a hit lingering past the fight it landed in would
             // paint the wrong body's cell in whatever opens next.
             self.tactical_flashes.clear();
-            self.heal_marks.clear();
+            self.cell_marks.clear();
         }
     }
 
@@ -908,33 +973,30 @@ impl Fx {
         Self::draw_bursts_in(&self.tactical_flashes, self.now, painter, tile_px, to_px);
     }
 
-    /// Draws every heal mark currently bouncing over a healed body's cell on
-    /// a tactical battle map: a green `+`, centred the way `draw_walkers`
-    /// centres a glyph on measured ink, lifted by `heal_mark_height` and
-    /// faded by `heal_mark_alpha`.
-    ///
-    /// `HEALTHY` rather than a new palette role — a body's Integrity coming
-    /// back is exactly what that role already means.
-    pub fn draw_heal_marks(
+    /// Draws every cell mark currently over a body on a tactical battle
+    /// map — a heal's `+`, a reaction's `!` — centred the way
+    /// `draw_walkers` centres a glyph on measured ink, lifted by its kind's
+    /// own height curve and faded by `cell_mark_alpha`.
+    pub fn draw_cell_marks(
         &self,
         painter: &Painter,
         tile_px: f32,
         glyph_px: u16,
         to_px: impl Fn((i32, i32)) -> (f32, f32),
     ) {
-        const MARK: &str = "+";
-        for mark in &self.heal_marks {
-            let t = ((self.now - mark.start) / HEAL_MARK_SECONDS) as f32;
+        for mark in &self.cell_marks {
+            let t = ((self.now - mark.start) / mark.kind.seconds()) as f32;
             if !(0.0..1.0).contains(&t) {
                 continue;
             }
+            let glyph = mark.kind.glyph();
             let (ox, oy) = to_px(mark.pos);
-            let dims = painter.measure_map(MARK, glyph_px);
+            let dims = painter.measure_map(glyph, glyph_px);
             let x = ox + (tile_px - dims.width) / 2.0;
-            let y = oy + (tile_px + dims.height) / 2.0 - heal_mark_height(t) * tile_px;
-            let base = palette::HEALTHY;
-            let color = Color::new(base.r, base.g, base.b, heal_mark_alpha(t));
-            painter.map(MARK, x, y, glyph_px, color);
+            let y = oy + (tile_px + dims.height) / 2.0 - mark.kind.height(t) * tile_px;
+            let base = mark.kind.color();
+            let color = Color::new(base.r, base.g, base.b, cell_mark_alpha(t));
+            painter.map(glyph, x, y, glyph_px, color);
         }
     }
 

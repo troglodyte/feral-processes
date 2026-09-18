@@ -942,7 +942,7 @@ relying on one, and correct all three places if it has moved.
 - **`TacticalFxQueue` is `BoltCue`'s pattern for a body's own hit or heal,
   cued once inside `apply_damage`/`restore_hp` rather than at each call
   site** — a hit reuses `EffectKind::Hit`'s wash and burst in gui, a heal
-  draws through its own `Fx::heal_marks`.
+  and a reaction draw through `Fx::cell_marks`, one list keyed by `MarkKind`.
 - **A battle map's blows are heard off `SwingCueQueue`, never off the
   reveal** — `Game::log_swing` fills it only while a `TacticalBattle` is
   open, `App::take_sounds` drains it, and `advance_reveal`'s cue is gated on

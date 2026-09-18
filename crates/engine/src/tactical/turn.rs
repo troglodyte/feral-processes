@@ -437,6 +437,9 @@ impl Game {
                     to,
                     color,
                 });
+            self.world
+                .resource_mut::<crate::resources::TacticalFxQueue>()
+                .push(at, crate::resources::TacticalFxKind::Reaction);
             let (move_name, _) = self.swing_move_at(reactor, Some(reach::distance(at, to)));
             let range = self.natural_range_of(reactor);
             let outcome = self.resolve_and_apply_attack(

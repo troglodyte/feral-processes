@@ -194,7 +194,12 @@ impl Game {
             .get_resource::<TacticalBattle>()
             .and_then(|battle| {
                 let from = battle.cell_of(attacker)?;
-                let at = battle.cell_of(defender)?;
+                // The defender's nearest footprint cell to the attacker,
+                // rather than its anchor — `nearest_cell` is `cover_between`'s
+                // own signature staying cell-to-cell, so a caller holding a
+                // whole footprint picks one before calling it. One cell today,
+                // without a `Squad`.
+                let at = tactical::reach::nearest_cell(&battle.cells_of(defender), from)?;
                 Some(tactical::reach::cover_between(&battle.board, from, at))
             })
             .unwrap_or(false);

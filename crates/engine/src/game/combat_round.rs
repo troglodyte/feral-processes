@@ -1089,13 +1089,35 @@ impl Game {
     /// here. A copy of this on the tactical side would be a second place a
     /// patrol kill could stop charging a town.
     pub(crate) fn finish_hostile(&mut self, victim: Entity, player: Entity) {
+        let overkill = self.overkill_term(victim);
+        self.finish_hostile_with_overkill(victim, player, overkill);
+    }
+
+    /// `finish_hostile` with the overkill fraction supplied rather than
+    /// read off `victim`'s own `Stats`.
+    ///
+    /// **The door a squad's death needs and nothing else does.** A squad
+    /// member's own `Stats` never move — the squad takes every hit on one
+    /// shared block (`Game::effective_atk`'s `Squad` arm) — so
+    /// `overkill_term(member)` would always answer `0.0` regardless of how
+    /// the squad actually died, where the squad's *own* overkill (read
+    /// before `reap_tactical_dead` despawns it) is the real figure to
+    /// share. Routed through a parameter rather than a member's `Stats`
+    /// being written to fake it, because `Game::apply_damage` stays the
+    /// only path that damages a creature.
+    pub(crate) fn finish_hostile_with_overkill(
+        &mut self,
+        victim: Entity,
+        player: Entity,
+        overkill: f32,
+    ) {
         self.log_kind(
             MessageKind::Outcome,
             "The rogue program crashes and deletes itself!",
         );
         let earned = self.kill_xp(victim);
         self.award_player_xp(player, earned);
-        self.award_loot(victim);
+        self.award_loot(victim, overkill);
         let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
         // Read beside the nest and for its reason — the tether is on the
         // body that is about to be despawned. What it costs is *that town's*
@@ -1751,6 +1773,20 @@ impl Game {
             .map(|a| a.power)
             .unwrap_or(0);
         let field_bonus = self.field_buff_power(entity, FieldBuffKind::Atk);
+        // A squad's attack falls with its own Integrity, the way a pack
+        // thins as members drop one at a time — `Stats::atk * hp / max_hp`,
+        // scaling the raw base figure alone. A buff landing on a squad
+        // (nothing grants one today) still adds its full power on top,
+        // exactly as it would for any other body.
+        if self.world.get::<Squad>(entity).is_some() {
+            let frac = self
+                .world
+                .get::<Stats>(entity)
+                .map(|s| s.hp_fraction())
+                .unwrap_or(0.0);
+            let scaled = ((base as f32) * frac).round() as i32;
+            return scaled + bonus + field_bonus;
+        }
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }

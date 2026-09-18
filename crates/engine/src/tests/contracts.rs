@@ -524,7 +524,7 @@ fn every_kill_records_its_species() {
     let mut game = fresh();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let wild = game.spawn_wild_creature("drone", pos.x, pos.y).unwrap();
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert_eq!(
         game.world.resource::<crate::resources::RunFeats>().kills,
@@ -538,7 +538,7 @@ fn a_boss_kill_lands_in_both_fields() {
     let mut game = fresh();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let boss = game.spawn_wild_creature("overseer", pos.x, pos.y).unwrap();
-    game.award_loot(boss);
+    game.award_loot(boss, 0.0);
 
     let feats = game.world.resource::<crate::resources::RunFeats>();
     assert_eq!(feats.bosses_defeated, vec!["overseer".to_string()]);
@@ -569,7 +569,7 @@ fn progress_of(game: &Game, id: &str) -> u32 {
 fn kill(game: &mut Game, species: &str) {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let wild = game.spawn_wild_creature(species, pos.x, pos.y).unwrap();
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
     game.world.despawn(wild);
 }
 

@@ -137,6 +137,52 @@ pub(super) fn patrol_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     )
 }
 
+/// Where a battle-map body's own HP bar sits — the full width of its
+/// footprint's bottom edge, `render/tactical.rs::draw_body`'s own geometry
+/// pulled out here rather than restated: it is what `squad_mark_rect` reads
+/// for its own floor, and a copy kept beside the draw call is the one that
+/// drifts the moment either changes.
+///
+/// `cell_px` is the whole footprint's pixel width — `tile_px` scaled by a
+/// squad's own side — never one cell's alone, since the bar spans the
+/// footprint the way the surface map's progress bar spans one tile.
+pub(super) fn tactical_hp_bar_rect(px: f32, py: f32, cell_px: f32) -> Rect {
+    let h = (cell_px * 0.09).max(2.0);
+    Rect::new(px, py + cell_px - 1.0 - h, cell_px - 1.0, h)
+}
+
+/// Where a folded squad wears its own mark — the **bottom-right** corner of
+/// its footprint, not the top-right a stale spec asked for.
+///
+/// That spec was written before the battle map's in-cover mark shipped
+/// (`render/tactical.rs::draw_body`), which now owns the top-right corner
+/// the way `nemesis_mark_rect` owns it on the surface map. By the time this
+/// feature landed every other channel on a battle-map body was already
+/// spoken for — the rarity bar the top edge, the con earmark the top-left,
+/// the cover mark the top-right, the HP bar the bottom edge — so the squad
+/// mark takes the one corner nothing else claims, following
+/// `patrol_mark_rect`'s own bottom-right convention on the surface map, and
+/// **lifts above the HP bar** the way the top-corner marks drop below the
+/// rarity bar.
+///
+/// Sized like `patrol_mark_rect` — a fact about the body, not a job — and
+/// inset from both edges for the same reason `STAFFED_MARK_INSET` is: flush
+/// against an edge it would read as a border the tile does not draw.
+///
+/// A free function for `nemesis_mark_rect`'s reason: the geometry is
+/// unit-testable without a `Painter`. `cell_px` is `tactical_hp_bar_rect`'s
+/// own parameter — the whole footprint's pixel width, not one cell's.
+pub(super) fn squad_mark_rect(px: f32, py: f32, cell_px: f32) -> Rect {
+    let size = (cell_px - 1.0) * IDENTITY_MARK;
+    let floor = tactical_hp_bar_rect(px, py, cell_px).y;
+    Rect::new(
+        px + cell_px - 1.0 - IDENTITY_MARK_INSET - size,
+        floor - IDENTITY_MARK_INSET - size,
+        size,
+        size,
+    )
+}
+
 /// The con read's earmark — a right triangle folded into the **top-left**
 /// corner, its right angle at the corner and its hypotenuse running down
 /// into the tile, so the reading is a shape and not a fifth coloured strip

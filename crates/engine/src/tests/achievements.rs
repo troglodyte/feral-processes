@@ -80,7 +80,7 @@ fn fight_to_the_end(game: &mut Game) {
 fn killing_a_boss_records_its_species() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let boss = spawn_boss_on_player_tile(&mut game, "overseer", 1);
-    game.award_loot(boss);
+    game.award_loot(boss, 0.0);
 
     assert_eq!(
         game.world.resource::<RunFeats>().bosses_defeated,
@@ -92,7 +92,7 @@ fn killing_a_boss_records_its_species() {
 fn killing_an_ordinary_program_records_nothing() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_wild_on_player_tile(&mut game);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert!(
         game.world.resource::<RunFeats>().bosses_defeated.is_empty(),

@@ -479,7 +479,10 @@ fn a_single_tamper_at_the_player_is_refused_before_anything_is_spent() {
         "a refusal must not arm a cooldown"
     );
     let battle = game.world.resource::<TacticalBattle>();
-    assert!(!battle.acted(), "a refusal must not spend the turn");
+    assert!(
+        battle.actions_left() > 0,
+        "a refusal must not spend the turn"
+    );
     assert_eq!(
         battle.actor(),
         Some(player),
@@ -648,6 +651,38 @@ fn a_self_applied_entry_is_not_aged_by_the_turn_that_applied_it() {
     assert_eq!(
         entry.remaining, 2,
         "the turn that applied the entry must not also have aged it"
+    );
+}
+
+/// A body's own `Tampered` entry ages on its own turn, and a turn is not the
+/// same thing as an action — two actions in one turn must age it once, not
+/// twice, or a squad's second action would halve every duration authored
+/// against it. `actions_left` is driven directly rather than by seating a
+/// real squad, since what is being pinned is the ageing and not the
+/// formation.
+#[test]
+fn a_tampered_body_ages_once_a_turn_however_many_actions_it_spends() {
+    let mut game = game(9606);
+    let pack = tactical_fight(&mut game, 1, 400);
+    let wild = pack[0];
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Temperature(0.0), 5, false);
+    game.world.entity_mut(wild).insert(tampered);
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_actions_left(2);
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    let entry = game
+        .world
+        .get_mut::<Tampered>(wild)
+        .and_then(|mut t| t.remove(TamperSlot::Temperature))
+        .expect("the entry must still be live after one turn");
+    assert_eq!(
+        entry.remaining, 4,
+        "two actions in one turn must age the entry once, not twice"
     );
 }
 
@@ -1347,7 +1382,7 @@ fn nothing_was_spent(game: &Game, body: Entity, power_before: f32, what: &str) {
         "{what} must not arm a cooldown"
     );
     let battle = game.world.resource::<TacticalBattle>();
-    assert!(!battle.acted(), "{what} must not spend the turn");
+    assert!(battle.actions_left() > 0, "{what} must not spend the turn");
     assert_eq!(
         battle.actor(),
         Some(body),
@@ -1663,7 +1698,7 @@ fn every_decoy_strike_refusal_lands_before_anything_moves() {
             decoys,
             "{why}: a decoy moved"
         );
-        assert!(!battle.acted(), "{why}: the action was spent");
+        assert!(battle.actions_left() > 0, "{why}: the action was spent");
         assert_eq!(battle.actor(), Some(hostile), "{why}: the turn moved on");
     };
 
@@ -1701,7 +1736,7 @@ fn every_decoy_strike_refusal_lands_before_anything_moves() {
     assert!(!game.tactical_strike_decoy((0, 2)), "behind cover");
     untouched(&game, &[(1, 0), (0, 1), (3, 0), (0, 2)], "behind cover");
 
-    game.world.resource_mut::<TacticalBattle>().mark_acted();
+    game.world.resource_mut::<TacticalBattle>().spend_action();
     assert!(!game.tactical_strike_decoy((1, 0)), "already acted");
     let battle = game.world.resource::<TacticalBattle>();
     assert_eq!(battle.decoys().len(), 4, "already acted: a decoy moved");

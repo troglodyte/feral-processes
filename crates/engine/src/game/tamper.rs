@@ -267,8 +267,8 @@ impl Game {
     /// cell could have been. Decoys never block sight, so the line is the
     /// board's alone.
     ///
-    /// Every refusal lands before anything moves: no fight or actor, an
-    /// action already spent, an actor that is not hallucinating (Decision 6
+    /// Every refusal lands before anything moves: no fight or actor, no
+    /// actions left to spend, an actor that is not hallucinating (Decision 6
     /// — a body that cannot see a decoy cannot aim at one), no decoy it sees
     /// on `cell`, out of `swing_range`, or no line of sight.
     ///
@@ -281,13 +281,18 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() || !self.sees_decoy_at(actor, cell) {
+        if battle.actions_left() == 0 || !self.sees_decoy_at(actor, cell) {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
             return false;
         };
-        if !reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor)) {
+        if !reach::swing_reaches(
+            &battle.board,
+            &battle.cells_of(actor),
+            &[cell],
+            self.swing_range(actor),
+        ) {
             return false;
         }
 
@@ -308,7 +313,7 @@ impl Game {
             .take_decoy_at(cell, actor_hostile);
         let label = self.tamper_label(actor);
         self.log(format!("{label}'s swing passes through a decoy."));
-        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.world.resource_mut::<TacticalBattle>().spend_action();
         self.hand_on_turn(actor, round_before);
         true
     }

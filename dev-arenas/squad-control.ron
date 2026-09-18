@@ -1,0 +1,34 @@
+// `squad.ron`'s control: four rootkits plus one virus — comparable stats
+// (hp 122/atk 10/mitigation 8 against rootkit's 132/12/3), so the fifth
+// body is close in power without being the same species. `squads::plan`
+// folds same-species runs only, and four of a kind is one short of
+// `FORMATIONS[0].members`, so this pack stays five loose bodies. Same
+// party, same zone, same seed as `squad.ron` — the pair is the comparison,
+// not either file alone.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [
+        (species: "rootkit", count: 4),
+        (species: "virus", count: 1),
+    ],
+    model: Tactical,
+    approach: Some(East),
+    reps: 50,
+    seed: 3,
+)

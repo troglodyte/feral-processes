@@ -411,6 +411,13 @@ neither is worth it until a question needs it.
   left and the battle map in 7.3 at 93% — turns spent walking, and damage
   spread across whoever is in reach rather than forced onto a group's front.
   Bin only, like every `model: Tactical` file.
+- **`squad.ron`** and **`squad-control.ron`** — the tactical-squads pair:
+  five rootkits that fold into one formation against the same mid-grade
+  party as `tactical-full-group.ron`, and four rootkits plus one
+  comparable-stat Virus that stay five loose bodies. Both are walkovers at
+  50 reps, but the folded squad clears about a round faster and costs the
+  party a few points less HP — `docs/measurements/2026-09-17-tactical-squads.md`
+  is the sweep behind `tuning::FORMATIONS`' `swing_share`. Bin only.
 
 These are meant to be kept and re-run after a `tuning.rs` edit, not to
 demonstrate syntax. Add one whenever you find a fight worth watching twice —

@@ -27,7 +27,7 @@ use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
-use crate::tactical::reach::{cover_between, distance, line_of_sight};
+use crate::tactical::reach::{cover_between, line_of_sight};
 use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
@@ -92,10 +92,11 @@ impl Intent {
 /// the player can read the blow in, and there was nothing to drive at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AiBeat {
-    /// The body walked one cell. The rest of its turn is still owed.
+    /// The body walked one cell, or spent one of more than one action.
+    /// Either way the rest of its turn is still owed.
     Stepped,
-    /// The body spent its action — or passed — and the turn has been handed
-    /// on.
+    /// The body spent its last action — or passed — and the turn has been
+    /// handed on.
     Acted,
     /// Nobody this file may drive is acting.
     Idle,
@@ -143,15 +144,21 @@ pub(crate) enum ForecastAction {
     Routine(AbilityId),
 }
 
-/// How far outside `band` a body at `from` is from `to`, in cells. Zero when
-/// it is inside it.
+/// How far outside `band` a body whose footprint is `from` is from `to`, in
+/// cells. Zero when it is inside it.
 ///
 /// **This is the term that tells closing from holding off**, and it is why
 /// the score cannot simply read the distance to the nearest enemy: a body
 /// standing inside its routine's minimum range wants to walk *away*, and a
 /// distance term would march it further in.
-fn shortfall(from: (i32, i32), to: (i32, i32), band: AbilityRange) -> u32 {
-    let d = distance(from, to);
+///
+/// `reach::gap` and not `distance`, so a squad's band is measured from
+/// whichever of its cells is nearest — the same measurement
+/// `Game::tactical_attack` and `reach::in_range` take. Read off the anchor
+/// alone a 2x2 body believes itself a cell further out than it is, and
+/// walks to close a gap it has already closed.
+fn shortfall(from: &[(i32, i32)], to: (i32, i32), band: AbilityRange) -> u32 {
+    let d = reach::gap(from, &[to]);
     if d < band.min {
         band.min - d
     } else {
@@ -166,14 +173,14 @@ fn shortfall(from: (i32, i32), to: (i32, i32), band: AbilityRange) -> u32 {
 /// read against each other without a fight to hold them.
 fn cell_score(
     board: &Board,
-    cell: (i32, i32),
+    cells: &[(i32, i32)],
     band: AbilityRange,
     targets: &[(i32, i32)],
     allies: &[(i32, i32)],
 ) -> f32 {
     let crowd = allies
         .iter()
-        .filter(|&&a| distance(cell, a) <= TACTICAL_FIELD_RADIUS)
+        .filter(|&&a| reach::gap(cells, &[a]) <= TACTICAL_FIELD_RADIUS)
         .count();
     // **The melee half of the cover term, and it belongs here rather than in
     // merit.** `walk_to_best_cell` uses merit as the candidate filter, so a
@@ -182,28 +189,30 @@ fn cell_score(
     // filter exists to prevent. Here it only chooses between cells that were
     // already worth walking to.
     let shelter = if band.max <= TACTICAL_MELEE_RANGE {
-        TACTICAL_AI_COVER_TIEBREAK * cover_share(board, cell, targets)
+        TACTICAL_AI_COVER_TIEBREAK * cover_share(board, cells, targets)
     } else {
         0.0
     };
-    cell_merit(board, cell, band, targets) + shelter - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+    cell_merit(board, cells, band, targets) + shelter - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
 }
 
 /// The fraction of `targets` that a body standing at `cell` would have cover
 /// against.
 ///
 /// A call into `reach::cover_between` with the *target* as the attacker and
-/// the candidate cell as the defender — the same function the roll reads, so
-/// the AI cannot come to believe in cover the roll would not grant. The
-/// denominator is every target, since `cover_between` asks sight itself and
-/// a target that cannot see the cell is not a shot to be sheltered from.
-fn cover_share(board: &Board, cell: (i32, i32), targets: &[(i32, i32)]) -> f32 {
+/// the candidate footprint's nearest cell as the defender — the same
+/// function and the same `reach::nearest_cell` pick `Game::
+/// defender_profile_against` makes, so the AI cannot come to believe in
+/// cover the roll would not grant. The denominator is every target, since
+/// `cover_between` asks sight itself and a target that cannot see the cell
+/// is not a shot to be sheltered from.
+fn cover_share(board: &Board, cells: &[(i32, i32)], targets: &[(i32, i32)]) -> f32 {
     if targets.is_empty() {
         return 0.0;
     }
     let sheltered = targets
         .iter()
-        .filter(|&&t| cover_between(board, t, cell))
+        .filter(|&&t| reach::nearest_cell(cells, t).is_some_and(|at| cover_between(board, t, at)))
         .count();
     sheltered as f32 / targets.len() as f32
 }
@@ -216,23 +225,33 @@ fn cover_share(board: &Board, cell: (i32, i32), targets: &[(i32, i32)]) -> f32 {
 /// this figure — see `Game::walk_to_best_cell` — so a hostile that can
 /// already act holds its ground, and crowding only chooses among cells a
 /// body had some other reason to walk to.
-fn cell_merit(board: &Board, cell: (i32, i32), band: AbilityRange, targets: &[(i32, i32)]) -> f32 {
+/// **`cells` is a whole footprint**, the block the body would cover anchored
+/// at the candidate rather than the anchor alone — so a squad scores a cell
+/// by what its block reaches from there, which is what the swing and the
+/// routine doors will measure when it acts.
+fn cell_merit(
+    board: &Board,
+    cells: &[(i32, i32)],
+    band: AbilityRange,
+    targets: &[(i32, i32)],
+) -> f32 {
     // Line of sight is asked only of a cell that is already in band, so a
     // cell behind cover scores as one that has closed but cannot fire —
-    // better than standing further back, worse than stepping around.
-    let hits = targets
-        .iter()
-        .any(|&t| shortfall(cell, t, band) == 0 && line_of_sight(board, cell, t));
+    // better than standing further back, worse than stepping around. Sight
+    // from **any** cell of the footprint, `swing_reaches`' own rule.
+    let hits = targets.iter().any(|&t| {
+        shortfall(cells, t, band) == 0 && cells.iter().any(|&c| line_of_sight(board, c, t))
+    });
     let gap = targets
         .iter()
-        .map(|&t| shortfall(cell, t, band))
+        .map(|&t| shortfall(cells, t, band))
         .min()
         .unwrap_or(0);
 
     // A ranged body has a reason to walk for cover; a melee one does not,
     // and its half of the term is `cell_score`'s.
     let shelter = if band.max > TACTICAL_MELEE_RANGE {
-        TACTICAL_AI_COVER_WEIGHT * cover_share(board, cell, targets)
+        TACTICAL_AI_COVER_WEIGHT * cover_share(board, cells, targets)
     } else {
         0.0
     };
@@ -370,7 +389,7 @@ impl Game {
         if self.world.get::<Hostile>(body).is_none() || !profiled {
             return None;
         }
-        if battle.actor() == Some(body) && (battle.walk_planned() || battle.acted()) {
+        if battle.actor() == Some(body) && (battle.walk_planned() || battle.actions_left() == 0) {
             return None;
         }
         let from = battle.cell_of(body)?;
@@ -505,12 +524,15 @@ impl Game {
     /// `tactical_walking`'s sibling and derived the same way, off the fight
     /// rather than remembered: a body that has planned a walk carries a
     /// `Some` — `Some(vec![])` once it has arrived — and a body that has
-    /// swung carries `acted`, so all three states are told apart without a
-    /// driver having to hold what the last beat did.
+    /// spent an action has fewer than its full `actions_left`, so all three
+    /// states are told apart without a driver having to hold what the last
+    /// beat did.
     pub fn tactical_turn_opening(&self) -> bool {
         self.world
             .get_resource::<TacticalBattle>()
-            .is_some_and(|battle| !battle.walk_planned() && battle.spent() == 0 && !battle.acted())
+            .is_some_and(|battle| {
+                !battle.walk_planned() && battle.spent() == 0 && battle.actions_left() > 0
+            })
     }
 
     /// Runs the acting body's turn **whichever side it is on**, and reports
@@ -550,8 +572,8 @@ impl Game {
         while self.run_tactical_beat(actor, temperature) == AiBeat::Stepped {}
     }
 
-    /// One beat of `actor`'s turn: the next cell of its walk, or the action
-    /// that ends the turn.
+    /// One beat of `actor`'s turn: the next cell of its walk, or one action —
+    /// which ends the turn only once none are left.
     ///
     /// The walk is planned on the beat that takes its first step and read
     /// back off `TacticalBattle` by every beat after it, which is what holds
@@ -579,28 +601,40 @@ impl Game {
             }
         }
 
+        // Read before the action, so landing one is told apart from finding
+        // nothing to spend it on — both leave this body `battle.actor()`
+        // when there is another action still owed, and only one of them
+        // spent anything.
+        let actions_before = self.world.resource::<TacticalBattle>().actions_left();
         match intent {
             Intent::Routine(_) => self.run_tactical_intent(actor, &intent, &sides),
             Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &intent, &sides),
         }
-        // **Only if the action did not already hand it on.** The action ends
-        // the turn, so `tactical_attack` and `tactical_use_routine` both end
-        // it themselves; ending it again here spends two rungs of the order
+        // **Only if the action did not already hand the turn on.** The
+        // action ends the turn once no actions are left, so `tactical_attack`
+        // and `tactical_use_routine` both end it themselves through
+        // `hand_on_turn`; ending it again here spends two rungs of the order
         // and skips whoever came next, which against a lone hostile is a
-        // fight the player never gets a turn in. A body that found nothing
-        // to swing at ended none, and still owes one.
+        // fight the player never gets a turn in.
         //
         // Asked as "is this body still up" rather than tracked as a flag: a
         // fight that ended inside the action took the resource with it, and
         // that is the same question with the same answer.
-        let still_up = self
-            .world
-            .get_resource::<TacticalBattle>()
-            .and_then(|b| b.actor())
-            == Some(actor);
-        if still_up {
-            self.tactical_end_turn();
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return AiBeat::Acted;
+        };
+        if battle.actor() != Some(actor) {
+            return AiBeat::Acted;
         }
+        if battle.actions_left() < actions_before {
+            // An action landed and `hand_on_turn` left this body still
+            // acting — another is owed this turn. Its walk was cleared
+            // there, so the next beat plans a fresh one from here.
+            return AiBeat::Stepped;
+        }
+        // Nothing landed: a swing or routine that found nothing to spend
+        // itself on still owes the turn, whole.
+        self.tactical_end_turn();
         AiBeat::Acted
     }
 
@@ -649,11 +683,12 @@ impl Game {
         match self.tactical_step(dir) {
             StepOutcome::Moved => true,
             // `Struck` is unreachable from here — `reach::movement_field`
-            // treats every body as a wall, so a committed path never names an
-            // occupied cell, and nothing on this board moves between one
-            // body's beats — and is grouped with the refusals rather than
-            // given an arm of its own: if it ever did fire, the action is
-            // spent and the rest of the walk is owed to nobody.
+            // treats every *other* body as a wall and offers no anchor whose
+            // whole footprint is not clear, so a committed path never names a
+            // cell `move_to` will refuse, and nothing on this board moves
+            // between one body's beats — and is grouped with the refusals
+            // rather than given an arm of its own: if it ever did fire, the
+            // action is spent and the rest of the walk is owed to nobody.
             //
             // **Not `tactical_awaits_input`, which used to be the reason.**
             // That is false for every body the *AI* door drives and true for
@@ -811,6 +846,11 @@ impl Game {
             return (Vec::new(), Vec::new());
         }
         let band = intent.band();
+        // The footprint the body would cover anchored at each candidate —
+        // one cell without a `Squad`, so every score below is the one it
+        // always was for an ordinary body.
+        let side = battle.footprint_of(actor);
+        let block = |anchor: (i32, i32)| crate::tactical::footprint_cells_at(anchor, side);
         // **Staying put is the default.** The candidates are the cells that
         // are strictly better than this one on reach or closing, and the
         // cell it stands on only when there are none. Offered every cell
@@ -822,7 +862,7 @@ impl Game {
         // The hold still goes through the draw, so a turn spends one draw
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
-        let standing = cell_merit(&battle.board, from, band, &sides.targets);
+        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets);
         // **The reaction cost rides merit, not just the score**, so it is
         // read by the candidate filter as well as by the draw: a cell worth
         // one step of closing that costs three Integrity on the way out is
@@ -836,7 +876,8 @@ impl Game {
             .keys()
             .copied()
             .filter(|&cell| {
-                cell_merit(&battle.board, cell, band, &sides.targets) - self.walk_risk(actor, cell)
+                cell_merit(&battle.board, &block(cell), band, &sides.targets)
+                    - self.walk_risk(actor, cell)
                     > standing
             })
             .collect();
@@ -850,8 +891,13 @@ impl Game {
         let scores: Vec<f32> = cells
             .iter()
             .map(|&cell| {
-                cell_score(&battle.board, cell, band, &sides.targets, &sides.allies)
-                    - self.walk_risk(actor, cell)
+                cell_score(
+                    &battle.board,
+                    &block(cell),
+                    band,
+                    &sides.targets,
+                    &sides.allies,
+                ) - self.walk_risk(actor, cell)
             })
             .collect();
         (cells, scores)
@@ -1012,7 +1058,15 @@ impl Game {
         let band = def.tactical_range();
         let shape = def.tactical_shape();
         let helpful = Intent::Routine(def.clone()).helpful();
-        let reach_max = i32::try_from(band.max).unwrap_or(0);
+        // The block the body covers anchored at `from` — one cell without a
+        // `Squad`. `reach::in_range` measures the band off the whole
+        // footprint, which is what `Game::tactical_use_routine` will
+        // measure when the aim is actually taken, so the search box has to
+        // widen by the footprint's overhang or an aim the door would accept
+        // is never even scored.
+        let cells = crate::tactical::footprint_cells_at(from, battle.footprint_of(actor));
+        let reach_max =
+            i32::try_from(band.max).unwrap_or(0) + i32::from(battle.footprint_of(actor)) - 1;
         let acting_side = self.acts_for_hostiles(actor);
         let hallucinating = !helpful && self.is_hallucinating(actor);
 
@@ -1021,7 +1075,7 @@ impl Game {
             for dx in -reach_max..=reach_max {
                 let aim = (from.0 + dx, from.1 + dy);
                 if !battle.board.in_bounds(aim.0, aim.1)
-                    || !reach::in_range(from, aim, band)
+                    || !reach::in_range(&cells, aim, band)
                     // The same gate the player's own door applies, asked here
                     // rather than inside the effect for the same reason the
                     // range is: an aim it may not take is not a candidate.
@@ -1100,6 +1154,11 @@ impl Game {
         targets: &[(i32, i32)],
     ) -> Option<TurnTarget> {
         let battle = self.world.resource::<TacticalBattle>();
+        // The block this body covers anchored at `from` — one cell without a
+        // `Squad`. Both sides of the reach test are whole footprints, which
+        // is what `Game::tactical_attack` measures: read off the anchors a
+        // planner declines the very swing that door would take.
+        let cells = crate::tactical::footprint_cells_at(from, battle.footprint_of(actor));
         // A target this body sees a decoy on is struck through the door that
         // takes a cell — for a hallucinating body that is its only target —
         // and only when that door's own reach would take the strike, so a
@@ -1109,16 +1168,19 @@ impl Game {
             .iter()
             .find(|&&cell| self.sees_decoy_at(actor, cell))
         {
-            return reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor))
+            return reach::swing_reaches(&battle.board, &cells, &[cell], self.swing_range(actor))
                 .then_some(TurnTarget::Decoy(cell));
         }
         let mut reachable: Vec<(i32, i32, Entity)> = targets
             .iter()
+            .filter_map(|&cell| battle.occupant(cell).map(|e| (cell, e)))
             // Sight is asked here as well as at the gate, so a body does not
             // spend its turn swinging at something it cannot see and calling
             // that its action.
-            .filter(|&&cell| reach::swing_reaches(&battle.board, from, cell, range))
-            .filter_map(|&cell| battle.occupant(cell).map(|e| (cell.1, cell.0, e)))
+            .filter(|&(_, e)| {
+                reach::swing_reaches(&battle.board, &cells, &battle.cells_of(e), range)
+            })
+            .map(|(cell, e)| (cell.1, cell.0, e))
             .collect();
         // By Integrity, then by the board's reading order, so a tie is broken
         // the same way twice in a seeded fight.
@@ -1169,8 +1231,8 @@ mod tests {
     #[test]
     fn a_ranged_cell_with_cover_outscores_an_equal_one_without() {
         let board = one_boulder();
-        let sheltered = cell_merit(&board, COVERED, STANDOFF, &TARGET);
-        let open = cell_merit(&board, EXPOSED, STANDOFF, &TARGET);
+        let sheltered = cell_merit(&board, &[COVERED], STANDOFF, &TARGET);
+        let open = cell_merit(&board, &[EXPOSED], STANDOFF, &TARGET);
         assert!(
             sheltered > open,
             "the covered cell scored {sheltered}, the exposed one {open}"
@@ -1184,8 +1246,8 @@ mod tests {
     #[test]
     fn cover_is_worth_less_than_reach_and_more_than_a_step_of_closing() {
         let board = one_boulder();
-        let gained = cell_merit(&board, COVERED, STANDOFF, &TARGET)
-            - cell_merit(&board, EXPOSED, STANDOFF, &TARGET);
+        let gained = cell_merit(&board, &[COVERED], STANDOFF, &TARGET)
+            - cell_merit(&board, &[EXPOSED], STANDOFF, &TARGET);
         assert!(
             gained < TACTICAL_AI_REACH_SCORE,
             "cover worth {gained} would buy a cell that cannot fire"
@@ -1205,13 +1267,13 @@ mod tests {
     fn a_melee_bands_cover_is_a_tie_break_and_not_a_reason_to_walk() {
         let board = one_boulder();
         assert_eq!(
-            cell_merit(&board, COVERED, MELEE, &TARGET),
-            cell_merit(&board, EXPOSED, MELEE, &TARGET),
+            cell_merit(&board, &[COVERED], MELEE, &TARGET),
+            cell_merit(&board, &[EXPOSED], MELEE, &TARGET),
             "a boulder opened a candidate cell for a melee body"
         );
         assert!(
-            cell_score(&board, COVERED, MELEE, &TARGET, &[])
-                > cell_score(&board, EXPOSED, MELEE, &TARGET, &[]),
+            cell_score(&board, &[COVERED], MELEE, &TARGET, &[])
+                > cell_score(&board, &[EXPOSED], MELEE, &TARGET, &[]),
             "between two cells it was already walking to, the covered one wins"
         );
         const _: () = assert!(
@@ -1225,10 +1287,45 @@ mod tests {
     /// cannot be fired inside three, and march the body further in.
     #[test]
     fn a_body_inside_its_minimum_range_is_as_short_as_one_outside_its_maximum() {
-        assert_eq!(shortfall((0, 0), (1, 0), STANDOFF), 2, "one cell in");
-        assert_eq!(shortfall((0, 0), (4, 0), STANDOFF), 0, "inside the band");
-        assert_eq!(shortfall((0, 0), (9, 0), STANDOFF), 3, "three cells out");
-        assert_eq!(shortfall((0, 0), (1, 0), MELEE), 0, "adjacent is melee");
+        assert_eq!(shortfall(&[(0, 0)], (1, 0), STANDOFF), 2, "one cell in");
+        assert_eq!(shortfall(&[(0, 0)], (4, 0), STANDOFF), 0, "inside the band");
+        assert_eq!(shortfall(&[(0, 0)], (9, 0), STANDOFF), 3, "three cells out");
+        assert_eq!(shortfall(&[(0, 0)], (1, 0), MELEE), 0, "adjacent is melee");
+    }
+
+    /// **A footprint's band is measured from its nearest cell.** A 2x2 block
+    /// anchored at (0, 0) is one step from (2, 1) and its anchor is two, so
+    /// a planner reading the anchor calls a squad short of a target it is
+    /// already standing next to — and walks to close a gap already closed,
+    /// while `Game::tactical_attack` would have taken the swing.
+    #[test]
+    fn a_footprints_shortfall_is_measured_from_its_nearest_cell() {
+        let block = crate::tactical::footprint_cells_at((0, 0), 2);
+        assert_eq!(shortfall(&block, (2, 1), MELEE), 0, "the block is adjacent");
+        assert_eq!(
+            shortfall(&[(0, 0)], (2, 1), MELEE),
+            1,
+            "fixture: the anchor alone is a cell short"
+        );
+    }
+
+    /// And merit follows it, so the cell a squad already reaches from is not
+    /// one it has a reason to leave.
+    #[test]
+    fn a_footprint_that_already_reaches_scores_as_reaching() {
+        let board = open(8);
+        let targets = [(2, 1)];
+        let block = crate::tactical::footprint_cells_at((0, 0), 2);
+        let as_a_block = cell_merit(&board, &block, MELEE, &targets);
+        let as_an_anchor = cell_merit(&board, &[(0, 0)], MELEE, &targets);
+        assert!(
+            as_a_block >= TACTICAL_AI_REACH_SCORE,
+            "a block already in reach scored {as_a_block} and took no reach bonus"
+        );
+        assert!(
+            as_a_block > as_an_anchor,
+            "block {as_a_block} did not beat anchor {as_an_anchor}"
+        );
     }
 
     /// A reaching body's band is its own range, not the melee constant — the
@@ -1238,12 +1335,12 @@ mod tests {
         let swing = Intent::Swing { range: 2 };
         assert_eq!(swing.band(), AbilityRange { min: 0, max: 2 });
         assert_eq!(
-            shortfall((0, 0), (2, 0), swing.band()),
+            shortfall(&[(0, 0)], (2, 0), swing.band()),
             0,
             "two cells is inside a range-2 band"
         );
         assert_eq!(
-            shortfall((0, 0), (4, 0), swing.band()),
+            shortfall(&[(0, 0)], (4, 0), swing.band()),
             2,
             "four cells is two short of the band"
         );
@@ -1256,8 +1353,8 @@ mod tests {
     fn a_standoff_carrier_scores_its_band_above_the_target_s_doorstep() {
         let board = open(12);
         let target = [(8, 4)];
-        let held = cell_score(&board, (4, 4), STANDOFF, &target, &[]);
-        let closed = cell_score(&board, (7, 4), STANDOFF, &target, &[]);
+        let held = cell_score(&board, &[(4, 4)], STANDOFF, &target, &[]);
+        let closed = cell_score(&board, &[(7, 4)], STANDOFF, &target, &[]);
         assert!(
             held > closed,
             "holding the band scored {held}, the doorstep {closed}"
@@ -1272,9 +1369,9 @@ mod tests {
         let board = open(crate::tuning::TACTICAL_BOARD_LARGE as usize);
         let far = crate::tuning::TACTICAL_BOARD_LARGE - 1;
         let targets = [(1, 1)];
-        let hitting = cell_score(&board, (2, 1), MELEE, &targets, &[]);
-        let nearest_miss = cell_score(&board, (3, 1), MELEE, &targets, &[]);
-        let across_the_board = cell_score(&board, (far, far), MELEE, &targets, &[]);
+        let hitting = cell_score(&board, &[(2, 1)], MELEE, &targets, &[]);
+        let nearest_miss = cell_score(&board, &[(3, 1)], MELEE, &targets, &[]);
+        let across_the_board = cell_score(&board, &[(far, far)], MELEE, &targets, &[]);
         assert!(hitting > nearest_miss, "{hitting} vs {nearest_miss}");
         assert!(
             nearest_miss > across_the_board,
@@ -1292,10 +1389,22 @@ mod tests {
     fn crowding_separates_two_cells_that_both_reach_and_never_outranks_reaching() {
         let board = open(12);
         let targets = [(6, 6)];
-        let packed = cell_score(&board, (5, 6), MELEE, &targets, &[(4, 6), (5, 5), (4, 5)]);
-        let clear = cell_score(&board, (7, 6), MELEE, &targets, &[(4, 6), (5, 5), (4, 5)]);
+        let packed = cell_score(
+            &board,
+            &[(5, 6)],
+            MELEE,
+            &targets,
+            &[(4, 6), (5, 5), (4, 5)],
+        );
+        let clear = cell_score(
+            &board,
+            &[(7, 6)],
+            MELEE,
+            &targets,
+            &[(4, 6), (5, 5), (4, 5)],
+        );
         assert!(clear > packed, "clear {clear}, packed {packed}");
-        let missing = cell_score(&board, (9, 6), MELEE, &targets, &[]);
+        let missing = cell_score(&board, &[(9, 6)], MELEE, &targets, &[]);
         assert!(
             packed > missing,
             "a crowded cell that hits still beats a clear one that does not"
@@ -1308,8 +1417,8 @@ mod tests {
     fn a_cell_in_band_but_behind_cover_does_not_count_as_reaching() {
         let board = Board::from_rows(&["......", "......", "..#...", "......", "......", "......"]);
         let targets = [(2, 1)];
-        let blocked = cell_score(&board, (2, 3), MELEE, &targets, &[]);
-        let clear = cell_score(&board, (1, 1), MELEE, &targets, &[]);
+        let blocked = cell_score(&board, &[(2, 3)], MELEE, &targets, &[]);
+        let clear = cell_score(&board, &[(1, 1)], MELEE, &targets, &[]);
         assert!(clear > blocked, "clear {clear}, blocked {blocked}");
     }
 }

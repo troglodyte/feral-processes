@@ -249,7 +249,7 @@ fn killing_a_boss_can_drop_its_signature_disk() {
         "the disk was in cargo before the boss even died"
     );
 
-    game.award_loot(corpse);
+    game.award_loot(corpse, 0.0);
 
     assert_eq!(
         game.etched_disks_of(&wanted),

@@ -11,12 +11,12 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Player, Stats};
+use crate::components::{Hostile, Player, Squad, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
-use crate::tuning::TACTICAL_MELEE_RANGE;
+use crate::tuning::{FORMATIONS, TACTICAL_MELEE_RANGE};
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -76,6 +76,30 @@ impl Game {
             .filter(|&e| self.creature_alive(e))
             .collect();
 
+        // Folded here, after `bearing` is already in hand — squads::plan's
+        // own rule. `Game::gather_pack` answers a pack of one for an anchor
+        // with no `Position`, and `open_tactical_battle`'s own bearing is
+        // derived from `pack[0]`'s tile: folding one call earlier would let
+        // a squad reach either as its anchor, both silent-degradation sites
+        // `tactical::squads` warns about. `arena::stage` passes its bearing
+        // explicitly and is safe by construction already.
+        let pieces = crate::tactical::squads::plan(&pack, &self.world);
+        let mut wild: Vec<Entity> = Vec::new();
+        let mut wild_footprints: Vec<u8> = Vec::new();
+        for piece in pieces {
+            match piece {
+                crate::tactical::squads::Piece::Single(entity) => {
+                    wild.push(entity);
+                    wild_footprints.push(1);
+                }
+                crate::tactical::squads::Piece::Squad { members, formation } => {
+                    let squad = self.spawn_squad(&members, formation);
+                    wild_footprints.push(FORMATIONS[formation].footprint);
+                    wild.push(squad);
+                }
+            }
+        }
+
         let spec = BattleSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             site,
@@ -89,23 +113,42 @@ impl Game {
                 .resource_mut::<WorldMap>()
                 .tile(site.0, site.1)
                 .biome,
-            bodies: (party.len() + pack.len()) as u32,
+            // **Cells, not bodies.** A squad stands on its whole block, so
+            // it counts for `footprint^2` — sized off a head count a fight
+            // with two squads in it gets the board six bodies would have
+            // had and seats fourteen cells on it.
+            bodies: party.len() as u32
+                + wild_footprints
+                    .iter()
+                    .map(|&side| u32::from(side).pow(2))
+                    .sum::<u32>(),
         };
         let board = generate(spec);
-        let plan = deploy::plan(&board, bearing, party.len() as u32, pack.len() as u32);
+        let plan = deploy::plan(&board, bearing, party.len() as u32, &wild_footprints);
 
         let mut battle = TacticalBattle::open(spec, board);
         for (&body, &cell) in party.iter().zip(plan.party.iter()) {
             battle.place(body, cell);
         }
-        for (&body, &cell) in pack.iter().zip(plan.wild.iter()) {
+        // **Shaped before it is seated.** `place` refuses a block that
+        // overlaps anything or stands on ground it cannot, and it can only
+        // apply that to a body whose shape it already knows — seated first
+        // and widened afterwards, a squad's block is never checked at all
+        // and the seating is well-formed only because `deploy::plan`
+        // reserved a clear block for it two files away.
+        for ((&body, &cell), &footprint) in wild.iter().zip(plan.wild.iter()).zip(&wild_footprints)
+        {
+            if footprint > 1 {
+                let actions = self.actions_per_turn(body);
+                battle.set_shape(body, footprint, actions);
+            }
             battle.place(body, cell);
         }
         // Taken at the bell, before the first blow, for the reason
         // `BattleState::outmatched` gives: by the time a fight is won the
         // question is unanswerable.
         battle.outmatched =
-            self.summed_power(pack.iter().copied()) > self.summed_power(party.iter().copied());
+            self.summed_power(wild.iter().copied()) > self.summed_power(party.iter().copied());
 
         let standing: Vec<Entity> = battle.bodies().map(|(entity, _)| entity).collect();
         battle.set_initiative(self.roll_turn_order(&standing));
@@ -129,7 +172,7 @@ impl Game {
             party: g.telemetry_party(),
             enemies: g.telemetry_enemy_groups(),
         });
-        let line = self.intercept_line(pack.first().copied(), pack.len());
+        let line = self.intercept_line(wild.first().copied(), wild.len());
         self.log(line);
     }
 
@@ -153,6 +196,22 @@ impl Game {
     /// tactical fight open.
     pub fn tactical_actor(&self) -> Option<Entity> {
         self.world.get_resource::<TacticalBattle>()?.actor()
+    }
+
+    /// How many actions `body` gets on its turn — a formation's `actions`
+    /// for a `Squad`, one otherwise. The player's party always gets one,
+    /// since a companion is never a formation row.
+    ///
+    /// `footprint_of`'s door on the `Game` side: `TacticalBattle` holds no
+    /// `World` to look a `Squad` up with itself, so `open_tactical_battle_at`
+    /// calls this once, at seat time, and hands the answer to
+    /// `TacticalBattle::set_shape` for `begin_turn` to read back every
+    /// round.
+    pub fn actions_per_turn(&self, body: Entity) -> u8 {
+        self.world
+            .get::<Squad>(body)
+            .and_then(|s| FORMATIONS.get(s.formation))
+            .map_or(1, |f| f.actions)
     }
 
     /// Moves the acting body one cell.
@@ -179,7 +238,7 @@ impl Game {
     /// this is the door that loop's walk goes through, so without it a
     /// hostile could spend its action part-way along a path it planned.
     ///
-    /// Refused once the body has acted, because the action ends the turn.
+    /// Refused once the body has spent every action it has this turn.
     pub fn tactical_step(&mut self, dir: (i32, i32)) -> StepOutcome {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return StepOutcome::Refused;
@@ -187,7 +246,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return StepOutcome::Refused;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return StepOutcome::Refused;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -196,7 +255,11 @@ impl Game {
         let to = (from.0 + dir.0, from.1 + dir.1);
         let spent = battle.spent();
         let cost = battle.board.cell(to.0, to.1).movement_cost();
-        let inside = battle.board.in_bounds(to.0, to.1);
+        // A body departs if any footprint cell anchored at `to` leaves the
+        // board — one cell today, without a `Squad`, so this is the same
+        // check `in_bounds(to)` alone made.
+        let footprint = battle.footprint_cells(actor, to);
+        let inside = footprint.iter().all(|&(x, y)| battle.board.in_bounds(x, y));
 
         if !inside {
             self.depart_tactical(actor);
@@ -255,9 +318,9 @@ impl Game {
         from: (i32, i32),
         to: (i32, i32),
     ) -> Vec<Entity> {
-        self.reactors(mover, from, |at| {
-            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
-                && reach::distance(at, to) > TACTICAL_MELEE_RANGE
+        self.reactors(mover, from, |cells| {
+            reach::gap(cells, &[from]) <= TACTICAL_MELEE_RANGE
+                && reach::gap(cells, &[to]) > TACTICAL_MELEE_RANGE
         })
     }
 
@@ -271,22 +334,23 @@ impl Game {
         else {
             return Vec::new();
         };
-        self.reactors(mover, from, |at| {
-            reach::distance(at, from) <= TACTICAL_MELEE_RANGE
+        self.reactors(mover, from, |cells| {
+            reach::gap(cells, &[from]) <= TACTICAL_MELEE_RANGE
         })
     }
 
     /// The half both triggers share: who is *able* to react to `mover` at
-    /// all, in initiative order, out of the bodies whose cell `trigger`
+    /// all, in initiative order, out of the bodies whose footprint `trigger`
     /// accepts.
     ///
     /// Four conditions, and each is somebody else's rule rather than a new
     /// one. An enemy of the mover, read through `acts_for_hostiles` so an
     /// injected body reacts for the side it now believes it is on. Its
     /// reaction unspent. Line of sight to the mover, `tactical_attack`'s own
-    /// gate. And the mover nameable at all — **a cloaked body provokes
-    /// nobody**, which is not a special case here but the same filter that
-    /// sits at the five doors that name a body.
+    /// gate — any cell of the reactor's footprint to `cell`, one cell today
+    /// without a `Squad`. And the mover nameable at all — **a cloaked body
+    /// provokes nobody**, which is not a special case here but the same
+    /// filter that sits at the five doors that name a body.
     ///
     /// **Melee reach and not `Game::swing_range`.** A reaction from across
     /// the board is overwatch, which is a different feature; this is the one
@@ -296,7 +360,7 @@ impl Game {
         &self,
         mover: Entity,
         cell: (i32, i32),
-        trigger: impl Fn((i32, i32)) -> bool,
+        trigger: impl Fn(&[(i32, i32)]) -> bool,
     ) -> Vec<Entity> {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return Vec::new();
@@ -314,9 +378,12 @@ impl Game {
             .filter(|&body| !battle.reaction_spent(body))
             .filter(|&body| self.creature_alive(body))
             .filter(|&body| {
-                battle
-                    .cell_of(body)
-                    .is_some_and(|at| trigger(at) && reach::line_of_sight(&battle.board, at, cell))
+                let cells = battle.cells_of(body);
+                !cells.is_empty()
+                    && trigger(&cells)
+                    && cells
+                        .iter()
+                        .any(|&at| reach::line_of_sight(&battle.board, at, cell))
             })
             .collect()
     }
@@ -422,6 +489,14 @@ impl Game {
         };
         self.log(line);
         self.world.resource_mut::<TacticalBattle>().remove(body);
+        // A departing squad is disbanded here rather than caught by
+        // `settle_tactical`'s own sweep: `remove` above has already taken it
+        // out of `TacticalBattle::bodies`, so that sweep — which reads
+        // `bodies()` for whatever squad the *player's* own departure or
+        // defeat left standing — would never see it.
+        if self.world.get::<Squad>(body).is_some() {
+            self.disband_squad(body);
+        }
         self.settle_tactical(None);
     }
 
@@ -439,8 +514,8 @@ impl Game {
     /// still a wall in `reach::movement_field`, so the cell it stands on is
     /// the tell.
     ///
-    /// Reports whether the swing happened. The action ends the turn, so a
-    /// swing that lands hands the turn on — unless it ended the fight.
+    /// Reports whether the swing happened. It spends one action, which hands
+    /// the turn on once none are left — unless it ended the fight.
     pub fn tactical_attack(&mut self, target: Entity) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -448,25 +523,30 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
             return false;
         };
-        if actor == target || reach::distance(from, at) > self.swing_range(actor) {
-            return false;
-        }
-        // **Unconditional, with no melee branch.** `line_of_sight` excludes
-        // its endpoints, so for neighbours its loop is empty and this is
-        // already a no-op — one rule, and no second place
-        // `TACTICAL_MELEE_RANGE` has to be restated. Cover earns a second
-        // job for free.
+        // **A call into `reach::swing_reaches`, which is the one definition
+        // of what a swing reaches** — the range over both whole footprints
+        // rather than their anchors, and the sight line unconditional, with
+        // no melee branch: `line_of_sight` excludes its endpoints, so for
+        // neighbours its loop is empty and asking is already a no-op. The
+        // AI's `best_swing` and the decoy strike door read the same
+        // function, so no planner can decline a swing this would take.
+        let actor_cells = battle.cells_of(actor);
+        let target_cells = battle.cells_of(target);
+        if actor == target
+            || !reach::swing_reaches(
+                &battle.board,
+                &actor_cells,
+                &target_cells,
+                self.swing_range(actor),
+            )
         {
-            let battle = self.world.resource::<TacticalBattle>();
-            if !reach::line_of_sight(&battle.board, from, at) {
-                return false;
-            }
+            return false;
         }
         if self.is_cloaked(target) {
             return false;
@@ -545,7 +625,7 @@ impl Game {
             let line = self.party_swing_line(actor, &move_name, outcome);
             self.log_swing(crate::resources::MessageKind::PartyDamage, outcome, line);
         }
-        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.world.resource_mut::<TacticalBattle>().spend_action();
 
         // Every body that fell, not just the target: a fumble's riposte can
         // put the swinger down, and a body left standing on the board at
@@ -579,13 +659,14 @@ impl Game {
     /// player can read before spending the turn.
     ///
     /// Three refusals, all before anything is spent: no fight, nobody
-    /// acting, and a body that has already taken its action. **No
-    /// `is_stunned` gate**, unlike `battle_resolve_round`'s Defend loop —
-    /// nothing in this model reads stun at all and a stunned body already
-    /// takes a whole turn on a board, so gating the brace alone would make
-    /// bracing the one thing a stunned body could not do.
+    /// acting, and a body with no actions left to spend. **No `is_stunned`
+    /// gate**, unlike `battle_resolve_round`'s Defend loop — nothing in this
+    /// model reads stun at all and a stunned body already takes a whole turn
+    /// on a board, so gating the brace alone would make bracing the one
+    /// thing a stunned body could not do.
     ///
-    /// Reports whether the brace took. The action ends the turn.
+    /// Reports whether the brace took. It spends one action, which hands
+    /// the turn on once none are left.
     pub fn tactical_defend(&mut self) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -593,13 +674,13 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
 
         let round_before = battle.round;
         self.begin_defend(actor);
-        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.world.resource_mut::<TacticalBattle>().spend_action();
         // No reap: bracing damages nobody, and the round upkeep
         // `hand_on_turn` may spend brings its own.
         self.hand_on_turn(actor, round_before);
@@ -635,7 +716,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.acted() {
+        if battle.actions_left() == 0 {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -650,7 +731,8 @@ impl Game {
         if self.ability_unavailable(actor, &ability).is_some() {
             return false;
         }
-        if !reach::in_range(from, aim, ability.tactical_range()) {
+        let actor_cells = self.world.resource::<TacticalBattle>().cells_of(actor);
+        if !reach::in_range(&actor_cells, aim, ability.tactical_range()) {
             return false;
         }
         // The other half of "may this be aimed there", and a refusal rather
@@ -749,7 +831,7 @@ impl Game {
         };
         let taken: std::collections::BTreeSet<(i32, i32)> =
             battle.bodies().map(|(_, cell)| cell).collect();
-        crate::tactical::deploy::nearest_free(&battle.board, &taken, from).is_some()
+        crate::tactical::deploy::nearest_free(&battle.board, &taken, from, 1).is_some()
     }
 
     /// Places a forked body beside `invoker` and splices it into the turn
@@ -770,7 +852,7 @@ impl Game {
             battle.cell_of(invoker).and_then(|from| {
                 let taken: std::collections::BTreeSet<(i32, i32)> =
                     battle.bodies().map(|(_, cell)| cell).collect();
-                crate::tactical::deploy::nearest_free(&battle.board, &taken, from)
+                crate::tactical::deploy::nearest_free(&battle.board, &taken, from, 1)
             })
         }) else {
             return false;
@@ -844,7 +926,7 @@ impl Game {
                 // taken, whatever it bought, and a reaction can have ended
                 // the fight under it.
                 if self.world.get_resource::<TacticalBattle>().is_some() {
-                    self.world.resource_mut::<TacticalBattle>().mark_acted();
+                    self.world.resource_mut::<TacticalBattle>().spend_action();
                 }
                 self.hand_on_turn(actor, round_before);
                 return;
@@ -864,10 +946,17 @@ impl Game {
                 .resource::<TacticalBattle>()
                 .occupant(aim)
                 .filter(|&e| e != actor && self.world.get::<Hostile>(e).is_some());
-            if let Some(target) = target
-                && self.decompile_body(target, player)
-            {
-                self.world.resource_mut::<TacticalBattle>().remove(target);
+            if let Some(target) = target {
+                // A squad's capture pulls its lead out and keeps fighting —
+                // the squad itself stays on the board (unless the capture's
+                // own damage just killed it, which the ordinary reap below
+                // still catches), so it is never removed here the way an
+                // ordinary target is.
+                if self.world.get::<Squad>(target).is_some() {
+                    self.decompile_squad(target, player);
+                } else if self.decompile_body(target, player) {
+                    self.world.resource_mut::<TacticalBattle>().remove(target);
+                }
             }
         } else if let AbilityEffect::Summon {
             count,
@@ -933,23 +1022,36 @@ impl Game {
         // friendly fire means — so the reap is over the whole roster rather
         // than over what was aimed at, exactly as it is after a swing.
         if self.world.get_resource::<TacticalBattle>().is_some() {
-            self.world.resource_mut::<TacticalBattle>().mark_acted();
+            self.world.resource_mut::<TacticalBattle>().spend_action();
             let aimed = self.world.resource::<TacticalBattle>().occupant(aim);
             self.reap_tactical_dead(aimed);
         }
         self.hand_on_turn(actor, round_before);
     }
 
-    /// Hands the turn on after `actor` has finished with it, and spends the
-    /// round's upkeep when the order comes back round.
+    /// Hands the turn on once `actor` has spent every action it has, and
+    /// spends the round's upkeep when the order comes back round.
     ///
-    /// **Only if `actor` is still the one acting.** A body that died to its
-    /// own action — a fumble's recoil, a blast centred on its own cell —
-    /// left the order inside the reap, and `TacticalBattle::remove` hands
-    /// the turn on as it goes, because the cursor names a body rather than
-    /// a position. Ending the turn again on top of that skips whoever was
-    /// standing behind it: a companion who fumbles fatally costs the player
-    /// their turn, with nothing on screen to say why.
+    /// **Another action still owed is not the turn ending.** Called once
+    /// per action — the per-action `spend_action`/`hand_on_turn` pairs stay
+    /// at each door rather than being hoisted to fire once after the whole
+    /// turn — so a body with more than one action reads its own still-fresh
+    /// `actions_left` here and gets nothing below: not the tamper age, not
+    /// the decoy settle, not the round upkeep, all of which count a *turn*,
+    /// not an action. Only its walk is cleared, so the next action plans a
+    /// fresh one from wherever this one left the body standing.
+    ///
+    /// **The identity check has to run first, and stay first.** A body
+    /// killed by its own action — a fumble's recoil, a blast centred on its
+    /// own cell — left the order inside the reap that ran before this was
+    /// called, and `TacticalBattle::remove` hands the turn on as it goes,
+    /// because the cursor names a body rather than a position. Reading
+    /// `actions_left` before checking `actor` is still `battle.actor()`
+    /// would read the *next* body's fresh budget and mistake it for this
+    /// one's still-open turn — silently skipping the round's upkeep
+    /// whenever that death landed on the last rung of the order, and, were
+    /// the reap ever deferred instead of run per action, leaving a dead
+    /// body sitting as the acting one.
     ///
     /// **`round_before` is read by the caller, before it acts.** The order
     /// wraps in two places, not one: `end_turn` below, and
@@ -962,6 +1064,15 @@ impl Game {
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
     pub(crate) fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+        let continues = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| battle.actor() == Some(actor) && battle.actions_left() > 0);
+        if continues {
+            self.world.resource_mut::<TacticalBattle>().clear_walk();
+            return;
+        }
+
         // **First, and only while `actor` is alive.** Duration counts the
         // tampered body's own turns — `components::Tampered`'s reason for
         // ageing here rather than in `Game::tick_one_combatant` — so this is
@@ -1045,7 +1156,12 @@ impl Game {
             .insert(AbilityCooldowns(cooldowns));
     }
 
-    /// Ends the acting body's turn without spending its action.
+    /// Ends the acting body's turn without spending any of its actions.
+    ///
+    /// **Forfeits whatever is left, rather than spending one.** `hand_on_
+    /// turn`'s "another action is coming" gate reads `actions_left` alone
+    /// once the identity check passes, so a pass that only spent one of two
+    /// would read as a turn still open and hand nobody anything.
     ///
     /// Through `hand_on_turn` like every other way a turn ends, so a passed
     /// turn buys the round's upkeep exactly as a spent one does.
@@ -1055,6 +1171,9 @@ impl Game {
         };
         let round_before = battle.round;
         if let Some(actor) = battle.actor() {
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .forfeit_actions();
             self.hand_on_turn(actor, round_before);
         }
     }
@@ -1081,10 +1200,32 @@ impl Game {
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.
             if self.world.get::<Hostile>(body).is_some() {
-                self.finish_hostile(body, player);
+                match self.world.get::<Squad>(body).map(|s| s.members.clone()) {
+                    Some(members) => self.reap_squad(body, &members, player),
+                    None => self.finish_hostile(body, player),
+                }
             }
         }
         self.settle_tactical(wild);
+    }
+
+    /// A squad's death pays each of its still-living members' own kill —
+    /// XP, loot, nest/patrol consequences alike, exactly the payout five
+    /// separate kills would give — and only then despawns the squad shell
+    /// itself, which draws no payout of its own.
+    ///
+    /// The squad's own overkill is read here, before the despawn takes its
+    /// `Stats` away, and shared evenly across the members being paid —
+    /// `Game::finish_hostile_with_overkill`'s reason: a member's own
+    /// `Stats` never moved, so `overkill_term` read off one directly would
+    /// always answer `0.0` regardless of how hard the squad's kill actually
+    /// landed.
+    fn reap_squad(&mut self, squad: Entity, members: &[Entity], player: Entity) {
+        let overkill = self.overkill_term(squad) / (members.len().max(1) as f32);
+        for &member in members {
+            self.finish_hostile_with_overkill(member, player, overkill);
+        }
+        self.world.despawn(squad);
     }
 
     /// Ends the fight if it is over, and reports whether it did.
@@ -1119,10 +1260,19 @@ impl Game {
         if hostiles > 0 && !down && !gone {
             return false;
         }
+        let rounds = battle.round;
+        let outmatched = battle.outmatched;
+        // `battle`'s last read — freeing the borrow of `self.world` before
+        // the squad sweep below needs `&mut self`. A squad still standing
+        // when the fight ends for a reason other than its own death (the
+        // player down, or gone) is the second of the three ways one
+        // survives a fight, `depart_tactical`'s own direct call being the
+        // first.
+        self.disband_surviving_squads();
         let verdict = FightVerdict {
             won: hostiles == 0,
-            rounds: battle.round,
-            outmatched: battle.outmatched,
+            rounds,
+            outmatched,
             // A lair is roused in the Stack and the Stack stays abstract, so
             // a tactical fight never has one. Stated rather than omitted:
             // this is the field a fourth in-scope encounter kind would have

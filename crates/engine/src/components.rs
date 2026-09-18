@@ -1304,6 +1304,26 @@ pub struct TamperEntry {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Summoned;
 
+/// Several wild programs of one species folded into a single enhanced body
+/// on a battle map — `tactical::squads::plan` decides who folds, and
+/// `Game::spawn_squad` is the one place this component (and the rest of a
+/// squad's shape) is written, `spawn_structure`'s rule.
+///
+/// **Never saved and never seen outside a fight.** A squad carries no world
+/// `Position`, so `creature_save_for` skips it exactly as it skips a
+/// `Summoned` fork; the last squad standing disbands back into `members`
+/// (`Game::disband_squad`) the moment the fight that formed it ends, one
+/// way or another. `members` is drained by a successful capture
+/// (`Game::decompile_squad`) and by death (`reap_tactical_dead`, which pays
+/// each remaining name here its own kill before despawning the squad
+/// itself) — an emptied list is a second way a squad dies, independent of
+/// its own `Stats::hp`.
+#[derive(Component, Clone, Debug)]
+pub struct Squad {
+    pub members: Vec<Entity>,
+    pub formation: usize,
+}
+
 /// Battle-scoped: when a reach weapon's swing may next be a wide one.
 ///
 /// Battle-scoped for `Cloaked`'s reason and with `Cloaked`'s consequence —

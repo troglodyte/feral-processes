@@ -17,10 +17,11 @@ pub mod ai;
 pub mod deploy;
 pub mod map;
 pub mod reach;
+pub mod squads;
 pub mod turn;
 pub mod view;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::{Entity, Resource};
 
@@ -118,10 +119,11 @@ pub struct TacticalBattle {
     /// What the acting body has spent on movement this turn, against
     /// `Game::movement_allowance`.
     spent: u32,
-    /// Whether the acting body has taken its action. The action ends the
-    /// turn, so this is only ever read between the action landing and the
-    /// turn being handed on.
-    acted: bool,
+    /// How many of the acting body's actions this turn are unspent — one
+    /// without a `Squad`. The turn ends once this reaches zero, so it is
+    /// only ever read between an action landing and the turn being handed
+    /// on. Set from `shapes` in `begin_turn`.
+    actions_left: u8,
     /// The cells the acting body has committed to walking and has not walked
     /// yet, in the order it will enter them.
     ///
@@ -163,6 +165,24 @@ pub struct TacticalBattle {
     /// whoever the wrap landed on — one body unable to react for a round,
     /// for a reason nothing on screen could explain.
     reacted: Vec<Entity>,
+    /// A body's shape on the board — footprint and actions per turn —
+    /// written once, when it is seated (`set_shape`), and absent for an
+    /// ordinary body.
+    ///
+    /// `TacticalBattle` holds no `World`, so `footprint_of` and `begin_turn`
+    /// cannot resolve a `components::Squad` themselves; they read whatever
+    /// the caller who *does* have one (`Game::open_tactical_battle_at`)
+    /// told them at seat time instead. A `HashMap` rather than a fourth
+    /// parallel `Vec`, for `decompile_attempts`' reason: both are keyed
+    /// lookups a body's own turn reads, never walked in fight order.
+    shapes: HashMap<Entity, BodyShape>,
+}
+
+/// One entry of `TacticalBattle::shapes` — see that field's doc.
+#[derive(Clone, Copy, Debug)]
+struct BodyShape {
+    footprint: u8,
+    actions: u8,
 }
 
 impl TacticalBattle {
@@ -176,12 +196,13 @@ impl TacticalBattle {
             initiative: Vec::new(),
             turn: 0,
             spent: 0,
-            acted: false,
+            actions_left: 1,
             walk: None,
             round: 1,
             outmatched: false,
             decoys: Vec::new(),
             reacted: Vec::new(),
+            shapes: HashMap::new(),
         }
     }
 
@@ -200,15 +221,21 @@ impl TacticalBattle {
 
     /// Puts a body on a cell, or refuses.
     ///
-    /// Refused when the cell cannot be stood on, when somebody is already
-    /// there, or when this body is already on the board — the last so a
-    /// double placement is a refusal rather than a second entry that
-    /// `cell_of` would answer from and `occupant` would not.
+    /// Refused when any cell of the footprint anchored there cannot be stood
+    /// on, when somebody already holds one, or when this body is already on
+    /// the board — the last so a double placement is a refusal rather than a
+    /// second entry that `cell_of` would answer from and `occupant` would
+    /// not.
     pub fn place(&mut self, body: Entity, cell: (i32, i32)) -> bool {
-        if !self.board.walkable(cell.0, cell.1)
-            || self.occupant(cell).is_some()
-            || self.cell_of(body).is_some()
-        {
+        if self.cell_of(body).is_some() {
+            return false;
+        }
+        let footprint = self.footprint_cells(body, cell);
+        let blocked: HashSet<(i32, i32)> = self
+            .bodies()
+            .flat_map(|(other, _)| self.cells_of(other))
+            .collect();
+        if !footprint_clear(&self.board, &footprint, &blocked) {
             return false;
         }
         self.bodies.push((body, cell));
@@ -222,25 +249,89 @@ impl TacticalBattle {
             .map(|(_, cell)| *cell)
     }
 
+    /// The body whose footprint contains `cell`, if any.
     pub fn occupant(&self, cell: (i32, i32)) -> Option<Entity> {
         self.bodies
             .iter()
-            .find(|(_, at)| *at == cell)
-            .map(|(e, _)| *e)
+            .map(|&(e, _)| e)
+            .find(|&e| self.cells_of(e).contains(&cell))
+    }
+
+    /// How many cells wide (and tall) `body`'s footprint is — one without a
+    /// `Squad`, read out of `shapes` — see that field's doc for why this
+    /// cannot ask a `Squad` component itself.
+    ///
+    /// Every reader of a body's footprint goes through this or
+    /// [`cells_of`](Self::cells_of) rather than assuming one cell, so
+    /// widening a formation's footprint is the only place that has to
+    /// change.
+    pub fn footprint_of(&self, body: Entity) -> u8 {
+        self.shapes.get(&body).map_or(1, |s| s.footprint)
+    }
+
+    /// Records `body`'s shape for the rest of the fight — its footprint and
+    /// how many actions it gets a turn. Called once, when it is seated
+    /// (`Game::open_tactical_battle_at`), never again: a squad keeps its
+    /// formation to the end whatever its Integrity.
+    ///
+    /// **Shaping comes before seating**, and the assert is what holds it:
+    /// `place` validates the footprint it knows about, so a body seated
+    /// while still reading as one cell has its block checked against
+    /// nothing, and a widening `set_shape` afterwards can leave two bodies
+    /// overlapping with no refusal anywhere. Today the one caller is
+    /// correct only because `deploy::plan` reserved a clear block two files
+    /// away; this makes the rule local to the type, so a second seating
+    /// site cannot get it wrong quietly.
+    pub(crate) fn set_shape(&mut self, body: Entity, footprint: u8, actions: u8) {
+        debug_assert!(
+            self.cell_of(body).is_none(),
+            "a body's shape must be set before it is seated, or `place` \
+             checked a footprint it did not yet know about"
+        );
+        self.shapes.insert(body, BodyShape { footprint, actions });
+    }
+
+    /// The cells `body`'s footprint would cover, anchored top-left at
+    /// `anchor` — [`cells_of`](Self::cells_of)'s general form, usable before
+    /// a body is actually standing there. `place`'s own refusal needs to ask
+    /// about a cell nobody occupies yet.
+    fn footprint_cells(&self, body: Entity, anchor: (i32, i32)) -> Vec<(i32, i32)> {
+        footprint_cells_at(anchor, self.footprint_of(body))
+    }
+
+    /// Every cell `body`'s footprint covers right now, anchored at
+    /// [`cell_of`](Self::cell_of) — empty for a body not on the board, the
+    /// same "off the board reaches nothing" answer every other reader here
+    /// gives.
+    pub fn cells_of(&self, body: Entity) -> Vec<(i32, i32)> {
+        match self.cell_of(body) {
+            Some(anchor) => self.footprint_cells(body, anchor),
+            None => Vec::new(),
+        }
     }
 
     /// Moves a placed body, or refuses. Standing still is allowed.
+    ///
+    /// Refused when any cell of the footprint anchored at `cell` cannot be
+    /// stood on, or is held by a body other than this one.
     pub fn move_to(&mut self, body: Entity, cell: (i32, i32)) -> bool {
-        if !self.board.walkable(cell.0, cell.1) {
+        if self.cell_of(body).is_none() {
             return false;
         }
-        match self.occupant(cell) {
-            Some(other) if other != body => return false,
-            _ => {}
-        }
-        let Some(slot) = self.bodies.iter_mut().find(|(e, _)| *e == body) else {
+        let footprint = self.footprint_cells(body, cell);
+        let blocked: HashSet<(i32, i32)> = self
+            .bodies()
+            .filter(|&(other, _)| other != body)
+            .flat_map(|(other, _)| self.cells_of(other))
+            .collect();
+        if !footprint_clear(&self.board, &footprint, &blocked) {
             return false;
-        };
+        }
+        let slot = self
+            .bodies
+            .iter_mut()
+            .find(|(e, _)| *e == body)
+            .expect("checked above: cell_of(body) answered Some");
         slot.1 = cell;
         true
     }
@@ -256,6 +347,12 @@ impl TacticalBattle {
     pub fn remove(&mut self, body: Entity) {
         self.bodies.retain(|(e, _)| *e != body);
         self.reacted.retain(|e| *e != body);
+        // `shapes` goes with the body, like every other per-body record
+        // here. A stale entry answers `footprint_of` for a body that has
+        // left the fight, and entity ids are reused: the next body bevy
+        // hands out that id would be seated as whatever shape the last one
+        // was.
+        self.shapes.remove(&body);
         let Some(idx) = self.initiative.iter().position(|&e| e == body) else {
             return;
         };
@@ -315,9 +412,9 @@ impl TacticalBattle {
         self.spent
     }
 
-    /// Whether the acting body has already taken its action.
-    pub fn acted(&self) -> bool {
-        self.acted
+    /// How many actions the acting body has left to spend this turn.
+    pub fn actions_left(&self) -> u8 {
+        self.actions_left
     }
 
     /// Charges `cost` against the acting body's movement.
@@ -354,11 +451,43 @@ impl TacticalBattle {
         self.walk.as_ref().is_some_and(|walk| !walk.is_empty())
     }
 
-    /// Records that the acting body has acted. The caller ends the turn —
-    /// this only says the action landed, because a body killed by its own
-    /// fumble leaves the order instead.
-    pub fn mark_acted(&mut self) {
-        self.acted = true;
+    /// Spends one of the acting body's actions. The caller ends the turn
+    /// once none are left — this only says one landed, because a body
+    /// killed by its own fumble or its own blast leaves the order instead.
+    pub fn spend_action(&mut self) {
+        self.actions_left = self.actions_left.saturating_sub(1);
+    }
+
+    /// Clears whatever the acting body has committed to walking, leaving
+    /// everything else about its turn alone — `begin_turn`'s reset with the
+    /// movement allowance and the action budget left untouched.
+    ///
+    /// **`hand_on_turn`'s own door, for a body with another action still to
+    /// spend.** A turn's movement is spent once for the whole turn however
+    /// many actions it buys, so the walk is the only thing stale between one
+    /// action and the next — the next action plans a fresh one from
+    /// wherever this one left the body standing.
+    pub(crate) fn clear_walk(&mut self) {
+        self.walk = None;
+    }
+
+    /// Empties the acting body's action budget without spending anything.
+    ///
+    /// `tactical_end_turn`'s own door: passing a turn with actions still
+    /// unspent forfeits all of them, not just one, so `hand_on_turn`'s
+    /// "another action is coming" gate cannot read a pass as anything but
+    /// the end of the turn.
+    pub(crate) fn forfeit_actions(&mut self) {
+        self.actions_left = 0;
+    }
+
+    /// Test hook: overrides the acting body's action budget for the turn,
+    /// so a rule can be pinned without seating a real `Squad` to carry the
+    /// second action. Nothing outside a test calls it — in a real fight the
+    /// budget comes from `begin_turn`, off `shapes`.
+    #[cfg(test)]
+    pub(crate) fn set_actions_left(&mut self, n: u8) {
+        self.actions_left = n;
     }
 
     /// Hands the turn to the next body in the order, starting a new round
@@ -372,9 +501,14 @@ impl TacticalBattle {
     /// The one place a body's turn starts — `end_turn`, `remove` and
     /// `set_initiative` all land here, which is what makes it the honest
     /// home for the reaction refund.
+    ///
+    /// **`actions_left` is read out of `shapes`, `footprint_of`'s door
+    /// again** — one for a body `set_shape` never touched.
     fn begin_turn(&mut self) {
         self.spent = 0;
-        self.acted = false;
+        self.actions_left = self
+            .actor()
+            .map_or(1, |a| self.shapes.get(&a).map_or(1, |s| s.actions));
         self.walk = None;
         // **Refunded at the start of its own turn, not at the round.** A
         // body that reacts early in a round gets its budget back when its
@@ -441,10 +575,39 @@ impl TacticalBattle {
     }
 }
 
+/// The cells an anchor-top-left footprint of `side` cells covers —
+/// [`TacticalBattle::footprint_cells`](TacticalBattle::footprint_cells)'s
+/// pure grid math, pulled out to a free function so `deploy` (which never
+/// sees an `Entity` at all) can seat a squad's clear NxN block without
+/// reaching back into a body's own shape lookup.
+pub(crate) fn footprint_cells_at(anchor: (i32, i32), side: u8) -> Vec<(i32, i32)> {
+    let side = i32::from(side);
+    (0..side)
+        .flat_map(|dy| (0..side).map(move |dx| (anchor.0 + dx, anchor.1 + dy)))
+        .collect()
+}
+
+/// Whether every cell of `footprint` can be stood on: walkable, and none of
+/// them in `blocked` — `place`/`move_to`'s shared refusal, and
+/// `reach::movement_field`'s destination test, so the anchors a walk is
+/// offered are exactly the anchors `move_to` will accept.
+///
+/// A free function rather than inlined at each call site, so its own test
+/// can hand it a hand-built multi-cell footprint with no `Squad` behind it.
+pub(crate) fn footprint_clear(
+    board: &Board,
+    footprint: &[(i32, i32)],
+    blocked: &HashSet<(i32, i32)>,
+) -> bool {
+    footprint
+        .iter()
+        .all(|&(x, y)| board.walkable(x, y) && !blocked.contains(&(x, y)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tactical::map::{BattleSpec, generate};
+    use crate::tactical::map::{BattleSpec, Board, generate};
     use crate::world::Biome;
     use bevy_ecs::world::World;
 
@@ -480,6 +643,22 @@ mod tests {
             .find(|(_, k)| k.walkable())
             .map(|(c, _)| c)
             .expect("a board with no ground")
+    }
+
+    /// The first anchor a whole `footprint`x`footprint` block stands on —
+    /// [`first_open`](first_open) answers for one cell, which is not the
+    /// same question once a body is wider than that.
+    fn first_open_block(battle: &TacticalBattle, footprint: u8) -> (i32, i32) {
+        battle
+            .board
+            .cells()
+            .map(|(c, _)| c)
+            .find(|&c| {
+                footprint_cells_at(c, footprint)
+                    .iter()
+                    .all(|&(x, y)| battle.board.walkable(x, y))
+            })
+            .expect("a board with no room for a block")
     }
 
     #[test]
@@ -557,6 +736,25 @@ mod tests {
         assert_eq!(battle.cell_of(bodies[0]), Some(a));
     }
 
+    /// A body's shape leaves with it. Entity ids are reused, so a stale
+    /// entry is not merely untidy — the next body handed that id would seat
+    /// at the dead one's footprint.
+    #[test]
+    fn a_removed_body_takes_its_shape_with_it() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open_block(&battle, 2);
+        battle.set_shape(bodies[0], 2, 2);
+        assert!(battle.place(bodies[0], cell), "the 2x2 block had no room");
+        assert_eq!(battle.footprint_of(bodies[0]), 2);
+
+        battle.remove(bodies[0]);
+        assert_eq!(
+            battle.footprint_of(bodies[0]),
+            1,
+            "a departed body kept its footprint"
+        );
+    }
+
     /// A body that dies or walks off the edge leaves, and takes its cell
     /// with it.
     #[test]
@@ -607,12 +805,12 @@ mod tests {
     fn a_new_turn_starts_with_nothing_spent_and_nothing_done() {
         let (mut battle, _) = seated();
         battle.spend(3);
-        battle.mark_acted();
+        battle.spend_action();
         assert_eq!(battle.spent(), 3);
-        assert!(battle.acted());
+        assert_eq!(battle.actions_left(), 0);
         battle.end_turn();
         assert_eq!(battle.spent(), 0);
-        assert!(!battle.acted());
+        assert_eq!(battle.actions_left(), 1);
     }
 
     /// `None` is "has not chosen yet" and `Some(vec![])` is "has arrived",
@@ -710,5 +908,116 @@ mod tests {
         }
         let order: Vec<Entity> = battle.bodies().map(|(e, _)| e).collect();
         assert_eq!(order, bodies);
+    }
+
+    /// A footprint of one is exactly the anchor `cell_of` already answers —
+    /// the whole of `footprint_of`'s answer for a body nothing ever called
+    /// `set_shape` for, which is every body but a squad.
+    #[test]
+    fn a_bodys_cells_are_its_anchor_alone_without_a_squad() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.place(bodies[0], cell);
+        assert_eq!(battle.footprint_of(bodies[0]), 1);
+        assert_eq!(battle.cells_of(bodies[0]), vec![cell]);
+    }
+
+    #[test]
+    fn a_body_not_on_the_board_has_no_cells() {
+        let (battle, bodies) = fight();
+        assert!(battle.cells_of(bodies[0]).is_empty());
+    }
+
+    /// Two bodies cannot be placed overlapping — `footprint_clear`'s own
+    /// rule, pinned on a hand-built two-cell footprint since no `Squad`
+    /// exists yet to seat a real one. Deleting the rule (checking only the
+    /// footprint's first cell) would still pass a footprint whose *first*
+    /// cell is clear, so the blocked cell here is the footprint's second.
+    #[test]
+    fn a_footprint_refuses_a_cell_any_other_body_already_holds() {
+        let board = Board::from_rows(&["...", "...", "..."]);
+        let blocked: HashSet<(i32, i32)> = HashSet::from([(1, 1)]);
+        assert!(
+            !footprint_clear(&board, &[(0, 0), (1, 1)], &blocked),
+            "a footprint overlapping an occupied cell was accepted"
+        );
+        assert!(footprint_clear(&board, &[(0, 0), (0, 1)], &blocked));
+    }
+
+    #[test]
+    fn a_footprint_refuses_ground_any_of_its_cells_cannot_stand_on() {
+        let board = Board::from_rows(&["..X", "...", "..."]);
+        let clear = HashSet::new();
+        assert!(!footprint_clear(&board, &[(0, 0), (2, 0)], &clear));
+        assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &clear));
+    }
+
+    /// `set_shape` is what `footprint_of` and `begin_turn` read — the
+    /// `Squad` lookup lands at the caller instead, since `TacticalBattle`
+    /// holds no `World` to ask a component itself.
+    #[test]
+    fn a_seated_shape_is_what_footprint_of_and_begin_turn_read() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open_block(&battle, 2);
+        battle.set_shape(bodies[0], 2, 2);
+        assert!(battle.place(bodies[0], cell), "the 2x2 block had no room");
+        assert_eq!(battle.footprint_of(bodies[0]), 2);
+        assert_eq!(
+            battle.cells_of(bodies[0]).len(),
+            4,
+            "a footprint of 2 covers a 2x2 block"
+        );
+
+        battle.set_initiative(vec![bodies[0]]);
+        assert_eq!(
+            battle.actions_left(),
+            2,
+            "begin_turn (run by set_initiative) must read the seated shape"
+        );
+    }
+
+    /// Seating checks the whole block, and `TacticalBattle` is where that is
+    /// enforced — `deploy::plan` reserving a clear block is what makes the
+    /// one production caller safe today, so this pins the rule without it.
+    ///
+    /// The overlap is on the footprint's *second* cell and its anchor is
+    /// free, so a check that reads the anchor alone accepts it.
+    #[test]
+    fn seating_a_shaped_body_refuses_a_block_another_body_is_standing_in() {
+        let spec = BattleSpec {
+            world_seed: 5,
+            site: (0, 0),
+            tick: 10,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 4,
+        };
+        let mut world = World::new();
+        let (sitting, squad) = (world.spawn_empty().id(), world.spawn_empty().id());
+        let mut battle = TacticalBattle::open(spec, Board::from_rows(&["....."; 5]));
+        assert!(battle.place(sitting, (1, 1)));
+
+        battle.set_shape(squad, 2, 2);
+        assert!(
+            !battle.place(squad, (0, 0)),
+            "a 2x2 block was seated over a body standing in its far corner"
+        );
+
+        // The same anchor at the ordinary footprint is free, so the refusal
+        // above is the block's doing and not the anchor's.
+        let ordinary = world.spawn_empty().id();
+        assert!(battle.place(ordinary, (0, 0)));
+    }
+
+    /// A body `set_shape` never touched still reads footprint 1, action 1 —
+    /// the default this whole feature must leave alone.
+    #[test]
+    fn an_unshaped_body_keeps_the_ordinary_defaults() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.place(bodies[0], cell);
+        battle.set_initiative(vec![bodies[0]]);
+        assert_eq!(battle.footprint_of(bodies[0]), 1);
+        assert_eq!(battle.actions_left(), 1);
     }
 }

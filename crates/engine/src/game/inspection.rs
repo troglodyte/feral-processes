@@ -4,8 +4,8 @@
 use crate::game::base::hauling::at_station;
 use crate::settlements::CompassTarget;
 use crate::tuning::{
-    DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_COMPANION_REFACTORS,
-    MAX_FUSIONS,
+    DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, FORMATIONS,
+    MAX_COMPANION_REFACTORS, MAX_FUSIONS,
 };
 use crate::views::drawn_on_surface_map;
 use crate::*;
@@ -769,8 +769,32 @@ impl Game {
             .unwrap_or_else(|| kind.clone())
     }
 
+    /// A folded squad's own name — `"<species> squad (5)"` — built once
+    /// here rather than in a renderer, so a turn strip and an examine line
+    /// reading the same `entity_label` call cannot show two different
+    /// counts once a capture thins the squad.
+    ///
+    /// Checked ahead of `creature_name` in `entity_label`: a squad carries
+    /// a bare `Creature` (no `CustomName`, no `ProgramId` — `spawn_squad`'s
+    /// own component list), so falling through to that ladder would print
+    /// the species name alone with no word saying five of them stand
+    /// there. `None` for anything that isn't a `Squad` at all, which is
+    /// every entity but the one this feature spawns.
+    fn squad_label(&self, entity: Entity) -> Option<String> {
+        let squad = self.world.get::<Squad>(entity)?;
+        let creature = self.world.get::<Creature>(entity)?;
+        let species_name = self.species_display_name(creature);
+        let noun = FORMATIONS
+            .get(squad.formation)
+            .map(|f| f.noun)
+            .unwrap_or("squad");
+        Some(format!("{species_name} {noun} ({})", squad.members.len()))
+    }
+
     pub(crate) fn entity_label(&self, entity: Entity) -> String {
-        if let Some(name) = self.creature_name(entity) {
+        if let Some(name) = self.squad_label(entity) {
+            name
+        } else if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
             self.structure_name(&s.kind)

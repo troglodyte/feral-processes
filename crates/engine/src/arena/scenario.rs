@@ -41,8 +41,9 @@ pub struct Scenario {
     /// The arena has no way to *invoke* Emulate itself: the bin plays
     /// `PartyPlan::AllAttack`, which invokes no routine, so a scenario is
     /// the only way to stage the kit swap at all. This bypasses
-    /// `EMULATION_ROUNDS`'s duration, Power cost and cooldown on purpose —
-    /// it measures the swapped kit, not the action economy of reaching it.
+    /// `assets/abilities/emulate.ron`'s duration, Power cost and cooldown
+    /// on purpose — it measures the swapped kit, not the action economy of
+    /// reaching it.
     pub emulate: Option<SpeciesId>,
     /// Order is formation: `ENGAGED_GROUPS` is 2, so entries past the second
     /// are out of melee reach.

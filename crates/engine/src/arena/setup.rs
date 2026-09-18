@@ -70,9 +70,9 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                     // `AbilityEffect::Emulate` never fires here — the bin
                     // plays `PartyPlan::AllAttack`, which invokes nothing —
                     // so this is the only way to stage the swap at all, and
-                    // it bypasses `tuning::EMULATION_ROUNDS`'s own duration
-                    // deliberately: outlasting every fight the arena stages
-                    // is what lets a report measure the kit alone.
+                    // it bypasses `emulate.ron`'s own duration deliberately:
+                    // outlasting every fight the arena stages is what lets a
+                    // report measure the kit alone.
                     rounds_left: ARENA_EMULATION_ROUNDS,
                 });
             }
@@ -212,9 +212,9 @@ fn known_species(game: &Game, species: &SpeciesId) -> Result<(), String> {
 
 /// How long `Scenario::emulate` holds the image for. Chosen to outlast any
 /// fight the arena stages — `reps`' whole point is a sample of *rounds*, and
-/// a swap that could lapse mid-fight would measure `EMULATION_ROUNDS`
-/// instead of the kit it names. That duration is untested by this
-/// instrument on purpose (see the field's own doc).
+/// a swap that could lapse mid-fight would measure `assets/abilities/
+/// emulate.ron`'s own duration instead of the kit it names. That duration is
+/// untested by this instrument on purpose (see the field's own doc).
 const ARENA_EMULATION_ROUNDS: u32 = 9_999;
 
 #[cfg(test)]
@@ -275,7 +275,7 @@ mod tests {
             .expect("the player is emulating");
         assert_eq!(emulation.species, "rootkit");
         // Long enough that no fight the arena stages lapses it mid-measurement
-        // — the point is the kit swap, not `EMULATION_ROUNDS`'s own duration.
+        // — the point is the kit swap, not `emulate.ron`'s own duration.
         assert!(emulation.rounds_left > 100);
     }
 

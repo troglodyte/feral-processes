@@ -5366,12 +5366,6 @@ pub const EMULATION_EDGE: f32 = 1.25;
 /// reason.
 pub const EMULATION_EDGE_PER_PERK_LEVEL: f32 = 0.1;
 
-/// How many rounds `AbilityEffect::Emulate` holds an image for, once that
-/// effect exists (todo #100 Task 3). This is the default the ability file
-/// authors — the `.ron` file is the source of truth once it is written, and
-/// this constant only says what a fresh one should start at.
-pub const EMULATION_ROUNDS: u32 = 10;
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -644,9 +644,9 @@ pub enum AbilityEffect {
     Emulate {
         /// Battle rounds the image holds, absent a Revert
         /// (`BattleAction::Revert`/`Game::tactical_revert`) or the fight
-        /// ending. `tuning::EMULATION_ROUNDS` is what a fresh `emulate.ron`
-        /// should start this at — the file is the source of truth once
-        /// written.
+        /// ending. `assets/abilities/emulate.ron`'s `rounds:` field is the
+        /// only source of truth for this — final review F8 deleted the
+        /// unused `tuning::EMULATION_ROUNDS` that used to duplicate it.
         rounds: u32,
     },
 }

@@ -665,11 +665,12 @@ impl Game {
         match self.tactical_step(dir) {
             StepOutcome::Moved => true,
             // `Struck` is unreachable from here — `reach::movement_field`
-            // treats every body as a wall, so a committed path never names an
-            // occupied cell, and nothing on this board moves between one
-            // body's beats — and is grouped with the refusals rather than
-            // given an arm of its own: if it ever did fire, the action is
-            // spent and the rest of the walk is owed to nobody.
+            // treats every *other* body as a wall and offers no anchor whose
+            // whole footprint is not clear, so a committed path never names a
+            // cell `move_to` will refuse, and nothing on this board moves
+            // between one body's beats — and is grouped with the refusals
+            // rather than given an arm of its own: if it ever did fire, the
+            // action is spent and the rest of the walk is owed to nobody.
             //
             // **Not `tactical_awaits_input`, which used to be the reason.**
             // That is false for every body the *AI* door drives and true for

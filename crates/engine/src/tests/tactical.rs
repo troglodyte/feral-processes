@@ -4242,6 +4242,127 @@ mod squads {
         assert_eq!(game.world.resource::<TacticalBattle>().actions_left(), 1);
     }
 
+    /// The one squad a 9-of-a-kind pack seats.
+    fn seated_squad(game: &Game) -> Entity {
+        let battle = game.world.resource::<TacticalBattle>();
+        battle
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Squad>(e).is_some())
+            .expect("9 of a kind must seat a squad")
+    }
+
+    /// **Every anchor the field offers is one `move_to` accepts.** That is
+    /// the property `step_along_walk` rests on when it calls `Struck` and a
+    /// refusal unreachable from a committed path — offered an anchor the
+    /// board then refuses, a squad abandons the rest of its walk mid-path,
+    /// silently, and the turn is owed to nobody.
+    ///
+    /// Against a *real* squad, because task 1's footprint unit tests used
+    /// hand-built cell lists and stayed green with every footprint at one.
+    #[test]
+    fn every_anchor_a_squads_field_offers_is_one_move_to_accepts() {
+        let mut game = game();
+        let _pack = tactical_fight(&mut game, 9, 10);
+        let squad = seated_squad(&game);
+        let allowance = game.movement_allowance(squad);
+
+        let (home, field) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let home = battle.cell_of(squad).expect("the squad is seated");
+            let field: Vec<(i32, i32)> =
+                crate::tactical::reach::movement_field(battle, squad, allowance)
+                    .into_keys()
+                    .collect();
+            (home, field)
+        };
+        assert!(
+            field.len() > 1,
+            "a squad that can reach nowhere but the cell it stands on proves nothing"
+        );
+
+        for anchor in field {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            assert!(
+                battle.move_to(squad, anchor),
+                "the field offered {anchor:?}, which move_to refuses"
+            );
+            assert!(battle.move_to(squad, home), "the squad could not step back");
+        }
+    }
+
+    /// A squad stands somewhere only if its *whole* footprint does:
+    /// `move_to` accepts an anchor exactly when every cell of the block
+    /// anchored there is walkable and free. Swept over the whole board, so
+    /// both halves — ground nothing can stand on, and another body — are
+    /// asserted against rather than assumed reachable, and the two counters
+    /// below keep the sweep from passing vacuously.
+    #[test]
+    fn a_squad_stands_only_where_its_whole_footprint_does() {
+        let mut game = game();
+        let _pack = tactical_fight(&mut game, 9, 10);
+        let squad = seated_squad(&game);
+
+        let (home, side, others) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let others: Vec<(i32, i32)> = battle
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| e != squad)
+                .flat_map(|e| battle.cells_of(e))
+                .collect();
+            (
+                battle.cell_of(squad).expect("the squad is seated"),
+                battle.board.side,
+                others,
+            )
+        };
+        assert_eq!(
+            crate::tactical::footprint_cells_at(home, 2).len(),
+            4,
+            "fixture: the shipped formation is a 2x2"
+        );
+
+        let mut refused_for_ground = 0;
+        let mut refused_for_a_body = 0;
+        for y in 0..side {
+            for x in 0..side {
+                let anchor = (x, y);
+                let cells = crate::tactical::footprint_cells_at(anchor, 2);
+                let (on_ground, clear_of_bodies) = {
+                    let battle = game.world.resource::<TacticalBattle>();
+                    (
+                        cells.iter().all(|&(cx, cy)| battle.board.walkable(cx, cy)),
+                        cells.iter().all(|c| !others.contains(c)),
+                    )
+                };
+                let legal = on_ground && clear_of_bodies;
+                if !on_ground {
+                    refused_for_ground += 1;
+                }
+                if on_ground && !clear_of_bodies {
+                    refused_for_a_body += 1;
+                }
+                let mut battle = game.world.resource_mut::<TacticalBattle>();
+                assert_eq!(
+                    battle.move_to(squad, anchor),
+                    legal,
+                    "anchor {anchor:?}: footprint {cells:?}, on_ground {on_ground}, \
+                     clear {clear_of_bodies}"
+                );
+                assert!(battle.move_to(squad, home), "the squad could not step back");
+            }
+        }
+        assert!(
+            refused_for_ground > 0,
+            "the sweep never met ground a footprint could not stand on"
+        );
+        assert!(
+            refused_for_a_body > 0,
+            "the sweep never met another body to overlap"
+        );
+    }
+
     /// A squad's death pays each remaining member's own kill — the same XP
     /// five separate kills would pay, not one kill priced off the squad's
     /// inflated combined `Stats`. The player's `atk` is boosted to a

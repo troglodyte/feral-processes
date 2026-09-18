@@ -17,7 +17,7 @@ use crate::components::Creature;
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
 use crate::tactical::map::{BattleCell, Board};
-use crate::tactical::{TacticalBattle, deploy};
+use crate::tactical::{TacticalBattle, deploy, footprint_cells_at, footprint_clear};
 use crate::tuning::{
     DEFAULT_BASE_SPEED, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX,
     TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP,
@@ -71,11 +71,22 @@ impl Game {
 /// costs it. The cell it is standing on is present at zero, because holding
 /// still is a legal move.
 ///
-/// **A body is a wall.** An occupied cell is neither crossed nor stopped on,
-/// friend or foe — one rule rather than a pass-through set and a
-/// destination set, and the same refusal `TacticalBattle::move_to` already
-/// makes. It is also the whole of this model's zone of control: bodies that
-/// can be walked through cannot hold a line.
+/// **A body is a wall, and never to itself.** An occupied cell is neither
+/// crossed nor stopped on, friend or foe — one rule rather than a
+/// pass-through set and a destination set, and the same refusal
+/// `TacticalBattle::move_to` already makes. It is also the whole of this
+/// model's zone of control: bodies that can be walked through cannot hold a
+/// line. The mover's *own* cells are left out of the set, because a 2x2
+/// block slid one cell in any direction still covers two of the cells it
+/// started on: counted as walls, a squad could not take a single step.
+///
+/// **An anchor is legal only if the whole footprint anchored there is** —
+/// `footprint_clear`, the very rule `move_to` will apply when the walk
+/// arrives, so a committed path can never name an anchor `move_to` then
+/// refuses. The *cost* is still the anchor cell's own, because
+/// `Game::tactical_step` charges the anchor and `path_to` descends this
+/// field by subtracting exactly that; pricing the footprint here would put
+/// three readers of one step's cost out of step with each other.
 ///
 /// A body that is not on the board reaches nothing.
 pub fn movement_field(
@@ -96,9 +107,11 @@ pub fn movement_field(
     // `cell_of` always built for an ordinary body.
     let occupied: HashSet<(i32, i32)> = battle
         .bodies()
+        .filter(|&(other, _)| other != body)
         .flat_map(|(other, _)| battle.cells_of(other))
         .collect();
     let board = &battle.board;
+    let side = battle.footprint_of(body);
 
     // The radius is the budget. `walk_field` bounds a Chebyshev box and not
     // a cost, but no step costs less than one, so nothing outside a box of
@@ -106,7 +119,7 @@ pub fn movement_field(
     // box cannot cut off a cell the filter below would have kept.
     let radius = i32::try_from(allowance).unwrap_or(i32::MAX);
     let mut field = walk_field(origin, radius, |cell| {
-        if occupied.contains(&cell) {
+        if !footprint_clear(board, &footprint_cells_at(cell, side), &occupied) {
             return None;
         }
         board.cell(cell.0, cell.1).movement_cost()
@@ -577,6 +590,64 @@ mod tests {
         let field = movement_field(&battle, bodies[0], 2);
 
         assert_eq!(path_to(&battle.board, &field, (0, 0), (5, 5)), Vec::new());
+    }
+
+    /// **A body is not a wall to itself.** The occupancy set is every cell of
+    /// every *other* body — a squad whose own four cells were walls could not
+    /// take a single step that overlapped where it already stands, which is
+    /// every step it has: a 2x2 block slid one cell in any direction still
+    /// covers two of the cells it started on.
+    #[test]
+    fn a_bodys_own_footprint_is_not_a_wall_in_its_own_field() {
+        let (mut battle, bodies) = fight(&["........"; 8]);
+        battle.set_shape(bodies[0], 2, 2);
+        assert!(battle.place(bodies[0], (2, 2)));
+        let field = movement_field(&battle, bodies[0], 3);
+
+        for step in [(3, 2), (2, 3), (3, 3), (1, 1), (1, 2), (2, 1)] {
+            assert!(
+                field.contains_key(&step),
+                "a 2x2 body could not step to {step:?}: its own cells are walls to it"
+            );
+        }
+    }
+
+    /// Every anchor the field offers has to seat the *whole* footprint —
+    /// `move_to` refuses anything else, and a walk committed to an anchor it
+    /// refuses is abandoned mid-path with the rest of the turn owed to
+    /// nobody.
+    #[test]
+    fn every_anchor_the_field_offers_seats_the_whole_footprint() {
+        let (mut battle, bodies) = fight(&[
+            "........", "........", "........", "....X...", "........", "........", "........",
+            "........",
+        ]);
+        battle.set_shape(bodies[0], 2, 2);
+        assert!(battle.place(bodies[0], (1, 1)));
+        assert!(battle.place(bodies[1], (4, 1)));
+        let others: Vec<(i32, i32)> = battle.cells_of(bodies[1]);
+        let field = movement_field(&battle, bodies[0], 4);
+
+        assert!(!field.is_empty(), "the field reached nowhere at all");
+        for &anchor in field.keys() {
+            for cell in crate::tactical::footprint_cells_at(anchor, 2) {
+                assert!(
+                    battle.board.walkable(cell.0, cell.1),
+                    "anchor {anchor:?} puts {cell:?} on ground nothing can stand on"
+                );
+                assert!(
+                    !others.contains(&cell),
+                    "anchor {anchor:?} puts {cell:?} on top of another body"
+                );
+            }
+        }
+        // The two anchors the rule above is what refuses, named so the test
+        // still says something if the field ever shrinks to nothing.
+        assert!(!field.contains_key(&(3, 3)), "an anchor over the boulder");
+        assert!(
+            !field.contains_key(&(3, 1)),
+            "an anchor over the other body"
+        );
     }
 
     /// A slow body, an average one and a fast one must actually differ, and

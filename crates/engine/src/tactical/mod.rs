@@ -21,7 +21,7 @@ pub mod squads;
 pub mod turn;
 pub mod view;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::{Entity, Resource};
 
@@ -231,7 +231,7 @@ impl TacticalBattle {
             return false;
         }
         let footprint = self.footprint_cells(body, cell);
-        let blocked: Vec<(i32, i32)> = self
+        let blocked: HashSet<(i32, i32)> = self
             .bodies()
             .flat_map(|(other, _)| self.cells_of(other))
             .collect();
@@ -305,7 +305,7 @@ impl TacticalBattle {
             return false;
         }
         let footprint = self.footprint_cells(body, cell);
-        let blocked: Vec<(i32, i32)> = self
+        let blocked: HashSet<(i32, i32)> = self
             .bodies()
             .filter(|&(other, _)| other != body)
             .flat_map(|(other, _)| self.cells_of(other))
@@ -568,11 +568,17 @@ pub(crate) fn footprint_cells_at(anchor: (i32, i32), side: u8) -> Vec<(i32, i32)
 }
 
 /// Whether every cell of `footprint` can be stood on: walkable, and none of
-/// them in `blocked` — `place`/`move_to`'s shared refusal.
+/// them in `blocked` — `place`/`move_to`'s shared refusal, and
+/// `reach::movement_field`'s destination test, so the anchors a walk is
+/// offered are exactly the anchors `move_to` will accept.
 ///
 /// A free function rather than inlined at each call site, so its own test
 /// can hand it a hand-built multi-cell footprint with no `Squad` behind it.
-fn footprint_clear(board: &Board, footprint: &[(i32, i32)], blocked: &[(i32, i32)]) -> bool {
+pub(crate) fn footprint_clear(
+    board: &Board,
+    footprint: &[(i32, i32)],
+    blocked: &HashSet<(i32, i32)>,
+) -> bool {
     footprint
         .iter()
         .all(|&(x, y)| board.walkable(x, y) && !blocked.contains(&(x, y)))
@@ -875,7 +881,7 @@ mod tests {
     #[test]
     fn a_footprint_refuses_a_cell_any_other_body_already_holds() {
         let board = Board::from_rows(&["...", "...", "..."]);
-        let blocked = vec![(1, 1)];
+        let blocked: HashSet<(i32, i32)> = HashSet::from([(1, 1)]);
         assert!(
             !footprint_clear(&board, &[(0, 0), (1, 1)], &blocked),
             "a footprint overlapping an occupied cell was accepted"
@@ -886,8 +892,9 @@ mod tests {
     #[test]
     fn a_footprint_refuses_ground_any_of_its_cells_cannot_stand_on() {
         let board = Board::from_rows(&["..X", "...", "..."]);
-        assert!(!footprint_clear(&board, &[(0, 0), (2, 0)], &[]));
-        assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &[]));
+        let clear = HashSet::new();
+        assert!(!footprint_clear(&board, &[(0, 0), (2, 0)], &clear));
+        assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &clear));
     }
 
     /// `set_shape` is what `footprint_of` and `begin_turn` read — task 4's

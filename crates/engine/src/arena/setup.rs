@@ -65,15 +65,28 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             if let Some(species) = &scenario.emulate {
                 known_species(&game, species)?;
                 let player = game.player_entity();
+                // Final review F10 (U4): staged with `emulate.ron`'s own
+                // real duration rather than an arbitrarily large number —
+                // `AbilityEffect::Emulate` never fires here (the bin plays
+                // `PartyPlan::AllAttack`, which invokes no routine, so this
+                // is still the only way to stage the swap at all), but a
+                // fight that outlasts the real duration now shows the image
+                // lapsing mid-measurement instead of hiding that entirely.
+                // Falls back to `ARENA_EMULATION_ROUNDS` only if the shipped
+                // ability is somehow missing, which `known_species` above
+                // does not already guard against.
+                let rounds = game
+                    .world
+                    .resource::<AbilityDb>()
+                    .get("emulate")
+                    .and_then(|def| match def.effect {
+                        AbilityEffect::Emulate { rounds } => Some(rounds),
+                        _ => None,
+                    })
+                    .unwrap_or(ARENA_EMULATION_ROUNDS);
                 game.world.entity_mut(player).insert(Emulation {
                     species: species.clone(),
-                    // `AbilityEffect::Emulate` never fires here — the bin
-                    // plays `PartyPlan::AllAttack`, which invokes nothing —
-                    // so this is the only way to stage the swap at all, and
-                    // it bypasses `emulate.ron`'s own duration deliberately:
-                    // outlasting every fight the arena stages is what lets a
-                    // report measure the kit alone.
-                    rounds_left: ARENA_EMULATION_ROUNDS,
+                    rounds_left: rounds,
                 });
             }
             // **Authored from inside base space, and back out afterwards.**
@@ -210,11 +223,10 @@ fn known_species(game: &Game, species: &SpeciesId) -> Result<(), String> {
     Ok(())
 }
 
-/// How long `Scenario::emulate` holds the image for. Chosen to outlast any
-/// fight the arena stages — `reps`' whole point is a sample of *rounds*, and
-/// a swap that could lapse mid-fight would measure `assets/abilities/
-/// emulate.ron`'s own duration instead of the kit it names. That duration is
-/// untested by this instrument on purpose (see the field's own doc).
+/// The fallback for `Scenario::emulate` if `assets/abilities/emulate.ron`'s
+/// own duration can't be read (a stripped-down test asset dir with no
+/// ability files, say) — final review F10 made the shipped duration the
+/// normal case; this only covers the asset being missing entirely.
 const ARENA_EMULATION_ROUNDS: u32 = 9_999;
 
 #[cfg(test)]
@@ -274,9 +286,36 @@ mod tests {
             .get::<Emulation>(game.player_entity())
             .expect("the player is emulating");
         assert_eq!(emulation.species, "rootkit");
-        // Long enough that no fight the arena stages lapses it mid-measurement
-        // — the point is the kit swap, not `emulate.ron`'s own duration.
-        assert!(emulation.rounds_left > 100);
+    }
+
+    /// Final review F10 (U4): the arena still has no way to *invoke* Emulate
+    /// (`PartyPlan::AllAttack` invokes no routine), so this stages the
+    /// ability's own real duration rather than the old arbitrary
+    /// `ARENA_EMULATION_ROUNDS` — a fight that outlasts it now shows the
+    /// image lapsing mid-measurement, which the old 9999-round stand-in
+    /// could never show. The Power cost and cooldown of *reaching* an
+    /// emulation are still not modeled; only its duration is real.
+    #[test]
+    fn an_emulate_row_starts_with_the_abilitys_own_real_duration() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("rootkit".into());
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let AbilityEffect::Emulate { rounds } = game
+            .world
+            .resource::<AbilityDb>()
+            .get("emulate")
+            .expect("emulate.ron ships with the game")
+            .effect
+        else {
+            panic!("emulate.ron's own effect is not AbilityEffect::Emulate");
+        };
+        let emulation = game
+            .world
+            .get::<Emulation>(game.player_entity())
+            .expect("the player is emulating");
+        assert_eq!(emulation.rounds_left, rounds);
     }
 
     #[test]

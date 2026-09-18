@@ -1,0 +1,40 @@
+// Five rootkits against `tactical-full-group.ron`'s own party — same level,
+// same gear, same zone — so a rootkit count exactly at
+// `FORMATIONS[0].members` folds into one squad on the battle map. Paired
+// with `squad-control.ron`, which fields the same five bodies' worth of
+// rootkit but one short of the fold, so the two files isolate what folding
+// is worth rather than what five rootkits are worth.
+//
+// `count: 5` sits at, not past, this composition's own ceiling: a fielded
+// party of three level-12 companions buys extra `group_steps` on top of the
+// zone's own `danger_steps`, which is what makes `Game::max_group_size`
+// reach 5 here rather than the 4 `full-group.ron`'s naked-player comment
+// measured — verified by running this file and reading `report.warnings`
+// (empty) rather than assumed from that comment.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [(species: "rootkit", count: 5)],
+    model: Tactical,
+    // Head-on, `tactical-full-group.ron`'s own choice: a staged fight has
+    // no tile to read a bearing off, so every point of the compass is the
+    // same fight from the side.
+    approach: Some(East),
+    reps: 50,
+    seed: 3,
+)

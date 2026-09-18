@@ -1282,11 +1282,28 @@ impl Game {
             Kit::Emulated { def, .. } => {
                 let level = self.ability_user_level(entity);
                 let slots = self.routine_slots(entity);
-                kit::innate_routine_ids(def, level, db)
+                let mut list: Vec<AbilityDef> = kit::innate_routine_ids(def, level, db)
                     .into_iter()
                     .filter_map(|id| db.get(&id).cloned())
                     .take(slots)
-                    .collect()
+                    .collect();
+                // Final review F6 (U3): Decompile is welded into the
+                // player's own slot 0 (`abilities::DECOMPILE_ABILITY_ID`,
+                // `routine_tree::is_permanent`) and never actually left —
+                // the species list above replaces the *rest* of the kit,
+                // not this one permanent routine, so it rides along beside
+                // it rather than competing for one of its `slots`. Checked
+                // on `entity`'s own `Routines` rather than assumed, so a
+                // legacy save or a mod missing it does not fabricate one.
+                if self
+                    .world
+                    .get::<Routines>(entity)
+                    .is_some_and(|r| r.0.iter().any(|id| id == abilities::DECOMPILE_ABILITY_ID))
+                    && let Some(decompile) = db.get(abilities::DECOMPILE_ABILITY_ID)
+                {
+                    list.push(decompile.clone());
+                }
+                list
             }
             Kit::Unarmed | Kit::Innate(_) => self
                 .world

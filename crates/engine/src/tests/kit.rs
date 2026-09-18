@@ -644,7 +644,191 @@ mod emulation_tests {
             slots < 3,
             "the fixture needs fewer slots than abilities to prove the cap holds"
         );
-        assert_eq!(game.actor_abilities(player).len(), slots);
+        // F6 (U3): Decompile rides along beside the capped species list and
+        // does not itself count against `slots` — a fresh `game()` player
+        // always carries it in slot 0 (`spawn_player`).
+        assert_eq!(game.actor_abilities(player).len(), slots + 1);
+        assert!(
+            game.actor_abilities(player)
+                .iter()
+                .any(|a| a.id == "decompile"),
+            "Decompile must still be offered while emulating"
+        );
+    }
+
+    /// Final review F6 (U3): the player's welded Decompile routine stays on
+    /// the list while emulating, beside the species' own routines — it
+    /// never left slot 0, so the species list (which replaces the *rest* of
+    /// the kit) does not evict it.
+    #[test]
+    fn actor_abilities_lists_decompile_beside_the_species_list_while_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        assert!(
+            game.world
+                .get::<Routines>(player)
+                .unwrap()
+                .0
+                .iter()
+                .any(|id| id == "decompile"),
+            "test premise: a fresh player always carries decompile"
+        );
+        let def = drone(&game);
+        game.world.get_mut::<Experience>(player).unwrap().level = 10;
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 3,
+        });
+
+        let ids: Vec<AbilityId> = game
+            .actor_abilities(player)
+            .iter()
+            .map(|a| a.id.clone())
+            .collect();
+
+        assert!(
+            ids.contains(&"decompile".to_string()),
+            "decompile must still be offered while emulating: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"skim_group".to_string()),
+            "the species list must still be offered alongside it: {ids:?}"
+        );
+    }
+
+    /// A capture is legal in the group model while emulating — U3's "capture
+    /// works while emulating in both models."
+    #[test]
+    fn a_capture_succeeds_in_the_group_model_while_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 50,
+        });
+        let species = game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Hostile,
+                WanderAi::default(),
+                Position { x: 3, y: 3 },
+                Stats {
+                    hp: 1,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 1,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        insert_battle(&mut game, player, vec![wild]);
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::ICE_BREAKER), 50);
+        game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(wild).is_some() {
+                break;
+            }
+            if game.world.get::<Emulation>(player).is_none() {
+                // A lapsed emulation would make this a test of the ordinary
+                // kit instead — re-arm it rather than let that happen
+                // silently.
+                game.world.entity_mut(player).insert(Emulation {
+                    species: def.id.clone(),
+                    rounds_left: 50,
+                });
+            }
+            player_decompiles(&mut game);
+        }
+
+        assert!(
+            game.world.get::<Tamed>(wild).is_some(),
+            "the wild program should have been captured while the player was emulating"
+        );
+    }
+
+    /// The tactical model's own half of U3's "capture works while
+    /// emulating in both models" — `decompile_body`, reached through a cell
+    /// rather than a group index, the same walk-into-reach loop
+    /// `a_capture_on_a_battle_map_turns_the_program_it_was_aimed_at`
+    /// (`tests::tactical`) uses.
+    #[test]
+    fn a_capture_succeeds_on_a_battle_map_while_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 50,
+        });
+        let pack = tactical_fight(&mut game, 1, 40);
+        game.world.get_mut::<Stats>(pack[0]).unwrap().hp = 1;
+        game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+        crate::tests::support::set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(pack[0]).is_some() {
+                break;
+            }
+            if game.world.get::<Emulation>(player).is_none() {
+                // A lapsed emulation would make this a test of the
+                // ordinary kit instead — re-arm it rather than let that
+                // happen silently.
+                game.world.entity_mut(player).insert(Emulation {
+                    species: def.id.clone(),
+                    rounds_left: 50,
+                });
+            }
+            if !wait_for_turn(&mut game, player) {
+                break;
+            }
+            let at = game
+                .world
+                .resource::<crate::tactical::TacticalBattle>()
+                .cell_of(pack[0])
+                .expect("the target left the board");
+            while game
+                .world
+                .resource::<crate::tactical::TacticalBattle>()
+                .cell_of(player)
+                .is_some_and(|from| crate::tactical::reach::distance(from, at) > 1)
+            {
+                let from = game
+                    .world
+                    .resource::<crate::tactical::TacticalBattle>()
+                    .cell_of(player)
+                    .unwrap();
+                let dir = ((at.0 - from.0).signum(), (at.1 - from.1).signum());
+                if game.tactical_step(dir) != crate::tactical::turn::StepOutcome::Moved {
+                    break;
+                }
+            }
+            let index = game
+                .actor_abilities(player)
+                .iter()
+                .position(|a| a.id == "decompile")
+                .expect("decompile must still be offered while emulating");
+            if !game.tactical_use_routine(index, at) {
+                game.tactical_end_turn();
+            }
+        }
+
+        assert!(
+            game.world.get::<Tamed>(pack[0]).is_some(),
+            "the wild program should have been captured on a battle map while emulating"
+        );
     }
 
     /// The lapse: `tick_one_combatant` ages `rounds_left`, and at zero

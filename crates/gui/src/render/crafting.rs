@@ -169,8 +169,12 @@ pub(super) fn draw_craft_quantity(
 /// `Mode::Compiling`'s footer — the only thing this screen has to teach,
 /// since there is nothing to page through. Named so a width test measures
 /// the string the screen actually prints, `CRAFT_QUANTITY_KEYS`' reason.
-const COMPILING_KEYS: &str =
-    "Any key stops — finished units are kept, the one in progress is refunded.";
+const COMPILING_KEYS: &str = "Any key stops — finished units kept, the current one refunded.";
+
+/// How big `Mode::Compiling`'s box is. A progress bar and two lines of text
+/// over whatever the player was doing: at `Large` it covered the map for a
+/// screen with nothing to read.
+const COMPILING_POPUP: PopupSize = PopupSize::Small;
 
 /// The two text rows `draw_compiling` prints above the bar — what
 /// `Compiling {item}...` and `Unit U of N` cost the layout, and so how far
@@ -214,14 +218,14 @@ pub(super) fn draw_compiling(
         text_row(""),
         text_row(COMPILING_KEYS),
     ];
-    draw_popup("Compiling", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Compiling", COMPILING_POPUP, &rows, refusal, painter, m);
     debug_assert_eq!(
         COMPILING_HEADER_ROWS + COMPILING_BAR_ROWS + 1.0,
         rows.len() as f32,
         "the blank rows reserved for the bar must match what's actually in `rows`"
     );
 
-    let rect = popup_rect(PopupSize::Large, &rows, refusal, painter, m);
+    let rect = popup_rect(COMPILING_POPUP, &rows, refusal, painter, m);
     let g = BarGeometry {
         x: rect.x + m.pad,
         y: rect.y + m.line_height * (2.0 + COMPILING_HEADER_ROWS),
@@ -774,8 +778,10 @@ mod tests {
     #[test]
     fn the_compiling_screens_own_rows_fit_its_popup() {
         with_painter(|p| {
-            let m = ui_metrics(900.0);
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            // 1280x720, the smallest window the HUD is laid out for: the
+            // screen is a small popup, so a wider window only adds room.
+            let m = ui_metrics(720.0);
+            let room = 1280.0 * popup_fractions(COMPILING_POPUP).0 - m.pad * 2.0;
             for line in [COMPILING_KEYS, "999 / 999999 ticks"] {
                 let drawn = p.measure_ui_advance(line, m.font_size);
                 assert!(

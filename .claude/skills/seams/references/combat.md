@@ -1,5 +1,16 @@
 # Combat, progression and balance
 
+- **`Game::kit_of` is the one answer to where a body's kit comes from**, and
+  every reader of a kit figure is an exhaustive `match` on `Kit` with no `_`
+  arm. The trap is a reader that branches on `player_entity()` or on
+  `Creature` directly for a kit figure — attack band, reach, affinity, basic
+  attacks: it compiles clean and silently ignores the next kit source
+  (emulation, todo #100), so the player emulating a ranged species still
+  swings at arm's length in that one place. `Kit::Unarmed` is the player *and*
+  a body whose species no longer resolves; a reader that must tell those two
+  apart guards the `Unarmed` arm on the player, never the whole match.
+  Who a body *is* — `routine_slots`, perks, talents — is not a kit figure and
+  stays keyed on player or companion.
 - **`Game::apply_damage` (`game/combat_damage.rs`) is the only code path that
   *damages* a creature**, every rung of the fumble ladder included. Put a check
   that must see all damage here. `Game::kill_outright` is the one other thing

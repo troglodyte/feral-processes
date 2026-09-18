@@ -55,12 +55,12 @@
 
 Each reader becomes an exhaustive `match self.kit_of(entity)`. `ability_affinity`'s class-affinity arm is `Kit::Unarmed` **and** the body is the player; `swing_move_at`'s unarmed strike is `Kit::Unarmed`. No `_ =>` arms. `swing_move_at` takes `&mut self`, so take what it needs from `kit_of` (e.g. the species id) before the mutable roll — don't clone the def to fight the borrow checker.
 
-- [ ] **Step 1: Failing tests.** In `tests/kit.rs`: `kit_of` answers `Unarmed` for the player and `Innate` (with the right species id) for a companion and for a wild program. Also pin the four former player paths so the refactor has a witness: a non-emulating player's `swing_move_at` yields `PLAYER_UNARMED_DAMAGE`'s band; `natural_range_of(player)` is `PLAYER_UNARMED_DAMAGE`; `swing_range(player)` is `TACTICAL_MELEE_RANGE` (see `an_unarmed_body_swings_at_arms_length`, `tests/tactical.rs:2444`); `ability_affinity(player, …)` equals the class affinity for the player's class.
-- [ ] **Step 2:** `cargo test -p feral-processes-engine kit` — fails to compile (no `kit_of`).
-- [ ] **Step 3:** Write `kit.rs`, convert the four readers.
-- [ ] **Step 4:** Targeted tests pass; then `cargo test --workspace` green (this is the regression gate the spec asks for).
-- [ ] **Step 5: Seam, three writes** (the `seams` skill documents the order): argument to the memory graph as `seam:kit-of`; the trap (a reader branching on `player_entity()` or `Creature` directly for a kit figure) to the combat reference under `.claude/skills/seams/`; one sentence in CLAUDE.md's *Combat, progression and balance* section: "**`Game::kit_of` is the one answer to where a body's kit comes from**, and every reader of a kit figure is an exhaustive match on `Kit`."
-- [ ] **Step 6:** Commit: `Engine: Game::kit_of is the one answer to where a body's kit comes from (todo #100)`.
+- [x] **Step 1: Failing tests.** In `tests/kit.rs`: `kit_of` answers `Unarmed` for the player and `Innate` (with the right species id) for a companion and for a wild program. Also pin the four former player paths so the refactor has a witness: a non-emulating player's `swing_move_at` yields `PLAYER_UNARMED_DAMAGE`'s band; `natural_range_of(player)` is `PLAYER_UNARMED_DAMAGE`; `swing_range(player)` is `TACTICAL_MELEE_RANGE` (see `an_unarmed_body_swings_at_arms_length`, `tests/tactical.rs:2444`); `ability_affinity(player, …)` equals the class affinity for the player's class.
+- [x] **Step 2:** `cargo test -p feral-processes-engine kit` — fails to compile (no `kit_of`).
+- [x] **Step 3:** Write `kit.rs`, convert the four readers.
+- [x] **Step 4:** Targeted tests pass; then `cargo test --workspace` green (this is the regression gate the spec asks for).
+- [x] **Step 5: Seam, three writes** (the `seams` skill documents the order): argument to the memory graph as `seam:kit-of`; the trap (a reader branching on `player_entity()` or `Creature` directly for a kit figure) to the combat reference under `.claude/skills/seams/`; one sentence in CLAUDE.md's *Combat, progression and balance* section: "**`Game::kit_of` is the one answer to where a body's kit comes from**, and every reader of a kit figure is an exhaustive match on `Kit`."
+- [x] **Step 6:** Commit: `Engine: Game::kit_of is the one answer to where a body's kit comes from (todo #100)`.
 
 **Part A ends here.** Report to the controller; it runs the opus review of Part A and lands it as its own release before Part B starts.
 

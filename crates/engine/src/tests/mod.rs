@@ -46,6 +46,7 @@ mod gear_detail;
 mod gear_passives;
 mod hauling;
 mod inspection;
+mod kit;
 mod level_up;
 mod listen;
 mod memories;

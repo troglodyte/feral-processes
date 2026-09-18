@@ -1346,13 +1346,10 @@ impl Game {
             // in the group model has no hostile AI to tamper with, and
             // picking one would reach `use_ability`'s `unreachable!` arm.
             .filter(|(_, def)| !def.effect.tactical_only())
-            // Only the player emulates. A fork body reaching this arm would
-            // resolve through this function's own recipient — see the
-            // Special site below — so an autonomous body running it would
-            // adopt an image itself rather than lend the player one, which
-            // is the "AI never chooses Emulate" rule for a summon's own
-            // account.
-            .filter(|(_, def)| !matches!(def.effect, AbilityEffect::Emulate { .. }))
+            // Only the player emulates (`seam:only-the-player-emulates`),
+            // and `ability_unavailable` below is that gate — a fork body is
+            // never `player_entity()`, so its own Emulate row is already
+            // refused there. No separate filter needed.
             .filter(|(_, def)| self.ability_unavailable(body, def).is_none())
             .collect();
         let pick = {

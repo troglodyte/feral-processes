@@ -452,7 +452,7 @@ fn the_player_walking_out_closes_the_fight_without_winning_it() {
 }
 
 /// A free walkable cell on the board's western edge.
-fn western_edge(game: &Game) -> (i32, i32) {
+pub(super) fn western_edge(game: &Game) -> (i32, i32) {
     let battle = game.world.resource::<TacticalBattle>();
     (0..battle.board.side)
         .map(|y| (0, y))

@@ -11,6 +11,31 @@
   apart guards the `Unarmed` arm on the player, never the whole match.
   Who a body *is* — `routine_slots`, perks, talents — is not a kit figure and
   stays keyed on player or companion.
+- **Only the player emulates, and `ability_unavailable` is where every other
+  body is refused.** The trap is a *second* place that excludes `Emulate` for
+  a non-player chooser instead of trusting that one gate — the final review
+  found four of them (`choose_summon_action`, `swing_for_the_squad`,
+  `wieldable_routines`, `wild_routine_ready`), and two were already dead:
+  `choose_summon_action` and `swing_for_the_squad` both already filter on
+  `self.ability_unavailable(actor, def).is_none()` as their last step, so a
+  `!matches!(.., AbilityEffect::Emulate {..})` filter beside it never fires —
+  it can be deleted with nothing lost. The other two are load-bearing and
+  must stay: `wieldable_routines` feeds a wielded program's proc, which goes
+  straight to `use_ability` and never calls `ability_unavailable` at all (the
+  proc is free, priced at nothing), so without its own filter a wielded
+  companion carrying Emulate would let a proc re-emulate the player for free;
+  `wild_routine_ready` feeds `wild_retaliate`, which arms the cooldown and
+  runs the routine directly, also with no `ability_unavailable` call —
+  hostiles hold no `PowerReserve` by design and are routed around that gate
+  on purpose. **The test before deleting one of these filters**: does the
+  chooser's own selection loop already call `self.ability_unavailable(actor,
+  def)` before acting on the pick? If yes, a same-purpose `!matches!` filter
+  beside it is dead. If no, it is the only thing stopping the choice and must
+  stay, with a comment saying so. `install_disk` closes the write side too —
+  the Emulate disk can't be installed onto anyone but the player — and
+  `unemulate` clears every `Party` body at teardown, not only the player, as
+  defence in depth against a mod or future bug handing one to a companion
+  some other way. See `seam:only-the-player-emulates` for the argument.
 - **`Game::apply_damage` (`game/combat_damage.rs`) is the only code path that
   *damages* a creature**, every rung of the fumble ladder included. Put a check
   that must see all damage here. `Game::kill_outright` is the one other thing

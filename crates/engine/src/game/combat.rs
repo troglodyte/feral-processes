@@ -1325,10 +1325,12 @@ impl Game {
     /// always resolves to the player (slot 0) regardless of which program
     /// is wielded — so a companion carrying it would let a proc re-emulate
     /// for the player at no Power and no turn, undercutting Revert costing
-    /// both. Only the player ever installs Emulate through research, but a
-    /// mod's talent tree or species kit could still hand it to a companion,
-    /// which is exactly the "AI never chooses Emulate for a companion body"
-    /// rule.
+    /// both. **Kept even though `ability_unavailable` also refuses Emulate
+    /// off the player** (`seam:only-the-player-emulates`): a proc never
+    /// calls that gate at all — `proc_wielded_routine` goes straight to
+    /// `use_ability`, "costs nothing" being the whole point — so this filter
+    /// is the only thing standing between a mod-granted Emulate on a
+    /// wielded program and a free re-emulate.
     pub(crate) fn wieldable_routines(&self, entity: Entity) -> Vec<AbilityDef> {
         self.actor_abilities(entity)
             .into_iter()
@@ -1412,6 +1414,16 @@ impl Game {
             if self.pet_count() >= self.pet_capacity() {
                 return Some("roster is full".to_string());
             }
+        }
+        // Only the player emulates (`seam:only-the-player-emulates`). This
+        // is the one door every chooser and every invocation site shares —
+        // a companion holding the Emulate routine at all is already refused
+        // by `install_disk`, but a mod's talent tree or species kit could
+        // still hand it to one, and the scattered `!matches!(…Emulate…)`
+        // filters this replaces each covered exactly one chooser.
+        if matches!(ability.effect, AbilityEffect::Emulate { .. }) && entity != self.player_entity()
+        {
+            return Some("only you can emulate".to_string());
         }
         // Emulate's own two refusals — spec §4 "Invoking". `Emulation`
         // itself would already keep it off `entity`'s `actor_abilities`

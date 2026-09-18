@@ -4,7 +4,7 @@
 //! before they became matches on `Kit`, so converting them has a witness.
 
 use super::support::*;
-use super::tactical::{body, log_texts, tactical_fight, wait_for_turn};
+use super::tactical::{body, log_texts, tactical_fight, wait_for_turn, western_edge};
 use crate::abilities::AbilityId;
 use crate::components::Perks;
 use crate::game::kit::Kit;
@@ -1141,5 +1141,212 @@ mod emulation_tests {
             assert!(wait_for_turn(&mut game, player));
         }
         panic!("no reaction cut Emulate off in 24 rounds against 500 Attack");
+    }
+
+    /// Final review F1 (Critical): a companion could emulate and it
+    /// outlived the fight. `ability_unavailable` is the one door every
+    /// chooser and invocation site shares — see `seam:only-the-player-
+    /// emulates`.
+    mod only_the_player_emulates {
+        use super::*;
+
+        fn emulate_def(game: &Game) -> crate::abilities::AbilityDef {
+            game.world
+                .resource::<crate::abilities::AbilityDb>()
+                .get("emulate")
+                .unwrap()
+                .clone()
+        }
+
+        #[test]
+        fn ability_unavailable_refuses_emulate_for_a_companion() {
+            let mut game = game();
+            let companion = spawn_tamed(&mut game, 30, 6);
+            // A mod's talent tree or species kit is the only way a
+            // companion ever carries this — `install_disk` refuses it, so
+            // this is written directly rather than through that door.
+            game.world
+                .entity_mut(companion)
+                .insert(Routines(vec!["emulate".to_string()]));
+            let ability = emulate_def(&game);
+
+            assert_eq!(
+                game.ability_unavailable(companion, &ability),
+                Some("only you can emulate".to_string())
+            );
+        }
+
+        #[test]
+        fn ability_unavailable_still_permits_emulate_for_the_player() {
+            let mut game = game();
+            let player = game.player_entity();
+            install_routine_for_test(&mut game, player, "emulate");
+            let def = drone(&game);
+            game.world
+                .resource_mut::<crate::resources::EmulationImages>()
+                .0
+                .insert(def.id.clone());
+            let ability = emulate_def(&game);
+
+            assert_eq!(game.ability_unavailable(player, &ability), None);
+        }
+
+        #[test]
+        fn install_disk_refuses_the_emulate_disk_onto_a_companion() {
+            let mut game = game();
+            teach_routine(&mut game, "emulate");
+            give_disks(&mut game, 1);
+            game.etch_disk("emulate").unwrap();
+            let companion = spawn_tamed(&mut game, 30, 6);
+
+            let err = game
+                .install_disk(companion, "emulate")
+                .expect_err("a companion must never take the Emulate disk");
+            assert_eq!(err, "Only you can emulate.");
+            assert!(
+                game.world
+                    .get::<Routines>(companion)
+                    .is_some_and(|r| !r.0.iter().any(|id| id == "emulate")),
+                "the refused install must not have written the routine anyway"
+            );
+        }
+
+        #[test]
+        fn install_disk_still_permits_the_emulate_disk_onto_the_player() {
+            let mut game = game();
+            let player = game.player_entity();
+            teach_routine(&mut game, "emulate");
+            give_disks(&mut game, 1);
+            game.etch_disk("emulate").unwrap();
+
+            game.install_disk(player, "emulate")
+                .expect("the player must still be able to install Emulate");
+        }
+
+        #[test]
+        fn battle_set_action_refuses_emulate_for_a_companion_in_the_group_model() {
+            let mut game = game();
+            let player = game.player_entity();
+            let companion = spawn_tamed(&mut game, 30, 6);
+            game.world
+                .entity_mut(companion)
+                .insert(Routines(vec!["emulate".to_string()]));
+            game.world.resource_mut::<Party>().0.push(companion);
+            let def = drone(&game);
+            game.world
+                .resource_mut::<crate::resources::EmulationImages>()
+                .0
+                .insert(def.id.clone());
+            let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+            insert_battle(&mut game, player, vec![hostile]);
+
+            let index = game
+                .actor_abilities(companion)
+                .iter()
+                .position(|a| a.id == "emulate")
+                .expect("the companion carries the emulate routine");
+            let result = game.battle_set_action(
+                1,
+                BattleAction::Special {
+                    ability: index,
+                    target: battle::SpecialTarget::WholeParty,
+                    image: Some(def.id.clone()),
+                },
+            );
+
+            assert!(result.is_err(), "a companion must be refused Emulate");
+            assert!(game.world.get::<Emulation>(companion).is_none());
+        }
+
+        #[test]
+        fn tactical_emulate_is_refused_for_a_companion_actor() {
+            let mut game = game();
+            let companion = spawn_tamed(&mut game, 100_000, 6);
+            game.world
+                .entity_mut(companion)
+                .insert(Routines(vec!["emulate".to_string()]));
+            game.world.resource_mut::<Party>().0.push(companion);
+            let def = drone(&game);
+            game.world
+                .resource_mut::<crate::resources::EmulationImages>()
+                .0
+                .insert(def.id.clone());
+            tactical_fight(&mut game, 1, 100_000);
+            assert!(wait_for_turn(&mut game, companion));
+
+            let index = game
+                .actor_abilities(companion)
+                .iter()
+                .position(|a| a.id == "emulate")
+                .expect("the companion carries the emulate routine");
+
+            assert!(!game.tactical_emulate(index, &def.id));
+            assert!(game.world.get::<Emulation>(companion).is_none());
+        }
+
+        /// Defence in depth: even a companion that ended up carrying
+        /// `Emulation` some other way (a mod, a future bug) loses it at
+        /// teardown, the same as the player.
+        #[test]
+        fn finish_fight_clears_emulation_from_a_companion_too() {
+            let mut game = game();
+            let player = game.player_entity();
+            let companion = spawn_tamed(&mut game, 30, 6);
+            game.world.resource_mut::<Party>().0.push(companion);
+            let def = drone(&game);
+            game.world.entity_mut(companion).insert(Emulation {
+                species: def.id.clone(),
+                rounds_left: 5,
+            });
+            let hostile = overwhelmed_hostile(&mut game, 1, 0);
+            insert_battle(&mut game, player, vec![hostile]);
+
+            force_the_next_attack_to_land(&mut game);
+            player_attacks(&mut game);
+
+            assert!(!game.has_active_battle());
+            assert!(
+                game.world.get::<Emulation>(companion).is_none(),
+                "a companion's stray Emulation must not survive the fight either"
+            );
+        }
+    }
+
+    /// F1's tactical teardown case, `finish_fight_removes_emulation_after_
+    /// a_win`'s sibling on a battle map — Task 1's sweep covered a win, a
+    /// loss and a jack-out in the group model, but never a battle map's own
+    /// jack-out.
+    #[test]
+    fn finish_fight_removes_emulation_after_a_tactical_jack_out() {
+        let mut game = game();
+        let player = game.player_entity();
+        let def = drone(&game);
+        game.world.entity_mut(player).insert(Emulation {
+            species: def.id.clone(),
+            rounds_left: 5,
+        });
+        tactical_fight(&mut game, 1, 100_000);
+        assert!(wait_for_turn(&mut game, player));
+        let edge = western_edge(&game);
+        assert!(
+            game.world
+                .resource_mut::<crate::tactical::TacticalBattle>()
+                .move_to(player, edge)
+        );
+
+        assert_eq!(
+            game.tactical_step((-1, 0)),
+            crate::tactical::turn::StepOutcome::Departed
+        );
+
+        assert!(
+            game.world
+                .get_resource::<crate::tactical::TacticalBattle>()
+                .is_none()
+        );
+        assert!(
+            game.world.get::<Emulation>(player).is_none(),
+            "a jack-out on a battle map must clear the emulation too"
+        );
     }
 }

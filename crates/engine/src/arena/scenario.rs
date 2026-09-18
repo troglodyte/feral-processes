@@ -222,6 +222,18 @@ pub struct CharacterSpec {
     /// silently ignored input reads as the axis being worthless.
     pub stats: [u32; 4],
     pub routine: Option<AbilityId>,
+    /// Perk Points the player starts with, spent by `perks` below —
+    /// final review F10 (U4): a scenario had no way to give the staged
+    /// player any perks at all, which is not what a level-20 player looks
+    /// like. `CharacterChoice::perk_points`'s own field.
+    #[serde(default)]
+    pub perk_points: u32,
+    /// `(perk, levels)` rows, each level bought through `Game::unlock_perk`
+    /// exactly as `apply_creation_perks` buys the wizard's basket — so
+    /// `components::BoughtStats` is written the same way a real purchase
+    /// writes it, not faked in by hand.
+    #[serde(default)]
+    pub perks: Vec<(crate::perks::Perk, u32)>,
 }
 
 impl CharacterSpec {
@@ -234,6 +246,8 @@ impl CharacterSpec {
             class: self.class,
             stats: self.stats,
             routine: self.routine.clone(),
+            perk_points: self.perk_points,
+            perks: self.perks.clone(),
             ..CharacterChoice::default()
         }
     }

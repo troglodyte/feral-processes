@@ -43,6 +43,20 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             }
             let mut game = Game::new_with(0, DifficultyMode::Forgiving, assets_dir, &choice)
                 .map_err(|e| format!("{}: {e}", assets_dir.display()))?;
+            // Same fail-loud rule as the stat check above, for the perk
+            // basket — `apply_creation_perks` already ran silently inside
+            // `Game::new_with` and applied nothing if this is `None`, so an
+            // instrument that didn't check would report the baseline and
+            // read as the perks being worthless.
+            if choice
+                .perk_cost(game.world.resource::<crate::perks::PerkDb>())
+                .is_none()
+            {
+                return Err(format!(
+                    "character: {:?} spends more perk points than perk_points ({})",
+                    choice.perks, choice.perk_points
+                ));
+            }
             // Before the equips below: `Game::equip` captures
             // `EquippedItem::level` off the current zone and gear grows by
             // `GEAR_LEVEL_STEP` per level, so equipping first under-scales
@@ -729,6 +743,39 @@ mod tests {
         assert_eq!(one_def.mitigation, plain.mitigation + 1);
     }
 
+    /// Final review F10 (U4): a scenario needed a way to spend Perk
+    /// Points before this — every staged player arrived with zero perks,
+    /// which is not how a level-20 player looks. Goes through
+    /// `Game::unlock_perk` the same way character creation does
+    /// (`CharacterChoice::perks`/`perk_points`), so `components::
+    /// BoughtStats` is written exactly as a real purchase writes it.
+    #[test]
+    fn a_character_spec_perk_spend_reaches_the_players_stats_and_the_receipt() {
+        use crate::arena::scenario::CharacterSpec;
+        use crate::perks::Perk;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            perk_points: 4,
+            perks: vec![(Perk::Attacker, 1), (Perk::Defender, 1)],
+            ..CharacterSpec::default()
+        };
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().atk,
+            crate::tuning::PLAYER_BASE_STATS.atk + crate::tuning::ATTACKER_BONUS_PER_LEVEL
+        );
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().mitigation,
+            crate::tuning::PLAYER_BASE_STATS.mitigation + crate::tuning::DEFENDER_BONUS_PER_LEVEL
+        );
+        let receipt = game.world.get::<BoughtStats>(player).copied().unwrap();
+        assert_eq!(receipt.atk, crate::tuning::ATTACKER_BONUS_PER_LEVEL);
+        assert_eq!(receipt.mitigation, crate::tuning::DEFENDER_BONUS_PER_LEVEL);
+    }
+
     /// Fail-closed is right inside a run and wrong in an instrument: an
     /// overspent pool applies *no* spend, so a sweep that authored one
     /// would report the baseline and read as the axis being worthless.
@@ -744,6 +791,24 @@ mod tests {
             .err()
             .expect("should refuse");
         assert!(err.contains("CREATION_STAT_POINTS"), "{err}");
+    }
+
+    /// The perk basket's own overspend rule, `an_overspent_character_spec_
+    /// is_an_err_rather_than_a_dropped_spend`'s sibling.
+    #[test]
+    fn an_overspent_perk_basket_is_an_err_rather_than_a_dropped_spend() {
+        use crate::arena::scenario::CharacterSpec;
+        use crate::perks::Perk;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            perk_points: 1,
+            perks: vec![(Perk::Attacker, 5)],
+            ..CharacterSpec::default()
+        };
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("perk_points"), "{err}");
     }
 
     /// A class reaches the fight as an affinity spread, so the thing to

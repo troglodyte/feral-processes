@@ -347,6 +347,22 @@ fn ghost_step(ghost: f32, current: f32, dt: f32) -> f32 {
     (ghost - GHOST_DRAIN_PER_SECOND * dt).max(current)
 }
 
+/// The cell `battle_center` aims the camera at, given a body's own anchor
+/// and footprint — the anchor itself at `footprint` 1, so an ordinary body
+/// is untouched.
+///
+/// Integer division rather than a fractional centre: `battle_center` still
+/// hands back a whole cell, so a footprint whose side is odd lands exactly
+/// on its own middle cell, and the shipped 2x2 formation rounds to the
+/// block's own far corner rather than the near one `anchor` alone would
+/// read as. That is closer to the middle by half a cell either way — there
+/// is no better whole-cell answer for an even side — and it is what keeps
+/// the camera from reading as biased toward a squad's least-visited corner.
+fn footprint_center(anchor: (i32, i32), footprint: u8) -> (i32, i32) {
+    let half = i32::from(footprint) / 2;
+    (anchor.0 + half, anchor.1 + half)
+}
+
 /// Moves the camera one frame closer to the player along one axis.
 ///
 /// Exponential rather than `ghost_step`'s fixed rate, so the camera
@@ -1141,7 +1157,17 @@ impl Fx {
     /// Effects-off means an instant camera here too, so the dwell is skipped
     /// rather than shortened: with no streak and no flash drawn there is
     /// nothing to hold the camera for, and the hold would read as lag.
-    pub fn battle_center(&mut self, acting: Option<(Entity, (i32, i32))>) -> Option<(i32, i32)> {
+    ///
+    /// `footprint` is the acting body's own — `footprint_center` folds it
+    /// into the cell before anything below ever sees it, so the hold, the
+    /// dwell and a walk's own tracking all follow the footprint's own
+    /// centre rather than each having to know a squad exists.
+    pub fn battle_center(
+        &mut self,
+        acting: Option<(Entity, (i32, i32), u8)>,
+    ) -> Option<(i32, i32)> {
+        let acting =
+            acting.map(|(entity, cell, footprint)| (entity, footprint_center(cell, footprint)));
         // A gap wider than the dwell means no battle map was drawn last
         // frame, so this is a fight *opening* rather than one already on
         // screen: both the hold and the camera's easing belong to a board
@@ -1727,6 +1753,36 @@ mod tests {
                 "alpha {a} escaped the band"
             );
         }
+    }
+
+    /// The battle camera aims one cell in from a squad's own anchor, not at
+    /// the corner an ordinary body would centre on — `footprint_center`'s
+    /// own rule for the shipped 2x2 formation.
+    #[test]
+    fn battle_center_aims_at_a_squads_own_footprint_not_its_anchor() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        let center = fx
+            .battle_center(Some((entity, (4, 4), 2)))
+            .expect("a body is acting");
+        assert_eq!(
+            center,
+            (5, 5),
+            "a 2x2 footprint anchored at (4,4) must not centre on the bare anchor"
+        );
+    }
+
+    /// A body with no `Squad` reads as footprint 1, and the camera must
+    /// still aim at its own anchor — the invariant every other reader of
+    /// footprint holds, held here too.
+    #[test]
+    fn battle_center_is_the_bare_anchor_without_a_squad() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        let center = fx
+            .battle_center(Some((entity, (4, 4), 1)))
+            .expect("a body is acting");
+        assert_eq!(center, (4, 4));
     }
 
     /// The mark bobs *up* out of its rest position and never below it. Its

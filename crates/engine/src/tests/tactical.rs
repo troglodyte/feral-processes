@@ -4665,22 +4665,32 @@ mod disbanding {
 
     /// A 9-of-a-kind squad at exactly half Integrity, still on the board.
     fn squad_at_half(game: &mut Game) -> (Entity, Vec<Entity>) {
-        let pack = tactical_pack(game, 9, 10);
-        game.open_tactical_battle(pack);
-        let squad = {
-            let battle = game.world.resource::<TacticalBattle>();
-            battle
-                .bodies()
-                .map(|(e, _)| e)
-                .find(|&e| game.world.get::<Squad>(e).is_some())
-                .expect("9 of a kind must seat a squad")
-        };
+        let squad = squad_on_the_board(game);
         {
             let mut stats = game.world.get_mut::<Stats>(squad).unwrap();
             stats.hp = stats.max_hp / 2;
         }
         let members = game.world.get::<Squad>(squad).unwrap().members.clone();
         (squad, members)
+    }
+
+    /// The same squad, at `hp` Integrity out of its own summed block.
+    fn squad_at(game: &mut Game, hp: i32) -> (Entity, Vec<Entity>) {
+        let squad = squad_on_the_board(game);
+        game.world.get_mut::<Stats>(squad).unwrap().hp = hp;
+        let members = game.world.get::<Squad>(squad).unwrap().members.clone();
+        (squad, members)
+    }
+
+    fn squad_on_the_board(game: &mut Game) -> Entity {
+        let pack = tactical_pack(game, 9, 10);
+        game.open_tactical_battle(pack);
+        let battle = game.world.resource::<TacticalBattle>();
+        battle
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Squad>(e).is_some())
+            .expect("9 of a kind must seat a squad")
     }
 
     /// A walkable block on the western edge wide enough for `footprint` —
@@ -4730,6 +4740,50 @@ mod disbanding {
                 stats.hp,
                 stats.max_hp / 2,
                 "member {member:?} did not land at the squad's own Integrity fraction"
+            );
+        }
+    }
+
+    /// **No member is ever handed back at zero Integrity.** A squad on its
+    /// last point hands out `max_hp * fraction` rounded, which for a member
+    /// of 10 at a fraction of 0.02 is nothing at all — and a member at zero
+    /// is not a corpse: it keeps its world `Position` and its `Hostile`, and
+    /// `Game::gather_pack` does not filter on `creature_alive`, so walking
+    /// into one opens a fight that pays five kills for free.
+    /// `decompile_squad` already floors its captured lead at one; this is
+    /// its sibling, which did not.
+    #[test]
+    fn a_squad_disbanding_on_its_last_point_leaves_no_member_at_zero() {
+        let mut game = game();
+        let (squad, members) = squad_at(&mut game, 1);
+        let max_hp = game.world.get::<Stats>(squad).unwrap().max_hp;
+        assert!(
+            (members[0..1].iter())
+                .all(|&m| game.world.get::<Stats>(m).unwrap().max_hp / max_hp == 0),
+            "fixture: a member's share of one point must round to nothing"
+        );
+        assert!(
+            wait_for_turn(&mut game, squad),
+            "the squad never got a turn"
+        );
+
+        let footprint = game.world.resource::<TacticalBattle>().footprint_of(squad);
+        let edge = footprint_western_edge(&game, footprint);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(squad, edge)
+        );
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+
+        for &member in &members {
+            assert!(
+                game.world.get::<Stats>(member).unwrap().hp >= 1,
+                "member {member:?} was handed back dead"
+            );
+            assert!(
+                game.creature_alive(member),
+                "member {member:?} stands on the zone map as a free kill"
             );
         }
     }

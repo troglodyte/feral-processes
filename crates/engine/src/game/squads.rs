@@ -118,6 +118,13 @@ impl Game {
     /// from — so this does not go through `Game::apply_damage`, which
     /// prices mitigation and the fumble ladder that has nothing here to
     /// price.
+    ///
+    /// **Floored at one, `decompile_squad`'s captured lead's rule.** A squad
+    /// on its last point hands out a fraction that rounds to nothing, and a
+    /// member at zero Integrity is not a corpse — nothing killed it, so it
+    /// keeps its `Position` and its `Hostile` and stands on the zone map.
+    /// `Game::gather_pack` does not ask `creature_alive`, so bumping one
+    /// would open a fight that pays five kills for free.
     pub(crate) fn disband_squad(&mut self, squad: Entity) {
         let Some(members) = self.world.get::<Squad>(squad).map(|s| s.members.clone()) else {
             return;
@@ -129,7 +136,7 @@ impl Game {
             .unwrap_or(1.0);
         for member in members {
             if let Some(mut stats) = self.world.get_mut::<Stats>(member) {
-                stats.hp = ((stats.max_hp as f32) * frac).round() as i32;
+                stats.hp = ((stats.max_hp as f32) * frac).round().max(1.0) as i32;
             }
         }
         self.world.despawn(squad);

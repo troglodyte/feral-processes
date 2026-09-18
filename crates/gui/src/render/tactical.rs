@@ -1012,14 +1012,10 @@ pub(super) fn draw_tactical_emulate(
 ) {
     let mut rows = vec![text_row("Invoke which image?")];
     for (i, option) in options.iter().enumerate() {
-        let label = format!(
-            "[{}] {} — ATK {} MIT {}",
-            menu_shortcut(i),
-            option.name,
-            option.atk,
-            option.mitigation
-        );
-        rows.push(item_row(label, i == selected));
+        rows.push(item_row(
+            super::emulation_row_label(i, option),
+            i == selected,
+        ));
     }
     draw_popup(
         "Invoke an Image",

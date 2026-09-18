@@ -22,9 +22,9 @@ use feral_processes_engine::tuning::{
 };
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
-    LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
-    RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
+    Assignee, BrokerReach, ContractRow, CraftRecipe, EmulationOption, Entity, EntityView, Game,
+    InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption,
+    RecipeChain, RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
@@ -402,6 +402,23 @@ pub(super) fn player_look_color(colour: Option<u8>) -> Color {
 /// caller draws the glyph. Shared with `player_look_color` for its reason.
 pub(super) fn player_sprite_name(sprite: &str) -> Option<&str> {
     (!sprite.is_empty()).then_some(sprite)
+}
+
+/// One row of the image picker (`Mode::BattleEmulate`/
+/// `Mode::TacticalEmulate`, todo #100 Task 6), shared so the group model's
+/// `draw_battle_emulate_menu` and the battle map's `draw_tactical_emulate`
+/// cannot drift on it — `menu_shortcut(i)`, not a bare `i + 1`, since
+/// `App::selected_index` only takes digits `1`-`9` for rows `0`-`8` and
+/// hands the alphabet to letters past that (`DIGIT_ROWS`), and
+/// `Game::emulation_options()` is unbounded.
+pub(super) fn emulation_row_label(i: usize, option: &EmulationOption) -> String {
+    format!(
+        "[{}] {} — ATK {} MIT {}",
+        menu_shortcut(i),
+        option.name,
+        option.atk,
+        option.mitigation
+    )
 }
 
 /// Pulls `color` toward its own grey, for drawing something that's present

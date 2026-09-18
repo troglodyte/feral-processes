@@ -630,16 +630,7 @@ pub(super) fn draw_battle_emulate_menu(
     let Some(game) = &mut app.game else { return };
     let mut rows = vec![text_row("Invoke which image?")];
     for (i, o) in game.emulation_options().into_iter().enumerate() {
-        rows.push(creature_row(
-            format!(
-                "[{}] {} — ATK {} MIT {}",
-                i + 1,
-                o.name,
-                o.atk,
-                o.mitigation
-            ),
-            i == selected,
-        ));
+        rows.push(creature_row(emulation_row_label(i, &o), i == selected));
     }
     draw_popup(
         "Invoke an image",
@@ -1444,12 +1435,19 @@ mod tests {
         let body = popup_body_width(1280.0, PopupSize::Large, &m);
         crate::paint::with_painter(|p| {
             for (i, o) in options.iter().enumerate() {
-                let label = format!(
-                    "[{}] {} — ATK {} MIT {}",
-                    i + 1,
-                    o.name,
-                    o.atk,
-                    o.mitigation
+                // Built through the same function `draw_battle_emulate_menu`
+                // and `draw_tactical_emulate` both call, not a copy of the
+                // format string — a copy measured whatever it happened to
+                // build rather than what the picker actually draws, which
+                // is how `[10]`..`[17]` (unreachable through any keypress
+                // past `DIGIT_ROWS`) passed this census once already.
+                let label = super::emulation_row_label(i, o);
+                assert!(
+                    label.starts_with(&format!("[{}]", menu_shortcut(i))),
+                    "row {i} must be labelled with the key that actually \
+                     selects it, `menu_shortcut({i})` — not a bare index — \
+                     or the 10th-and-later image reads a number no keypress \
+                     reaches: {label:?}"
                 );
                 let width = p.measure_ui_advance(&label, m.font_size);
                 assert!(

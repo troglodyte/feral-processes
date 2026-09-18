@@ -656,9 +656,10 @@ fn a_self_applied_entry_is_not_aged_by_the_turn_that_applied_it() {
 
 /// A body's own `Tampered` entry ages on its own turn, and a turn is not the
 /// same thing as an action — two actions in one turn must age it once, not
-/// twice, or a task 4 formation's second action would halve every duration
-/// authored against it. No body carries more than one action yet, so
-/// `actions_left` is driven directly.
+/// twice, or a squad's second action would halve every duration authored
+/// against it. `actions_left` is driven directly rather than by seating a
+/// real squad, since what is being pinned is the ageing and not the
+/// formation.
 #[test]
 fn a_tampered_body_ages_once_a_turn_however_many_actions_it_spends() {
     let mut game = game(9606);

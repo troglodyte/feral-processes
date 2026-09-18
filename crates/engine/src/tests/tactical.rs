@@ -4053,10 +4053,9 @@ mod cover_telegraph {
     }
 }
 
-/// Task 3: the `Squad` arm inside the existing `Game::effective_atk` door —
-/// see `docs/superpowers/plans/2026-09-17-tactical-squads.md`. A bare
-/// fixture rather than a real `Game::spawn_squad` (task 4's), since this
-/// arm only ever reads the entity's own `Squad`-presence and `Stats`.
+/// The `Squad` arm inside the existing `Game::effective_atk` door. A bare
+/// fixture rather than a real `Game::spawn_squad`, since this arm only ever
+/// reads the entity's own `Squad`-presence and `Stats`.
 mod squad_effective_atk {
     use super::*;
 
@@ -4116,8 +4115,7 @@ mod squad_effective_atk {
     }
 }
 
-/// Task 4: squads actually form and fight — see
-/// `docs/superpowers/plans/2026-09-17-tactical-squads.md`.
+/// Squads forming and fighting, on a real board.
 mod squads {
     use super::*;
 
@@ -5220,9 +5218,8 @@ fn a_squad_is_not_saved_and_its_members_are_unchanged() {
     );
 }
 
-/// Task 5: what a fight's drawing needs — see
-/// `docs/superpowers/plans/2026-09-17-tactical-squads.md`. `TacticalBody`'s
-/// two new fields and the name `Game::entity_label` builds for a `Squad`.
+/// What a fight's drawing needs: `TacticalBody`'s two squad fields, and the
+/// name `Game::entity_label` builds for a `Squad`.
 mod squad_drawing {
     use super::*;
 

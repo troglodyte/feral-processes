@@ -333,6 +333,12 @@ impl TacticalBattle {
     pub fn remove(&mut self, body: Entity) {
         self.bodies.retain(|(e, _)| *e != body);
         self.reacted.retain(|e| *e != body);
+        // `shapes` goes with the body, like every other per-body record
+        // here. A stale entry answers `footprint_of` for a body that has
+        // left the fight, and entity ids are reused: the next body bevy
+        // hands out that id would be seated as whatever shape the last one
+        // was.
+        self.shapes.remove(&body);
         let Some(idx) = self.initiative.iter().position(|&e| e == body) else {
             return;
         };
@@ -461,10 +467,10 @@ impl TacticalBattle {
         self.actions_left = 0;
     }
 
-    /// Test hook: overrides the acting body's action budget for the turn, so
-    /// a rule task 4's `Squad` will exercise for real can be pinned today —
-    /// no body carries more than one action yet, so nothing outside a test
-    /// calls this.
+    /// Test hook: overrides the acting body's action budget for the turn,
+    /// so a rule can be pinned without seating a real `Squad` to carry the
+    /// second action. Nothing outside a test calls it — in a real fight the
+    /// budget comes from `begin_turn`, off `shapes`.
     #[cfg(test)]
     pub(crate) fn set_actions_left(&mut self, n: u8) {
         self.actions_left = n;
@@ -702,6 +708,25 @@ mod tests {
 
     /// A body that dies or walks off the edge leaves, and takes its cell
     /// with it.
+    /// A body's shape leaves with it. Entity ids are reused, so a stale
+    /// entry is not merely untidy — the next body handed that id would seat
+    /// at the dead one's footprint.
+    #[test]
+    fn a_removed_body_takes_its_shape_with_it() {
+        let (mut battle, bodies) = fight();
+        let cell = first_open(&battle);
+        battle.set_shape(bodies[0], 2, 2);
+        battle.place(bodies[0], cell);
+        assert_eq!(battle.footprint_of(bodies[0]), 2);
+
+        battle.remove(bodies[0]);
+        assert_eq!(
+            battle.footprint_of(bodies[0]),
+            1,
+            "a departed body kept its footprint"
+        );
+    }
+
     #[test]
     fn a_removed_body_frees_its_cell() {
         let (mut battle, bodies) = fight();
@@ -856,8 +881,8 @@ mod tests {
     }
 
     /// A footprint of one is exactly the anchor `cell_of` already answers —
-    /// the whole of `footprint_of`'s hardcoded rule until task 4 adds
-    /// `Squad`.
+    /// the whole of `footprint_of`'s answer for a body nothing ever called
+    /// `set_shape` for, which is every body but a squad.
     #[test]
     fn a_bodys_cells_are_its_anchor_alone_without_a_squad() {
         let (mut battle, bodies) = fight();
@@ -897,9 +922,9 @@ mod tests {
         assert!(footprint_clear(&board, &[(0, 0), (1, 0)], &clear));
     }
 
-    /// `set_shape` is what `footprint_of` and `begin_turn` read — task 4's
-    /// whole component lookup lands at the caller instead, since
-    /// `TacticalBattle` holds no `World` to ask a `Squad` component itself.
+    /// `set_shape` is what `footprint_of` and `begin_turn` read — the
+    /// `Squad` lookup lands at the caller instead, since `TacticalBattle`
+    /// holds no `World` to ask a component itself.
     #[test]
     fn a_seated_shape_is_what_footprint_of_and_begin_turn_read() {
         let (mut battle, bodies) = fight();

@@ -42,6 +42,20 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.202
+
+**Five wild programs of the same kind now close ranks and fight you as one
+body twice their reach, taking two swings a turn and wearing a `^` to say
+what it is.** Meeting five of a kind on a battle map used to be five
+separate turns against five separate health bars, which is slow to play and
+easy to pick apart one body at a time. They now fold into a single squad
+that fills a two-by-two block with one pooled Integrity, one place in the
+turn order and two actions in it — and it weakens as you wear it down, so
+the last of a squad swings for a fraction of what the first of it did. A
+capture pulls one member out and leaves the rest standing, so a squad is
+worth five attempts rather than one; beating one pays all five kills. Take
+the fight somewhere else and the survivors walk away as individuals again.
+
 ## 0.13.201
 
 **A boulder standing between you and whoever is shooting at you now makes

@@ -65,6 +65,49 @@ fn battling_app_with(setup: impl Fn(&mut App)) -> App {
     );
 }
 
+/// `battling_app`, with the player already knowing Emulate and one learned
+/// image — todo #100 Task 6's fixture for the group model's own picker.
+fn battling_app_with_emulate() -> App {
+    battling_app_with(|app| {
+        let species = app
+            .game
+            .as_ref()
+            .expect("the fixture has a game")
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species ships")
+            .id;
+        install_player_routines(app, &["emulate"]);
+        learn_image(app, &species);
+    })
+}
+
+/// `battling_app_with_emulate`, having learned every shipped species —
+/// `App::selected_index` labels rows `1`-`9` before it hands the alphabet
+/// to letters (`DIGIT_ROWS`), so a single-row fixture could only ever
+/// exercise the digit branch and never prove a letter commits the right
+/// row. **Learned before the fight opens**: `Game::save`/`load`, which
+/// `learn_image` round-trips through, never persists a battle in
+/// progress, so editing the save after `battling_app_with` has already
+/// walked into one would silently drop the fight instead of the image.
+fn battling_app_with_full_image_library() -> App {
+    battling_app_with(|app| {
+        let all_species: Vec<String> = app
+            .game
+            .as_ref()
+            .expect("the fixture has a game")
+            .species_defs()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        install_player_routines(app, &["emulate"]);
+        for species in &all_species {
+            learn_image(app, species);
+        }
+    })
+}
+
 /// Weakens every wild program the world already spawned to `hp`/`max_hp`,
 /// leaving `atk` alone — a `[R]` setup that certainly resolves in one round
 /// rather than one that merely usually does. Through the save, the only
@@ -672,6 +715,134 @@ fn esc_from_the_ally_picker_steps_back_to_the_ability_picker() {
     );
 }
 
+/// Choosing Emulate from the ability picker opens its own image picker
+/// rather than the ally list — `SpecialTargeting::Image`, todo #100 Task 6.
+#[test]
+fn choosing_emulate_opens_the_image_picker() {
+    let mut app = battling_app_with_emulate();
+    let options = app.game.as_ref().unwrap().battle_special_options(0);
+    let idx = options
+        .iter()
+        .position(|o| o.name == "Emulate")
+        .expect("the fixture installed Emulate");
+
+    app.mode = Mode::BattleSpecial;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.menu_selected = idx;
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::BattleEmulate);
+    assert_eq!(app.pending_special_ability, Some(idx));
+}
+
+/// The image picker's rows are `Game::emulation_options()`, and a lowercase
+/// letter both selects a row and commits it — no separate confirm step,
+/// `Mode::BattleAlly`'s own shape.
+///
+/// **Learns every shipped species**, not just one: `App::selected_index`
+/// labels rows `1`-`9` before it hands the alphabet to letters
+/// (`DIGIT_ROWS`), so a single-row fixture could only ever exercise the
+/// digit branch and never prove the letter one commits the right row.
+#[test]
+fn a_lowercase_letter_invokes_the_image_it_names() {
+    let mut app = battling_app_with_full_image_library();
+    let options = app.game.as_ref().unwrap().battle_special_options(0);
+    let ability_idx = options
+        .iter()
+        .position(|o| o.name == "Emulate")
+        .expect("the fixture installed Emulate");
+    app.mode = Mode::BattleEmulate;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.pending_special_ability = Some(ability_idx);
+    let row = 9; // `Char('a')`, the first row past the nine digit rows.
+    let chosen = app.game.as_ref().unwrap().emulation_options()[row]
+        .species
+        .clone();
+
+    app.handle_key(GameKey::Char('a'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Battle,
+        "committing an action returns to the roster, same as any other Special"
+    );
+    assert_eq!(app.pending_special_ability, None);
+    // Only reachable while `components::Emulation` is present — the row
+    // both proves the invocation landed and doubles as
+    // `revert_is_only_offered_while_emulating`'s positive half.
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .battle_action_options(0)
+            .iter()
+            .any(|o| o.kind == ActionKind::Revert),
+        "Revert must be offered once the image is invoked"
+    );
+    let name = app.game.as_ref().unwrap().species_name(&chosen).to_string();
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .message_history(20)
+            .iter()
+            .any(|line| line.text.contains(&name)),
+        "the row the letter named ({name}) must be the image the engine \
+         logged invoking"
+    );
+}
+
+/// Esc from the image picker returns to the ability picker, spending
+/// nothing — `esc_from_the_ally_picker_steps_back_to_the_ability_picker`'s
+/// own shape.
+#[test]
+fn esc_from_the_image_picker_steps_back_to_the_ability_picker_spending_nothing() {
+    let mut app = battling_app_with_emulate();
+    let options = app.game.as_ref().unwrap().battle_special_options(0);
+    let idx = options
+        .iter()
+        .position(|o| o.name == "Emulate")
+        .expect("the fixture installed Emulate");
+    app.mode = Mode::BattleEmulate;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.pending_special_ability = Some(idx);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::BattleSpecial);
+    assert_eq!(app.pending_special_ability, None);
+    assert_eq!(
+        app.pending_battle_action,
+        Some(ActionKind::Special),
+        "only the ability was undone, not the whole action"
+    );
+    assert!(
+        !app.game
+            .as_ref()
+            .unwrap()
+            .battle_action_options(0)
+            .iter()
+            .any(|o| o.kind == ActionKind::Revert),
+        "cancelling the picker must not have invoked anything"
+    );
+}
+
+/// Revert is hidden while nothing is emulating — the row's own negative
+/// half, `a_lowercase_letter_invokes_the_image_it_names`'s positive one.
+#[test]
+fn revert_is_only_offered_while_emulating() {
+    let app = battling_app();
+    assert!(
+        !app.game
+            .as_ref()
+            .unwrap()
+            .battle_action_options(0)
+            .iter()
+            .any(|o| o.kind == ActionKind::Revert),
+        "a party member not emulating has nothing to revert"
+    );
+}
+
 /// Every picker layered over the battle roster has to count as being in
 /// a battle, or the renderer discards battle-only state the moment one
 /// opens. Pinned as a test as well as an exhaustive match, so the intent
@@ -684,6 +855,7 @@ fn every_battle_screen_counts_as_being_in_a_battle() {
         Mode::BattleItem,
         Mode::BattleSpecial,
         Mode::BattleAlly,
+        Mode::BattleEmulate,
     ] {
         assert!(mode.is_battle(), "{mode:?} is drawn over the battle roster");
     }

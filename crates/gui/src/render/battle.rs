@@ -1431,9 +1431,11 @@ mod tests {
         );
         let m = ui_metrics(720.0);
         let cap = popup_max_rows(720.0, PopupSize::Large, &m);
-        // +1 for the title row both draw functions prepend.
+        // `< cap` rather than `+ 1 <= cap`: the title row both draw
+        // functions prepend is the `+ 1`, folded into the strict
+        // inequality per clippy's `int_plus_one`.
         assert!(
-            options.len() + 1 <= cap,
+            options.len() < cap,
             "a full image library is {} rows plus a title into a {cap}-row \
              popup at 1280x720",
             options.len()

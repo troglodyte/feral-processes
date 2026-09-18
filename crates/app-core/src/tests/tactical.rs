@@ -1,7 +1,9 @@
 //! The three screens a tactical fight is fought through, and the loop that
 //! paces the wild side.
 
-use super::support::{app_with_companions_in_the_party, install_player_routines, test_app};
+use super::support::{
+    app_with_companions_in_the_party, install_player_routines, learn_image, test_app,
+};
 use crate::{
     App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
@@ -51,6 +53,61 @@ fn fighting_app(tactical: bool) -> App {
 
 fn fighting(_seed: u32) -> App {
     fighting_app(true)
+}
+
+/// `fighting_app(true)`, with the player already knowing Emulate and one
+/// learned image — todo #100 Task 6's fixture for the battle map's own
+/// picker. Both are written before the walk into battle: `learn_image`'s
+/// save round trip never persists a fight in progress, so editing the save
+/// afterward would silently drop the fight rather than teach the image.
+fn emulating_tactical_app() -> App {
+    for seed in 0..200u32 {
+        let mut app = test_app(seed);
+        app.profile.tactical_battles = true;
+        let mut game = app.game.take().expect("the fixture has a game");
+        game.install_profile(app.profile.clone());
+        app.game = Some(game);
+        let species = app
+            .game
+            .as_ref()
+            .unwrap()
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species ships")
+            .id;
+        install_player_routines(&mut app, &["emulate"]);
+        learn_image(&mut app, &species);
+        // Both round trips above load a fresh `Game` that has never had
+        // `install_profile` called on it — that only happens where app-core
+        // itself does, never inside `Game::load` — so the tactical-battles
+        // toggle set above would otherwise be lost and every fight here
+        // would open the group model instead.
+        let mut game = app.game.take().expect("the fixture has a game");
+        game.install_profile(app.profile.clone());
+        app.game = Some(game);
+
+        let game = app.game.as_mut().unwrap();
+        let player = game.player_status().position;
+        let target = game
+            .view_entities(12, 12)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+        let Some(target) = target else { continue };
+        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+            (1, 0) => GameKey::Right,
+            (-1, 0) => GameKey::Left,
+            (0, 1) => GameKey::Down,
+            _ => GameKey::Up,
+        });
+        if app.mode == Mode::TacticalBattle {
+            let _ = app.take_sounds();
+            wait_for_the_player(&mut app);
+            return app;
+        }
+    }
+    panic!("no seed under 200 put a lone wild program next to the player");
 }
 
 #[test]
@@ -457,6 +514,180 @@ fn r_on_the_players_turn_opens_the_results() {
     app.handle_key(GameKey::Char('R'));
 
     assert_eq!(app.mode, Mode::TacticalResult, "{:?}", app.status_line);
+}
+
+/// Choosing Emulate from the routine list opens its own image picker
+/// rather than the cell cursor — `SpecialTargeting::Image`, todo #100
+/// Task 6. Emulate has no cell to aim, so this never reaches
+/// `Mode::TacticalAim`.
+#[test]
+fn choosing_emulate_on_the_battle_map_opens_the_image_picker() {
+    use feral_processes_engine::battle::SpecialTargeting;
+
+    let mut app = emulating_tactical_app();
+    let options = app.tactical_routine_rows();
+    let idx = options
+        .iter()
+        .position(|o| o.targeting == SpecialTargeting::Image)
+        .expect("the fixture installed Emulate");
+
+    app.mode = Mode::TacticalRoutine;
+    app.menu_selected = idx;
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::TacticalEmulate);
+    assert_eq!(app.pending_tactical_emulate, Some(options[idx].index));
+}
+
+/// Esc from the image picker returns to the routine list, spending
+/// nothing — no action taken, no round spent.
+#[test]
+fn esc_from_the_tactical_image_picker_returns_to_the_routine_list_spending_nothing() {
+    use feral_processes_engine::battle::SpecialTargeting;
+
+    let mut app = emulating_tactical_app();
+    let options = app.tactical_routine_rows();
+    let idx = options
+        .iter()
+        .position(|o| o.targeting == SpecialTargeting::Image)
+        .expect("the fixture installed Emulate");
+    app.mode = Mode::TacticalEmulate;
+    app.pending_tactical_emulate = Some(options[idx].index);
+    let allowance_before = app
+        .game
+        .as_mut()
+        .unwrap()
+        .tactical_view()
+        .unwrap()
+        .allowance;
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::TacticalRoutine);
+    assert_eq!(app.pending_tactical_emulate, None);
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .tactical_view()
+            .unwrap()
+            .allowance,
+        allowance_before,
+        "cancelling the picker must spend no movement or action"
+    );
+    assert!(
+        !app.game
+            .as_mut()
+            .unwrap()
+            .tactical_view()
+            .unwrap()
+            .bodies
+            .iter()
+            .any(|b| b.is_player && b.form.is_some()),
+        "cancelling the picker must not have invoked anything"
+    );
+}
+
+/// A digit (`emulation_options()` has one row here — `1`, not a letter,
+/// `DIGIT_ROWS`' own reason) both selects the image and commits it through
+/// `Game::tactical_emulate`, which has no separate confirm step.
+#[test]
+fn a_row_in_the_tactical_image_picker_invokes_it() {
+    use feral_processes_engine::battle::SpecialTargeting;
+
+    let mut app = emulating_tactical_app();
+    let options = app.tactical_routine_rows();
+    let idx = options
+        .iter()
+        .position(|o| o.targeting == SpecialTargeting::Image)
+        .expect("the fixture installed Emulate");
+    app.mode = Mode::TacticalEmulate;
+    app.pending_tactical_emulate = Some(options[idx].index);
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    assert_eq!(app.pending_tactical_emulate, None);
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .tactical_view()
+            .unwrap()
+            .bodies
+            .iter()
+            .any(|b| b.is_player && b.form.is_some()),
+        "the image must have been invoked"
+    );
+}
+
+/// Revert is uppercase (`V`) and does nothing while nothing is emulating —
+/// `r_is_not_a_second_way_into_the_picker`'s own shape, and the negative
+/// half of `v_drops_the_image`.
+#[test]
+fn v_is_a_no_op_while_not_emulating() {
+    let mut app = fighting(9134);
+    wait_for_the_player(&mut app);
+    let allowance_before = app
+        .game
+        .as_mut()
+        .unwrap()
+        .tactical_view()
+        .unwrap()
+        .allowance;
+
+    app.handle_key(GameKey::Char('V'));
+
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .tactical_view()
+            .unwrap()
+            .allowance,
+        allowance_before,
+        "a refused revert must spend nothing"
+    );
+}
+
+/// `V` drops the image once one is active — `Game::tactical_revert`'s own
+/// door, engine-tested for its Power and turn cost
+/// (`tactical_revert_removes_emulation_and_costs_no_power`); this pins the
+/// key binding that reaches it.
+#[test]
+fn v_drops_the_image() {
+    use feral_processes_engine::battle::SpecialTargeting;
+
+    let mut app = emulating_tactical_app();
+    let options = app.tactical_routine_rows();
+    let idx = options
+        .iter()
+        .position(|o| o.targeting == SpecialTargeting::Image)
+        .expect("the fixture installed Emulate");
+    app.mode = Mode::TacticalEmulate;
+    app.pending_tactical_emulate = Some(options[idx].index);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(
+        app.mode,
+        Mode::TacticalBattle,
+        "the image must be invoked first"
+    );
+    wait_for_the_player(&mut app);
+
+    app.handle_key(GameKey::Char('V'));
+
+    assert!(
+        !app.game
+            .as_mut()
+            .unwrap()
+            .tactical_view()
+            .unwrap()
+            .bodies
+            .iter()
+            .any(|b| b.is_player && b.form.is_some()),
+        "reverting must drop the image"
+    );
 }
 
 /// `[R]`'s regression: the whole fight plays out inside one `handle_key`,

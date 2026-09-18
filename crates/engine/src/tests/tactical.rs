@@ -4242,6 +4242,56 @@ mod squads {
         assert_eq!(game.world.resource::<TacticalBattle>().actions_left(), 1);
     }
 
+    /// **Nothing is seated on top of anything else, or on ground it cannot
+    /// stand on.** `TacticalBattle::place` is the refusal that holds that,
+    /// and it can only apply it to a body whose shape it already knows — so
+    /// `open_tactical_battle_at` has to call `set_shape` *before* `place`,
+    /// not after. Seated first and widened afterwards a squad's block is
+    /// never checked at all, and the fight is only well-formed because
+    /// `deploy::plan` reserves a clear block two files away.
+    #[test]
+    fn no_two_seated_footprints_overlap_and_all_of_them_stand_on_ground() {
+        let mut game = game();
+        let _pack = tactical_fight(&mut game, 9, 10);
+        let battle = game.world.resource::<TacticalBattle>();
+
+        let mut held: Vec<((i32, i32), Entity)> = Vec::new();
+        for (body, _) in battle.bodies() {
+            for cell in battle.cells_of(body) {
+                assert!(
+                    battle.board.walkable(cell.0, cell.1),
+                    "{body:?} was seated on {cell:?}, which nothing can stand on"
+                );
+                if let Some((_, other)) = held.iter().find(|(at, _)| *at == cell) {
+                    panic!("{body:?} and {other:?} both hold {cell:?}");
+                }
+                held.push((cell, body));
+            }
+        }
+        assert!(
+            battle.bodies().any(|(e, _)| battle.footprint_of(e) > 1),
+            "fixture: a fight with no squad in it says nothing about blocks"
+        );
+    }
+
+    /// A board is sized by the cells the fight puts on it, so a squad counts
+    /// for its whole block rather than for one body — the plan's reader
+    /// table for `BattleSpec::bodies`.
+    #[test]
+    fn a_squad_counts_for_its_whole_block_when_the_board_is_sized() {
+        let mut game = game();
+        let _pack = tactical_fight(&mut game, 9, 10);
+        let battle = game.world.resource::<TacticalBattle>();
+        let seated: u32 = battle
+            .bodies()
+            .map(|(e, _)| u32::from(battle.footprint_of(e)).pow(2))
+            .sum();
+        assert_eq!(
+            battle.spec.bodies, seated,
+            "the spec counted bodies where the board holds cells"
+        );
+    }
+
     /// The one squad a 9-of-a-kind pack seats.
     fn seated_squad(game: &Game) -> Entity {
         let battle = game.world.resource::<TacticalBattle>();

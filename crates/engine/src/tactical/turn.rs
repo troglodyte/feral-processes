@@ -113,7 +113,15 @@ impl Game {
                 .resource_mut::<WorldMap>()
                 .tile(site.0, site.1)
                 .biome,
-            bodies: (party.len() + wild.len()) as u32,
+            // **Cells, not bodies.** A squad stands on its whole block, so
+            // it counts for `footprint^2` — sized off a head count a fight
+            // with two squads in it gets the board six bodies would have
+            // had and seats fourteen cells on it.
+            bodies: party.len() as u32
+                + wild_footprints
+                    .iter()
+                    .map(|&side| u32::from(side).pow(2))
+                    .sum::<u32>(),
         };
         let board = generate(spec);
         let plan = deploy::plan(&board, bearing, party.len() as u32, &wild_footprints);
@@ -122,13 +130,19 @@ impl Game {
         for (&body, &cell) in party.iter().zip(plan.party.iter()) {
             battle.place(body, cell);
         }
+        // **Shaped before it is seated.** `place` refuses a block that
+        // overlaps anything or stands on ground it cannot, and it can only
+        // apply that to a body whose shape it already knows — seated first
+        // and widened afterwards, a squad's block is never checked at all
+        // and the seating is well-formed only because `deploy::plan`
+        // reserved a clear block for it two files away.
         for ((&body, &cell), &footprint) in wild.iter().zip(plan.wild.iter()).zip(&wild_footprints)
         {
-            battle.place(body, cell);
             if footprint > 1 {
                 let actions = self.actions_per_turn(body);
                 battle.set_shape(body, footprint, actions);
             }
+            battle.place(body, cell);
         }
         // Taken at the bell, before the first blow, for the reason
         // `BattleState::outmatched` gives: by the time a fight is won the

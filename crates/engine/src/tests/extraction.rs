@@ -3238,6 +3238,98 @@ fn image_extraction_options_preview_nothing_to_learn_when_already_known() {
     );
 }
 
+/// Final review U1: an apex species' image cannot be learned —
+/// `SpeciesDef::is_boss`, never `DownedProgram::boss` (a rolled boss of an
+/// ordinary species still teaches its ordinary image, `image_yield_teaches_
+/// the_ordinary_image_of_a_rolled_boss` below).
+#[test]
+fn image_yield_refuses_an_apex_species() {
+    let game = Game::new(4606, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut prog = program(70, Rarity::Gold, 20);
+    prog.species = "wintermute".to_string();
+
+    assert_eq!(
+        game.image_yield(&prog),
+        None,
+        "an apex species must never be a learnable image"
+    );
+}
+
+#[test]
+fn image_extraction_refuses_an_apex_species_and_spends_nothing() {
+    let mut game = Game::new(4607, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let mut prog = program(70, Rarity::Gold, 20);
+    prog.species = "wintermute".to_string();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    let tool_id = install_image_capture(&mut game);
+
+    let result = game.extract_program(0, &tool_id);
+
+    assert!(
+        result.is_err(),
+        "an apex species must refuse the extraction"
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::EmulationImages>()
+            .0
+            .contains(&prog.species),
+        "an apex species must not have been learned"
+    );
+}
+
+/// The preview must never offer the boss image either — U1's "so the tool
+/// screen never previews a boss image".
+#[test]
+fn image_extraction_options_preview_nothing_to_learn_for_an_apex_species() {
+    let mut game = Game::new(4608, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let mut prog = program(70, Rarity::Gold, 20);
+    prog.species = "wintermute".to_string();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog];
+    let tool_id = install_image_capture(&mut game);
+
+    let options = game.extraction_options(0);
+    let option = options
+        .iter()
+        .find(|o| o.tool == tool_id)
+        .expect("the installed Image tool should have a row");
+
+    assert!(
+        matches!(option.preview, views::ExtractionPreview::NothingToLearn),
+        "an apex species must preview NothingToLearn, got {:?}",
+        option.preview
+    );
+}
+
+/// U1's other half: a *rolled* boss (`DownedProgram::boss`) of an ordinary
+/// species still teaches its ordinary image — only the species' own
+/// `is_boss` blocks learning, not the roll.
+#[test]
+fn image_yield_teaches_the_ordinary_image_of_a_rolled_boss() {
+    let game = Game::new(4609, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut prog = program(70, Rarity::Gold, 20);
+    prog.boss = true;
+    assert!(
+        !game
+            .world
+            .resource::<crate::species::SpeciesDb>()
+            .get(&prog.species)
+            .unwrap()
+            .is_boss,
+        "test premise: scrapper is an ordinary species, only rolled into a boss here"
+    );
+
+    assert_eq!(game.image_yield(&prog), Some(prog.species.clone()));
+}
+
 #[test]
 fn image_yield_spends_no_gamerng_draw() {
     assert!(

@@ -220,14 +220,18 @@ impl Game {
     /// the screen's preview (`extraction_options`) and the grant
     /// (`extract_image_from_program`) both call, so a quoted species and a
     /// learned one cannot differ (constraints.md decision 6). `None` means
-    /// the player already holds `program.species`'s image
-    /// (`resources::EmulationImages`) — the refusal `extract_program`
-    /// answers with, before anything is spent.
+    /// either the player already holds `program.species`'s image
+    /// (`resources::EmulationImages`) or the species is an apex one (U1,
+    /// `species_forbids_emulation`) — the refusal `extract_program` answers
+    /// with, before anything is spent.
     ///
     /// Unlike `extraction_yield`, this reads no tool at all: an `Image` tool
     /// has no `yields` pool and no tier scaling to apply, `Routines`'
     /// category own reason for the same omission.
     pub fn image_yield(&self, program: &DownedProgram) -> Option<SpeciesId> {
+        if self.species_forbids_emulation(&program.species) {
+            return None;
+        }
         let known = self
             .world
             .resource::<crate::resources::EmulationImages>()
@@ -238,6 +242,21 @@ impl Game {
         } else {
             Some(program.species.clone())
         }
+    }
+
+    /// Final review U1: an apex species (`SpeciesDef::is_boss`) can never be
+    /// emulated, so its image can never be learned. Deliberately **not**
+    /// `DownedProgram::boss` — that is a per-kill roll onto an *ordinary*
+    /// species (`BOSS_STAT_MULT` and nothing else), and U1 is explicit that
+    /// a rolled boss still teaches its species' ordinary image. A missing
+    /// species def (a mod pulled out from under a save) answers `false`
+    /// rather than refusing — the same tolerance `image_yield`'s caller
+    /// takes on every other species lookup here.
+    fn species_forbids_emulation(&self, species: &SpeciesId) -> bool {
+        self.world
+            .resource::<SpeciesDb>()
+            .get(species)
+            .is_some_and(|def| def.is_boss)
     }
 
     /// Whether a downed program may yield `item` at all.
@@ -547,8 +566,12 @@ impl Game {
     /// The `Image` branch of `extract_program` (todo #100 Task 5): teaches
     /// `program.species`'s image into `resources::EmulationImages` instead
     /// of granting an item. Refused, before anything is spent, when
-    /// `image_yield` answers `None` — the species is already known — the
-    /// same per-refusal rule the `Routines` branch's empty-pool check takes.
+    /// `image_yield` answers `None` — either the species is already known,
+    /// or it is an apex one (U1, `species_forbids_emulation`) — the same
+    /// per-refusal rule the `Routines` branch's empty-pool check takes.
+    /// The two reasons get different wording; `image_yield` only says
+    /// "nothing", not "why", so the boss check is asked again here for the
+    /// message alone.
     fn extract_image_from_program(
         &mut self,
         index: usize,
@@ -556,6 +579,9 @@ impl Game {
         tool: &ToolDef,
     ) -> Result<(), String> {
         let Some(species) = self.image_yield(program) else {
+            if self.species_forbids_emulation(&program.species) {
+                return Err("An apex species is too volatile to image-capture.".to_string());
+            }
             return Err("You already have that image.".to_string());
         };
 

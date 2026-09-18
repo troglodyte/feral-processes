@@ -444,9 +444,11 @@ format and overwrites a file of that name deliberately.
 - **`emulation.ron`** — a geared level-20 player, alone, against six
   rootkits at zone 3 (past the zone's own group ceiling of 4, so the
   player's own kit is a coinflip rather than a walkover), emulating the
-  strongest species the roster ships. `emulate: Some("wintermute")` is the
-  whole of what makes it worth watching twice: delete that row for the
-  player's own kit alone, or swap the species, to reproduce
+  strongest species an image can actually be learned for. `emulate:
+  Some("zero_day")` — not `wintermute`, an apex species whose image U1
+  (final review) refused at the extraction door, so it is unreachable in
+  play — is the whole of what makes it worth watching twice: delete that
+  row for the player's own kit alone, or swap the species, to reproduce
   `docs/measurements/2026-09-18-emulation-edge.md`'s sweep — the fitting
   scenario for `tuning::EMULATION_EDGE`.
 

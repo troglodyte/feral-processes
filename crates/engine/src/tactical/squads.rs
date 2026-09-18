@@ -19,9 +19,13 @@ use crate::tuning::FORMATIONS;
 pub enum Piece {
     Single(Entity),
     Squad {
-        /// The lead is always [0] — the body the player bumped, if this set
-        /// contains it, otherwise the first member of the set in pack
-        /// order. `Game::spawn_squad` reads routines and cooldowns off it;
+        /// The lead is the first member in the pack's own order, which is
+        /// the body the player bumped whenever that body lands in a set at
+        /// all: `Game::gather_pack` puts the anchor at `pack[0]`, the cuts
+        /// below preserve pack order within a species, and the first set
+        /// cut from a species is the one `pack[0]` falls in. There is no
+        /// promotion step, because there is no case for one to handle.
+        /// `Game::spawn_squad` reads routines and cooldowns off the lead;
         /// `Game::decompile_squad` is who a successful capture pulls out.
         members: Vec<Entity>,
         /// Index into `tuning::FORMATIONS`.
@@ -39,8 +43,6 @@ pub enum Piece {
 /// requires `Hostile`, and every wild spawner writes `Creature` beside it),
 /// but which is safer than dropping a body from the fight silently.
 pub fn plan(pack: &[Entity], world: &World) -> Vec<Piece> {
-    let bumped = pack.first().copied();
-
     let mut order: Vec<SpeciesId> = Vec::new();
     let mut by_species: std::collections::HashMap<SpeciesId, Vec<Entity>> =
         std::collections::HashMap::new();
@@ -78,12 +80,7 @@ pub fn plan(pack: &[Entity], world: &World) -> Vec<Piece> {
                 break;
             };
             let need = FORMATIONS[formation].members;
-            let mut set: Vec<Entity> = members.drain(0..need).collect();
-            if let Some(bumped) = bumped
-                && let Some(pos) = set.iter().position(|&e| e == bumped)
-            {
-                set.swap(0, pos);
-            }
+            let set: Vec<Entity> = members.drain(0..need).collect();
             pieces.push(Piece::Squad {
                 members: set,
                 formation,
@@ -194,27 +191,42 @@ mod tests {
         assert_eq!(singles.last().copied(), pack.last().copied());
     }
 
-    /// The bumped body (`pack[0]`) leads whichever set it lands in — even
-    /// when that set is not the first one cut.
+    /// The bumped body is `pack[0]` (`gather_pack`'s own rule) and leads
+    /// the set it lands in — not by being promoted into the slot, but
+    /// because the cuts preserve pack order within a species and the first
+    /// set cut from a species is the one `pack[0]` falls in.
+    ///
+    /// The pack is deliberately mixed and interleaved: the bumped `"a"` is
+    /// followed by a `"b"`, so a cut that took the pack's order rather than
+    /// each species' own would put the wrong body at the head.
     #[test]
-    fn the_bumped_body_leads_its_set() {
+    fn the_bumped_body_leads_the_set_it_lands_in() {
         let mut world = World::new();
-        let pack = pack_of(&mut world, "a", 10);
-        let bumped = pack[7];
-        // Re-derive the pack with the bumped body still at [0] — `plan`
-        // reads `pack.first()` as "the body the player bumped", exactly as
-        // `gather_pack` builds its own pack with the anchor first.
-        let mut reordered = vec![bumped];
-        reordered.extend(pack.iter().copied().filter(|&e| e != bumped));
-        let pieces = plan(&reordered, &world);
-        let containing = pieces
+        let bumped = spawn(&mut world, "a");
+        let mut pack = vec![bumped];
+        for _ in 0..4 {
+            pack.push(spawn(&mut world, "b"));
+            pack.push(spawn(&mut world, "a"));
+        }
+        let pieces = plan(&pack, &world);
+
+        let squads: Vec<&Vec<Entity>> = pieces
             .iter()
-            .find_map(|p| match p {
-                Piece::Squad { members, .. } if members.contains(&bumped) => Some(members),
-                _ => None,
+            .filter_map(|p| match p {
+                Piece::Squad { members, .. } => Some(members),
+                Piece::Single(_) => None,
             })
-            .expect("the bumped body must land in some squad");
-        assert_eq!(containing[0], bumped, "the bumped body must lead its set");
+            .collect();
+        assert_eq!(squads.len(), 1, "only the five 'a's make a set");
+        assert_eq!(squads[0][0], bumped, "the bumped body must lead its set");
+        // And the rest of the set is that species in pack order, so the
+        // head is the pack's head rather than a body promoted into it.
+        let a_order: Vec<Entity> = pack
+            .iter()
+            .copied()
+            .filter(|&e| world.get::<Creature>(e).unwrap().species == "a")
+            .collect();
+        assert_eq!(*squads[0], a_order);
     }
 
     #[test]

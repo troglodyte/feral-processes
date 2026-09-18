@@ -17,7 +17,7 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{AbilityShape, TamperKind};
 use crate::components::{
-    Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Stats,
+    Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Squad, Stats,
     Tampered,
 };
 use crate::game::inspection::difficulty_color;
@@ -26,6 +26,7 @@ use crate::tactical::TacticalBattle;
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
 use crate::tactical::reach;
+use crate::tuning::FORMATIONS;
 use crate::views::PlayerLook;
 
 /// One body standing on the battle map.
@@ -75,6 +76,38 @@ pub struct TacticalBody {
     /// through `Game::body_in_cover` instead. Off on a finished board too —
     /// see `TacticalView::frozen`.
     pub in_cover: bool,
+    /// The side, in cells, of the square footprint this body occupies —
+    /// `TacticalBattle::footprint_of`'s own answer, `1` for every body
+    /// without a `Squad`. What `draw_body` scales its whole draw to, not
+    /// just the mark: the glyph or sprite, the rarity bar, the con earmark,
+    /// the cover mark and the HP bar all span the footprint rather than one
+    /// cell.
+    pub footprint: u8,
+    /// `Some` exactly when this body is a folded `Squad`.
+    ///
+    /// **The name is not carried here.** `TacticalBody::label` already has
+    /// it — `Game::entity_label`'s own `Squad` arm builds `"<species> squad
+    /// (5)"` once, in the engine, so the turn strip and an examine line
+    /// reading the same field cannot show two different counts as a
+    /// capture thins the squad. This carries only what a draw needs and
+    /// the stat block does not already say: the mark drawn in the
+    /// footprint's own corner and the member count for anyone drawing the
+    /// HP bar's own reading beside it.
+    pub squad: Option<SquadView>,
+}
+
+/// What a folded squad's body draws that a single one does not.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SquadView {
+    /// How many bodies are still folded into this one — `Squad::members`'s
+    /// own length, read live so a capture's count is never stale.
+    pub members: usize,
+    /// The mark drawn in the footprint's corner nothing else claims —
+    /// `tuning::Formation::mark`.
+    pub mark: char,
+    /// The noun `Game::entity_label`'s own `Squad` arm built its name
+    /// from — `tuning::Formation::noun`.
+    pub noun: &'static str,
 }
 
 /// A `Tampered` slot's own tag, in the strip's short vocabulary — see the
@@ -473,6 +506,19 @@ impl Game {
         let stats = self.world.get::<Stats>(entity);
         let is_player = self.world.get::<Player>(entity).is_some();
         let is_hostile = self.world.get::<Hostile>(entity).is_some();
+        let footprint = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .map(|battle| battle.footprint_of(entity))
+            .unwrap_or(1);
+        let squad = self.world.get::<Squad>(entity).map(|squad| {
+            let formation = FORMATIONS.get(squad.formation);
+            SquadView {
+                members: squad.members.len(),
+                mark: formation.map(|f| f.mark).unwrap_or('^'),
+                noun: formation.map(|f| f.noun).unwrap_or("squad"),
+            }
+        });
         TacticalBody {
             entity,
             cell,
@@ -503,6 +549,8 @@ impl Game {
             level: self.world.get::<Experience>(entity).map(|e| e.level),
             cloaked: self.is_cloaked(entity),
             in_cover: attacker.is_some_and(|a| self.body_in_cover(a, entity)),
+            footprint,
+            squad,
         }
     }
 

@@ -261,7 +261,12 @@ impl Game {
     /// The species' display name, falling back to its raw id if the def
     /// failed to load — `SpeciesDb::load_dir` skips a malformed file rather
     /// than panicking, so this is the one place that fallback shows.
-    fn species_display_name(&self, c: &Creature) -> String {
+    ///
+    /// `pub(crate)` for `inspection::squad_label`'s reason: a squad carries
+    /// a bare `Creature` with no `CustomName` and no `ProgramId`, so it
+    /// needs this same species name without walking the rest of the
+    /// naming ladder above it.
+    pub(crate) fn species_display_name(&self, c: &Creature) -> String {
         self.world
             .resource::<SpeciesDb>()
             .get(&c.species)

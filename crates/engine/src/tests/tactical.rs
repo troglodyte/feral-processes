@@ -4784,3 +4784,80 @@ fn a_squad_is_not_saved_and_its_members_are_unchanged() {
         "a squad's combined stat block reached the save under some other tile"
     );
 }
+
+/// Task 5: what a fight's drawing needs — see
+/// `docs/superpowers/plans/2026-09-17-tactical-squads.md`. `TacticalBody`'s
+/// two new fields and the name `Game::entity_label` builds for a `Squad`.
+mod squad_drawing {
+    use super::*;
+
+    /// A folded squad's own `TacticalBody` carries the formation's
+    /// footprint and a `SquadView`; a leftover single carries neither.
+    #[test]
+    fn a_squads_tacticalbody_carries_its_footprint_and_squadview() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 9, 10);
+        game.open_tactical_battle(pack);
+        let view = game.tactical_view().expect("a fight is open");
+        let formation = &crate::tuning::FORMATIONS[0];
+
+        let squad_body = view
+            .bodies
+            .iter()
+            .find(|b| b.squad.is_some())
+            .expect("9 of a kind must seat a squad");
+        assert_eq!(squad_body.footprint, formation.footprint);
+        let squad_view = squad_body.squad.as_ref().unwrap();
+        assert_eq!(squad_view.members, 5);
+        assert_eq!(squad_view.mark, formation.mark);
+        assert_eq!(squad_view.noun, formation.noun);
+
+        let lone = view
+            .bodies
+            .iter()
+            .find(|b| b.squad.is_none() && !b.is_player)
+            .expect("a leftover single stands on the board");
+        assert_eq!(
+            lone.footprint, 1,
+            "a body with no Squad must read as footprint 1"
+        );
+    }
+
+    /// `"<species> squad (5)"`, built once in the engine — and it shrinks
+    /// live off `Squad::members`, never off a count stashed at formation, so
+    /// a turn strip and an examine line built a tick apart after a capture
+    /// cannot disagree.
+    #[test]
+    fn a_squads_name_is_built_in_the_engine_and_tracks_its_own_membership() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 9, 10);
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        let creature = game.world.get::<Creature>(squad).unwrap().clone();
+        let species_name = game
+            .world
+            .resource::<SpeciesDb>()
+            .get(&creature.species)
+            .unwrap()
+            .name
+            .clone();
+        assert_eq!(
+            game.entity_label(squad),
+            format!("{species_name} squad (5)")
+        );
+
+        game.world.get_mut::<Squad>(squad).unwrap().members.pop();
+        assert_eq!(
+            game.entity_label(squad),
+            format!("{species_name} squad (4)"),
+            "the name must read the squad's own membership, not a cached count"
+        );
+    }
+}

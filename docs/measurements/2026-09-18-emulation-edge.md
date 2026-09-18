@@ -1,207 +1,281 @@
 # 2026-09-18 — Fitting `EMULATION_EDGE`
 
+**Rerun 2026-09-18 (final review, F10/U4)** against a realistic player —
+Perk Points spent, a class, tier-appropriate gear, two levels, and the
+ability's own real duration instead of a 9999-round stand-in. The rerun
+overturns two things the first pass believed and confirms a third.
+
 ## The claim
 
-`EMULATION_EDGE` (1.25) and `EMULATION_EDGE_PER_PERK_LEVEL` (0.1) — both
-guesses when Task 2 wrote them — **stay unchanged**. Against a solo geared
-level-20 player, an emulation of an ordinary (non-boss) species is clearly
-worth taking: it roughly **doubles or more the win rate** of a fight that
-is otherwise a coinflip (33.5% → 87-94%). But the strongest species reachable
-— an apex boss, `is_boss: true` — already outclasses the player's own kit
-**before `EMULATION_EDGE` is applied at all**, because a boss's
-`growth_multiplier` (2.0) is double the player's own fixed growth rate
-(`BASELINE_GROWTH_MULTIPLIER`, 1.0). Lowering `EMULATION_EDGE` from 1.25 to
-1.05 — as low as the constant can go without breaking its own documented
-invariant ("above 1.0, so an emulation always beats a wild program of the
-same species and level") — barely moves the boss case (99.5% win / 52% HP
-left → 99.0% / 46%) while roughly halving the benefit for every ordinary
-species (scrapper 87.0% → 77.5%; the weakest species tested, sub_process,
-drops from a real edge to statistical noise: 52.0% → 35.5%, against a 33.5%
-control). **`EMULATION_EDGE` is not the lever that controls the boss case at
-all** — the gap is set by `SpeciesDef::growth_multiplier` before the
-multiplier ever touches it — so no value of this one global constant can
-satisfy "worth taking" for the ordinary roster and "does not outclass" for
-the strongest species at once. That is recorded here as an open risk rather
-than something this task's scope (`tuning.rs` constants) can close.
+`EMULATION_EDGE` (1.25) **stays**, but for a different reason than the first
+pass gave: the constant now barely moves the outcome either way once a
+realistic player's gear and Perk Points are in the mix (§"Does
+`EMULATION_EDGE` still matter?" below), so there is no numeric argument for
+moving it in either direction.
 
-`assets/abilities/emulate.ron`'s `research_zone: 2` is also unchanged: it
-gates *when* Emulate can be learned, not the per-species power ratio this
-measurement is about, and nothing here bears on it.
+Three things changed since the first pass:
+
+1. **The species gap collapses once gear and perks are counted.**
+   Emulating the strongest *reachable* ordinary species (`zero_day`) no
+   longer clearly beats a middling one (`scrapper`) — 63.0% vs 65.0% win
+   rate at level 20, 55.0% vs 56.5% at level 30, both well inside 200 reps'
+   ~3.5-point sampling noise. `Game::emulated_base` (F5, U2) adds worn gear
+   and the `components::BoughtStats` receipt *after* the species figure and
+   `EMULATION_EDGE` are applied, as flat bonuses — and a flat bonus is a
+   bigger fraction of a weaker base than a stronger one, so it compresses
+   exactly the spread the first pass measured. The weakest species tested,
+   `sub_process`, moved from a real if modest edge (52.0% in the first pass)
+   to barely distinguishable from the player's own kit (44.5% vs 39.0%
+   control at level 20; 41.0% vs 38.0% at level 30).
+2. **The real 10-round duration matters more than the species choice.**
+   Staged for the ability's own real duration (F10-prep) instead of the old
+   9999-round stand-in, `zero_day` at level 20 wins **63.0%** of a fight
+   averaging 35 rounds. Staged to never lapse — the first pass's own method
+   — the identical fight wins **92.0%**. The arena still cannot *invoke*
+   Emulate (`PartyPlan::AllAttack` invokes no routine), so every number
+   here is a floor: a played run that keeps recharging Power and spends the
+   turn to re-invoke every cooldown would sit somewhere between these two
+   figures, and this instrument cannot say where.
+3. **The boss gap the first pass recorded was never only `growth_multiplier`.**
+   See "Correcting the boss attribution" below — `wintermute` also starts
+   with a far higher `base_mitigation` than any ordinary species, and
+   mitigation never scales with level at all, so that whole axis of its
+   edge was base stats from the first round. It no longer matters for
+   *reachability* — U1 (final review) refuses an apex species' image at the
+   extraction door — but the old doc's explanation was incomplete on its
+   own terms, and this rerun corrects it since the finding is still true of
+   the (now unlearnable) species.
 
 ## How to reproduce it
 
-Built at commit `630304b3` (todo #100 Task 7's `Scenario::emulate` field).
-Two packs against the same solo geared level-20 player, zone 3, no party —
-alone, so nothing but the player's own kit does the fighting:
+Built at commit `c5eff0a5` (F10-prep's real-duration staging) plus
+`ab250299` (the `character:` perk fields this rerun needed) on
+`feat/player-emulation`. Two player builds, two levels apart, each fought
+against a *coinflip* pack of rootkits — a pack sized so the player's own
+kit alone wins close to half the time, which is what makes a kit swap's
+effect legible against 200 reps of sampling noise (`sqrt(0.5 * 0.5 / 200)
+≈ 3.5` percentage points).
 
-- **on-curve**: 4 rootkits, at `zone_group_cap`'s own ceiling for zone 3 —
-  the shape `opening-fight.ron` already established as "a real fight" (98%
-  win, comfortable HP), used here to confirm an emulation does not make an
-  already-easy fight suspicious.
-- **contested**: 6 rootkits, past that ceiling — a coinflip on the player's
-  own kit, which is what makes a kit swap's effect legible at all (a
-  98%-90%-ish fight cannot show a 10-point win-rate move against sampling
-  noise; a coinflip can).
-
-```sh
-cargo run --bin arena -- dev-arenas/emulation.ron
-# 99.5% win, 52% HP left, mean 23.8 rounds — the shipped file, six rootkits,
-# `emulate: Some("wintermute")`.
-```
-
-Every other row below is the same file with `emulate:` deleted (the
-control), `emulate:`'s species swapped, or `opponents: [(species:
-"rootkit", count: 4)]` for the on-curve pack — 200 reps, seed 7, in every
-case:
+**Level 20, zone 3** (`dev-arenas/emulation.ron`, shipped):
 
 ```ron
 (
     player: Fresh(level: 20, zone: 3),
+    character: (
+        class: Some(Striker),
+        perk_points: 40,
+        perks: [(Attacker, 5), (Defender, 5), (Buffer, 4), (LowPowerMode, 4)],
+    ),
     equip: [
         (item: "plasma_router", tier: 0),
         (item: "bastion_lattice", tier: 0),
         (item: "singularity_matrix", tier: 0),
     ],
-    emulate: Some("<species>"),           // omitted for "own kit"
-    opponents: [(species: "rootkit", count: <4 or 6>)],
+    emulate: Some("zero_day"),           // omitted for "own kit"; swapped per row
+    opponents: [(species: "rootkit", count: 13)],
     reps: 200,
     seed: 7,
 )
 ```
 
-The `EMULATION_EDGE = 1.05` rows were measured by editing
+```sh
+cargo run --bin arena -- dev-arenas/emulation.ron
+```
+
+**Level 30, zone 4** (not shipped — a scratch file, reproduced from this
+block; `character:` spends the level's full 60-point allowance in the same
+proportions, and `equip:` moves to `tier: 1` as one fusion level a
+level-30 player would plausibly have banked):
+
+```ron
+(
+    player: Fresh(level: 30, zone: 4),
+    character: (
+        class: Some(Striker),
+        perk_points: 60,
+        perks: [(Attacker, 8), (Defender, 8), (Buffer, 6), (LowPowerMode, 5)],
+    ),
+    equip: [
+        (item: "plasma_router", tier: 1),
+        (item: "bastion_lattice", tier: 1),
+        (item: "singularity_matrix", tier: 1),
+    ],
+    emulate: Some("zero_day"),
+    opponents: [(species: "rootkit", count: 18)],
+    reps: 200,
+    seed: 7,
+)
+```
+
+Both counts (13 at zone 3, 18 at zone 4) were found by sweeping the control
+row (no `emulate:`) until its win rate landed near 50% — `zone_group_cap`'s
+own ceiling (4 at zone 3, 8 at zone 4) is far below both, so every fight
+here is already past what the game would ever field on its own, by design.
+
+Species: `zero_day` (the strongest species an image can actually be
+learned for — `base_atk: 16`, `growth_multiplier: 1.5`, both the ceiling
+among ordinary species), `scrapper` (`base_atk: 12`, `growth_multiplier:
+1.25`, the starter companion species), and `sub_process` (`base_atk: 4`,
+`growth_multiplier` unset/1.0, the weakest species shipped) — the same
+three species tiers the first pass used, so the two passes read against
+the same roster.
+
+The `EMULATION_EDGE = 1.05` row was measured by editing
 `crates/engine/src/tuning.rs` to that value, rebuilding
-(`cargo build --bin arena`), rerunning the six-rootkit files, then reverting
-the edit — `git diff crates/engine/src/tuning.rs` is empty on this branch,
-confirming the shipped constant is what it was before this measurement.
+(`cargo build --bin arena`), rerunning, then restoring the file — `git
+diff crates/engine/src/tuning.rs` is empty on this branch, confirming the
+shipped constant is what it was before this measurement.
 
-Species and their relevant `SpeciesDef` fields, for reading the tables:
-
-| species | `base_atk` | `base_mitigation` | `growth_multiplier` | note |
-|---|---|---|---|---|
-| `sub_process` | 4 | 3 | 1.0 (unset, default) | the weakest species shipped |
-| `scrapper` | 12 | 3 | 1.25 | the starter companion species |
-| `rootkit` | 12 | 3 | 1.5 | the pack's own species |
-| `zero_day` | 16 | 4 | 1.5 | the strongest *ordinary* species |
-| `wintermute` | 19 | 17 | 2.0 | `is_boss: true` — the strongest overall |
-
-`scrapper` and `rootkit` end up with identical emulated attack at every
-level despite different `growth_multiplier`s (1.25 vs 1.5): `progression::
-scaled_growth` rounds `ATK_PER_LEVEL (2) * growth_multiplier` to the nearest
-whole point, and `round(2 * 1.25) == round(2 * 1.5) == 3`. Their rows below
-are identical, seed for seed — not a bug, a rounding coincidence at this
-level.
+The no-lapse comparison (finding 2) was measured by editing
+`assets/abilities/emulate.ron`'s `rounds: 10` to `rounds: 9999`,
+rebuilding, rerunning `zero_day` at level 20, then restoring the file —
+`git diff assets/abilities/emulate.ron` is empty on this branch for the
+same reason.
 
 ## The numbers
 
-### On-curve pack (4 rootkits, zone 3) — `EMULATION_EDGE = 1.25` (shipped)
+### Level 20, zone 3 — geared, perked, `EMULATION_EDGE = 1.25` (shipped)
+
+On-curve pack (4 rootkits, `zone_group_cap`'s own ceiling):
 
 | kit | win rate | mean rounds | mean HP left |
 |---|---|---|---|
-| own kit (no image) | 98.0% (196/200) | 26.3 | 41% |
-| emulating `sub_process` | 100.0% (200/200) | 24.2 | 49% |
-| emulating `scrapper` | 100.0% (200/200) | 19.2 | 61% |
-| emulating `rootkit` | 100.0% (200/200) | 19.2 | 61% |
-| emulating `zero_day` | 100.0% (200/200) | 18.8 | 62% |
-| emulating `wintermute` | 100.0% (200/200) | 15.9 | 75% |
+| own kit (no image) | 100.0% (200/200) | 12.3 | 82% |
+| emulating `zero_day` | 100.0% (200/200) | 9.0 | 87% |
 
-Every emulation improves on the player's own kit here, but the pack is
-already close to a walkover on the player's own kit (98%), so a 100% ceiling
-compresses every species into the same win-rate reading — HP left and
-rounds are the only rows that separate them, and both move monotonically
-with `growth_multiplier`.
-
-### Contested pack (6 rootkits, past the zone's own ceiling) — `EMULATION_EDGE = 1.25` (shipped)
+Contested pack (13 rootkits, a coinflip for this build's own kit):
 
 | kit | win rate | mean rounds | mean HP left |
 |---|---|---|---|
-| own kit (no image) | 33.5% (67/200) | 31.9 | 4% |
-| emulating `sub_process` | 52.0% (104/200) | 32.1 | 9% |
-| emulating `scrapper` | 87.0% (174/200) | 28.5 | 24% |
-| emulating `rootkit` | 87.0% (174/200) | 28.5 | 24% |
-| emulating `zero_day` | 94.0% (188/200) | 27.9 | 29% |
-| emulating `wintermute` | 99.5% (199/200) | 23.8 | 52% |
+| own kit (no image) | 39.0% (78/200) | 35.4 | 8% |
+| emulating `sub_process` | 44.5% (89/200) | 35.2 | 8% |
+| emulating `scrapper` | 65.0% (130/200) | 34.9 | 15% |
+| emulating `zero_day` | 63.0% (126/200) | 34.9 | 14% |
 
-This is the fight that shows what the feature is worth: every ordinary
-species roughly doubles or more the win rate over the player's own kit, and
-the ordering tracks `growth_multiplier` and `base_atk` exactly as
-`progression::emulated_stats` says it should. `sub_process`'s edge is real
-but small — it is barely stronger than the player's own kit *before* the
-multiplier (its `growth_multiplier` of 1.0 matches the player's own, and its
-`base_atk` of 4 is below the player's `PLAYER_BASE_STATS.atk` of 6), so
-`EMULATION_EDGE` alone is carrying its whole case for "worth taking."
+`scrapper` edging out `zero_day` (65.0% vs 63.0%) is sampling noise, not an
+inversion — both sit at the same distance from the control within one
+standard error of each other.
 
-### Contested pack — `EMULATION_EDGE = 1.05` (tested, rejected)
+### Level 30, zone 4 — geared, perked, `EMULATION_EDGE = 1.25` (shipped)
+
+Contested pack (18 rootkits):
 
 | kit | win rate | mean rounds | mean HP left |
 |---|---|---|---|
-| own kit (no image, unaffected by this constant) | 33.5% (67/200) | 31.9 | 4% |
-| emulating `sub_process` | 35.5% (71/200) | 32.3 | 5% |
-| emulating `scrapper` | 77.5% (155/200) | 30.2 | 17% |
-| emulating `rootkit` | 77.5% (155/200) | 30.2 | 17% |
-| emulating `zero_day` | 78.0% (156/200) | 29.5 | 20% |
-| emulating `wintermute` | 99.0% (198/200) | 26.5 | 46% |
+| own kit (no image) | 38.0% (76/200) | 40.3 | 20% |
+| emulating `sub_process` | 41.0% (82/200) | 40.7 | 16% |
+| emulating `scrapper` | 56.5% (113/200) | 40.8 | 28% |
+| emulating `zero_day` | 55.0% (110/200) | 40.5 | 28% |
 
-The comparison this task turns on. Dropping `EMULATION_EDGE` almost to its
-documented floor (1.0) barely touches `wintermute` — win rate moves one
-point (99.5 → 99.0) and HP left drops 6 points (52% → 46%), both easily
-inside what `growth_multiplier`'s own difference from an ordinary species
-would produce with *no* edge at all. Every ordinary species loses far more:
-`scrapper`/`rootkit` fall 9.5 points, `zero_day` 16 points, and
-`sub_process` falls to a 2-point improvement over the control — inside the
-noise a `sqrt(0.335 * 0.665 / 200) ≈ 3.3` percentage-point standard error on
-200 reps already covers. **1.25 stays**, because 1.05 buys nothing at the
-top and costs everything in the middle.
+The same shape as level 20: a real but modest edge for the weakest species,
+`scrapper` and `zero_day` statistically tied, both clearly ahead of the
+control.
+
+### Does `EMULATION_EDGE` still matter? (level 20, zone 3, contested pack)
+
+| kit | `EDGE = 1.25` (shipped) | `EDGE = 1.05` |
+|---|---|---|
+| emulating `sub_process` | 44.5% (89/200) | 42.0% (84/200) |
+| emulating `zero_day` | 63.0% (126/200) | 64.5% (129/200) |
+
+Both moves are inside sampling noise — the opposite of the first pass,
+which found `EDGE = 1.05` cut the ordinary roster's benefit roughly in
+half. The reason is finding 1 above: most of what an ordinary emulation is
+worth to *this* player now comes from `emulated_base`'s flat additions
+(gear, `BoughtStats`), which `EMULATION_EDGE` does not touch at all —
+`stats.atk`/`stats.mitigation` (the part `EDGE` scales) is a smaller share
+of the total than it was for the ungeared, unperked player the first pass
+measured. **`EMULATION_EDGE` stays at 1.25**: nothing here argues for
+moving it, because moving it barely changes anything for the player this
+measurement models.
+
+### No-lapse comparison (level 20, zone 3, `zero_day`, contested pack)
+
+| staged duration | win rate | mean rounds | mean HP left |
+|---|---|---|---|
+| real (`emulate.ron`'s `rounds: 10`) | 63.0% (126/200) | 34.9 | 14% |
+| never lapses (`rounds: 9999`, the first pass's own method) | 92.0% (184/200) | 29.4 | 31% |
+
+A 29-point swing, on the same build, same pack, same seed — see "What it
+does not say" below.
+
+## Correcting the boss attribution
+
+The first pass wrote the boss gap off entirely to `growth_multiplier`
+(`wintermute`'s 2.0 against every ordinary species' ceiling of 1.5). That
+undercounted it. Comparing `wintermute` and `zero_day`'s own `SpeciesDef`
+fields:
+
+| | `base_atk` | `base_mitigation` | `growth_multiplier` |
+|---|---|---|---|
+| `zero_day` | 16 | 4 | 1.5 |
+| `wintermute` | 19 | 17 | 2.0 |
+
+`progression::emulated_stats` never scales mitigation by level at all
+(`Stats::mitigation`'s own rule, `mitigation_is_unscaled_by_level_but_
+takes_the_multiplier`) — every point of `wintermute`'s 17-vs-4
+mitigation lead over `zero_day` is `base_mitigation` alone, `growth_
+multiplier` never entering that axis at any level. And even on attack,
+`emulated_stats(def, 1, 0)` (no growth applied yet) is already `base_atk *
+EMULATION_EDGE`, so `wintermute`'s higher `base_atk` gives it a head start
+before the level curve or `growth_multiplier` ever run. **The boss gap was
+base stats as well as growth, on both axes and starting from level 1** —
+not something this measurement retested with `wintermute` itself, since
+U1 (final review, 2026-09-18) now refuses an apex species' image at the
+extraction door and it can no longer be learned in play. The correction
+stands because the first pass's *explanation* was incomplete on its own
+terms, whether or not the species it was about is still reachable.
 
 ## What it does not say
 
-- **Whether `wintermute` "should" be reachable at all is not this
-  measurement's question.** It answers "if a player has this image, how
-  strong is it", not "should extraction ever hand it out" — that is a
-  content/economy question (how hard a boss is to down and to extract from)
-  outside `tuning.rs`'s scope.
-- **The player's own kit here is deliberately mid-tier, not the ceiling.**
-  `equip`'s three items are tier-0, unfused, `Rarity::Ordinary` — the same
-  loadout `full-group.ron` uses for a level-20 solo player. A maximally
-  geared kit (rare tier, fused, affixed) would be stronger than what is
-  measured as "own kit" here, which would *narrow* every gap in these
-  tables, including the boss one. This instrument cannot speak to that
-  ceiling; `dev-arenas/README.md`'s note on rarity and affixes applies here
-  too.
-- **No party.** The player fights alone by construction, to isolate the kit
-  swap from a companion's own output — a party-bearing scenario would dilute
-  every row in the same direction and by an amount this run cannot say.
-- **`EMULATION_EDGE_PER_PERK_LEVEL` is untested here.** Buying
-  `Perk::EmulationFidelity` only ever pushes every row further in the same
-  direction (it is a positive addend on the same multiplier), so it cannot
-  narrow the boss gap either — it was not measured because it cannot change
-  this measurement's conclusion, only amplify it.
-- **`EMULATION_ROUNDS` (the ability's real 10-round duration), its Power
-  cost (20) and its 4-round cooldown are all bypassed.** `Scenario::emulate`
-  inserts `components::Emulation` directly with `rounds_left: 9999`
-  (`ARENA_EMULATION_ROUNDS`) so it cannot lapse mid-fight — the arena has no
-  way to *invoke* Emulate at all (`PartyPlan::AllAttack` never invokes a
-  routine), so this is the only way to stage the kit swap, and it measures
-  the kit alone, never the action economy of reaching or holding it. A real
-  fight that runs past 10 rounds pays to re-invoke; none of these numbers
-  charge for that.
+- **The Power cost, the cooldown, and the action economy of *reaching* an
+  emulation are still not modeled.** The arena has no way to *invoke*
+  Emulate (`PartyPlan::AllAttack` invokes no routine), so every number here
+  assumes the image is already up at round 1 for free and (bar the
+  no-lapse row) drops for good once its 10 rounds run out — a played run
+  could spend a turn and 20 Power to re-invoke on cooldown, which would
+  sit somewhere between the "real" and "no-lapse" rows above. This is now
+  the largest blind spot in this file, larger than the species choice —
+  finding 2 puts a number on it for the first time.
+- **The perk and gear spend is one plausible level-20/level-30 build, not
+  the only one, and not the ceiling.** A different split of the perk
+  budget, a Buffer-heavy or Low-Power-Mode-heavy build, or better gear
+  (fused, rare, affixed — `dev-arenas/README.md`'s note on this applies
+  here too) would all move the *absolute* win rates; whether it would
+  re-open the gap between `scrapper` and `zero_day` that flat bonuses
+  closed here is untested.
+- **The pack sizes (13 and 18 rootkits) are specific to this build.** They
+  were fit so *this player's own kit* is a coinflip; a different level,
+  perk spend or gear loadout needs its own fit, the same way the first
+  pass's six-rootkit pack stopped being a coinflip the moment perks and
+  gear were added (see the "count was refit" note in `dev-arenas/
+  emulation.ron` itself).
+- **No party.** The player fights alone by construction, to isolate the
+  kit swap from a companion's own output.
+- **`class: Striker` changes nothing this bin reports** —
+  `arena::scenario::CharacterSpec`'s own doc: a class is an affinity spread
+  over *authored routine power*, and `PartyPlan::AllAttack` invokes no
+  routine. It is here for realism alone.
+- **`EMULATION_EDGE_PER_PERK_LEVEL` is untested here**, for the same reason
+  the first pass left it untested: it only ever pushes every row further
+  in the same direction, so it cannot narrow or widen the gaps this rerun
+  is about.
 - **`balance_sim` models no abilities**, which is the whole reason this is
-  an arena question rather than a `balance_sim` assertion (`CLAUDE.md`'s own
-  rule for this seam).
+  an arena question rather than a `balance_sim` assertion.
 - **These numbers compare within this build only.** A later change to
-  `battle::resolve_attack`, mitigation, or the rootkit species file
-  reshuffles the `GameRng` stream as well as the fight, so re-tuning against
-  a report from a different commit is invalid — rerun both sides fresh.
+  `battle::resolve_attack`, mitigation, `emulated_base`, or the rootkit
+  species file reshuffles the `GameRng` stream as well as the fight, so
+  re-tuning against a report from a different commit is invalid — rerun
+  both sides fresh.
 
 ## Open questions
 
-- **Is a boss-tier emulation supposed to be this strong?** The measurement
-  cannot answer "supposed to" — only that at `EMULATION_EDGE`'s documented
-  floor (1.0) a boss species already doubles the player's own raw attack
-  before any edge is applied, purely from `growth_multiplier`. If a future
-  pass wants the strongest image capped closer to the player's own geared
-  kit, the lever is not `tuning.rs`'s two emulation constants — it would
-  need to read the emulated species itself (e.g. dampen `growth_multiplier`
-  above some ceiling inside `emulated_stats`, or exclude `is_boss` species
-  from `EmulationImages` at the extraction door) — a design decision, not a
-  numbers-only retune.
+- **Is the action economy of re-invoking Emulate worth measuring for
+  real?** The no-lapse comparison shows it is the single biggest lever in
+  this file, bigger than which species is worn. Answering it needs the
+  arena to be able to *invoke* a routine mid-fight, which nothing in
+  `PartyPlan` does today — a real feature, not a numbers-only rerun.
+- **Does a maximally-developed build (fused/affixed rare gear, a different
+  perk split) re-open the gap between ordinary species that flat bonuses
+  closed here?** Untested; the first pass's own "not the ceiling" caveat
+  still applies, now to a higher floor.

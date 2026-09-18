@@ -1,11 +1,16 @@
 // EMULATION_EDGE's fitting scenario (todo #100 Task 7) — and the file that
 // carries the risk the design spec named: "a strong species could replace
 // the player's build". A geared level-20 player, alone (no party, so
-// nothing but the player's own kit is doing the fighting), against six
+// nothing but the player's own kit is doing the fighting), against thirteen
 // rootkits at zone 3 — past `zone_group_cap`'s ceiling of 4, deliberately,
-// because on-curve the player's own kit already wins this at 98%
-// (`opening-fight.ron`'s shape at a higher level); this pack is a genuine
-// coinflip instead, which is what makes a kit swap's effect visible at all.
+// because on-curve the player's own kit already wins this at 100%. The
+// count was refit at F10 (final review, 2026-09-18): the six-rootkit pack
+// this used to be was already a walkover (100% win, both with and without
+// an image) once `character:` below spends real Perk Points — a perked,
+// geared level-20 player is simply stronger than the ungeared, unperked one
+// the original count was fit against. Thirteen is a coinflip for this
+// build's own kit (39.0%), which is what makes a kit swap's effect visible
+// at all.
 //
 // `emulate: Some("zero_day")` is the strongest species an image can ever
 // actually be learned for — U1 (final review, 2026-09-18) refuses an apex
@@ -16,15 +21,29 @@
 // player's own geared kit, no image). Swap the species to compare another
 // image; `docs/measurements/2026-09-18-emulation-edge.md` has the sweep
 // across the roster.
+//
+// `character:` spends Perk Points the way a level-20 player actually would
+// — F10 (final review, 2026-09-18): every point of the level's 40-point
+// allowance, split Attacker/Defender/Buffer/Low Power Mode, so
+// `components::BoughtStats` (F5, U2) shows up in this measurement rather
+// than being silently zero. `class: Striker` is along for realism alone —
+// `arena::scenario::CharacterSpec`'s own doc: a class is an affinity spread
+// over *authored routine power*, and `PartyPlan::AllAttack` invokes no
+// routine, so it changes nothing this bin reports.
 (
     player: Fresh(level: 20, zone: 3),
+    character: (
+        class: Some(Striker),
+        perk_points: 40,
+        perks: [(Attacker, 5), (Defender, 5), (Buffer, 4), (LowPowerMode, 4)],
+    ),
     equip: [
         (item: "plasma_router", tier: 0),
         (item: "bastion_lattice", tier: 0),
         (item: "singularity_matrix", tier: 0),
     ],
     emulate: Some("zero_day"),
-    opponents: [(species: "rootkit", count: 6)],
+    opponents: [(species: "rootkit", count: 13)],
     reps: 200,
     seed: 7,
 )

@@ -441,9 +441,10 @@ format and overwrites a file of that name deliberately.
   creation stat pool spent entirely on one axis, the two rows behind
   `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`. These
   two *are* for the bin: the pool lands in `Stats` and All-Attack sees it.
-- **`emulation.ron`** — a geared level-20 player, alone, against six
-  rootkits at zone 3 (past the zone's own group ceiling of 4, so the
-  player's own kit is a coinflip rather than a walkover), emulating the
+- **`emulation.ron`** — a geared, perked level-20 player, alone, against
+  thirteen rootkits at zone 3 (past the zone's own group ceiling of 4, and
+  refit at F10/final review to stay a coinflip once `character:` started
+  spending real Perk Points — six was already a walkover), emulating the
   strongest species an image can actually be learned for. `emulate:
   Some("zero_day")` — not `wintermute`, an apex species whose image U1
   (final review) refused at the extraction door, so it is unreachable in

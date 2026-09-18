@@ -55,13 +55,22 @@ an honest "unknown".
 ## Entries
 
 - [2026-09-18 — Fitting `EMULATION_EDGE`](2026-09-18-emulation-edge.md) —
-  `EMULATION_EDGE` (1.25) stays: it roughly doubles the win rate of an
-  otherwise-coinflip fight for every ordinary species emulated (33.5% →
-  87-94%), and dropping it to 1.05 barely moves the strongest species
-  (99.5% → 99.0%) while gutting everyone else's benefit. Carries the open
-  finding that a boss-tier image already doubles the player's own raw
-  attack from `growth_multiplier` alone, before the constant this task
-  tunes is even applied — not a lever this task's scope can pull.
+  rerun against a realistic player (Perk Points spent, gear worn, the
+  ability's own real 10-round duration) for the final review's U4: the
+  species gap the first pass measured almost disappears once gear and
+  `components::BoughtStats` stack on top as flat bonuses (the strongest
+  reachable species and a middling one land within sampling noise of each
+  other, 63% vs 65%), and the ability's real duration against a
+  never-lapses stand-in swings the same fight from 63% to 92% — a bigger
+  lever than which species is worn, and one the arena still cannot model
+  the other half of (it cannot *invoke* Emulate to re-arm it).
+  `EMULATION_EDGE` (1.25) stays, but because moving it now barely changes
+  anything, not because it was refit. Also corrects the first pass's boss
+  attribution: `wintermute`'s edge was base stats as well as
+  `growth_multiplier` (its mitigation lead is 100% base stats, since
+  mitigation never scales with level at all) — moot for reachability now
+  that U1 refuses an apex species' image at the extraction door, but the
+  explanation was incomplete either way.
 
 - [2026-09-17 — The arena cannot see opportunity attacks](2026-09-17-tactical-reactions-arena-blind.md)
   — `dev-arenas/tactical-full-group.ron` is identical to every digit before

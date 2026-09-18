@@ -849,7 +849,9 @@ impl Game {
         // resolve time and silently cost the member its round — while still
         // charging for it — so they are refused here instead.
         if let BattleAction::Special {
-            ability, target, ..
+            ability,
+            target,
+            image,
         } = &action
         {
             if let battle::SpecialTarget::Ally { slot: ally } = target
@@ -904,6 +906,37 @@ impl Game {
             {
                 return Err("That program's ICE is beyond decompiling.".to_string());
             }
+            // Final review F9: an Emulate `Special` needs a chosen image the
+            // player has actually learned before anything is spent —
+            // `Game::tactical_emulate`'s own gate
+            // (`resources::EmulationImages`), which this door lacked. `image`
+            // is `None` for every other effect (`battle::BattleAction::
+            // Special`'s own doc), so this only ever fires for Emulate.
+            if let Some(actor) = self.actor_entity(battle::Actor::Party(slot))
+                && matches!(
+                    self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
+                    Some(AbilityEffect::Emulate { .. })
+                )
+                && !image.as_ref().is_some_and(|species| {
+                    self.world
+                        .resource::<crate::resources::EmulationImages>()
+                        .0
+                        .contains(species)
+                })
+            {
+                return Err("Choose a known image to emulate.".to_string());
+            }
+        }
+        // F9's other half: `Game::tactical_revert`'s own refusal, matched
+        // here rather than only at resolve time — `BattleAction::Revert`
+        // already resolves as a silent no-op on a body that isn't
+        // emulating (`Game::drop_emulation`'s guard), but a plan accepted
+        // here still spends the slot's whole round on nothing.
+        if matches!(&action, BattleAction::Revert)
+            && let Some(actor) = self.actor_entity(battle::Actor::Party(slot))
+            && self.world.get::<Emulation>(actor).is_none()
+        {
+            return Err("You aren't emulating.".to_string());
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
         Ok(())

@@ -1228,6 +1228,109 @@ mod emulation_tests {
         );
     }
 
+    /// Final review F9: `battle_set_action` must refuse `BattleAction::
+    /// Revert` while the slot isn't emulating, matching `Game::
+    /// tactical_revert`'s own refusal, rather than accepting the plan and
+    /// letting it resolve as a silent no-op that still spent the round.
+    #[test]
+    fn battle_set_action_refuses_revert_while_not_emulating() {
+        let mut game = game();
+        let player = game.player_entity();
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+
+        let result = game.battle_set_action(0, BattleAction::Revert);
+
+        assert!(
+            result.is_err(),
+            "Revert must be refused while not emulating"
+        );
+        assert!(
+            game.world
+                .get_resource::<BattleState>()
+                .is_some_and(|b| b.planned[0].is_none()),
+            "a refused plan must not be written"
+        );
+    }
+
+    /// F9's other half: `battle_set_action` must refuse an Emulate `Special`
+    /// with no image, or an image the player hasn't learned, before
+    /// anything is spent — matching `Game::tactical_emulate`'s own gate
+    /// (`EmulationImages`).
+    #[test]
+    fn battle_set_action_refuses_emulate_with_no_image() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        let def = drone(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(def.id.clone());
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+        let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+        let index = emulate_index(&game);
+
+        let result = game.battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::WholeParty,
+                image: None,
+            },
+        );
+
+        assert!(result.is_err(), "Emulate with no image must be refused");
+        assert_eq!(
+            game.world.get::<PowerReserve>(player).unwrap().get(),
+            power_before,
+            "a refused plan must spend no Power"
+        );
+        assert!(
+            game.world
+                .get::<AbilityCooldowns>(player)
+                .is_none_or(|c| c.0.is_empty()),
+            "a refused plan must arm no cooldown"
+        );
+    }
+
+    /// The other unknown-image case: an image named that the player has
+    /// never learned.
+    #[test]
+    fn battle_set_action_refuses_emulate_with_an_unknown_image() {
+        let mut game = game();
+        let player = game.player_entity();
+        install_routine_for_test(&mut game, player, "emulate");
+        // `emulate_index` needs at least one known image for the row to be
+        // offered at all, so `known` is learned and `unknown` is the one
+        // named on the action instead — distinct species, `two_species`'
+        // own guarantee.
+        let (known, unknown) = two_species(&game);
+        game.world
+            .resource_mut::<crate::resources::EmulationImages>()
+            .0
+            .insert(known.id.clone());
+        let hostile = overwhelmed_hostile(&mut game, 100_000, 0);
+        insert_battle(&mut game, player, vec![hostile]);
+        let index = emulate_index(&game);
+
+        let result = game.battle_set_action(
+            0,
+            BattleAction::Special {
+                ability: index,
+                target: battle::SpecialTarget::WholeParty,
+                image: Some(unknown.id.clone()),
+            },
+        );
+
+        assert!(
+            result.is_err(),
+            "Emulate with an unlearned image must be refused"
+        );
+        assert!(game.world.get::<Emulation>(player).is_none());
+    }
+
     #[test]
     fn tactical_use_routine_refuses_emulate_since_it_has_no_aim() {
         let mut game = game();

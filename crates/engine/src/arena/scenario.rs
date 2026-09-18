@@ -35,6 +35,15 @@ pub struct Scenario {
     pub inventory: Vec<InventorySpec>,
     /// `Fresh` only.
     pub party: Vec<CompanionSpec>,
+    /// `Fresh` only. Starts the player already emulating this species —
+    /// `components::Emulation`, inserted at stage time (todo #100 Task 7).
+    ///
+    /// The arena has no way to *invoke* Emulate itself: the bin plays
+    /// `PartyPlan::AllAttack`, which invokes no routine, so a scenario is
+    /// the only way to stage the kit swap at all. This bypasses
+    /// `EMULATION_ROUNDS`'s duration, Power cost and cooldown on purpose —
+    /// it measures the swapped kit, not the action economy of reaching it.
+    pub emulate: Option<SpeciesId>,
     /// Order is formation: `ENGAGED_GROUPS` is 2, so entries past the second
     /// are out of melee reach.
     pub opponents: Vec<OpponentSpec>,
@@ -70,6 +79,7 @@ impl Default for Scenario {
             equip: Vec::new(),
             inventory: Vec::new(),
             party: Vec::new(),
+            emulate: None,
             opponents: Vec::new(),
             encounter: None,
             model: CombatModel::default(),
@@ -370,6 +380,7 @@ impl Scenario {
                 ("equip", !self.equip.is_empty()),
                 ("inventory", !self.inventory.is_empty()),
                 ("party", !self.party.is_empty()),
+                ("emulate", self.emulate.is_some()),
             ] {
                 if populated {
                     return Err(format!(
@@ -481,6 +492,33 @@ mod tests {
         )
         .unwrap_err();
         assert!(tmpl.contains("party"), "{tmpl}");
+    }
+
+    #[test]
+    fn emulate_defaults_to_none_and_round_trips_when_set() {
+        let s = Scenario::from_ron(
+            r#"(
+                player: Fresh(level: 20, zone: 3),
+                emulate: Some("wintermute"),
+                opponents: [(species: "rootkit", count: 4)],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(s.emulate, Some("wintermute".to_string()));
+        assert_eq!(Scenario::default().emulate, None);
+    }
+
+    #[test]
+    fn emulate_on_a_save_scenario_is_an_err_naming_the_field() {
+        let err = Scenario::from_ron(
+            r#"(
+                player: Save("saves/save.bin"),
+                emulate: Some("wintermute"),
+                opponents: [(species: "glitch", count: 1)],
+            )"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("emulate"), "{err}");
     }
 
     #[test]

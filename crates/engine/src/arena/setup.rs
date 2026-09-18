@@ -62,6 +62,20 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                 game.equip(player, &row.copy())
                     .map_err(|e| format!("equip `{}`: {e}", row.item.as_str()))?;
             }
+            if let Some(species) = &scenario.emulate {
+                known_species(&game, species)?;
+                let player = game.player_entity();
+                game.world.entity_mut(player).insert(Emulation {
+                    species: species.clone(),
+                    // `AbilityEffect::Emulate` never fires here — the bin
+                    // plays `PartyPlan::AllAttack`, which invokes nothing —
+                    // so this is the only way to stage the swap at all, and
+                    // it bypasses `tuning::EMULATION_ROUNDS`'s own duration
+                    // deliberately: outlasting every fight the arena stages
+                    // is what lets a report measure the kit alone.
+                    rounds_left: ARENA_EMULATION_ROUNDS,
+                });
+            }
             // **Authored from inside base space, and back out afterwards.**
             // `Game::add_companion` is a base verb now — who is in your
             // party is decided at home — and a scenario's `party:` rows are
@@ -182,6 +196,27 @@ fn known_item(game: &Game, item: &ItemId) -> Result<(), String> {
     Ok(())
 }
 
+/// `known_item`'s twin for `Scenario::emulate`: an unresolvable species is a
+/// typo, not a form to measure.
+fn known_species(game: &Game, species: &SpeciesId) -> Result<(), String> {
+    if game
+        .world
+        .resource::<SpeciesDb>()
+        .get(species.as_str())
+        .is_none()
+    {
+        return Err(format!("unknown species `{species}`"));
+    }
+    Ok(())
+}
+
+/// How long `Scenario::emulate` holds the image for. Chosen to outlast any
+/// fight the arena stages — `reps`' whole point is a sample of *rounds*, and
+/// a swap that could lapse mid-fight would measure `EMULATION_ROUNDS`
+/// instead of the kit it names. That duration is untested by this
+/// instrument on purpose (see the field's own doc).
+const ARENA_EMULATION_ROUNDS: u32 = 9_999;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +260,34 @@ mod tests {
             20
         );
         assert_eq!(game.world.resource::<ZoneLevel>().0, 3);
+    }
+
+    #[test]
+    fn an_emulate_row_starts_the_player_already_emulating() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("rootkit".into());
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let emulation = game
+            .world
+            .get::<Emulation>(game.player_entity())
+            .expect("the player is emulating");
+        assert_eq!(emulation.species, "rootkit");
+        // Long enough that no fight the arena stages lapses it mid-measurement
+        // — the point is the kit swap, not `EMULATION_ROUNDS`'s own duration.
+        assert!(emulation.rounds_left > 100);
+    }
+
+    #[test]
+    fn an_unknown_emulate_species_is_an_err_naming_it() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("not_a_real_species".into());
+
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("not_a_real_species"), "{err}");
     }
 
     #[test]

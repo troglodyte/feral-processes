@@ -13,11 +13,15 @@ cooldown.
 
 What carries over and what does not:
 
-- Your own HP, your Power reserve, your class's own pace and its extra swing if it has one — none
-  of that changes. You are still you underneath it.
+- Your own HP, your Power reserve, your class's own pace and its extra swing if it has one,
+  Decompile, and any stat points you've bought with Perk Points or a talent all stay exactly as
+  they are.
+- The image replaces your base attack and mitigation, your basic attacks and reach, your
+  affinity, and the rest of your routines — your own class affinity doesn't add on top while
+  it holds.
 - Worn gear still adds to your attack and mitigation on top of whatever the image is worth.
-- A Kernel Ring's fidelity perk raises how much an image is worth at every level you hold it, so
-  the same image gets stronger as you invest in it.
+- A perk bought with Perk Points raises how much an image is worth at every level you hold it,
+  so the same image gets stronger as you invest in it.
 
 While it holds, your own tile draws the image instead of you, and keeps a ring in your own colour
 so you can still pick yourself out among a crowd of them.

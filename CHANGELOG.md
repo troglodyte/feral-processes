@@ -42,6 +42,30 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.203
+
+**An opportunity attack on a battle map now shows a `!` over the body that
+took it and plays a sound of its own.** Stepping out of a hostile's reach,
+or running a routine beside one, provokes a free swing, but that swing used
+to look and sound exactly like any other blow, so you couldn't tell that an
+interrupt had happened. The yellow `!` pops over whoever reacted, and a
+short double blip plays alongside the ordinary hit or miss.
+
+**Compiling the most you can afford now tells you when Power is what's
+short.** If the compile screen had nothing affordable, it always said "Not
+enough resources", even with a full pack and an empty Power reserve. It now
+gives the same answer compiling by hand gives, and names Power when that's
+the problem.
+
+**The base is no longer heard from out in the field.** Your crew cutting
+rock, or two programs brawling at home, could be heard anywhere in the
+world. Those sounds now play only while you're in the base, the same place
+their flashes are drawn.
+
+**The compiling progress box is now a small window instead of one that
+covers most of the screen.** It holds two lines and a bar, but it used to
+be as wide as the largest popups in the game.
+
 ## 0.13.202
 
 **Five wild programs of the same kind now close ranks and fight you as one

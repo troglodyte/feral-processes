@@ -6,6 +6,7 @@
 //! emits and the reap that clears the fallen out of their group in one file
 //! is what makes that claim checkable by reading rather than by grepping.
 
+use crate::game::kit::Kit;
 use crate::tactical::TacticalBattle;
 use crate::*;
 
@@ -330,12 +331,13 @@ impl Game {
     /// would spend a `GameRng` draw before the band roll and break every
     /// draw-count assertion `resolve_attack` carries.
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
-        let natural = self
-            .world
-            .get::<Creature>(entity)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .and_then(|def| def.moves.first().map(|mv| mv.range()))
-            .unwrap_or(crate::tuning::PLAYER_UNARMED_DAMAGE);
+        let natural = match self.kit_of(entity) {
+            Kit::Unarmed => crate::tuning::PLAYER_UNARMED_DAMAGE,
+            Kit::Innate(def) => def
+                .moves
+                .first()
+                .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range()),
+        };
         self.attack_range(entity, natural)
     }
 

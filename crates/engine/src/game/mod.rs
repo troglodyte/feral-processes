@@ -29,6 +29,7 @@ pub(crate) mod extraction;
 pub(crate) mod field;
 pub(crate) mod gear_power;
 pub(crate) mod inspection;
+pub(crate) mod kit;
 pub(crate) mod lifecycle;
 pub(crate) mod listen;
 pub(crate) mod memories;

@@ -2,6 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
+use crate::game::kit::Kit;
 use crate::tactical::TacticalBattle;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
@@ -103,20 +104,18 @@ impl Game {
                 .and_then(|def| def.range)
                 .unwrap_or(crate::tuning::TACTICAL_MELEE_RANGE);
         }
-        self.world
-            .get::<Creature>(actor)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .and_then(|species| {
-                species
-                    .basic_attacks()
-                    .iter()
-                    .map(|a| match a.ranged {
-                        true => crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
-                        false => crate::tuning::TACTICAL_MELEE_RANGE,
-                    })
-                    .max()
-            })
-            .unwrap_or(crate::tuning::TACTICAL_MELEE_RANGE)
+        match self.kit_of(actor) {
+            Kit::Unarmed => crate::tuning::TACTICAL_MELEE_RANGE,
+            Kit::Innate(species) => species
+                .basic_attacks()
+                .iter()
+                .map(|a| match a.ranged {
+                    true => crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+                    false => crate::tuning::TACTICAL_MELEE_RANGE,
+                })
+                .max()
+                .unwrap_or(crate::tuning::TACTICAL_MELEE_RANGE),
+        }
     }
 
     /// Holds `actor`'s next `recharge` rounds of swings narrow.
@@ -1199,21 +1198,17 @@ impl Game {
         let Some(kind) = effect.affinity_kind() else {
             return AFFINITY_NEUTRAL;
         };
-        if actor == self.player_entity() {
+        let species = match self.kit_of(actor) {
+            Kit::Innate(def) => def.affinities.get(kind),
+            Kit::Unarmed if actor != self.player_entity() => AFFINITY_NEUTRAL,
             // `affinity_with_perk` is the class-plus-perk combination,
             // clamped — the one place it's computed. `player_affinity_for`
             // (`classes.rs`) calls the same function for a class not yet
             // written to `PlayerIdentity`, which is what lets
             // `starter_routine_rows` price the creation wizard's picker
             // against a class the player is only considering.
-            return self.affinity_with_perk(self.player_class_affinity(kind), kind);
-        }
-        let species = self
-            .world
-            .get::<Creature>(actor)
-            .and_then(|c| self.species_affinities(&c.species))
-            .map(|a| a.get(kind))
-            .unwrap_or(AFFINITY_NEUTRAL);
+            Kit::Unarmed => return self.affinity_with_perk(self.player_class_affinity(kind), kind),
+        };
         // Talents are the *companion's* axis, in the creature arm only: perks
         // are the player's, and the two never stack. Clamped the same way the
         // perk arm above is, and for the same reason — a mod's tree may author

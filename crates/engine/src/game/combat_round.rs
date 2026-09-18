@@ -2,6 +2,7 @@
 //! effective stats, and rendering the result as a `BattleView`.
 
 use crate::abilities::PassiveTrigger;
+use crate::game::kit::Kit;
 use crate::tuning::{
     ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS, PLAYER_UNARMED_DAMAGE,
     WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
@@ -572,8 +573,12 @@ impl Game {
         entity: Entity,
         distance: Option<u32>,
     ) -> (String, battle::DamageRange) {
-        if entity == self.player_entity() {
-            return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
+        match self.kit_of(entity) {
+            Kit::Unarmed if entity == self.player_entity() => {
+                return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
+            }
+            Kit::Unarmed => return ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
+            Kit::Innate(_) => {}
         }
         let rolled = self
             .roll_species_move_in_range(entity, distance)
@@ -704,12 +709,10 @@ impl Game {
         entity: Entity,
         distance: Option<u32>,
     ) -> Option<AbilityDef> {
-        let species_id = self.world.get::<Creature>(entity)?.species.clone();
-        let all = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .map(|s| s.basic_attacks())?;
+        let all = match self.kit_of(entity) {
+            Kit::Unarmed => return None,
+            Kit::Innate(def) => def.basic_attacks(),
+        };
         let moves: Vec<AbilityDef> = match distance {
             None => all,
             Some(d) => all

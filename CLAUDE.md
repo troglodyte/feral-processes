@@ -995,6 +995,23 @@ relying on one, and correct all three places if it has moved.
   is a strictly-positive dot product and whose evasion enters at
   `Game::defender_profile_against`, the wrapper around `combatant_profile`
   that the AI, both telegraph marks and the roll all read through.
+- **`tuning::FORMATIONS` is the whole of what a squad is, and an absent
+  `components::Squad` is footprint 1, actions 1, swing share 1 at every
+  reader.**
+- **A body's cells come from `TacticalBattle::cells_of` and its reach from
+  `reach::gap`, never a bare anchor**, and a footprint rule is only tested by
+  a test with a real squad in it.
+- **A body is shaped before it is seated**, `set_shape`'s assert, because
+  `place` can only check the footprint it already knows about.
+- **A turn ends when `actions_left` reaches zero, not when a body acts**, and
+  `hand_on_turn`'s "still the one acting" guard sits beside that rather than
+  under it.
+- **A squad is never saved, and folding happens after the opening bearing is
+  taken** — no world `Position` and no `Tamed`, so a pack folded too early
+  degrades silently rather than failing.
+- **A squad's death pays each remaining member, its capture is priced as the
+  lead, and its disbanding is not damage** — so only the capture's cost goes
+  through `Game::apply_damage`.
 
 ### Items, gear and economy
 

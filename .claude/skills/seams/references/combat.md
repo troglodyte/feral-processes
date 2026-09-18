@@ -1502,3 +1502,54 @@
   `Game::body_in_cover` for the one the player is aiming at — and both, with
   `TacticalView::covered`, are cleared by `TacticalView::frozen`. See
   `seam:tactical-cover`.
+
+## Tactical squads
+
+`tuning::FORMATIONS` is the whole table — five of one species, footprint 2,
+two actions, `swing_share` 0.5, the noun and the `^` mark — and it is in
+`tuning.rs` rather than `assets/` because how hard the game is, is not
+moddable. **A single body is not a formation row**: every reader treats an
+absent `components::Squad` as footprint 1, actions 1, share 1, which is what
+keeps the whole feature off the ordinary path.
+
+The trap is that a squad is the first body that is **not one cell**, and
+every reader that measured from a bare anchor was silently right until it
+existed. `TacticalBattle::cells_of`/`footprint_of` and `reach::gap` are the
+doors; a reader left on `distance` disagrees with the door beside it rather
+than failing to compile. Two shipped that way and both had the same shape: a
+squad's own four cells counted as walls in its *own* `movement_field`, so it
+could not step right or down at all, and `ai.rs` measured anchor-to-anchor
+while `tactical_attack` measured `gap`, so a squad adjacent along its bottom
+edge declined to swing and tried to walk — which the first bug then
+prevented. Neither failed a test, because every fixture that could see them
+was hand-built at footprint 1. **A footprint rule needs a test with a real
+squad in it.**
+
+A squad's shape is **set before it is seated**, and `set_shape`'s
+`debug_assert` is what holds that: `place` validates the footprint it knows
+about, so a body seated while still reading as one cell has its block checked
+against nothing, and widening it afterwards leaves two bodies overlapping
+with no refusal anywhere. That ordering was correct for a while only because
+`deploy::plan` reserved a clear block two files away — an invariant in
+another module is not an invariant.
+
+`actions_left` replaced `acted`, and the turn ends when it reaches zero
+rather than when a body acts. `hand_on_turn`'s existing "the body that acted
+is still the one acting" guard sits **beside** the new one, not under it: a
+body killed by its own fumble or its own blast has already left the order and
+`remove` handed the turn on as it went, so a second action must not
+resurrect it.
+
+Three omissions carry the rest. A squad has no world `Position` and no
+`Tamed`, which is what keeps it out of `save.rs` — so folding must happen
+**after** the opening bearing is taken off the original pack, or
+`gather_pack` reads a pack of one and the bearing degenerates, both silently.
+It does carry `Creature` (`group_pack` drops a member without one) and
+`StatusEffects` (`arm_status` is a documented no-op without it, while
+`use_ability` logs the condition landing regardless — so a squad read as
+immune to Exposed while the log said otherwise). Death pays each **remaining
+member's** own payout with the overkill shared as a *parameter*, never by
+writing a member's `Stats`; a capture takes the lead and prices the roll as
+the lead, not as the summed block; and disbanding hands each member back at
+the squad's Integrity fraction, floored at 1, which is deliberately **not**
+damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.

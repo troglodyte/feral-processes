@@ -521,8 +521,9 @@ pub(super) fn draw_tactical_map(
         )
     });
 
-    // A green `+` bouncing over anyone just healed.
-    fx.draw_heal_marks(painter, tile_px, glyph_px, |cell| {
+    // A green `+` bouncing over anyone just healed, a `!` over anyone who
+    // just took an opportunity swing.
+    fx.draw_cell_marks(painter, tile_px, glyph_px, |cell| {
         tile_origin_px(
             cell,
             center,
@@ -1963,6 +1964,43 @@ mod tests {
             painted_text(&shapes).iter().any(|t| t == "+"),
             "a heal cue must draw a + over the healed body: {:?}",
             painted_text(&shapes)
+        );
+    }
+
+    /// A reaction draws a `!` over the *reactor's* cell, `Heal`'s mark
+    /// with its own glyph — the one thing that tells an interrupt from an
+    /// ordinary swing on the board.
+    #[test]
+    fn a_reaction_draws_a_bang_over_the_reactors_cell() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let cell = view.bodies[0].cell;
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![TacticalFxCue {
+                pos: cell,
+                kind: TacticalFxKind::Reaction,
+            }],
+            true,
+        );
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let text = painted_text(&shapes);
+        assert!(
+            text.iter().any(|t| t == "!"),
+            "a reaction cue must draw a ! over the reactor: {text:?}"
+        );
+        assert!(
+            !text.iter().any(|t| t == "+"),
+            "and not a heal's mark: {text:?}"
         );
     }
 

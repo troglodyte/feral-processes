@@ -437,3 +437,42 @@ fn a_run_that_ends_mid_compile_still_gets_its_defeat_cue() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+/// `stocked_app` with the player's reserve lowered to `power` through the
+/// save, `app_with_player_routines`' route in.
+fn stocked_app_at_power(seed: u32, power: f32) -> App {
+    let mut app = stocked_app(seed);
+    let path = scratch_path("craft_power", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.power = power;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// `[M]` with nothing affordable says *why* — the reserve, when the pack
+/// could pay. It used to answer "Not enough resources" for both, which sent
+/// a player with a full pack and a flat reserve looking for materials.
+#[test]
+fn compiling_the_most_with_a_flat_reserve_names_power_not_materials() {
+    let mut app = stocked_app_at_power(711, 1.0);
+    open_compile_of(&mut app, "ice_breaker");
+    assert_eq!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .max_craftable(&ItemId::from("ice_breaker"), false),
+        0,
+        "the fixture must leave nothing affordable"
+    );
+
+    app.handle_key(GameKey::Char('M'));
+
+    let said = app.status_line.clone().unwrap_or_default();
+    assert!(said.contains("Power"), "should name the reserve: {said:?}");
+    assert!(!said.contains("resources"), "and not the pack: {said:?}");
+    assert_eq!(app.mode, Mode::Playing);
+}

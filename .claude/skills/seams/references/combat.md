@@ -1193,12 +1193,18 @@
   a Hit cue drives `EffectKind::Hit`'s existing wash and spark burst
   through a second list (`Fx::tactical_flashes`, board cells) rather than
   a second implementation. A Heal has no match in `EffectKind`'s table at
-  all, so it gets its own list (`Fx::heal_marks`) and its own draw call
-  (`draw_heal_marks`), tinted `palette::HEALTHY` — no new role needed,
+  all, so it gets its own list (`Fx::cell_marks`) and its own draw call
+  (`draw_cell_marks`), tinted `palette::HEALTHY` — no new role needed,
   since a body's Integrity coming back is exactly what that role already
   means — and lifted by `(PI * HEAL_MARK_BOUNCES * t).sin().abs()`, whose
   `abs()` is what keeps the curve touching its rest position at the start,
-  the middle and the end rather than dipping below it. Both lists are
+  the middle and the end rather than dipping below it. **A reaction is the
+  third kind** (`TacticalFxKind::Reaction`, pushed by `Game::provoke` at the
+  *reactor's* cell) and the second mark: `CellMark`'s `MarkKind` owns the
+  glyph, hue, life and height curve, so a `!` in `ATTENTION` that pops and
+  a `+` that bounces are one list and one draw rather than two copies of
+  the centring. gui's `frame_cues` also hears it, `SoundEvent::Reaction`,
+  off the same queue — not gated on base space. Both lists are
   cleared, not merely left to expire, the moment `begin_frame`'s
   `in_battle` goes false — board cell indices are reused between fights,
   `clear_bars()`'s own reason. See

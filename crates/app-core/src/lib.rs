@@ -856,6 +856,11 @@ pub enum SoundEvent {
     /// which is the only reason the variant exists rather than the cue
     /// reusing one.
     Mine,
+    /// A body on a battle map took an opportunity swing. Heard *beside* the
+    /// swing's own hit or miss, which cannot tell an interrupt from any
+    /// other blow. `Mine`'s arrangement: it comes off the engine's tactical
+    /// fx queue (`TacticalFxKind::Reaction`), never pushed by `App`.
+    Reaction,
 }
 
 /// Which pane of the HUD's info column is open.

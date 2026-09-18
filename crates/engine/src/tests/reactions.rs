@@ -505,3 +505,48 @@ fn the_movement_overlay_marks_the_cells_that_provoke() {
         "a step that stays in reach was marked as costing something"
     );
 }
+
+/// A reaction is cued at the *reactor's* cell, so the board can mark who
+/// took the swing rather than only who it landed on — the one thing a
+/// reaction's streak and blow share with any other swing.
+#[test]
+fn a_reaction_is_cued_at_the_reactor() {
+    let mut game = game();
+    let (_, hostile) = face_off(&mut game);
+    let at = cell(&game, hostile);
+    game.take_tactical_fx();
+
+    assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Moved);
+
+    let reactions: Vec<_> = game
+        .take_tactical_fx()
+        .into_iter()
+        .filter(|c| c.kind == crate::resources::TacticalFxKind::Reaction)
+        .collect();
+    assert_eq!(
+        reactions,
+        vec![crate::resources::TacticalFxCue {
+            pos: at,
+            kind: crate::resources::TacticalFxKind::Reaction,
+        }],
+        "one reaction, cued where the hostile stands"
+    );
+}
+
+/// And an ordinary step cues none, or the mark would be on every move.
+#[test]
+fn a_step_that_provokes_nobody_cues_no_reaction() {
+    let mut game = game();
+    face_off(&mut game);
+    game.take_tactical_fx();
+
+    // North stays beside the hostile, `a_step_that_stays_in_reach_provokes_nobody`'s step.
+    assert_eq!(game.tactical_step((0, 1)), StepOutcome::Moved);
+
+    assert!(
+        game.take_tactical_fx()
+            .iter()
+            .all(|c| c.kind != crate::resources::TacticalFxKind::Reaction),
+        "a step that provoked nobody was cued as a reaction"
+    );
+}

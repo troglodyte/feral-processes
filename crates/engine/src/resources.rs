@@ -844,6 +844,10 @@ impl BoltQueue {
 pub enum TacticalFxKind {
     Hit,
     Heal,
+    /// A body took an opportunity swing, cued at the *reactor's* cell
+    /// before the blow — the swing itself sounds and streaks like any
+    /// other, so this is the one thing that says it was an interrupt.
+    Reaction,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

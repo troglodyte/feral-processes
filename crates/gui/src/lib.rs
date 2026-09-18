@@ -602,6 +602,7 @@ fn frame(
     // Effects are drained every frame whether or not they'll be drawn,
     // so a disabled `Fx` can't leave the engine's queue at its cap.
     let in_battle = fe.app.mode.is_battle();
+    let in_base = fe.app.game.as_ref().is_some_and(|g| g.base_pos().is_some());
     let (effects, transits, bolts, tactical_fx, last_log) = match &mut fe.app.game {
         Some(game) => (
             game.take_effects(),
@@ -614,7 +615,7 @@ fn frame(
     };
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
-    for event in frame_cues(queued, &effects) {
+    for event in frame_cues(queued, &effects, &tactical_fx, in_base) {
         sounds.play(&mut commands, event, fe.volume);
     }
     fe.fx
@@ -666,13 +667,23 @@ fn frame(
 /// the engine already knows. A brawl deliberately does *not* suppress it:
 /// two programs fighting across the base has nothing to do with the step the
 /// player just took.
+///
+/// A third, a battle map's reaction, comes off the tactical fx queue and
+/// plays at most once a frame the same way.
+///
+/// **The two base kinds are heard only from inside base space**, `in_base` being
+/// `Game::base_pos().is_some()`. The queue is base-space by construction —
+/// `render/base.rs` suppresses its flashes everywhere else for that reason —
+/// and a crew keeps cutting while the player is out in the field.
 fn frame_cues(
     queued: Vec<SoundEvent>,
     effects: &[feral_processes_engine::resources::VisualEffect],
+    tactical_fx: &[feral_processes_engine::TacticalFxCue],
+    in_base: bool,
 ) -> Vec<SoundEvent> {
     use feral_processes_engine::EffectKind;
 
-    let sounded = |kind: EffectKind| effects.iter().any(|e| e.kind == kind);
+    let sounded = |kind: EffectKind| in_base && effects.iter().any(|e| e.kind == kind);
     let mining = sounded(EffectKind::Mine);
     let mut cues: Vec<SoundEvent> = queued
         .into_iter()
@@ -684,6 +695,13 @@ fn frame_cues(
     // A brawl has no clip of its own — see `EffectKind::Brawl`.
     if sounded(EffectKind::Brawl) {
         cues.push(SoundEvent::Hit);
+    }
+    // A battle map is not base space, so `in_base` does not gate this one.
+    if tactical_fx
+        .iter()
+        .any(|c| c.kind == feral_processes_engine::TacticalFxKind::Reaction)
+    {
+        cues.push(SoundEvent::Reaction);
     }
     cues
 }
@@ -708,7 +726,12 @@ mod tests {
     #[test]
     fn a_mining_cue_replaces_the_step_the_same_keypress_queued() {
         assert_eq!(
-            frame_cues(vec![SoundEvent::Step], &[effect(EffectKind::Mine)]),
+            frame_cues(
+                vec![SoundEvent::Step],
+                &[effect(EffectKind::Mine)],
+                &[],
+                true
+            ),
             vec![SoundEvent::Mine],
         );
     }
@@ -724,7 +747,9 @@ mod tests {
                     effect(EffectKind::Mine),
                     effect(EffectKind::Mine),
                     effect(EffectKind::Mine),
-                ]
+                ],
+                &[],
+                true,
             ),
             vec![SoundEvent::Mine],
         );
@@ -738,6 +763,8 @@ mod tests {
         let cues = frame_cues(
             vec![SoundEvent::Hit, SoundEvent::Step, SoundEvent::Victory],
             &[effect(EffectKind::Mine)],
+            &[],
+            true,
         );
         assert_eq!(
             cues,
@@ -751,7 +778,12 @@ mod tests {
     #[test]
     fn a_brawl_sounds_alongside_the_step_rather_than_instead_of_it() {
         assert_eq!(
-            frame_cues(vec![SoundEvent::Step], &[effect(EffectKind::Brawl)]),
+            frame_cues(
+                vec![SoundEvent::Step],
+                &[effect(EffectKind::Brawl)],
+                &[],
+                true
+            ),
             vec![SoundEvent::Step, SoundEvent::Hit],
         );
     }
@@ -763,7 +795,52 @@ mod tests {
         assert_eq!(
             frame_cues(
                 vec![SoundEvent::Step],
-                &[effect(EffectKind::Hit), effect(EffectKind::Destroyed)]
+                &[effect(EffectKind::Hit), effect(EffectKind::Destroyed)],
+                &[],
+                true,
+            ),
+            vec![SoundEvent::Step],
+        );
+    }
+
+    /// A reaction on a battle map has a clip of its own, heard wherever the
+    /// fight is — a battle map is not base space, so `in_base` has no say.
+    #[test]
+    fn a_reaction_is_heard_on_a_battle_map() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+        let cue = |kind| TacticalFxCue { pos: (1, 1), kind };
+        assert_eq!(
+            frame_cues(
+                vec![SoundEvent::Hit],
+                &[],
+                &[cue(TacticalFxKind::Reaction), cue(TacticalFxKind::Reaction)],
+                false,
+            ),
+            vec![SoundEvent::Hit, SoundEvent::Reaction],
+        );
+        assert_eq!(
+            frame_cues(
+                vec![SoundEvent::Hit],
+                &[],
+                &[cue(TacticalFxKind::Hit)],
+                false
+            ),
+            vec![SoundEvent::Hit],
+            "only a reaction has the clip"
+        );
+    }
+
+    /// Every effect the engine queues is base-space, so a crew cutting rock
+    /// or two programs brawling at home is not heard out in the field — and
+    /// the step the player just took there is theirs, not a bump into rock.
+    #[test]
+    fn the_base_is_not_heard_from_outside_it() {
+        assert_eq!(
+            frame_cues(
+                vec![SoundEvent::Step],
+                &[effect(EffectKind::Mine), effect(EffectKind::Brawl)],
+                &[],
+                false,
             ),
             vec![SoundEvent::Step],
         );

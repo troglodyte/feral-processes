@@ -488,7 +488,7 @@ const MIN_POPUP_ROWS: usize = 2;
 /// One table rather than a match at each reader: `popup_max_rows` and
 /// `draw_popup` have to agree about the height, or a height test passes
 /// against a box the drawing code sizes differently.
-fn popup_fractions(size: PopupSize) -> (f32, f32) {
+pub(super) fn popup_fractions(size: PopupSize) -> (f32, f32) {
     match size {
         PopupSize::Large => (0.88, 0.85),
         PopupSize::Small => (0.5, 0.85),

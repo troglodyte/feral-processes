@@ -94,13 +94,10 @@ impl App {
                     self.mode = Mode::Playing;
                     return;
                 };
-                let max = game.max_craftable(&result, self.careful_craft);
-                if max == 0 {
-                    let name = game.item_name(&result).to_string();
-                    self.refuse(format!("Not enough resources to compile any {name}."));
-                    self.mode = Mode::Playing;
-                    return;
-                }
+                // Nothing affordable still commits one, so the refusal is
+                // `begin_hand_craft`'s: it knows whether the pack or the
+                // reserve is short, and a line written here did not.
+                let max = game.max_craftable(&result, self.careful_craft).max(1);
                 self.commit_craft(result, max);
             }
             GameKey::Enter => {

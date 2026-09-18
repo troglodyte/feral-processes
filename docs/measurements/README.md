@@ -54,6 +54,15 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-18 — Fitting `EMULATION_EDGE`](2026-09-18-emulation-edge.md) —
+  `EMULATION_EDGE` (1.25) stays: it roughly doubles the win rate of an
+  otherwise-coinflip fight for every ordinary species emulated (33.5% →
+  87-94%), and dropping it to 1.05 barely moves the strongest species
+  (99.5% → 99.0%) while gutting everyone else's benefit. Carries the open
+  finding that a boss-tier image already doubles the player's own raw
+  attack from `growth_multiplier` alone, before the constant this task
+  tunes is even applied — not a lever this task's scope can pull.
+
 - [2026-09-17 — The arena cannot see opportunity attacks](2026-09-17-tactical-reactions-arena-blind.md)
   — `dev-arenas/tactical-full-group.ron` is identical to every digit before
   and after reactions shipped, because **zero fire in fifty reps**: the

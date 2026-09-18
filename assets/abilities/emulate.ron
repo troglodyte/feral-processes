@@ -10,7 +10,10 @@
     effect: Emulate(rounds: 10),
     cooldown: 4,
     power_cost: 20.0,
-    // Sits above the opening tier alongside the rest of the routine tree —
-    // Task 7 may retune this once the arena has a number to move it by.
+    // Sits above the opening tier alongside the rest of the routine tree.
+    // Task 7's arena measurement (`docs/measurements/
+    // 2026-09-18-emulation-edge.md`) was about the per-species power ratio
+    // at a fixed level, not about when the routine unlocks, and gave no
+    // reason to move this.
     research_zone: 2,
 )

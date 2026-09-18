@@ -5345,13 +5345,25 @@ pub fn routine_research_cost(scope_rank: u8, version: (u32, u32), zone: u32) -> 
 /// The flat multiplier `progression::emulated_stats` applies to both attack
 /// and mitigation, on top of the species' own growth. Kept above 1.0 so an
 /// emulation always beats a wild program of the same species at the same
-/// level — the strength the feature exists to sell. A guess, not a
-/// measurement: `balance_sim` models no abilities, so this is retuned
-/// against the arena (todo #100 Task 7).
+/// level — the strength the feature exists to sell. `balance_sim` models no
+/// abilities, so this was fitted against the arena instead (todo #100 Task
+/// 7): kept at its guessed value, `docs/measurements/
+/// 2026-09-18-emulation-edge.md`. Against a coinflip fight an ordinary
+/// species roughly doubles the win rate at 1.25 and barely more than a
+/// tenth of that at 1.05 — the constant this task tunes is doing real work
+/// for the ordinary roster. The strongest species (an apex boss) already
+/// outclasses the player's own kit at 1.25 and is nearly as strong at 1.05,
+/// because a boss's `growth_multiplier` (2.0) alone doubles the player's own
+/// fixed growth rate before this multiplier is ever applied — a species-level
+/// gap this one global constant cannot close either way, recorded as an open
+/// risk rather than something a lower number here would fix.
 pub const EMULATION_EDGE: f32 = 1.25;
 
-/// Added to `EMULATION_EDGE` per level of `Perk::EmulationFidelity`. A
-/// guess alongside `EMULATION_EDGE`, for the same reason.
+/// Added to `EMULATION_EDGE` per level of `Perk::EmulationFidelity`. Only
+/// ever pushes every species further in the same direction, so it cannot
+/// narrow the boss-species gap `EMULATION_EDGE`'s own doc records — left at
+/// its guessed value, untested by the 2026-09-18 measurement for that
+/// reason.
 pub const EMULATION_EDGE_PER_PERK_LEVEL: f32 = 0.1;
 
 /// How many rounds `AbilityEffect::Emulate` holds an image for, once that

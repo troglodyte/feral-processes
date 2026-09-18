@@ -1,0 +1,27 @@
+// EMULATION_EDGE's fitting scenario (todo #100 Task 7) — and the file that
+// carries the risk the design spec named: "a strong species could replace
+// the player's build". A geared level-20 player, alone (no party, so
+// nothing but the player's own kit is doing the fighting), against six
+// rootkits at zone 3 — past `zone_group_cap`'s ceiling of 4, deliberately,
+// because on-curve the player's own kit already wins this at 98%
+// (`opening-fight.ron`'s shape at a higher level); this pack is a genuine
+// coinflip instead, which is what makes a kit swap's effect visible at all.
+//
+// `emulate: Some("wintermute")` is the strongest species reachable — an
+// apex boss, `is_boss: true`, `growth_multiplier: 2.0` against every
+// ordinary species' 1.0-1.5 and the player's own fixed 1.0. Delete the
+// `emulate:` row for the control (the player's own geared kit, no image).
+// Swap the species to compare another image; `docs/measurements/
+// 2026-09-18-emulation-edge.md` has the sweep across the roster.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    emulate: Some("wintermute"),
+    opponents: [(species: "rootkit", count: 6)],
+    reps: 200,
+    seed: 7,
+)

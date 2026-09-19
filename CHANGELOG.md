@@ -42,6 +42,29 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.206
+
+**A base whose Recharger Nodes have all run dry now lights itself again.**
+Before, with no Power Cell on any shelf, nobody was sent to make one: no
+work order names Power Cells, so a Power Conduit could stand idle while the
+grid sat at the Home's four for good. Now a program goes to a lit Conduit and
+makes cells, its worker carries them to a Depot, and the Rechargers are fed
+from there.
+
+**When the grid is short, a Power Conduit is the last machine to go dark,
+and a Mining Node the one before it.** Before, which machines were cut
+depended only on where they stood, so a Compiler in the corner of a base
+could take the Home's supply and leave the Conduit dark. The order is worked
+out from what each machine makes, so a modded fuel maker ranks the same way
+without being told to.
+
+**Your crew holds off cutting a marked cell until the base has a Blank
+Substrate to floor it with.** Before, a crew opened every marked cell and
+floored only as many as it had Substrate for; the rest was bare ground that
+knit back into rock, and every swing that opened it was owed again. Now each
+cut claims its floor tile up front, and the crew says once when it is holding
+off. Your own swings are not held.
+
 ## 0.13.205
 
 **In a fight, you can emulate a species whose image you have learned, and

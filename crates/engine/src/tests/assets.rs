@@ -1775,6 +1775,47 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
     );
 }
 
+/// The bootstrap has to reach the bootstrapper. `ledger` cuts the machines
+/// that can restart the grid last, so a base collapsed to the Home's free
+/// supply recovers only if that supply covers one of each of them — a
+/// Mining Node and a Power Conduit standing dark behind a Compiler that ate
+/// the Home's 4 is how a run used to die with its own way out standing idle.
+///
+/// The set is named rather than merely counted: it is *derived* from the
+/// item catalogue (`power::fuel_chain`), so a new `grid_fuel` or a new
+/// ingredient in the Power Cell's recipe silently widens it, and the widened
+/// set may no longer fit the Home. Change the list deliberately.
+#[test]
+fn the_home_alone_lights_every_kind_that_restarts_the_grid() {
+    let game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let items = game.world.resource::<ItemDb>();
+    let chain = crate::game::base::power::fuel_chain(items);
+
+    let mut tier: Vec<&str> = db
+        .all()
+        .filter(|def| def.runs_a_job())
+        .filter(|def| crate::game::base::power::restarts_the_grid(def, &chain))
+        .map(|def| def.id.as_str())
+        .collect();
+    tier.sort_unstable();
+    assert_eq!(
+        tier,
+        ["mining_node", "power_conduit"],
+        "the machines that outrank the rest of the base for power; the \
+         Winding Node's Charge Coil is a Power Cell *sink* and must not be here"
+    );
+
+    let home = db.get("home").expect("home ships");
+    let tier_draw: u32 = tier.iter().map(|id| db.get(id).unwrap().power_draw).sum();
+    assert!(
+        home.power_supply >= tier_draw,
+        "Home supplies {}, but one of each machine that can restart the grid \
+         draws {tier_draw} — a blackout would be permanent",
+        home.power_supply
+    );
+}
+
 /// A structure that both draws from the grid and supplies it is incoherent
 /// — the two would net against each other inside a single building rather
 /// than being separate roles on the base. Cheap enough to enforce outright

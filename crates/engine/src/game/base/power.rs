@@ -20,6 +20,8 @@ use std::collections::HashSet;
 use bevy_ecs::prelude::*;
 
 use crate::components::{Position, PowerFuel, Structure};
+use crate::items::ItemId;
+use crate::items_db::ItemDb;
 use crate::structures::{StructureDb, StructureDef};
 
 /// The result of one pass over every deployed `Structure`: what the base
@@ -49,13 +51,78 @@ pub(crate) fn is_fuelled(def: &StructureDef, fuel: Option<&PowerFuel>) -> bool {
     def.power_upkeep.is_none() || fuel.is_some_and(|f| f.ticks_left > 0)
 }
 
+/// Every item that can put charge back on the grid: anything a supplier can
+/// burn (`ItemDef::grid_fuel`), plus everything those are made out of,
+/// transitively through `ItemDef::craftable`.
+///
+/// **Derived from the item catalogue, never authored on a structure.** A
+/// `power_priority:` field would have said the same thing in twenty-five
+/// files, and a mod's own mining node would have shipped with the default —
+/// which reads at the keyboard exactly like the blackout this exists to
+/// prevent, since a base dies quietly rather than refusing anything. Derived,
+/// the rule *is* its own census: a structure outranks the rest precisely
+/// when what it puts out can light the grid again.
+///
+/// A **fixpoint** rather than a fixed depth or a recursive walk: a mod's fuel
+/// may sit any number of recipes above the raw its base mines, and a recipe
+/// that names itself would spin a recursive walk forever where this one
+/// simply stops adding.
+pub(crate) fn fuel_chain(items: &ItemDb) -> HashSet<ItemId> {
+    let mut chain: HashSet<ItemId> = items
+        .all()
+        .filter(|def| def.grid_fuel.is_some())
+        .map(|def| def.id.clone())
+        .collect();
+    loop {
+        let mut grew = false;
+        for id in chain.iter().cloned().collect::<Vec<_>>() {
+            let Some(recipe) = items.get(id.as_str()).and_then(|d| d.craftable.as_ref()) else {
+                continue;
+            };
+            for (ingredient, _) in &recipe.cost {
+                grew |= chain.insert(ingredient.clone());
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    chain
+}
+
+/// Whether what this structure puts out can restart the grid — the first key
+/// of `ledger`'s cut.
+///
+/// **Both output fields, not just `work`.** Nothing shipped assembles a grid
+/// fuel today, so a reader that asked `work.produces` alone would pass every
+/// shipped census and quietly drop a mod's fuel bench into the bottom tier.
+pub(crate) fn restarts_the_grid(def: &StructureDef, chain: &HashSet<ItemId>) -> bool {
+    let produces = def.work.as_ref().map(|w| &w.produces);
+    let assembles = def.assembles.as_ref().map(|a| &a.item);
+    produces
+        .into_iter()
+        .chain(assembles)
+        .any(|id| chain.contains(id))
+}
+
 /// Sums `power_supply` over every deployed structure and `power_draw` over
 /// every one whose def `StructureDef::runs_a_job()` — a machine draws
 /// whether or not anyone is posted to it (see the design spec's "A machine
 /// draws whether or not anyone is posted to it"). Machines beyond what the
 /// supply covers are cut in `(x, y)` order until the rest fit.
 ///
-/// Machines are sorted by position before the cut runs: bevy's query
+/// **The cut favours the machines that can restart the grid**, and only then
+/// falls back to position. A base whose supply has collapsed to the Home's
+/// free 4 recovers by mining Core Fragments and running the Power Conduit
+/// that turns them into Power Cells; cut in tile order alone, that supply
+/// goes to whichever machines happen to sit at the lowest `(x, y)` — so a
+/// Compiler drawing 3 in the corner of the base could darken a working
+/// Conduit and leave the run dead with its own way out standing idle.
+/// `restarts_the_grid` is the first sort key and `fuel_chain` is what it
+/// reads; an empty `ItemDb` authors no fuel, puts nothing in the top tier,
+/// and leaves the order exactly the tile order it was.
+///
+/// Machines are sorted by position *within* a tier: bevy's query
 /// iteration order is not stable, so two machines competing for the last
 /// unit of supply would resolve differently between runs otherwise. Same
 /// reason, and the same order, `systems::assembler_system` sorts by.
@@ -74,11 +141,12 @@ pub(crate) fn is_fuelled(def: &StructureDef, fuel: Option<&PowerFuel>) -> bool {
 /// A structure whose def is missing from `db` contributes nothing to either
 /// sum and is never dark — the same "an unknown kind is inert" shape the
 /// neighbouring base systems already use, rather than a panic.
-pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
+pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLedger {
+    let chain = fuel_chain(items);
     let mut supply = 0u32;
-    // (entity, (x, y), draw) for every deployed machine, collected before
-    // the cut runs so the sort sees the whole base at once.
-    let mut machines: Vec<(Entity, (i32, i32), u32)> = Vec::new();
+    // (entity, restarts-the-grid, (x, y), draw) for every deployed machine,
+    // collected before the cut runs so the sort sees the whole base at once.
+    let mut machines: Vec<(Entity, bool, (i32, i32), u32)> = Vec::new();
 
     for entity_ref in world.iter_entities() {
         let Some(structure) = entity_ref.get::<Structure>() else {
@@ -97,7 +165,12 @@ pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
                 .get::<Position>()
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
-            machines.push((entity_ref.id(), (pos.x, pos.y), def.power_draw));
+            machines.push((
+                entity_ref.id(),
+                restarts_the_grid(def, &chain),
+                (pos.x, pos.y),
+                def.power_draw,
+            ));
         }
     }
     // The entity rides along in the key, not just the tile: `place_structure`
@@ -105,16 +178,18 @@ pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
     // land two machines on one, and a stable sort on `tile` alone would then
     // break the tie on `world.iter_entities()` order — the exact instability
     // this sort exists to remove.
-    machines.sort_by_key(|(e, tile, _)| (*tile, *e));
+    // `!feeds` so `true` sorts first — the fuel chain keeps the supply, and
+    // the tile is what still decides between two of them.
+    machines.sort_by_key(|(e, feeds, tile, _)| (!*feeds, *tile, *e));
 
     let draw: u32 = machines
         .iter()
-        .map(|(_, _, machine_draw)| machine_draw)
+        .map(|(_, _, _, machine_draw)| machine_draw)
         .sum();
 
     let mut dark = HashSet::new();
     let mut budget = supply;
-    for (entity, _, machine_draw) in machines {
+    for (entity, _, _, machine_draw) in machines {
         if budget >= machine_draw {
             budget -= machine_draw;
         } else {

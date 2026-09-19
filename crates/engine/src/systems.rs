@@ -758,7 +758,8 @@ pub fn power_grid_system(world: &mut World) {
     let grid = {
         let world: &World = world;
         let db = world.resource::<StructureDb>();
-        crate::game::base::power::ledger(world, db)
+        let items = world.resource::<ItemDb>();
+        crate::game::base::power::ledger(world, db, items)
     };
     world.insert_resource(PowerGrid {
         supply: grid.supply,

@@ -83,6 +83,7 @@ impl App {
             field_cursor: None,
             tactical_cursor: None,
             pending_tactical: None,
+            pending_tactical_emulate: None,
             tactical_carry: 0.0,
             tactical_auto: false,
             excavate_cursor: None,

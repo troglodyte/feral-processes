@@ -462,6 +462,34 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar here either: a template built to save playing
+    /// up to Emulate has to actually carry a *usable* one — known, disked
+    /// into a slot — and a few images, or a session opens on the same
+    /// "research it first" wall this template exists to skip.
+    #[test]
+    fn the_emulation_template_starts_with_images_and_emulate_installed() {
+        let out = std::env::temp_dir().join("feral_processes_template_emulation_kit.bin");
+        generate("emulation", &out).unwrap();
+        let game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let images = game.emulation_options();
+        assert!(
+            images.len() > 1,
+            "a single image cannot show the picker choosing between two — got {} of them",
+            images.len()
+        );
+
+        let player = game.player_entity();
+        assert!(
+            game.routine_view(player)
+                .iter()
+                .any(|slot| slot.ability.as_deref() == Some("emulate")),
+            "known is not installed: `emulate` has to sit in an actual slot, \
+             or invoking it is still one more step the template was built to skip"
+        );
+    }
+
     /// Loading is not the bar for `chains`: it exists so that a session
     /// testing production chains starts with one *running*, and a template
     /// whose machines are misaligned by one tile would load perfectly and

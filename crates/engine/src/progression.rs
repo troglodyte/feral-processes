@@ -1,7 +1,9 @@
 use crate::components::{Experience, Stats};
+use crate::species::SpeciesDef;
 use crate::tuning::{
-    ATK_PER_LEVEL, DIFFICULTY_EASY_MAX, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION,
-    XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
+    ATK_PER_LEVEL, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
+    HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
+    XP_PER_LEVEL_STEP,
 };
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
@@ -149,6 +151,57 @@ pub fn kill_xp(victim_max_hp: i32, power_ratio: f64) -> u32 {
     }
     let factor = (power_ratio / DIFFICULTY_EASY_MAX).clamp(XP_CHALLENGE_FLOOR, XP_CHALLENGE_CEIL);
     ((victim_max_hp as f64 * factor).round() as u32).max(1)
+}
+
+/// What an emulated body fights with, in place of a `Kit::Innate`'s own
+/// `Stats` — see `progression::emulated_stats`.
+///
+/// Deliberately not `Stats`: an emulation never touches HP (`Stats` is
+/// never written by this feature — see spec §1 "Strength"), so a struct
+/// with the two fields it actually replaces cannot be mistaken for a
+/// third store of health.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EmulatedStats {
+    pub atk: i32,
+    pub mitigation: i32,
+}
+
+/// What emulating `def` as a `player_level`-level player, with
+/// `fidelity_level` levels of `Perk::EmulationFidelity` bought, fights
+/// with.
+///
+/// A species' base stats are level 1 (see `SpeciesDef::base_atk` and
+/// friends), so growing "to the player's level" is `levels_gained =
+/// player_level - 1` through `stats_after_levels` — the same growth a
+/// tamed member of `def` gets on level-up, at the species' own
+/// `growth_multiplier`. Both `atk` and `mitigation` then take
+/// `EMULATION_EDGE + EMULATION_EDGE_PER_PERK_LEVEL * fidelity_level`,
+/// rounded — `EMULATION_EDGE` sits above 1.0 so an emulation always beats
+/// a wild program of the same species at the same level.
+///
+/// Mitigation is not scaled by level even before the multiplier:
+/// `stats_after_levels` already carries it through untouched (percentage
+/// points approaching immunity — see `components::Stats::mitigation`), so
+/// only the multiplier moves it here. The `MAX_MITIGATION_PERCENT` cap is
+/// not applied in this function — that stays `Game::effective_mitigation`'s
+/// job, the same as for every other body.
+///
+/// `Game::kit_of` calls this for an emulating body, and the picker's
+/// preview calls it too, so the preview and the fight cannot disagree.
+pub fn emulated_stats(def: &SpeciesDef, player_level: u32, fidelity_level: u32) -> EmulatedStats {
+    let base = Stats {
+        hp: def.base_hp,
+        max_hp: def.base_hp,
+        atk: def.base_atk,
+        mitigation: def.base_mitigation,
+    };
+    let levels_gained = player_level.saturating_sub(1);
+    let grown = stats_after_levels(base, levels_gained, def.growth_multiplier);
+    let multiplier = EMULATION_EDGE + EMULATION_EDGE_PER_PERK_LEVEL * fidelity_level as f32;
+    EmulatedStats {
+        atk: (grown.atk as f32 * multiplier).round() as i32,
+        mitigation: (grown.mitigation as f32 * multiplier).round() as i32,
+    }
 }
 
 /// `base` after `levels_gained` level-ups at `growth_multiplier`, fully

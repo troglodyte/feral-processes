@@ -184,6 +184,13 @@ impl Game {
         // *recipient*, so this clears nothing for them in practice and is
         // here only so a reader doesn't have to know that to trust the loop.
         self.detamper(player);
+        // `Emulation` (todo #100) the same way, but silently — a fight
+        // ending is not a deliberate change of form, so this drops it
+        // without `Game::drop_emulation`'s log line. Only the player is
+        // meant to ever carry one (`seam:only-the-player-emulates`), but the
+        // party loop below repeats this clear anyway, defence in depth
+        // against a companion holding one by accident.
+        self.unemulate(player);
         // Every hostile still in the fight, not only the one passed in.
         // Survivors of a jack-out stay on the map, and a mirrored buff left
         // armed on one never ticks down — `effective_atk`/`effective_mitigation`
@@ -224,6 +231,13 @@ impl Game {
             self.uncloak(companion);
             self.disarm_reach_charge(companion);
             self.detamper(companion);
+            // Only the player is meant to ever carry `Emulation`
+            // (`seam:only-the-player-emulates`), but this clears it here
+            // too, defence in depth against a mod or a future bug handing
+            // one to a companion — the same belt-and-braces `install_disk`
+            // and `ability_unavailable` already apply at the other two
+            // doors.
+            self.unemulate(companion);
         }
     }
 
@@ -238,6 +252,16 @@ impl Game {
     fn uncloak(&mut self, entity: Entity) {
         if let Ok(mut body) = self.world.get_entity_mut(entity) {
             body.remove::<Cloaked>();
+        }
+    }
+
+    /// Drops `entity`'s emulation with no line — `uncloak`'s sibling and
+    /// reason. `Game::drop_emulation` is the door a deliberate drop (the
+    /// lapse, and Revert in todo #100 Task 4) logs through; a fight ending
+    /// is teardown, not a choice, so it gets no line here.
+    fn unemulate(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<Emulation>();
         }
     }
 

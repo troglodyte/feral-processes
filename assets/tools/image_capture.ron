@@ -1,0 +1,13 @@
+(
+    id: "image_capture",
+    name: "Image Extractor",
+    description: "Captures a downed process's full image — its shape and stats — so you can emulate it later.",
+    category: Image,
+    // No `yields`: an Image tool reads no pool. What it teaches is the
+    // downed program's own species, through `Game::image_yield`.
+    tier: 1,
+    // As slow as the Routine Extractor — pulling a whole image off a
+    // process is no quicker than pulling one routine out of it.
+    ticks: 40,
+    forge_cost: [("logic_wafer", 6), ("core_fragment", 16)],
+)

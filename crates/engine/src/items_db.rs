@@ -682,7 +682,7 @@ impl ItemDb {
     /// what the wizard offers plus a census rather than by a check inside
     /// the writer.
     ///
-    /// Four exclusions, each for its own reason. The **trade currency** is
+    /// Five exclusions, each for its own reason. The **trade currency** is
     /// the allowance itself, so buying it with itself is a no-op — its own
     /// filter rather than `ItemDef::banked`, the caravan's rule. The
     /// **craft currency** is what the Stack exists to pay you, and starting
@@ -694,16 +694,27 @@ impl ItemDb {
     /// buyable nowhere, so the wizard's flat allowance handing one over for
     /// free would let a new run skip the research→forge chain the whole
     /// feature exists to make you earn — `TOOL_CARRIER_VALUE`'s low price
-    /// would otherwise seat every carrier at the front of this shelf.
+    /// would otherwise seat every carrier at the front of this shelf. An
+    /// **Emulate disk** (`abilities::ability_disk_shelved`, todo #100 Task 4
+    /// decision 9) is barred for the same shape of reason: a new run
+    /// starting with one would skip the routine tree entirely for the one
+    /// routine unlocking it *is* the feature.
     ///
     /// Sorted `(price, id)` because `ItemDb` keys by `String` in a
     /// `HashMap`, so the rows — and the digit shortcuts over them — would
     /// otherwise land in a different order every run.
-    pub fn creation_shelf(&self) -> Vec<crate::views::StartingItemRow> {
+    pub fn creation_shelf(
+        &self,
+        abilities: &crate::abilities::AbilityDb,
+    ) -> Vec<crate::views::StartingItemRow> {
         let barred = |id: &ItemId| {
             Some(id) == self.trade_currency()
                 || Some(id) == self.craft_currency()
                 || id.tool_id().is_some()
+                || id
+                    .etched_ability()
+                    .and_then(|a| abilities.get(a))
+                    .is_some_and(|def| !crate::abilities::ability_disk_shelved(def))
         };
         let mut rows: Vec<crate::views::StartingItemRow> = self
             .all()
@@ -868,7 +879,9 @@ mod tests {
 
         let carrier_id = ItemId::tool(&crate::tools::ToolId("widget".to_string()));
         assert!(
-            db.creation_shelf().iter().all(|row| row.id != carrier_id),
+            db.creation_shelf(&crate::abilities::AbilityDb::default())
+                .iter()
+                .all(|row| row.id != carrier_id),
             "a tool carrier must never be offered on the creation shelf"
         );
     }

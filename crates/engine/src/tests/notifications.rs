@@ -293,6 +293,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::FirstTownRaid => "Game::run_town_raid",
             NotificationKind::FirstWorkOrder => "Game::queue_work_order",
             NotificationKind::FirstStatic => "Game::move_player, the movement hook",
+            NotificationKind::LearnedImage => "Game::extract_image_from_program",
             NotificationKind::LowPower => "Game::note_low_power, once a tick",
             NotificationKind::DownedProgram => "Game::bench_or_dissolve, the benched arm",
             NotificationKind::Breach => "Game::enter_next_zone",
@@ -331,7 +332,8 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::FirstWorkOrder
             | NotificationKind::FirstStatic
             | NotificationKind::LowPower
-            | NotificationKind::DownedProgram => Repeat::OnceEver,
+            | NotificationKind::DownedProgram
+            | NotificationKind::LearnedImage => Repeat::OnceEver,
             // The chain runs on every new game, so a briefing latched across
             // runs would leave a second playthrough's missions unexplained —
             // and a world holds more than one town, so a city announcing
@@ -348,6 +350,26 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::ResearchComplete => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
+    }
+}
+
+/// Final review F7: `NotificationKind::LearnedImage`'s latch key read
+/// `milestone_learned_image` despite grouping with the `OnceEver` tutorials
+/// above it — every one of that group's siblings carries a `tutorial_`
+/// prefix, and this one didn't. `latch_key`'s own doc says the string is
+/// what matters, but a string that contradicts its own group's naming is
+/// exactly the kind of drift a census exists to catch — this checks the
+/// convention `tutorials_latch_and_milestones_do_not` checks the policy for.
+#[test]
+fn every_oncever_latch_key_carries_the_tutorial_prefix() {
+    for kind in NotificationKind::all() {
+        if kind.def().repeat == Repeat::OnceEver {
+            assert!(
+                kind.latch_key().starts_with("tutorial_"),
+                "{kind} is OnceEver but its latch key {:?} doesn't carry the group's prefix",
+                kind.latch_key()
+            );
+        }
     }
 }
 

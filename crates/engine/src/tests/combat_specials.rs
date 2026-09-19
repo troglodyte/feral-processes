@@ -343,6 +343,7 @@ fn healing_an_ally_does_not_depend_on_a_valid_enemy_group() {
         BattleAction::Special {
             ability: 0,
             target: battle::SpecialTarget::Ally { slot: 0 },
+            image: None,
         },
     )
     .expect("an ally-targeted Special has no group to reject");

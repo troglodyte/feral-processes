@@ -333,7 +333,7 @@ impl Game {
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
         let natural = match self.kit_of(entity) {
             Kit::Unarmed => crate::tuning::PLAYER_UNARMED_DAMAGE,
-            Kit::Innate(def) => def
+            Kit::Innate(def) | Kit::Emulated { def, .. } => def
                 .moves
                 .first()
                 .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range()),

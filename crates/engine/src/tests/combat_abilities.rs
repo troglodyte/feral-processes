@@ -317,6 +317,7 @@ fn an_ability_on_cooldown_is_offered_but_refused() {
             BattleAction::Special {
                 ability: 0,
                 target: battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             }
         )
         .is_err(),
@@ -612,6 +613,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
         BattleAction::Special {
             ability: hot_patch,
             target: battle::SpecialTarget::Ally { slot: 0 },
+            image: None,
         },
     );
 
@@ -682,6 +684,7 @@ fn a_player_special_spends_its_authored_power_cost() {
     let special = round_cost(BattleAction::Special {
         ability: index,
         target: battle::SpecialTarget::AllEnemies,
+        image: None,
     });
 
     assert!(
@@ -2279,6 +2282,7 @@ fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right
         BattleAction::Special {
             ability: ability_index,
             target: battle::SpecialTarget::Ally { slot: 0 },
+            image: None,
         },
     )
     .expect(
@@ -2325,6 +2329,7 @@ fn an_empty_reserve_greys_a_special_and_refuses_the_same_plan() {
             BattleAction::Special {
                 ability: costed.index,
                 target: battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .is_err(),

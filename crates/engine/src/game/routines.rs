@@ -501,6 +501,21 @@ impl Game {
         if !self.owns_routine_holder(entity) {
             return Err("You don't control that program.".into());
         }
+        // Only the player emulates (`seam:only-the-player-emulates`).
+        // `ability_unavailable` is the gate an already-installed Emulate
+        // would meet at invocation time, but refusing here too means a
+        // companion never carries the routine at all — belt and braces
+        // rather than trusting every future writer of `Routines` to ask
+        // `ability_unavailable` before it fires.
+        if entity != self.player_entity()
+            && self
+                .world
+                .resource::<AbilityDb>()
+                .get(ability)
+                .is_some_and(|def| matches!(def.effect, AbilityEffect::Emulate { .. }))
+        {
+            return Err("Only you can emulate.".into());
+        }
         // Ahead of the duplicate check: the player already runs the only
         // permanent routine there is, so without this the sentence they get
         // for their own spare slot would be "you already run it" — which

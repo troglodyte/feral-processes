@@ -4634,6 +4634,38 @@ fn a_market_never_lists_an_exclusive_routine_as_an_ordinary_rung() {
     assert!(listed > 0, "no shelf in the sweep listed a routine at all");
 }
 
+/// Final review F2: `market_offers` built its routine pool straight off
+/// `AbilityDb::all` and never asked `abilities::ability_disk_shelved`, the
+/// one predicate `ItemDb::creation_shelf` and `Game::routine_disk_pool`
+/// both already go through — so a Stack market could sell straight past
+/// the research gate Emulate exists to be behind. Swept over depth *and*
+/// entrance (`the_deep_stack_carries_exclusive_disks...`'s reason: a sweep
+/// over `frames` alone would re-derive one shelf and count it repeatedly).
+#[test]
+fn no_market_frame_ever_lists_the_emulate_disk() {
+    let game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+    let mut listed = 0;
+    for depth in 1..=8 {
+        for i in 0..50 {
+            for offer in game.market_offers(StackPos {
+                depth,
+                entrance: (i, i * 7 + 3),
+                ..pos
+            }) {
+                if let MarketOfferKind::Routine { ability, .. } = offer {
+                    listed += 1;
+                    assert_ne!(
+                        ability, "emulate",
+                        "a market is selling the Emulate disk, straight past the research gate"
+                    );
+                }
+            }
+        }
+    }
+    assert!(listed > 0, "no shelf in the sweep listed a routine at all");
+}
+
 /// The rare row exists, gets likelier with depth, and sells one disk at the
 /// exclusive price. Swept across depths rather than asserted on one frame:
 /// at the shallow end it is roughly one market in twelve, so a single-frame

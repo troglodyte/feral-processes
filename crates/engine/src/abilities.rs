@@ -622,6 +622,33 @@ pub enum AbilityEffect {
         /// expire before that body ever took the turn it was aimed at.
         duration: u32,
     },
+    /// Adopts a known image's kit for `rounds` — `game::kit::Kit::Emulated`'s
+    /// door (todo #100). Neither `tactical_only` nor `field_only`: it runs
+    /// in both battle models and nowhere else, since there is no mechanic
+    /// for it on the map.
+    ///
+    /// **Resolved through `use_ability` like an ordinary ally-facing
+    /// effect, unlike `Decompile`/`Summon`/`Tamper`.** Both combat models
+    /// still hand it a single-element recipient list built from the acting
+    /// body alone rather than trusting `target`/`Game::ability_recipients`
+    /// — see `Game::resolve_one_action`'s Special branch and
+    /// `Game::run_tactical_routine`'s Emulate branch — because `target:
+    /// WholeParty` (the shape that opens no picker, `Summon`'s reason) would
+    /// otherwise seat every living party member in an image built for one.
+    /// Which image is read from `resources::PendingEmulateImage`, set by
+    /// the caller immediately before that one call.
+    ///
+    /// **Not scaled by the invoker's level or affinity** — `rounds` is a
+    /// count against a fixed ceiling, `Cloak::duration`'s reason exactly:
+    /// what the file authors is what every level gets.
+    Emulate {
+        /// Battle rounds the image holds, absent a Revert
+        /// (`BattleAction::Revert`/`Game::tactical_revert`) or the fight
+        /// ending. `assets/abilities/emulate.ron`'s `rounds:` field is the
+        /// only source of truth for this — final review F8 deleted the
+        /// unused `tuning::EMULATION_ROUNDS` that used to duplicate it.
+        rounds: u32,
+    },
 }
 
 impl AbilityEffect {
@@ -672,7 +699,9 @@ impl AbilityEffect {
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
             | AbilityEffect::Cloak { .. }
-            | AbilityEffect::Summon { .. } => false,
+            | AbilityEffect::Summon { .. }
+            // Runs in both models — see the variant's own doc.
+            | AbilityEffect::Emulate { .. } => false,
         }
     }
 
@@ -701,12 +730,18 @@ impl AbilityEffect {
             // player's own level, `SUMMON_STAT_MULT` and the Scheduler, and
             // `count` is a body count rather than a magnitude — there is
             // nothing here for an affinity to scale either.
+            //
+            // `Emulate` joins them too: `rounds` is a count against a fixed
+            // ceiling, `Cloak`'s own reason — the strength an image fights
+            // with is `progression::emulated_stats`'s job, not an
+            // affinity's.
             AbilityEffect::Cleanse
             | AbilityEffect::Decompile
             | AbilityEffect::Phase
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
             | AbilityEffect::Summon { .. }
+            | AbilityEffect::Emulate { .. }
             | AbilityEffect::Cloak { .. } => None,
             // A temperature is a temperature: nothing in a Tamper scales
             // with the invoker's level or affinity, so there is no
@@ -746,6 +781,8 @@ impl AbilityEffect {
             // Fielding more of your own side names nobody on theirs, which
             // is the act a cloak is waiting for.
             | AbilityEffect::Summon { .. }
+            // Adopting an image tends your own kit, `Buff`'s reason exactly.
+            | AbilityEffect::Emulate { .. }
             | AbilityEffect::Symlink => false,
         }
     }
@@ -1005,6 +1042,22 @@ impl AbilityDef {
 /// pay for, or one charged more than the row quoted.
 pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
     def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
+}
+
+/// Whether `def`'s etched disk may be offered on a shelf that bypasses
+/// research entirely — `ItemDb::creation_shelf` and `Game::
+/// routine_disk_pool`'s shared door (todo #100 Task 4, constraints.md
+/// decision 9).
+///
+/// `Game::install_disk` (`game/routines.rs`) never calls `Game::
+/// node_researched`: it checks ownership, a duplicate, a free slot and a
+/// carried disk, and nothing else, so an ordinary routine's disk being
+/// craftable or purchasable already lets a player skip researching it —
+/// accepted, existing behaviour this predicate does not touch. `Emulate` is
+/// the one exception: unlocking it *is* the feature the routine tree
+/// gates, so a shelf selling its disk would sell straight past that gate.
+pub(crate) fn ability_disk_shelved(def: &AbilityDef) -> bool {
+    !matches!(def.effect, AbilityEffect::Emulate { .. })
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
@@ -1679,6 +1732,11 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
                 "Seeds {decoys} decoys the target's side mistakes for real, for {duration} rounds"
             ),
         },
+        // `Cloak`'s reason again: `rounds` is a count against a fixed
+        // ceiling, not a magnitude for `level`/`affinity` to scale.
+        AbilityEffect::Emulate { rounds } => {
+            format!("Adopts a known image's kit for {rounds} rounds")
+        }
     }
 }
 

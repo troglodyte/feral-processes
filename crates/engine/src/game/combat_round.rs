@@ -329,7 +329,11 @@ impl Game {
             BattleAction::Attack { group } => {
                 self.party_member_attacks(slot, entity, group, player);
             }
-            BattleAction::Special { ability, target } => {
+            BattleAction::Special {
+                ability,
+                target,
+                image,
+            } => {
                 let name = self.creature_label(entity);
                 let abilities = self.actor_abilities(entity);
                 // Falls back to the first rather than skipping the turn: the
@@ -391,8 +395,29 @@ impl Game {
                             self.seat_summon_in_group(body);
                         }
                     } else {
-                        let recipients = self.ability_recipients(entity, ability.target, &target);
+                        let is_emulate = matches!(ability.effect, AbilityEffect::Emulate { .. });
+                        if is_emulate {
+                            self.world
+                                .resource_mut::<crate::resources::PendingEmulateImage>()
+                                .0 = image.clone();
+                        }
+                        // Emulate names its own recipient — the acting body
+                        // — rather than trusting `target`: its `target:
+                        // WholeParty` opens no picker (`Summon`'s shape),
+                        // and `Game::ability_recipients` would otherwise
+                        // seat every living party member in an image built
+                        // for one.
+                        let recipients = if is_emulate {
+                            vec![entity]
+                        } else {
+                            self.ability_recipients(entity, ability.target, &target)
+                        };
                         self.use_ability(&ability, entity, &name, &recipients);
+                        if is_emulate {
+                            self.world
+                                .resource_mut::<crate::resources::PendingEmulateImage>()
+                                .0 = None;
+                        }
                         // An area effect can drop members from any rank, and
                         // a corpse left in a group would be promoted to front
                         // and then attacked as though alive.
@@ -409,6 +434,13 @@ impl Game {
             // player left a companion no way to refill mid-fight.
             BattleAction::UseItem { item } => {
                 self.consume_item(entity, &item);
+            }
+            // No Power, no cooldown — the turn already spent by planning
+            // this is the whole cost. A no-op if `entity` isn't emulating
+            // (an emulation that lapsed between planning and resolution),
+            // `Game::drop_emulation`'s own guard.
+            BattleAction::Revert => {
+                self.drop_emulation(entity, "You drop the emulation.");
             }
         }
     }
@@ -578,7 +610,7 @@ impl Game {
                 return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
             }
             Kit::Unarmed => return ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
-            Kit::Innate(_) => {}
+            Kit::Innate(_) | Kit::Emulated { .. } => {}
         }
         let rolled = self
             .roll_species_move_in_range(entity, distance)
@@ -711,7 +743,7 @@ impl Game {
     ) -> Option<AbilityDef> {
         let all = match self.kit_of(entity) {
             Kit::Unarmed => return None,
-            Kit::Innate(def) => def.basic_attacks(),
+            Kit::Innate(def) | Kit::Emulated { def, .. } => def.basic_attacks(),
         };
         let moves: Vec<AbilityDef> = match distance {
             None => all,
@@ -744,7 +776,9 @@ impl Game {
         let group_letter = |group: usize| (b'A' + group as u8) as char;
         match action {
             BattleAction::Attack { group } => format!("Attack {}", group_letter(*group)),
-            BattleAction::Special { ability, target } => {
+            BattleAction::Special {
+                ability, target, ..
+            } => {
                 let abilities = self.actor_abilities(actor);
                 let name = abilities
                     .get(*ability)
@@ -770,6 +804,7 @@ impl Game {
             }
             BattleAction::Defend => "Defend".to_string(),
             BattleAction::UseItem { item } => format!("Use {}", self.item_name(item)),
+            BattleAction::Revert => "Revert".to_string(),
         }
     }
 
@@ -1311,6 +1346,10 @@ impl Game {
             // in the group model has no hostile AI to tamper with, and
             // picking one would reach `use_ability`'s `unreachable!` arm.
             .filter(|(_, def)| !def.effect.tactical_only())
+            // Only the player emulates (`seam:only-the-player-emulates`),
+            // and `ability_unavailable` below is that gate — a fork body is
+            // never `player_entity()`, so its own Emulate row is already
+            // refused there. No separate filter needed.
             .filter(|(_, def)| self.ability_unavailable(body, def).is_none())
             .collect();
         let pick = {
@@ -1332,6 +1371,7 @@ impl Game {
                 // tending an ally tends the one body that cannot be absent.
                 AbilityTarget::OneAlly => battle::SpecialTarget::Ally { slot: 0 },
             },
+            image: None,
         }
     }
 
@@ -1704,6 +1744,36 @@ impl Game {
                     // Silent on a clean recipient: a "nothing to clear" line
                     // per party member, every invocation, would drown the log.
                 }
+                AbilityEffect::Emulate { rounds } => {
+                    // `mem::take` both reads and clears in the same
+                    // expression — `resources::PendingEmulateImage`'s own
+                    // doc, and what makes a stale image structurally unable
+                    // to survive past this one arm.
+                    let Some(species) = std::mem::take(
+                        &mut self
+                            .world
+                            .resource_mut::<crate::resources::PendingEmulateImage>()
+                            .0,
+                    ) else {
+                        continue;
+                    };
+                    let Some(display) = self
+                        .world
+                        .resource::<SpeciesDb>()
+                        .get(&species)
+                        .map(|def| def.name.clone())
+                    else {
+                        continue;
+                    };
+                    self.world.entity_mut(recipient).insert(Emulation {
+                        species,
+                        rounds_left: *rounds,
+                    });
+                    // Always "You": the caller builds this recipient list as
+                    // `[entity]`, the acting body alone, never through
+                    // `ability_recipients` — see the effect's own doc.
+                    self.log(format!("You emulate a {display}."));
+                }
                 // `resolve_one_action` branches around `use_ability` entirely
                 // for `Decompile` — it needs the group index, not a
                 // recipient entity — so this arm is unreachable in practice.
@@ -1767,7 +1837,15 @@ impl Game {
     /// instead, and a companion has neither a wield of its own nor a
     /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
-        let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
+        let base = match self.kit_of(entity) {
+            // `Game::emulated_base` — gear and the `BoughtStats` receipt
+            // (U2) both have to be added back, since an emulation's base
+            // replaces `Stats::atk` outright.
+            Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).0,
+            Kit::Unarmed | Kit::Innate(_) => {
+                self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0)
+            }
+        };
         let bonus = self
             .world
             .get::<CombatBuff>(entity)
@@ -1827,11 +1905,18 @@ impl Game {
     /// `DEFEND_MITIGATION_BONUS`, and a field buff landing on that same
     /// power must not be mistaken for one.
     pub(crate) fn effective_mitigation(&self, entity: Entity) -> i32 {
-        let base = self
-            .world
-            .get::<Stats>(entity)
-            .map(|s| s.mitigation)
-            .unwrap_or(0);
+        let base = match self.kit_of(entity) {
+            // `effective_atk`'s reason: an emulation's base replaces
+            // `Stats::mitigation` outright, so gear and the `BoughtStats`
+            // receipt are both added back through `Game::emulated_base`
+            // rather than read off `Stats`.
+            Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).1,
+            Kit::Unarmed | Kit::Innate(_) => self
+                .world
+                .get::<Stats>(entity)
+                .map(|s| s.mitigation)
+                .unwrap_or(0),
+        };
         let bonus = self
             .world
             .get::<CombatBuff>(entity)

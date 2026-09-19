@@ -2,7 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
-use crate::game::kit::Kit;
+use crate::game::kit::{self, Kit};
 use crate::tactical::TacticalBattle;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
@@ -106,7 +106,7 @@ impl Game {
         }
         match self.kit_of(actor) {
             Kit::Unarmed => crate::tuning::TACTICAL_MELEE_RANGE,
-            Kit::Innate(species) => species
+            Kit::Innate(species) | Kit::Emulated { def: species, .. } => species
                 .basic_attacks()
                 .iter()
                 .map(|a| match a.ranged {
@@ -172,6 +172,13 @@ impl Game {
     /// A wild program carrying no `Experience` reads the zone's level, which
     /// is what `ability_user_level` already does for every other magnitude
     /// in combat.
+    ///
+    /// **Deliberately keyed on `PlayerIdentity`, not `Kit` (todo #100 Task
+    /// 3's decision 11).** A second swing is the fighter's own training —
+    /// the class that earned it — not a property of the form worn this
+    /// round, so an emulating player keeps their own class's swing count
+    /// rather than borrowing the image's. `game/kit.rs`'s doc is the fuller
+    /// version of this rule; `routine_slots` is its other member.
     pub(crate) fn attacks_for(&self, entity: Entity) -> u32 {
         // `ability_user_level` is already the one answer to "what level is
         // this body?", falling back to the zone for a wild program that
@@ -687,6 +694,11 @@ impl Game {
     /// handed everything else the default — which left the player acting
     /// first against an average opponent and yet hitting and dodging as
     /// though a shade slower than one.
+    ///
+    /// **Deliberately keyed on identity, not `Kit` (todo #100 Task 3's
+    /// decision 11).** An emulating player keeps their own pace — speed is
+    /// the fighter's own reflexes, not the borrowed form's, `attacks_for`'s
+    /// reason and `game/kit.rs`'s doc.
     pub(crate) fn combat_speed(&self, entity: Entity) -> i32 {
         if entity == self.player_entity() {
             PLAYER_BASE_SPEED
@@ -695,6 +707,9 @@ impl Game {
         }
     }
 
+    /// `entity`'s species `base_speed`. Reads `Creature` directly rather
+    /// than `Kit`, `combat_speed`'s reason: an emulation does not lend the
+    /// player its pace.
     pub(crate) fn species_base_speed(&self, entity: Entity) -> i32 {
         self.world
             .get::<Creature>(entity)
@@ -833,7 +848,12 @@ impl Game {
         // acting member's abilities to spend. Both resolve to `None` at
         // resolve time and silently cost the member its round — while still
         // charging for it — so they are refused here instead.
-        if let BattleAction::Special { ability, target } = &action {
+        if let BattleAction::Special {
+            ability,
+            target,
+            image,
+        } = &action
+        {
             if let battle::SpecialTarget::Ally { slot: ally } = target
                 && *ally >= planned_len
             {
@@ -886,6 +906,37 @@ impl Game {
             {
                 return Err("That program's ICE is beyond decompiling.".to_string());
             }
+            // Final review F9: an Emulate `Special` needs a chosen image the
+            // player has actually learned before anything is spent —
+            // `Game::tactical_emulate`'s own gate
+            // (`resources::EmulationImages`), which this door lacked. `image`
+            // is `None` for every other effect (`battle::BattleAction::
+            // Special`'s own doc), so this only ever fires for Emulate.
+            if let Some(actor) = self.actor_entity(battle::Actor::Party(slot))
+                && matches!(
+                    self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
+                    Some(AbilityEffect::Emulate { .. })
+                )
+                && !image.as_ref().is_some_and(|species| {
+                    self.world
+                        .resource::<crate::resources::EmulationImages>()
+                        .0
+                        .contains(species)
+                })
+            {
+                return Err("Choose a known image to emulate.".to_string());
+            }
+        }
+        // F9's other half: `Game::tactical_revert`'s own refusal, matched
+        // here rather than only at resolve time — `BattleAction::Revert`
+        // already resolves as a silent no-op on a body that isn't
+        // emulating (`Game::drop_emulation`'s guard), but a plan accepted
+        // here still spends the slot's whole round on nothing.
+        if matches!(&action, BattleAction::Revert)
+            && let Some(actor) = self.actor_entity(battle::Actor::Party(slot))
+            && self.world.get::<Emulation>(actor).is_none()
+        {
+            return Err("You aren't emulating.".to_string());
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
         Ok(())
@@ -1020,13 +1071,8 @@ impl Game {
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|s| s.abilities.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|a| a.level <= level)
-            .map(|a| a.id)
-            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
-            .collect();
+            .map(|def| kit::innate_routine_ids(def, level, self.world.resource::<AbilityDb>()))
+            .unwrap_or_default();
         // After the species kit, so a talent takes the slot the kit left over
         // rather than one the kit needed.
         declared.extend(self.talent_abilities(entity));
@@ -1200,6 +1246,13 @@ impl Game {
         };
         let species = match self.kit_of(actor) {
             Kit::Innate(def) => def.affinities.get(kind),
+            // The form is the whole kit: an emulation's own affinity
+            // applies **instead** of the class affinity, and — unlike the
+            // `Innate` arm below — without `talent_affinity_mult` either,
+            // since talents are a companion's axis and the player never has
+            // one to apply. Species files are already clamped to
+            // `AFFINITY_MAX` at load, so no re-clamp is needed here.
+            Kit::Emulated { def, .. } => return def.affinities.get(kind),
             Kit::Unarmed if actor != self.player_entity() => AFFINITY_NEUTRAL,
             // `affinity_with_perk` is the class-plus-perk combination,
             // clamped — the one place it's computed. `player_affinity_for`
@@ -1249,15 +1302,54 @@ impl Game {
     /// installed at tame/fuse time and topped up on the level-ups that reach
     /// a species unlock (`install_innate_routines`,
     /// `install_unlocked_routines`); nothing is resolved here.
+    ///
+    /// **`Kit::Emulated` reads the species list live instead of
+    /// `Routines`** — the player's own installed kit is untouched underneath
+    /// and returns the moment the emulation ends. `innate_routine_ids` is
+    /// the same level filter a companion's own kit install uses; capped at
+    /// `routine_slots`, which stays keyed on the player regardless of what
+    /// they are wearing (see `game/kit.rs`'s doc).
     pub(crate) fn actor_abilities(&self, entity: Entity) -> Vec<AbilityDef> {
         let db = self.world.resource::<AbilityDb>();
-        self.world
-            .get::<Routines>(entity)
-            .map(|r| r.0.as_slice())
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|id| db.get(id).cloned())
-            .collect()
+        match self.kit_of(entity) {
+            Kit::Emulated { def, .. } => {
+                let level = self.ability_user_level(entity);
+                let slots = self.routine_slots(entity);
+                let mut list: Vec<AbilityDef> = kit::innate_routine_ids(def, level, db)
+                    .into_iter()
+                    .filter_map(|id| db.get(&id).cloned())
+                    .take(slots)
+                    .collect();
+                // Final review F6 (U3): Decompile is welded into the
+                // player's own slot 0 (`abilities::DECOMPILE_ABILITY_ID`,
+                // `routine_tree::is_permanent`) and never actually left —
+                // the species list above replaces the *rest* of the kit,
+                // not this one permanent routine, so it rides along beside
+                // it rather than competing for one of its `slots`. Checked
+                // on `entity`'s own `Routines` rather than assumed, so a
+                // legacy save or a mod missing it does not fabricate one.
+                if self
+                    .world
+                    .get::<Routines>(entity)
+                    .is_some_and(|r| r.0.iter().any(|id| id == abilities::DECOMPILE_ABILITY_ID))
+                    && let Some(decompile) = db.get(abilities::DECOMPILE_ABILITY_ID)
+                    // A mod's species list could grant `decompile` on its
+                    // own merits; the weld above must not double it.
+                    && !list.iter().any(|d| d.id.as_str() == abilities::DECOMPILE_ABILITY_ID)
+                {
+                    list.push(decompile.clone());
+                }
+                list
+            }
+            Kit::Unarmed | Kit::Innate(_) => self
+                .world
+                .get::<Routines>(entity)
+                .map(|r| r.0.as_slice())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|id| db.get(id).cloned())
+                .collect(),
+        }
     }
 
     /// The routines a program wielded as a weapon could actually fire —
@@ -1280,12 +1372,25 @@ impl Game {
     /// A tactical-only effect is the third exclusion: `AbilityEffect::
     /// tactical_only`'s reason — no AI ever chooses a Tamper, and a proc
     /// roll is exactly that.
+    ///
+    /// `Emulate` is the fourth, and for `Decompile`'s reason again: a proc
+    /// is free (`proc_wielded_routine`'s own doc), and its `OneAlly` target
+    /// always resolves to the player (slot 0) regardless of which program
+    /// is wielded — so a companion carrying it would let a proc re-emulate
+    /// for the player at no Power and no turn, undercutting Revert costing
+    /// both. **Kept even though `ability_unavailable` also refuses Emulate
+    /// off the player** (`seam:only-the-player-emulates`): a proc never
+    /// calls that gate at all — `proc_wielded_routine` goes straight to
+    /// `use_ability`, "costs nothing" being the whole point — so this filter
+    /// is the only thing standing between a mod-granted Emulate on a
+    /// wielded program and a free re-emulate.
     pub(crate) fn wieldable_routines(&self, entity: Entity) -> Vec<AbilityDef> {
         self.actor_abilities(entity)
             .into_iter()
             .filter(|d| !d.effect.field_only())
             .filter(|d| !matches!(d.effect, AbilityEffect::Decompile))
             .filter(|d| !d.effect.tactical_only())
+            .filter(|d| !matches!(d.effect, AbilityEffect::Emulate { .. }))
             .collect()
     }
 
@@ -1361,6 +1466,39 @@ impl Game {
             }
             if self.pet_count() >= self.pet_capacity() {
                 return Some("roster is full".to_string());
+            }
+        }
+        // Only the player emulates (`seam:only-the-player-emulates`). This
+        // is the gate for every *chooser* that offers Emulate — a companion
+        // holding the Emulate routine at all is already refused by
+        // `install_disk`, but a mod's talent tree or species kit could
+        // still hand it to one. Two paths bypass this gate and keep their
+        // own filter instead, because neither resolves through a chooser
+        // that calls `ability_unavailable` at all: a wielded program's proc
+        // (`proc_wielded_routine`) and a hostile's retaliation
+        // (`wild_retaliate`) both go straight to `use_ability`.
+        if matches!(ability.effect, AbilityEffect::Emulate { .. }) && entity != self.player_entity()
+        {
+            return Some("only you can emulate".to_string());
+        }
+        // Emulate's own two refusals — spec §4 "Invoking". `Emulation`
+        // itself would already keep it off `entity`'s `actor_abilities`
+        // (`Kit::Emulated`'s species list has no Emulate entry), so the
+        // second check is unreachable through the ordinary picker; it stays
+        // here anyway as the one door every caller of this function shares,
+        // rather than trusting that every future caller re-derives the same
+        // answer from `Kit`.
+        if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+            if self.world.get::<Emulation>(entity).is_some() {
+                return Some("already emulating".to_string());
+            }
+            if self
+                .world
+                .resource::<crate::resources::EmulationImages>()
+                .0
+                .is_empty()
+            {
+                return Some("no images known".to_string());
             }
         }
         None
@@ -1445,7 +1583,17 @@ impl Game {
                 index,
                 name: ability.name.clone(),
                 detail: ability.description.clone(),
-                targeting: ability.target.targeting(),
+                // Emulate is authored `target: WholeParty` — the shape that
+                // opens no picker at all — but it needs one anyway, an
+                // image rather than an ally or a group. `AbilityTarget::
+                // targeting` cannot say that; it knows nothing about
+                // effects. Overridden here instead of widening
+                // `AbilityTarget` for one ability (todo #100 Task 6).
+                targeting: if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+                    crate::battle::SpecialTargeting::Image
+                } else {
+                    ability.target.targeting()
+                },
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),
                 cooldown: ability.cooldown,
@@ -1519,6 +1667,21 @@ impl Game {
                 label: "[s]pecial".to_string(),
                 detail: self.ability_label(entity),
                 target: TargetSpec::SpecialAbility,
+                unavailable: None,
+            });
+        }
+
+        // Only while emulating — spec §4 "Changing back". Hidden rather
+        // than greyed, `Special`'s own reason: a party member not emulating
+        // has nothing to revert, and a permanently-there row would teach
+        // nothing new.
+        if self.world.get::<Emulation>(entity).is_some() {
+            options.push(ActionOption {
+                kind: ActionKind::Revert,
+                key: 'r',
+                label: "[r]evert".to_string(),
+                detail: "Drop your current emulation".to_string(),
+                target: TargetSpec::None,
                 unavailable: None,
             });
         }

@@ -133,6 +133,21 @@ fn a_family_rooted_at_group_has_a_parentless_group_root() {
     );
 }
 
+/// Spec §4 "Unlocking": `routine/emulate` is synthesised with no research
+/// file, and `family`/`routine_prereq` must give it a single root rung —
+/// todo #100 Task 4's own check against #101 as built.
+#[test]
+fn emulate_is_its_familys_own_parentless_root() {
+    let abilities = shipped_abilities();
+    let def = abilities.get("emulate").expect("emulate.ron ships");
+    assert_eq!(family(def), "Emulate");
+    assert_eq!(
+        routine_prereq(&abilities, def),
+        None,
+        "Emulate has no cheaper sibling scope, so it roots its own family"
+    );
+}
+
 fn fixture_ability(id: &str, name: &str, target: AbilityTarget) -> AbilityDef {
     AbilityDef {
         id: id.into(),
@@ -683,6 +698,21 @@ fn an_always_visible_family_lists_its_nodes_at_the_right_zone_and_none_below_it(
     );
     set_zone(&mut game, 3);
     assert!(listed_routine_ids(&game).contains("routine/hardened_shell_party"));
+}
+
+/// `emulate.ron` sets `research_zone: 2` (constraints.md decision 9) — this
+/// is the zone-visibility half of the same design check
+/// `emulate_is_its_familys_own_parentless_root` covers structurally.
+#[test]
+fn emulate_is_visible_starting_at_zone_two() {
+    let mut game = Game::new(9141, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    assert!(
+        !listed_routine_ids(&game).contains("routine/emulate"),
+        "zone 1: emulate's own gate is zone 2"
+    );
+    set_zone(&mut game, 2);
+    assert!(listed_routine_ids(&game).contains("routine/emulate"));
 }
 
 #[test]

@@ -615,6 +615,33 @@ pub(super) fn draw_battle_ally_menu(
     draw_popup(&title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
+/// Which learned image does Emulate invoke? `draw_battle_ally_menu`'s shape
+/// one target-kind over — todo #100 Task 6. The figures shown are
+/// `Game::emulation_options`'s own `atk`/`mitigation`, a call rather than a
+/// second formula, so this can never quote a number invoking the row
+/// installs a different one from.
+pub(super) fn draw_battle_emulate_menu(
+    app: &mut App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let selected = app.menu_selected;
+    let Some(game) = &mut app.game else { return };
+    let mut rows = vec![text_row("Invoke which image?")];
+    for (i, o) in game.emulation_options().into_iter().enumerate() {
+        rows.push(creature_row(emulation_row_label(i, &o), i == selected));
+    }
+    draw_popup(
+        "Invoke an image",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
 /// Which group does the pending action hit? Shows per-group decompile odds,
 /// since that's the one action where the choice of target is a real gamble
 /// rather than a preference.
@@ -1281,9 +1308,12 @@ mod tests {
     /// seed search: `action_bar_line` is pure, and a seeded fight always
     /// carries usable items, so `[u]se item (no usable items)` — the only
     /// `unavailable` reason `battle_action_options` can produce, and the
-    /// widest row on the bar — was never measured before. All four options
-    /// and all four party commands, every one of them advertised at once,
-    /// which is the actual ceiling this line can reach.
+    /// widest row on the bar — was never measured before. Five options and
+    /// four party commands, every one of them advertised at once, which is
+    /// the actual ceiling this line can reach. `[r]evert` is the fifth
+    /// (todo #100 Task 6): `battle_action_options` offers it beside
+    /// `[s]pecial` rather than instead of it, so an emulating party member
+    /// with abilities shows both at once.
     #[test]
     fn the_group_action_bar_fits_the_screen() {
         use feral_processes_engine::battle::{ActionKind, PartyCommandKind, TargetSpec};
@@ -1319,6 +1349,7 @@ mod tests {
                 TargetSpec::InventoryItem,
                 Some("no usable items"),
             ),
+            option(ActionKind::Revert, 'r', "[r]evert", TargetSpec::None, None),
         ];
         let command = |kind, key, label: &str, needs_target| PartyCommand {
             kind,
@@ -1348,6 +1379,84 @@ mod tests {
                 );
             });
         }
+    }
+
+    /// A `Game` that has learned every shipped species as an image —
+    /// `resources::EmulationImages` has no public writer short of a real
+    /// extraction, so this writes the whole census straight into
+    /// `save::SaveData::emulation_images` and reloads, `savetool`'s own
+    /// dump-edit-pack shape, entirely through public `save::` functions.
+    fn game_with_every_image() -> feral_processes_engine::Game {
+        use feral_processes_engine::save;
+        use feral_processes_engine::{DifficultyMode, Game};
+
+        let assets_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let mut game =
+            Game::new(0, DifficultyMode::Forgiving, &assets_dir).expect("the assets parse");
+        let species: Vec<String> = game.species_defs().into_iter().map(|d| d.id).collect();
+
+        let tmp =
+            std::env::temp_dir().join(format!("fp_gui_every_image_{}.bin", std::process::id()));
+        game.save(&tmp).expect("the fixture must save");
+        let mut data = save::load_from_file(&tmp).expect("the fixture save must load back");
+        data.emulation_images = species;
+        save::save_to_file(&tmp, &data).expect("the edited save must write back");
+        let game = Game::load(&tmp, &assets_dir).expect("the edited save must load");
+        let _ = std::fs::remove_file(&tmp);
+        game
+    }
+
+    /// This popup does not scroll (`Mode::BattleEmulate`/`Mode::
+    /// TacticalEmulate`, todo #100 Task 6): a full image library — every
+    /// shipped species, the ceiling `emulation_options()` can reach since
+    /// nothing caps it — must still fit a 1280x720 `PopupSize::Large`
+    /// popup's row count, and the widest row (`draw_battle_emulate_menu`'s
+    /// and `draw_tactical_emulate`'s shared format) its body width.
+    #[test]
+    fn a_full_image_library_fits_the_picker_popup_at_1280x720() {
+        let game = game_with_every_image();
+        let options = game.emulation_options();
+        assert!(
+            !options.is_empty(),
+            "test premise: the fixture must learn something"
+        );
+        let m = ui_metrics(720.0);
+        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
+        // `< cap` rather than `+ 1 <= cap`: the title row both draw
+        // functions prepend is the `+ 1`, folded into the strict
+        // inequality per clippy's `int_plus_one`.
+        assert!(
+            options.len() < cap,
+            "a full image library is {} rows plus a title into a {cap}-row \
+             popup at 1280x720",
+            options.len()
+        );
+
+        let body = popup_body_width(1280.0, PopupSize::Large, &m);
+        crate::paint::with_painter(|p| {
+            for (i, o) in options.iter().enumerate() {
+                // Built through the same function `draw_battle_emulate_menu`
+                // and `draw_tactical_emulate` both call, not a copy of the
+                // format string — a copy measured whatever it happened to
+                // build rather than what the picker actually draws, which
+                // is how `[10]`..`[17]` (unreachable through any keypress
+                // past `DIGIT_ROWS`) passed this census once already.
+                let label = super::emulation_row_label(i, o);
+                assert!(
+                    label.starts_with(&format!("[{}]", menu_shortcut(i))),
+                    "row {i} must be labelled with the key that actually \
+                     selects it, `menu_shortcut({i})` — not a bare index — \
+                     or the 10th-and-later image reads a number no keypress \
+                     reaches: {label:?}"
+                );
+                let width = p.measure_ui_advance(&label, m.font_size);
+                assert!(
+                    width <= body,
+                    "an image row draws {width}px into a {body}px body at \
+                     1280x720: {label:?}"
+                );
+            }
+        });
     }
 }
 

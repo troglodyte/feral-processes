@@ -1,0 +1,19 @@
+(
+    id: "emulate",
+    name: "Emulate",
+    // No scope suffix: `target: WholeParty` is the shape that opens no
+    // picker (`Summon`'s reason), not a promise this lands on the party —
+    // it lands on you alone. `every_shipped_ability_name_ends_in_the_
+    // scope_it_targets` excludes it the same way it excludes Summon.
+    description: "Adopts a known image's kit for 10 rounds, replacing your attack, mitigation, reach and routines with theirs",
+    target: WholeParty,
+    effect: Emulate(rounds: 10),
+    cooldown: 4,
+    power_cost: 20.0,
+    // Sits above the opening tier alongside the rest of the routine tree.
+    // Task 7's arena measurement (`docs/measurements/
+    // 2026-09-18-emulation-edge.md`) was about the per-species power ratio
+    // at a fixed level, not about when the routine unlocks, and gave no
+    // reason to move this.
+    research_zone: 2,
+)

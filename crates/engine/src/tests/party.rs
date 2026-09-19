@@ -895,6 +895,7 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
             BattleAction::Special {
                 ability: index,
                 target: battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .unwrap_err();
@@ -924,6 +925,7 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
         BattleAction::Special {
             ability: index,
             target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            image: None,
         },
     )
     .expect("with a cache deployed the roster has room, so the action must be accepted");

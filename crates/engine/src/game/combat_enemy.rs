@@ -92,6 +92,19 @@ impl Game {
                     // party — a carrier's retaliation is the wild side's
                     // own AI, and it has no scoring for one yet.
                     && !def.effect.tactical_only()
+                    // Only the player emulates (`seam:only-the-player-
+                    // emulates`). `tactical/ai.rs::tactical_intent` reuses
+                    // this exact function for the battle-map hostile AI, so
+                    // this one filter is both "AI never chooses Emulate for
+                    // a wild body" doors — real content never puts Emulate
+                    // on a wild carrier (no `wild_weight`, no species kit),
+                    // but a mod's `Routines` edit should still find no seat
+                    // for it here. **Kept even though `ability_unavailable`
+                    // also refuses it**: `wild_retaliate` arms the cooldown
+                    // and runs the routine directly, never asking that gate
+                    // — the same reason `ability_unavailable`'s own doc
+                    // gives for hostiles never reaching it at all.
+                    && !matches!(def.effect, AbilityEffect::Emulate { .. })
                     && !def.is_passive()
             })
             .cloned()

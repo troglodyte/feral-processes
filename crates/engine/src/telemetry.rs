@@ -237,6 +237,7 @@ pub enum ActionKind {
     Defend,
     Item,
     Flee,
+    Revert,
 }
 
 /// A party slot as the fight opened. `species` is `None` for the player,

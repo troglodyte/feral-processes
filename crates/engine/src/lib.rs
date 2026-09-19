@@ -74,13 +74,13 @@ use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BUILD_SITE_GLYPH, BaseAnchor,
     Boss, BoughtStats, BuffKind, BuffSource, BuildGoal, BuildSite, Caravan, CaravanStage, Carrying,
     Cloaked, CombatBuff, Creature, CustomName, Decompiler, DepotFilter, DigSite, DownedPrograms,
-    Durability, Equipment, EquippedItem, Experience, FieldBuff, FieldBuffKind, FinishOrder,
-    FusionCount, GearCopies, Glyph, GlyphColor, Hostile, Inventory, KernelRing, MachineStatus,
-    Memories, Memory, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player, PlayerIdentity,
-    Position, Potential, PowerReserve, ProgramId, PurchasedTiers, Pursuing, Rarity, ReachCharge,
-    Refactors, ResourceNode, Routines, Squad, StackSpawn, StandingJob, Stats, StatusEffects,
-    StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Tampered,
-    Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
+    Durability, Emulation, Equipment, EquippedItem, Experience, FieldBuff, FieldBuffKind,
+    FinishOrder, FusionCount, GearCopies, Glyph, GlyphColor, Hostile, Inventory, KernelRing,
+    MachineStatus, Memories, Memory, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player,
+    PlayerIdentity, Position, Potential, PowerReserve, ProgramId, PurchasedTiers, Pursuing, Rarity,
+    ReachCharge, Refactors, ResourceNode, Routines, Squad, StackSpawn, StandingJob, Stats,
+    StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents,
+    Tamed, Tampered, Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::auto_resolve::AutoResolve;
 pub use game::base::transfer::TransferBasket;
@@ -96,6 +96,7 @@ pub use game::catalog::program_tier_required;
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;
+pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
 /// Every sentence the town page's aid rows can carry — exported so the

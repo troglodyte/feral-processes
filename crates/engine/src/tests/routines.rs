@@ -976,6 +976,7 @@ fn decompile_greys_with_a_reason_rather_than_refunding_the_round() {
             BattleAction::Special {
                 ability: row.index,
                 target: battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
             },
         )
         .unwrap_err();
@@ -1082,6 +1083,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         BattleAction::Special {
             ability: player_decompile,
             target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            image: None,
         },
     )
     .unwrap();
@@ -1090,6 +1092,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         BattleAction::Special {
             ability: companion_decompile,
             target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            image: None,
         },
     )
     .unwrap();

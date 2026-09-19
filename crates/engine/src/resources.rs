@@ -2017,6 +2017,39 @@ pub struct CompassBearing(pub Option<crate::settlements::CompassTarget>);
 #[derive(Resource, Default)]
 pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
 
+/// The images the player has learned — `Game::emulation_options()`'s
+/// source, and the "no images known" half of `ability_unavailable`'s
+/// `AbilityEffect::Emulate` refusal (todo #100 Task 4). Written by
+/// `Game::extract_image_from_program`, the `Image` tool category's own door
+/// (todo #100 Task 5). Saved as `SaveData::emulation_images`, a sorted
+/// `Vec` behind `#[serde(default)]` — a `BTreeSet` for the same reason
+/// `KnownTools`/`KnownRoutines` are, so the encoded bytes never depend on
+/// set iteration order.
+#[derive(Resource, Default, Clone)]
+pub struct EmulationImages(pub BTreeSet<crate::species::SpeciesId>);
+
+/// The image an in-flight `AbilityEffect::Emulate` invocation is installing.
+///
+/// `Game::use_ability` is the one door every routine shares, so widening its
+/// signature to carry this for one effect would touch every other caller —
+/// this resource is the smaller threading instead (constraints.md decision
+/// 8). `Game::resolve_one_action`'s Special branch and `Game::
+/// tactical_emulate` each set it immediately before the call that can reach
+/// `use_ability`'s `Emulate` arm, which reads and clears it in the same
+/// `mem::take` — so a successful invocation cannot leave a stale value.
+///
+/// **A refusal cannot leave one either**, because both callers only set it
+/// after every refusal of their own has already passed. What can — and
+/// once did — is a *fizzle*: `run_tactical_routine`'s reactor/provoke check
+/// sits between the set and `use_ability`, and only `Decompile` is exempt
+/// from it, so an adjacent hostile's reaction can cut Emulate off before
+/// `use_ability` is ever reached. `tactical_emulate` clears this
+/// unconditionally right after calling `run_tactical_routine` for exactly
+/// that path — the group model has no equivalent gap, since `resolve_one_
+/// action` does not provoke a reaction between the set and the call.
+#[derive(Resource, Default)]
+pub struct PendingEmulateImage(pub Option<crate::species::SpeciesId>);
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

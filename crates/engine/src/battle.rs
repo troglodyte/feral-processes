@@ -465,11 +465,22 @@ pub enum BattleAction {
         /// Who it lands on, which side depending on the ability — see
         /// `species::SpecialAbility::targeting`.
         target: SpecialTarget,
+        /// Which image an `AbilityEffect::Emulate` invocation adopts.
+        /// `None` for every other effect — constraints.md decision 8's
+        /// "every construction site gets `image: None`". Carried on the
+        /// action rather than collected by a second `TargetSpec` picker,
+        /// since Emulate's own `target: WholeParty` already opens none.
+        image: Option<crate::species::SpeciesId>,
     },
     Defend,
     UseItem {
         item: ItemId,
     },
+    /// Drops the acting member's `components::Emulation` — spec §4
+    /// "Changing back". Carries no fields: there is nothing to choose, and
+    /// `Game::battle_action_options`/`Game::tactical_revert` are the two
+    /// doors that decide whether the row is even offered.
+    Revert,
 }
 
 /// Which picker the UI opens after an ability is chosen — see
@@ -480,7 +491,14 @@ pub enum SpecialTargeting {
     Ally,
     /// Lands on an enemy group.
     Enemy,
-    /// PowerReserve no choice at all — it resolves the moment it is picked.
+    /// Picks a learned image to invoke — `Game::emulation_options()`'s list
+    /// (todo #100 Task 6). `AbilityTarget::targeting` cannot answer this:
+    /// Emulate is authored `target: WholeParty` (the shape that opens no
+    /// ally/group picker, `Summon`'s reason), so `special_options_for`
+    /// overrides it for `AbilityEffect::Emulate` alone rather than widening
+    /// `AbilityTarget` for one ability.
+    Image,
+    /// No choice at all — it resolves the moment it is picked.
     None,
 }
 
@@ -511,6 +529,7 @@ pub enum ActionKind {
     Special,
     Defend,
     UseItem,
+    Revert,
 }
 
 /// What the UI must collect before an `ActionKind` becomes a

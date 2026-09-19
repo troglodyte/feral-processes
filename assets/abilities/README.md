@@ -82,7 +82,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of fourteen:
+    // What it does to each recipient. Exactly one of fifteen:
     //
     //   Damage(power: 6, spread: 2)
     //     Direct damage through the same resolution a move uses: an attack
@@ -326,6 +326,40 @@ way deleting the Currency item does.
     //     every other incoherent shape here. This is what `cold_sample.ron`,
     //     `heat_injection.ron`, `inference_probe.ron`, `prompt_injection.ron`
     //     and `hallucination.ron` use.
+    //
+    //   Emulate(rounds: 10)
+    //     Adopts a known image's kit for `rounds` battle rounds: the
+    //     image's own attack, mitigation, natural reach and routine list
+    //     replace yours, scaled to your own level and
+    //     `Perk::EmulationFidelity` — see `progression::emulated_stats`.
+    //     Ends on `BattleAction::Revert`/`Game::tactical_revert` (no Power,
+    //     costs the turn), on `rounds` running out (logged as a lapse), or
+    //     on the fight ending.
+    //
+    //     Runs in **both** battle models — neither `tactical_only` nor
+    //     `field_only` — because there is no mechanic for it outside a
+    //     fight and nothing about it needs a battle map's aim or shape.
+    //
+    //     Refused with no images learned ("no images known") and while
+    //     already emulating ("already emulating"): switching straight from
+    //     one image to another is out of scope, Revert first.
+    //
+    //     `rounds` is **not** scaled by level or affinity — `Cloak`'s own
+    //     reason: it is a count against a fixed ceiling, not a magnitude.
+    //
+    //     Which images are available is a second axis entirely, learned
+    //     separately from running this effect — a mod never needs to touch
+    //     this effect to add a species, since every species is
+    //     automatically a learnable image.
+    //
+    //     No sibling scope exists or ever will: `target: WholeParty` is the
+    //     shape that opens no picker (`Summon`'s reason), and the effect
+    //     always lands on the acting body alone rather than on `target`.
+    //     `every_shipped_ability_name_ends_in_the_scope_it_targets` and
+    //     `every_battle_ability_family_is_contiguous_from_single_upward`
+    //     both exclude it the same way they exclude `Summon`. This is what
+    //     `emulate.ron` uses; there is no reason to declare a second
+    //     ability with this effect.
     //
     //   FieldBuff(kind: Regen, power: 3, duration: 40)
     //   FieldBuff(kind: Atk, power: 4)

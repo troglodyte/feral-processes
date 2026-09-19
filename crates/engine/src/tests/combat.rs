@@ -458,6 +458,7 @@ fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
             BattleAction::Special {
                 ability: 0,
                 target: battle::SpecialTarget::Ally { slot: 42 },
+                image: None,
             },
         )
         .unwrap_err();
@@ -472,6 +473,7 @@ fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
             BattleAction::Special {
                 ability: abilities,
                 target: battle::SpecialTarget::Ally { slot: 0 },
+                image: None,
             },
         )
         .unwrap_err();
@@ -486,6 +488,7 @@ fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
             BattleAction::Special {
                 ability: 0,
                 target: battle::SpecialTarget::Ally { slot: 0 },
+                image: None,
             },
         )
         .is_ok(),

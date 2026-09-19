@@ -441,6 +441,17 @@ format and overwrites a file of that name deliberately.
   creation stat pool spent entirely on one axis, the two rows behind
   `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`. These
   two *are* for the bin: the pool lands in `Stats` and All-Attack sees it.
+- **`emulation.ron`** — a geared, perked level-20 player, alone, against
+  thirteen rootkits at zone 3 (past the zone's own group ceiling of 4, and
+  refit at F10/final review to stay a coinflip once `character:` started
+  spending real Perk Points — six was already a walkover), emulating the
+  strongest species an image can actually be learned for. `emulate:
+  Some("zero_day")` — not `wintermute`, an apex species whose image U1
+  (final review) refused at the extraction door, so it is unreachable in
+  play — is the whole of what makes it worth watching twice: delete that
+  row for the player's own kit alone, or swap the species, to reproduce
+  `docs/measurements/2026-09-18-emulation-edge.md`'s sweep — the fitting
+  scenario for `tuning::EMULATION_EDGE`.
 
 The list above is short of the directory: `class-mirror`, `developed-companion`,
 `gear-passives`, `stack-depth-5` and the five `policy-*` files are also

@@ -43,6 +43,20 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             }
             let mut game = Game::new_with(0, DifficultyMode::Forgiving, assets_dir, &choice)
                 .map_err(|e| format!("{}: {e}", assets_dir.display()))?;
+            // Same fail-loud rule as the stat check above, for the perk
+            // basket — `apply_creation_perks` already ran silently inside
+            // `Game::new_with` and applied nothing if this is `None`, so an
+            // instrument that didn't check would report the baseline and
+            // read as the perks being worthless.
+            if choice
+                .perk_cost(game.world.resource::<crate::perks::PerkDb>())
+                .is_none()
+            {
+                return Err(format!(
+                    "character: {:?} spends more perk points than perk_points ({})",
+                    choice.perks, choice.perk_points
+                ));
+            }
             // Before the equips below: `Game::equip` captures
             // `EquippedItem::level` off the current zone and gear grows by
             // `GEAR_LEVEL_STEP` per level, so equipping first under-scales
@@ -61,6 +75,22 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                 let player = game.player_entity();
                 game.equip(player, &row.copy())
                     .map_err(|e| format!("equip `{}`: {e}", row.item.as_str()))?;
+            }
+            if let Some(species) = &scenario.emulate {
+                known_species(&game, species)?;
+                let player = game.player_entity();
+                // Final review F10 (U4): staged with `emulate.ron`'s own
+                // real duration rather than an arbitrarily large number —
+                // `AbilityEffect::Emulate` never fires here (the bin plays
+                // `PartyPlan::AllAttack`, which invokes no routine, so this
+                // is still the only way to stage the swap at all), but a
+                // fight that outlasts the real duration now shows the image
+                // lapsing mid-measurement instead of hiding that entirely.
+                let rounds = emulate_rounds(game.world.resource::<AbilityDb>())?;
+                game.world.entity_mut(player).insert(Emulation {
+                    species: species.clone(),
+                    rounds_left: rounds,
+                });
             }
             // **Authored from inside base space, and back out afterwards.**
             // `Game::add_companion` is a base verb now — who is in your
@@ -182,6 +212,40 @@ fn known_item(game: &Game, item: &ItemId) -> Result<(), String> {
     Ok(())
 }
 
+/// `known_item`'s twin for `Scenario::emulate`: an unresolvable species is a
+/// typo, not a form to measure.
+fn known_species(game: &Game, species: &SpeciesId) -> Result<(), String> {
+    if game
+        .world
+        .resource::<SpeciesDb>()
+        .get(species.as_str())
+        .is_none()
+    {
+        return Err(format!("unknown species `{species}`"));
+    }
+    Ok(())
+}
+
+/// `Scenario::emulate`'s stand-in `Emulation` is staged for
+/// `emulate.ron`'s own duration — refused rather than defaulted to some
+/// made-up number, the same fail-loud rule `build_player` applies to an
+/// overspent stat pool or perk basket above: an instrument that silently
+/// timed an image at an arbitrary length would report numbers nobody could
+/// reproduce from the shipped asset.
+fn emulate_rounds(ability_db: &AbilityDb) -> Result<u32, String> {
+    ability_db
+        .get("emulate")
+        .and_then(|def| match def.effect {
+            AbilityEffect::Emulate { rounds } => Some(rounds),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            "emulate: assets/abilities/emulate.ron is missing or its effect \
+             is not AbilityEffect::Emulate"
+                .to_string()
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +289,71 @@ mod tests {
             20
         );
         assert_eq!(game.world.resource::<ZoneLevel>().0, 3);
+    }
+
+    #[test]
+    fn an_emulate_row_starts_the_player_already_emulating() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("rootkit".into());
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let emulation = game
+            .world
+            .get::<Emulation>(game.player_entity())
+            .expect("the player is emulating");
+        assert_eq!(emulation.species, "rootkit");
+    }
+
+    /// Final review F10 (U4): the arena still has no way to *invoke* Emulate
+    /// (`PartyPlan::AllAttack` invokes no routine), so this stages the
+    /// ability's own real duration rather than the old arbitrary
+    /// `ARENA_EMULATION_ROUNDS` — a fight that outlasts it now shows the
+    /// image lapsing mid-measurement, which the old 9999-round stand-in
+    /// could never show. The Power cost and cooldown of *reaching* an
+    /// emulation are still not modeled; only its duration is real.
+    #[test]
+    fn an_emulate_row_starts_with_the_abilitys_own_real_duration() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("rootkit".into());
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let AbilityEffect::Emulate { rounds } = game
+            .world
+            .resource::<AbilityDb>()
+            .get("emulate")
+            .expect("emulate.ron ships with the game")
+            .effect
+        else {
+            panic!("emulate.ron's own effect is not AbilityEffect::Emulate");
+        };
+        let emulation = game
+            .world
+            .get::<Emulation>(game.player_entity())
+            .expect("the player is emulating");
+        assert_eq!(emulation.rounds_left, rounds);
+    }
+
+    #[test]
+    fn an_unknown_emulate_species_is_an_err_naming_it() {
+        let mut s = fresh(20, 3);
+        s.emulate = Some("not_a_real_species".into());
+
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("not_a_real_species"), "{err}");
+    }
+
+    /// Fail-loud, `an_overspent_character_spec_is_an_err_rather_than_a_
+    /// dropped_spend`'s sibling: a missing or malformed `emulate.ron` used
+    /// to fall back to a silent 9999-round stand-in, which would report a
+    /// duration nobody could reproduce from the shipped asset.
+    #[test]
+    fn a_missing_emulate_ability_is_an_err_rather_than_a_9999_round_stand_in() {
+        let err = emulate_rounds(&AbilityDb::default()).expect_err("should refuse");
+        assert!(err.contains("emulate"), "{err}");
     }
 
     #[test]
@@ -627,6 +756,39 @@ mod tests {
         assert_eq!(one_def.mitigation, plain.mitigation + 1);
     }
 
+    /// Final review F10 (U4): a scenario needed a way to spend Perk
+    /// Points before this — every staged player arrived with zero perks,
+    /// which is not how a level-20 player looks. Goes through
+    /// `Game::unlock_perk` the same way character creation does
+    /// (`CharacterChoice::perks`/`perk_points`), so `components::
+    /// BoughtStats` is written exactly as a real purchase writes it.
+    #[test]
+    fn a_character_spec_perk_spend_reaches_the_players_stats_and_the_receipt() {
+        use crate::arena::scenario::CharacterSpec;
+        use crate::perks::Perk;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            perk_points: 4,
+            perks: vec![(Perk::Attacker, 1), (Perk::Defender, 1)],
+            ..CharacterSpec::default()
+        };
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().atk,
+            crate::tuning::PLAYER_BASE_STATS.atk + crate::tuning::ATTACKER_BONUS_PER_LEVEL
+        );
+        assert_eq!(
+            game.world.get::<Stats>(player).unwrap().mitigation,
+            crate::tuning::PLAYER_BASE_STATS.mitigation + crate::tuning::DEFENDER_BONUS_PER_LEVEL
+        );
+        let receipt = game.world.get::<BoughtStats>(player).copied().unwrap();
+        assert_eq!(receipt.atk, crate::tuning::ATTACKER_BONUS_PER_LEVEL);
+        assert_eq!(receipt.mitigation, crate::tuning::DEFENDER_BONUS_PER_LEVEL);
+    }
+
     /// Fail-closed is right inside a run and wrong in an instrument: an
     /// overspent pool applies *no* spend, so a sweep that authored one
     /// would report the baseline and read as the axis being worthless.
@@ -642,6 +804,24 @@ mod tests {
             .err()
             .expect("should refuse");
         assert!(err.contains("CREATION_STAT_POINTS"), "{err}");
+    }
+
+    /// The perk basket's own overspend rule, `an_overspent_character_spec_
+    /// is_an_err_rather_than_a_dropped_spend`'s sibling.
+    #[test]
+    fn an_overspent_perk_basket_is_an_err_rather_than_a_dropped_spend() {
+        use crate::arena::scenario::CharacterSpec;
+        use crate::perks::Perk;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            perk_points: 1,
+            perks: vec![(Perk::Attacker, 5)],
+            ..CharacterSpec::default()
+        };
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("perk_points"), "{err}");
     }
 
     /// A class reaches the fight as an affinity spread, so the thing to

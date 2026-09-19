@@ -761,6 +761,27 @@ fn no_caravan_shelf_ever_stocks_a_tool_carrier() {
     }
 }
 
+/// The Emulate disk must never be a caravan's own offer — buying one would
+/// let Credits skip the routine tree entirely, and unlocking Emulate *is*
+/// what that tree gates (todo #100 Task 4 decision 9). `Game::install_disk`
+/// never checks `Game::node_researched`, so this exclusion lives beside
+/// `routine_disk_pool`'s own two rather than in the research door itself.
+#[test]
+fn no_caravan_shelf_ever_stocks_the_emulate_disk() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 4);
+
+    for offer in every_shelf(&mut game, 60) {
+        if let CaravanOfferKind::Routine(ability) = &offer.kind {
+            assert_ne!(
+                ability, "emulate",
+                "the Emulate disk must never be stocked for sale"
+            );
+        }
+    }
+}
+
 /// A carrier already forged is still ordinary cargo on the *sell* side — the
 /// same asymmetry an etched disk already has (buyable nowhere, sellable
 /// anywhere held cargo is).

@@ -255,22 +255,27 @@ impl Game {
         })
     }
 
-    /// Whether a rig can run `def` at all. The two categories it cannot are
-    /// `Routines` and `Gear`, which is `Game::extract_program`'s own
-    /// division rather than a second one: neither draws from `ToolDef::
-    /// yields`, and what each produces — a routine written into a slot, a
-    /// roll against the species' drop table — has nowhere to go in a
-    /// machine's `Stock::output`.
+    /// Whether a rig can run `def` at all. The three categories it cannot
+    /// are `Routines`, `Gear` and `Image`, which is `Game::extract_program`'s
+    /// own division rather than a second one: none of the three draws from
+    /// `ToolDef::yields`, and what each produces — a routine written into a
+    /// slot, a roll against the species' drop table, an image learned into
+    /// `resources::EmulationImages` (todo #100 Task 5) — is granted to the
+    /// *player*, not routed into a machine's `Stock::output`.
     ///
     /// A `Result` rather than a `bool` so the refusal sentence is written
     /// once, beside the rule, instead of at the door and again at the
     /// filter that hides the row.
     fn rig_runs(&self, def: &crate::tools::ToolDef) -> Result<(), String> {
         match def.category {
-            crate::tools::ToolCategory::Routines | crate::tools::ToolCategory::Gear => {
+            crate::tools::ToolCategory::Routines
+            | crate::tools::ToolCategory::Gear
+            | crate::tools::ToolCategory::Image => {
                 Err(format!("The {} is work for your hands.", def.name))
             }
-            _ => Ok(()),
+            crate::tools::ToolCategory::Materials
+            | crate::tools::ToolCategory::Parts
+            | crate::tools::ToolCategory::Cores => Ok(()),
         }
     }
 

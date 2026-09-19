@@ -12,7 +12,7 @@
 [
     (
         name: "Combat",
-        perks: [Attacker, Defender, Buffer, TargetLock, Scheduler],
+        perks: [Attacker, Defender, Buffer, TargetLock, Scheduler, EmulationFidelity],
     ),
     (
         name: "Affinities",

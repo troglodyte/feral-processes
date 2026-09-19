@@ -309,6 +309,7 @@ pub(super) fn player_decompiles(game: &mut Game) {
         BattleAction::Special {
             ability: index,
             target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+            image: None,
         },
     );
 }
@@ -323,7 +324,15 @@ pub(super) fn companion_uses_special(
     ability: usize,
     target: battle::SpecialTarget,
 ) {
-    companion_acts(game, companion, BattleAction::Special { ability, target });
+    companion_acts(
+        game,
+        companion,
+        BattleAction::Special {
+            ability,
+            target,
+            image: None,
+        },
+    );
 }
 
 /// Resolves a round in which `companion` takes `action` and everyone else
@@ -2943,6 +2952,19 @@ pub(crate) fn equip_weapon(game: &mut Game, wearer: Entity, item: &str) {
     body.get_mut::<crate::components::Equipment>()
         .expect("just inserted")
         .weapon = Some(worn);
+}
+
+/// `equip_weapon`'s twin for the Armor slot.
+pub(crate) fn equip_armor(game: &mut Game, wearer: Entity, item: &str) {
+    let worn = crate::components::EquippedItem {
+        copy: crate::items::GearCopy::plain(crate::items::ItemId(item.into())),
+        level: 1,
+    };
+    let mut body = game.world.entity_mut(wearer);
+    body.insert_if_new(crate::components::Equipment::default());
+    body.get_mut::<crate::components::Equipment>()
+        .expect("just inserted")
+        .armor = Some(worn);
 }
 
 /// Reseeds `resources::GameRng` so the next `battle::resolve_attack` lands a

@@ -1125,6 +1125,27 @@ pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
 }
 
+/// Teaches the player `species` as a learned image on an existing fixture —
+/// `resources::EmulationImages`, todo #100 Task 6's own store. No public
+/// writer short of a real extraction exists outside a save round trip:
+/// `install_player_routines`'s shape, one field over.
+pub(crate) fn learn_image(app: &mut App, species: &str) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let assets_dir = test_assets_dir();
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_image_{unique}.sav"));
+    let _cleanup = RemoveOnDrop(&path);
+    let game = app.game.as_mut().expect("a fixture with a game");
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.emulation_images.push(species.to_string());
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+}
+
 /// Empties the player's routine slots on an existing fixture, through the
 /// save the way `stand_in_base_at` does.
 ///

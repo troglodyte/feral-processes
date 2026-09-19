@@ -22,9 +22,9 @@ use feral_processes_engine::tuning::{
 };
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
-    LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
-    RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
+    Assignee, BrokerReach, ContractRow, CraftRecipe, EmulationOption, Entity, EntityView, Game,
+    InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption,
+    RecipeChain, RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
@@ -91,8 +91,8 @@ use base::draw_playing_base;
 #[cfg(test)]
 pub(crate) use base::CUTTING_OUTLINE;
 use battle::{
-    draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_special_menu,
-    draw_battle_target_menu,
+    draw_battle, draw_battle_ally_menu, draw_battle_emulate_menu, draw_battle_item_menu,
+    draw_battle_special_menu, draw_battle_target_menu,
 };
 use building::{
     build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
@@ -404,6 +404,23 @@ pub(super) fn player_sprite_name(sprite: &str) -> Option<&str> {
     (!sprite.is_empty()).then_some(sprite)
 }
 
+/// One row of the image picker (`Mode::BattleEmulate`/
+/// `Mode::TacticalEmulate`, todo #100 Task 6), shared so the group model's
+/// `draw_battle_emulate_menu` and the battle map's `draw_tactical_emulate`
+/// cannot drift on it — `menu_shortcut(i)`, not a bare `i + 1`, since
+/// `App::selected_index` only takes digits `1`-`9` for rows `0`-`8` and
+/// hands the alphabet to letters past that (`DIGIT_ROWS`), and
+/// `Game::emulation_options()` is unbounded.
+pub(super) fn emulation_row_label(i: usize, option: &EmulationOption) -> String {
+    format!(
+        "[{}] {} — ATK {} MIT {}",
+        menu_shortcut(i),
+        option.name,
+        option.atk,
+        option.mitigation
+    )
+}
+
 /// Pulls `color` toward its own grey, for drawing something that's present
 /// but not currently in play.
 fn desaturate(color: Color) -> Color {
@@ -639,6 +656,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         Mode::BattleAlly => {
             draw_battle(app, fx, painter, &m);
             draw_battle_ally_menu(app, refusal, painter, &m);
+        }
+        Mode::BattleEmulate => {
+            draw_battle(app, fx, painter, &m);
+            draw_battle_emulate_menu(app, refusal, painter, &m);
         }
         Mode::Help => {
             draw_playing_base(app, fx, None, painter, &m, reveal);
@@ -1245,6 +1266,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::TacticalEmulate => tactical::draw_tactical_emulate(
+            &game.emulation_options(),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::FieldRoutine => draw_field_routine(game, selected, refusal, painter, m),
         Mode::FieldRoutineAlly => {
             draw_field_routine_ally(game, pending_field_routine, selected, refusal, painter, m)
@@ -1467,9 +1495,10 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 110] = [
+    const ALL_MODES: [Mode; 112] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
+        Mode::TacticalEmulate,
         Mode::TacticalAim,
         Mode::TacticalResult,
         Mode::MainMenu,
@@ -1487,6 +1516,7 @@ mod tests {
         Mode::BattleItem,
         Mode::BattleSpecial,
         Mode::BattleAlly,
+        Mode::BattleEmulate,
         Mode::BattleResult,
         Mode::Build,
         Mode::BuildDirection,

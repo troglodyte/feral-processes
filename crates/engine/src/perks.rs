@@ -145,6 +145,12 @@ pub enum Perk {
     /// `Rarity::ALL` is finite, so after four ranks there is no rung above
     /// `Prismatic` left to buy and the ceiling stops climbing on its own.
     Scheduler,
+    /// Adds `EMULATION_EDGE_PER_PERK_LEVEL` per level to the multiplier
+    /// `progression::emulated_stats` applies to an emulation's attack and
+    /// mitigation, on top of `EMULATION_EDGE`. Appended rather than sorted
+    /// among the other perks because `Perk`'s variant order is save format
+    /// (see the enum's own doc).
+    EmulationFidelity,
 }
 
 impl Perk {
@@ -152,7 +158,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 19] {
+    pub fn all() -> [Perk; 20] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -173,6 +179,7 @@ impl Perk {
             Perk::TightenTolerances,
             Perk::TargetLock,
             Perk::Scheduler,
+            Perk::EmulationFidelity,
         ]
     }
 
@@ -338,6 +345,16 @@ pub fn summon_tier_ceiling(perks: Option<&crate::components::Perks>) -> crate::c
     use crate::components::Rarity;
     let rank = level(perks, Perk::Scheduler) as usize;
     Rarity::ALL[rank.min(Rarity::ALL.len() - 1)]
+}
+
+/// How many levels of `Perk::EmulationFidelity` the player has bought,
+/// read by `progression::emulated_stats`'s caller to price the multiplier
+/// it applies on top of `tuning::EMULATION_EDGE`.
+///
+/// Returns the bare level rather than a finished bonus, `mining_roll_bonus`'s
+/// reason: the formula it feeds lives in `progression`, not here.
+pub fn emulation_fidelity_level(perks: Option<&crate::components::Perks>) -> u32 {
+    level(perks, Perk::EmulationFidelity)
 }
 
 /// What the player's affinity perk for `kind` is worth, raw — the caller
@@ -824,6 +841,9 @@ mod tests {
             // The window and not the ceiling: this helper asserts a rank is
             // strictly *greater*, and `Rarity` is not ordered arithmetic.
             Perk::Scheduler => summon_rarity_window(one) > summon_rarity_window(none),
+            Perk::EmulationFidelity => {
+                emulation_fidelity_level(one) > emulation_fidelity_level(none)
+            }
             Perk::DamageAffinity
             | Perk::HealAffinity
             | Perk::BuffAffinity

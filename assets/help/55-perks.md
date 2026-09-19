@@ -8,7 +8,7 @@ A perk is bought over and over. Each purchase stacks another level on the last a
 what the first one did, so a perk you like is a place to keep putting points rather than a box to
 tick once. Nothing refunds, and nothing is lost on a breach.
 
-There are sixteen, and they fall into five jobs.
+There are twenty, and they fall into five jobs.
 
 - Raw numbers. Attacker and Defender add two points of Attack or Mitigation the moment you buy
   them. Buffer widens Integrity by a percentage and heals you in full on the way through.

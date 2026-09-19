@@ -54,6 +54,24 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-18 — Fitting `EMULATION_EDGE`](2026-09-18-emulation-edge.md) —
+  rerun against a realistic player (Perk Points spent, gear worn, the
+  ability's own real 10-round duration) for the final review's U4: the
+  species gap the first pass measured almost disappears once gear and
+  `components::BoughtStats` stack on top as flat bonuses (the strongest
+  reachable species and a middling one land within sampling noise of each
+  other, 63% vs 65%), and the ability's real duration against a
+  never-lapses stand-in swings the same fight from 63% to 92% — a bigger
+  lever than which species is worn, and one the arena still cannot model
+  the other half of (it cannot *invoke* Emulate to re-arm it).
+  `EMULATION_EDGE` (1.25) stays, but because moving it now barely changes
+  anything, not because it was refit. Also corrects the first pass's boss
+  attribution: `wintermute`'s edge was base stats as well as
+  `growth_multiplier` (its mitigation lead is 100% base stats, since
+  mitigation never scales with level at all) — moot for reachability now
+  that U1 refuses an apex species' image at the extraction door, but the
+  explanation was incomplete either way.
+
 - [2026-09-17 — The arena cannot see opportunity attacks](2026-09-17-tactical-reactions-arena-blind.md)
   — `dev-arenas/tactical-full-group.ron` is identical to every digit before
   and after reactions shipped, because **zero fire in fifty reps**: the

@@ -781,7 +781,12 @@ fn draw_surface_map(
             // up only the glyph, which is the one thing that cannot show two
             // things at once.
             if let Some(ev) = actor {
-                ch = Some(ev.glyph);
+                // While emulating, the tile draws the image's own glyph —
+                // never the player's `@` — todo #100 Task 6. `form` is
+                // `Some` for the player alone (`Game::form_look`'s only
+                // writer is `components::Emulation`), so this is checked
+                // ahead of `is_player` rather than folded into it.
+                ch = Some(ev.form.as_ref().map_or(ev.glyph, |f| f.glyph));
                 // The `@` is the one glyph whose colour is a role. Every
                 // other entity wears the hue its file authored; the player
                 // wears a colour off the character-creation wizard —
@@ -796,8 +801,14 @@ fn draw_surface_map(
                 // **A boss is the other exception, and it spends the hue on
                 // purpose.** Magenta is what a boss reads as, which is why
                 // it is the one hostile whose con rung has to go somewhere
-                // else — see `ConRead`.
-                color = if ev.is_player {
+                // else — see `ConRead`. An emulating player spends it for
+                // the same reason and the same styling — see `EntityView::
+                // form`'s doc for why this isn't `is_boss: true` instead —
+                // so it is checked first, ahead of `is_player`, or the
+                // player's own role colour would win the tile back.
+                color = if ev.form.is_some() {
+                    boss_color()
+                } else if ev.is_player {
                     player_look_color(ev.look.as_ref().and_then(|look| look.colour))
                 } else if ev.is_boss {
                     boss_color()
@@ -922,8 +933,15 @@ fn draw_surface_map(
                 // is still uploading, or a blank canvas `sync_drawn_icon`
                 // declined — misses and falls to the rung below, like any
                 // other sprite.
+                // `form.is_none()`: an emulating player draws the image's
+                // own sprite below, in the ordinary tinted rung, and never
+                // the untinted drawn icon — the overdraw trap the other
+                // way round, since the two would otherwise substitute for
+                // the same glyph on the same tile.
                 let drawn_icon = actor.is_some_and(|ev| {
-                    ev.is_player && ev.look.as_ref().is_some_and(|look| look.icon.is_some())
+                    ev.is_player
+                        && ev.form.is_none()
+                        && ev.look.as_ref().is_some_and(|look| look.icon.is_some())
                 });
                 // **An actor's sprite outranks a structure's, exactly as its
                 // glyph already does above** — `structure` is only reached
@@ -932,7 +950,16 @@ fn draw_surface_map(
                 // 2's `sprite_name` fallback), so the two non-player,
                 // non-anchor arms below are the same read for a creature and
                 // a structure alike.
+                //
+                // **`form` outranks `is_player`**, todo #100 Task 6: while
+                // emulating, the image's own sprite substitutes for the
+                // glyph exactly as any other creature's does, and never the
+                // player's chosen look — `EntityView::form`'s doc has the
+                // reason it isn't `is_boss: true` instead.
                 let sprite = match actor {
+                    Some(ev) if ev.form.is_some() => {
+                        ev.form.as_ref().and_then(|f| f.sprite.as_deref())
+                    }
                     Some(ev) if ev.is_player => ev
                         .look
                         .as_ref()
@@ -986,7 +1013,7 @@ fn draw_surface_map(
             // not hostile.
             let con = ConRead::of(
                 actor.and_then(|ev| ev.difficulty),
-                actor.is_some_and(|ev| ev.is_boss),
+                actor.is_some_and(|ev| ev.is_boss || ev.form.is_some()),
                 drew_sprite,
             );
             if let Some(ch) = ch
@@ -1144,6 +1171,27 @@ fn draw_surface_map(
             // that glyph carries the cue too.
             if cutting && actor.is_some_and(|ev| ev.is_player) {
                 painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, CUTTING_OUTLINE);
+            }
+            // While emulating, the tile's ink is spent on boss magenta —
+            // todo #100 Task 6 — so the player stays findable through an
+            // outline in their own colour instead. Every corner is already
+            // claimed (the con earmark, the nemesis mark, the staffed mark,
+            // the patrol mark), and the top-right is already cyan, which is
+            // what rules out a fifth corner mark reading as "nemesis"
+            // instead. `player_look_color` and not the `PLAYER` role colour
+            // directly, `color`'s own fallback one line above.
+            if let Some(ev) = actor
+                && ev.is_player
+                && ev.form.is_some()
+            {
+                painter.rect_lines(
+                    px,
+                    py,
+                    tile_px - 1.0,
+                    tile_px - 1.0,
+                    2.0,
+                    player_look_color(ev.look.as_ref().and_then(|look| look.colour)),
+                );
             }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
@@ -1456,6 +1504,7 @@ mod tests {
             label: "Scrapper".into(),
             is_player: false,
             look: None,
+            form: None,
             is_tamed: true,
             is_companion: false,
             is_hostile: false,
@@ -2346,6 +2395,91 @@ mod tests {
         drawn_map_with(sprites, 0)
     }
 
+    /// Advances the wild side one turn at a time until the tactical board
+    /// hands the turn to the player — `crates/app-core/src/tests/
+    /// tactical.rs`'s `wait_for_the_player`, copied rather than shared
+    /// across crates.
+    fn wait_for_the_player(game: &mut Game) {
+        for _ in 0..64 {
+            if game.tactical_awaits_input() {
+                return;
+            }
+            assert!(
+                game.tactical_ai_turn(),
+                "nobody is acting and it is not the player"
+            );
+        }
+        panic!("the turn never came round to the player");
+    }
+
+    /// A `Game` mid-tactical-fight, with the player already emulating a
+    /// known image — todo #100 Task 6's fixture for the form-drawing
+    /// tests.
+    ///
+    /// `resources::EmulationImages` has no public writer short of a real
+    /// extraction, unlike `KnownRoutines` (`CharacterChoice::routine`,
+    /// `abilities::install_starter`'s own door). So this writes the image
+    /// straight into `save::SaveData::emulation_images` and reloads —
+    /// `savetool`'s own dump-edit-pack shape, entirely through the
+    /// engine's public `save::` functions, never `Game::world`.
+    fn emulating_player() -> (Game, String) {
+        use feral_processes_engine::battle::SpecialTargeting;
+        use feral_processes_engine::save;
+
+        for seed in 0..200u32 {
+            let choice = CharacterChoice {
+                routine: Some("emulate".to_string()),
+                ..CharacterChoice::default()
+            };
+            let mut game = Game::new_with(seed, DifficultyMode::Forgiving, &test_assets(), &choice)
+                .expect("the shipped assets must load");
+            let species = game
+                .species_defs()
+                .into_iter()
+                .next()
+                .expect("at least one species ships")
+                .id;
+
+            let tmp = std::env::temp_dir().join(format!(
+                "fp_gui_emulating_player_{}_{seed}.bin",
+                std::process::id()
+            ));
+            game.save(&tmp).expect("the fixture must save");
+            let mut data = save::load_from_file(&tmp).expect("the fixture save must load back");
+            data.emulation_images.push(species.clone());
+            save::save_to_file(&tmp, &data).expect("the edited save must write back");
+            let mut game = Game::load(&tmp, &test_assets()).expect("the edited save must load");
+            let _ = std::fs::remove_file(&tmp);
+
+            let mut profile = game.profile().clone();
+            profile.tactical_battles = true;
+            game.install_profile(profile);
+
+            let at = game.player_status().position;
+            let target = game
+                .view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - at.0).abs() + (e.pos.1 - at.1).abs() == 1);
+            let Some(target) = target else { continue };
+            game.move_player(target.pos.0 - at.0, target.pos.1 - at.1);
+            if !game.in_tactical_battle() {
+                continue;
+            }
+
+            wait_for_the_player(&mut game);
+            let index = game
+                .tactical_routine_options()
+                .into_iter()
+                .find(|o| o.targeting == SpecialTargeting::Image)
+                .expect("emulate must be offered")
+                .index;
+            assert!(game.tactical_emulate(index, &species));
+            return (game, species);
+        }
+        panic!("no seed under 200 put a lone wild program next to the player");
+    }
+
     /// How far the party has to walk before the anchor it spawned on top of
     /// is a cell of its own. One step is enough; the constant is named so
     /// the assertion above can say what zero means.
@@ -2581,6 +2715,66 @@ mod tests {
         assert!(
             glyphs.iter().any(|g| g == "@"),
             "the glyph is what is left when neither rung above it draws: {glyphs:?}"
+        );
+    }
+
+    /// The overdraw trap, `the_drawn_icon_stands_in_for_the_at_sign`'s
+    /// shape, for an emulating player's own tile (todo #100 Task 6): the
+    /// image's sprite must draw, and neither the `@` nor the image's own
+    /// glyph as text may still be underneath it. Also asserts the
+    /// player-colour outline the con read and the boss magenta both leave
+    /// the player findable through.
+    #[test]
+    fn the_emulating_players_tile_draws_its_form_and_outline() {
+        let (mut game, species) = emulating_player();
+        let def = game
+            .species_defs()
+            .into_iter()
+            .find(|d| d.id == species)
+            .expect("the fixture's own species must resolve");
+        let mut table = SpriteTable::default();
+        table.insert(def.sprite_name(), bevy_egui::egui::TextureId::User(9));
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(table, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+                false,
+            );
+        });
+        let images = painted_images(&shapes);
+        let glyphs = painted_text(&shapes);
+
+        assert_eq!(images.len(), 1, "exactly one sprite, the image's own");
+        assert!(
+            !glyphs.iter().any(|g| g == "@"),
+            "the '@' must give way to the form, not sit under it: {glyphs:?}"
+        );
+        let form_glyph = def.glyph.to_string();
+        assert!(
+            !glyphs.iter().any(|g| g == &form_glyph),
+            "the form's own glyph must not draw as text under its sprite \
+             either, or the sprite has drawn beside it rather than in place \
+             of it: {glyphs:?}"
+        );
+
+        // The player-colour outline: `player_look_color(None)` is the
+        // `PLAYER` role colour, since the fixture's choice names no swatch.
+        let outline = player_look_color(None);
+        assert!(
+            painted_rect_stroke_count(&shapes, outline) > 0,
+            "the emulating player's own tile must keep an outline in their \
+             colour, since the hue is spent on boss magenta"
         );
     }
 

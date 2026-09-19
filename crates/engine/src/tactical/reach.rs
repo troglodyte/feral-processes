@@ -57,6 +57,11 @@ impl Game {
     /// no `Creature` and so no species — moves off `PLAYER_BASE_SPEED` the
     /// same way they roll initiative and hit and dodge off it. A body with
     /// no species authors nothing and always derives.
+    ///
+    /// **Reads `Creature` directly rather than `Kit` (todo #100 Task 3's
+    /// decision 11).** An emulating player still has none, so this still
+    /// derives off their own pace — footwork on the battle map is the
+    /// fighter's own body, not the borrowed form's, `combat_speed`'s reason.
     pub fn movement_allowance(&self, entity: Entity) -> u32 {
         let authored = self
             .world

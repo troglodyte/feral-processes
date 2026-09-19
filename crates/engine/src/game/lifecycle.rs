@@ -528,6 +528,10 @@ impl Game {
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
+        // Empty on a new game: nothing has been learned yet. `Game::load`
+        // refills it from the save instead (todo #100 Task 5).
+        world.insert_resource(crate::resources::EmulationImages::default());
+        world.insert_resource(crate::resources::PendingEmulateImage::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -1195,6 +1199,10 @@ impl Game {
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
+        world.insert_resource(crate::resources::EmulationImages(
+            data.emulation_images.into_iter().collect(),
+        ));
+        world.insert_resource(crate::resources::PendingEmulateImage::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -2468,6 +2476,13 @@ impl Game {
             known_tools: self
                 .world
                 .resource::<KnownTools>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
+            emulation_images: self
+                .world
+                .resource::<crate::resources::EmulationImages>()
                 .0
                 .iter()
                 .cloned()

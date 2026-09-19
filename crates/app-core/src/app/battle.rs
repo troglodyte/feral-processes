@@ -396,6 +396,10 @@ impl App {
         match chosen.targeting {
             SpecialTargeting::Ally => self.mode = Mode::BattleAlly,
             SpecialTargeting::Enemy => self.mode = Mode::BattleTarget,
+            // Emulate's own picker — todo #100 Task 6. An image, not an
+            // ally or a group, so it gets a mode of its own rather than
+            // `Mode::BattleAlly`'s list of party members.
+            SpecialTargeting::Image => self.mode = Mode::BattleEmulate,
             // Nothing left to choose — commit the action now rather than
             // opening a picker with one meaningless row. Which side it
             // sweeps is the engine's answer, not a guess made here.
@@ -408,6 +412,7 @@ impl App {
                 let action = BattleAction::Special {
                     ability: chosen.index,
                     target,
+                    image: None,
                 };
                 self.pending_battle_action = None;
                 self.pending_special_ability = None;
@@ -445,6 +450,42 @@ impl App {
             },
         ) else {
             return;
+        };
+        self.pending_battle_action = None;
+        self.pending_special_ability = None;
+        self.commit_battle_action(slot, action);
+    }
+
+    /// Picks which learned image the Emulate routine chosen in
+    /// `Mode::BattleSpecial` invokes, completing the Special — todo #100
+    /// Task 6. `handle_battle_ally_key`'s shape one target-kind over:
+    /// Emulate sweeps the whole party (`SpecialTarget::WholeParty`) with no
+    /// choice of *who*, so this picker fills `image` instead of `ally`, and
+    /// `action_from` is bypassed the way `SpecialTargeting::None`'s own
+    /// commit already is, rather than widening `Collected` for one field
+    /// only this door ever sets.
+    pub(crate) fn handle_battle_emulate_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_special_ability = None;
+            self.menu_selected = 0;
+            self.mode = Mode::BattleSpecial;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let Some(slot) = game.battle_active_slot() else {
+            return;
+        };
+        let options = game.emulation_options();
+        let Some(idx) = self.selected_index(key, options.len()) else {
+            return;
+        };
+        let Some(ability) = self.pending_special_ability else {
+            return;
+        };
+        let action = BattleAction::Special {
+            ability,
+            target: SpecialTarget::WholeParty,
+            image: Some(options[idx].species.clone()),
         };
         self.pending_battle_action = None;
         self.pending_special_ability = None;

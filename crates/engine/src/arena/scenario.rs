@@ -35,6 +35,16 @@ pub struct Scenario {
     pub inventory: Vec<InventorySpec>,
     /// `Fresh` only.
     pub party: Vec<CompanionSpec>,
+    /// `Fresh` only. Starts the player already emulating this species —
+    /// `components::Emulation`, inserted at stage time (todo #100 Task 7).
+    ///
+    /// The arena has no way to *invoke* Emulate itself: the bin plays
+    /// `PartyPlan::AllAttack`, which invokes no routine, so a scenario is
+    /// the only way to stage the kit swap at all. This bypasses
+    /// `assets/abilities/emulate.ron`'s duration, Power cost and cooldown
+    /// on purpose — it measures the swapped kit, not the action economy of
+    /// reaching it.
+    pub emulate: Option<SpeciesId>,
     /// Order is formation: `ENGAGED_GROUPS` is 2, so entries past the second
     /// are out of melee reach.
     pub opponents: Vec<OpponentSpec>,
@@ -70,6 +80,7 @@ impl Default for Scenario {
             equip: Vec::new(),
             inventory: Vec::new(),
             party: Vec::new(),
+            emulate: None,
             opponents: Vec::new(),
             encounter: None,
             model: CombatModel::default(),
@@ -192,13 +203,17 @@ impl Default for PlayerSource {
 /// The look is deliberately absent: a glyph and a swatch are what the map
 /// draws, and nothing in a staged fight reads either.
 ///
-/// **The headless bin can only see part of this.** `run_rep` plays
-/// `PartyPlan::AllAttack` — the game's own `[A]` plan — which invokes no
-/// routine, and a class is a spread of multipliers over *authored routine
-/// power* alone (`Game::ability_affinity` is not on the ordinary swing's
-/// path at all). So `class` and `routine` change nothing the bin reports;
-/// they are for the played arena, `FERAL_DEV_ARENA=1 cargo run`. `stats`
-/// lands in `Stats` and is visible to both.
+/// **The headless bin can only see part of this, and `class` is not the
+/// clean half of it.** `run_rep` plays `PartyPlan::AllAttack` — the game's
+/// own `[A]` plan — which invokes no routine, so a class's *affinity*
+/// spread over authored routine power (`Game::ability_affinity`) never
+/// touches an ordinary swing and `routine` changes nothing the bin reports.
+/// But `class` also gates `battle::attacks_per_round`'s second swing (a
+/// Striker at `EXTRA_ATTACK_LEVEL`+), which an ordinary swing very much
+/// reads — so a `class: Some(Striker)` scenario at or above that level
+/// *does* change what the bin reports, and any measurement run with one
+/// must say so rather than claim class-independence. `stats` lands in
+/// `Stats` and is visible to both.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CharacterSpec {
@@ -211,6 +226,18 @@ pub struct CharacterSpec {
     /// silently ignored input reads as the axis being worthless.
     pub stats: [u32; 4],
     pub routine: Option<AbilityId>,
+    /// Perk Points the player starts with, spent by `perks` below —
+    /// final review F10 (U4): a scenario had no way to give the staged
+    /// player any perks at all, which is not what a level-20 player looks
+    /// like. `CharacterChoice::perk_points`'s own field.
+    #[serde(default)]
+    pub perk_points: u32,
+    /// `(perk, levels)` rows, each level bought through `Game::unlock_perk`
+    /// exactly as `apply_creation_perks` buys the wizard's basket — so
+    /// `components::BoughtStats` is written the same way a real purchase
+    /// writes it, not faked in by hand.
+    #[serde(default)]
+    pub perks: Vec<(crate::perks::Perk, u32)>,
 }
 
 impl CharacterSpec {
@@ -223,6 +250,8 @@ impl CharacterSpec {
             class: self.class,
             stats: self.stats,
             routine: self.routine.clone(),
+            perk_points: self.perk_points,
+            perks: self.perks.clone(),
             ..CharacterChoice::default()
         }
     }
@@ -370,6 +399,7 @@ impl Scenario {
                 ("equip", !self.equip.is_empty()),
                 ("inventory", !self.inventory.is_empty()),
                 ("party", !self.party.is_empty()),
+                ("emulate", self.emulate.is_some()),
             ] {
                 if populated {
                     return Err(format!(
@@ -481,6 +511,33 @@ mod tests {
         )
         .unwrap_err();
         assert!(tmpl.contains("party"), "{tmpl}");
+    }
+
+    #[test]
+    fn emulate_defaults_to_none_and_round_trips_when_set() {
+        let s = Scenario::from_ron(
+            r#"(
+                player: Fresh(level: 20, zone: 3),
+                emulate: Some("wintermute"),
+                opponents: [(species: "rootkit", count: 4)],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(s.emulate, Some("wintermute".to_string()));
+        assert_eq!(Scenario::default().emulate, None);
+    }
+
+    #[test]
+    fn emulate_on_a_save_scenario_is_an_err_naming_the_field() {
+        let err = Scenario::from_ron(
+            r#"(
+                player: Save("saves/save.bin"),
+                emulate: Some("wintermute"),
+                opponents: [(species: "glitch", count: 1)],
+            )"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("emulate"), "{err}");
     }
 
     #[test]

@@ -89,6 +89,7 @@ In an intrusion:
 - a — attack
 - d — defend
 - s — special
+- r — drop your current emulation, if you have run one. See [emulation](emulation).
 - u — use an item
 - j — jack out
 - A — all attack, and D all defend: shift commands the whole party
@@ -97,8 +98,8 @@ In an intrusion:
 
 On a [battle map](battle-maps), which surface fights use if you turn them on
 in Options, the keys are different: arrows or the numpad step the acting
-body, a attacks, d defends, s runs a routine, E ends the turn, and R
-resolves the fight.
+body, a attacks, d defends, s runs a routine, V drops an active emulation,
+E ends the turn, and R resolves the fight.
 
 This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
 screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:

@@ -1344,6 +1344,22 @@ pub struct ReachCharge {
     pub ready_on: u32,
 }
 
+/// The player's current image — `game::kit::Kit::Emulated`'s state, todo
+/// #100. Only the player ever carries this.
+///
+/// Battle-scoped for `Cloaked`'s reason: no serde derive, dropped in
+/// `game/combat_teardown.rs` beside `CombatBuff` and `AbilityCooldowns`, so
+/// it appears nowhere in `save.rs` and costs no `SAVE_FORMAT_VERSION`
+/// bump — a fight in progress is never saved.
+#[derive(Component, Clone, Debug)]
+pub struct Emulation {
+    /// Which species' kit `game::kit::Kit::Emulated` reads.
+    pub species: SpeciesId,
+    /// Ages by one in `Game::tick_one_combatant`, beside `tick_combat_buff`
+    /// — at zero, `Game::drop_emulation` removes this and logs the lapse.
+    pub rounds_left: u32,
+}
+
 /// Which routine or item armed a `FieldBuff` entry. Drives the two
 /// collision rules `Game::arm_field_buff` enforces — it is not shown to the
 /// player, `ActiveFieldBuff::name` is.

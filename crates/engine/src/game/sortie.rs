@@ -662,6 +662,10 @@ impl Game {
             // model-blind through `use_ability`, which has no seat for one
             // outside a real tactical battle.
             .filter(|d| !d.effect.tactical_only())
+            // Only the player emulates (`seam:only-the-player-emulates`),
+            // and `ability_unavailable` below is that gate — a dispatched
+            // squad member is never `player_entity()`, so its own Emulate
+            // row is already refused there. No separate filter needed.
             .find(|d| self.ability_unavailable(actor, d).is_none());
         match choice {
             Some(ability) => {

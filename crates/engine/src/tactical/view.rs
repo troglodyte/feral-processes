@@ -27,7 +27,7 @@ use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
 use crate::tactical::reach;
 use crate::tuning::FORMATIONS;
-use crate::views::PlayerLook;
+use crate::views::{FormLook, PlayerLook};
 
 /// One body standing on the battle map.
 ///
@@ -55,6 +55,9 @@ pub struct TacticalBody {
     pub is_player: bool,
     /// `Some` exactly when `is_player`.
     pub look: Option<PlayerLook>,
+    /// What this body draws instead of `look`/`glyph` while emulating —
+    /// `EntityView::form`'s twin, `Game::form_look`'s other reader.
+    pub form: Option<FormLook>,
     pub is_hostile: bool,
     pub is_boss: bool,
     pub rarity: Rarity,
@@ -543,6 +546,7 @@ impl Game {
                     icon: identity.and_then(|i| i.icon.clone()),
                 }
             }),
+            form: self.form_look(entity),
             is_hostile,
             is_boss: self.is_boss_creature(entity),
             rarity: self.rarity_of(entity),

@@ -1223,6 +1223,9 @@ relying on one, and correct all three places if it has moved.
   roster — not `M`, which has been the manifest since long before this — and
   every figure comes from `Game::memory_report` / `Game::morale`.
 - **`mood` splits one store into two reads, and `evict` reads neither.**
+- **Slots are a grudge, not a door: `Game::roster_room` against
+  `ROSTER_HARD_CAP` is the one refusal into the roster, and `pet_capacity`
+  only decides who earns `unslotted`.**
 
 ### Notifications
 

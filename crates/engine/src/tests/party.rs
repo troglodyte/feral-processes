@@ -868,78 +868,70 @@ fn pet_count_tallies_every_owned_program_regardless_of_party_membership() {
     assert_eq!(game.pet_count(), 2, "a party member is still a pet");
 }
 
+/// Slots are a morale cost now, not a door: a roster past `pet_capacity`
+/// still captures, and what it pays is `unslotted` (`tests::tantrums`).
 #[test]
-fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
+fn taming_past_the_slot_capacity_is_accepted() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Fill the base roster of 3 owned pets.
-    for _ in 0..BASE_PET_CAPACITY {
+    for _ in 0..BASE_PET_CAPACITY + 2 {
         spawn_tamed(&mut game, 10, 3);
     }
-    assert_eq!(game.pet_count(), BASE_PET_CAPACITY);
+    assert!(game.pet_count() > game.pet_capacity());
 
     start_battle_with_a_wild_program(&mut game);
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    let index = decompile_index(&game);
+    game.battle_set_action(0, decompile_at_group_0(index))
+        .expect("a roster over its slots must still be able to capture");
+}
 
+/// The one ceiling left, and it is hidden: nothing on screen names
+/// `ROSTER_HARD_CAP`, so the refusal is the only place the player meets it.
+#[test]
+fn taming_is_refused_at_the_hard_roster_cap_before_the_catalyst_is_spent() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for _ in 0..crate::tuning::ROSTER_HARD_CAP {
+        spawn_tamed(&mut game, 10, 3);
+    }
+    assert_eq!(game.roster_room(), 0);
+
+    start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    let index = decompile_index(&game);
     // A full roster greys the row, so `battle_set_action` refuses it before
     // a round can ever resolve — the refusal is this `Err`, not a logged
     // line.
-    let index = game
-        .battle_special_options(0)
-        .into_iter()
-        .find(|o| o.name.to_lowercase().contains("decompile"))
-        .expect("the player starts with decompile installed")
-        .index;
     let err = game
-        .battle_set_action(
-            0,
-            BattleAction::Special {
-                ability: index,
-                target: battle::SpecialTarget::EnemyGroup { group: 0 },
-                image: None,
-            },
-        )
+        .battle_set_action(0, decompile_at_group_0(index))
         .unwrap_err();
     assert!(
         err.contains("roster is full"),
         "the refusal should say the roster is full, got: {err}"
     );
-
-    let held = |g: &Game| {
-        g.world
-            .get::<Inventory>(g.player_entity())
-            .unwrap()
-            .count(&ItemId::from(ids::ICE_BREAKER))
-    };
     assert_eq!(
-        held(&game),
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .count(&ItemId::from(ids::ICE_BREAKER)),
         1,
         "a full roster must refuse before the catalyst is spent"
     );
+}
 
-    // A Data Cache raises the cap to 8, so the same attempt is accepted
-    // rather than refused.
-    spawn_data_cache(&mut game, 1);
-    assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 5);
-    game.battle_set_action(
-        0,
-        BattleAction::Special {
-            ability: index,
-            target: battle::SpecialTarget::EnemyGroup { group: 0 },
-            image: None,
-        },
-    )
-    .expect("with a cache deployed the roster has room, so the action must be accepted");
-    // Deliberately asserts on the acceptance rather than on the catalyst
-    // being spent. Whether the attempt actually resolves depends on the
-    // round: the wild acts first, and a stun costs the player the turn
-    // before the decompile ever runs. That made this assertion a coin flip
-    // on the RNG sequence, which any unrelated change to the number of
-    // rolls could — and did — flip.
-    assert_eq!(
-        held(&game),
-        1,
-        "planning alone must not spend the catalyst — that happens on resolve"
-    );
+fn decompile_index(game: &Game) -> usize {
+    game.battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index
+}
+
+fn decompile_at_group_0(index: usize) -> BattleAction {
+    BattleAction::Special {
+        ability: index,
+        target: battle::SpecialTarget::EnemyGroup { group: 0 },
+        image: None,
+    }
 }
 
 #[test]

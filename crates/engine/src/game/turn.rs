@@ -306,6 +306,10 @@ impl Game {
         // — the order only matters at `MEMORY_CAP_PER_PROGRAM`, where
         // `remember`'s tail eviction drops the weakest.
         self.note_respites();
+        // On the same period, and a stretch like the others: how long a
+        // program has gone without a slot. Order-free against the three
+        // above — it writes a `Nothing` memory no other pass reads.
+        self.note_unslotted();
         // Beside `note_strandings` and for its reason: `needs_tick_system`
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.

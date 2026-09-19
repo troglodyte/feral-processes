@@ -140,6 +140,7 @@ but not what makes a program remember.
 | `stranded_at` | − | `BaseTile` | being posted somewhere nothing can reach |
 | `frayed_here` | − | `BaseTile` | running a need down beside an amenity that could restore it and cannot be walked to |
 | `ran_down` | − | `Nothing` | running a need down with nothing in the base that services it at all |
+| `unslotted` | − | `Nothing` | a stretch of being owned past the roster's slots, newest programs first |
 | `vented` | + | `Nothing` | coming out of a tantrum you started |
 | `turned_on_me` | − | `Program` | being the one a tantrum was aimed at, about whoever aimed it |
 | `settled_in` | + | `Structure` | a stretch of service at a machine that is running |
@@ -150,7 +151,7 @@ but not what makes a program remember.
 | `at_ease_on` | + | `BaseTile` | a stretch of standing on a floor finish whose `comfort` names it (`assets/floors/README.md`) |
 
 They are chosen to cover both valences and every subject kind, not because
-these fifteen are the interesting content. `Nothing`, `Program`, `Species`
+these sixteen are the interesting content. `Nothing`, `Program`, `Species`
 and `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
 
@@ -166,6 +167,15 @@ When it never had one at all, the program still feels it but nothing is held
 responsible, which is what `Nothing` buys: the player may not have researched
 the building, may not have the materials, and has never been told they want
 one. Neither is written until the base has grown past a grace threshold.
+
+**`unslotted` is the one kind that crosses the tantrum line on its own.**
+Every other grudge, at its strike cap and felt by the disposition that
+feels grudges hardest, stays short of downing tools — that takes a pattern,
+not one thing the player could not prevent. A roster past its slots is
+always preventable (build a Data Cache), and slots are no longer a door a
+capture is refused at: the overflow brawling is what they cost instead. The
+exemption is by name, in `tests/disposition.rs`, so a second kind cannot
+join it by accident.
 
 **`turned_on_me` is the one negative `Program` memory**, and it is worth
 saying because the other two are both fond — the subject does not imply

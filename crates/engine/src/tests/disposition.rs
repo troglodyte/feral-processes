@@ -299,10 +299,17 @@ fn sour_to(game: &mut Game, who: Entity, target: f32) {
 ///
 /// Every term is a call rather than a number, so a mod or a retune moves the
 /// bound instead of drifting from it.
+///
+/// **`unslotted` is exempt by name, and on the rule's own terms.** The rule
+/// protects a program from one thing the player could not prevent; a roster
+/// past its slots is always the player's to fix with a Data Cache, and
+/// making the overflow brawl on its own is the whole of what slots cost now
+/// that they are not a door (`Game::note_unslotted`).
 fn worst_single_grudge(game: &Game) -> f32 {
     game.world
         .resource::<crate::memories::MemoryDb>()
         .all()
+        .filter(|def| def.id.as_str() != "unslotted")
         .map(|def| {
             crate::disposition::Disposition::Abrasive
                 .felt(def.valence * def.strike_cap as f32)

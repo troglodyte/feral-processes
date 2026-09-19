@@ -101,7 +101,7 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         // The contracts screen is a base-menu row, and the chip names the
         // top-level map key that opens it.
         | AttentionKind::ContractDeliverable => InfoTab::Base,
-        AttentionKind::PerkPoints | AttentionKind::RosterFull => InfoTab::Crew,
+        AttentionKind::PerkPoints | AttentionKind::Unslotted => InfoTab::Crew,
     }
 }
 
@@ -509,7 +509,7 @@ mod tests {
             AttentionKind::StructureDamaged,
             AttentionKind::IdleStructures,
             AttentionKind::PerkPoints,
-            AttentionKind::RosterFull,
+            AttentionKind::Unslotted,
         ] {
             let tab = tab_of(kind);
             assert!(

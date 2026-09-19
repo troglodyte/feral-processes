@@ -301,18 +301,20 @@ mod refusals {
         assert!(err.contains("right now"), "{err}");
     }
 
+    /// Not a refusal any more: slots are a morale cost rather than a
+    /// limit, so a roster left past them is a state the base already
+    /// answers (`unslotted`), and refunding the perk is allowed into it.
     #[test]
-    fn when_process_pool_would_overfill_the_roster() {
+    fn not_when_process_pool_would_leave_the_roster_past_its_slots() {
         let mut game = funded(23);
         game.unlock_perk(Perk::ProcessPool).unwrap();
-        // Fill every slot the perk opened, so refunding it leaves the roster
-        // above `pet_capacity`.
         while game.pet_count() < game.pet_capacity() {
             spawn_tamed(&mut game, 20, 4);
         }
 
-        let err = assert_free(&mut game, |g| g.respec_perks());
-        assert!(err.contains("release"), "{err}");
+        game.respec_perks()
+            .expect("a roster past its slots is allowed now");
+        assert!(game.pet_count() > game.pet_capacity());
     }
 
     #[test]

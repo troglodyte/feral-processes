@@ -369,9 +369,6 @@ fn a_base_below_the_raid_staff_minimum_takes_no_raid() {
 /// it — none of them can tell one floor from another, which is exactly what
 /// this pins.
 ///
-/// Four is already past the whole roster before a Data Cache
-/// (`BASE_PET_CAPACITY`, 3), so this is also the statement that raids wait
-/// for the base to have grown a roster structure first.
 #[test]
 fn four_undowned_staff_is_still_below_the_raid_floor() {
     for seed in 0..300u32 {

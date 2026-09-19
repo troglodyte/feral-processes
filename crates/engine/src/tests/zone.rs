@@ -1889,7 +1889,7 @@ fn nest_orphans_across(seeds: std::ops::Range<u32>, fill_roster: bool) -> Vec<Op
         .map(|seed| {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
             if fill_roster {
-                while game.pet_count() < game.pet_capacity() {
+                while game.roster_room() > 0 {
                     spawn_tamed(&mut game, 10, 1);
                 }
             }
@@ -1940,7 +1940,7 @@ fn a_full_roster_loses_the_nest_orphan() {
 
     assert!(
         outcomes.iter().all(|o| o.is_none()),
-        "a roster already at pet_capacity has nowhere to put an orphan, and adopt_program \
+        "a roster at ROSTER_HARD_CAP has nowhere to put an orphan, and adopt_program \
          must not be reached at all: {outcomes:?}"
     );
 }
@@ -1956,7 +1956,7 @@ fn a_lost_nest_orphan_says_so() {
         .expect("the sweep above already asserts at least one seed hits");
 
     let mut game = Game::new(hit, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    while game.pet_count() < game.pet_capacity() {
+    while game.roster_room() > 0 {
         spawn_tamed(&mut game, 10, 1);
     }
     let nest = game.spawn_nest("scrapper", 440, 440);

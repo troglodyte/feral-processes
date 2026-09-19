@@ -4124,7 +4124,7 @@ fn an_orphan_with_nowhere_to_put_it_says_so_underfoot() {
     let mut game = game();
     descend(&mut game);
     ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
-    while game.pet_count() < game.pet_capacity() {
+    while game.roster_room() > 0 {
         spawn_tamed(&mut game, 10, 2);
     }
 
@@ -4156,7 +4156,7 @@ fn the_underfoot_offer_and_the_key_agree_on_every_refusal() {
         descend(&mut game);
         ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
         if fill_roster {
-            while game.pet_count() < game.pet_capacity() {
+            while game.roster_room() > 0 {
                 spawn_tamed(&mut game, 10, 2);
             }
         }
@@ -4255,7 +4255,7 @@ fn adopting_with_a_full_roster_is_refused_before_the_catalyst_is_spent() {
     let mut game = game();
     descend(&mut game);
     ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
-    while game.pet_count() < game.pet_capacity() {
+    while game.roster_room() > 0 {
         spawn_tamed(&mut game, 10, 2);
     }
     let before = game.pet_count();

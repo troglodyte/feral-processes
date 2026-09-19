@@ -369,7 +369,7 @@ mod tests {
                 false,
             ),
             nagging(AttentionKind::PerkPoints, "2 perk points unspent", false),
-            nagging(AttentionKind::RosterFull, "roster full (3/3)", false),
+            nagging(AttentionKind::Unslotted, "1 unslotted (4/3)", false),
         ];
         let text: String = badge_pieces(&rows)
             .iter()

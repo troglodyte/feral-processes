@@ -74,22 +74,6 @@ impl Game {
                 if perks.is_none_or(|p| p.unlocked.is_empty()) {
                     return Some("You have no perks to refund.".into());
                 }
-                // `Perk::ProcessPool` is the one term in `pet_capacity` a
-                // respec takes away, so a full roster would be over capacity
-                // the moment it is refunded. Refused rather than left
-                // over-full: there is no rule anywhere else in the game for a
-                // roster above its cap, and inventing one here would be a
-                // second meaning for `pet_capacity`.
-                let without = self
-                    .pet_capacity()
-                    .saturating_sub(crate::perks::roster_slot_bonus(perks));
-                let held = self.pet_count();
-                if held > without {
-                    return Some(format!(
-                        "Refunding Process Pool would leave {held} programs in {without} slots — release {} first.",
-                        held - without
-                    ));
-                }
             }
             RespecSubject::Talents(entity) => {
                 if self

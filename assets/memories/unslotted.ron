@@ -1,0 +1,20 @@
+// Owned, but with no slot to run in: the roster outgrew `Game::pet_capacity`
+// and this program is one of the newest past it. Slots are not a door any
+// more — a capture past them succeeds — so this is what they cost instead.
+//
+// Harsh on purpose. At the strike cap it sits past `MORALE_LASHES_OUT_AT`
+// (-75) even a full `MEMORY_POSTING_PERIOD` after its last strike, so a
+// program left without a slot ends up brawling with no other grievance. The
+// short half-life is the other half: build a Data Cache and it fades.
+//
+// `Nothing` as a subject, `ran_down`'s reason: no tile, machine or colleague
+// is to blame for the player not having built the room.
+(
+    id: "unslotted",
+    name: "Unslotted",
+    blurb: "Had nowhere of its own to run.",
+    valence: -22.0,
+    half_life: 2000,
+    subject: Nothing,
+    strike_cap: 4,
+)

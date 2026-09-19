@@ -137,3 +137,17 @@
   `MANIFEST_MEMORY_ROWS` of them, so how many are shown is a layout decision
   a width census can measure past — and `sum` is `Game::morale` over the whole
   store, never a fold over the few rows the sheet can see.
+- **Slots are a grudge, not a door: `Game::roster_room` against
+  `ROSTER_HARD_CAP` is the one refusal into the roster, and `pet_capacity`
+  only decides who earns `unslotted`.** Three traps. **A new way into the
+  roster asks `roster_room`**, never `pet_count >= pet_capacity` — that was
+  seven hand-copied doors, and the settlement gift shipped with none at all.
+  **Who is slotted is seniority by `ProgramId`**, never `Entity` (not stable
+  across a load) and never role (a party member runs somewhere too), so
+  `note_unslotted` sorts the whole owned roster and strikes the tail.
+  **`unslotted` is the one def exempt from the single-memory ceiling** in
+  `tests/disposition.rs`, by name, on the rule's own terms: the ceiling
+  protects a program from what the player could not prevent, and a missing
+  slot is always a Data Cache away. A second kind joining it must be named
+  there too, with its own reason. The attention row fires at `>` and not
+  `>=` — a roster exactly filling its slots has nothing wrong with it.

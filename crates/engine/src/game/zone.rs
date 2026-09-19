@@ -193,7 +193,7 @@ impl Game {
         let Some(at) = self.world.get::<Position>(nest).copied() else {
             return;
         };
-        if self.pet_count() >= self.pet_capacity() {
+        if self.roster_room() == 0 {
             self.log_kind(
                 MessageKind::Loot,
                 "Something small was still running in the wreckage. You have no room for it.",

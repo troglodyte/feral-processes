@@ -1421,17 +1421,17 @@ pub const STACK_CORRUPTION_PATCH_CELLS: usize = 3;
 ///
 /// One, and the supply is not what limits this. Each costs the player a
 /// taming catalyst, which is cheap; what actually binds is
-/// `BASE_PET_CAPACITY`, which is **3**. Six frames of a full stack therefore
-/// offer four or five programs to a roster that holds three, so a descent
-/// with no base standing behind it still refuses at the end.
+/// `BASE_PET_CAPACITY`, which is **3** slots. Six frames of a full stack
+/// therefore offer four or five programs to a roster with three slots, so a
+/// descent with no base standing behind it comes home with programs that
+/// have nowhere to run — adopted, since slots are not a door, and earning
+/// `unslotted` until the base makes room.
 ///
-/// Phase 4 shipped without deciding whether that read as pressure toward
-/// capacity-granting structures or as a dead mechanic. It is pressure: the
-/// Data Cache's `pet_slot_bonus` was raised to **5** so that one of them —
-/// ten Core Fragments, buildable before the first descent — absorbs a whole
-/// stack's worth of orphans. The refusal is what a player who skipped the
-/// cache meets, not what a thorough descent meets. `balance_sim` models no
-/// roster and cannot gate any of that.
+/// That is pressure toward capacity-granting structures, and it is meant
+/// to be: the Data Cache's `pet_slot_bonus` was raised to **5** so that one
+/// of them — ten Core Fragments, buildable before the first descent —
+/// slots a whole stack's worth of orphans. `balance_sim` models no roster
+/// and cannot gate any of that.
 pub const STACK_ORPHANS_PER_FRAME: usize = 1;
 
 /// What one step onto corrupted substrate costs, as a fraction of the
@@ -2348,7 +2348,7 @@ pub const NODE_PAYOUT_ZONE_BONUS: u32 = 1;
 //
 // What a posted program's `SpeciesDef::affinity_class` is worth at a
 // structure. Three of the five classes have a base job and two deliberately
-// do not: with `BASE_PET_CAPACITY` at 3, every program at a machine is one
+// do not: with `BASE_PET_CAPACITY` at 3 slots, every program at a machine is one
 // absent from the party, so a Striker or a Saboteur being a waste at a post
 // is what makes roster composition a cost rather than a formality.
 
@@ -2700,7 +2700,19 @@ pub const MAX_PARTY_SIZE: usize = 5;
 /// structures — see `StructureDef::pet_slot_bonus` and `Game::pet_capacity`,
 /// which add to this base. Distinct from `MAX_PARTY_SIZE`, which caps only
 /// how many of those pets can fight at once.
+///
+/// **Slots, not a limit.** A roster past this total still captures; what
+/// it pays is the `unslotted` memory on each program past it
+/// (`Game::note_unslotted`), which walks them down the morale ladder into
+/// tantrums. `ROSTER_HARD_CAP` is the only door.
 pub const BASE_PET_CAPACITY: usize = 3;
+
+/// The one hard ceiling on how many tamed programs the player may own,
+/// counted the way `Game::pet_count` counts — party, sortie and base staff
+/// alike. **Hidden on purpose**: no screen shows it, because the ceiling
+/// the player is meant to feel is the base coming apart past its slots.
+/// It exists to bound the per-tick cost of a base, not to shape play.
+pub const ROSTER_HARD_CAP: usize = 200;
 
 /// Chance per tick (see `Game::raid_check`) that a random deployed
 /// structure comes under raid, if any exist.
@@ -2716,12 +2728,13 @@ pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
 /// raid that would have missed anyway still consumes the same draw from
 /// `GameRng` and this gate cannot shift any other test's RNG stream.
 ///
-/// **Above `BASE_PET_CAPACITY` (3) on purpose**, so raids cannot begin
-/// until the base has grown a roster structure — a Data Cache, the one
-/// shipped `pet_slot_bonus` — or the player has taken the roster perk. A
-/// floor at or below the opening capacity meant a base being swept while
-/// its whole roster was still the three programs it started with, which is
-/// the attrition this constant exists to hold off. Pinned against the
+/// **Above `BASE_PET_CAPACITY` (3) on purpose.** A floor at or below the
+/// opening slots meant a base being swept while its whole roster was still
+/// the three programs it started with, which is the attrition this
+/// constant exists to hold off. It is a count of bodies and no longer a
+/// proxy for a Data Cache: slots stopped being a door, so five staff can
+/// stand in a base with three slots — and two of them are then earning
+/// `unslotted`, a base with its own trouble before a raid adds any. Pinned against the
 /// literal by `four_undowned_staff_is_still_below_the_raid_floor`, because
 /// every other raid test reads this constant and so moves with it.
 pub const RAID_MIN_BASE_STAFF: usize = 5;

@@ -79,23 +79,27 @@ fn one_unspent_point_is_singular() {
     );
 }
 
+/// A roster exactly filling its slots is fine now — slots stopped being a
+/// door — so the row waits for the first program with no slot, which is
+/// the first one earning `unslotted`.
 #[test]
-fn a_full_roster_says_so() {
+fn a_roster_past_its_slots_says_so() {
     let mut game = fresh(5);
-    assert!(
-        !kinds(&mut game).contains(&AttentionKind::RosterFull),
-        "a fresh roster has room"
-    );
-
     while game.pet_count() < game.pet_capacity() {
         spawn_tamed(&mut game, 10, 3);
     }
+    assert!(
+        !kinds(&mut game).contains(&AttentionKind::Unslotted),
+        "every program has a slot"
+    );
 
-    let full = row(&mut game, AttentionKind::RosterFull);
+    spawn_tamed(&mut game, 10, 3);
+
+    let over = row(&mut game, AttentionKind::Unslotted);
     let (count, capacity) = (game.pet_count(), game.pet_capacity());
-    assert_eq!(full.text, format!("roster full ({count}/{capacity})"));
-    assert_eq!(full.key, 'p');
-    assert!(!full.threat);
+    assert_eq!(over.text, format!("1 unslotted ({count}/{capacity})"));
+    assert_eq!(over.key, 'p');
+    assert!(!over.threat);
 }
 
 #[test]

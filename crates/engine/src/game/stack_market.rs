@@ -429,7 +429,7 @@ impl Game {
                 format!("{name} is yours — the only one you'll see on this shelf")
             }
             MarketOfferKind::Program { species } => {
-                if self.pet_count() >= self.pet_capacity() {
+                if self.roster_room() == 0 {
                     return Err("Your roster is full.".into());
                 }
                 // The one thing a market's own price does not describe:

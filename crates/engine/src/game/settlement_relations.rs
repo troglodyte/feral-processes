@@ -208,6 +208,9 @@ impl Game {
                 return Err(format!("{name} has nothing spare for you yet."));
             }
         }
+        if self.roster_room() == 0 {
+            return Err("Your roster is full.".into());
+        }
         let Some((ax, ay)) = self.anchor_position() else {
             return Err("You have nowhere to send it.".into());
         };

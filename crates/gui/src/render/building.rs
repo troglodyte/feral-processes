@@ -3221,7 +3221,7 @@ mod base_output_tests {
                     false,
                 ),
                 attention(AttentionKind::PerkPoints, "12 perk points unspent", false),
-                attention(AttentionKind::RosterFull, "roster full (12/12)", false),
+                attention(AttentionKind::Unslotted, "2 unslotted (14/12)", false),
             ],
         })
     }

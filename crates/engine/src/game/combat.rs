@@ -1464,7 +1464,7 @@ impl Game {
             if self.taming_catalyst().is_none() {
                 return Some("no taming catalyst".to_string());
             }
-            if self.pet_count() >= self.pet_capacity() {
+            if self.roster_room() == 0 {
                 return Some("roster is full".to_string());
             }
         }

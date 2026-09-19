@@ -787,10 +787,12 @@ impl Game {
             .collect()
     }
 
-    /// How many tamed programs the player may own in total right now:
+    /// How many slots the roster has right now — the count past which a
+    /// program is `unslotted` (`Game::note_unslotted`), not a limit on
+    /// owning one; `roster_room` is that. The total is
     /// `BASE_PET_CAPACITY` plus every deployed structure's `pet_slot_bonus`
     /// (a Data Cache adds five), plus `Perk::ProcessPool`. Derived on each
-    /// call rather than cached, so a cache lost to a raid shrinks the limit
+    /// call rather than cached, so a cache lost to a raid shrinks the slots
     /// with no invalidation step and the save format stays unchanged.
     ///
     /// The perk is the one term a raid cannot take back, which is the whole
@@ -819,6 +821,18 @@ impl Game {
             .iter_entities()
             .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
             .count()
+    }
+
+    /// How many more programs the roster may take before the hard ceiling,
+    /// `ROSTER_HARD_CAP` — **not** `pet_capacity`, which is slots: a roster
+    /// past its slots still grows, and pays for it in `unslotted`.
+    ///
+    /// The one door every way into the roster asks, so the ceiling is one
+    /// comparison rather than one per door. A basket counts it down across
+    /// its Program rows rather than re-reading per row, since one at a time
+    /// each of two would pass against a roster with one place left.
+    pub(crate) fn roster_room(&self) -> usize {
+        crate::tuning::ROSTER_HARD_CAP.saturating_sub(self.pet_count())
     }
 
     /// Units of cargo currently carried, excluding banked currency. Fused

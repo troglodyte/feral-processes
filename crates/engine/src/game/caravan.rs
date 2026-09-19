@@ -1269,16 +1269,6 @@ impl Game {
         Ok(())
     }
 
-    /// How many programs the roster has room for. Split out because a basket
-    /// has to test its Program rows *together* — one at a time each of two
-    /// would pass against a roster with one slot left.
-    ///
-    /// `pub(crate)` because a program bought off any vendor's shelf spends
-    /// the same roster slot — `Game::commit_settlement_basket` reads it too.
-    pub(crate) fn roster_room(&self) -> usize {
-        self.pet_capacity().saturating_sub(self.pet_count())
-    }
-
     /// Everything that can refuse a purchase once its price is settled,
     /// asked with **no side effect at all**, so a basket can ask it of every
     /// row before the first one moves.

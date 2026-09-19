@@ -495,7 +495,7 @@ impl Game {
         if self.taming_catalyst().is_none() {
             return Some(AdoptBlock::NoCatalyst);
         }
-        if self.pet_count() >= self.pet_capacity() {
+        if self.roster_room() == 0 {
             return Some(AdoptBlock::RosterFull);
         }
         None

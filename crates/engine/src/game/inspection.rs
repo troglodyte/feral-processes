@@ -1722,10 +1722,10 @@ impl Game {
         }
 
         let (count, capacity) = (self.pet_count(), self.pet_capacity());
-        if capacity > 0 && count >= capacity {
+        if count > capacity {
             rows.push(AttentionRow {
-                kind: AttentionKind::RosterFull,
-                text: format!("roster full ({count}/{capacity})"),
+                kind: AttentionKind::Unslotted,
+                text: format!("{} unslotted ({count}/{capacity})", count - capacity),
                 key: 'p',
                 threat: false,
             });

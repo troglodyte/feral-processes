@@ -422,6 +422,21 @@ fn a_gift_refuses_during_an_active_battle_and_spends_nothing() {
     assert_gift_spent_nothing(&game, key, roster, "active battle");
 }
 
+/// The gift was the one door into the roster with no ceiling at all.
+#[test]
+fn a_gift_refuses_at_the_hard_roster_cap_and_spends_nothing() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    while game.roster_room() > 0 {
+        spawn_tamed(&mut game, 10, 3);
+    }
+    let roster = owned_programs(&game);
+
+    let err = game.request_program_gift(key).unwrap_err();
+    assert!(err.contains("roster is full"), "{err}");
+    assert_gift_spent_nothing(&game, key, roster, "hard roster cap");
+}
+
 #[test]
 fn a_gift_refuses_an_unknown_town_and_spends_nothing() {
     let mut game = game();

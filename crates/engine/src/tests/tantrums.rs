@@ -596,3 +596,113 @@ fn a_tantrum_draws_no_rng_when_nobody_is_lashing_out() {
         "nobody is on the rung, so the beat must not draw"
     );
 }
+
+// ---------------------------------------------------------------------------
+// A program with no slot is remembered
+// ---------------------------------------------------------------------------
+
+fn wind_to(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+/// The roster ordered oldest first, which is the order slots are handed out.
+fn by_seniority(game: &Game, bodies: &[Entity]) -> Vec<Entity> {
+    let mut sorted = bodies.to_vec();
+    sorted.sort_by_key(|&e| game.world.get::<crate::components::ProgramId>(e).unwrap().0);
+    sorted
+}
+
+/// Slots go to the oldest programs, so the grudge lands on the newest
+/// arrivals past `pet_capacity` and on nobody who holds one.
+#[test]
+fn only_the_programs_past_the_slot_capacity_remember_being_unslotted() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    let capacity = game.pet_capacity();
+    assert!(
+        staff.len() > capacity,
+        "the fixture must overflow its slots"
+    );
+
+    wind_to(&mut game, crate::tuning::MEMORY_POSTING_PERIOD);
+    game.note_unslotted();
+
+    let ordered = by_seniority(&game, &staff);
+    for &slotted in &ordered[..capacity] {
+        assert!(entries(&game, slotted, "unslotted").is_empty());
+    }
+    for &overflow in &ordered[capacity..] {
+        assert_eq!(
+            entries(&game, overflow, "unslotted"),
+            vec![MemorySubject::Nothing]
+        );
+    }
+}
+
+/// `fray`'s grace: a young base is exempt from what its programs lack.
+#[test]
+fn no_program_is_unslotted_before_the_base_is_established() {
+    let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_of(&mut game, BASE_ESTABLISHED_STAFF, 1);
+    assert!(staff.len() > game.pet_capacity());
+
+    wind_to(&mut game, crate::tuning::MEMORY_POSTING_PERIOD);
+    game.note_unslotted();
+
+    for &worker in &staff {
+        assert!(entries(&game, worker, "unslotted").is_empty());
+    }
+}
+
+/// A stretch memory on `note_postings`' period: off-period ticks write
+/// nothing, or `strikes` would saturate in a few ticks and mean nothing.
+#[test]
+fn unslotted_is_written_on_the_posting_period_only() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    let newest = *by_seniority(&game, &staff).last().unwrap();
+
+    wind_to(&mut game, crate::tuning::MEMORY_POSTING_PERIOD + 1);
+    game.note_unslotted();
+    assert!(entries(&game, newest, "unslotted").is_empty());
+}
+
+/// Building slots is the fix, and it takes effect at the next beat.
+#[test]
+fn a_data_cache_stops_the_unslotted_strikes() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    spawn_data_cache(&mut game, 1);
+    assert!(game.pet_capacity() >= staff.len());
+
+    wind_to(&mut game, crate::tuning::MEMORY_POSTING_PERIOD);
+    game.note_unslotted();
+
+    for &worker in &staff {
+        assert!(entries(&game, worker, "unslotted").is_empty());
+    }
+}
+
+/// The feature's whole claim: with no other grievance, a program left
+/// without a slot ends up lashing out — and stays there between beats,
+/// since the worst case is a full period of decay after the last strike.
+#[test]
+fn a_program_left_unslotted_reaches_lashing_out_on_its_own() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    let newest = *by_seniority(&game, &staff).last().unwrap();
+
+    let period = crate::tuning::MEMORY_POSTING_PERIOD;
+    let mut tick = period;
+    for _ in 0..16 {
+        wind_to(&mut game, tick);
+        game.note_unslotted();
+        tick += period;
+    }
+    wind_to(&mut game, tick - 1);
+    let morale = game.morale(newest);
+    assert!(
+        morale <= crate::tuning::MORALE_LASHES_OUT_AT,
+        "a saturated unslotted grudge must reach the tantrum rung alone, got {morale}"
+    );
+}

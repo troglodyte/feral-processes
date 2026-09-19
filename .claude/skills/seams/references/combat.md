@@ -22,8 +22,9 @@
   it can be deleted with nothing lost. The other two are load-bearing and
   must stay: `wieldable_routines` feeds a wielded program's proc, which goes
   straight to `use_ability` and never calls `ability_unavailable` at all (the
-  proc is free, priced at nothing), so without its own filter a wielded
-  companion carrying Emulate would let a proc re-emulate the player for free;
+  proc is free, priced at nothing). Today a proc Emulate would be a no-op —
+  no `PendingEmulateImage` is set on that path, so the arm `continue`s — but
+  that is an accident of the threading, not a guard, so the filter stays;
   `wild_routine_ready` feeds `wild_retaliate`, which arms the cooldown and
   runs the routine directly, also with no `ability_unavailable` call —
   hostiles hold no `PowerReserve` by design and are routed around that gate

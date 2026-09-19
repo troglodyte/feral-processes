@@ -480,9 +480,11 @@ relying on one, and correct all three places if it has moved.
   incurs is paid from their pack.** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
   hauler uses, over the same buffers the stock block counts.
-- **A dry floor job is not a want either — `build_wants`' deadlock rule
-  crossed over**, `Game::dig_wants` asking `build_is_workable`'s question on
-  the half of the one dig verb that spends anything.
+- **A dry dig job is not a want either — `build_wants`' deadlock rule
+  crossed over**, and `Game::drop_dry_dig_wants` is where it is asked.
+- **A cut claims the tile that will hold it**, so the substrate is one
+  budget claimed in want order — open cells before solid ones, and settled
+  *after* the unreachable drop rather than inside `Game::dig_wants`.
 - **What a program needs is a catalogue, and `assets/needs/` deleted is the
   pre-needs game.** `needs::NeedDb` is `MemoryDb`'s seam again — nine
   required fields, an absent directory loading silently empty, `iter` sorted

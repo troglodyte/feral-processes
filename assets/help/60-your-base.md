@@ -31,7 +31,11 @@ Everything past that first pocket is solid, and you cut it out yourself.
 
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a
-spare body digs and a needed one does not. Marking a corridor can never stall production.
+spare body digs and a needed one does not. Marking a corridor can never stall production. The crew
+will not start a cut it cannot hold, either: a marked wall waits until the base has a Blank
+Substrate spare for the tile that follows it, and says so once. Cells already cut and waiting on
+their floor are served first. Your own swings are never held back this way — walking into a wall
+still cuts it, whatever the shelves hold.
 
 Building works the same way, and the Home is the one exception. Every other structure you pick out
 of the build menu is a *request*: it marks the cell with a dark slab and an orange caret, and one of

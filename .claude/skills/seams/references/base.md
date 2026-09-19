@@ -953,16 +953,41 @@
   `DigSite::announced_dry` says it once beside `announced_stuck`. And a body
   holding a load for a cancelled job: `schedule_base_labour` may never free
   one, so `DigErrand::Return` walks it back and gives the post up there.
-- **A dry floor job is not a want either — `build_wants`' deadlock rule
-  crossed over**, `Game::dig_wants` asking `build_is_workable`'s question on
-  the half of the one dig verb that spends anything. Gated on the *cell*
-  (`grid.is_solid`), never the mark alone, or a drought stops every cut job
-  in the base too. `Game::announce_dig_dry`, called from `dig_wants`, is the
-  one writer of `DigSite::announced_dry`, both the set and the clear. **The
-  trap the build side never needed**: `schedule_base_labour`'s "quiet base"
-  guard tests `wanted.iter().all(posted.contains)`, vacuously true whatever
-  `posted` holds the tick a dry site's drop empties `wanted`. `queue_is_empty`
-  also reads whether any `DigSite` is `marked` at all, the same "a base with
+- **A dry dig job is not a want either — `build_wants`' deadlock rule
+  crossed over**, and **a cut is dry when the tile that will hold it is**.
+  Cutting spends nothing, so asked per site the answer is always yes: the
+  crew opens the whole plan, floors one cell of it, and
+  `BASE_ENTROPY_REFILL_TICKS` takes the rest back at full thickness with
+  every swing owed again. So the substrate is a **budget** claimed in want
+  order — a cut claims 1 (the tile it will need), the tile job it turns into
+  claims the same 1 with nothing double-counted because a site is only ever
+  one of the two, an `Apply` claims `FLOOR_FINISH_COST`, and a `Strip`
+  claims nothing. **Open cells sort ahead of solid ones** inside the
+  `finish: None` block: the exposed cell's entropy window is already
+  running, so the base holds what it cut before it buys another cut. The
+  deadlock rule still holds in the direction that matters — a dropped want
+  frees the body, which is what sends it to the Mining Node and the Lathe
+  that make the substrate — and the player's own bump is untouched, which is
+  the bootstrap out of a base with nothing on its shelves.
+  `Game::drop_dry_dig_wants` is the one writer of `DigSite::announced_dry`,
+  both the set and the clear, and it owns all three wordings: a held-off cut
+  says so in words of its own, because told in the tile job's it reads as a
+  cut that already happened, and it must not borrow the *cut off* wording
+  either (`CUT_OFF`'s rule — two stalls sharing a needle is two tests each
+  satisfied by the other's bug). **The trap that moved it out of
+  `dig_wants`**: a budget claimed there goes to sites in tile order,
+  including the sealed pocket and the plan past `haul_walk_radius` that
+  `schedule_base_labour` is about to drop anyway — the unroutable-mark
+  starvation, one dimension over, with the one cell a body could have cut
+  announced dry instead. So the claim is settled over the assembled want
+  list, **after** the unreachable drop and **above** the truncation, where
+  it also keeps a job nobody can pay for out of `record_labour_demand`.
+  `dig_wants` keeps `hauling::has_station`, which is four grid lookups and
+  answers for a cell on its own. **The trap the build side never needed**:
+  `schedule_base_labour`'s "quiet base" guard tests
+  `wanted.iter().all(posted.contains)`, vacuously true whatever `posted`
+  holds the tick a dry site's drop empties `wanted`. `queue_is_empty` also
+  reads whether any `DigSite` is `marked` at all, the same "a base with
   instructions" carve-out a `BuildSite` on order already gets.
 - **What a program needs is a catalogue, and `assets/needs/` deleted is the
   pre-needs game.** `needs::NeedDb` is `MemoryDb`'s seam again — nine

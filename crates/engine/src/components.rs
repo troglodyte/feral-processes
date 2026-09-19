@@ -2313,8 +2313,10 @@ pub struct DigSite {
     /// announcement follows `set_machine_status` and fires only on
     /// transition, because entering a state is news and staying in it is not.
     pub announced_stuck: bool,
-    /// Whether the crew has already said it has nothing to floor this one
-    /// with. `announced_stuck`'s rule and `announced_stuck`'s reason —
+    /// Whether the crew has already said it has no Blank Substrate to spare
+    /// for this one — to floor the cell it has cut, or to floor the cell it
+    /// is being held back from cutting, which are one shortage told in two
+    /// wordings. `announced_stuck`'s rule and `announced_stuck`'s reason —
     /// entering a state is news, staying in it is not — but a second field
     /// rather than a shared one, because the two leave the player different
     /// errands: no route is a wall to cut, no substrate is a shelf to fill.

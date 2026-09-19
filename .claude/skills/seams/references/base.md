@@ -235,6 +235,25 @@
   `ledger`** — decrement, then refuel on reaching zero, so a supplier that
   can pay never leaves the grid for a tick — and `Starved` is the existing
   variant rather than a new one, `cell_mark`'s rule.
+- **The grid cuts its fuel makers last, nearest the fuel last of all, and
+  a short burner with nothing in store staffs them.** The Home's free 4 is
+  the bootstrap only if it *reaches* the bootstrapper. `ledger`'s first sort
+  key is `power::grid_rung` over `power::fuel_chain` (every `grid_fuel` at
+  0, what it is made of below, via `work_orders::ingredient_depths`) —
+  shipped, the Power Conduit at 0 and the Mining Node at 1. **A rung, not a
+  flag**: as one tier, four Mining Nodes west of every Conduit take the whole
+  4 and the fuel maker is dark, and a Mining Node's fragments become a cell
+  only through the player's hands. The labour half lives in `fuel_wants`:
+  fuel on a shelf is *fetched*, fuel on no shelf is *made* — `wants` asked
+  of a one-window `WorkOrder::batch` for it — filed after every fetch and
+  **never naming a dark machine**. **The dark set is asked of `ledger`
+  fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
+  runs ahead of `power_grid_system`, so the cache is last tick's and empty
+  on the first tick after a load — exactly when a base arrives dark.
+  **Charge Coil is not fuel**; the Winding Node *burns* three Power Cells
+  per coil, and protecting it would deepen a blackout. And a probe that
+  samples `PowerFuel::ticks_left` every 100 ticks aliases against
+  `POWER_UPKEEP_TICKS` and reads a healthy burner as frozen.
 - **`power_upkeep` is `Option<ItemId>`, not `bool`, and the *building*
   gates on it, not just the Grid.** Task D shipped the bool and flagged the
   wider type as a decision it wouldn't make alone; Task E took it, because

@@ -1333,6 +1333,9 @@ impl Game {
                     .get::<Routines>(entity)
                     .is_some_and(|r| r.0.iter().any(|id| id == abilities::DECOMPILE_ABILITY_ID))
                     && let Some(decompile) = db.get(abilities::DECOMPILE_ABILITY_ID)
+                    // A mod's species list could grant `decompile` on its
+                    // own merits; the weld above must not double it.
+                    && !list.iter().any(|d| d.id.as_str() == abilities::DECOMPILE_ABILITY_ID)
                 {
                     list.push(decompile.clone());
                 }
@@ -1466,11 +1469,14 @@ impl Game {
             }
         }
         // Only the player emulates (`seam:only-the-player-emulates`). This
-        // is the one door every chooser and every invocation site shares —
-        // a companion holding the Emulate routine at all is already refused
-        // by `install_disk`, but a mod's talent tree or species kit could
-        // still hand it to one, and the scattered `!matches!(…Emulate…)`
-        // filters this replaces each covered exactly one chooser.
+        // is the gate for every *chooser* that offers Emulate — a companion
+        // holding the Emulate routine at all is already refused by
+        // `install_disk`, but a mod's talent tree or species kit could
+        // still hand it to one. Two paths bypass this gate and keep their
+        // own filter instead, because neither resolves through a chooser
+        // that calls `ability_unavailable` at all: a wielded program's proc
+        // (`proc_wielded_routine`) and a hostile's retaliation
+        // (`wild_retaliate`) both go straight to `use_ability`.
         if matches!(ability.effect, AbilityEffect::Emulate { .. }) && entity != self.player_entity()
         {
             return Some("only you can emulate".to_string());

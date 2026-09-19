@@ -203,13 +203,17 @@ impl Default for PlayerSource {
 /// The look is deliberately absent: a glyph and a swatch are what the map
 /// draws, and nothing in a staged fight reads either.
 ///
-/// **The headless bin can only see part of this.** `run_rep` plays
-/// `PartyPlan::AllAttack` — the game's own `[A]` plan — which invokes no
-/// routine, and a class is a spread of multipliers over *authored routine
-/// power* alone (`Game::ability_affinity` is not on the ordinary swing's
-/// path at all). So `class` and `routine` change nothing the bin reports;
-/// they are for the played arena, `FERAL_DEV_ARENA=1 cargo run`. `stats`
-/// lands in `Stats` and is visible to both.
+/// **The headless bin can only see part of this, and `class` is not the
+/// clean half of it.** `run_rep` plays `PartyPlan::AllAttack` — the game's
+/// own `[A]` plan — which invokes no routine, so a class's *affinity*
+/// spread over authored routine power (`Game::ability_affinity`) never
+/// touches an ordinary swing and `routine` changes nothing the bin reports.
+/// But `class` also gates `battle::attacks_per_round`'s second swing (a
+/// Striker at `EXTRA_ATTACK_LEVEL`+), which an ordinary swing very much
+/// reads — so a `class: Some(Striker)` scenario at or above that level
+/// *does* change what the bin reports, and any measurement run with one
+/// must say so rather than claim class-independence. `stats` lands in
+/// `Stats` and is visible to both.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CharacterSpec {

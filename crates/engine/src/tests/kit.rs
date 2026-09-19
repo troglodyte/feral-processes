@@ -696,6 +696,40 @@ mod emulation_tests {
         );
     }
 
+    /// A mod's species could grant `decompile` on its own merits; the weld
+    /// that rides Decompile along beside the emulated list (the test above)
+    /// must not double it in that case.
+    #[test]
+    fn actor_abilities_does_not_double_decompile_if_the_species_list_grants_it() {
+        let mut game = game();
+        let player = game.player_entity();
+        let mut species = generic_species();
+        species.abilities = vec![crate::species::SpeciesAbility {
+            id: "decompile".to_string(),
+            level: 1,
+        }];
+        let id = species.id.clone();
+        game.world
+            .resource_mut::<crate::species::SpeciesDb>()
+            .insert(species);
+
+        game.world.entity_mut(player).insert(Emulation {
+            species: id,
+            rounds_left: 3,
+        });
+
+        let ids: Vec<AbilityId> = game
+            .actor_abilities(player)
+            .iter()
+            .map(|a| a.id.clone())
+            .collect();
+        assert_eq!(
+            ids.iter().filter(|id| *id == "decompile").count(),
+            1,
+            "decompile must not be listed twice: {ids:?}"
+        );
+    }
+
     /// A capture is legal in the group model while emulating — U3's "capture
     /// works while emulating in both models."
     #[test]

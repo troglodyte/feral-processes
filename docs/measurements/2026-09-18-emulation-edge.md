@@ -8,25 +8,38 @@ overturns two things the first pass believed and confirms a third.
 ## The claim
 
 `EMULATION_EDGE` (1.25) **stays**, but for a different reason than the first
-pass gave: the constant now barely moves the outcome either way once a
-realistic player's gear and Perk Points are in the mix (§"Does
-`EMULATION_EDGE` still matter?" below), so there is no numeric argument for
-moving it in either direction.
+pass gave: against a realistic player's gear, Perk Points and the ability's
+own 10-round duration, the constant now barely moves the outcome either way
+(§"Does `EMULATION_EDGE` still matter?" below), so there is no numeric
+argument for moving it in either direction. *Why* it stopped mattering is
+unresolved — see finding 1 and that section below, both confounded by the
+same run.
 
 Three things changed since the first pass:
 
-1. **The species gap collapses once gear and perks are counted.**
-   Emulating the strongest *reachable* ordinary species (`zero_day`) no
-   longer clearly beats a middling one (`scrapper`) — 63.0% vs 65.0% win
-   rate at level 20, 55.0% vs 56.5% at level 30, both well inside 200 reps'
-   ~3.5-point sampling noise. `Game::emulated_base` (F5, U2) adds worn gear
-   and the `components::BoughtStats` receipt *after* the species figure and
-   `EMULATION_EDGE` are applied, as flat bonuses — and a flat bonus is a
-   bigger fraction of a weaker base than a stronger one, so it compresses
-   exactly the spread the first pass measured. The weakest species tested,
-   `sub_process`, moved from a real if modest edge (52.0% in the first pass)
-   to barely distinguishable from the player's own kit (44.5% vs 39.0%
-   control at level 20; 41.0% vs 38.0% at level 30).
+1. **The species gap collapses once gear and perks are counted — but this
+   run is confounded and cannot say why.** Emulating the strongest
+   *reachable* ordinary species (`zero_day`) no longer clearly beats a
+   middling one (`scrapper`) — 63.0% vs 65.0% win rate at level 20, 55.0%
+   vs 56.5% at level 30, both well inside 200 reps' ~3.5-point sampling
+   noise. The weakest species tested, `sub_process`, moved from a real if
+   modest edge (52.0% in the first pass) to barely distinguishable from the
+   player's own kit (44.5% vs 39.0% control at level 20; 41.0% vs 38.0% at
+   level 30). One *hypothesis*: `Game::emulated_base` (F5, U2) adds worn
+   gear and the `components::BoughtStats` receipt *after* the species
+   figure and `EMULATION_EDGE` are applied, as flat bonuses, and a flat
+   bonus is a bigger fraction of a weaker base than a stronger one, which
+   would compress exactly the spread the first pass measured. But this same
+   run also let the image lapse partway through an average 35-round fight
+   (finding 2's own no-lapse row: 63.0% real-duration vs 92.0% never-lapses,
+   identical build and pack) — a fight that spends most of its rounds back
+   on the player's own kit narrows every emulated species toward the
+   control for that reason alone, with no flat-bonus term required. The
+   lapse is the likelier cause precisely because it is large enough
+   (29 points) to explain the collapse on its own, but **no run in this
+   file isolates the two** — staging the flat bonuses off, or staging a
+   non-lapsing fight without them, would be needed to tell which is doing
+   the work, and neither was run.
 2. **The real 10-round duration matters more than the species choice.**
    Staged for the ability's own real duration (F10-prep) instead of the old
    9999-round stand-in, `zero_day` at level 20 wins **63.0%** of a fight
@@ -180,14 +193,17 @@ control.
 
 Both moves are inside sampling noise — the opposite of the first pass,
 which found `EDGE = 1.05` cut the ordinary roster's benefit roughly in
-half. The reason is finding 1 above: most of what an ordinary emulation is
-worth to *this* player now comes from `emulated_base`'s flat additions
-(gear, `BoughtStats`), which `EMULATION_EDGE` does not touch at all —
-`stats.atk`/`stats.mitigation` (the part `EDGE` scales) is a smaller share
-of the total than it was for the ungeared, unperked player the first pass
-measured. **`EMULATION_EDGE` stays at 1.25**: nothing here argues for
-moving it, because moving it barely changes anything for the player this
-measurement models.
+half. Finding 1's flat-bonus hypothesis would explain this the same way
+(`EMULATION_EDGE` never touches `emulated_base`'s flat gear/`BoughtStats`
+additions, so if those now dominate the total, scaling `EDGE` has less
+left to move); the same run's 10-round lapse is an equally available
+explanation (a fight that spends most of its rounds back on the player's
+own kit gives `EDGE` — which only ever acts during the emulated window —
+fewer rounds to matter in). This run does not distinguish them, same as
+finding 1. **`EMULATION_EDGE` stays at 1.25** regardless of which
+explanation is right: nothing measured here argues for moving it in either
+direction, because moving it barely changed the outcome for the specific
+build and fight this measurement ran.
 
 ### No-lapse comparison (level 20, zone 3, `zero_day`, contested pack)
 
@@ -242,8 +258,9 @@ terms, whether or not the species it was about is still reachable.
   budget, a Buffer-heavy or Low-Power-Mode-heavy build, or better gear
   (fused, rare, affixed — `dev-arenas/README.md`'s note on this applies
   here too) would all move the *absolute* win rates; whether it would
-  re-open the gap between `scrapper` and `zero_day` that flat bonuses
-  closed here is untested.
+  re-open the gap between `scrapper` and `zero_day` that this run measured
+  closed is untested, and finding 1 above is why that gap's cause is itself
+  still open.
 - **The pack sizes (13 and 18 rootkits) are specific to this build.** They
   were fit so *this player's own kit* is a coinflip; a different level,
   perk spend or gear loadout needs its own fit, the same way the first
@@ -252,10 +269,19 @@ terms, whether or not the species it was about is still reachable.
   emulation.ron` itself).
 - **No party.** The player fights alone by construction, to isolate the
   kit swap from a companion's own output.
-- **`class: Striker` changes nothing this bin reports** —
-  `arena::scenario::CharacterSpec`'s own doc: a class is an affinity spread
-  over *authored routine power*, and `PartyPlan::AllAttack` invokes no
-  routine. It is here for realism alone.
+- **`class: Striker` is not inert here, and every row in this file was run
+  with it.** `attacks_for` (game/combat.rs) reads `PlayerIdentity.class`
+  regardless of kit, and `battle::attacks_per_round` gives a Striker at or
+  above `EXTRA_ATTACK_LEVEL` (8) a second swing every round —
+  `PartyPlan::AllAttack` resolves through `party_member_attacks`, which
+  loops over that count. Both scenarios (level 20 and level 30) are past
+  that threshold, so **every win rate in this file, control included, was
+  measured with a Striker's double swing**, not a class-independent kit
+  comparison. Only the *routine* half of a class
+  (`Game::ability_affinity` over authored routine power,
+  `arena::scenario::CharacterSpec`'s own doc) is inert for the reason
+  originally given here — `PartyPlan::AllAttack` invokes no routine, so
+  that half is still realism alone.
 - **`EMULATION_EDGE_PER_PERK_LEVEL` is untested here**, for the same reason
   the first pass left it untested: it only ever pushes every row further
   in the same direction, so it cannot narrow or widen the gaps this rerun
@@ -276,6 +302,11 @@ terms, whether or not the species it was about is still reachable.
   arena to be able to *invoke* a routine mid-fight, which nothing in
   `PartyPlan` does today — a real feature, not a numbers-only rerun.
 - **Does a maximally-developed build (fused/affixed rare gear, a different
-  perk split) re-open the gap between ordinary species that flat bonuses
-  closed here?** Untested; the first pass's own "not the ceiling" caveat
-  still applies, now to a higher floor.
+  perk split) re-open the gap between ordinary species that this run
+  measured closed?** Untested; the first pass's own "not the ceiling"
+  caveat still applies, now to a higher floor.
+- **Which of the flat-bonus hypothesis and the 10-round lapse actually
+  closed the species gap (finding 1)?** Untested; needs a run that varies
+  one while holding the other fixed — staging the flat bonuses off against
+  the real duration, or the current build against a non-lapsing fight,
+  would separate them.

@@ -86,18 +86,7 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                 // is still the only way to stage the swap at all), but a
                 // fight that outlasts the real duration now shows the image
                 // lapsing mid-measurement instead of hiding that entirely.
-                // Falls back to `ARENA_EMULATION_ROUNDS` only if the shipped
-                // ability is somehow missing, which `known_species` above
-                // does not already guard against.
-                let rounds = game
-                    .world
-                    .resource::<AbilityDb>()
-                    .get("emulate")
-                    .and_then(|def| match def.effect {
-                        AbilityEffect::Emulate { rounds } => Some(rounds),
-                        _ => None,
-                    })
-                    .unwrap_or(ARENA_EMULATION_ROUNDS);
+                let rounds = emulate_rounds(game.world.resource::<AbilityDb>())?;
                 game.world.entity_mut(player).insert(Emulation {
                     species: species.clone(),
                     rounds_left: rounds,
@@ -237,11 +226,25 @@ fn known_species(game: &Game, species: &SpeciesId) -> Result<(), String> {
     Ok(())
 }
 
-/// The fallback for `Scenario::emulate` if `assets/abilities/emulate.ron`'s
-/// own duration can't be read (a stripped-down test asset dir with no
-/// ability files, say) — final review F10 made the shipped duration the
-/// normal case; this only covers the asset being missing entirely.
-const ARENA_EMULATION_ROUNDS: u32 = 9_999;
+/// `Scenario::emulate`'s stand-in `Emulation` is staged for
+/// `emulate.ron`'s own duration — refused rather than defaulted to some
+/// made-up number, the same fail-loud rule `build_player` applies to an
+/// overspent stat pool or perk basket above: an instrument that silently
+/// timed an image at an arbitrary length would report numbers nobody could
+/// reproduce from the shipped asset.
+fn emulate_rounds(ability_db: &AbilityDb) -> Result<u32, String> {
+    ability_db
+        .get("emulate")
+        .and_then(|def| match def.effect {
+            AbilityEffect::Emulate { rounds } => Some(rounds),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            "emulate: assets/abilities/emulate.ron is missing or its effect \
+             is not AbilityEffect::Emulate"
+                .to_string()
+        })
+}
 
 #[cfg(test)]
 mod tests {
@@ -341,6 +344,16 @@ mod tests {
             .err()
             .expect("should refuse");
         assert!(err.contains("not_a_real_species"), "{err}");
+    }
+
+    /// Fail-loud, `an_overspent_character_spec_is_an_err_rather_than_a_
+    /// dropped_spend`'s sibling: a missing or malformed `emulate.ron` used
+    /// to fall back to a silent 9999-round stand-in, which would report a
+    /// duration nobody could reproduce from the shipped asset.
+    #[test]
+    fn a_missing_emulate_ability_is_an_err_rather_than_a_9999_round_stand_in() {
+        let err = emulate_rounds(&AbilityDb::default()).expect_err("should refuse");
+        assert!(err.contains("emulate"), "{err}");
     }
 
     #[test]

@@ -642,8 +642,9 @@ relying on one, and correct all three places if it has moved.
 
 - **`Game::kit_of` is the one answer to where a body's kit comes from**, and
   every reader of a kit figure is an exhaustive match on `Kit`.
-- **Only the player emulates, and `ability_unavailable` is where every other
-  body is refused.**
+- **Only the player emulates, and `ability_unavailable` is the gate for every
+  chooser that offers Emulate** — a wielded program's proc and a hostile's
+  retaliation call `use_ability` directly and keep their own filter.
 - **`Game::apply_damage` (`game/combat_damage.rs`) is the only code path
   that *damages* a creature**, every rung of the fumble ladder included.
 - **`PowerReserve`'s float is private, and the clamp is the type's.** Seven

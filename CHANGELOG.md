@@ -42,6 +42,24 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.207
+
+**Running out of roster slots no longer stops you capturing.** Decompiling,
+adopting an orphan, buying a program and accepting a town's gift all go
+through past your slots. What it costs instead is the base: once your base
+is established, each program past your slots, newest first, keeps the
+memory of having nowhere of its own to run, and left that way it ends up
+lashing out at its colleagues, whose grudges then spread through the base.
+A Data Cache or a level of Process Pool gives them room, and the memory
+fades. There is still a ceiling, far above anything a base can hold
+comfortably.
+
+**The roster row on the attention list now reads "2 unslotted (5/3)"**, and
+appears once you are past your slots rather than when you reach them.
+
+**Refunding Process Pool is no longer refused** when it would leave more
+programs than slots; the programs left over go unslotted.
+
 ## 0.13.206
 
 **A base whose Recharger Nodes have all run dry now lights itself again.**

@@ -27,6 +27,7 @@ use super::support::{
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
 use crate::items::{ItemId, ids};
+use crate::items_db::ItemDb;
 use crate::structures::StructureDb;
 use crate::{DifficultyMode, Game};
 
@@ -112,7 +113,7 @@ fn supply_sums_across_home_and_every_recharger() {
     spawn(&mut world, "test_recharger", 5, 5);
     spawn(&mut world, "test_recharger", 7, 7);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert_eq!(
         result.supply, 12,
@@ -144,7 +145,7 @@ fn draw_sums_only_over_structures_that_run_a_job() {
     spawn(&mut world, "test_machine_a", 3, 0);
     spawn(&mut world, "test_machine_b", 4, 0);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert_eq!(
         result.draw, 5,
@@ -164,7 +165,7 @@ fn a_base_exactly_at_capacity_has_nothing_dark() {
     spawn(&mut world, "test_home", 0, 0);
     spawn(&mut world, "test_machine", 1, 0);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert_eq!(result.supply, 5);
     assert_eq!(result.draw, 5);
@@ -189,7 +190,7 @@ fn the_cut_order_is_by_position_not_spawn_order() {
     let east = spawn(&mut world, "test_machine", 42, 40);
     let west = spawn(&mut world, "test_machine", 40, 40);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert!(
         !result.dark.contains(&west),
@@ -199,6 +200,186 @@ fn the_cut_order_is_by_position_not_spawn_order() {
         result.dark.contains(&east),
         "and the one behind it in sort order loses the cut"
     );
+}
+
+/// A machine whose `work.produces` is settable, for the cut-order tier.
+/// `machine_ron`'s `produces` is a fixed `"test_item"` that no fixture item
+/// db ever holds, which is exactly what keeps every test above it in the
+/// bottom tier and their assertions about `(x, y)` order intact.
+fn producer_ron(id: &str, produces: &str, power_draw: u32) -> String {
+    format!(
+        r#"(
+    id: "{id}",
+    name: "{id}",
+    glyph: 'x',
+    color: White,
+    build_cost: [],
+    work: Some((
+        produces: "{produces}",
+        ticks_per_unit: 1,
+    )),
+    power_draw: {power_draw},
+)"#
+    )
+}
+
+/// `structure_db`'s twin. `AbilityDb::default()` is empty, which costs
+/// nothing here: no fixture item below grants an ability.
+fn item_db(defs: &[&str]) -> ItemDb {
+    let dir = scratch_assets_dir("power_items");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (i, body) in defs.iter().enumerate() {
+        std::fs::write(dir.join(format!("i{i}.ron")), body).unwrap();
+    }
+    let (db, warnings) = ItemDb::load_dir(&dir, &crate::abilities::AbilityDb::default()).unwrap();
+    assert!(warnings.is_empty(), "bad fixture item ron: {warnings:?}");
+    db
+}
+
+#[test]
+fn a_machine_that_makes_grid_fuel_keeps_the_last_unit_of_supply() {
+    // The Home's free supply is the bootstrap out of a blackout, and it buys
+    // nothing if it lands on a machine that cannot put charge back. `eater`
+    // sorts *first* by tile, so under a tile-only cut it took the whole
+    // 1-unit budget and the base could never light its own Conduit again.
+    let items = item_db(&[r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1))"#]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        machine_ron("test_eater", 1),
+        producer_ron("test_conduit", "test_cell", 1),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let eater = spawn(&mut world, "test_eater", 0, 1);
+    let conduit = spawn(&mut world, "test_conduit", 9, 9);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(
+        !result.dark.contains(&conduit),
+        "the machine that makes the grid's own fuel must keep the supply,          however far into the tile order it sits"
+    );
+    assert!(
+        result.dark.contains(&eater),
+        "and the machine that cannot restart the grid is the one cut"
+    );
+}
+
+#[test]
+fn a_machine_that_makes_what_grid_fuel_is_made_of_keeps_it_too() {
+    // One rung further out: the Mining Node's Core Fragments are not fuel,
+    // they are what fuel is *made of*. A chain that stops at `grid_fuel`
+    // itself protects the Conduit and starves the node feeding it, which is
+    // the same dead base one tick later.
+    let items = item_db(&[
+        r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1), craftable: Some((cost: [("test_raw", 2)])))"#,
+        r#"(id: "test_raw", name: "Raw")"#,
+    ]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        machine_ron("test_eater", 1),
+        producer_ron("test_mine", "test_raw", 1),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let eater = spawn(&mut world, "test_eater", 0, 1);
+    let mine = spawn(&mut world, "test_mine", 9, 9);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(
+        !result.dark.contains(&mine),
+        "the raw the fuel is made of counts"
+    );
+    assert!(result.dark.contains(&eater));
+}
+
+#[test]
+fn an_assembler_of_grid_fuel_counts_as_much_as_an_extractor_of_it() {
+    // `grid_rung` reads both output fields. Nothing shipped
+    // assembles a grid fuel today, so only a fixture can hold this — and a
+    // reader that checked `work` alone would pass every other test here.
+    let items = item_db(&[
+        r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1), craftable: Some((cost: [("test_raw", 2)])))"#,
+        r#"(id: "test_raw", name: "Raw")"#,
+    ]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        machine_ron("test_eater", 1),
+        r#"(
+    id: "test_bench",
+    name: "test_bench",
+    glyph: 'x',
+    color: White,
+    build_cost: [],
+    work: None,
+    assembles: Some((item: "test_cell", ticks_per_unit: 1)),
+    power_draw: 1,
+)"#
+        .to_string(),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let eater = spawn(&mut world, "test_eater", 0, 1);
+    let bench = spawn(&mut world, "test_bench", 9, 9);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(!result.dark.contains(&bench));
+    assert!(result.dark.contains(&eater));
+}
+
+#[test]
+fn what_makes_the_fuel_outranks_what_the_fuel_is_made_of() {
+    // The Home's 4 must reach the Conduit *before* the Mining Nodes, not
+    // merely before the Compiler. A Mining Node's fragments become a cell
+    // only through somebody's hands — nothing on the grid assembles one —
+    // so four nodes west of every Conduit would take the whole bootstrap
+    // and leave the one machine that makes fuel from nothing dark, and a
+    // dark fuel maker is never handed a body.
+    let items = item_db(&[
+        r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1), craftable: Some((cost: [("test_raw", 2)])))"#,
+        r#"(id: "test_raw", name: "Raw")"#,
+    ]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        producer_ron("test_mine", "test_raw", 1),
+        producer_ron("test_conduit", "test_cell", 1),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let mine = spawn(&mut world, "test_mine", 0, 1);
+    let conduit = spawn(&mut world, "test_conduit", 9, 9);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(
+        !result.dark.contains(&conduit),
+        "the machine one recipe closer to the grid keeps the supply"
+    );
+    assert!(result.dark.contains(&mine));
+}
+
+#[test]
+fn inside_one_tier_the_cut_is_still_by_position() {
+    // The tier is a *first* key, not a replacement: two machines that both
+    // feed the grid still resolve the same way every run, or the sort the
+    // whole ledger exists to keep deterministic is back to bevy's iteration
+    // order for exactly the machines that matter most.
+    let items = item_db(&[r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1))"#]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        producer_ron("test_conduit", "test_cell", 1),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let east = spawn(&mut world, "test_conduit", 42, 40);
+    let west = spawn(&mut world, "test_conduit", 40, 40);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(!result.dark.contains(&west), "lower x is still cut last");
+    assert!(result.dark.contains(&east));
 }
 
 #[test]
@@ -227,7 +408,7 @@ fn a_machine_too_big_for_the_budget_does_not_darken_the_one_behind_it() {
     // Sorted third; its 2-draw no longer fits the 1 unit left.
     let tail = spawn(&mut world, "test_tail", 2, 1);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert!(
         result.dark.contains(&big),
@@ -259,7 +440,7 @@ fn an_unstaffed_machine_still_draws() {
     spawn(&mut world, "test_home", 0, 0);
     spawn(&mut world, "test_machine", 1, 0);
 
-    let result = ledger(&world, &db);
+    let result = ledger(&world, &db, &ItemDb::default());
 
     assert_eq!(
         result.draw, 3,
@@ -716,7 +897,7 @@ fn base_with_home(seed: u32) -> Game {
 /// supplier has to take its own contribution out of.
 fn grid_supply(game: &Game) -> u32 {
     let db = game.world.resource::<StructureDb>();
-    ledger(&game.world, db).supply
+    ledger(&game.world, db, game.world.resource::<ItemDb>()).supply
 }
 
 /// A shipped structure's authored `power_supply`, so the assertions below
@@ -950,7 +1131,7 @@ fn a_machine_lit_only_by_a_burning_supplier_goes_dark_with_it() {
     }
     recharger_beside_a_depot(&mut game, 0);
     let db = game.world.resource::<StructureDb>();
-    let before = ledger(&game.world, db);
+    let before = ledger(&game.world, db, game.world.resource::<ItemDb>());
     assert!(
         before.dark.is_empty(),
         "the fixture has to start with the whole base lit"
@@ -961,7 +1142,7 @@ fn a_machine_lit_only_by_a_burning_supplier_goes_dark_with_it() {
     }
 
     let db = game.world.resource::<StructureDb>();
-    let after = ledger(&game.world, db);
+    let after = ledger(&game.world, db, game.world.resource::<ItemDb>());
     assert_eq!(
         after.dark.len(),
         1,
@@ -1166,7 +1347,7 @@ fn a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real_power_cells() {
     );
     let db = game.world.resource::<StructureDb>();
     assert_eq!(
-        ledger(&game.world, db).supply,
+        ledger(&game.world, db, game.world.resource::<ItemDb>()).supply,
         0,
         "a supplier that can never pay contributes nothing to the grid"
     );

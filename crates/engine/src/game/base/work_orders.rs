@@ -744,20 +744,40 @@ pub(crate) fn queue_needs(
     orders: &[WorkOrder],
     items: &ItemDb,
 ) -> std::collections::HashSet<ItemId> {
-    let mut needed = std::collections::HashSet::new();
-    let mut frontier: Vec<ItemId> = orders.iter().map(|o| o.item.clone()).collect();
-    // `needed` doubles as the seen set, so a mod's pair of items that list
-    // each other as ingredients terminates rather than spinning.
-    while let Some(item) = frontier.pop() {
-        if !needed.insert(item.clone()) {
+    ingredient_depths(orders.iter().map(|o| o.item.clone()), items)
+        .into_keys()
+        .collect()
+}
+
+/// Every item reachable from `seeds` down `ItemDef::craftable`, with the
+/// fewest recipe steps it sits below any seed — `0` for a seed itself.
+///
+/// **The one walk down a recipe tree by item**, with two readers:
+/// `queue_needs` takes only the keys, and `power::fuel_chain` takes the
+/// depths, which is what ranks a Power Conduit above the Mining Node whose
+/// fragments a Power Cell is made of. Breadth-first because the depth has to
+/// be the *shortest* one — an item that is both a seed and an ingredient of
+/// another seed is a seed. The map doubles as the seen set, so a mod's pair
+/// of items that list each other as ingredients terminates rather than
+/// spinning.
+pub(crate) fn ingredient_depths(
+    seeds: impl IntoIterator<Item = ItemId>,
+    items: &ItemDb,
+) -> std::collections::HashMap<ItemId, u32> {
+    let mut depths = std::collections::HashMap::new();
+    let mut frontier: std::collections::VecDeque<(ItemId, u32)> =
+        seeds.into_iter().map(|id| (id, 0)).collect();
+    while let Some((item, depth)) = frontier.pop_front() {
+        if depths.contains_key(&item) {
             continue;
         }
+        depths.insert(item.clone(), depth);
         let Some(recipe) = items.get(item.as_str()).and_then(|d| d.craftable.as_ref()) else {
             continue;
         };
-        frontier.extend(recipe.cost.iter().map(|(id, _)| id.clone()));
+        frontier.extend(recipe.cost.iter().map(|(id, _)| (id.clone(), depth + 1)));
     }
-    needed
+    depths
 }
 
 /// Which of the three things `Game::announce_dig_dry` ran out of Blank
@@ -1431,6 +1451,27 @@ impl Game {
     /// want nothing can supply still costs a body out of the truncation
     /// below, and on a one-program base that body is the one producing the
     /// cells.
+    ///
+    /// **And a short burner with nothing in store asks for its fuel to be
+    /// made instead**, which is the gate's other half. Left at "nothing to
+    /// fetch, so nothing to want", a base whose Recharger Nodes all ran dry
+    /// kept every body on its work orders while a Power Conduit — the one
+    /// machine that makes cells out of nothing — stood `Idle` beside them,
+    /// and the grid never came back: no order names Power Cells, so nothing
+    /// else would ever post to it. The make want is `wants` asked about the
+    /// fuel as though it were a one-window order, so it names whatever the
+    /// base makes that fuel with, a mod's bench and its feeders included,
+    /// and each of those is a machine that `can_progress` — which is what
+    /// hands the body back the moment the Conduit's buffer fills and its
+    /// worker carries the load to a Depot, where the fetch half takes over.
+    /// Filed *after* every fetch, since carrying a cell that exists beats
+    /// making one that does not.
+    ///
+    /// **A dark machine is never named**: a body posted to a fuel maker the
+    /// grid cannot run makes nothing for exactly as long as the base is
+    /// short, which is exactly as long as the want lasts. See
+    /// `game::base::power::ledger` for why the fuel makers are the last
+    /// machines it cuts.
     fn fuel_wants(&self) -> Vec<(Entity, TaskKind)> {
         // Every deployed structure carrying a buffer, which is every one of
         // them — collected once because this asks three questions of the
@@ -1462,7 +1503,8 @@ impl Game {
                 .sum()
         };
 
-        let mut wants: Vec<((i32, i32), Entity)> = Vec::new();
+        let mut fetches: Vec<((i32, i32), Entity)> = Vec::new();
+        let mut unstocked: Vec<ItemId> = Vec::new();
         for (burner, (x, y), kind) in &cells {
             let Some(fuel) = db.get(kind).and_then(|d| d.power_upkeep.clone()) else {
                 continue;
@@ -1483,18 +1525,44 @@ impl Game {
                 continue;
             }
             if shelved(&fuel) < per_window {
+                if !unstocked.contains(&fuel) {
+                    unstocked.push(fuel);
+                }
                 continue;
             }
-            wants.push(((*x, *y), *burner));
+            fetches.push(((*x, *y), *burner));
         }
         // `assembler_system`'s reason: `iter_entities` order is not stable,
         // and two suppliers competing for the last body have to resolve the
-        // same way every run.
-        wants.sort_unstable();
-        wants
+        // same way every run. `unstocked` is sorted for the same reason —
+        // two burners on different fuels were pushed in that same order.
+        fetches.sort_unstable();
+        unstocked.sort_unstable();
+        let mut out: Vec<(Entity, TaskKind)> = fetches
             .into_iter()
             .map(|(_, burner)| (burner, TaskKind::GatherResource))
-            .collect()
+            .collect();
+        if unstocked.is_empty() {
+            return out;
+        }
+        // Asked fresh rather than read off `resources::PowerGrid`: this runs
+        // ahead of `power_grid_system` in the tick, so the resource is last
+        // tick's ledger — empty on the first tick after a load, which is
+        // exactly when a base arrives already dark. Only reached while a
+        // burner is short with nothing in store, so the walk is a blackout's
+        // cost and not a tick's.
+        let dark =
+            crate::game::base::power::ledger(&self.world, db, self.world.resource::<ItemDb>()).dark;
+        for fuel in unstocked {
+            let order = WorkOrder::batch(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW);
+            for (machine, _) in wants(self, &order) {
+                if dark.contains(&machine) || out.iter().any(|&(e, _)| e == machine) {
+                    continue;
+                }
+                out.push((machine, TaskKind::GatherResource));
+            }
+        }
+        out
     }
 
     /// Every marked dig site, in a stable tile order — the lowest-priority

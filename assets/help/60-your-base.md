@@ -55,7 +55,9 @@ and puts every part already carried there back on a shelf.
 
 Machines run on the Grid, and the Grid has to cover them. Every tick the base sums what it supplies
 against what its machines draw, and anything over the line is cut in a fixed order until the rest
-fit. A cut machine reads dark: no progress, no pulling from its neighbours, and nothing to be had by
+fit. A Power Conduit is cut last of all and a Mining Node just before it, because those are how a
+base with every Recharger dry lights itself again on the Home's four alone. A cut machine reads
+dark: no progress, no pulling from its neighbours, and nothing to be had by
 working it by hand either. Home supplies four and so does each Recharger Node, there is no limit on
 how many Rechargers you build, and a Line Driver is pure supply with nothing else attached. A
 machine draws whether or not anybody is posted to it, which makes an idle machine kept for later a
@@ -67,7 +69,7 @@ scheduler decides the whole assignment every tick by priority: pending builds fi
 Recharger Node or a Line Driver fuelled, then work orders, then standing jobs, then digging. Those
 two burn a Power Cell to stay on the Grid, and a program will walk one over from a shelf ahead of
 almost anything else — on a base short of hands, that means a machine stands idle while the lights
-stay on. A work order is an item and a quantity and nothing else — say what you want and
+stay on. With no cell on any shelf, that program goes to a Power Conduit and makes some instead. A work order is an item and a quantity and nothing else — say what you want and
 the base works out which machines make it, who stands on each, and what has to be fetched. The queue
 is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
 and > move the highlighted order up and down. Cancelling one unwinds nothing.

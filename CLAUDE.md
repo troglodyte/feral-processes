@@ -299,6 +299,10 @@ relying on one, and correct all three places if it has moved.
 - **A supplier that declares `power_upkeep` (an `Option<ItemId>` naming its
   fuel) does nothing at all while it is dry — grid supply and its own
   `power_regen` trickle alike — and the Home never declares it.**
+- **The grid cuts its fuel makers last, nearest the fuel last of all, and a
+  short burner with nothing in store staffs them** — `power::grid_rung` is
+  the ledger's first key and `fuel_wants`' make half never names a dark
+  machine, asked of `ledger` fresh.
 - **`collect::plan_adjacent_take` is the one machine-to-machine reach**, the
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw

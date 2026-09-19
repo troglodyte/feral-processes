@@ -1095,6 +1095,13 @@ fn posted_to(game: &Game, worker: Entity) -> Option<Entity> {
     game.world.get::<Task>(worker).map(|t| t.target)
 }
 
+/// A base that may build a Power Conduit — `power_grid` is its research node.
+fn base_with_conduits(seed: u32) -> Game {
+    let mut game = base(seed);
+    unlock_research_chain(&mut game, "power_grid");
+    game
+}
+
 /// A standing order big enough that no fixture fill can satisfy it, so the
 /// machine below stays a want for the whole of a test.
 fn order_core_fragments(game: &mut Game) {
@@ -1187,6 +1194,92 @@ fn a_burner_is_no_want_when_no_shelf_holds_its_fuel() {
         Some(node),
         "nothing in store to fetch is nothing to want a body for"
     );
+}
+
+#[test]
+fn a_short_burner_with_nothing_in_store_puts_a_body_on_what_makes_its_fuel() {
+    // The other half of the stock gate above. Nothing to fetch is not
+    // nothing to do: the base can *make* the fuel, and a body left on a
+    // Mining Node while every Recharger runs dry is how a run used to end
+    // with a working Conduit standing idle beside it.
+    let mut game = base_with_conduits(9110);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let conduit = deploy(&mut game, "power_conduit", -2, 0);
+    recharger_and_a_distant_depot(&mut game, 0);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, node);
+
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(conduit),
+        "with no cell anywhere, the fuel want is a want on the machine that \
+         makes one, and it still outranks the order"
+    );
+}
+
+#[test]
+fn a_base_with_no_cell_anywhere_relights_its_own_recharger() {
+    // End to end, and the whole of what the want above is for: nothing on
+    // any shelf, nothing in any hopper, and the base gets a cell into the
+    // Recharger by itself. The Conduit's worker fills its buffer and
+    // unloads it onto the Depot, and the fetch half of `fuel_wants` takes
+    // it from there.
+    let mut game = base_with_conduits(9111);
+    deploy(&mut game, "power_conduit", -2, 0);
+    let (recharger, _) = recharger_and_a_distant_depot(&mut game, 0);
+    hauler(&mut game);
+    hauler(&mut game);
+
+    tick_until(&mut game, 600, |g| {
+        hopper(g, recharger, ids::POWER_CELL) > 0
+    });
+
+    assert!(
+        hopper(&game, recharger, ids::POWER_CELL) > 0,
+        "a base that can make its own fuel must never stay dark for want \
+         of a body to make it"
+    );
+}
+
+#[test]
+fn a_dark_fuel_maker_is_not_handed_a_body() {
+    // A body posted to a Conduit the grid cannot run stands there making
+    // nothing for as long as the base is short — which is exactly as long
+    // as the want lasts, so on a one-body base it never comes back. Five
+    // Conduits against the Home's 4: the fifth in tile order is dark.
+    let mut game = base_with_conduits(9112);
+    let conduits: Vec<Entity> = (0..5)
+        .map(|i| deploy(&mut game, "power_conduit", -2, i - 2))
+        .collect();
+    let (recharger, _) = recharger_and_a_distant_depot(&mut game, 0);
+    // A fresh Recharger comes with a full window of charge, which would put
+    // supply at 8 and every Conduit in the light. The blackout is the case.
+    game.world
+        .get_mut::<components::PowerFuel>(recharger)
+        .unwrap()
+        .ticks_left = 0;
+    let workers: Vec<Entity> = (0..5).map(|_| hauler(&mut game)).collect();
+
+    game.tick();
+
+    let dark = conduits[4];
+    assert!(
+        game.world
+            .resource::<resources::PowerGrid>()
+            .dark
+            .contains(&dark),
+        "fixture: the fifth Conduit is past the Home's supply"
+    );
+    for w in workers {
+        assert_ne!(
+            posted_to(&game, w),
+            Some(dark),
+            "nobody posted to a dark Conduit"
+        );
+    }
 }
 
 #[test]

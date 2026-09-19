@@ -892,7 +892,7 @@ pub enum MachineStatus {
     ///
     /// A sixth variant is allowed here where `views.rs::output_stranded`
     /// refused one, and the difference is worth keeping straight: a base-wide
-    /// shortfall is *not* what this says. Under the `(x, y)` cut order one
+    /// shortfall is *not* what this says. Under the ledger's cut order one
     /// machine runs while its neighbour two tiles over is dark, so which
     /// machine lost the cut really is that machine's own state — which is the
     /// test that enum is held to.

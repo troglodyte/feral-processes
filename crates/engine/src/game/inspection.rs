@@ -1510,7 +1510,8 @@ impl Game {
     /// `EntityView::machine_status` and `MachineStatus::Unpowered`.
     pub fn base_power(&self) -> (u32, u32) {
         let db = self.world.resource::<StructureDb>();
-        let ledger = crate::game::base::power::ledger(&self.world, db);
+        let items = self.world.resource::<crate::items_db::ItemDb>();
+        let ledger = crate::game::base::power::ledger(&self.world, db, items);
         (ledger.draw, ledger.supply)
     }
 

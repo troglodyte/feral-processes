@@ -42,6 +42,36 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.205
+
+**In a fight, you can emulate a species whose image you have learned, and
+fight with its kit for ten rounds.** Emulate is a routine, unlocked by
+research. Choosing it opens a picker of your learned images, each showing
+the attack and mitigation you would fight with. While it holds, you swing
+with that species' attacks, reach and affinities and run its routines.
+You keep your own Integrity, gear, bought stat points and Decompile.
+Changing back costs the turn and no Power. Only the player can emulate:
+a companion given the Emulate disk is refused.
+
+**A new extraction tool, the Image Extractor, teaches you a downed program's
+image instead of drawing out items.** It unlocks alongside the Routine
+Reader. An image you already hold is refused before the program is spent.
+Apex (boss) species cannot be learned at all, because in the arena their
+image outclassed every build it was tested against. A rolled boss of an
+ordinary species still teaches its ordinary image.
+
+**The Emulation Fidelity perk makes every emulation hit harder.** Each
+level raises the emulated attack and mitigation. The figures in the image
+picker already include it.
+
+**The Emulate disk is not sold anywhere.** Installing a disk doesn't check
+research, so a disk on a shelf would have skipped the research node. The
+creation shelf, traders, settlements and the Stack market all leave it out.
+
+**A new help page, Emulation, is linked from Extraction and Controls.** On
+a battle map, Change Back is `V`; in a group fight it is a row on the
+action list.
+
 ## 0.13.204
 
 **Nothing changes in play.** This release prepares the code for player

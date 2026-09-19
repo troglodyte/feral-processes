@@ -19,7 +19,7 @@ alive, and are read at exactly one moment.
 
 `BuildSite::program: Option<CreatureSave>` already holds the committed program
 from the moment an order is filed until the crew finishes it — see
-`docs/superpowers/specs/2026-09-07-tamed-program-build-requirement-design.md`,
+`docs/superpowers/archive/specs/2026-09-07-tamed-program-build-requirement-design.md`,
 whose §2 lifecycle table this spec extends by one column. That spec closed with
 *"no structure remembers what it ate"* listed as deliberately out of scope.
 This is that scope, reopened with a reason: not flavour, a number.

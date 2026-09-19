@@ -296,7 +296,7 @@ fn a_machine_that_makes_what_grid_fuel_is_made_of_keeps_it_too() {
 
 #[test]
 fn an_assembler_of_grid_fuel_counts_as_much_as_an_extractor_of_it() {
-    // `restarts_the_grid` reads both output fields. Nothing shipped
+    // `grid_rung` reads both output fields. Nothing shipped
     // assembles a grid fuel today, so only a fixture can hold this — and a
     // reader that checked `work` alone would pass every other test here.
     let items = item_db(&[
@@ -327,6 +327,37 @@ fn an_assembler_of_grid_fuel_counts_as_much_as_an_extractor_of_it() {
 
     assert!(!result.dark.contains(&bench));
     assert!(result.dark.contains(&eater));
+}
+
+#[test]
+fn what_makes_the_fuel_outranks_what_the_fuel_is_made_of() {
+    // The Home's 4 must reach the Conduit *before* the Mining Nodes, not
+    // merely before the Compiler. A Mining Node's fragments become a cell
+    // only through somebody's hands — nothing on the grid assembles one —
+    // so four nodes west of every Conduit would take the whole bootstrap
+    // and leave the one machine that makes fuel from nothing dark, and a
+    // dark fuel maker is never handed a body.
+    let items = item_db(&[
+        r#"(id: "test_cell", name: "Cell", grid_fuel: Some(1), craftable: Some((cost: [("test_raw", 2)])))"#,
+        r#"(id: "test_raw", name: "Raw")"#,
+    ]);
+    let db = structure_db(&[
+        passive_ron("test_home", 1, 0),
+        producer_ron("test_mine", "test_raw", 1),
+        producer_ron("test_conduit", "test_cell", 1),
+    ]);
+    let mut world = World::new();
+    spawn(&mut world, "test_home", 0, 0);
+    let mine = spawn(&mut world, "test_mine", 0, 1);
+    let conduit = spawn(&mut world, "test_conduit", 9, 9);
+
+    let result = ledger(&world, &db, &items);
+
+    assert!(
+        !result.dark.contains(&conduit),
+        "the machine one recipe closer to the grid keeps the supply"
+    );
+    assert!(result.dark.contains(&mine));
 }
 
 #[test]

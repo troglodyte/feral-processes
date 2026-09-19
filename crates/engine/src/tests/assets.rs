@@ -1776,42 +1776,52 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
 }
 
 /// The bootstrap has to reach the bootstrapper. `ledger` cuts the machines
-/// that can restart the grid last, so a base collapsed to the Home's free
-/// supply recovers only if that supply covers one of each of them — a
-/// Mining Node and a Power Conduit standing dark behind a Compiler that ate
-/// the Home's 4 is how a run used to die with its own way out standing idle.
+/// that can restart the grid last, nearest the fuel last of all, so a base
+/// collapsed to the Home's free supply recovers only if that supply covers
+/// the rung that makes fuel out of nothing — a Power Conduit standing dark
+/// behind a Compiler that ate the Home's 4 is how a run used to die with its
+/// own way out standing idle.
 ///
-/// The set is named rather than merely counted: it is *derived* from the
-/// item catalogue (`power::fuel_chain`), so a new `grid_fuel` or a new
-/// ingredient in the Power Cell's recipe silently widens it, and the widened
-/// set may no longer fit the Home. Change the list deliberately.
+/// The rungs are named rather than merely counted: they are *derived* from
+/// the item catalogue (`power::fuel_chain`), so a new `grid_fuel` or a new
+/// ingredient in the Power Cell's recipe silently reorders them, and the
+/// reordered set may no longer fit the Home. Change the table deliberately.
 #[test]
-fn the_home_alone_lights_every_kind_that_restarts_the_grid() {
+fn the_home_alone_lights_the_machine_that_makes_grid_fuel() {
     let game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
     let items = game.world.resource::<ItemDb>();
     let chain = crate::game::base::power::fuel_chain(items);
 
-    let mut tier: Vec<&str> = db
+    let mut rungs: Vec<(u32, &str)> = db
         .all()
         .filter(|def| def.runs_a_job())
-        .filter(|def| crate::game::base::power::restarts_the_grid(def, &chain))
-        .map(|def| def.id.as_str())
+        .filter_map(|def| {
+            Some((
+                crate::game::base::power::grid_rung(def, &chain)?,
+                def.id.as_str(),
+            ))
+        })
         .collect();
-    tier.sort_unstable();
+    rungs.sort_unstable();
     assert_eq!(
-        tier,
-        ["mining_node", "power_conduit"],
-        "the machines that outrank the rest of the base for power; the \
-         Winding Node's Charge Coil is a Power Cell *sink* and must not be here"
+        rungs,
+        [(0, "power_conduit"), (1, "mining_node")],
+        "the machines that outrank the rest of the base for power, and in \
+         what order; the Winding Node's Charge Coil is a Power Cell *sink* \
+         and must not be here"
     );
 
     let home = db.get("home").expect("home ships");
-    let tier_draw: u32 = tier.iter().map(|id| db.get(id).unwrap().power_draw).sum();
+    let makers_draw: u32 = rungs
+        .iter()
+        .filter(|(rung, _)| *rung == 0)
+        .map(|(_, id)| db.get(id).unwrap().power_draw)
+        .sum();
     assert!(
-        home.power_supply >= tier_draw,
-        "Home supplies {}, but one of each machine that can restart the grid \
-         draws {tier_draw} — a blackout would be permanent",
+        home.power_supply >= makers_draw,
+        "Home supplies {}, but one of each machine that makes grid fuel draws \
+         {makers_draw} — a blackout would be permanent",
         home.power_supply
     );
 }

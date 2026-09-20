@@ -225,10 +225,14 @@ impl Game {
         if !self.world.resource::<BaseGrid>().is_floor(pen.0, pen.1) {
             return Err("The pen has no floor under it.".into());
         }
+        // Exempt `program` itself — `place_structure`'s body refusal exempts
+        // the program paying for the build for the same reason: a program
+        // that happens to already be standing on the pen (no walk needed at
+        // all) must not trip this refusal against its own position.
         if self
             .base_bodies()
             .into_iter()
-            .any(|(_, p)| (p.x, p.y) == pen)
+            .any(|(e, p)| e != program && (p.x, p.y) == pen)
         {
             return Err("Something is already standing in the pen.".into());
         }

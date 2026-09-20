@@ -4754,6 +4754,30 @@ fn pin_subject_succeeds_and_writes_the_marker() {
 }
 
 #[test]
+fn pin_subject_succeeds_for_a_program_already_standing_on_the_pen() {
+    // The occupancy refusal must exempt the program being pinned — the same
+    // way `place_structure`'s body refusal exempts the program paying for
+    // the build. A program that happens to already be standing on the pen
+    // tile (no walk needed) must not trip "something is already standing in
+    // the pen" against itself.
+    let (mut game, station) = base_with_station(4308100);
+    let pen = game.study_pen(station).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(program).unwrap().x = pen.0;
+    game.world.get_mut::<Position>(program).unwrap().y = pen.1;
+
+    game.pin_subject(program, station)
+        .expect("pinning the occupant of the pen onto itself must succeed");
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .map(|u| u.station),
+        Some(station)
+    );
+}
+
+#[test]
 fn unpin_subject_is_refused_when_nothing_is_pinned() {
     let (mut game, _station) = base_with_station(4309);
     let program = spawn_tamed(&mut game, 10, 3);

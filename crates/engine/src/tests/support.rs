@@ -1567,19 +1567,6 @@ pub(super) fn pin_subject_at_pen(game: &mut Game, program: Entity, station: Enti
     let pen = game
         .study_pen(station)
         .expect("a station under test must declare studies");
-    // `pin_subject`'s "something is already standing in the pen" refusal
-    // does not exclude the program *being* pinned, so a fixture that lets a
-    // program spawn on the pen by coincidence (`spawn_tamed`'s default
-    // `(3, 3)`, which several stations sit at the anchor of) would trip its
-    // own refusal. `(0, 0)` sits well inside `STARTING_POCKET_RADIUS` and is
-    // never a pen a test places a station at, so it is a safe stand-off cell
-    // to pin from.
-    if let Some(mut pos) = game.world.get_mut::<Position>(program)
-        && (pos.x, pos.y) == pen
-    {
-        pos.x = 0;
-        pos.y = 0;
-    }
     game.pin_subject(program, station)
         .expect("pin_subject should succeed for a staff program with a route");
     let mut pos = game.world.get_mut::<Position>(program).unwrap();

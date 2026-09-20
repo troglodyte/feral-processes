@@ -718,7 +718,11 @@ impl Game {
     /// sortie. Each exclusion below is for its own reason, and none is
     /// cosmetic: a carrier's goods are destroyed by freeing it, let alone
     /// despawning it; a sortied program is away and cannot be reached; a
-    /// `Downed` one is the roster slot a wipe is supposed to cost.
+    /// `Downed` one is the roster slot a wipe is supposed to cost; and a
+    /// pinned subject is standing in a pen mid-study, `commit_program`'s own
+    /// reason for the identical exclusion — offering it here and refusing it
+    /// there would let the picker confirm a spend `commit_program` then
+    /// silently declines.
     ///
     /// **The roster floor is part of the filter, not a separate gate.** A
     /// base holding exactly one program can spend none of it (see
@@ -757,6 +761,11 @@ impl Game {
                     .is_none()
             })
             .filter(|p| self.world.get::<Carrying>(p.entity).is_none())
+            .filter(|p| {
+                self.world
+                    .get::<crate::components::UnderStudy>(p.entity)
+                    .is_none()
+            })
             .collect()
     }
 
@@ -1539,6 +1548,12 @@ impl Game {
         // despawning it, and nothing in the base has a claim on it to
         // return it to.
         if self.world.get::<Carrying>(e).is_some() {
+            return None;
+        }
+        // Standing in a pen mid-study — `programs_for_build`'s own reason
+        // for the identical exclusion, so the picker cannot offer a spend
+        // this door then silently declines.
+        if self.world.get::<crate::components::UnderStudy>(e).is_some() {
             return None;
         }
         let snapshot = self.creature_save_for(e)?;

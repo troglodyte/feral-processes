@@ -3003,6 +3003,28 @@ fn a_program_carrying_goods_is_not_offered_to_a_build() {
     );
 }
 
+/// A pinned subject is standing in a Research Station's pen mid-study —
+/// offering it here would let the picker confirm a spend `commit_program`
+/// then silently declines. `commit_program`'s own reason for the identical
+/// exclusion (see `committing_a_pinned_subject_is_refused` below).
+#[test]
+fn a_pinned_subject_is_not_offered_to_a_build() {
+    let (mut game, station) = base_with_station(20260920);
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(p, station).expect("staff is pinnable");
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a subject under study is not spendable on a build"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one still on staff is offered, so the list is not simply empty"
+    );
+}
+
 /// The program rule may never demand a depth the tier ceiling would not
 /// have let the player reach. If `upgrade_ceiling` ever loosens, this is
 /// what says so out loud instead of leaving an unsatisfiable upgrade.
@@ -3299,6 +3321,19 @@ fn committing_a_downed_program_is_refused() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = tame_at_zone(&mut game, 1);
     game.world.entity_mut(p).insert(Downed);
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// `programs_for_build`'s own reason for the identical exclusion: a program
+/// mid-study is not reachable to spend, so this door refuses too rather than
+/// leaving the rule live only in a picker.
+#[test]
+fn committing_a_pinned_subject_is_refused() {
+    let (mut game, station) = base_with_station(20260922);
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(p, station).expect("staff is pinnable");
 
     assert!(game.commit_program(p).is_none());
     assert!(game.world.get_entity(p).is_ok());

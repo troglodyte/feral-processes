@@ -1,6 +1,7 @@
 //! The research tree and the recipes and structures it gates.
 
 use super::support::*;
+use crate::items::DownedProgram;
 use crate::*;
 
 #[test]
@@ -2241,4 +2242,167 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
     game.abandon_research().unwrap();
     game.unpin_subject(program)
         .expect("abandoning the project frees the subject to be unpinned");
+}
+
+// ---------------------------------------------------------------------
+// Completion spends the subject (Task 8)
+// ---------------------------------------------------------------------
+
+/// A minimal filler row for `components::DownedPrograms`, used only to
+/// saturate the store — nothing about its content matters to the tests
+/// that spawn it.
+fn filler_downed_program() -> DownedProgram {
+    DownedProgram {
+        species: "test_generic".to_string(),
+        level: 1,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 50,
+        carried: None,
+    }
+}
+
+/// Decision 5's short-circuit, the subject half: full progress and a full
+/// bill do not complete a subject-gated project once its subject is gone —
+/// `a_full_bill_alone_does_not_complete_a_project`'s failure, with a worse
+/// loss, since a program is not refundable the way a shelf material is.
+///
+/// The subject leaves by a direct removal rather than through
+/// `unpin_subject`, which now refuses this exact case — the door under test
+/// here is `settle_research`'s own gate.
+#[test]
+fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
+    let mut game = Game::new(4500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::UnderStudy>();
+    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
+    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(!game.is_researched("paging"));
+    assert_eq!(
+        node_output(&game, shelf, ids::BYTECODE_BLOCK),
+        stocked,
+        "a project missing its subject must not spend its materials either"
+    );
+}
+
+/// The conversion: `downed_program_for_with_overkill(subject, 0.0)` →
+/// `push_downed_program` → despawn. The level comes off the subject's real
+/// `Experience`, not `ZoneLevel` — `ability_user_level`'s distinction from a
+/// wild kill — and a routine installed on the subject comes back as
+/// `carried`, since nothing about the test species' (declared-nothing) kit
+/// claims it.
+#[test]
+fn completing_a_subject_gated_project_spends_the_pinned_subject() {
+    let mut game = Game::new(4501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Experience>(program).unwrap().level = 4;
+    let species = game.world.get::<Creature>(program).unwrap().species.clone();
+    let prize = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .next()
+        .expect("some shipped ability is wild-poolable");
+    game.world.get_mut::<Routines>(program).unwrap().0 = vec![prize.clone()];
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(game.is_researched("paging"));
+    assert!(
+        game.world.get_entity(program).is_err(),
+        "the subject leaves the world when it is spent"
+    );
+    let held = game
+        .world
+        .get::<DownedPrograms>(game.player_entity())
+        .unwrap()
+        .0
+        .clone();
+    assert_eq!(held.len(), 1, "exactly one DownedProgram must appear");
+    assert_eq!(held[0].species, species);
+    assert_eq!(
+        held[0].level, 4,
+        "level must come from the subject's real Experience, not ZoneLevel"
+    );
+    assert_eq!(
+        held[0].carried,
+        Some(prize),
+        "a routine installed on the subject comes back as carried"
+    );
+}
+
+/// A full `DownedPrograms` store refuses the conversion, and that refusal
+/// blocks the whole completion — reported the way a material shortfall is,
+/// through `Game::research_material_shortfall` — rather than eating the
+/// body and discovering the push failed afterward.
+#[test]
+fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
+    let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
+    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    fill_research_progress(&mut game, "paging");
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .unwrap()
+        .cost;
+    {
+        let player = game.player_entity();
+        let mut held = game.world.get_mut::<DownedPrograms>(player).unwrap();
+        held.0 = (0..crate::tuning::MAX_DOWNED_PROGRAMS)
+            .map(|_| filler_downed_program())
+            .collect();
+    }
+    assert_eq!(
+        game.research_material_shortfall(),
+        Some("room for another downed program".to_string()),
+        "a full store must be reported before the bill is even considered"
+    );
+
+    game.tick();
+
+    assert!(
+        !game.is_researched("paging"),
+        "a full store must block completion"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "the subject must still be pinned — nothing was spent"
+    );
+    assert_eq!(
+        research_progress(&game, "paging"),
+        cost,
+        "the progress must be intact"
+    );
+    assert_eq!(
+        node_output(&game, shelf, ids::BYTECODE_BLOCK),
+        stocked,
+        "the materials must be intact too"
+    );
 }

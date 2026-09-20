@@ -42,6 +42,28 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.208
+
+**Your programs no longer stand on top of each other.** Two bodies cannot
+share a cell in the base now: a program walking anywhere routes around the
+ones already standing there, and a crowd that has already piled up thins
+itself out one step at a time. A base with a large roster used to draw a
+dozen glyphs for a hundred programs, because the map has room for one glyph
+to a cell and every walk stopped at the first tile that would do — which,
+approached from the same side, was the same tile for everyone.
+
+**A Repair Bay mends whoever can stand at it, and no more.** That is the
+price of the rule above: seventy-one patients lying on one cell were all
+touching the Bay, and once they have to spread out only four cells touch it.
+A base with more patients than that builds more Bays, and a patient with
+nowhere to stand goes back to milling with everyone else rather than holding
+a queue — it stays a patient while it waits. A base with no Bay at all is
+unchanged: a program benched there still lies where it fell.
+
+**Deploying onto a cell a program is standing in is refused**, instead of
+raising the building on top of it. The program you spend on the build is
+exempt, since it is leaving anyway.
+
 ## 0.13.207
 
 **Running out of roster slots no longer stops you capturing.** Decompiling,

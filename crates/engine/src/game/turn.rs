@@ -1313,15 +1313,22 @@ impl Game {
         };
         for (creature, role) in owned {
             // Exhaustive rather than a `!=`, `cell_mark`'s rule: the question
-            // is whether this program is standing *with* the player, the four
-            // roles answer it two and two, and there is no safe side to
-            // default a fifth one to. `None` is unreachable — `owned` is
-            // already filtered to programs this player owns — and is spelled
-            // out rather than folded into a catch-all so it cannot become the
-            // arm a new role quietly lands in.
+            // is whether this program is standing *with* the player, the
+            // five roles answer it two and three, and there is no safe side
+            // to default a sixth one to. `UnderStudy` falls on the `false`
+            // side with `Sortie` and `Staff` — a pinned program is not
+            // beside you either, and this is the one reader of the enum a
+            // fifth role could not leave silently wrong: decision 2 in
+            // `docs/superpowers/plans/2026-09-20-research-station-study.md`
+            // found this the only one of the role's five intended omissions
+            // that is an exhaustive match rather than a comparison. `None`
+            // is unreachable — `owned` is already filtered to programs this
+            // player owns — and is spelled out rather than folded into a
+            // catch-all so it cannot become the arm a new role quietly lands
+            // in.
             let repaired = match role {
                 Some(ProgramRole::InParty | ProgramRole::Wielded) => true,
-                Some(ProgramRole::Sortie | ProgramRole::Staff) => false,
+                Some(ProgramRole::Sortie | ProgramRole::Staff | ProgramRole::UnderStudy) => false,
                 None => false,
             };
             if repaired && let Some(mut stats) = self.world.get_mut::<Stats>(creature) {

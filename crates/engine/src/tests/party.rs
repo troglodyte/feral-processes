@@ -1270,6 +1270,37 @@ fn fuse_companions_rejects_a_wild_creature() {
     assert!(game.world.get::<Creature>(wild).is_some());
 }
 
+/// One of the fifth role's five intended omissions (decision 2 in
+/// `docs/superpowers/plans/2026-09-20-research-station-study.md`) —
+/// `fuse_companions` asks no role of either input today, so this is an
+/// explicit refusal rather than a free consequence of the enum.
+#[test]
+fn fuse_companions_rejects_a_pinned_subject_as_either_input() {
+    let mut game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(subject)
+        .insert(components::UnderStudy { station });
+
+    let err = game
+        .fuse_companions(subject, other, None)
+        .expect_err("a pinned program must not be spent on a fusion");
+    assert!(err.contains("pinned"), "unexpected error: {err}");
+    assert!(
+        game.world.get::<Creature>(subject).is_some(),
+        "a refused fusion shouldn't consume either input"
+    );
+    assert!(game.world.get::<Creature>(other).is_some());
+
+    // The other order refuses too — either input being pinned is enough.
+    let err = game
+        .fuse_companions(other, subject, None)
+        .expect_err("order must not matter");
+    assert!(err.contains("pinned"), "unexpected error: {err}");
+}
+
 /// Regression for I2: `fuse_companions` derives the result's kit fresh from
 /// its species, so a routine installed manually on either input (research,
 /// extraction, a swap) has nowhere to land. Before this fix that vanished
@@ -2177,6 +2208,127 @@ fn a_wild_program_is_never_base_staff() {
 
     assert_eq!(game.program_role(wild), None);
     assert!(game.base_staff().is_empty());
+}
+
+// ---------------------------------------------------------------------
+// The fifth role: `ProgramRole::UnderStudy`
+//
+// Decision 2 in `docs/superpowers/plans/2026-09-20-research-station-study.md`:
+// the variant makes only the rest-repair match (`tests::turn`) fail to
+// compile. Everything below is held by these tests and nothing else, and
+// the doc comment on each site says so rather than repeating the spec's
+// stronger, false claim that a fifth role closes all five by itself.
+// ---------------------------------------------------------------------
+
+#[test]
+fn roster_rank_places_under_study_between_sortie_and_staff() {
+    assert!(ProgramRole::Sortie.roster_rank() < ProgramRole::UnderStudy.roster_rank());
+    assert!(ProgramRole::UnderStudy.roster_rank() < ProgramRole::Staff.roster_rank());
+}
+
+/// The component is the one authoritative fact; `program_role` is the one
+/// reader of it. This is also the first of the five omissions: a pinned
+/// program is not `Staff`, so `Game::base_staff` — which every job the
+/// scheduler hands out is filled from — excludes it without a check of its
+/// own.
+#[test]
+fn a_program_carrying_the_under_study_marker_reads_that_role_and_leaves_the_staff_pool() {
+    let mut game = Game::new(4110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert_eq!(game.base_staff(), vec![program]);
+
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    assert_eq!(game.program_role(program), Some(ProgramRole::UnderStudy));
+    assert!(
+        game.base_staff().is_empty(),
+        "a pinned program must not be offered a job"
+    );
+}
+
+/// The second omission, made concrete against the real scheduler rather
+/// than only against `base_staff`: a pending build request the pinned
+/// program is the only body free to take is never handed to it.
+#[test]
+fn a_pinned_program_is_never_posted_to_a_pending_build() {
+    let mut game = Game::new(4121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    file_build(&mut game, "depot", 2, 2).expect("a depot needs no program to file");
+
+    for _ in 0..20 {
+        game.tick();
+        assert!(
+            game.world.get::<Task>(program).is_none(),
+            "a pinned program must never be handed the pending build"
+        );
+    }
+}
+
+/// The third omission: `add_companion` asks no role at all otherwise, so
+/// this is `party.rs`'s own explicit refusal rather than a consequence the
+/// enum buys for free.
+#[test]
+fn a_pinned_program_cannot_be_recalled_into_the_party() {
+    let mut game = Game::new(4122, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    let err = game
+        .add_companion(program)
+        .expect_err("a pinned program must not join the party");
+    assert!(err.contains("pinned"), "unexpected error: {err}");
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::UnderStudy),
+        "a refused add must leave the role, and so the component, untouched"
+    );
+    assert!(!game.world.resource::<Party>().0.contains(&program));
+}
+
+// The fourth omission — a fusion candidate — lives with the rest of the
+// fusion tests, `fuse_companions_rejects_a_pinned_subject_as_either_input`.
+
+/// The fifth omission: `Game::rest`'s exhaustive match (`game/turn.rs`) is
+/// the one reader of the five that fails to compile without an arm, so this
+/// is the one test in this run that would already pass on a stale binary if
+/// the match still had a wildcard — asserted against a real HP deficit
+/// rather than merely against the match compiling.
+#[test]
+fn a_pinned_program_is_not_healed_by_a_rest() {
+    let mut game = Game::new(4123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+    game.world.get_mut::<Stats>(program).unwrap().hp = 1;
+
+    game.rest().expect("resting inside the base is free");
+
+    assert_eq!(
+        game.world.get::<Stats>(program).unwrap().hp,
+        1,
+        "a pinned subject is not repaired by a rest"
+    );
 }
 
 // ---------------------------------------------------------------------

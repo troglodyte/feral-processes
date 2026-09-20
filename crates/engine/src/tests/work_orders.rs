@@ -1237,6 +1237,109 @@ fn an_idle_program_standing_outside_the_base_is_brought_into_it() {
     );
 }
 
+// ---------------------------------------------------------------------
+// Being under study: the walk to the pen (Task 4)
+// ---------------------------------------------------------------------
+
+/// A pinned program is not `Staff`, so it is absent from `base_staff` and
+/// would otherwise fall out of `drift_idle_staff`'s only pass entirely —
+/// `schedule_base_labour`'s walker list has to be widened past `base_staff`
+/// for this to hold at all, and this test is what would have caught it
+/// standing still forever instead.
+#[test]
+fn a_pinned_program_walks_to_its_pen_and_stops() {
+    let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    let mut arrived = false;
+    for _ in 0..40 {
+        game.tick();
+        let p = *game.world.get::<Position>(program).unwrap();
+        if (p.x, p.y) == pen {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(arrived, "the pinned program never reached its pen");
+
+    // Once arrived it stops — `drift_idle_staff`'s `UnderStudy` arm answers
+    // `Ok(())` on an exact match and the wander arm never gets a turn at it.
+    for _ in 0..15 {
+        game.tick();
+        let p = *game.world.get::<Position>(program).unwrap();
+        assert_eq!(
+            (p.x, p.y),
+            pen,
+            "a pinned program must not wander off its pen once it has arrived"
+        );
+    }
+}
+
+/// One body to a cell holds in the pen exactly as it holds everywhere else
+/// in base space — `Game::blocked_tiles` folds every walking body's
+/// position in, the pen's occupant included.
+#[test]
+fn two_pinned_programs_cannot_share_the_pen() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    // Apart to begin with — `two_idle_programs_never_step_onto_one_another`'s
+    // reason: `spawn_tamed` puts every fresh program on the same tile, and
+    // this test is about the pen, not about that separate rule.
+    game.world.get_mut::<Position>(b).unwrap().y += 1;
+    game.world
+        .entity_mut(a)
+        .insert(components::UnderStudy { station });
+    game.world
+        .entity_mut(b)
+        .insert(components::UnderStudy { station });
+
+    for _ in 0..60 {
+        game.tick();
+        let pa = *game.world.get::<Position>(a).unwrap();
+        let pb = *game.world.get::<Position>(b).unwrap();
+        assert_ne!(
+            (pa.x, pa.y),
+            (pb.x, pb.y),
+            "two programs, two tiles — even in the pen"
+        );
+    }
+
+    let pa = *game.world.get::<Position>(a).unwrap();
+    let pb = *game.world.get::<Position>(b).unwrap();
+    let in_pen = [(pa.x, pa.y) == pen, (pb.x, pb.y) == pen];
+    assert_eq!(
+        in_pen.iter().filter(|&&here| here).count(),
+        1,
+        "exactly one of the two should have taken the single pen: {pa:?} {pb:?} vs pen {pen:?}"
+    );
+}
+
 /// The map and the inspector must stay the same set — that is the whole
 /// reason `drawn_on_surface_map` is one function called by both.
 ///

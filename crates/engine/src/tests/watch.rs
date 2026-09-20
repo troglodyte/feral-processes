@@ -66,6 +66,29 @@ fn an_idle_staff_program_can_be_watched_where_it_stands() {
     );
 }
 
+/// **Decision 3** (`docs/superpowers/plans/2026-09-20-research-station-study.md`):
+/// `walks_the_base` is shared with `watch_position`, and widening it to
+/// `UnderStudy` widens both readers. That is wanted rather than a side
+/// effect — a pinned program is standing in its pen, which is ground the
+/// same as any other staff posting, so the camera may follow it exactly as
+/// it follows an idle body.
+#[test]
+fn a_pinned_program_can_be_watched_where_it_stands() {
+    let mut game = base(1);
+    let origin = game.base_pos().unwrap();
+    let subject = staffer(&mut game, 3, 1);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(subject)
+        .insert(crate::components::UnderStudy { station });
+
+    assert_eq!(
+        game.watch_position(subject),
+        Some((origin.0 + 3, origin.1 + 1)),
+        "a pinned subject occupies ground and may be watched like any other body"
+    );
+}
+
 /// **The regression this feature turns on.** `position_is_honest` is
 /// `wears_job_mark || idle staff`, and `mark_sits_on_the_post` answers true
 /// for a worker standing at its machine — so the honest flag goes *false*

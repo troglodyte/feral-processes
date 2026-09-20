@@ -591,7 +591,7 @@ pub struct HaulGround<'w, 's> {
     /// `Hauler`'s `&mut Position` to bevy — the two halves of the body set
     /// are split by exactly that filter and by nothing else.
     idle: Query<'w, 's, Bystander, NotPosted>,
-    roles: crate::game::party::Roles<'w>,
+    roles: crate::game::party::Roles<'w, 's>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:

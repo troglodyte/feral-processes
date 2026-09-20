@@ -30,6 +30,22 @@ pub enum ProgramRole {
     /// `drift_idle_staff`, `base_entropy_system`, `needs_drain_system` and
     /// the surface map in one edit rather than five.
     Sortie,
+    /// Pinned in a Research Station's pen — `components::UnderStudy`.
+    /// Between `Sortie` and `Staff` for `Sortie`'s own reason: this program
+    /// is not available to be handed a job either, and its consequences are
+    /// meant to be omissions the same way.
+    ///
+    /// **Only one of those omissions is a compiler error.** The census
+    /// (`docs/superpowers/plans/2026-09-20-research-station-study.md`,
+    /// decision 2) found three exhaustive matches on this enum in the whole
+    /// workspace — `roster_rank` below, gui's `role_heading` and the
+    /// rest-repair branch in `game/turn.rs` — and every other reader
+    /// (the labour scheduler, the wander, a party add, a fusion) compares
+    /// with `==`/`is_some_and` and compiles whether or not it accounts for
+    /// this variant. Those four are held by their own tests and, where
+    /// nothing already filtered on `Staff` alone, an explicit refusal —
+    /// not by this enum.
+    UnderStudy,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
     Staff,
@@ -51,7 +67,8 @@ impl ProgramRole {
             ProgramRole::InParty => 0,
             ProgramRole::Wielded => 1,
             ProgramRole::Sortie => 2,
-            ProgramRole::Staff => 3,
+            ProgramRole::UnderStudy => 3,
+            ProgramRole::Staff => 4,
         }
     }
 }
@@ -70,6 +87,7 @@ pub(crate) fn role_of(
     party: &Party,
     wielded: Option<Entity>,
     sorties: &crate::resources::Sorties,
+    under_study: bool,
 ) -> Option<ProgramRole> {
     if owner != player {
         return None;
@@ -82,6 +100,9 @@ pub(crate) fn role_of(
     }
     if sorties.contains(creature) {
         return Some(ProgramRole::Sortie);
+    }
+    if under_study {
+        return Some(ProgramRole::UnderStudy);
     }
     Some(ProgramRole::Staff)
 }
@@ -103,8 +124,19 @@ pub(crate) fn role_of(
 ///
 /// A free function beside `role_of` and for its reason: `haul_step_system`
 /// has no `Game` and must build the same set from its own queries.
+///
+/// **Widened to `UnderStudy`**: a pinned program is standing in its pen,
+/// which is ground the one-body-to-a-cell rule has to hold for exactly as
+/// it does for staff. `UnderStudy` never carries a `Task` — the scheduler
+/// never posts one, since `Game::base_staff` already excludes it — so there
+/// is no guard-style exemption to state for it the way there is for
+/// `Staff`. This is also `Game::watch_position`'s other reader (decision 3):
+/// a subject may be watched like any other body standing in the base, which
+/// is wanted rather than a side effect — a subject occupies ground the same
+/// as staff does, and the camera follows ground.
 pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) -> bool {
-    role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard)
+    role == Some(ProgramRole::UnderStudy)
+        || (role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard))
 }
 
 /// The four resources that decide a role, as one system parameter.
@@ -115,14 +147,18 @@ pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) 
 /// adapter and never a second copy of the rule: `of` is one call to the
 /// free function above.
 #[derive(bevy_ecs::system::SystemParam)]
-pub struct Roles<'w> {
+pub struct Roles<'w, 's> {
     player: Res<'w, PlayerEntity>,
     party: Res<'w, Party>,
     wielded: Res<'w, WieldedProgram>,
     sorties: Res<'w, crate::resources::Sorties>,
+    /// A presence-only query rather than a fifth `Res`: whether `creature`
+    /// is pinned is per-entity state, not a resource, and every caller here
+    /// already has the entity in hand to look it up against.
+    under_study: Query<'w, 's, (), With<crate::components::UnderStudy>>,
 }
 
-impl Roles<'_> {
+impl Roles<'_, '_> {
     pub(crate) fn of(&self, creature: Entity, owner: Entity) -> Option<ProgramRole> {
         role_of(
             creature,
@@ -131,6 +167,7 @@ impl Roles<'_> {
             &self.party,
             self.wielded.0,
             &self.sorties,
+            self.under_study.contains(creature),
         )
     }
 }
@@ -853,6 +890,25 @@ impl Game {
                     .into(),
             );
         }
+        // A pinned subject is not a body you can call back with a keypress.
+        // `role_of` would answer `Staff` in this Party push were this check
+        // skipped, but `UnderStudy` is checked *before* `Staff`'s fallback,
+        // so on the very next read the program would be `InParty` and the
+        // `components::UnderStudy` marker left on it a lie about where it
+        // stands — nothing here fails to compile without this refusal, so
+        // it is the one thing decision 2 says has to be an explicit check
+        // rather than a free consequence of the enum. `Game::unpin_subject`
+        // names the door out, the same shape `Downed`'s refusal above
+        // points at a Bay.
+        if self
+            .world
+            .get::<crate::components::UnderStudy>(creature)
+            .is_some()
+        {
+            return Err(
+                "That program is pinned in a Research Station's pen. Unpin it first.".into(),
+            );
+        }
         // The other door of the wield/party exclusion — see
         // `wield_program`, which stands a member down for the same reason.
         // Last, after every refusal above, so a party that turns out to be
@@ -898,6 +954,9 @@ impl Game {
             self.world.resource::<Party>(),
             self.wielded_program(),
             self.world.resource::<crate::resources::Sorties>(),
+            self.world
+                .get::<crate::components::UnderStudy>(creature)
+                .is_some(),
         )
     }
 
@@ -1194,6 +1253,20 @@ impl Game {
                 let name = self.creature_label(e);
                 return Err(format!(
                     "{name} has already been fused {MAX_FUSIONS} times — it can't be fused again."
+                ));
+            }
+        }
+        // Neither half of a fusion may be a pinned subject. Nothing here
+        // fails to compile without this: `fuse_companions` asks no role at
+        // all, of either input, and consuming a program mid-study would
+        // strand its research project's completion on a body the pen no
+        // longer has — decision 2's "fusion candidacy... compiles silently"
+        // is this function.
+        for e in [a, b] {
+            if self.world.get::<crate::components::UnderStudy>(e).is_some() {
+                let name = self.creature_label(e);
+                return Err(format!(
+                    "{name} is pinned in a Research Station's pen and can't be fused."
                 ));
             }
         }

@@ -4813,3 +4813,83 @@ fn pin_then_unpin_returns_the_program_to_staff() {
             .is_none()
     );
 }
+
+// ---------------------------------------------------------------------
+// Losing the station under a running project (Task 9)
+//
+// Both destruction doors release a pinned subject back to `Staff` and
+// abandon the active project — `clear_pending_build_at`'s rule with a
+// second subject: the door left out silently strands a program in a role
+// nothing can get it out of, and nothing fails to compile.
+// ---------------------------------------------------------------------
+
+#[test]
+fn destroying_a_research_station_releases_its_subject_and_abandons_the_project() {
+    let mut game = Game::new(4600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(node)
+        .insert(crate::components::Durability { hp: 10, max_hp: 10 });
+
+    game.damage_structure(node, 10, "Research Station");
+
+    assert!(
+        game.world.get::<Structure>(node).is_none(),
+        "the fixture must actually destroy the Station or this asserts nothing"
+    );
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::Staff),
+        "the subject must be released back to staff"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the project the destroyed Station was serving must be abandoned"
+    );
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "the abandoned project's material orders must leave the queue"
+    );
+}
+
+#[test]
+fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project() {
+    let mut game = Game::new(4601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+
+    game.remove_structure(node).unwrap();
+
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::Staff),
+        "the subject must be released back to staff"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the project the demolished Station was serving must be abandoned"
+    );
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "the abandoned project's material orders must leave the queue"
+    );
+}

@@ -1277,6 +1277,9 @@ impl Game {
             if let Some(pos) = self.world.get::<Position>(target).copied() {
                 self.clear_pending_build_at(pos.x, pos.y);
             }
+            // The first of the two destruction paths for a subject pinned in
+            // this structure's pen — see `Game::release_study_station`.
+            self.release_study_station(target);
             self.announce_lost_shelf(target);
             self.world.despawn(target);
         }

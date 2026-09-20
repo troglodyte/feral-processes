@@ -5,6 +5,7 @@
     cost: 120,
     materials: [("cache_grain", 6), ("bytecode_block", 24)],
     min_zone: 3,
+    requires_subject: true,
     requires: ["paging", "cache_coherence"],
     unlocks_structures: ["depot_mk3"],
 )

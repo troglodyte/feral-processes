@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use crate::base_grid::BaseGrid;
 use crate::game::base::hauling::NoPost;
 use crate::game::pursuit::walk_field;
+use crate::resources::ActiveResearch;
 use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;
 use crate::*;
@@ -36,6 +37,50 @@ impl Game {
         let pos = self.world.get::<Position>(structure)?;
         let side = i32::from(def.footprint);
         Some((pos.x + side - 1, pos.y + side - 1))
+    }
+
+    /// The `(x, y)`-sorted first standing `studies` structure, or `None` if
+    /// none stands — `assembler_system`'s sorting rule, so `research_block`'s
+    /// gate and `settle_research`'s "which subject is spent" read the same
+    /// station and cannot resolve two Stations differently between runs.
+    ///
+    /// `&self`, like `producers_of` beside it: `research_block` is read from
+    /// the screen as well as from `select_research`, so this walks
+    /// `World::iter_entities` rather than taking the `&mut self` a bevy
+    /// query needs.
+    fn first_study_station(&self) -> Option<Entity> {
+        let db = self.world.resource::<StructureDb>();
+        let mut found: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let kind = &e.get::<Structure>()?.kind;
+                let pos = e.get::<Position>()?;
+                let def = db.get(kind)?;
+                def.studies.then_some((pos.x, pos.y, e.id()))
+            })
+            .collect();
+        found.sort();
+        found.first().map(|(_, _, e)| *e)
+    }
+
+    /// The program standing in the pen of `first_study_station`'s chosen
+    /// station — `None` when no `studies` structure stands, or when its pen
+    /// is empty. **The one door**: `research_block`'s gate and
+    /// `settle_research`'s "which subject is spent" both call this rather
+    /// than each re-deriving a station and a corner, so they cannot read the
+    /// base's one active subject differently.
+    pub(crate) fn pinned_subject(&self) -> Option<Entity> {
+        let station = self.first_study_station()?;
+        let pen = self.study_pen(station)?;
+        self.world.iter_entities().find_map(|e| {
+            let under_study = e.get::<components::UnderStudy>()?;
+            if under_study.station != station {
+                return None;
+            }
+            let pos = e.get::<Position>()?;
+            ((pos.x, pos.y) == pen).then_some(e.id())
+        })
     }
 
     /// Every tamed program you own that is pinned somewhere — the second
@@ -213,11 +258,14 @@ impl Game {
     /// Unpins `program`, returning it to `ProgramRole::Staff`.
     ///
     /// **Every refusal lands before anything is written**, `pin_subject`'s
-    /// rule. Task 7 (Part C) adds the refusal this door is really for — an
-    /// active `ResearchDef::requires_subject` project loses its subject out
-    /// from under it otherwise — but that field does not exist on this
-    /// branch yet, so there is nothing to check against until it lands; this
-    /// is not an oversight to "fix" without it.
+    /// rule. The third refusal — an active `ResearchDef::requires_subject`
+    /// project loses its subject out from under it otherwise — is
+    /// `select_research`'s "a project is already active" refusal in shape:
+    /// it names the project and says abandoning it is how you change your
+    /// mind, so a player is told rather than left to wonder why the key did
+    /// nothing. Only refused for **this** program: it is the one
+    /// `Game::pinned_subject` would spend, so unpinning a second Station's
+    /// subject while an unrelated project runs is not this door's business.
     pub fn unpin_subject(&mut self, program: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -225,11 +273,60 @@ impl Game {
         if self.world.get::<components::UnderStudy>(program).is_none() {
             return Err("That program isn't pinned for study.".into());
         }
+        if let Some(active) = self.world.resource::<ActiveResearch>().id.clone() {
+            let requires_subject = self
+                .world
+                .resource::<ResearchDb>()
+                .get(&active)
+                .is_some_and(|d| d.requires_subject);
+            if requires_subject && self.pinned_subject() == Some(program) {
+                let name = self
+                    .world
+                    .resource::<ResearchDb>()
+                    .get(&active)
+                    .map(|d| d.name.clone())
+                    .unwrap_or(active);
+                return Err(format!(
+                    "The base needs this subject to research {name} — abandon the project \
+                     first if you want to change your mind."
+                ));
+            }
+        }
         self.world
             .entity_mut(program)
             .remove::<components::UnderStudy>();
         let name = self.creature_label(program);
         self.log(format!("{name} is unpinned and rejoins the base staff."));
         Ok(())
+    }
+
+    /// Both structure-destruction doors call this: a demolished or
+    /// destroyed `studies` structure releases its subject back to
+    /// `ProgramRole::Staff` and abandons whatever project is active —
+    /// `clear_pending_build_at`'s rule with a second subject, since the door
+    /// left out silently strands a program in a role nothing can get it out
+    /// of, and nothing fails to compile.
+    ///
+    /// A no-op when `structure` holds no subject — most structures never
+    /// will — so calling it beside `clear_pending_build_at` costs every
+    /// other destruction path nothing.
+    pub(crate) fn release_study_station(&mut self, structure: Entity) {
+        let subject = self
+            .world
+            .query::<(Entity, &components::UnderStudy)>()
+            .iter(&self.world)
+            .find(|(_, u)| u.station == structure)
+            .map(|(e, _)| e);
+        let Some(subject) = subject else {
+            return;
+        };
+        self.world
+            .entity_mut(subject)
+            .remove::<components::UnderStudy>();
+        let name = self.creature_label(subject);
+        self.log(format!(
+            "{name} is released from the pen — the Research Station is gone."
+        ));
+        let _ = self.abandon_research();
     }
 }

@@ -5,6 +5,7 @@
     cost: 125,
     materials: [("trace_sniffer", 6), ("logic_wafer", 12)],
     min_zone: 3,
+    requires_subject: true,
     requires: ["neural_amp"],
     unlocks_recipes: [(
         result: "cortex_hack",

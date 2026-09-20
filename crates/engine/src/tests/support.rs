@@ -1181,6 +1181,29 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
             Stock::new(1_000_000),
         ))
         .id();
+    // `Game::settle_research` refuses a `requires_subject` node without a
+    // body standing in a `studies` structure's pen (Task 8), so a chain
+    // touching one of the 19 subject-gated nodes needs the same shortcut
+    // this fixture already gives materials: a scratch station, far enough
+    // into negative coordinates that `Game::pinned_subject`'s `(x, y)` sort
+    // picks it over anything a calling test may have placed for real, and a
+    // fresh subject per gated node — `settle_research` despawns it on
+    // completion, so there is nothing left to clean up afterward.
+    let station = game
+        .world
+        .spawn((
+            Structure {
+                kind: "research_node".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_000,
+            },
+        ))
+        .id();
+    let pen = game
+        .study_pen(station)
+        .expect("research_node.ron declares studies");
     for node in chain {
         if game.is_researched(&node) {
             continue;
@@ -1197,6 +1220,13 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
                 *stock.output.entry(item.clone()).or_default() += need;
             }
         }
+        if def.requires_subject {
+            let subject = spawn_tamed(game, 10, 3);
+            game.world.entity_mut(subject).insert((
+                Position { x: pen.0, y: pen.1 },
+                crate::components::UnderStudy { station },
+            ));
+        }
         {
             let mut research = game
                 .world
@@ -1211,6 +1241,7 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
         );
     }
     game.world.despawn(shelf);
+    game.world.despawn(station);
 }
 
 /// Stands the party in base space with a Research Node deployed, which is the
@@ -1524,6 +1555,36 @@ pub(super) fn park_at_post(game: &mut Game, worker: Entity, structure: Entity) {
     let mut pos = game.world.get_mut::<Position>(worker).unwrap();
     pos.x = target.x + 1;
     pos.y = target.y;
+}
+
+/// Pins `program` in `station`'s pen through the real `Game::pin_subject`
+/// door and then walks it there by hand, `pin_subject_is_refused_when_the
+/// _pen_already_holds_a_body`'s pattern: pinning writes no `Position`
+/// (`components::UnderStudy`'s own doc), so `Game::research_block`'s "a body
+/// is standing in the pen" gate needs a body actually there, and a test
+/// about the gate should not have to tick `drift_idle_staff` to get one.
+pub(super) fn pin_subject_at_pen(game: &mut Game, program: Entity, station: Entity) {
+    let pen = game
+        .study_pen(station)
+        .expect("a station under test must declare studies");
+    // `pin_subject`'s "something is already standing in the pen" refusal
+    // does not exclude the program *being* pinned, so a fixture that lets a
+    // program spawn on the pen by coincidence (`spawn_tamed`'s default
+    // `(3, 3)`, which several stations sit at the anchor of) would trip its
+    // own refusal. `(0, 0)` sits well inside `STARTING_POCKET_RADIUS` and is
+    // never a pen a test places a station at, so it is a safe stand-off cell
+    // to pin from.
+    if let Some(mut pos) = game.world.get_mut::<Position>(program)
+        && (pos.x, pos.y) == pen
+    {
+        pos.x = 0;
+        pos.y = 0;
+    }
+    game.pin_subject(program, station)
+        .expect("pin_subject should succeed for a staff program with a route");
+    let mut pos = game.world.get_mut::<Position>(program).unwrap();
+    pos.x = pen.0;
+    pos.y = pen.1;
 }
 
 /// How many of `item` are sitting in `structure`'s output buffer.

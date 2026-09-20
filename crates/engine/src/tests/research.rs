@@ -2076,3 +2076,169 @@ fn the_running_project_is_read_out_with_no_node_standing() {
         Some(ResearchReadout::Earning { .. })
     ));
 }
+
+// ---------------------------------------------------------------------
+// Studying a subject (Task 7): every node from sector 2 up refuses
+// selection until a tamed program is standing in a `studies` structure's
+// pen — `Game::research_block`'s gate, not a second arm on
+// `select_research`, so the row the screen marks blocked and the sentence
+// the player is refused with cannot disagree.
+// ---------------------------------------------------------------------
+
+/// The gate lives in `Game::research_block`, so the refusal is asserted
+/// against a **live call** to it rather than hardcoded prose — the same
+/// drift this repo keeps recording for `chain_break`.
+#[test]
+fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
+    let mut game = Game::new(4400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .cloned()
+        .expect("paging ships and is gated at zone 2 with no other prereqs");
+    assert!(
+        def.requires_subject,
+        "the fixture is vacuous unless paging is actually gated"
+    );
+    let want = game
+        .research_block(&def)
+        .expect("nobody is pinned yet, so the gate must be live");
+
+    let err = game.select_research("paging").unwrap_err();
+
+    assert_eq!(
+        err, want,
+        "select_research's refusal must be research_block's own sentence"
+    );
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and nothing is filed");
+}
+
+/// **A reachability test, not only a refusal test.** A refusal can ship
+/// permanent with every refusal test still green — pinning a program in the
+/// pen must make the identical selection succeed.
+#[test]
+fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
+    let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+
+    game.select_research("paging")
+        .expect("a subject standing in the pen must clear the gate");
+
+    assert_eq!(active_research(&game), Some("paging".to_string()));
+}
+
+/// The eight nodes with no `min_zone` gate — what gets a base running —
+/// stay selectable with nobody pinned. Looped rather than named one at a
+/// time, so a mod or a retune that grows the ungated set is covered for
+/// free.
+#[test]
+fn every_ungated_node_is_selectable_with_nobody_pinned() {
+    let ungated: Vec<String> = {
+        let game = Game::new(4402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.tree == ResearchTree::Base && !d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !ungated.is_empty(),
+        "the fixture is vacuous with nothing ungated"
+    );
+    for id in ungated {
+        let mut game = Game::new(4403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let zone = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .expect("walked out of the same db")
+            .min_zone;
+        set_zone(&mut game, zone);
+
+        game.select_research(&id)
+            .unwrap_or_else(|e| panic!("{id} should be selectable with nobody pinned: {e}"));
+    }
+}
+
+/// Every node with `min_zone >= 2` is refused without a subject, and the
+/// same pin makes it reachable — the census that `decision 13`'s 19/8 split
+/// actually behaves as the refusal test above shows for one node.
+#[test]
+fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
+    let gated: Vec<String> = {
+        let game = Game::new(4404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !gated.is_empty(),
+        "the fixture is vacuous with nothing gated"
+    );
+    for id in gated {
+        let mut game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let def = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .cloned()
+            .expect("walked out of the same db");
+        set_zone(&mut game, def.min_zone);
+        let want = game
+            .research_block(&def)
+            .unwrap_or_else(|| panic!("{id} should be blocked with nobody pinned"));
+
+        let err = game
+            .select_research(&id)
+            .expect_err(&format!("{id} should be refused with nobody pinned"));
+
+        assert_eq!(
+            err, want,
+            "{id}'s refusal must be research_block's own sentence"
+        );
+    }
+}
+
+/// The third refusal on `Game::unpin_subject`: pulling the subject out from
+/// under a project that needs it is refused, and abandoning the project is
+/// how you change your mind — `select_research`'s "already active" refusal,
+/// in shape.
+#[test]
+fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
+    let mut game = Game::new(4406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+
+    let err = game
+        .unpin_subject(program)
+        .expect_err("the active project still needs this subject");
+    assert!(err.contains("abandon"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "the refusal must not have unpinned it"
+    );
+
+    game.abandon_research().unwrap();
+    game.unpin_subject(program)
+        .expect("abandoning the project frees the subject to be unpinned");
+}

@@ -4731,6 +4731,90 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     );
 }
 
+/// **The 19/8 split (decision 13): every shipped node with `min_zone >= 2`
+/// declares `requires_subject`, and none of the eight ungated ones does.**
+/// A node above zone 1 that forgot the field would ship free of the study
+/// cost the feature exists to charge; one of the eight that gained it by
+/// mistake would silently gate a base's opening machines.
+#[test]
+fn every_zone_gated_base_node_requires_a_subject_and_no_ungated_one_does() {
+    let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research
+        .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Base)
+    {
+        assert_eq!(
+            def.min_zone >= 2,
+            def.requires_subject,
+            "{:?} has min_zone {} but requires_subject {} — the two must agree",
+            def.id,
+            def.min_zone,
+            def.requires_subject
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 27,
+        "expected the shipped base tree's 27 nodes; a count that moved means a node was \
+         added, removed, or reclassified without this census being told"
+    );
+}
+
+/// A routine node is synthesised, never authored, and must keep its own
+/// economy — `routine_tree::synthesise_nodes` must leave `requires_subject`
+/// at its default rather than gaining a second gate on top of "discover a
+/// family by extracting a rung".
+#[test]
+fn no_synthesised_routine_node_requires_a_subject() {
+    let mut game = Game::new(4115, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research
+        .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Routines)
+    {
+        assert!(
+            !def.requires_subject,
+            "{:?} is a synthesised routine node and must not require a subject",
+            def.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "the fixture is vacuous with no synthesised routine node loaded"
+    );
+}
+
+/// No subject-gated node may sit upstream of an ungated one — a node that
+/// cannot be selected without a subject must not gate content the eight
+/// bootstrap nodes promise a fresh run with nobody pinned yet.
+#[test]
+fn no_subject_gated_node_is_a_prerequisite_of_an_ungated_one() {
+    let game = Game::new(4116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research.all().filter(|d| !d.requires_subject) {
+        for req in &def.requires {
+            let gated = research.get(req).is_some_and(|d| d.requires_subject);
+            assert!(
+                !gated,
+                "{:?} is ungated but requires {:?}, which is subject-gated",
+                def.id, req
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "the fixture is vacuous with nothing to check — every shipped node has at least one \
+         `requires` edge somewhere in the tree"
+    );
+}
+
 /// The other half: the shipped **base** tree actually *has* bills. The
 /// census above passes vacuously against a tree with none, so a node whose
 /// `materials` line was deleted by hand would read as free rather than as a

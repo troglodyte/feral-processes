@@ -717,7 +717,16 @@ impl Game {
     /// screen marks blocked and the refusal `select_research` answers with
     /// cannot disagree — `Game::orderable_items`' rule one rung up.
     ///
-    /// Two things, in this order. A Research Node has to be standing, and
+    /// Three things, in this order. First, for a node with `requires_subject`
+    /// set, whether a body is standing in a `studies` structure's pen — the
+    /// `(x, y)`-sorted first one, `Game::pinned_subject`'s rule, so a second
+    /// Station cannot resolve this differently between runs. This subsumes
+    /// the "is a Research Node standing" test below for a subject-gated
+    /// node, since a station with a pen is a station, and it is checked
+    /// **outside** `research_block_memo` because it is a question per node
+    /// rather than per item.
+    ///
+    /// Then a Research Node has to be standing at all, and
     /// `work_orders::chain_break` cannot answer that: it refuses every
     /// banked item by construction and names the research currency in its own
     /// doc as the example. Then every material line through `chain_break`
@@ -725,6 +734,12 @@ impl Game {
     /// same sentence the work-order screen shows, and two spellings of one
     /// refusal is the drift this repo keeps recording.
     pub(crate) fn research_block(&self, def: &ResearchDef) -> Option<String> {
+        if def.requires_subject && self.pinned_subject().is_none() {
+            return Some(
+                "Pin a tamed program in a Research Station's pen before researching this."
+                    .to_string(),
+            );
+        }
         self.research_block_memo(def, &mut HashMap::new())
     }
 
@@ -989,18 +1004,40 @@ impl Game {
         if earned < def.cost {
             return None;
         }
+        // `settle_research`'s own order: a subject-gated project with a full
+        // `DownedPrograms` store is exactly as stalled as one short a
+        // material, and reported the same way rather than through a second
+        // surface — see decision 5's ordering.
+        if def.requires_subject && self.downed_programs_full() {
+            return Some("room for another downed program".to_string());
+        }
         def.materials
             .iter()
             .find(|(item, need)| crate::game::base::work_orders::base_holding(self, item) < *need)
             .map(|(item, _)| self.item_name(item).to_string())
     }
 
+    /// Whether `components::DownedPrograms` has no room left —
+    /// `push_downed_program`'s own gate, read early by `settle_research` and
+    /// `research_material_shortfall` so a subject is never spent into a full
+    /// store to discover the push failed afterward.
+    fn downed_programs_full(&self) -> bool {
+        self.world
+            .get::<DownedPrograms>(self.player_entity())
+            .is_some_and(|held| held.0.len() >= crate::tuning::MAX_DOWNED_PROGRAMS)
+    }
+
     /// One tick of the completion check: a project finishes when it has the
-    /// progress **and** the base can pay the whole bill off its shelves.
+    /// progress, a subject if it needs one, room to hold what the subject
+    /// becomes, and the base can pay the whole bill off its shelves.
     ///
-    /// `&&` short-circuits, so the bill is only spent once the progress gate
-    /// has passed — the other order spends a project's materials while it is
-    /// still half-researched.
+    /// The whole gate is one early-return `||`, and the order is load-bearing
+    /// (decision 5): `progress < cost`, then no subject pinned, then no room
+    /// for the downed program the subject becomes, then the materials. The
+    /// short-circuit is what stops a subject-gated project spending its
+    /// subject — or its materials — on one that is still half-researched,
+    /// `a_full_bill_alone_does_not_complete_a_project`'s failure with a worse
+    /// loss, since a program is not refundable the way a shelf material is.
     pub(crate) fn settle_research(&mut self) {
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;
@@ -1015,7 +1052,17 @@ impl Game {
             .get(&active)
             .copied()
             .unwrap_or(0);
+        // Resolved once, ahead of the gate, so the entity the gate approved
+        // is the exact one spent below rather than a second, possibly
+        // different, answer to "which subject" — `Game::pinned_subject`'s
+        // one-door rule.
+        let subject = def
+            .requires_subject
+            .then(|| self.pinned_subject())
+            .flatten();
         if progress < def.cost
+            || (def.requires_subject && subject.is_none())
+            || (def.requires_subject && self.downed_programs_full())
             || !crate::game::base::stock::spend_bill_from_base(
                 self,
                 &def.materials,
@@ -1023,6 +1070,22 @@ impl Game {
             )
         {
             return;
+        }
+        // The conversion: two existing doors and no new function.
+        // `downed_program_for_with_overkill(subject, 0.0)` reads `overkill_
+        // term`'s own identity value, so the condition roll is best-case — a
+        // controlled dissection beats overkilling something in the field.
+        // The room check just above guarantees `push_downed_program`
+        // succeeds; despawning unconditionally after it would eat the body
+        // even on the refusal this repo has already recorded elsewhere.
+        if let Some(subject) = subject {
+            let name = self.creature_label(subject);
+            if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0)
+                && self.push_downed_program(program)
+            {
+                self.world.despawn(subject);
+                self.log(format!("{name} is spent in the study."));
+            }
         }
         // "Researched means known" (spec §1): a routine node writes its
         // ability into `KnownRoutines` and never touches `Research`, so a

@@ -5,6 +5,7 @@
     cost: 160,
     materials: [("trace_sniffer", 8), ("logic_wafer", 14)],
     min_zone: 3,
+    requires_subject: true,
     requires: ["cortex"],
     unlocks_recipes: [
         (

@@ -5,6 +5,7 @@
     cost: 75,
     materials: [("bytecode_block", 24), ("charge_coil", 12)],
     min_zone: 2,
+    requires_subject: true,
     requires: ["automation"],
     unlocks_structures: ["annealing_node", "refactor_bench"],
     unlocks_tools: ["component_stripper"],

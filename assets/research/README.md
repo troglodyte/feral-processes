@@ -100,6 +100,22 @@ Core Fragments.
     // from the start — so deleting the flagged node (or the whole file) does
     // not strand a run behind a gate nothing can ever open.
     opens_routine_tree: true,
+
+    // Optional; defaults to false. Refuses selection until a tamed program
+    // is standing in a Research Station's pen — see `assets/structures/
+    // README.md`'s `studies` field. The node stays listed either way
+    // (`ResearchState::Locked` and the block reason are the disclosure, not
+    // hiding the row); the refusal names the same sentence the menu already
+    // marks the row blocked with. Any owned tamed program satisfies any
+    // study — which one does not matter — and completion consumes it into a
+    // `DownedProgram` record in your store, exactly as if it had been
+    // defeated in the field. Every shipped node with `min_zone >= 2` sets
+    // this; the eight that get a base running from turn one
+    // (`automation`, `power_grid`, `commerce`, `teardown`, `fortification`,
+    // `armor_bench`, `routine_fabrication`, `weapon_bench`) do not, so a
+    // fresh run never needs a subject before it has a base worth studying
+    // anyone at. A synthesised routine node never sets this — the routine
+    // tree has its own economy already.
 )
 ```
 

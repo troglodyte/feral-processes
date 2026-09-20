@@ -3196,3 +3196,158 @@ fn ending_a_project_on_a_run_dry_base_leaves_the_body_standing() {
         "a run-dry base leaves its postings alone rather than standing down"
     );
 }
+
+// ---------------------------------------------------------------------
+// One body to a cell
+// ---------------------------------------------------------------------
+
+/// Every cell a base-space body is standing on, and how many are on it.
+fn bodies_by_tile(game: &mut Game) -> std::collections::HashMap<(i32, i32), usize> {
+    let mut tally: std::collections::HashMap<(i32, i32), usize> = std::collections::HashMap::new();
+    for (_, p) in game.base_bodies() {
+        *tally.entry((p.x, p.y)).or_default() += 1;
+    }
+    tally
+}
+
+/// **A body is a blocker, so two patients cannot share one Bay face.** Both
+/// walks stop at the first tile `in_reach` answers for, and with nothing in
+/// the way that is the same cell for everyone approaching from the same
+/// side: the save this was found in had 71 downed programs on one tile,
+/// drawn as a single glyph because `render/base.rs` keeps one `actor` slot
+/// per cell.
+#[test]
+fn two_downed_programs_do_not_share_a_bay_face() {
+    let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 2);
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
+    }
+
+    for _ in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let first = *game.world.get::<Position>(staff[0]).unwrap();
+    let second = *game.world.get::<Position>(staff[1]).unwrap();
+    assert_ne!(
+        first, second,
+        "two patients walked onto the same cell: {first:?}"
+    );
+}
+
+/// **The invariant repairs itself, which is what makes it true of a save
+/// written before it existed.** A body already `in_reach` of its Bay never
+/// consults the walk at all — it is standing where it wanted to be — so
+/// blocking alone leaves an existing pile piled. A body sharing its cell
+/// steps off it whatever errand it is on.
+#[test]
+fn a_pile_of_bodies_on_one_tile_spreads_out() {
+    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 3);
+    let heap = Position { x: -3, y: 0 };
+    for &worker in &staff {
+        *game.world.get_mut::<Position>(worker).unwrap() = heap;
+    }
+    assert_eq!(
+        bodies_by_tile(&mut game).get(&(heap.x, heap.y)).copied(),
+        Some(3),
+        "precondition: all three start on one cell"
+    );
+
+    for _ in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let tally = bodies_by_tile(&mut game);
+    assert!(
+        tally.values().all(|&n| n == 1),
+        "every body should have a cell to itself: {tally:?}"
+    );
+}
+
+/// The same rule for a pile the drift's *errand* arms parked, which is the
+/// shape the dev save was in: downed bodies hold where they stand once they
+/// are in reach, so the spread has to outrank the hold.
+#[test]
+fn a_pile_of_downed_bodies_at_the_bay_spreads_out() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 3);
+    let site = bay_tile(&mut game);
+    let face = Position {
+        x: site.x - 1,
+        y: site.y,
+    };
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
+        *game.world.get_mut::<Position>(worker).unwrap() = face;
+    }
+
+    for _ in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let tally = bodies_by_tile(&mut game);
+    assert!(
+        tally.values().all(|&n| n == 1),
+        "a heap of patients should thin out around the Bay: {tally:?}"
+    );
+}
+
+/// **A posted worker stands on one of its own machine's station tiles**, so
+/// bodies-as-blockers must exempt the body doing the asking. Unexempted,
+/// `station_candidates` filters that cell out, a machine whose other faces
+/// are walled answers `BoxedIn` to the very worker standing at it, and the
+/// scheduler frees and re-posts it every tick.
+#[test]
+fn a_body_standing_at_its_post_is_not_boxed_in_by_itself() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let machine = spawn_machine_at(&mut game, "mining_node", 4, 0);
+    // Three of the four faces walled off with buildings, so the tile the
+    // worker is standing on is the machine's only station.
+    for (dx, dy) in [(1, 0), (0, 1), (0, -1)] {
+        spawn_structure_at(&mut game, "depot", 4 + dx, dy);
+    }
+    let worker = spawn_tamed(&mut game, 10, 3);
+    let station = Position { x: 3, y: 0 };
+    *game.world.get_mut::<Position>(worker).unwrap() = station;
+
+    let blocked = game.blocked_tiles();
+    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let to = *game.world.get::<Position>(machine).unwrap();
+
+    assert!(
+        crate::game::base::hauling::post_reach(grid, station, to, &blocked, radius).is_ok(),
+        "the worker's own cell is still a station it may keep standing on"
+    );
+}
+
+/// **A party companion's `Position` is the tile it was beaten on**, and base
+/// space and the zone surface alias onto each other freely — base space's
+/// origin and the zone spawn point are both usually `(0, 0)`. Selecting
+/// bodies by `Tamed` alone would block a base cell nothing is standing in,
+/// permanently and invisibly.
+#[test]
+fn a_party_companions_stale_tile_blocks_nothing() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+    let stale = Position { x: 2, y: 0 };
+    *game.world.get_mut::<Position>(companion).unwrap() = stale;
+
+    assert!(
+        !game.blocked_tiles().contains(&(stale.x, stale.y)),
+        "a companion standing beside the player blocks no base-space cell"
+    );
+}

@@ -86,6 +86,27 @@ pub(crate) fn role_of(
     Some(ProgramRole::Staff)
 }
 
+/// Whether the sim walks `creature` around base space, so its `Position` is
+/// a cell that body is really standing in rather than the tile it was last
+/// left on.
+///
+/// **The one definition of which bodies occupy ground.** Four `Position`s in
+/// the game are written once and never again: a party companion's, a wielded
+/// program's and a sortie squad's are all held out by the role, and a posted
+/// **guard**'s is the fourth — nothing ever walks a guard to what it guards,
+/// so it stands wherever it was when it was assigned. `Game::base_bodies`
+/// asks this to decide which cells a walk may not cross and
+/// `Game::watch_position` to decide where a camera may sit; a second copy of
+/// the rule would either block a tile out on the zone surface, which base
+/// space's coordinates alias onto freely, or let the camera follow a body
+/// nothing blocks.
+///
+/// A free function beside `role_of` and for its reason: `haul_step_system`
+/// has no `Game` and must build the same set from its own queries.
+pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) -> bool {
+    role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard)
+}
+
 /// The four resources that decide a role, as one system parameter.
 ///
 /// A bevy system that narrows through `role_of` needs every one of them and

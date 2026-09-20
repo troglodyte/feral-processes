@@ -761,7 +761,7 @@ impl Game {
                 .collect()
         };
         diggers.sort_unstable();
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (.., worker) in diggers {
             let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {

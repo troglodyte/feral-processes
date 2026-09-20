@@ -925,7 +925,7 @@ impl Game {
             self.log(format!("{name} sets out its stock beside the counter."));
             return;
         }
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let step = {
             let grid = self.world.resource::<BaseGrid>();

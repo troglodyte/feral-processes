@@ -111,7 +111,7 @@ impl Game {
                 .collect()
         };
         builders.sort_unstable();
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (.., worker) in builders {
             self.step_one_builder(worker, &blocked, pocket_radius);

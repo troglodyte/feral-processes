@@ -993,7 +993,7 @@ impl Game {
         // such a tick regardless — `truncate(0)` empties the list — so the
         // only thing the guard changes is the sentence.
         if !on_shift.is_empty() {
-            let blocked = self.structure_tiles();
+            let blocked = self.blocked_tiles();
             let pocket_radius = self.world.resource::<BaseGrid>().radius();
             let mut reach: Vec<hauling::CrewReach> = Vec::new();
             let mut unreachable: Vec<(Entity, TaskKind)> = Vec::new();
@@ -1290,7 +1290,7 @@ impl Game {
         // stood. Measured from the player it did both jobs wrong at once: a
         // loitering program teleported across the map onto you, and walking
         // out of the walk field stopped the base filling a single machine.
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (post, kind) in remaining {
             if idle.is_empty() {
@@ -1758,7 +1758,11 @@ impl Game {
     /// substrate is a budget shared by every site in the base and so cannot
     /// be spent on one the scheduler is about to drop as unreachable.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
-        let blocked = self.structure_tiles();
+        // `structure_tiles` and not `blocked_tiles`: `has_station` asks
+        // whether a face exists to be stood on, which is a question about the
+        // ground. See its doc for why counting bodies here stops the crew
+        // cutting anything at all.
+        let structures = self.structure_tiles();
         let marked: Vec<(Position, Entity, Option<FinishOrder>)> = {
             let mut query = self.world.query::<(Entity, &DigSite, &Position)>();
             query
@@ -1770,7 +1774,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let mut sites: Vec<(bool, i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
-            .filter(|(p, ..)| hauling::has_station(grid, *p, &blocked))
+            .filter(|(p, ..)| hauling::has_station(grid, *p, &structures))
             .map(|(p, e, f)| (grid.is_solid(p.x, p.y), p.x, p.y, e, f))
             .collect();
         // Cut/tile sites (`finish: None`) sort before finish/strip sites,
@@ -1978,6 +1982,32 @@ impl Game {
             .filter_map(|&w| self.world.get::<Position>(w))
             .map(|p| (p.x, p.y))
             .collect();
+        // Which cells hold more than one body, as the beat opens.
+        //
+        // **What makes "one body to a cell" repair itself**, and it is why
+        // the walks refusing an occupied tile was not the whole rule. A body
+        // that has *arrived* never consults a walk again — a patient in reach
+        // of its Bay holds there deliberately, and so does a program standing
+        // at its amenity — so a heap that already exists, in a save written
+        // before any of this or left by a structure raised on top of one,
+        // would stay a heap forever with every future step correctly refused.
+        // Sharing a cell therefore outranks every errand below: the body
+        // takes the wander instead, which is the one arm that already knows
+        // how to decline a tile somebody else has.
+        //
+        // Off `Game::base_bodies` rather than off `staff`, because a posted
+        // worker standing on the cell is as much in the way as an idle one
+        // and is not in this list.
+        let crowded: std::collections::HashSet<(i32, i32)> = {
+            let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
+            let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
+            for (_, p) in self.base_bodies() {
+                if !seen.insert((p.x, p.y)) {
+                    twice.insert((p.x, p.y));
+                }
+            }
+            twice
+        };
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
@@ -1999,7 +2029,11 @@ impl Game {
                 .world
                 .get::<Position>(worker)
                 .is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
-            if on_floor && self.world.get::<components::Downed>(worker).is_some() {
+            let sharing = self
+                .world
+                .get::<Position>(worker)
+                .is_some_and(|p| crowded.contains(&(p.x, p.y)));
+            if !sharing && on_floor && self.world.get::<components::Downed>(worker).is_some() {
                 let _ = self.step_to_repair(worker, bays);
                 if let Some(p) = self.world.get::<Position>(worker) {
                     held.insert((p.x, p.y));
@@ -2009,7 +2043,7 @@ impl Game {
             // A body with an errand walks it. `Err` is the one place a route
             // is ever judged: it gives the post up and latches the need, so
             // the gate does not hand it straight back on the next beat.
-            if self.world.get::<components::OffShift>(worker).is_some() {
+            if !sharing && self.world.get::<components::OffShift>(worker).is_some() {
                 if self.step_off_shift(worker, amenities).is_err() {
                     self.strand_off_shift(worker);
                 }
@@ -2026,7 +2060,7 @@ impl Game {
             // it puts the body back in the *posting* pool rather than leaving
             // it stalled, which is this errand's whole difference from that
             // one.
-            if self.on_respite(worker, amenities) {
+            if !sharing && self.on_respite(worker, amenities) {
                 if self.step_respite(worker, amenities).is_err() {
                     self.strand_respite(worker);
                 }

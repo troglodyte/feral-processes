@@ -331,13 +331,12 @@ impl Game {
     /// release the instant the body arrived where the player was watching it
     /// go, which is the one moment the feature exists for.
     ///
-    /// What this asks instead is whether the sim *walks* the body. That is
-    /// `ProgramRole::Staff` less the guards: `role_of` already holds out the
-    /// party, the wielded program and anything away on a sortie, and
-    /// `TaskKind::Guard` is the fourth — nothing ever walks a guard to what
-    /// it guards, so it stands wherever it was when it was assigned. All
-    /// four keep a `Position` that is never written again, and parking the
-    /// camera on one claims the program is somewhere it isn't.
+    /// What this asks instead is whether the sim *walks* the body —
+    /// `party::walks_the_base`, shared with `Game::base_bodies` rather than
+    /// restated, since a body the camera may follow and a body that occupies
+    /// a cell are the same body. All four `Position`s that rule holds out are
+    /// written once and never again, and parking the camera on one claims the
+    /// program is somewhere it isn't.
     ///
     /// Refused outside base space, where staff stand: the map draws one
     /// space at a time (`stands_in_base_space`) and a base-space cell drawn
@@ -345,10 +344,10 @@ impl Game {
     /// already refuses.
     pub fn watch_position(&self, entity: Entity) -> Option<(i32, i32)> {
         self.base_pos()?;
-        if self.program_role(entity) != Some(ProgramRole::Staff) {
-            return None;
-        }
-        if self.world.get::<Task>(entity).map(|t| t.kind) == Some(TaskKind::Guard) {
+        if !crate::game::party::walks_the_base(
+            self.program_role(entity),
+            self.world.get::<Task>(entity).map(|t| t.kind),
+        ) {
             return None;
         }
         let pos = self.world.get::<Position>(entity)?;

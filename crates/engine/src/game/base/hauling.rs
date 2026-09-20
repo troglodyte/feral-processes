@@ -159,17 +159,39 @@ pub(crate) fn nearest_depot(
         .copied()
 }
 
-/// Every tile a deployed structure stands on. A worker may not walk over one,
-/// for the reason the player may not: `move_player` refuses a tile
-/// `find_blocking_structure_at` answers for, and a base that a program walks
-/// through while its owner walks around stops reading as a physical place.
+/// Every cell in base space that is already spoken for: the tile each
+/// deployed structure stands on, and the tile each body the sim walks is
+/// standing in.
+///
+/// A worker may not walk over a structure for the reason the player may not —
+/// `move_player` refuses a tile `find_blocking_structure_at` answers for, and
+/// a base a program walks through while its owner walks around stops reading
+/// as a physical place. **A body is the same rule one step further**, and it
+/// is what stops a crowd converging on one cell: every walk in base space
+/// stops at the first tile its arrival test answers for, so with nothing in
+/// the way that is the *same* tile for everyone approaching from the same
+/// side. The save that forced this had 71 downed programs standing on one
+/// cell outside a Repair Bay, drawn as a single glyph.
+///
+/// **Two iterators rather than one set the caller assembles**, which is the
+/// whole of what keeps the two seams agreeing: `post_field` and `crew_reach`
+/// have to answer the same question about which tiles are crossable, and a
+/// caller that could pass the structures alone would silently be asking a
+/// different one. `collect::feeders_by_tile`'s argument — the signature is
+/// what holds it, since nothing here fails to compile when a half is
+/// forgotten.
 ///
 /// Built per tick from whatever positions the caller can see, rather than
 /// cached — the same reasoning `haul_step_system` rebuilds its depot list on:
-/// a demolished structure has to stop blocking without anything noticing it
-/// changed.
-pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> HashSet<(i32, i32)> {
-    positions.map(|p| (p.x, p.y)).collect()
+/// a demolished structure, and a body that has moved on, both have to stop
+/// blocking without anything noticing they changed. A cached one would also
+/// be a new `Resource`, which shifts query iteration order across the whole
+/// engine; `repair::Bays` refuses the same trade for the same reason.
+pub(crate) fn blocked_tiles(
+    structures: impl Iterator<Item = Position>,
+    bodies: impl Iterator<Item = Position>,
+) -> HashSet<(i32, i32)> {
+    structures.chain(bodies).map(|p| (p.x, p.y)).collect()
 }
 
 /// Every tile a worker could stand on to work or deliver to `structure` —
@@ -202,16 +224,26 @@ fn station_tiles(
     from: Position,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
-    let mut tiles = station_candidates(grid, structure, blocked);
+    let mut tiles = station_candidates(grid, structure, Some(from), blocked);
     tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
     tiles
 }
 
 /// The same tiles unranked — what `station_tiles` sorts and what
 /// `has_station` counts.
+///
+/// `asking` is the body's own cell, exempt from `blocked` for
+/// `post_field`'s reason one level down: **a posted worker is standing on one
+/// of its own machine's station tiles**, so once bodies count as occupied the
+/// cell it is already on would be filtered out from under it. A machine whose
+/// other faces are walled would then answer `BoxedIn` to the very worker
+/// standing at it, and `schedule_base_labour` would free and re-post it every
+/// tick. `None` is the question asked without a body —
+/// `has_station`, which is about the cell and not about who wants it.
 fn station_candidates(
     grid: &BaseGrid,
     structure: Position,
+    asking: Option<Position>,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
     ORTHOGONAL
@@ -220,7 +252,9 @@ fn station_candidates(
             x: structure.x + dx,
             y: structure.y + dy,
         })
-        .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
+        .filter(|p| {
+            grid.walkable(p.x, p.y) && (asking == Some(*p) || !blocked.contains(&(p.x, p.y)))
+        })
         .collect()
 }
 
@@ -232,12 +266,22 @@ fn station_candidates(
 /// one. That is what lets `dig_wants` drop the interior of a marked block
 /// before the scheduler budgets for it, sharing this predicate rather than
 /// keeping a second copy of what a face is.
+///
+/// **`structures`, and deliberately not the walk's `blocked` set.** A body
+/// standing on the only face of a marked cell is *proof* that something can
+/// stand there, so counting bodies here answers the wrong question — and
+/// answers it in the one direction that deadlocks: the want is dropped
+/// because its own digger is standing at it, the digger is freed and wanders
+/// off, the want comes back, the digger walks back, and the base never cuts
+/// anything again. Who may take a *particular* face is `station_tiles`'
+/// question, asked with the body doing the asking and answered against the
+/// full set.
 pub(crate) fn has_station(
     grid: &BaseGrid,
     structure: Position,
-    blocked: &HashSet<(i32, i32)>,
+    structures: &HashSet<(i32, i32)>,
 ) -> bool {
-    !station_candidates(grid, structure, blocked).is_empty()
+    !station_candidates(grid, structure, None, structures).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -357,7 +401,7 @@ pub(crate) fn reaches(
     blocked: &HashSet<(i32, i32)>,
 ) -> bool {
     at_station(from, structure)
-        || station_candidates(grid, structure, blocked)
+        || station_candidates(grid, structure, Some(from), blocked)
             .iter()
             .any(|s| reach.contains_key(&(s.x, s.y)))
 }
@@ -429,12 +473,19 @@ fn deposit(stock: &mut Stock, load: &Carrying) -> u32 {
 /// is what lets this hold `Position` mutably while `HaulStructure` below
 /// reads it — bevy proves the two disjoint from the filters, not from the
 /// fact that nothing is both a program and a building.
+///
+/// The trailing `Tamed` is read for its `owner` alone, which is what
+/// `party::walks_the_base` needs to tell a posted body from a party member
+/// holding the tile it was beaten on. A posted worker is one of the bodies a
+/// *second* worker may not walk over, and this query holds `Position`
+/// mutably — so the posted half of that set cannot come from anywhere else.
 type Hauler = (
     Entity,
     &'static mut Position,
     &'static Task,
     Option<&'static Carrying>,
     Option<&'static Stranded>,
+    &'static Tamed,
 );
 
 type HaulStructure = (
@@ -458,6 +509,34 @@ pub struct HaulLookups<'w> {
     /// system parameter for the reason the two def tables are — the argument
     /// list is already at clippy's threshold.
     clock: Res<'w, resources::GameClock>,
+}
+
+/// A body standing in base space that holds no post — what
+/// `HaulGround::idle` reads off each one, aliased for `Hauler`'s
+/// `type_complexity` reason.
+type Bystander = (Entity, &'static Position, &'static Tamed);
+
+/// And which bodies those are. `Without<Task>` is load-bearing twice over:
+/// it is what proves this query disjoint from `Hauler`'s `&mut Position` to
+/// bevy, and it is the half of the body set `haul_step_system`'s own query
+/// cannot see.
+type NotPosted = (Without<Task>, Without<Structure>);
+
+/// The ground a walk is measured against, and who is already standing on it.
+///
+/// Bundled for `HaulLookups`' reason — the argument list is at clippy's
+/// threshold — and the grouping is real: all three answer the one question
+/// `step_to_post` is about, which cells this body may step into.
+#[derive(SystemParam)]
+pub struct HaulGround<'w, 's> {
+    grid: Res<'w, BaseGrid>,
+    /// Every body the sim walks that this system's own query cannot see:
+    /// staff between postings, a program off shift on a need, a patient on
+    /// its way to a Bay. `Without<Task>` is what proves it disjoint from
+    /// `Hauler`'s `&mut Position` to bevy — the two halves of the body set
+    /// are split by exactly that filter and by nothing else.
+    idle: Query<'w, 's, Bystander, NotPosted>,
+    roles: crate::game::party::Roles<'w>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
@@ -653,10 +732,11 @@ pub(crate) fn haul_step_system(
     mut structures: Query<HaulStructure, Without<Tamed>>,
     departure: HaulDeparture,
     defs: HaulLookups,
-    grid: Res<BaseGrid>,
+    ground: HaulGround,
     mut telemetry: ResMut<crate::resources::BattleTelemetry>,
     mut commands: Commands,
 ) {
+    let HaulGround { grid, idle, roles } = ground;
     let HaulDeparture {
         statuses,
         standing,
@@ -676,7 +756,28 @@ pub(crate) fn haul_step_system(
         items,
         clock,
     } = defs;
-    let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
+    // **Grown as bodies move, never shrunk** — `drift_idle_staff`'s `held`
+    // rule, and for its reason: a vacated cell stays spoken for until the
+    // next tick, which costs a body one step it will be offered again and
+    // saves this from depending on the order the pool is walked in. Built
+    // once and read for the rest of the tick, two haulers heading for the
+    // same free cell would both be told it was free.
+    let mut blocked = blocked_tiles(
+        structures.iter().map(|(_, p, _, _)| *p),
+        workers
+            .iter()
+            .filter(|(entity, _, task, _, _, tamed)| {
+                crate::game::party::walks_the_base(roles.of(*entity, tamed.owner), Some(task.kind))
+            })
+            .map(|(_, p, ..)| *p)
+            .chain(
+                idle.iter()
+                    .filter(|(entity, _, tamed)| {
+                        crate::game::party::walks_the_base(roles.of(*entity, tamed.owner), None)
+                    })
+                    .map(|(_, p, _)| *p),
+            ),
+    );
     // What bounds the Dijkstra field a walker rebuilds each tick: how far
     // the base actually reaches, measured off the grid rather than taken
     // from the size the pocket started at. See `BaseGrid::radius`.
@@ -749,7 +850,7 @@ pub(crate) fn haul_step_system(
     order.sort_unstable();
 
     for (.., worker) in order {
-        let Ok((_, worker_pos, task, carrying, stranded)) = workers.get(worker) else {
+        let Ok((_, worker_pos, task, carrying, stranded, _)) = workers.get(worker) else {
             continue;
         };
         let (worker_pos, carrying, stranded) = (*worker_pos, carrying.cloned(), stranded.copied());
@@ -1001,6 +1102,7 @@ pub(crate) fn haul_step_system(
             && let Ok((_, mut pos, ..)) = workers.get_mut(worker)
         {
             *pos = next;
+            blocked.insert((next.x, next.y));
         }
     }
 }

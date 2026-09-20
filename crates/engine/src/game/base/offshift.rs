@@ -368,7 +368,7 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),

@@ -3310,7 +3310,7 @@ fn patients_that_cannot_reach_a_full_bay_go_back_to_milling() {
     for &worker in &staff {
         game.world.entity_mut(worker).insert(Downed);
     }
-    let mut beats = |game: &mut Game, n: usize| {
+    let beats = |game: &mut Game, n: usize| {
         for _ in 0..n {
             let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
             wind_to(game, next);

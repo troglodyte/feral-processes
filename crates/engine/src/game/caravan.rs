@@ -912,14 +912,15 @@ impl Game {
     }
 
     fn walk_caravan_to_counter(&mut self, entity: Entity, caravan: &Caravan) {
-        let Some((_, counter)) = self.trading_structures().next() else {
+        let Some((counter_entity, counter)) = self.trading_structures().next() else {
             self.send_caravan_home(entity);
             return;
         };
         let Some(from) = self.world.get::<Position>(entity).copied() else {
             return;
         };
-        if crate::game::base::hauling::at_station(from, counter) {
+        let side = self.structure_footprint_of(counter_entity);
+        if crate::game::base::hauling::at_station(from, counter, side) {
             self.set_caravan_stage(entity, CaravanStage::Docked);
             let name = self.caravan_name(caravan);
             self.log(format!("{name} sets out its stock beside the counter."));
@@ -929,7 +930,14 @@ impl Game {
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let step = {
             let grid = self.world.resource::<BaseGrid>();
-            crate::game::base::hauling::step_to_post(grid, from, counter, &blocked, pocket_radius)
+            crate::game::base::hauling::step_to_post(
+                grid,
+                from,
+                counter,
+                side,
+                &blocked,
+                pocket_radius,
+            )
         };
         match step {
             Ok(Some(next)) => {

@@ -3951,7 +3951,7 @@ fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
     let blocked = std::collections::HashSet::new();
 
     assert_eq!(
-        post_reach(&grid, from, target, &blocked, grid.radius()),
+        post_reach(&grid, from, target, 1, &blocked, grid.radius()),
         Ok(()),
         "a post with one reachable face was reported unreachable"
     );
@@ -3974,7 +3974,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     let blocked = std::collections::HashSet::new();
 
     assert_eq!(
-        post_reach(&grid, from, target, &blocked, grid.radius()),
+        post_reach(&grid, from, target, 1, &blocked, grid.radius()),
         Err(NoPost::NoRoute),
         "both faces are cut off from the worker, so this is a route problem"
     );
@@ -3982,7 +3982,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     let mut boxed = base_grid::BaseGrid::default();
     boxed.open(from.x, from.y, 0);
     assert_eq!(
-        post_reach(&boxed, from, target, &blocked, boxed.radius()),
+        post_reach(&boxed, from, target, 1, &blocked, boxed.radius()),
         Err(NoPost::BoxedIn),
         "nothing can stand beside it at all, which is a digging problem"
     );

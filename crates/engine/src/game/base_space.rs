@@ -788,13 +788,16 @@ impl Game {
                 .get::<Position>(worker)
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
-            if !crate::game::base::hauling::at_station(from, target) {
+            // A `DigSite` is always footprint 1 — a mark names one cell —
+            // so `side` here is never anything but the default.
+            if !crate::game::base::hauling::at_station(from, target, 1) {
                 let step = {
                     let grid = self.world.resource::<BaseGrid>();
                     crate::game::base::hauling::step_to_post(
                         grid,
                         from,
                         target,
+                        1,
                         &blocked,
                         pocket_radius,
                     )

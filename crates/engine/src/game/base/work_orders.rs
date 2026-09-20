@@ -1018,7 +1018,9 @@ impl Game {
                     }
                     let (from, field) = &reach[index];
                     let grid = self.world.resource::<BaseGrid>();
-                    if hauling::reaches(grid, field, *from, at, &blocked) {
+                    // `post` is a `BuildSite` or `DigSite` here, never a
+                    // `Structure` — both are always footprint 1.
+                    if hauling::reaches(grid, field, *from, at, 1, &blocked) {
                         anyone = true;
                         break;
                     }
@@ -1386,8 +1388,12 @@ impl Game {
         let Some(to) = self.world.get::<Position>(target).copied() else {
             return Err(hauling::NoPost::BoxedIn);
         };
+        // `target` is a machine (`GatherResource`) or a `DigSite`
+        // (`Excavate`); `structure_footprint_of` answers `1` for the
+        // latter, since a `DigSite` carries no `Structure`.
+        let side = self.structure_footprint_of(target);
         let grid = self.world.resource::<BaseGrid>();
-        hauling::post_reach(grid, from, to, blocked, pocket_radius)
+        hauling::post_reach(grid, from, to, side, blocked, pocket_radius)
     }
 
     /// Says once that nothing on the staff can walk to `site` —
@@ -1774,7 +1780,10 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let mut sites: Vec<(bool, i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
-            .filter(|(p, ..)| hauling::has_station(grid, *p, &structures))
+            // A dig mark is always footprint 1 — `structures` (the widened
+            // `structure_tiles`) is what carries a real Station's floor
+            // cells into this check.
+            .filter(|(p, ..)| hauling::has_station(grid, *p, 1, &structures))
             .map(|(p, e, f)| (grid.is_solid(p.x, p.y), p.x, p.y, e, f))
             .collect();
         // Cut/tile sites (`finish: None`) sort before finish/strip sites,

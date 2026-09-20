@@ -1947,13 +1947,17 @@ fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     game.assign_cronjob(worker, node).unwrap();
 
     for _ in 0..200 {
-        if game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
+        if game::base::hauling::at_station(
+            *game.world.get::<Position>(worker).unwrap(),
+            node_pos,
+            1,
+        ) {
             break;
         }
         game.tick();
     }
     assert!(
-        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos, 1),
         "a worker posted from one edge of a full-size base must reach the other"
     );
 }
@@ -4290,41 +4294,13 @@ fn a_deploy_is_refused_onto_a_standing_program() {
 //
 // The squad seam's failure was that every fixture was hand-built at
 // footprint 1, so every anchor-measuring reader stayed green across 5,964
-// passing tests. These fixtures clone `armory` wholesale — same build cost,
-// same `assembles` (so `file_build` tames a program the same way) — and
-// differ from a shipped-def test only in the one field under test, which is
-// the point: a 2x2 fixture that matters is one that could otherwise have
-// been a 1x1 in disguise.
-
-/// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
-/// `armory` so it needs a program and a real bill exactly like a shipped
-/// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
-/// of that and is for what a standing structure *enables*, not for the
-/// placement ladder these tests are about.
-fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
-    let mut def = game
-        .world
-        .resource::<StructureDb>()
-        .get("armory")
-        .cloned()
-        .expect("armory ships");
-    def.id = id.to_string();
-    def.name = id.to_string();
-    def.footprint = footprint;
-    game.world.resource_mut::<StructureDb>().insert(def);
-}
-
-/// A base with a Home standing, a footprint-2 fixture registered under
-/// `id`, and enough Core Fragments to raise it — the shared setup every
-/// placement-refusal test below builds on.
-fn base_with_footprint_fixture(seed: u32, id: &str) -> Game {
-    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    place_home(&mut game);
-    footprint_fixture(&mut game, id, 2);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    game
-}
+// passing tests. `footprint_fixture`/`base_with_footprint_fixture`
+// (`support.rs`) clone `armory` wholesale — same build cost, same
+// `assembles` (so `file_build` tames a program the same way) — and differ
+// from a shipped-def test only in the one field under test, which is the
+// point: a 2x2 fixture that matters is one that could otherwise have been a
+// 1x1 in disguise. Shared with `tests::hauling` and `tests::work_orders`,
+// which need the same shape for the reach machinery.
 
 #[test]
 fn an_unannotated_structure_has_footprint_one_and_does_not_study() {

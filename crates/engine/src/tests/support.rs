@@ -1554,6 +1554,41 @@ pub(super) fn place_home(game: &mut Game) {
     game.world.insert_resource(outside);
 }
 
+/// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
+/// `armory` so it needs a program and a real bill exactly like a shipped
+/// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
+/// of that and is for what a standing structure *enables*, not for the
+/// placement or reach machinery a footprint test is about.
+///
+/// Shared by `tests::building`, `tests::hauling` and `tests::work_orders` —
+/// the squad seam's failure was that every fixture was hand-built at
+/// footprint 1, so every anchor-measuring reader stayed green across 5,964
+/// passing tests.
+pub(super) fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
+    let mut def = game
+        .world
+        .resource::<StructureDb>()
+        .get("armory")
+        .cloned()
+        .expect("armory ships");
+    def.id = id.to_string();
+    def.name = id.to_string();
+    def.footprint = footprint;
+    game.world.resource_mut::<StructureDb>().insert(def);
+}
+
+/// A base with a Home standing, a footprint-2 fixture registered under
+/// `id`, and enough Core Fragments to raise it — the shared setup every
+/// footprint test builds on.
+pub(super) fn base_with_footprint_fixture(seed: u32, id: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    footprint_fixture(&mut game, id, 2);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    game
+}
+
 /// How many of `id` the player is holding.
 pub(super) fn count_item(game: &Game, id: &str) -> u32 {
     let player = game.player_entity();
@@ -2751,20 +2786,28 @@ impl Game {
             .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<crate::base_grid::BaseGrid>().radius();
+        let side = self.structure_footprint_of(structure);
         {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             // The two errands stay distinct, as they were: a machine the
             // base has been built around needs digging out, one with no
             // route may just need you to walk over to it.
-            crate::game::base::hauling::post_reach(grid, from, target, &blocked, pocket_radius)
-                .map_err(|reason| match reason {
-                    crate::game::base::hauling::NoPost::BoxedIn => {
-                        "That structure is walled in — nothing can stand next to it.".to_string()
-                    }
-                    crate::game::base::hauling::NoPost::NoRoute => {
-                        "No route to that structure from here.".to_string()
-                    }
-                })?;
+            crate::game::base::hauling::post_reach(
+                grid,
+                from,
+                target,
+                side,
+                &blocked,
+                pocket_radius,
+            )
+            .map_err(|reason| match reason {
+                crate::game::base::hauling::NoPost::BoxedIn => {
+                    "That structure is walled in — nothing can stand next to it.".to_string()
+                }
+                crate::game::base::hauling::NoPost::NoRoute => {
+                    "No route to that structure from here.".to_string()
+                }
+            })?;
         }
         // The removed player action started the program from the player's
         // tile; `post_worker` no longer writes a `Position` at all, so the

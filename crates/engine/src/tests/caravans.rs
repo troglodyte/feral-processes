@@ -1103,7 +1103,7 @@ fn a_caravan_walks_in_docks_and_walks_back_out() {
         *query.iter(&game.world).next().unwrap().1
     };
     assert!(
-        crate::game::base::hauling::at_station(standing, counter),
+        crate::game::base::hauling::at_station(standing, counter, 1),
         "docked at {standing:?}, which is not beside the counter at {counter:?}"
     );
 

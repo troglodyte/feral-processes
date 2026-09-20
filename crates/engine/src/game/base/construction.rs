@@ -243,7 +243,16 @@ impl Game {
             .get::<Position>(worker)
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
-        match self.builder_errand(worker, site, target) {
+        let errand = self.builder_errand(worker, site, target);
+        // The site's own tile (`Deliver`/`Raise`) and the pack are always
+        // single-cell targets; only a `Shelf` names a real standing
+        // structure, which may be the wide one, so its own footprint is
+        // resolved through the entity `Source::Shelf` already carries.
+        let side = match &errand {
+            Errand::Fetch(_, _, Source::Shelf(e, _)) => self.structure_footprint_of(*e),
+            _ => 1,
+        };
+        match errand {
             // **Silent here, deliberately.** The scheduler owns this
             // announcement, because it is the only thing that can see a site
             // nobody is posted to — and a dry site is dropped from the want
@@ -258,9 +267,9 @@ impl Game {
             Errand::Deliver(dest)
             | Errand::Raise(dest)
             | Errand::Fetch(_, _, Source::Shelf(_, dest) | Source::Pack(dest))
-                if !hauling::at_station(from, dest) =>
+                if !hauling::at_station(from, dest, side) =>
             {
-                self.walk_builder(worker, from, dest, blocked, pocket_radius);
+                self.walk_builder(worker, from, dest, side, blocked, pocket_radius);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
             // The dry latch is **not** cleared here. Both halves of it live
@@ -369,12 +378,13 @@ impl Game {
         worker: Entity,
         from: Position,
         dest: Position,
+        side: u8,
         blocked: &std::collections::HashSet<(i32, i32)>,
         pocket_radius: i32,
     ) {
         let step = {
             let grid = self.world.resource::<BaseGrid>();
-            hauling::step_to_post(grid, from, dest, blocked, pocket_radius)
+            hauling::step_to_post(grid, from, dest, side, blocked, pocket_radius)
         };
         match step {
             Ok(Some(next)) => {

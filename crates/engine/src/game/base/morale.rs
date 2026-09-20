@@ -267,10 +267,13 @@ impl Game {
         }
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        // No shipped amenity declares a footprint past 1, so `side` here is
+        // the default — `in_reach` above threads the same value.
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,
+            1,
             &blocked,
             pocket_radius,
         )?

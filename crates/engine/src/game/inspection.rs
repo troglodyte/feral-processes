@@ -260,7 +260,9 @@ impl Game {
                 .world
                 .get::<Position>(holder)
                 .zip(self.world.get::<Position>(target))
-                .is_some_and(|(pos, station)| at_station(*pos, *station)),
+                .is_some_and(|(pos, station)| {
+                    at_station(*pos, *station, self.structure_footprint_of(target))
+                }),
             // Neither of the two task kinds whose target is not a `Structure`
             // has a far end that can carry it. A `DigSite` has no `Glyph` at
             // all; a `BuildSite` has one but is not a `Structure`, and
@@ -1438,6 +1440,7 @@ impl Game {
             .into_iter()
             .map(|(entity, kind, pos)| {
                 let workable = self.accepts_a_program(entity);
+                let side = self.structure_footprint(&kind);
                 let named = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                     map.map(|m| {
                         m.iter()
@@ -1464,7 +1467,7 @@ impl Game {
                         .get::<Durability>(entity)
                         .map(|d| (d.hp, d.max_hp)),
                     workable,
-                    player_adjacent: at_station(center, pos),
+                    player_adjacent: at_station(center, pos, side),
                     assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
                     standing_tool: self
                         .world

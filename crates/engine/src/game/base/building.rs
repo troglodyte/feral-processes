@@ -1473,7 +1473,7 @@ impl Game {
             .world
             .get::<Position>(structure)
             .ok_or_else(|| "That structure isn't anywhere you can reach.".to_string())?;
-        if !hauling::at_station(here, structure_pos) {
+        if !hauling::at_station(here, structure_pos, self.structure_footprint_of(structure)) {
             return Err(
                 "You have to be standing next to it to work it — get beside it first.".into(),
             );

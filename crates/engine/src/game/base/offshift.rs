@@ -335,7 +335,9 @@ impl Game {
 /// Written as an `||` rather than as a special case so the two readings agree
 /// at `radius: 1` instead of stepping over each other.
 pub(crate) fn in_reach(here: Position, site: Position, radius: i32) -> bool {
-    at_station(here, site) || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
+    // No shipped amenity or Repair Bay declares a footprint past 1, so
+    // `at_station`'s side is the default here.
+    at_station(here, site, 1) || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
 }
 
 impl Game {
@@ -370,10 +372,12 @@ impl Game {
         }
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        // `in_reach`'s own note: no shipped amenity is wider than 1.
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,
+            1,
             &blocked,
             pocket_radius,
         )?

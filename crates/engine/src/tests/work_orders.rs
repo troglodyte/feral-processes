@@ -3372,3 +3372,48 @@ fn a_party_companions_stale_tile_blocks_nothing() {
         "a companion standing beside the player blocks no base-space cell"
     );
 }
+
+// --- The reach machinery widens with the footprint ---
+
+/// **Decided, not discovered.** `has_station` reads `Game::structure_tiles`
+/// (the footprint set) and counts a Station's own floor cells as taken,
+/// while `Game::blocked_tiles` would let a body actually stand on one. A
+/// marked cell whose only free walkable face happens to be a Station's
+/// floor cell is refused here even though a body really could stand there —
+/// narrow, and pinned so nobody "fixes" it later by widening `has_station`'s
+/// set to `blocked_tiles`.
+#[test]
+fn a_stations_own_floor_cell_does_not_count_as_a_dig_marks_only_face() {
+    let mut game = base_with_footprint_fixture(3020, "station_face_fixture");
+    place_now(&mut game, "station_face_fixture", 2, 0).unwrap();
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
+
+    // `(4, 0)` is solid rock just past the fixture's own floor cell at
+    // `(3, 0)`. Its other three orthogonal neighbours are reverted to solid
+    // too, so `(3, 0)` — the fixture's own footprint — is the *only* face
+    // `has_station` could ever offer it.
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.revert(4, 0);
+        grid.revert(5, 0);
+        grid.revert(4, 1);
+        grid.revert(4, -1);
+    }
+    game.toggle_mark_box((4, 0), (4, 0), None);
+    assert!(
+        game.world.resource::<base_grid::BaseGrid>().is_solid(4, 0),
+        "precondition: the marked cell is solid rock, not floor"
+    );
+
+    let worker = spawn_tamed(&mut game, 10, 3);
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        None,
+        "the only free face is the Station's own floor cell, which \
+         `has_station` counts as taken"
+    );
+}

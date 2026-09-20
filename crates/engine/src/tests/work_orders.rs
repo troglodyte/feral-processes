@@ -3210,63 +3210,46 @@ fn bodies_by_tile(game: &mut Game) -> std::collections::HashMap<(i32, i32), usiz
     tally
 }
 
-/// **A body is a blocker, so two patients cannot share one Bay face.** Both
-/// walks stop at the first tile `in_reach` answers for, and with nothing in
-/// the way that is the same cell for everyone approaching from the same
-/// side: the save this was found in had 71 downed programs on one tile,
-/// drawn as a single glyph because `render/base.rs` keeps one `actor` slot
-/// per cell.
+/// **A body is a blocker, so a walk never puts two patients on one Bay
+/// face.** Both walks stop at the first tile `in_reach` answers for, and with
+/// nothing in the way that is the same cell for everyone approaching from the
+/// same side: the save this was found in had 71 downed programs on one tile,
+/// drawn as a single glyph because `render/base.rs` keeps one `actor` slot per
+/// cell.
+///
+/// **Asserted every beat rather than at the end**, which is what makes it a
+/// test of the blocking and not of the spread below: a pair that steps onto
+/// one cell is pulled apart again on the next beat, so an end-state assertion
+/// passes with bodies taken back out of `blocked_tiles` entirely. Verified by
+/// that mutation.
 #[test]
-fn two_downed_programs_do_not_share_a_bay_face() {
+fn a_walk_never_puts_two_patients_on_one_bay_face() {
     let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let staff = a_base_with_a_bay(&mut game, 2);
     for &worker in &staff {
         game.world.entity_mut(worker).insert(Downed);
     }
 
-    for _ in 0..60 {
+    for beat in 0..60 {
         let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
         wind_to(&mut game, next);
         drift(&mut game, &staff);
+        let first = *game.world.get::<Position>(staff[0]).unwrap();
+        let second = *game.world.get::<Position>(staff[1]).unwrap();
+        assert_ne!(
+            first, second,
+            "beat {beat}: two patients standing on {first:?}"
+        );
     }
 
-    let first = *game.world.get::<Position>(staff[0]).unwrap();
-    let second = *game.world.get::<Position>(staff[1]).unwrap();
-    assert_ne!(
-        first, second,
-        "two patients walked onto the same cell: {first:?}"
-    );
-}
-
-/// **The invariant repairs itself, which is what makes it true of a save
-/// written before it existed.** A body already `in_reach` of its Bay never
-/// consults the walk at all — it is standing where it wanted to be — so
-/// blocking alone leaves an existing pile piled. A body sharing its cell
-/// steps off it whatever errand it is on.
-#[test]
-fn a_pile_of_bodies_on_one_tile_spreads_out() {
-    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let staff = a_base_with_a_bay(&mut game, 3);
-    let heap = Position { x: -3, y: 0 };
-    for &worker in &staff {
-        *game.world.get_mut::<Position>(worker).unwrap() = heap;
-    }
-    assert_eq!(
-        bodies_by_tile(&mut game).get(&(heap.x, heap.y)).copied(),
-        Some(3),
-        "precondition: all three start on one cell"
-    );
-
-    for _ in 0..60 {
-        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
-        wind_to(&mut game, next);
-        drift(&mut game, &staff);
-    }
-
-    let tally = bodies_by_tile(&mut game);
+    let site = bay_tile(&mut game);
     assert!(
-        tally.values().all(|&n| n == 1),
-        "every body should have a cell to itself: {tally:?}"
+        staff.iter().any(|&w| crate::game::base::offshift::in_reach(
+            *game.world.get::<Position>(w).unwrap(),
+            site,
+            0
+        )),
+        "and one of them still got to the Bay"
     );
 }
 
@@ -3300,34 +3283,72 @@ fn a_pile_of_downed_bodies_at_the_bay_spreads_out() {
     );
 }
 
-/// **A posted worker stands on one of its own machine's station tiles**, so
-/// bodies-as-blockers must exempt the body doing the asking. Unexempted,
-/// `station_candidates` filters that cell out, a machine whose other faces
-/// are walled answers `BoxedIn` to the very worker standing at it, and the
-/// scheduler frees and re-posts it every tick.
+/// **A patient that cannot get to a Bay goes back to milling, and keeps
+/// `Downed` doing it.** Four cells touch a Bay and no more, so a base with
+/// more patients than stations has to put the rest somewhere. Standing still
+/// in the queue is what built the heap, and it deadlocks: the bodies one cell
+/// out hold their ground too, so the crowd cannot even spill into the free
+/// ground beside it.
+///
+/// Found by running the dev save this whole change came from. With the walk
+/// refusing an occupied cell and the spread rule both in place but this one
+/// missing, 71 bodies on one tile thinned to 68 and then froze there for
+/// 1,200 ticks; with it they reach one body to a cell and hold.
+///
+/// **What is asserted is that a stuck patient keeps moving**, sampled across
+/// two runs of beats, and that is what makes this a test of *this* rule. Where
+/// the bodies end up does not discriminate: an open pocket spreads eight
+/// patients over eight cells whether the stuck ones are milling or standing
+/// still, which is how the first two versions of this test passed with the
+/// rule taken back out. Safe from flaking because `wander_step` is a pure
+/// function of `(index, beat)` and draws no RNG.
 #[test]
-fn a_body_standing_at_its_post_is_not_boxed_in_by_itself() {
-    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    place_home(&mut game);
-    let machine = spawn_machine_at(&mut game, "mining_node", 4, 0);
-    // Three of the four faces walled off with buildings, so the tile the
-    // worker is standing on is the machine's only station.
-    for (dx, dy) in [(1, 0), (0, 1), (0, -1)] {
-        spawn_structure_at(&mut game, "depot", 4 + dx, dy);
+fn patients_that_cannot_reach_a_full_bay_go_back_to_milling() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 8);
+    let site = bay_tile(&mut game);
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
     }
-    let worker = spawn_tamed(&mut game, 10, 3);
-    let station = Position { x: 3, y: 0 };
-    *game.world.get_mut::<Position>(worker).unwrap() = station;
+    let mut beats = |game: &mut Game, n: usize| {
+        for _ in 0..n {
+            let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+            wind_to(game, next);
+            drift(game, &staff);
+        }
+    };
 
-    let blocked = game.blocked_tiles();
-    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    let to = *game.world.get::<Position>(machine).unwrap();
-
+    beats(&mut game, 40);
+    let queueing: Vec<(Entity, Position)> = staff
+        .iter()
+        .map(|&w| (w, *game.world.get::<Position>(w).unwrap()))
+        .filter(|(_, p)| !crate::game::base::offshift::in_reach(*p, site, 0))
+        .collect();
     assert!(
-        crate::game::base::hauling::post_reach(grid, station, to, &blocked, radius).is_ok(),
-        "the worker's own cell is still a station it may keep standing on"
+        !queueing.is_empty(),
+        "precondition: eight patients cannot all stand at one four-station Bay"
+    );
+    beats(&mut game, 20);
+
+    for (worker, was) in &queueing {
+        let now = *game.world.get::<Position>(*worker).unwrap();
+        assert_ne!(
+            now, *was,
+            "a patient with no station to go to stood still at {was:?} instead of milling"
+        );
+        assert!(
+            game.world.get::<Downed>(*worker).is_some(),
+            "and it is still a patient — the marker is what may not be dropped \
+             here, not the tile"
+        );
+    }
+    assert!(
+        staff.iter().any(|&w| crate::game::base::offshift::in_reach(
+            *game.world.get::<Position>(w).unwrap(),
+            site,
+            0
+        )),
+        "while the stations that do exist are being used"
     );
 }
 

@@ -2034,11 +2034,22 @@ impl Game {
                 .get::<Position>(worker)
                 .is_some_and(|p| crowded.contains(&(p.x, p.y)));
             if !sharing && on_floor && self.world.get::<components::Downed>(worker).is_some() {
-                let _ = self.step_to_repair(worker, bays);
-                if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                // **`Err` no longer means "stand still", and which kind of
+                // failure it is decides that.** A base with no Bay at all
+                // leaves a benched program lying where it fell — it is on an
+                // errand it cannot start. A Bay that is standing but full is
+                // the other case: every station taken, `step_to_repair`
+                // answering `BoxedIn`, and a queue of patients holding a
+                // corridor one cell wide. Those go back to milling with
+                // everyone else and **keep `Downed`** — the marker is what
+                // must not be dropped here, not the tile, and nothing
+                // re-inserts it.
+                if self.step_to_repair(worker, bays).is_ok() || bays.is_empty() {
+                    if let Some(p) = self.world.get::<Position>(worker) {
+                        held.insert((p.x, p.y));
+                    }
+                    continue;
                 }
-                continue;
             }
             // A body with an errand walks it. `Err` is the one place a route
             // is ever judged: it gives the post up and latches the need, so

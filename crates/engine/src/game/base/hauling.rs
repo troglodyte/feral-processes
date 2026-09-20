@@ -224,7 +224,7 @@ fn station_tiles(
     from: Position,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
-    let mut tiles = station_candidates(grid, structure, Some(from), blocked);
+    let mut tiles = station_candidates(grid, structure, blocked);
     tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
     tiles
 }
@@ -232,18 +232,19 @@ fn station_tiles(
 /// The same tiles unranked — what `station_tiles` sorts and what
 /// `has_station` counts.
 ///
-/// `asking` is the body's own cell, exempt from `blocked` for
-/// `post_field`'s reason one level down: **a posted worker is standing on one
-/// of its own machine's station tiles**, so once bodies count as occupied the
-/// cell it is already on would be filtered out from under it. A machine whose
-/// other faces are walled would then answer `BoxedIn` to the very worker
-/// standing at it, and `schedule_base_labour` would free and re-post it every
-/// tick. `None` is the question asked without a body —
-/// `has_station`, which is about the cell and not about who wants it.
+/// **The asking body's own cell is deliberately not exempted**, and it does
+/// not need to be: a body already standing on one of its target's faces never
+/// consults this list, because every caller answers `at_station` first —
+/// `post_reach` and `reaches` short-circuit on it, and the four walkers
+/// (`haul_step_system`, `run_dig_crew`, `step_to_repair` and the caravan) each
+/// guard their own call. That short-circuit became load-bearing when bodies
+/// started counting as occupied, and seven existing tests in `tests::building`,
+/// `tests::chains` and `tests::power` fail if it is taken out. An exemption
+/// here was written first and removed again: instrumented, it never fired
+/// once across the whole suite or a 1,200-tick run of a real 106-body save.
 fn station_candidates(
     grid: &BaseGrid,
     structure: Position,
-    asking: Option<Position>,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
     ORTHOGONAL
@@ -252,9 +253,7 @@ fn station_candidates(
             x: structure.x + dx,
             y: structure.y + dy,
         })
-        .filter(|p| {
-            grid.walkable(p.x, p.y) && (asking == Some(*p) || !blocked.contains(&(p.x, p.y)))
-        })
+        .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
         .collect()
 }
 
@@ -281,7 +280,7 @@ pub(crate) fn has_station(
     structure: Position,
     structures: &HashSet<(i32, i32)>,
 ) -> bool {
-    !station_candidates(grid, structure, None, structures).is_empty()
+    !station_candidates(grid, structure, structures).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -401,7 +400,7 @@ pub(crate) fn reaches(
     blocked: &HashSet<(i32, i32)>,
 ) -> bool {
     at_station(from, structure)
-        || station_candidates(grid, structure, Some(from), blocked)
+        || station_candidates(grid, structure, blocked)
             .iter()
             .any(|s| reach.contains_key(&(s.x, s.y)))
 }

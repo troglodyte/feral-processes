@@ -129,6 +129,30 @@ impl Game {
         if self.build_site_at(x, y).is_some() {
             return Err("Your crew is already set to build something there.".into());
         }
+        // A third refusal on the same ladder, and its own for those two's
+        // reason: this cell needs a moment rather than a demolition or a
+        // cancelled request. Nothing checked it before, so a machine went up
+        // on top of a wandering program and left it standing *inside* the
+        // building — which reads as the base being broken and, now that a
+        // body is a blocker, would wall that body in behind a cell nothing
+        // may cross. Skipped while founding, `is_floor`'s reason: base space
+        // does not exist to be occupied yet, and every program's `Position`
+        // out there is a zone-surface tile these coordinates only alias.
+        //
+        // **The program being spent is exempt**, and it is the one body that
+        // has to be: `commit_program` retires it below, so a request refused
+        // on account of it names a body that would not have been there. It is
+        // also the likely one — the picker offers the whole roster wherever it
+        // happens to be standing, and a program milling around the cell you
+        // are pointing at is exactly the one you would pick.
+        if !founding
+            && self
+                .base_bodies()
+                .iter()
+                .any(|&(body, p)| (p.x, p.y) == (x, y) && Some(body) != program)
+        {
+            return Err("One of your programs is standing there — give it a moment.".into());
+        }
         // Before the materials check, with the other refusals: a structure
         // whose effect accumulates is bounded by a count rather than by
         // whatever downstream constant its effect happens to clamp against,

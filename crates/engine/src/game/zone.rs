@@ -263,14 +263,60 @@ impl Game {
             .any(|(g, pursuing)| g.nest == nest && pursuing.is_some())
     }
 
-    /// Every tile a deployed structure stands on — the set a hauler's walk
-    /// refuses, from the `Game` side. `haul_step_system` builds the same set
-    /// from its own query; both go through `hauling::structure_tiles` so the
-    /// two cannot disagree about what a blocked tile is.
+    /// Every tile a deployed structure stands on, and nothing else.
+    ///
+    /// **The narrower of the two sets, and the pair is not interchangeable.**
+    /// `blocked_tiles` below answers "may this body step onto that cell" and
+    /// counts the bodies already standing; this one answers "is that post
+    /// approachable at all", which is a question about the ground. The one
+    /// caller is `hauling::has_station`, whose own doc has why counting
+    /// bodies there deadlocks the dig crew.
     pub(crate) fn structure_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
         let mut query = self.world.query_filtered::<&Position, With<Structure>>();
         let positions: Vec<Position> = query.iter(&self.world).copied().collect();
-        crate::game::base::hauling::structure_tiles(positions.into_iter())
+        crate::game::base::hauling::blocked_tiles(positions.into_iter(), std::iter::empty())
+    }
+
+    /// Every cell a walk in base space refuses — every deployed structure's
+    /// tile and every body standing in one — from the `Game` side.
+    /// `haul_step_system` builds the same set from its own queries; both go
+    /// through `hauling::blocked_tiles` so the two cannot disagree about what
+    /// a blocked cell is.
+    pub(crate) fn blocked_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
+        let mut query = self.world.query_filtered::<&Position, With<Structure>>();
+        let structures: Vec<Position> = query.iter(&self.world).copied().collect();
+        let bodies: Vec<Position> = self.base_bodies().into_iter().map(|(_, p)| p).collect();
+        crate::game::base::hauling::blocked_tiles(structures.into_iter(), bodies.into_iter())
+    }
+
+    /// Every body standing in base space, with the cell it is standing in.
+    ///
+    /// **The `Game`-side half of `party::walks_the_base`**, which is where the
+    /// rule itself lives and why this is a list rather than a predicate: the
+    /// three readers want different things out of it. `blocked_tiles` takes
+    /// the cells, `Game::place_structure` looks one up, and
+    /// `drift_idle_staff` folds them into a tally to find out who is sharing.
+    ///
+    /// A program whose `Position` is the surface tile it was beaten on is held
+    /// out by the rule, not by a coordinate test: base space and the zone
+    /// surface alias onto each other freely — both origins are usually
+    /// `(0, 0)` — so a stale tile is indistinguishable from a real one by
+    /// looking at it.
+    pub(crate) fn base_bodies(&mut self) -> Vec<(Entity, Position)> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position, Option<&Task>), With<Tamed>>();
+        let candidates: Vec<(Entity, Position, Option<TaskKind>)> = query
+            .iter(&self.world)
+            .map(|(e, p, task)| (e, *p, task.map(|t| t.kind)))
+            .collect();
+        candidates
+            .into_iter()
+            .filter(|&(entity, _, task)| {
+                crate::game::party::walks_the_base(self.program_role(entity), task)
+            })
+            .map(|(entity, pos, _)| (entity, pos))
+            .collect()
     }
 
     /// The `Structure` standing at `(x, y)`, if any — and `None` outright

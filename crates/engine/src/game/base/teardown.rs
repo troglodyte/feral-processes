@@ -299,7 +299,7 @@ impl Game {
             return None;
         }
         let from = self.world.get::<Position>(worker).copied()?;
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let field = {
             let grid = self.world.resource::<BaseGrid>();

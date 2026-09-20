@@ -411,6 +411,15 @@ relying on one, and correct all three places if it has moved.
   `wander_step` offers one of the eight neighbours of the tile the body is
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
   the ring it replaced was absolute.
+- **One body to a cell, and `hauling::blocked_tiles` takes the structures and
+  the bodies as two iterators so no walk can ask the narrower question.**
+- **`party::walks_the_base` is the one definition of which bodies occupy
+  ground**, shared with `Game::watch_position`.
+- **`has_station` keeps the structures-only set**, `Game::structure_tiles`,
+  because a body on the only face of a marked cell is proof something can
+  stand there.
+- **Sharing a cell outranks every errand in `drift_idle_staff`**, which is
+  what makes one-body-to-a-cell true of a save written before it.
 - **`task_progress_system` and `assembler_system` both write
   `Task::progress` and are `.chain()`ed** — bevy can see the conflict but
   not the disjointness.
@@ -561,6 +570,11 @@ relying on one, and correct all three places if it has moved.
   `drift_idle_staff` sits above the `OffShift` arm** — recovery outranks an
   amenity — **gated on laid floor**, which is what keeps `entry_tile` the
   one arrival path for a program downed in the Stack.
+- **A Bay's capacity is the cells in reach of it that a body can stand in,
+  since bodies block**, and `RecoveryDef::radius` is the whole of it.
+- **A patient with no station to stand at mills instead of holding, and
+  `Bays::is_empty` is what tells that from a base with no Bay at all** —
+  which still leaves a benched program lying where it fell.
 - **`Downed` joins the `on_shift` filter without the `Carrying` escape**,
   and is freed in the diff **unconditionally, ahead of every keep rule**.
 - **A structure remembers how well it was built, and absent means neutral.**

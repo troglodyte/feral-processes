@@ -4257,3 +4257,31 @@ fn a_full_store_is_told_what_a_demolished_rack_could_not_return() {
             .collect::<Vec<_>>()
     );
 }
+
+/// **A deploy is refused onto a cell a program is standing in.**
+/// `place_structure` checked terrain, other structures and pending requests
+/// and never whether a body was there, so a machine went up on top of a
+/// wandering program — the dev save this was found in had seven staff
+/// standing *on* a row of Sandboxes. Its own refusal rather than one folded
+/// into the blocking-structure line above it, because the two leave the
+/// player different errands: one cell needs demolishing, the other needs a
+/// moment.
+#[test]
+fn a_deploy_is_refused_onto_a_standing_program() {
+    let mut game = Game::new(927, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    *game.world.get_mut::<Position>(worker).unwrap() = Position { x: 3, y: 0 };
+
+    let err = from_inside_the_base(&mut game, |game| {
+        game.place_structure("depot", 3, 0, None)
+            .expect_err("a program is standing on that cell")
+    });
+    assert!(err.contains("standing there"), "unexpected error: {err}");
+
+    // The cell beside it is free, so the refusal is about the body and not
+    // about the ground.
+    place_now(&mut game, "depot", 3, 1).expect("the next cell along is clear");
+}

@@ -3196,3 +3196,179 @@ fn ending_a_project_on_a_run_dry_base_leaves_the_body_standing() {
         "a run-dry base leaves its postings alone rather than standing down"
     );
 }
+
+// ---------------------------------------------------------------------
+// One body to a cell
+// ---------------------------------------------------------------------
+
+/// Every cell a base-space body is standing on, and how many are on it.
+fn bodies_by_tile(game: &mut Game) -> std::collections::HashMap<(i32, i32), usize> {
+    let mut tally: std::collections::HashMap<(i32, i32), usize> = std::collections::HashMap::new();
+    for (_, p) in game.base_bodies() {
+        *tally.entry((p.x, p.y)).or_default() += 1;
+    }
+    tally
+}
+
+/// **A body is a blocker, so a walk never puts two patients on one Bay
+/// face.** Both walks stop at the first tile `in_reach` answers for, and with
+/// nothing in the way that is the same cell for everyone approaching from the
+/// same side: the save this was found in had 71 downed programs on one tile,
+/// drawn as a single glyph because `render/base.rs` keeps one `actor` slot per
+/// cell.
+///
+/// **Asserted every beat rather than at the end**, which is what makes it a
+/// test of the blocking and not of the spread below: a pair that steps onto
+/// one cell is pulled apart again on the next beat, so an end-state assertion
+/// passes with bodies taken back out of `blocked_tiles` entirely. Verified by
+/// that mutation.
+#[test]
+fn a_walk_never_puts_two_patients_on_one_bay_face() {
+    let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 2);
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
+    }
+
+    for beat in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+        let first = *game.world.get::<Position>(staff[0]).unwrap();
+        let second = *game.world.get::<Position>(staff[1]).unwrap();
+        assert_ne!(
+            first, second,
+            "beat {beat}: two patients standing on {first:?}"
+        );
+    }
+
+    let site = bay_tile(&mut game);
+    assert!(
+        staff.iter().any(|&w| crate::game::base::offshift::in_reach(
+            *game.world.get::<Position>(w).unwrap(),
+            site,
+            0
+        )),
+        "and one of them still got to the Bay"
+    );
+}
+
+/// The same rule for a pile the drift's *errand* arms parked, which is the
+/// shape the dev save was in: downed bodies hold where they stand once they
+/// are in reach, so the spread has to outrank the hold.
+#[test]
+fn a_pile_of_downed_bodies_at_the_bay_spreads_out() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 3);
+    let site = bay_tile(&mut game);
+    let face = Position {
+        x: site.x - 1,
+        y: site.y,
+    };
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
+        *game.world.get_mut::<Position>(worker).unwrap() = face;
+    }
+
+    for _ in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let tally = bodies_by_tile(&mut game);
+    assert!(
+        tally.values().all(|&n| n == 1),
+        "a heap of patients should thin out around the Bay: {tally:?}"
+    );
+}
+
+/// **A patient that cannot get to a Bay goes back to milling, and keeps
+/// `Downed` doing it.** Four cells touch a Bay and no more, so a base with
+/// more patients than stations has to put the rest somewhere. Standing still
+/// in the queue is what built the heap, and it deadlocks: the bodies one cell
+/// out hold their ground too, so the crowd cannot even spill into the free
+/// ground beside it.
+///
+/// Found by running the dev save this whole change came from. With the walk
+/// refusing an occupied cell and the spread rule both in place but this one
+/// missing, 71 bodies on one tile thinned to 68 and then froze there for
+/// 1,200 ticks; with it they reach one body to a cell and hold.
+///
+/// **What is asserted is that a stuck patient keeps moving**, sampled across
+/// two runs of beats, and that is what makes this a test of *this* rule. Where
+/// the bodies end up does not discriminate: an open pocket spreads eight
+/// patients over eight cells whether the stuck ones are milling or standing
+/// still, which is how the first two versions of this test passed with the
+/// rule taken back out. Safe from flaking because `wander_step` is a pure
+/// function of `(index, beat)` and draws no RNG.
+#[test]
+fn patients_that_cannot_reach_a_full_bay_go_back_to_milling() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 8);
+    let site = bay_tile(&mut game);
+    for &worker in &staff {
+        game.world.entity_mut(worker).insert(Downed);
+    }
+    let beats = |game: &mut Game, n: usize| {
+        for _ in 0..n {
+            let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+            wind_to(game, next);
+            drift(game, &staff);
+        }
+    };
+
+    beats(&mut game, 40);
+    let queueing: Vec<(Entity, Position)> = staff
+        .iter()
+        .map(|&w| (w, *game.world.get::<Position>(w).unwrap()))
+        .filter(|(_, p)| !crate::game::base::offshift::in_reach(*p, site, 0))
+        .collect();
+    assert!(
+        !queueing.is_empty(),
+        "precondition: eight patients cannot all stand at one four-station Bay"
+    );
+    beats(&mut game, 20);
+
+    for (worker, was) in &queueing {
+        let now = *game.world.get::<Position>(*worker).unwrap();
+        assert_ne!(
+            now, *was,
+            "a patient with no station to go to stood still at {was:?} instead of milling"
+        );
+        assert!(
+            game.world.get::<Downed>(*worker).is_some(),
+            "and it is still a patient — the marker is what may not be dropped \
+             here, not the tile"
+        );
+    }
+    assert!(
+        staff.iter().any(|&w| crate::game::base::offshift::in_reach(
+            *game.world.get::<Position>(w).unwrap(),
+            site,
+            0
+        )),
+        "while the stations that do exist are being used"
+    );
+}
+
+/// **A party companion's `Position` is the tile it was beaten on**, and base
+/// space and the zone surface alias onto each other freely — base space's
+/// origin and the zone spawn point are both usually `(0, 0)`. Selecting
+/// bodies by `Tamed` alone would block a base cell nothing is standing in,
+/// permanently and invisibly.
+#[test]
+fn a_party_companions_stale_tile_blocks_nothing() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+    let stale = Position { x: 2, y: 0 };
+    *game.world.get_mut::<Position>(companion).unwrap() = stale;
+
+    assert!(
+        !game.blocked_tiles().contains(&(stale.x, stale.y)),
+        "a companion standing beside the player blocks no base-space cell"
+    );
+}

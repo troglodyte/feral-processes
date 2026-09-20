@@ -2749,7 +2749,7 @@ impl Game {
             .world
             .get::<Position>(structure)
             .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<crate::base_grid::BaseGrid>().radius();
         {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();

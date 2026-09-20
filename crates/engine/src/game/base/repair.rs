@@ -289,8 +289,12 @@ impl Game {
     /// therefore holds on `Err` and leaves the marker alone.
     ///
     /// A base with no Bay standing answers `NoRoute` at the first line that
-    /// asks, which is why a benched program lies where it fell rather than
-    /// wandering: it is on an errand it cannot start, not idle.
+    /// asks. That case and a Bay it merely cannot get *to* are told apart by
+    /// the caller, off `Bays::is_empty`, not in here: a benched program on a
+    /// base with nowhere to be mended lies where it fell, because it is on an
+    /// errand it cannot start; a patient queueing for a Bay that is full goes
+    /// back to milling, because standing in that queue is what puts sixty
+    /// bodies on one cell.
     pub(crate) fn step_to_repair(&mut self, worker: Entity, bays: &Bays) -> Result<(), NoPost> {
         let here = self
             .world
@@ -303,7 +307,7 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
-        let blocked = self.structure_tiles();
+        let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),
@@ -313,9 +317,16 @@ impl Game {
             pocket_radius,
         )?
         else {
-            // The field admits nowhere better than where it stands. It waits,
-            // exactly as a hauler does.
-            return Ok(());
+            // **A failure now, where a hauler waits.** The field admits
+            // nowhere better than the cell it is on, which on a base whose
+            // Bays are full is every patient but the four standing at each
+            // one — and standing still in that crowd is exactly what built
+            // the heap this rule exists to break up. Reported as `NoRoute` so
+            // the drift hands the body to the wander instead: it keeps
+            // `Downed`, mills with everybody else, and comes back the beat a
+            // station frees up. A hauler may wait because its post is its
+            // own; a Bay is shared.
+            return Err(NoPost::NoRoute);
         };
         // The party is the one rejection `step_to_post` cannot make for
         // itself: `Locale` is where the party stands in base space, and the

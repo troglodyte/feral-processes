@@ -677,6 +677,51 @@
   so that tile is a live one. Measured from the player instead, one seam
   broke twice: a wandering body teleported across the map onto you, and
   walking out of the walk field stopped the base filling a single machine.
+- **One body to a cell, and the walk's `blocked` set is what holds it.**
+  `hauling::blocked_tiles` takes the structures and the bodies as **two
+  iterators**, `collect::feeders_by_tile`'s argument: `post_field` and
+  `crew_reach` have to answer the same question about which cells are
+  crossable, and a caller that could pass the structures alone would silently
+  be asking a different one. Two construction sites and no more —
+  `Game::blocked_tiles` and `haul_step_system`, which has no `Game` — and the
+  system's copy is **grown as bodies move and never shrunk**, `held`'s rule,
+  or two haulers heading for the same free cell are both told it is free.
+  **Which bodies count is `party::walks_the_base`**, shared with
+  `watch_position`: `Staff` less the guards, because a party companion, a
+  wielded program, a sortie squad and a posted guard all keep a `Position`
+  written once and never again, and base space aliases onto the zone surface
+  freely enough (both origins usually `(0, 0)`) that a stale tile cannot be
+  told from a live one by looking at it. **Three traps.** `has_station` keeps
+  the **structures-only** set (`Game::structure_tiles`, the narrower of the
+  two, and they are not interchangeable): a body on the only face of a marked
+  cell is *proof* something can stand there, and counting it deadlocks the dig
+  crew — the want is dropped because its own digger is standing at it, the
+  digger is freed and wanders off, the want returns, and the base never cuts
+  again. `post_reach`'s and `reaches`' `at_station` short-circuits became
+  load-bearing, since a body standing at its own post is standing on one of
+  that post's station tiles; seven tests across `tests::building`,
+  `tests::chains` and `tests::power` fail without them, and an exemption
+  written into `station_candidates` for the asking body was removed again —
+  instrumented, it never fired across the whole suite or 1,200 ticks of a real
+  106-body save, because every caller answers `at_station` first. And
+  blocking alone leaves an existing heap a heap, which is the next entry.
+- **Sharing a cell outranks every errand in `drift_idle_staff`.** A body that
+  has *arrived* never consults a walk again — a patient in reach of its Bay
+  holds there deliberately, and so does a program at its amenity — so a heap
+  already in a save, or left by a structure raised on top of one, would stay a
+  heap forever with every future step correctly refused. A body sharing its
+  cell therefore takes the wander instead of its errand, which is the one arm
+  that already knows how to decline a tile somebody else has. The tally is
+  built off `Game::base_bodies` and not off `staff`, because a posted worker
+  standing there is as much in the way as an idle one and is not in that list.
+- **A deploy is refused onto a cell a body is standing in**, the third refusal
+  on `place_structure`'s ladder and its own for the other two's reason: this
+  cell needs a moment rather than a demolition or a cancelled request. **The
+  program being spent on the build is exempt**, and it is the one that has to
+  be — `commit_program` retires it below, so a refusal naming it names a body
+  that would not have been there, and it is the likely one, since the picker
+  offers the whole roster wherever it is standing. Skipped while founding,
+  `is_floor`'s reason.
 - **An idle program wanders the base, and laid floor is the leash.**
   `wander_step` offers one of the eight neighbours of the tile the body is
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
@@ -1190,9 +1235,20 @@
   **One threshold, not two**: release is `hp == max_hp`, the exit
   `run_repair_bays` already had, so the flicker gap is the whole bar and a
   hysteretic pair would be a second way out of one state. Low on purpose — it
-  pulls a working body off a machine. **A Bay has no capacity**: everyone in
-  reach mends at full rate on the same tick, which matters now that a stay is
-  the whole 20%-to-full climb rather than a corpse's moment.
+  pulls a working body off a machine. **A Bay's capacity is now the cells in
+  reach of it that a body can stand in**, and `RecoveryDef::radius` is the
+  whole of it: everyone in reach still mends at full rate on the same tick,
+  but one body to a cell means "in reach" is an area rather than a heap. This
+  **reverses** the rule that stood here, and the arithmetic is worth having in
+  front of you before touching either half — measured on a real save with 106
+  staff, 80 of them benched, two Bays built side by side: at the shipped
+  `radius: 0` one to four mend at a time and the benched count sits flat; at
+  1, three to four; at 2, six to eight; at 3, ten to fourteen. With bodies not
+  blocking at all it was thirty-nine to forty-six, because seventy-one bodies
+  were standing on one cell — the old throughput *depended* on the overlap, so
+  unlimited simultaneous mending and one-body-to-a-cell cannot both be had.
+  What the design takes instead is that a base wanting more patients mended
+  builds more Bays, which is a decision that did not exist before.
 - **The recovery `+` rides the patient, not the Bay, and it is green.**
   `EntityView::recovering` is a fact about a *program* — this body is in reach
   of a Bay right now, so its Integrity is climbing — and
@@ -1214,10 +1270,20 @@
   sits above the `OffShift` arm** — recovery outranks an amenity — **gated on
   laid floor**, which is what keeps `entry_tile` the one arrival path for a
   program downed in the Stack. `Game::step_to_repair` is `step_off_shift`'s
-  shape on the same walk, and **`Err` holds rather than dropping the marker**:
-  nothing re-inserts `Downed`, so there is no flicker to stop, and dropping it
-  would silently heal a program that could not reach a Bay. No Bay standing is
-  `NoRoute` at the first line — a benched program lies where it fell.
+  shape on the same walk, and **`Err` never drops the marker**: nothing
+  re-inserts `Downed`, so there is no flicker to stop, and dropping it would
+  silently heal a program that could not reach a Bay. **What `Err` no longer
+  does is hold the body still**, and the two failures are told apart by the
+  caller off `Bays::is_empty` rather than in there. No Bay standing at all is
+  still a benched program lying where it fell — it is on an errand it cannot
+  start. A Bay that is standing but *full* is the other case:
+  `step_to_repair` reports `BoxedIn` where a hauler would wait, because a
+  hauler's post is its own and a Bay is shared, and the patient goes back to
+  milling. Holding there is what built the heap, and it **deadlocks** —
+  measured on the real save, the pile's cell had three free neighbours, one
+  body stepped into each, those three then held their ground too, and 71
+  bodies thinned to 68 and froze there for 1,200 ticks. With the milling rule
+  they reach one body to a cell in about a thousand and hold.
 - **`Downed` joins the `on_shift` filter without the `Carrying` escape**, and
   is freed in the diff **unconditionally, ahead of every keep rule**. The
   `Carrying` exception exists because freeing a loaded body destroys the goods;

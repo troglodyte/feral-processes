@@ -1705,6 +1705,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             // No NestSave anywhere in this data names this tile.
             nest_position: Some((999, 999)),
             patrol_position: None,
+            study_station: None,
             pursuing: true,
             carrying: None,
             carrying_program: None,

@@ -1613,6 +1613,7 @@ impl Game {
             sortie_members,
             pending_cronjobs,
             pending_patrols,
+            pending_study,
         } = ctx;
         self.world
             .insert_resource(crate::resources::NextProgramId(next_program_id));
@@ -1636,6 +1637,14 @@ impl Game {
         // one part-finished tick of work, which is what a reload already
         // costs.
         drop(pending_cronjobs);
+        // Dropped for the same reason and by the same argument: a stale pin
+        // reinserted into a base that has moved on could put two bodies in
+        // one pen, the invariant `pin_subject`'s own reachability refusal
+        // exists to hold. A program that truly wants to resume study is
+        // pinned again by hand, which re-validates everything a snapshot
+        // cannot speak for — whether the Station is still standing, whether
+        // its pen is still floor, whether something else is already in it.
+        drop(pending_study);
         // The wield first, and the two arms are exclusive by construction:
         // `wield_program` stands a member down, so a snapshot is never both
         // wielded and holding a slot.

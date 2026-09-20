@@ -1418,6 +1418,7 @@ mod tests {
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

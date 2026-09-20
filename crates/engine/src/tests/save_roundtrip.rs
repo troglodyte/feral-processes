@@ -30,14 +30,14 @@ use crate::components::{
 use crate::game::lifecycle::CreatureRestore;
 use crate::*;
 
-/// The five shapes a creature takes on disk, one entity each.
+/// The six shapes a creature takes on disk, one entity each.
 ///
-/// Split rather than piled onto one program because four of the fields are
+/// Split rather than piled onto one program because five of the fields are
 /// **roles**, and the roles are mutually exclusive by construction (see
 /// `ProgramRole`): nothing is in the party and wielded and away and on the
-/// staff at once. A single-program fixture would have to leave three of the
-/// four at their defaults, and could not tell a builder that answers all
-/// four from one source apart from one that reads each.
+/// staff and under study at once. A single-program fixture would have to
+/// leave four of the five at their defaults, and could not tell a builder
+/// that answers all five from one source apart from one that reads each.
 struct Roster {
     /// In the party, and carrying every per-entity component a save reads.
     member: Entity,
@@ -51,6 +51,8 @@ struct Roster {
     /// Wild: no `Tamed`, so every owned-program field falls to its default,
     /// which is the other half of what the census checks.
     sentry: Entity,
+    /// Pinned in a Research Station's pen — `ProgramRole::UnderStudy`.
+    subject: Entity,
 }
 
 /// Every creature is named, so a census can find its row in a file where
@@ -68,6 +70,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
     let weapon = spawn_tamed(game, 22, 5);
     let scout = spawn_tamed(game, 25, 7);
     let sentry = spawn_wild_on_player_tile(game);
+    let subject = spawn_tamed(game, 15, 3);
 
     // Everything that goes through an engine verb happens first: `enlist`,
     // `wear` and `wield_program` each tick, and a tick drains needs and
@@ -195,6 +198,9 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         Boss,
         Rarity::Prismatic,
     ));
+    game.world
+        .entity_mut(subject)
+        .insert(CustomName("Analyst".to_string()));
 
     Roster {
         member,
@@ -202,11 +208,12 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         weapon,
         scout,
         sentry,
+        subject,
     }
 }
 
-/// The three fields the save resolves **by position** rather than by entity
-/// id — a cronjob's target, a nest and a town.
+/// The four fields the save resolves **by position** rather than by entity
+/// id — a cronjob's target, a nest, a town and a Research Station.
 ///
 /// Kept out of `seed_the_roster` because the stand-ins here are bare
 /// `Position` entities: enough for the save side, which reads nothing else
@@ -230,6 +237,11 @@ fn add_the_position_tethers(game: &mut Game, roster: &Roster) {
         TownPatrol { town },
         Pursuing,
     ));
+
+    let station = game.world.spawn(Position { x: 41, y: 42 }).id();
+    game.world
+        .entity_mut(roster.subject)
+        .insert(crate::components::UnderStudy { station });
 }
 
 /// The first need the game ships, whatever it is — the fixture wants a real
@@ -328,6 +340,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         field_buffs: _,
         nest_position: _,
         patrol_position: _,
+        study_station: _,
         pursuing: _,
         carrying: _,
         carrying_program: _,
@@ -391,6 +404,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert_eq!(saved.field_buffs[0].interval, 4, "buff interval");
     assert!(saved.nest_position.is_none(), "nest_position");
     assert!(saved.patrol_position.is_none(), "patrol_position");
+    assert!(saved.study_station.is_none(), "study_station");
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
     assert!(saved.carrying_program.is_none(), "carrying_program");
@@ -442,7 +456,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
 /// Four of them are **roles**, and a role is not a component — it is derived
 /// from the party list, the wield and the sortie roster. A builder that
 /// answered all four from one source would satisfy the census above, where
-/// three of the four are `false`, and be wrong here. The other three are the
+/// three of the four are `false`, and be wrong here. The other four are the
 /// **by-position** tethers, whose whole risk is resolving against the wrong
 /// entity's `Position` — which only shows up when the tiles differ.
 #[test]
@@ -524,6 +538,19 @@ fn the_roles_and_the_tethers_are_written_per_creature() {
     assert!(sentry.equipment.is_empty(), "a wild creature wears nothing");
     assert!(!sentry.staff, "a wild creature is on nobody's payroll");
     assert_eq!(sentry.zone, 1, "a wild creature spawned outside a portal");
+
+    let subject = named(&creatures, "Analyst");
+    assert_eq!(subject.study_station, Some((41, 42)), "study_station");
+    assert!(
+        !subject.staff,
+        "a pinned subject is not on the staff — it is `ProgramRole::UnderStudy`"
+    );
+    assert_eq!(
+        subject.party_slot, None,
+        "a pinned subject is not in the party"
+    );
+    assert!(!subject.wielded, "a pinned subject is not wielded");
+    assert_eq!(subject.sortie_index, None, "a pinned subject is not away");
 }
 
 /// Saving, loading and saving again must write the same lines.
@@ -830,6 +857,149 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
             .and_then(|e| e.weapon.as_ref().map(|w| w.copy.item.to_string())),
         Some(ids::OVERCLOCK_CORE.to_string()),
         "still wearing what it went in wearing"
+    );
+}
+
+// ---------------------------------------------------------------------
+// `CreatureSave::study_station` (Task 6) — a real save/load round trip,
+// not only the RON dump `creatures_on_disk` reads: a round trip through
+// text can't catch a field that isn't really persisting.
+// ---------------------------------------------------------------------
+
+/// The whole point of Task 6: a pinned subject reloads pinned, tethered to
+/// the *reloaded* Station rather than to a stale entity id.
+#[test]
+fn a_pinned_subject_survives_a_save_and_load() {
+    let mut game = Game::new(20260920, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let station_pos = *game.world.get::<Position>(station).unwrap();
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.pin_subject(program, station).expect("pin");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_pinned_subject_reload_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let _ = std::fs::remove_file(&path);
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Analyst"))
+        .expect("the pinned program is back on the roster after a reload");
+    assert_eq!(
+        loaded.program_role(back.entity),
+        Some(ProgramRole::UnderStudy),
+        "a pinned subject reloads pinned"
+    );
+    let reloaded_station = loaded
+        .find_blocking_structure_at(station_pos.x, station_pos.y)
+        .expect("the Station reloads standing");
+    assert_eq!(
+        loaded
+            .world
+            .get::<crate::components::UnderStudy>(back.entity)
+            .map(|u| u.station),
+        Some(reloaded_station),
+        "the tether resolves to the reloaded Station's own entity, not a stale one"
+    );
+}
+
+/// A tile naming no structure at all — the leniency `nest_position` already
+/// has, copied rather than reinvented: the program comes back as ordinary
+/// `Staff` and the load does not fail.
+#[test]
+fn a_study_station_naming_an_empty_tile_loads_the_program_as_staff() {
+    let mut game = Game::new(20260921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    // Enough for the save side to resolve a tile from, and nothing a
+    // reload could ever recognise as a studying structure — the save
+    // writes `Some((77, 77))` and the load finds nobody home there.
+    let empty_tile = game.world.spawn(Position { x: 77, y: 77 }).id();
+    game.world
+        .entity_mut(program)
+        .insert(crate::components::UnderStudy {
+            station: empty_tile,
+        });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_study_station_empty_tile_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded =
+        Game::load(&path, &test_assets_dir()).expect("a tile naming no structure still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Analyst"))
+        .expect("the program is back on the roster");
+    assert_eq!(
+        loaded.program_role(back.entity),
+        Some(ProgramRole::Staff),
+        "a tile with nobody standing on it leaves the program ordinary staff"
+    );
+}
+
+/// A save written before this field existed carries no `study_station` key
+/// at all — `#[serde(default)]`'s own case, and **no `SAVE_FORMAT_VERSION`
+/// bump** was spent on it.
+#[test]
+fn a_save_written_before_study_stations_existed_still_loads() {
+    let mut game = Game::new(20260922, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_no_study_station_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("study_station"),
+        "the key must have been there to remove"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("study_station:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("study_station"),
+        "the fixture must actually remove the key or the test proves nothing"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Analyst"))
+        .expect("the program is back on the roster");
+    assert_eq!(
+        loaded.program_role(back.entity),
+        Some(ProgramRole::Staff),
+        "a save written before this field existed loads ordinary staff"
     );
 }
 

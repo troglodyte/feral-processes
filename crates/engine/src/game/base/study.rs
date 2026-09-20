@@ -6,6 +6,8 @@
 //! responsibility: placement and demolition, not what a structure's
 //! footprint is *for*.
 
+use std::collections::{HashMap, HashSet};
+
 use crate::base_grid::BaseGrid;
 use crate::game::base::hauling::NoPost;
 use crate::game::pursuit::walk_field;
@@ -89,22 +91,10 @@ impl Game {
             return Ok(());
         }
         let blocked = self.blocked_tiles();
-        // A single pen can hold one body. `walk_field` roots its search at
-        // `pen` and always marks its own root reachable at cost 0 — right
-        // for `post_field`'s station faces, which are pre-filtered to ones
-        // nobody occupies, and wrong here, where the pen itself is the one
-        // cell that can already be spoken for. Checked before the field is
-        // ever built, or the second subject to arrive this tick would read
-        // the first's tile as a valid step rather than a blocked one.
-        if blocked.contains(&pen) {
-            return Err(NoPost::NoRoute);
-        }
-        let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        let grid = self.world.resource::<BaseGrid>();
         let start = (here.x, here.y);
-        let field = walk_field(pen, haul_walk_radius(pocket_radius), |p| {
-            (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
-        });
+        let Some(field) = self.pen_walk_field(pen, &blocked, start) else {
+            return Err(NoPost::NoRoute);
+        };
         let Some(&cost) = field.get(&start) else {
             return Err(NoPost::NoRoute);
         };
@@ -120,6 +110,126 @@ impl Game {
         {
             *pos = tile;
         }
+        Ok(())
+    }
+
+    /// The walk field rooted at `pen`, `None` when the pen itself is already
+    /// spoken for — the one door both `step_to_study` and `pin_subject`'s
+    /// reachability refusal go through, so a program that was refused for
+    /// want of a route and one that is actually being walked cannot read the
+    /// question differently.
+    ///
+    /// A single pen holds one body. `walk_field` roots its search at `pen`
+    /// and always marks its own root reachable at cost 0 — right for
+    /// `hauling::post_field`'s station faces, which are pre-filtered to ones
+    /// nobody occupies, and wrong here, where the pen is the one cell that
+    /// can already be occupied. Checked before the field is built, or a
+    /// second subject would read the first's tile as a valid step rather
+    /// than a blocked one.
+    fn pen_walk_field(
+        &mut self,
+        pen: (i32, i32),
+        blocked: &HashSet<(i32, i32)>,
+        start: (i32, i32),
+    ) -> Option<HashMap<(i32, i32), u32>> {
+        if blocked.contains(&pen) {
+            return None;
+        }
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        let grid = self.world.resource::<BaseGrid>();
+        Some(walk_field(pen, haul_walk_radius(pocket_radius), |p| {
+            (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
+        }))
+    }
+
+    /// Pins `program` — a tamed program you own — in `station`'s pen, so it
+    /// becomes `ProgramRole::UnderStudy` (`components::UnderStudy`).
+    ///
+    /// **Every refusal lands before anything is written**, asserted per
+    /// refusal — `select_research`'s rule, and for its reason: a single test
+    /// over one of several refusals passes against all the ones that never
+    /// write anyway.
+    pub fn pin_subject(&mut self, program: Entity, station: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let owner = self
+            .world
+            .get::<Tamed>(program)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != player {
+            return Err("You don't control that program.".into());
+        }
+        if self.world.get::<components::UnderStudy>(program).is_some() {
+            return Err("That program is already under study.".into());
+        }
+        // A partied, wielded or away-on-sortie program comes home first —
+        // saying so beats `pin_subject` silently recalling it, which would
+        // strand whatever it was doing with no notice.
+        if self.program_role(program) != Some(ProgramRole::Staff) {
+            return Err(
+                "Only a program on the base staff can be pinned for study — bring it home first."
+                    .into(),
+            );
+        }
+        let Some(pen) = self.study_pen(station) else {
+            return Err("That structure has no pen to study anyone in.".into());
+        };
+        if !self.world.resource::<BaseGrid>().is_floor(pen.0, pen.1) {
+            return Err("The pen has no floor under it.".into());
+        }
+        if self
+            .base_bodies()
+            .into_iter()
+            .any(|(_, p)| (p.x, p.y) == pen)
+        {
+            return Err("Something is already standing in the pen.".into());
+        }
+        let here = self
+            .world
+            .get::<Position>(program)
+            .copied()
+            .ok_or_else(|| "That program has nowhere to walk from.".to_string())?;
+        if (here.x, here.y) != pen {
+            let blocked = self.blocked_tiles();
+            let start = (here.x, here.y);
+            let reachable = self
+                .pen_walk_field(pen, &blocked, start)
+                .is_some_and(|field| field.contains_key(&start));
+            if !reachable {
+                return Err("There's no route to the pen from here.".into());
+            }
+        }
+        self.world
+            .entity_mut(program)
+            .insert(components::UnderStudy { station });
+        let name = self.creature_label(program);
+        self.log(format!("{name} is pinned in the Research Station's pen."));
+        Ok(())
+    }
+
+    /// Unpins `program`, returning it to `ProgramRole::Staff`.
+    ///
+    /// **Every refusal lands before anything is written**, `pin_subject`'s
+    /// rule. Task 7 (Part C) adds the refusal this door is really for — an
+    /// active `ResearchDef::requires_subject` project loses its subject out
+    /// from under it otherwise — but that field does not exist on this
+    /// branch yet, so there is nothing to check against until it lands; this
+    /// is not an oversight to "fix" without it.
+    pub fn unpin_subject(&mut self, program: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self.world.get::<components::UnderStudy>(program).is_none() {
+            return Err("That program isn't pinned for study.".into());
+        }
+        self.world
+            .entity_mut(program)
+            .remove::<components::UnderStudy>();
+        let name = self.creature_label(program);
+        self.log(format!("{name} is unpinned and rejoins the base staff."));
         Ok(())
     }
 }

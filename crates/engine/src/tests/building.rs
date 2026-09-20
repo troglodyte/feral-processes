@@ -4512,3 +4512,269 @@ fn a_legacy_research_node_with_occupied_neighbours_stands_and_blocks_only_its_an
         .expect_err("the node's own anchor is occupied");
     assert!(err.contains("already deployed"), "unexpected error: {err}");
 }
+
+// ---------------------------------------------------------------------
+// Pinning and unpinning a subject (Task 5: `Game::pin_subject`/`unpin_subject`)
+//
+// Every refusal below asserts that nothing was written — no
+// `components::UnderStudy`, and the role unchanged — `select_research`'s
+// rule: a single test over one of several refusals passes against all the
+// ones that never write anyway.
+// ---------------------------------------------------------------------
+
+/// A base with a Research Station standing at `(1, -3)` (pen at `(2, -2)`),
+/// shared by every pin/unpin test below.
+fn base_with_station(seed: u32) -> (Game, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    (game, station)
+}
+
+#[test]
+fn pin_subject_is_refused_during_game_over_or_a_battle() {
+    let (mut game, station) = base_with_station(4300);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a finished run cannot pin anyone");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let enemy = spawn_wild_without_routine(&mut game, "scrapper", 5, 5);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![enemy]);
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("mid-battle cannot pin anyone either");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none(),
+        "neither refusal should have written the marker"
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_for_a_program_you_do_not_own() {
+    let (mut game, station) = base_with_station(4301);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let stranger = game.world.spawn_empty().id();
+    game.world.get_mut::<Tamed>(program).unwrap().owner = stranger;
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a program tamed to somebody else cannot be pinned");
+    assert!(err.contains("control"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_already_under_study() {
+    let (mut game, station) = base_with_station(4302);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(program, station)
+        .expect("the first pin should succeed");
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a program already under study cannot be pinned again");
+    assert!(err.contains("already"), "unexpected error: {err}");
+}
+
+/// A partied, wielded or away-on-sortie program comes home first — saying
+/// so beats `pin_subject` silently recalling it.
+#[test]
+fn pin_subject_is_refused_unless_the_program_is_staff() {
+    let (mut game, station) = base_with_station(4303);
+
+    let partied = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, partied);
+    let err = game
+        .pin_subject(partied, station)
+        .expect_err("a partied program isn't staff");
+    assert!(err.contains("base staff"), "unexpected error: {err}");
+
+    let wielded = spawn_tamed(&mut game, 10, 3);
+    game.wield_program(wielded).unwrap();
+    let err = game
+        .pin_subject(wielded, station)
+        .expect_err("a wielded program isn't staff");
+    assert!(err.contains("base staff"), "unexpected error: {err}");
+
+    for program in [partied, wielded] {
+        assert!(
+            game.world
+                .get::<crate::components::UnderStudy>(program)
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_structure_does_not_study() {
+    let (mut game, _station) = base_with_station(4304);
+    place_now(&mut game, "depot", 3, -3).unwrap();
+    let depot = game.find_blocking_structure_at(3, -3).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .pin_subject(program, depot)
+        .expect_err("a Depot has no pen");
+    assert!(err.contains("pen"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_pen_has_no_floor() {
+    let (mut game, station) = base_with_station(4305);
+    let pen = game.study_pen(station).unwrap();
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .revert(pen.0, pen.1);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("the pen has no floor under it any more");
+    assert!(err.contains("floor"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_pen_already_holds_a_body() {
+    let (mut game, station) = base_with_station(4306);
+    let pen = game.study_pen(station).unwrap();
+    let occupant = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(occupant).unwrap().x = pen.0;
+    game.world.get_mut::<Position>(occupant).unwrap().y = pen.1;
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("the pen is occupied");
+    assert!(err.contains("standing"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_there_is_no_route_to_the_pen() {
+    let (mut game, station) = base_with_station(4307);
+    let program = spawn_tamed(&mut game, 10, 3);
+    // Outside `haul_walk_radius`'s box around the pen entirely, and not
+    // floor either — nowhere a walk could ever reach it from.
+    game.world.get_mut::<Position>(program).unwrap().x = 60;
+    game.world.get_mut::<Position>(program).unwrap().y = 60;
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("nothing routes there");
+    assert!(err.contains("route"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_succeeds_and_writes_the_marker() {
+    let (mut game, station) = base_with_station(4308);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.pin_subject(program, station).unwrap();
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .map(|u| u.station),
+        Some(station)
+    );
+    assert_eq!(game.program_role(program), Some(ProgramRole::UnderStudy));
+}
+
+#[test]
+fn unpin_subject_is_refused_when_nothing_is_pinned() {
+    let (mut game, _station) = base_with_station(4309);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .unpin_subject(program)
+        .expect_err("an ordinary staff program isn't pinned");
+    assert!(err.contains("pinned"), "unexpected error: {err}");
+}
+
+#[test]
+fn unpin_subject_is_refused_during_game_over_or_a_battle() {
+    let (mut game, station) = base_with_station(4310);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(program, station).unwrap();
+
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let err = game
+        .unpin_subject(program)
+        .expect_err("a finished run cannot unpin anyone");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let enemy = spawn_wild_without_routine(&mut game, "scrapper", 5, 5);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![enemy]);
+    let err = game
+        .unpin_subject(program)
+        .expect_err("mid-battle cannot unpin anyone either");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "neither refusal should have removed the marker"
+    );
+}
+
+/// The round trip: with no active project to speak for (Part C's own
+/// refusal isn't wired yet — see `Game::unpin_subject`'s doc), unpinning
+/// with nothing else in the way returns the program to `Staff`.
+#[test]
+fn pin_then_unpin_returns_the_program_to_staff() {
+    let (mut game, station) = base_with_station(4311);
+    let program = spawn_tamed(&mut game, 10, 3);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+
+    game.pin_subject(program, station).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::UnderStudy));
+
+    game.unpin_subject(program).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}

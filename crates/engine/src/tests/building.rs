@@ -4285,3 +4285,163 @@ fn a_deploy_is_refused_onto_a_standing_program() {
     // about the ground.
     place_now(&mut game, "depot", 3, 1).expect("the next cell along is clear");
 }
+
+// --- Footprint (`StructureDef::footprint`/`studies`) ---
+//
+// The squad seam's failure was that every fixture was hand-built at
+// footprint 1, so every anchor-measuring reader stayed green across 5,964
+// passing tests. These fixtures clone `armory` wholesale — same build cost,
+// same `assembles` (so `file_build` tames a program the same way) — and
+// differ from a shipped-def test only in the one field under test, which is
+// the point: a 2x2 fixture that matters is one that could otherwise have
+// been a 1x1 in disguise.
+
+/// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
+/// `armory` so it needs a program and a real bill exactly like a shipped
+/// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
+/// of that and is for what a standing structure *enables*, not for the
+/// placement ladder these tests are about.
+fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
+    let mut def = game
+        .world
+        .resource::<StructureDb>()
+        .get("armory")
+        .cloned()
+        .expect("armory ships");
+    def.id = id.to_string();
+    def.name = id.to_string();
+    def.footprint = footprint;
+    game.world.resource_mut::<StructureDb>().insert(def);
+}
+
+/// A base with a Home standing, a footprint-2 fixture registered under
+/// `id`, and enough Core Fragments to raise it — the shared setup every
+/// placement-refusal test below builds on.
+fn base_with_footprint_fixture(seed: u32, id: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    footprint_fixture(&mut game, id, 2);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    game
+}
+
+#[test]
+fn an_unannotated_structure_has_footprint_one_and_does_not_study() {
+    let game = Game::new(2001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game.world.resource::<StructureDb>().get("armory").unwrap();
+    assert_eq!(def.footprint, 1, "an unannotated def claims one cell");
+    assert!(!def.studies, "an unannotated def holds no pen");
+}
+
+#[test]
+fn a_structure_authoring_a_footprint_reads_it_back() {
+    let mut game = Game::new(2002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    footprint_fixture(&mut game, "footprint_fixture_read", 2);
+    assert_eq!(
+        game.world
+            .resource::<StructureDb>()
+            .get("footprint_fixture_read")
+            .unwrap()
+            .footprint,
+        2
+    );
+}
+
+/// The blocker sits at `(3, 0)` — a non-anchor cell of the 2x2 about to be
+/// placed at `(2, 0)` — and every refusal case below places it there before
+/// attempting the footprint. The fixture trap this guards against: a check
+/// that only ever looked at the anchor would wave every one of these
+/// through.
+#[test]
+fn placing_a_footprint_is_refused_when_a_structure_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2010, "footprint_fixture_struct");
+    place_now(&mut game, "depot", 3, 0).expect("a small blocker stands in a non-anchor cell");
+    let err = game
+        .place_structure("footprint_fixture_struct", 2, 0, None)
+        .expect_err("cell (3, 0) is already occupied by another structure");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_build_site_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2011, "footprint_fixture_site");
+    file_build(&mut game, "depot", 3, 0).expect("a build request is filed at the non-anchor cell");
+    let err = game
+        .place_structure("footprint_fixture_site", 2, 0, None)
+        .expect_err("cell (3, 0) already has a pending request");
+    assert!(
+        err.contains("already set to build"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_dig_mark_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2012, "footprint_fixture_mark");
+    // `Strip` needs an existing finish to strip and a bare `None` brush
+    // skips laid floor outright (`set_mark`'s table), so an `Apply` is the
+    // one brush that marks a plain floor cell.
+    game.toggle_mark_box(
+        (3, 0),
+        (3, 0),
+        Some(&FinishOrder::Apply(crate::floors::FloorId::from(
+            "slate_inlay",
+        ))),
+    );
+    let err = game
+        .place_structure("footprint_fixture_mark", 2, 0, None)
+        .expect_err("cell (3, 0) carries a dig mark");
+    assert!(err.contains("dig mark"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_non_anchor_cell_has_no_floor() {
+    let mut game = base_with_footprint_fixture(2013, "footprint_fixture_rock");
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .revert(3, 0);
+    let err = game
+        .place_structure("footprint_fixture_rock", 2, 0, None)
+        .expect_err("cell (3, 0) has no floor under it");
+    assert!(err.contains("no floor there"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_succeeds_when_every_cell_is_clear() {
+    let mut game = base_with_footprint_fixture(2014, "footprint_fixture_ok");
+    place_now(&mut game, "footprint_fixture_ok", 2, 0)
+        .expect("all four footprint cells are clear floor");
+}
+
+#[test]
+fn find_blocking_structure_at_answers_for_every_footprint_cell() {
+    let mut game = base_with_footprint_fixture(2015, "footprint_fixture_find");
+    place_now(&mut game, "footprint_fixture_find", 2, 0).expect("placed");
+    let anchor = game
+        .find_blocking_structure_at(2, 0)
+        .expect("the anchor cell resolves to the structure");
+    for (fx, fy) in [(3, 0), (2, 1), (3, 1)] {
+        assert_eq!(
+            game.find_blocking_structure_at(fx, fy),
+            Some(anchor),
+            "cell ({fx}, {fy}) should resolve to the same structure as the anchor"
+        );
+    }
+}
+
+#[test]
+fn build_site_at_answers_for_every_footprint_cell_of_a_pending_request() {
+    let mut game = base_with_footprint_fixture(2016, "footprint_fixture_site_find");
+    file_build(&mut game, "footprint_fixture_site_find", 2, 0).expect("filed");
+    let anchor_site = game
+        .build_site_at(2, 0)
+        .expect("the anchor cell has the pending site");
+    for (fx, fy) in [(3, 0), (2, 1), (3, 1)] {
+        assert_eq!(
+            game.build_site_at(fx, fy),
+            Some(anchor_site),
+            "cell ({fx}, {fy}) should resolve to the same pending site as the anchor"
+        );
+    }
+}

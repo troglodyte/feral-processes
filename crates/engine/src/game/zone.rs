@@ -337,17 +337,49 @@ impl Game {
     /// other structure either, since removing a Home cascades to every
     /// structure it stands beside — so `None` is the right answer there too,
     /// not a special case.
+    /// **Point-in-footprint, not point-equality.** `(x, y)` need not be a
+    /// structure's own anchor — this answers for any cell any standing
+    /// structure's footprint covers, so a build, a walk or an examine
+    /// pointed at a Research Station's floor cell is answered for the
+    /// Station rather than reading as open ground.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         if !self.in_base() {
             return None;
         }
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<Structure>>();
-        query
+        self.structure_footprints()
+            .into_iter()
+            .find(|(_, p, side)| {
+                crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(x, y))
+            })
+            .map(|(e, _, _)| e)
+    }
+
+    /// A structure kind's footprint side — `1` for anything that fails to
+    /// resolve, the same lenient answer an absent `footprint` field parses
+    /// to.
+    pub(crate) fn structure_footprint(&self, kind: &StructureId) -> u8 {
+        self.world
+            .resource::<StructureDb>()
+            .get(kind)
+            .map(|def| def.footprint)
+            .unwrap_or(1)
+    }
+
+    /// Every standing structure, with its footprint's side resolved —
+    /// `find_blocking_structure_at`, `structure_tiles` and `blocked_tiles`
+    /// all read these same rows rather than each building their own.
+    pub(crate) fn structure_footprints(&mut self) -> Vec<(Entity, Position, u8)> {
+        let mut query = self.world.query::<(Entity, &Position, &Structure)>();
+        let rows: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)
-            .find(|(_, p)| p.x == x && p.y == y)
-            .map(|(e, _)| e)
+            .map(|(e, p, s)| (e, *p, s.kind.clone()))
+            .collect();
+        rows.into_iter()
+            .map(|(e, p, kind)| {
+                let side = self.structure_footprint(&kind);
+                (e, p, side)
+            })
+            .collect()
     }
 
     /// The Home structure's position, if one is deployed anywhere right

@@ -605,6 +605,28 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Ownership, not proximity, the same rule as above. This is how the
     // Compiler works.
     extracts_programs: true,
+
+    // Optional; can be left out entirely (defaults to 1). The side of a
+    // square claim on placement, anchored **top-left**: a footprint of 2
+    // claims a 2x2 block, `(dx, dy)` through `(dx + 1, dy + 1)`. The anchor
+    // — the cell `(dx, dy)` names — is the only cell that blocks: it is
+    // impassable and carries the glyph, exactly like a footprint-1
+    // structure. The other `footprint * footprint - 1` cells are this
+    // structure's own walkable floor, open to anything that can stand on
+    // laid ground. Checked only at placement (every cell of the footprint
+    // must be floor, hold no structure, no pending build site and no dig
+    // mark) and never stored, so widening an existing structure's footprint
+    // in a later release needs no save migration — a structure already
+    // standing keeps blocking exactly the one cell it always did, and its
+    // new cells are purely additive. This is the Research Station's shape.
+    footprint: 2,
+
+    // Optional; can be left out entirely (defaults to false). Whether this
+    // structure can hold a tamed program *under study*, in the footprint
+    // cell diagonally opposite the anchor (see `Game::study_pen`) —
+    // `footprint * footprint > 1` for that cell to exist at all. This is
+    // the Research Station's own field.
+    studies: true,
 )
 ```
 

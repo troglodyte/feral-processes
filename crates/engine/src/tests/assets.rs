@@ -4529,6 +4529,49 @@ fn every_structure_that_strips_declares_a_hopper_and_an_output() {
     assert!(checked > 0, "no shipped structure strips programs at all");
 }
 
+/// **Exactly one shipped structure declares `studies`.** The Research
+/// Station is the whole of the feature so far — a second one shipping
+/// unannounced would silently double a run's pace through it.
+#[test]
+fn exactly_one_shipped_structure_declares_studies() {
+    let game = Game::new(4112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let studying: Vec<&StructureId> = structures
+        .all()
+        .filter(|def| def.studies)
+        .map(|def| &def.id)
+        .collect();
+    assert_eq!(
+        studying.len(),
+        1,
+        "expected exactly one studies structure, found {studying:?}"
+    );
+    assert_eq!(studying[0], "research_node");
+}
+
+/// A pen needs a second cell to sit in — the anchor is spoken for by the
+/// glyph, so a footprint-1 `studies` structure would derive a pen on top of
+/// its own blocking cell.
+#[test]
+fn every_studies_structure_declares_a_footprint_of_at_least_two() {
+    let game = Game::new(4113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let mut checked = 0;
+    for def in structures.all() {
+        if !def.studies {
+            continue;
+        }
+        assert!(
+            def.footprint >= 2,
+            "structure {:?} studies but its footprint is only {}",
+            def.id,
+            def.footprint
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no shipped structure studies at all");
+}
+
 /// The rig is a bench too, so manual extraction gains a second one. The
 /// Compiler keeps its own flag — moving it would silently downgrade
 /// manual extraction for a run in progress (spec 10.3).

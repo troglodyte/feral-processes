@@ -1591,23 +1591,27 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
             .find(|d| &d.id == kind)
             .unwrap_or_else(|| panic!("{kind} ships with the game"));
         let work = def.work.expect("both of these are worked structures");
+        let anchor = Position {
+            x: 3 + i as i32 * 6,
+            y: 4,
+        };
         let node = game
             .world
             .spawn((
                 Structure {
                     kind: kind.to_string(),
                 },
-                Position {
-                    x: 3 + i as i32 * 6,
-                    y: 4,
-                },
+                anchor,
                 ResourceNode {
                     resource: work.produces.clone(),
                     level: None,
                 },
             ))
             .id();
-        stand_player_at_post(&mut game, node);
+        // `stand_player_at_post`'s own offset assumes a footprint of 1 — the
+        // Research Station's is 2, so its east neighbour is one of its own
+        // floor cells rather than a station face.
+        stand_in_base_at(&mut game, anchor.x + i32::from(def.footprint), anchor.y);
 
         game.work_structure(node).unwrap();
 
@@ -4420,4 +4424,91 @@ fn build_site_at_answers_for_every_footprint_cell_of_a_pending_request() {
             "cell ({fx}, {fy}) should resolve to the same pending site as the anchor"
         );
     }
+}
+
+// --- The Research Station and its pen (`Game::study_pen`) ---
+
+#[test]
+fn study_pen_is_none_for_a_structure_that_does_not_study() {
+    let mut game = Game::new(4001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "depot", 1, 0).unwrap();
+    let depot = game
+        .find_blocking_structure_at(1, 0)
+        .expect("the depot was just deployed");
+    assert_eq!(game.study_pen(depot), None);
+}
+
+#[test]
+fn study_pen_is_the_footprint_cell_diagonally_opposite_the_anchor() {
+    let mut game = Game::new(4002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 2, 0).unwrap();
+    let station = game
+        .find_blocking_structure_at(2, 0)
+        .expect("the Station was just deployed at its anchor");
+    assert_eq!(
+        game.study_pen(station),
+        Some((3, 1)),
+        "the pen is the footprint cell diagonally opposite the anchor"
+    );
+}
+
+/// Task 1's widened ladder, now reached through the real def rather than a
+/// test fixture — a Station placed with any of its four cells occupied is
+/// refused exactly as the fixture proved it would be.
+#[test]
+fn placing_the_research_station_is_refused_when_a_cell_is_occupied() {
+    let mut game = Game::new(4003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "depot", 3, 0).unwrap();
+
+    let err = game
+        .place_structure("research_node", 2, 0, None)
+        .expect_err("cell (3, 0), one of the Station's own footprint cells, is occupied");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
+}
+
+/// **The legacy case.** The footprint is derived from the current def and
+/// never stored, so a Research Node placed before this def grew to 2x2 can
+/// have neighbours already occupied — exactly what an old save can hold.
+/// `spawn_structure_at` stands in for a loaded save here: it bare-spawns the
+/// `Structure`, bypassing the placement ladder entirely, the same as
+/// `Game::load` restoring an entity that is never re-checked against
+/// `place_structure`'s refusals.
+#[test]
+fn a_legacy_research_node_with_occupied_neighbours_stands_and_blocks_only_its_anchor() {
+    let mut game = Game::new(4004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+
+    // Every one of the anchor's would-be footprint cells is already spoken
+    // for by something else.
+    place_now(&mut game, "depot", 3, 0).unwrap();
+    place_now(&mut game, "depot", 2, 1).unwrap();
+    place_now(&mut game, "depot", 3, 1).unwrap();
+    let east = game
+        .find_blocking_structure_at(3, 0)
+        .expect("the neighbouring depot stands");
+
+    let node = spawn_structure_at(&mut game, "research_node", 2, 0);
+
+    // Stands, and the neighbour it happens to have gained is untouched —
+    // nothing about the wider def evicts either.
+    assert!(game.world.get::<Structure>(node).is_some());
+    assert!(game.world.get::<Structure>(east).is_some());
+
+    // Blocks its anchor, exactly as any standing structure does.
+    assert_eq!(game.find_blocking_structure_at(2, 0), Some(node));
+    let err = game
+        .place_structure("depot", 2, 0, None)
+        .expect_err("the node's own anchor is occupied");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
 }

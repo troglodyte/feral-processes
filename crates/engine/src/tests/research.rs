@@ -811,7 +811,7 @@ fn selecting_research_off_the_base_is_rejected() {
     let err = game.select_research("automation").unwrap_err();
 
     assert!(
-        !err.contains("Research Node"),
+        !err.contains("Research Station"),
         "the locale is the reason, not the plant: {err}"
     );
     assert_eq!(active_research(&game), None);
@@ -859,7 +859,7 @@ fn a_base_with_no_research_node_cannot_take_a_project() {
     let err = game.select_research("automation").unwrap_err();
 
     assert!(
-        err.contains("Research Node"),
+        err.contains("Research Station"),
         "the refusal must name the machine that is missing: {err}"
     );
     assert_eq!(active_research(&game), None);
@@ -1191,7 +1191,7 @@ fn the_zone_gate_is_refused_before_the_machines() {
 
     assert!(err.contains("Zone 2"), "got: {err}");
     assert!(
-        !err.contains("Research Node"),
+        !err.contains("Research Station"),
         "the zone is the reason, not the base's plant: {err}"
     );
 }

@@ -1,11 +1,13 @@
 (
     id: "research_node",
-    name: "Research Node",
-    description: "Assign a program here to gather Research Data.",
+    name: "Research Station",
+    description: "A 2x2 lab. Assign a program to gather Research Data, and pin a second one under study in the pen at its far corner.",
     glyph: 'R',
     color: Cyan,
     build_cost: [("core_fragment", 10)],
     work: Some((produces: "research_data", ticks_per_unit: 14, level: Some(1))),
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10), ("cache_grain", 1)])),
     power_draw: 1,
+    footprint: 2,
+    studies: true,
 )

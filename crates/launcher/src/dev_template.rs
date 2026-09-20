@@ -527,6 +527,44 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `study` either: it exists so a session
+    /// testing the Research Station opens *with a subject already pinned
+    /// and a subject-gated project already running*, since reaching either
+    /// by hand otherwise costs a mining chain, a tamed program, a walk to
+    /// the pen and a research pick. This is the whole of what the template
+    /// is for, so both halves are asserted through the public doors a
+    /// player-facing screen would use — `Game::program_role` and
+    /// `Game::active_research_progress`, not a private field this crate has
+    /// no business reading.
+    #[test]
+    fn the_study_template_opens_with_a_subject_pinned_and_a_project_running() {
+        let out = std::env::temp_dir().join("feral_processes_template_study_pinned.bin");
+        generate("study", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let pinned = game
+            .owned_pets()
+            .into_iter()
+            .filter(|p| {
+                game.program_role(p.entity) == Some(feral_processes_engine::ProgramRole::UnderStudy)
+            })
+            .count();
+        assert_eq!(
+            pinned, 1,
+            "the template must open with exactly one subject pinned for study"
+        );
+
+        let (name, earned, cost) = game
+            .active_research_progress()
+            .expect("the template must open with a project already selected");
+        assert!(
+            earned < cost,
+            "`{name}` reads as already complete ({earned}/{cost}) — the template exists to \
+             show a project *running*, not one about to settle on the next tick"
+        );
+    }
+
     #[test]
     fn resolving_an_unknown_template_names_it_and_lists_the_known_ones() {
         let err = resolve("not_a_template").unwrap_err();

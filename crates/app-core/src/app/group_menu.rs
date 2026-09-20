@@ -304,7 +304,14 @@ const PARTY_ROWS: &[GroupEntry] = &[
         label: "Fuse two programs",
         target: Mode::Fuse,
         locality: Locality::Anywhere,
-        available: |app| app.game.as_mut().is_some_and(|g| g.owned_pets().len() >= 2),
+        // Fusion is a researched capability (Task 10, `Game::fusion_unlocked`)
+        // — the research alone, no structure and no locality change, so this
+        // is a second term on the same closure rather than a new row.
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| g.owned_pets().len() >= 2 && g.fusion_unlocked())
+        },
     },
     GroupEntry {
         label: "Install a routine",

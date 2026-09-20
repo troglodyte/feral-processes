@@ -465,6 +465,7 @@ fn an_affinity_talent_on_the_player_changes_nothing() {
 #[test]
 fn a_fused_program_keeps_the_dominant_parents_ring_and_talents() {
     let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let developed_pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.take_talent(developed_pet, &TalentId::from(GEN_HP))
         .unwrap();
@@ -502,6 +503,7 @@ fn a_fused_program_keeps_the_dominant_parents_ring_and_talents() {
 #[test]
 fn the_consumed_programs_ring_and_talents_do_not_transfer() {
     let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     // The *lower* level parent is the developed one, so it is the one
     // consumed: the child takes the dominant parent's species and level, and
     // development follows the same parent.

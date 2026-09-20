@@ -208,6 +208,7 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 teaches: Some(def.id.clone()),
                 opens_routine_tree: false,
                 requires_subject: false,
+                unlocks_fusion: false,
             }
         })
         .collect()

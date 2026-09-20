@@ -326,6 +326,35 @@ impl Game {
         }
     }
 
+    /// Whether fusing two tamed programs together is unlocked —
+    /// `routine_tree_open`'s exact shape, including its lenient rule: some
+    /// loaded node carries `unlocks_fusion` and is researched, or no loaded
+    /// node carries the flag at all (the second half is what keeps a mod
+    /// that deletes `program_refactoring` from stranding fusion behind a
+    /// gate nothing can ever open).
+    pub fn fusion_unlocked(&self) -> bool {
+        let db = self.world.resource::<ResearchDb>();
+        let mut openers = db.all().filter(|d| d.unlocks_fusion);
+        match openers.next() {
+            None => true,
+            Some(first) => self.node_researched(first) || openers.any(|d| self.node_researched(d)),
+        }
+    }
+
+    /// The display name of the node that unlocks fusion, for
+    /// `fuse_companions`'s refusal — `routine_tree_opener_name`'s twin,
+    /// falling back to a generic phrase for the same reason: only reached
+    /// when `fusion_unlocked` found one and something upstream still has to
+    /// resolve it a second time.
+    pub(crate) fn fusion_opener_name(&self) -> String {
+        self.world
+            .resource::<ResearchDb>()
+            .all()
+            .find(|d| d.unlocks_fusion)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| "fusion".to_string())
+    }
+
     /// The display name of the node that opens the routine tree, for
     /// `select_research`'s refusal — falls back to a generic phrase rather
     /// than panicking, since this is only reached when `routine_tree_open`

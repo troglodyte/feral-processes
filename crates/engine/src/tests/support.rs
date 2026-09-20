@@ -2335,6 +2335,7 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
 /// Fuses `game`'s two freshest tamed programs together repeatedly to
 /// build up a lineage `depth` fusions deep, returning that program.
 pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
+    unlock_research_chain(game, "program_refactoring");
     let mut current = spawn_tamed(game, 10, 3);
     for _ in 0..depth {
         let partner = spawn_tamed(game, 10, 3);

@@ -116,6 +116,17 @@ Core Fragments.
     // fresh run never needs a subject before it has a base worth studying
     // anyone at. A synthesised routine node never sets this — the routine
     // tree has its own economy already.
+
+    // Optional; defaults to false. Set this on the one node that should
+    // unlock fusing two tamed programs together (the shipped tree sets it
+    // on `program_refactoring`). Until a loaded node carrying it is
+    // researched, fusing is refused. If no loaded node carries it, fusion
+    // is open from the start — `opens_routine_tree`'s exact lenient rule —
+    // so deleting the flagged node (or the whole file) does not strand a
+    // run behind a gate nothing can ever open. There is deliberately no
+    // structure or locality requirement for fusion beyond this: the
+    // research alone unlocks it.
+    unlocks_fusion: true,
 )
 ```
 

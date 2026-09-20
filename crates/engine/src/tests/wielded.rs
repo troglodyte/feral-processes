@@ -273,6 +273,7 @@ fn selling_the_wielded_program_ends_the_wield() {
 #[test]
 fn fusing_away_the_wielded_program_ends_the_wield() {
     let mut game = Game::new(9111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let program = spawn_tamed(&mut game, 40, 60);
     let other = spawn_tamed(&mut game, 30, 30);
     game.wield_program(program).unwrap();

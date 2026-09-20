@@ -528,6 +528,7 @@ fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
 #[test]
 fn fuse_companions_averages_the_parents_potential() {
     let mut game = Game::new(422, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let player = game.player_entity();
     let species = game.species_defs();
     let species_a = species[0].id.clone();
@@ -767,6 +768,7 @@ fn companion_status_survives_save_and_load() {
 #[test]
 fn fusing_two_bumped_programs_keeps_the_higher_tier() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.world
@@ -1050,6 +1052,7 @@ fn a_special_is_refused_for_a_program_not_in_the_party() {
 #[test]
 fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
     let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let player = game.player_entity();
     let species = game.species_defs();
     let species_a = species[0].id.clone();
@@ -1138,6 +1141,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
 #[test]
 fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.fuse_companions(a, b, Some("Way Too Long A Name".to_string()))
@@ -1171,6 +1175,7 @@ fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
 #[test]
 fn fuse_companions_with_no_name_or_blank_name_keeps_the_handle() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     // `spawn_tamed` always uses this same species, and fusing two
     // same-level, same-species programs keeps it — capturing it directly
     // here avoids having to pick the fused entity back out of a world that
@@ -1211,6 +1216,7 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_handle() {
 fn a_fused_programs_custom_name_survives_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(92, DifficultyMode::Forgiving, &assets).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.fuse_companions(a, b, Some("Zappy".to_string()))
@@ -1237,6 +1243,7 @@ fn a_fused_programs_custom_name_survives_save_and_load() {
 #[test]
 fn fuse_companions_rejects_fusing_a_program_with_itself() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     assert!(game.fuse_companions(a, a, None).is_err());
 }
@@ -1244,6 +1251,7 @@ fn fuse_companions_rejects_fusing_a_program_with_itself() {
 #[test]
 fn fuse_companions_rejects_a_wild_creature() {
     let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let species = game.species_defs().into_iter().next().unwrap();
     let wild = game
@@ -1270,6 +1278,67 @@ fn fuse_companions_rejects_a_wild_creature() {
     assert!(game.world.get::<Creature>(wild).is_some());
 }
 
+/// Fusion is a researched capability now (Task 10): `program_refactoring`
+/// carries `unlocks_fusion`, and `fuse_companions` refuses until it is
+/// researched — a fresh run's `ResearchDb` has the flag but nothing
+/// researched, so `Game::new` alone must not unlock it.
+#[test]
+fn fuse_companions_refuses_before_the_research_and_succeeds_after() {
+    let mut game = Game::new(4130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .fuse_companions(a, b, None)
+        .expect_err("fusion is not researched yet on a fresh run");
+    assert!(
+        err.to_lowercase().contains("research"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        game.world.get::<Creature>(a).is_some(),
+        "a refused fusion shouldn't consume either input"
+    );
+    assert!(game.world.get::<Creature>(b).is_some());
+
+    unlock_research_chain(&mut game, "program_refactoring");
+    game.fuse_companions(a, b, None)
+        .expect("fusion is unlocked once the node is researched");
+    assert_eq!(game.owned_pets().len(), 1);
+}
+
+/// `opens_routine_tree`'s own lenient rule (`Game::routine_tree_open`),
+/// mirrored: if no *loaded* node carries `unlocks_fusion`, fusion is open
+/// from the start, so a mod that deletes or replaces the research tree is
+/// never stranded without a capability the base game had.
+#[test]
+fn with_no_flagged_node_loaded_fusion_is_unlocked() {
+    let body = std::fs::read_to_string(
+        test_assets_dir()
+            .join("research")
+            .join("program_refactoring.ron"),
+    )
+    .unwrap();
+    assert!(
+        body.contains("unlocks_fusion"),
+        "fixture assumption: the shipped file carries the flag"
+    );
+    let stripped = body.replace("unlocks_fusion: true,", "");
+    let dir = modded_assets_dir(
+        "no_fusion_opener",
+        &[],
+        &[],
+        &[],
+        &[("program_refactoring.ron", &stripped)],
+        &[],
+    );
+    let game = Game::new(4131, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(
+        game.fusion_unlocked(),
+        "no loaded node carries unlocks_fusion, so fusion is open from the start"
+    );
+}
+
 /// One of the fifth role's five intended omissions (decision 2 in
 /// `docs/superpowers/plans/2026-09-20-research-station-study.md`) —
 /// `fuse_companions` asks no role of either input today, so this is an
@@ -1277,6 +1346,7 @@ fn fuse_companions_rejects_a_wild_creature() {
 #[test]
 fn fuse_companions_rejects_a_pinned_subject_as_either_input() {
     let mut game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let subject = spawn_tamed(&mut game, 10, 3);
     let other = spawn_tamed(&mut game, 10, 3);
     let station = game.world.spawn_empty().id();
@@ -1308,6 +1378,7 @@ fn fuse_companions_rejects_a_pinned_subject_as_either_input() {
 #[test]
 fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
     let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, a, 4); // two slots, one free alongside the fallback
@@ -1345,6 +1416,7 @@ fn fusing_a_program_logs_a_manually_installed_routine_as_lost() {
 #[test]
 fn fuse_companions_removes_fused_members_from_the_active_party() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, a);
@@ -1359,6 +1431,7 @@ fn fuse_companions_removes_fused_members_from_the_active_party() {
 #[test]
 fn fusing_two_fresh_programs_gives_a_result_one_fusion_deep() {
     let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     assert_eq!(game.fusion_count(a), 0, "a caught program starts unfused");
@@ -1373,6 +1446,7 @@ fn fusing_two_fresh_programs_gives_a_result_one_fusion_deep() {
 #[test]
 fn a_fusion_result_is_one_deeper_than_its_deepest_input() {
     let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let deep = fuse_to_depth(&mut game, 2);
     let fresh = spawn_tamed(&mut game, 10, 3);
     assert_eq!(game.fusion_count(deep), 2);
@@ -1393,6 +1467,7 @@ fn a_fusion_result_is_one_deeper_than_its_deepest_input() {
 #[test]
 fn fuse_companions_rejects_a_program_already_at_the_fusion_cap() {
     let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let maxed = fuse_to_depth(&mut game, MAX_FUSIONS);
     assert_eq!(game.fusion_count(maxed), MAX_FUSIONS);
     let fresh = spawn_tamed(&mut game, 10, 3);
@@ -1698,6 +1773,7 @@ fn a_custom_name_outranks_the_handle_and_drops_the_species_from_the_label() {
 #[test]
 fn a_fused_child_has_a_handle_neither_parent_had() {
     let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let player = game.player_entity();
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
@@ -1849,6 +1925,7 @@ fn a_program_from_a_pre_handle_save_reads_a_handle() {
 #[test]
 fn fusing_two_shinies_keeps_the_higher_rarity() {
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(a).insert(Rarity::Silver);
@@ -1871,12 +1948,14 @@ fn fusing_two_shinies_keeps_the_higher_rarity() {
 #[test]
 fn fusing_does_not_re_apply_the_rarity_multiplier() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let plain_a = spawn_tamed(&mut game, 10, 3);
     let plain_b = spawn_tamed(&mut game, 10, 3);
     game.fuse_companions(plain_a, plain_b, None).unwrap();
     let baseline = game.owned_pets()[0].max_hp;
 
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(a).insert(Rarity::Gold);
@@ -1938,6 +2017,7 @@ fn a_custom_name_still_carries_the_tier() {
 #[test]
 fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let weapon = ItemId::from(ids::OVERCLOCK_CORE);
     give(&mut game, &weapon, 1);
 
@@ -2035,6 +2115,7 @@ fn an_adopted_program_joins_the_roster_with_a_full_reserve() {
 #[test]
 fn a_fused_companion_joins_the_roster_with_a_full_reserve() {
     let mut game = Game::new(7403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let tamed = |game: &mut Game| -> Vec<Entity> {
         let mut query = game.world.query_filtered::<Entity, With<Tamed>>();
         query.iter(&game.world).collect()

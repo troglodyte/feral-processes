@@ -1243,6 +1243,11 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        // Fusion is a researched capability now (Task 10) — see
+        // `Game::fusion_unlocked`'s doc for the lenient rule.
+        if !self.fusion_unlocked() {
+            return Err(format!("Research {} first.", self.fusion_opener_name()));
+        }
         if a == b {
             return Err("Pick two different programs to fuse.".into());
         }

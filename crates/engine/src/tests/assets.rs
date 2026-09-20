@@ -4815,6 +4815,26 @@ fn no_subject_gated_node_is_a_prerequisite_of_an_ungated_one() {
     );
 }
 
+/// **Exactly one shipped node carries `unlocks_fusion`.** Zero would strand
+/// the capability behind a check that always reads open (the lenient rule
+/// makes that harmless, but silent); two would leave `fusion_opener_name`
+/// naming an arbitrary one of them.
+#[test]
+fn exactly_one_shipped_research_node_unlocks_fusion() {
+    let game = Game::new(4117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let openers: Vec<_> = research
+        .all()
+        .filter(|d| d.unlocks_fusion)
+        .map(|d| d.id.clone())
+        .collect();
+    assert_eq!(
+        openers,
+        vec!["program_refactoring".to_string()],
+        "expected exactly program_refactoring to unlock fusion, found {openers:?}"
+    );
+}
+
 /// The other half: the shipped **base** tree actually *has* bills. The
 /// census above passes vacuously against a tree with none, so a node whose
 /// `materials` line was deleted by hand would read as free rather than as a

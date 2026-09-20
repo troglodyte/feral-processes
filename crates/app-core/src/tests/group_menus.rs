@@ -202,6 +202,25 @@ fn fuse_needs_two_programs_to_be_offered() {
     );
 }
 
+/// Fusion is a researched capability (Task 10): even with two programs on
+/// hand, the row stays hidden until `program_refactoring` is researched.
+#[test]
+fn fuse_row_is_hidden_until_fusion_is_researched_then_shown() {
+    let mut app = app_owning_distant_programs(4008, 2);
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        !rows.contains(&"Fuse two programs"),
+        "fusion is unresearched on a fresh run: {rows:?}"
+    );
+
+    mark_researched(&mut app, "program_refactoring");
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        rows.contains(&"Fuse two programs"),
+        "researching program_refactoring should unlock the row: {rows:?}"
+    );
+}
+
 /// The reason the handler and the renderer must call the same function.
 /// Rows are hidden dynamically, so row 1 of the base menu is whatever
 /// survived the filter — not the first entry of the static table.

@@ -2043,6 +2043,23 @@ pub(crate) fn app_in_base(seed: u32) -> App {
     app_in_base_with_programs(seed, 0)
 }
 
+/// Marks `id` researched by editing the save directly and reloading —
+/// `app_in_base_with_routine_tree_open`'s trick, generalised: what a test
+/// wants is the research already done, not `Game::select_research` and a
+/// project's own progress replayed through a slow tick loop. Fusion's own
+/// gate, `Game::fusion_unlocked`, reads exactly this: no loaded save
+/// leaves `program_refactoring` researched by default, so any app-core
+/// fixture whose test fuses two programs needs this call first.
+pub(crate) fn mark_researched(app: &mut App, id: &str) {
+    let path = scratch_path("mark_researched", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+    let mut data = save::load_from_file(&path).unwrap();
+    data.researched.push(id.to_string());
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+}
+
 /// Adds one tamed program to `app`'s roster, caught at `zone` — the one
 /// thing about a program `programs_for_build`'s `>=` floor cares about that
 /// no public `Game` method can set. Through the save round trip for the same

@@ -42,6 +42,30 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.217
+
+**You can leave a honeypot on the ground and come back to a program caught in
+it.** Everything you owned used to have to be beaten first, which meant a
+fight you could lose for a roster slot you were only speculating on. Research
+Deception, build a Decoy Bench and it compiles Honeypots out of ICE Breakers;
+place one from your pack with P and a direction, and over the next few minutes
+it catches a program of the kind that tile would have spawned and holds it
+until you walk into it. What it catches is deliberately worse than what you
+would have beaten — never a boss, never better than Optimized however deep you
+are, in poorer condition than a fight would have left it, and never carrying
+the routine that program was running — so it buys safety with time rather than
+replacing the fight. They block you like anything else standing on a tile,
+they survive a breach, and D with a direction breaks one down where it stands
+and hands nothing back.
+
+**D and a direction works out on the grid now, not only inside your base.** It
+used to refuse outright anywhere else, for a reason that was true until this
+release: every structure stands in base space, so out on the surface the four
+directions pointed at nothing you owned. A honeypot is the first thing you own
+that stands on the open grid, so the key opens in both places and the space
+you are in decides what it means — your machines inside, your honeypots
+outside.
+
 ## 0.13.216
 
 Tooling only — nothing about a played game changes.

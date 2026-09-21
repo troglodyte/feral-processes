@@ -1671,6 +1671,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             sprite: String::new(),
             colour: None,
             icon: None,
+            attributes: Default::default(),
         },
         creatures: vec![save::CreatureSave {
             species: "scrapper".to_string(),
@@ -1720,6 +1721,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             disgruntled_stranded: false,
             memories: Vec::new(),
             needs: Default::default(),
+            attributes: Default::default(),
             off_shift: None,
             staff: false,
             downed: false,

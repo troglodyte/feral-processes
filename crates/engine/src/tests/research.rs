@@ -2476,6 +2476,54 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
     );
 }
 
+/// M2 (final whole-branch review): once progress is full and the bill is
+/// paid, a subject-gated project with no pinned subject is exactly as
+/// stalled as one short a material or a full `DownedPrograms` store —
+/// `settle_research`'s own ordering already treats it that way — but
+/// `research_material_shortfall` never said so, so the HUD read "Earning
+/// n/cost" forever with no stall line once the subject was gone. The
+/// subject leaves by direct removal, matching
+/// `a_subject_gated_project_does_not_complete_without_a_pinned_subject`
+/// above — reachable in play via M1's battle case, a second Station
+/// resolving first, or the subject simply being walked off the pen.
+#[test]
+fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
+    let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::UnderStudy>();
+    // The bill is fully paid, so a material line cannot be the reason this
+    // reads as a stall — isolating the subject as the only thing missing.
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+    assert_eq!(
+        game.pinned_subject(),
+        None,
+        "precondition: nobody is in the pen"
+    );
+
+    let shortfall = game.research_material_shortfall().expect(
+        "a full bill and full progress with no pinned subject is exactly as stalled \
+         as one short a material",
+    );
+    assert!(!shortfall.is_empty(), "the stall must name something");
+
+    match game.research_readout() {
+        Some(ResearchReadout::Stalled { short_of, .. }) => {
+            assert_eq!(
+                short_of, shortfall,
+                "the readout must report the same stall research_material_shortfall does"
+            );
+        }
+        other => panic!("expected a Stalled readout, got {other:?}"),
+    }
+}
+
 /// The conversion: `downed_program_for_with_overkill(subject, 0.0)` →
 /// `push_downed_program` → despawn. The level comes off the subject's real
 /// `Experience`, not `ZoneLevel` — `ability_user_level`'s distinction from a

@@ -1054,6 +1054,16 @@ impl Game {
         if earned < def.cost {
             return None;
         }
+        // `settle_research`'s own order (decision 5): no subject pinned,
+        // then no room for the downed program, then the materials. A
+        // subject-gated project can lose its pin after selection — a
+        // battle refusing `abandon_research` (M1), a second Station
+        // resolving first, or the subject simply walking off the pen — and
+        // with a full bill on the shelves this was the only surface left
+        // with nothing to say, so the HUD read "Earning n/cost" forever.
+        if def.requires_subject && self.pinned_subject().is_none() {
+            return Some("a subject pinned in the Research Station's pen".to_string());
+        }
         // `settle_research`'s own order: a subject-gated project with a full
         // `DownedPrograms` store is exactly as stalled as one short a
         // material, and reported the same way rather than through a second

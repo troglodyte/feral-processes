@@ -1540,6 +1540,19 @@ pub enum Mode {
     /// The manifest — a full read-only stat sheet for the player, a program
     /// you own, or a wild one. `App::pending_manifest` is the subject.
     Manifest,
+    /// The dossier — the second page about whatever body `Mode::Manifest`
+    /// is showing. Five attributes with their old-school names beside them,
+    /// over a derived header. `App::pending_manifest` is the subject here
+    /// too, deliberately: this is a page of the manifest, not a screen that
+    /// tracks its own body, so paging with ←/→ and then opening `[D]`
+    /// cannot show one program's sheet and another's attributes.
+    ///
+    /// **Nothing here reads a number for a mechanic.** See
+    /// `attributes.rs`.
+    ///
+    /// A popup like every other list, so it does not join
+    /// `needs_status_banner`.
+    Dossier,
     /// Picking whose manifest to read — you, or any program you own.
     /// Reached from the party group menu; `d` on the map is the demolish key.
     ManifestPick,
@@ -2085,6 +2098,7 @@ impl Mode {
             | Mode::Companion
             | Mode::CompanionEquip
             | Mode::CompanionMemories
+            | Mode::Dossier
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName

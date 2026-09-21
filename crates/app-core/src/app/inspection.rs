@@ -260,6 +260,14 @@ impl App {
             self.start_watching();
             return;
         }
+        // Uppercase, because a lowercase letter is a row selector on every
+        // screen in this game. The subject stays `pending_manifest`, so the
+        // sheet and the dossier cannot be about two different bodies.
+        if key == GameKey::Char('D') {
+            self.status_line = None;
+            self.mode = Mode::Dossier;
+            return;
+        }
         let step = match key {
             GameKey::Left => -1,
             GameKey::Right => 1,
@@ -280,6 +288,17 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// The dossier is a page, not a menu: nothing but Esc is bound, and Esc
+    /// steps back to the manifest it was opened from rather than out to
+    /// wherever that manifest came from — `leave_manifest`'s job stays
+    /// `leave_manifest`'s.
+    pub(crate) fn handle_dossier_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.status_line = None;
+            self.mode = Mode::Manifest;
+        }
     }
 
     /// `w` on a manifest: put the map's camera on this program and go watch

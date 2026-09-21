@@ -428,6 +428,7 @@ pub(super) fn draw_playing_base(
             regions.map_pane,
             research.as_ref(),
             &stock_rows,
+            game.downed_store(),
             painter,
             m,
         );
@@ -1790,9 +1791,14 @@ mod tests {
     /// Through the real `render::draw` rather than `draw_stock_block`, which
     /// would pass with the call site deleted — and with the item's *name*,
     /// the half the status bar's two-letter tag never printed.
+    ///
+    /// The downed store is checked the same way and for the same reason:
+    /// `draw_stock_block`'s own tests are handed a count, so only a draw
+    /// through the real path proves the call site asks `Game::downed_store`
+    /// for it rather than passing an empty one.
     #[test]
     fn the_base_stock_is_listed_over_the_map_in_base_space() {
-        use super::test_support::{STOCKED_NAME, StandingIn, game_with_base_stock};
+        use super::test_support::{HELD_PROGRAMS, STOCKED_NAME, StandingIn, game_with_base_stock};
         let mut app =
             super::test_support::playing_app_around(game_with_base_stock(5101, StandingIn::Base));
         let text = drawn_text(&mut app);
@@ -1808,6 +1814,16 @@ mod tests {
         assert!(
             heading("RESEARCHING") < heading("BASE STOCK") && heading("RESEARCHING").is_some(),
             "the idle Research Node is not read out above the stock: {text:?}"
+        );
+        assert!(
+            heading("BASE STOCK") < heading("DOWNED PROGRAMS")
+                && heading("DOWNED PROGRAMS").is_some(),
+            "the downed store is not read out under the stock: {text:?}"
+        );
+        let cap = feral_processes_engine::tuning::MAX_DOWNED_PROGRAMS;
+        assert!(
+            text.iter().any(|t| t == &format!("{HELD_PROGRAMS}/{cap}")),
+            "the store's figure is not what the player is actually holding: {text:?}"
         );
     }
 
@@ -1828,9 +1844,10 @@ mod tests {
         let mut app = super::test_support::playing_app_around(game);
         let text = drawn_text(&mut app);
         assert!(
-            !text
-                .iter()
-                .any(|t| t == "BASE STOCK" || t == "RESEARCHING" || t == STOCKED_NAME),
+            !text.iter().any(|t| t == "BASE STOCK"
+                || t == "RESEARCHING"
+                || t == "DOWNED PROGRAMS"
+                || t == STOCKED_NAME),
             "the stock block drew over the Stack view: {text:?}"
         );
     }

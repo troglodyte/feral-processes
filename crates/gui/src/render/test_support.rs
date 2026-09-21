@@ -329,6 +329,10 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
 /// print for it.
 pub(super) const STOCKED_ITEM: &str = "bytecode_block";
 pub(super) const STOCKED_NAME: &str = "Bytecode Block";
+/// How many downed programs `game_with_base_stock` leaves the player
+/// holding. Two rather than one so a readout that prints a bare `1` where
+/// the figure should be `2/10` cannot pass.
+pub(super) const HELD_PROGRAMS: usize = 2;
 
 /// Where `game_with_base_stock` leaves the party standing.
 pub(super) enum StandingIn {
@@ -344,6 +348,11 @@ pub(super) enum StandingIn {
 /// its output shelf and an idle Research Node, written into the save for
 /// `app_in_base_with_a_compiler`'s reason — nothing public stands one up
 /// and fills it.
+///
+/// `HELD_PROGRAMS` downed programs ride the same edit, because the corner
+/// block they are read out in is the one the stock and the research line
+/// share: a test asking where that block is drawn wants all three sections
+/// populated, or two of its three negatives pass on an empty store.
 ///
 /// The locale is part of the same edit so a test comparing two places reads
 /// the *same* stock in each, which is what keeps "not drawn here" from
@@ -374,6 +383,16 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         }
         StandingIn::Surface => {}
     }
+    data.player.downed_programs = (0..HELD_PROGRAMS)
+        .map(|i| feral_processes_engine::items::DownedProgram {
+            species: "scrapper".to_string(),
+            level: 4 + i as u32,
+            rarity: feral_processes_engine::components::Rarity::Ordinary,
+            boss: false,
+            condition: 70,
+            carried: None,
+        })
+        .collect();
     data.structures.push(save::StructureSave {
         kind: "depot".to_string(),
         position: (3, 0),

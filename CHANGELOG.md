@@ -42,6 +42,34 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.213
+
+**Most of the research tree is hidden until your base finds it.** Twenty of
+the twenty-seven nodes — everything past the handful that gets a base running
+— no longer sit on the menu from turn one waiting to be afforded. They are off
+the list and off the flow chart entirely, so what you are looking at is what
+you could actually take, and the tree grows as the run does instead of being
+a priced-out shopping list you read once on the first evening.
+
+**A Research Station with nothing to work on now studies instead of standing
+idle.** Its output used to land nowhere whenever no project was selected.
+That output is now banked toward study attempts, and an attempt made while a
+tamed program is pinned in the Station's pen uncovers a node — announced like
+any other milestone, and researchable the moment it arrives, since a study
+only ever turns up something whose prerequisites you already hold and whose
+zone you have already reached. A study that finds nothing says so.
+
+**The three zone-1 benches now cost a program.** Reactive Armor, Weapon
+Fabrication and Routine Fabrication join every node gated at zone 2 and above
+in requiring a subject pinned for study, so the chain that makes gear and
+Routine Disks is bought with a tamed program rather than with time alone. The
+five that get a base running from turn one — Automation, Power Grid, Isometric
+Commerce, Teardown and Fortification — still ask for nothing but Research Data.
+
+Saves written before this loads unchanged, with nothing discovered and nothing
+banked: the hidden half of that run's tree hides itself and is studied back
+out.
+
 ## 0.13.212
 
 **A program pinned in a Research Station now jitters while its project is

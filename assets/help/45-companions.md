@@ -47,4 +47,5 @@ gain one is the cost.
 Extracting a routine is the other thing that costs a program. It destroys the program and salvages
 exactly one of its routines; everything else installed on it goes with it.
 
-Read on: [routines](routines), [getting stronger](getting-stronger), and [your base](your-base).
+Read on: [routines](routines), [attributes](attributes), [getting stronger](getting-stronger),
+and [your base](your-base).

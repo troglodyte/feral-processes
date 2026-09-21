@@ -313,32 +313,35 @@ impl Game {
         (def.min_zone > self.world.resource::<ZoneLevel>().0).then_some(def.min_zone)
     }
 
-    /// Whether the routine research tree is open at all. Some loaded node
-    /// carries `opens_routine_tree` and is researched, or no loaded node
-    /// carries the flag — the second half is what keeps a mod that deletes
-    /// `routine_fabrication` from stranding its own tree closed forever.
-    pub fn routine_tree_open(&self) -> bool {
+    /// Whether some capability-flagged research node has been researched —
+    /// **the one formula** `routine_tree_open` and `fusion_unlocked` both
+    /// call rather than each keeping its own copy (CLAUDE.md's rule on a doc
+    /// comment claiming to mirror another module's formula: a comment cannot
+    /// hold two copies in sync). Some loaded node carries `flagged` and is
+    /// researched, or **no** loaded node carries it at all — the lenient
+    /// half is what keeps a mod that deletes the flagged node (say,
+    /// `routine_fabrication` or `program_refactoring`) from stranding the
+    /// capability behind a gate nothing can ever open.
+    fn capability_unlocked(&self, flagged: impl Fn(&ResearchDef) -> bool) -> bool {
         let db = self.world.resource::<ResearchDb>();
-        let mut openers = db.all().filter(|d| d.opens_routine_tree);
+        let mut openers = db.all().filter(|d| flagged(d));
         match openers.next() {
             None => true,
             Some(first) => self.node_researched(first) || openers.any(|d| self.node_researched(d)),
         }
     }
 
-    /// Whether fusing two tamed programs together is unlocked —
-    /// `routine_tree_open`'s exact shape, including its lenient rule: some
-    /// loaded node carries `unlocks_fusion` and is researched, or no loaded
-    /// node carries the flag at all (the second half is what keeps a mod
-    /// that deletes `program_refactoring` from stranding fusion behind a
-    /// gate nothing can ever open).
+    /// Whether the routine research tree is open at all — a call into
+    /// `capability_unlocked` over `opens_routine_tree`.
+    pub fn routine_tree_open(&self) -> bool {
+        self.capability_unlocked(|d| d.opens_routine_tree)
+    }
+
+    /// Whether fusing two tamed programs together is unlocked — a call into
+    /// `capability_unlocked` over `unlocks_fusion`, `routine_tree_open`'s
+    /// exact shape including its lenient rule.
     pub fn fusion_unlocked(&self) -> bool {
-        let db = self.world.resource::<ResearchDb>();
-        let mut openers = db.all().filter(|d| d.unlocks_fusion);
-        match openers.next() {
-            None => true,
-            Some(first) => self.node_researched(first) || openers.any(|d| self.node_researched(d)),
-        }
+        self.capability_unlocked(|d| d.unlocks_fusion)
     }
 
     /// The display name of the node that unlocks fusion, for

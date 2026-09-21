@@ -59,6 +59,7 @@ Three tiers, and which one you want depends on what you are doing:
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |
 | the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 23 |
+| traps (honeypots: placing, the tick, what a catch is worth) | `references/traps.md` | 4 |
 
 ## Adding a seam
 

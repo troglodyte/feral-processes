@@ -251,6 +251,16 @@ relying on one, and correct all three places if it has moved.
 - **A patrol's tether saves by the town's tile and is resolved *after*
   `restore_settlements`**, `pending_cronjobs`' deferral.
 
+### Traps
+
+- **A trap's quality is authored on the item def, never rolled per copy.**
+- **A trap clamps the rarity it rolled before it rolls a condition**,
+  `downed_program_for`'s boss-floor rule with a second caller.
+- **A trap spends no `GameRng` until its period elapses, and traps roll in
+  `(x, y)` order.**
+- **A trap resolves its item def live by id, against `ActiveContract`'s
+  precedent** — it is a device standing in the world, like a nest.
+
 ### The base
 
 - **A deploy is a *request*, and the Home is the only build the player's own

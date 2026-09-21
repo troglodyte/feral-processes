@@ -42,6 +42,28 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.209
+
+**Research now spends a program.** Every node from sector 2 up refuses to
+start until you pin one of your tamed programs in the Research Station's pen,
+and finishing the project spends it — the program comes back as a downed
+record in your store, where extraction can take it apart. Research used to be
+free base labour: one program posted on a node paid for the whole tree given
+enough wall-clock, which made it a timer rather than a reason to go out and
+fight for another program.
+
+**The Research Node is now a Research Station, two cells to a side.** The
+top-left cell still carries the glyph and still blocks the way; the other
+three are the lab's own floor, and the corner diagonally opposite the glyph
+is the pen the subject stands in. A Node already standing in an old save
+keeps its single cell and is never refused after the fact — though if its
+neighbours are built up, it has a pen nothing can reach, and the only thing
+that says so is the refusal you get when you try to pin.
+
+**Fusing two programs is something you research now.** Program Refactoring
+unlocks it, and until then the roster's fuse option is hidden rather than
+refusing. Fusion used to be available from the first minute of a run.
+
 ## 0.13.208
 
 **Your programs no longer stand on top of each other.** Two bodies cannot

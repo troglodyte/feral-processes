@@ -1,0 +1,8 @@
+(
+    id: "honeypot",
+    name: "Honeypot",
+    description: "A decoy left on the ground. Given time it catches a program that wanders into it, and holds it until you come back.",
+    value: Some(1),
+    craftable: Some((cost: [("ice_breaker", 2)], requires_structure: Some("decoy_bench"))),
+    trap: Some((rarity_cap: Silver)),
+)

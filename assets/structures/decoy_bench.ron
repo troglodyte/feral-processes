@@ -1,0 +1,12 @@
+(
+    id: "decoy_bench",
+    name: "Decoy Bench",
+    description: "ICE Breakers into Honeypots — decoys you leave on the ground.",
+    glyph: 'y',
+    color: Yellow,
+    build_cost: [("bytecode_block", 12)],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "honeypot", ticks_per_unit: 20)),
+    power_draw: 2,
+)

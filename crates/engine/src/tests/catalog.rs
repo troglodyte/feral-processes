@@ -72,6 +72,7 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
                 "armory",
                 "assembly_bay",
                 "compiler",
+                "decoy_bench",
                 "disk_press",
                 "fabricator",
                 "lathe",

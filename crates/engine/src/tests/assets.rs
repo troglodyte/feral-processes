@@ -5272,3 +5272,67 @@ fn the_honeypot_is_gated_by_deception_and_nothing_else() {
         "the bench must name the item or the recipe is unassemblable"
     );
 }
+
+/// Every shipped attribute authors all seven fields, and the two prose
+/// fields are actually prose.
+///
+/// The cost of the catalogue being data, paid: nothing in Rust enumerates
+/// the shipped five, so without this an attribute could ship with an empty
+/// `meaning` and the dossier page would draw a blank line under it.
+#[test]
+fn every_shipped_attribute_says_what_it_means() {
+    let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs = game.attribute_defs();
+    assert_eq!(defs.len(), 5, "the shipped catalogue is five attributes");
+    for def in &defs {
+        assert!(!def.name.is_empty(), "{} has no name", def.id);
+        assert!(!def.legacy.is_empty(), "{} has no legacy name", def.id);
+        assert!(
+            def.short.len() >= 10,
+            "{}'s gloss is too short to say anything: {:?}",
+            def.id,
+            def.short
+        );
+        assert!(
+            def.meaning.split_whitespace().count() >= 15,
+            "{}'s meaning is a phrase, not prose: {:?}",
+            def.id,
+            def.meaning
+        );
+        assert!(
+            def.spread < def.base,
+            "{}: a spread at or above the base can mint a negative attribute",
+            def.id
+        );
+    }
+}
+
+/// The gloss may not promise a mechanic. Decision 2 of the spec: the
+/// sentence saying what an attribute *does* lands with the mechanic that
+/// does it, and until then a claim the player tests and finds false is
+/// worse than no claim.
+#[test]
+fn no_shipped_attribute_claims_an_effect() {
+    let game = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.attribute_defs() {
+        let prose = format!("{} {}", def.short, def.meaning).to_lowercase();
+        for claim in [
+            "increases",
+            "reduces",
+            "improves",
+            "raises",
+            "lowers",
+            "bonus",
+            "chance to",
+            "per point",
+            "rises over",
+            "grows over",
+        ] {
+            assert!(
+                !prose.contains(claim),
+                "{} promises a mechanic ({claim:?}) that nothing implements: {prose}",
+                def.id
+            );
+        }
+    }
+}

@@ -1,0 +1,9 @@
+(
+    id: "bandwidth",
+    name: "Bandwidth",
+    legacy: "Stamina",
+    short: "how much it pushes at once",
+    meaning: "How much this program can push through at one time. A narrow-Bandwidth program does one thing at a time and does it properly; a wide one spreads itself across whatever it is pointed at.",
+    base: 50,
+    spread: 14,
+)

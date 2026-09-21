@@ -988,6 +988,28 @@ impl Game {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }
 
+    /// Every attribute the catalogue knows about, id-sorted — `item_defs`'
+    /// shape, cloned out of the resource so gui and app-core can read the
+    /// catalogue without holding a borrow on `Game`.
+    pub fn attribute_defs(&self) -> Vec<crate::attributes::AttributeDef> {
+        self.world
+            .resource::<crate::attributes::AttributeDb>()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Every class the game knows about, in `PlayerClass::ALL`'s order —
+    /// `attribute_defs`' counterpart, and the one door to `ClassDb` from
+    /// outside that module.
+    pub fn class_defs(&self) -> Vec<crate::classes::ClassDef> {
+        self.world
+            .resource::<crate::classes::ClassDb>()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
     /// The display name for `id`, falling back to the raw id if the species
     /// set doesn't define it (a save referencing a since-removed mod
     /// species) — `item_name`'s own fallback, over `SpeciesDb` rather than

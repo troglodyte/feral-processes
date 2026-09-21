@@ -410,16 +410,10 @@ const CONTRACT_BOARD_SALT: u64 = 0xC0A7_7AC7_5EED_0001;
 /// FNV-1a, a byte at a time — the one folding scheme this feature salts with,
 /// shared by the board's own seed and each template's.
 ///
-/// Byte-at-a-time rather than one XOR-and-multiply per word, for
-/// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves low output
-/// bits a fixed function of the input, and consecutive epochs differ in
-/// exactly one low bit.
-pub(crate) fn fold(mut h: u64, bytes: &[u8]) -> u64 {
-    for byte in bytes {
-        h ^= *byte as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
+/// A delegation to `derive::fold_bytes`, which owns the crate's one FNV-1a
+/// loop and carries the measured argument for folding a byte at a time.
+pub(crate) fn fold(h: u64, bytes: &[u8]) -> u64 {
+    crate::derive::fold_bytes(h, bytes)
 }
 
 impl Game {

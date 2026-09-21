@@ -1,0 +1,9 @@
+(
+    id: "parity",
+    name: "Parity",
+    legacy: "Vitality",
+    short: "corrects its own errors",
+    meaning: "How well this program catches and corrects its own errors without anyone looking. High Parity is a program that quietly puts itself right; low Parity is one whose small faults stay where they landed.",
+    base: 50,
+    spread: 13,
+)

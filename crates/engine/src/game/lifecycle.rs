@@ -433,6 +433,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             needs: need_db,
+            attributes: attribute_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -470,6 +471,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -1139,6 +1141,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             needs: need_db,
+            attributes: attribute_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -1194,6 +1197,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -2860,6 +2864,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
+    attributes: crate::attributes::AttributeDb,
     sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
@@ -2978,6 +2983,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
+    // Same absent-is-silent rule again — see `AttributeDb`'s own doc. An empty
+    // catalogue mints nothing and leaves the dossier page with no rows, which
+    // is the pre-attribute game.
+    let (attributes, attribute_warnings) =
+        crate::attributes::AttributeDb::load_dir(&assets_dir.join("attributes"))?;
+    warnings.extend(attribute_warnings);
     // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
     // catalogue leaves `Game::sortie_board` with nothing to offer, which is
     // the pre-sortie game.
@@ -3034,6 +3045,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         memories,
         needs,
+        attributes,
         sorties,
         caravans,
         nemesis,

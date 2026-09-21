@@ -1,0 +1,9 @@
+(
+    id: "entropy",
+    name: "Entropy",
+    legacy: "Luck",
+    short: "carries accumulated noise",
+    meaning: "How much accumulated noise this program runs with — the drift that collects in anything left running long enough. A high-Entropy program is one whose edges have gone soft in ways nobody deliberately wrote.",
+    base: 40,
+    spread: 15,
+)

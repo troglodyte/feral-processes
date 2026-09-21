@@ -1796,6 +1796,51 @@ pub struct ProgramId(pub u32);
 #[derive(Component, Clone, Debug, Default)]
 pub struct Memories(pub Vec<Memory>);
 
+/// What a body is like apart from what it can do in a fight — see
+/// `attributes.rs`.
+///
+/// **A component of its own and pointedly not a field on `Stats`.** `Stats`
+/// is level-scaled by `progression::stats_after_levels`, zone-multiplied by
+/// `ZoneLevel::stat_multiplier`, folded into by
+/// `Game::apply_equipment_delta` and summed by `Stats::power()`, which
+/// `Game::difficulty_color`, `progression::kill_xp` and trade valuation all
+/// read. A sixth field there would enter every one of those whether it was
+/// wanted or not, and `balance_sim`'s empirical curves would move. Being
+/// separate is also what keeps "nothing reads an attribute" true by
+/// construction: nothing that reads `Stats` can start reading one by
+/// accident.
+///
+/// **Minted once and stored**, never re-derived on read: the value is a
+/// property of the body and the place it came from, and `Disposition`'s own
+/// argument applies — a fold that ran on every read would be free to
+/// disagree with the one the save recorded.
+///
+/// `BTreeMap` for `Stock`'s reason: iteration order feeds the save
+/// encoding, and a `HashMap` would make the file differ run to run. An
+/// entry whose def no file defines is kept and skipped by every reader,
+/// exactly as a `Memories` entry is — which is what makes a catalogue
+/// edited between sessions a supported thing to do.
+#[derive(Component, Debug, Clone, Default, PartialEq, Eq)]
+pub struct Attributes(std::collections::BTreeMap<crate::attributes::AttributeId, i32>);
+
+impl Attributes {
+    pub fn get(&self, id: &crate::attributes::AttributeId) -> Option<i32> {
+        self.0.get(id).copied()
+    }
+
+    pub fn set(&mut self, id: &crate::attributes::AttributeId, value: i32) {
+        self.0.insert(id.clone(), value);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&crate::attributes::AttributeId, i32)> {
+        self.0.iter().map(|(id, v)| (id, *v))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// What one owned program's reserves stand at. Minted empty at
 /// `Game::roster_parts` beside `Memories`, so the absence of this component
 /// means "not on the roster" rather than "needs nothing".

@@ -12,12 +12,15 @@ exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-**The three exceptions are built and stay in `specs/` anyway**, because source
+**The four exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
 `2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations),
 `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and a seam
-argument in the memory graph) and `2026-09-16-routine-research-tree-design`
-(`routine_tree.rs`, `tuning.rs` and its tests).
+argument in the memory graph), `2026-09-16-routine-research-tree-design`
+(`routine_tree.rs`, `tuning.rs` and its tests) and
+`2026-09-21-program-attributes-design` (`attributes.rs`'s module doc, which
+sends a reader to §2 for why no attribute carries a sentence saying what it
+does).
 
 **The debt this section recorded is paid.** There was a third —
 `2026-09-06-settlement-growth-design`, one `//!` line in
@@ -348,6 +351,17 @@ is where a reader should be sent.
 | Spec | What it designed | Evidence |
 | --- | --- | --- |
 | `2026-09-21-honeypot-traps-design` | A placeable consumable that stands on the zone surface and catches one non-boss program over game-time, held until collected by hand | `ItemDef::trap`/`items_db::TrapDef`, `components::Trap` with `TRAP_GLYPH_ARMED`/`SPRUNG`, `Game::is_placeable`/`place_trap`/`destroy_trap`/`find_trap_at`/`trap_count`/`run_traps`/`wild_body_level`, the fifth arm of `move_player`'s ladder and `save::TrapSave` in `crates/engine`; `Mode::TrapDirection`, the `[P]lace` row and the lifted `d` gate in `crates/app-core`; the draw arm in `crates/gui`; `assets/research/deception.ron`, `assets/structures/decoy_bench.ron`, `assets/items/honeypot.ron`. A save change behind `#[serde(default)]` with a real save-then-load test, not only a RON round trip. Two deviations the spec could not have known: the recipe is one ingredient because `every_shipped_assembler_recipe_is_a_single_ingredient` is content law, and Deception carries `requires_subject` because only the bootstrap five may be ungated. Not yet played at the keyboard |
+
+## The spec that landed on 2026-09-21
+
+Built, and **staying in `specs/`** — `crates/engine/src/attributes.rs`'s
+module doc cites its path, and moving it would mean editing a source file
+inside a deploy, which is the habit the 2026-09-09 note above exists to
+break. It is the fourth standing exception to the invariant at the top.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-21-program-attributes-design` | A second, non-combat stat block — five attributes authored in `assets/attributes/` — carried by every creature and the player, minted from a deterministic fold rather than an RNG draw, stored in the save, and read on a new no-scroll page reached with `[D]` from the manifest | `attributes::AttributeDb`/`mint`/`body_seed`/`revision`/`checksum`, `components::Attributes`, `derive::fold_bytes`, `SpeciesDef::attributes`, `ClassDef::attributes`, `CreatureSave::attributes`, `PlayerSave::attributes`, `Game::dossier_report`, `views::DossierReport` and `tuning::MAX_ATTRIBUTE_ROWS` all resolve in `crates/engine`; `Mode::Dossier` in `crates/app-core`; `render/dossier.rs` in `crates/gui`; `assets/attributes/` (five defs), `assets/descriptions/program_dossier.ron`, `assets/help/47-attributes.md`. No save-format bump — both fields are `#[serde(default)]` and an older file mints on load. Nothing reads an attribute for a mechanic, which is decision 1 of the spec and what `components::Attributes` being its own component keeps true. Not yet played at the keyboard |
 
 ## Four rows that need a footnote
 

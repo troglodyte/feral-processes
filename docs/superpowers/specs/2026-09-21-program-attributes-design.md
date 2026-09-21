@@ -1,6 +1,15 @@
 # Program attributes and the dossier page
 
-**Status:** design approved, not implemented.
+**Status:** implemented, `v0.13.218`. Kept in `specs/` rather than archived:
+`crates/engine/src/attributes.rs`'s module doc cites this path, and moving it
+would mean editing a source file inside a deploy. See `INDEX.md`'s invariant.
+
+The plan that implemented it — `docs/superpowers/plans/2026-09-21-program-attributes.md`
+— carries eight corrections to this document, which supersede it where they
+conflict. The two that would otherwise have shipped as defects: attribute 1 is
+`Persistence`, not `Coherence`, which is already a shipped need; and the mint is
+not in `Game::roster_parts`, which would have rewritten a program's attributes at
+the moment you tamed it.
 
 A second, non-combat stat block carried by every creature and by the player,
 authored as a data catalogue, minted at spawn, stored, and read on a new

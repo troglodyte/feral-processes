@@ -167,8 +167,9 @@ fn placing_a_honeypot_spends_one_and_stands_it_on_the_tile() {
     assert!(placed.caught.is_none(), "a fresh trap has caught nothing");
     assert_eq!(
         placed.next_roll,
-        crate::tuning::TRAP_PERIOD_TICKS,
-        "the countdown starts full, so nothing is caught on the tick it was set"
+        crate::tuning::TRAP_PERIOD_TICKS - 1,
+        "the countdown starts full and placement spends a tick, so nothing is \
+         caught on the tick it was set"
     );
     assert_eq!(
         game.world.get::<Glyph>(trap).map(|g| g.ch),
@@ -249,4 +250,196 @@ fn placing_onto_an_occupied_tile_is_refused() {
     assert!(result.is_err(), "one trap to a tile");
     assert_eq!(held(&game, &honeypot()), 1);
     assert_eq!(game.trap_count(), 1, "the standing one is untouched");
+}
+
+/// Elapses one trap's period and runs the tick pass, up to `attempts`
+/// times, and answers what it caught. Each call resets the countdown, so
+/// the loop is over capture *rolls* rather than over ticks.
+fn spring(game: &mut Game, trap: Entity, attempts: u32) -> Option<items::DownedProgram> {
+    for _ in 0..attempts {
+        game.world.get_mut::<Trap>(trap).unwrap().next_roll = 0;
+        game.run_traps();
+        if let Some(caught) = game.world.get::<Trap>(trap).and_then(|t| t.caught.clone()) {
+            return Some(caught);
+        }
+    }
+    None
+}
+
+/// The whole "existing seeded tests are unaffected" claim rests on this
+/// one: a trap that is only counting down must not touch the shared stream.
+#[test]
+fn a_counting_down_trap_spends_no_gamerng_draw() {
+    assert!(
+        rng_unadvanced_by(7020, |game| {
+            let pos = player_tile(game);
+            stand_a_trap(game, pos.x + 1, pos.y, None);
+            stand_a_trap(game, pos.x + 2, pos.y, None);
+            // Fewer passes than one period, so nothing elapses.
+            for _ in 0..crate::tuning::TRAP_PERIOD_TICKS - 1 {
+                game.run_traps();
+            }
+        }),
+        "a trap that has not elapsed must not move the shared GameRng stream"
+    );
+}
+
+/// The draw order is part of the contract: chance, then species, then
+/// rarity, then the clamp, then a condition that spends no draw at all. A
+/// change here is deliberate and not a refactor.
+#[test]
+fn the_capture_draws_in_the_documented_order() {
+    let build = |seed: u64| {
+        let mut game = Game::new(7021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = player_tile(&game);
+        let trap = stand_a_trap(&mut game, pos.x + 1, pos.y, None);
+        game.world.get_mut::<Trap>(trap).unwrap().next_roll = 0;
+        reseed_rng(&mut game, seed);
+        game.run_traps();
+        game
+    };
+    let (caught, stream) = (0..512u64)
+        .find_map(|seed| {
+            let mut probe = build(seed);
+            let mut q = probe.world.query::<&Trap>();
+            let held = q.iter(&probe.world).find_map(|t| t.caught.clone());
+            held.map(|c| (c, seed))
+        })
+        .expect("some stream in 0..512 catches something");
+
+    // The same four steps, in the same order, driven by hand against the
+    // same stream. Anything reordered inside `run_traps` — a rarity rolled
+    // before a species, a boss roll not skipped — moves this.
+    let mut replay = Game::new(7021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&replay);
+    let (x, y) = (pos.x + 1, pos.y);
+    reseed_rng(&mut replay, stream);
+    let hit: bool = {
+        let mut rng = replay.world.resource_mut::<GameRng>();
+        rng.0.random_bool(crate::tuning::TRAP_CAPTURE_CHANCE)
+    };
+    assert!(hit, "the seed found above is the one that catches");
+    let (species, boss) = replay
+        .pick_habitat_species(x, y, None, false)
+        .expect("the tile has a habitat pool");
+    assert!(!boss, "allow_boss: false skips the boss roll entirely");
+    let def = replay.species_defs().into_iter().find(|d| d.id == species);
+    let rolled = replay.roll_rarity(&def.expect("the species ships"), x, y, false);
+    let rarity = rolled.min(Rarity::Silver);
+    let condition = items::DownedProgram::roll_condition(rarity, false, 0.0)
+        .saturating_sub(crate::tuning::TRAP_CONDITION_PENALTY);
+
+    assert_eq!(caught.species, species, "species is drawn second");
+    assert_eq!(caught.rarity, rarity, "rarity is drawn third, then clamped");
+    assert_eq!(
+        caught.condition, condition,
+        "condition is a formula over the clamped rarity and spends no draw"
+    );
+}
+
+/// A single roll proves nothing here: Silver is a common outcome. Many
+/// rolls across many seeds is what makes the ceiling an assertion.
+#[test]
+fn a_catch_is_never_better_than_the_ceiling_and_never_a_boss() {
+    let cap = Rarity::Silver;
+    let mut caught_any = 0;
+    for seed in 0..24u32 {
+        let mut game =
+            Game::new(7030 + seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = player_tile(&game);
+        let trap = stand_a_trap(&mut game, pos.x + 1, pos.y, None);
+        let Some(caught) = spring(&mut game, trap, 40) else {
+            continue;
+        };
+        caught_any += 1;
+        assert!(
+            caught.rarity <= cap,
+            "seed {seed} caught a {:?}, above the authored ceiling",
+            caught.rarity
+        );
+        assert!(!caught.boss, "a trap never catches a boss");
+        let apex = game
+            .species_defs()
+            .into_iter()
+            .find(|d| d.id == caught.species)
+            .map(|d| d.is_boss)
+            .unwrap_or(false);
+        assert!(!apex, "and never an apex species either");
+        assert!(
+            caught.carried.is_none(),
+            "a caught program never hands over the routine it was running"
+        );
+        assert_eq!(
+            caught.level,
+            game.wild_body_level(),
+            "a caught program is the zone's level"
+        );
+    }
+    assert!(
+        caught_any >= 8,
+        "only {caught_any} of 24 seeds caught anything — the sweep is not measuring the ceiling"
+    );
+}
+
+/// Two traps elapsing on the same tick resolve by `(x, y)`, not by bevy's
+/// query order. Asserting the order directly cannot fail — it is stable
+/// within one run — so the assertion is that a second run of the same seed
+/// produces the same two catches in the same two places.
+#[test]
+fn two_traps_elapsing_together_resolve_the_same_way_twice() {
+    let run = || {
+        let mut game = Game::new(7060, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pos = player_tile(&game);
+        let east = stand_a_trap(&mut game, pos.x + 1, pos.y, None);
+        let west = stand_a_trap(&mut game, pos.x - 1, pos.y, None);
+        reseed_rng(&mut game, 404);
+        for _ in 0..60 {
+            for t in [east, west] {
+                game.world.get_mut::<Trap>(t).unwrap().next_roll = 0;
+            }
+            game.run_traps();
+        }
+        let read = |e: Entity, g: &Game| g.world.get::<Trap>(e).and_then(|t| t.caught.clone());
+        (
+            read(east, &game).map(|c| (c.species, c.rarity, c.condition)),
+            read(west, &game).map(|c| (c.species, c.rarity, c.condition)),
+        )
+    };
+    assert_eq!(run(), run(), "the sort is what makes this reproducible");
+}
+
+#[test]
+fn springing_changes_the_glyph_and_a_second_period_does_not_overwrite_it() {
+    let mut game = Game::new(7070, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+    let trap = stand_a_trap(&mut game, pos.x + 1, pos.y, None);
+    assert_eq!(
+        game.world.get::<Glyph>(trap).map(|g| g.ch),
+        Some(TRAP_GLYPH_ARMED)
+    );
+
+    let caught = spring(&mut game, trap, 60).expect("sixty rolls catch something");
+    assert_eq!(
+        game.world.get::<Glyph>(trap).map(|g| g.ch),
+        Some(TRAP_GLYPH_SPRUNG),
+        "a sprung trap says so through the centre glyph's own char"
+    );
+
+    // A second elapsed period must not roll again over what is held.
+    for _ in 0..40 {
+        game.world.get_mut::<Trap>(trap).unwrap().next_roll = 0;
+        game.run_traps();
+    }
+    let still = game
+        .world
+        .get::<Trap>(trap)
+        .unwrap()
+        .caught
+        .clone()
+        .unwrap();
+    assert_eq!(
+        (still.species, still.rarity, still.condition),
+        (caught.species, caught.rarity, caught.condition),
+        "a full trap holds what it caught until it is collected"
+    );
 }

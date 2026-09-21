@@ -231,6 +231,10 @@ impl Game {
         self.ensure_local_population();
         self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
+        // Beside the ambient roll because it is the same kind of work: a
+        // `&mut Game` pass over the surface, keyed to a place rather than to
+        // the party, that a bevy system cannot express.
+        self.run_traps();
         // Beside the ambient roll and after `ensure_local_settlements`,
         // which is what resolves the towns this reads: a patrol is a spawn
         // like any other, keyed to a band and a distance rather than to a

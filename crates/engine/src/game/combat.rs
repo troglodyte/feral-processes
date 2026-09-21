@@ -1216,7 +1216,7 @@ impl Game {
         self.world
             .get::<Experience>(entity)
             .map(|e| e.level)
-            .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0)
+            .unwrap_or_else(|| self.wild_body_level())
     }
 
     /// The invoker's multiplier for `effect`'s category — the affinity half

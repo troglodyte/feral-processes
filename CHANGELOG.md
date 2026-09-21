@@ -42,6 +42,40 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.218
+
+**Every program in the Grid now has five attributes you can read, and so do
+you.** A program used to be its combat numbers and nothing else, which meant
+two Scrappers caught in different places were the same program with different
+rolls; there was no answer to "who is this one". Open a manifest and press D
+for a dossier: Persistence, Entropy, Bandwidth, Footprint and Parity, each
+with the old-school word it stands in for in parentheses after it, over a
+build revision, a checksum and one line of where this thing came from.
+
+**None of the five does anything yet, and the manual says so in as many
+words.** They are there to be read. A number that promised an effect nothing
+implements is a claim you would test and find false, so no gloss, no page and
+no help line claims one — when a mechanic arrives it will be designed around
+the number already on the sheet.
+
+**A program's five are settled once, where it was found, and never move
+again.** Two of one species caught on different tiles are different programs;
+the same program reads the same after a save, a reload, a taming, a posting or
+a breach. A fused program is a new program and is settled afresh, inheriting
+neither parent's sheet. Yours come from the class you picked at creation, a
+program's from its species — a Sentinel holds together where a Glitch does
+not, a Sprite barely occupies the heap.
+
+**Old saves need no migration and nothing stops loading.** A run in progress
+gets its attributes the next time it loads, worked out from the same places a
+fresh spawn would have used, so a program you have owned for hours reads as
+what it always was rather than as something newly invented.
+
+**Attributes are moddable like everything else.** `assets/attributes/` is five
+`.ron` files; a sixth is a file drop, the directory can be deleted to get the
+pre-attribute game back, and a species or class file may author its own base
+for any of them.
+
 ## 0.13.217
 
 **You can leave a honeypot on the ground and come back to a program caught in

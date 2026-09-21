@@ -9,6 +9,7 @@ mod achievements;
 mod affixes;
 mod assets;
 mod attention;
+mod attributes;
 mod auto_resolve;
 mod base_grid;
 mod base_ledger;

@@ -42,6 +42,12 @@ impl Game {
     ///   reaches: a nemesis is promoted from a body that survived, and a
     ///   squad never leaves the fight it formed in.
     /// - `Boss` — a boss is its own group and never folds.
+    /// - `Attributes` — a squad is a stand-in for its members inside one
+    ///   fight, is never inspected on a dossier and is never saved, and its
+    ///   members keep their own. Nothing reads an attribute, so this is an
+    ///   omission with no live consequence — but the census above claims to
+    ///   enumerate the tuple, and a claim like that is only worth anything
+    ///   while it is complete.
     ///
     /// `members` themselves are never touched: they keep their own
     /// `Position` and `Stats` and are never placed on the board, which is

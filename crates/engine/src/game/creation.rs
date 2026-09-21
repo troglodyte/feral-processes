@@ -266,6 +266,26 @@ impl Game {
         if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
             self.world.entity_mut(player).insert(CustomName(name));
         }
+        // The class's authored bases, or the catalogue's own where the run
+        // has no class — `CharacterChoice::default()`'s supported state.
+        // Here rather than in `spawn_player` because that function is a
+        // free fn over `&mut World` with no class and no `ClassDb`, and its
+        // bundle is already at bevy's 15-element ceiling.
+        let authored = choice
+            .class
+            .and_then(|class| {
+                self.world
+                    .resource::<crate::classes::ClassDb>()
+                    .get(class)
+                    .map(|def| def.attributes.clone())
+            })
+            .unwrap_or_default();
+        let attrs = crate::attributes::mint(
+            self.world.resource::<crate::attributes::AttributeDb>(),
+            crate::attributes::player_seed(self.world.resource::<WorldMap>().seed()),
+            &authored,
+        );
+        self.world.entity_mut(player).insert(attrs);
     }
 
     /// The kit slot: `choice.items` if the player picked one, the class kit

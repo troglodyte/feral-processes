@@ -341,6 +341,23 @@ impl Game {
         if boss {
             self.world.entity_mut(entity).insert(Boss);
         }
+        // Kept out of the spawn tuple for the same reason, and *minted*
+        // rather than rolled: `attributes::mint` reads no `GameRng`, so a
+        // body's attributes cost the run's stream nothing. The species'
+        // own authored bases come off the def this function already
+        // resolved.
+        let attrs = crate::attributes::mint(
+            self.world.resource::<crate::attributes::AttributeDb>(),
+            crate::attributes::body_seed(
+                self.world.resource::<WorldMap>().seed(),
+                x,
+                y,
+                species.id.as_str(),
+                zone,
+            ),
+            &species.attributes,
+        );
+        self.world.entity_mut(entity).insert(attrs);
         Some(entity)
     }
 

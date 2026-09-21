@@ -1428,6 +1428,18 @@ impl Game {
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));
         }
+        // A fused program is a *new* program with no place it came from, so
+        // it mints off the `ProgramId` `roster_parts` just handed it rather
+        // than inheriting either parent's — inheriting would be a fifth
+        // thing fusion carries across with nothing saying so.
+        let fused_attrs = crate::attributes::mint(
+            self.world.resource::<crate::attributes::AttributeDb>(),
+            crate::attributes::program_seed(
+                self.world.get::<ProgramId>(fused_entity).map_or(0, |p| p.0),
+            ),
+            &species.attributes,
+        );
+        self.world.entity_mut(fused_entity).insert(fused_attrs);
         self.install_innate_routines(fused_entity);
         self.log(match &final_name {
             Some(name) => format!(

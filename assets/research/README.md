@@ -116,6 +116,7 @@ Core Fragments.
     // fresh run never needs a subject before it has a base worth studying
     // anyone at. A synthesised routine node never sets this — the routine
     // tree has its own economy already.
+    requires_subject: true,
 
     // Optional; defaults to false. Set this on the one node that should
     // unlock fusing two tamed programs together (the shipped tree sets it

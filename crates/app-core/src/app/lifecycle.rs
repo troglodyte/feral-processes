@@ -58,6 +58,7 @@ impl App {
             help_stack: Vec::new(),
             quit: false,
             pending_structure: None,
+            pending_trap: None,
             pending_build: None,
             pending_post_structure: None,
             menu_origin: None,

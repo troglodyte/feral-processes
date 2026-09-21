@@ -50,8 +50,10 @@ impl Game {
     }
 
     /// How many traps stand anywhere in this zone — `TRAP_PLACEMENT_CAP`'s
-    /// half of `place_trap`'s refusal ladder.
-    pub(crate) fn trap_count(&mut self) -> usize {
+    /// half of `place_trap`'s refusal ladder, and the one door a frontend
+    /// has onto the question, since `Trap` is a component and the `World` is
+    /// the engine's alone.
+    pub fn trap_count(&mut self) -> usize {
         self.world
             .query_filtered::<(), With<crate::components::Trap>>()
             .iter(&self.world)

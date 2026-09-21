@@ -129,22 +129,17 @@ impl App {
                 self.mode = Mode::InspectDirection;
                 return;
             }
-            // Demolish, aimed rather than picked from a list. Refused here
-            // rather than in the direction handler because the prompt would
-            // otherwise open onto four directions that mean nothing: the
-            // structures are all in base space, and outside it the player's
-            // `Position` is either their tile on the open grid or pinned to
-            // the Stack entrance. Matches the `base_only` flag on the group
-            // menu's Demolish row, which hides that route for the same
-            // reason, and `Game::remove_structure`'s own `require_base`.
+            // Demolish, aimed rather than picked from a list. Open in both
+            // spaces now: this used to be refused outside base space because
+            // out there the four directions pointed at nothing ownable — every
+            // `Structure` stands in base space and the player's surface
+            // `Position` is either their own tile or pinned to the Stack
+            // entrance. Traps made that false for the first time, so the
+            // question is no longer *where are you* but *which space decides
+            // what `d` means*, which is `handle_remove_direction_key`'s own
+            // branch.
             GameKey::Char('d') => {
-                if self.game.as_ref().is_some_and(|g| g.in_base()) {
-                    self.mode = Mode::RemoveDirection;
-                } else {
-                    self.refuse(
-                        "Nothing of yours to demolish here — the base is through the anchor.",
-                    );
-                }
+                self.mode = Mode::RemoveDirection;
                 return;
             }
             // Flat despite belonging to the party, like `c` and `t` below:

@@ -171,6 +171,12 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
     if game.is_consumable(item) {
         actions.push(('c', "[C]onsume".to_string()));
     }
+    // Lowercase like every other row on this page — the uppercase rule is
+    // about screens whose lowercase letters select a row, and here they
+    // *are* the actions.
+    if game.is_placeable(item) {
+        actions.push(('p', "[P]lace".to_string()));
+    }
     if trader_in_range(game) {
         actions.push(('s', "[S]ell".to_string()));
     }
@@ -1507,6 +1513,13 @@ pub enum Mode {
     /// keypress can never take down something off the far side of the screen.
     /// Home still routes into `Mode::RemoveConfirm`.
     RemoveDirection,
+    /// Aiming a placeable item at one of the four neighbouring tiles,
+    /// reached with `[P]lace` from `Mode::InventoryItemAction`. The item is
+    /// held in `App::pending_trap` until the direction commits it, and Esc
+    /// clears it. `Mode::BuildDirection`'s exact shape one verb over — a
+    /// popup like every other picker, so it does not join
+    /// `needs_status_banner`.
+    TrapDirection,
     /// Aiming the upgrade verb at one of the four neighbouring tiles,
     /// reached from the base menu. Whatever structure stands that way
     /// **files a request** for the next tier, which the base's build crew
@@ -2040,6 +2053,7 @@ impl Mode {
             | Mode::Remove
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
+            | Mode::TrapDirection
             | Mode::UpgradeDirection
             | Mode::InspectDirection
             | Mode::Manifest
@@ -2293,6 +2307,10 @@ pub struct App {
     /// because that screen names it: the build menu's row is off screen by
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
+    /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s
+    /// shape one verb over. Cleared by the commit and by Esc alike, so a
+    /// cancelled placement leaves nothing behind to be spent later.
+    pub pending_trap: Option<ItemId>,
     /// The order awaiting a program pick on `Mode::BuildProgram` — see
     /// `PendingBuild`. `None` on every other screen, and cleared the moment
     /// the picker resolves it, Esc included: nothing about this is a "last

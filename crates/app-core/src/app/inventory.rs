@@ -293,6 +293,13 @@ impl App {
             self.open_gear_inspect(copy, None, Mode::InventoryItemAction);
             return;
         }
+        if idx.map(|i| actions[i]) == Some('p') {
+            self.pending_trap = Some(copy.item.clone());
+            self.pending_inventory_item = None;
+            self.status_line = None;
+            self.mode = Mode::TrapDirection;
+            return;
+        }
         if idx.map(|i| actions[i]) == Some('c') {
             let Some(game) = &mut self.game else { return };
             game.use_item(&copy.item);

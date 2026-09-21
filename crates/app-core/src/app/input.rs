@@ -237,6 +237,7 @@ impl App {
             Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
             Mode::RemoveDirection => self.handle_remove_direction_key(key),
+            Mode::TrapDirection => self.handle_trap_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::UpgradeDirection => self.handle_upgrade_direction_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),

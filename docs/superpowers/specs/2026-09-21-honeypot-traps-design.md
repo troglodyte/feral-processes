@@ -130,10 +130,8 @@ listing screen that explains what a thing does.
 ```rust
 pub struct Trap {
     /// Which item def this was placed from. The rarity ceiling is resolved
-    /// from the def on every read rather than copied here, so retuning the
-    /// .ron retunes honeypots already on the ground, and a deleted item def
-    /// makes the honeypot skip silently the way restore_nests skips a
-    /// deleted species.
+    /// from the def on every read rather than copied here — see below for
+    /// why this follows the nest precedent and not the contract one.
     pub item: ItemId,
     pub next_roll: u32,
     pub caught: Option<DownedProgram>,
@@ -150,11 +148,39 @@ an omission rather than a check — `Game::clear_local_wild` is
 test, and that test must breach on *populated* ground: a breach test that
 despawns the wild by hand first is vacuous.
 
-The glyph must not take a corner mark. All four corners and the top edge are
-spoken for (rarity bar, con earmark, nemesis, staffed mark, patrol), and a
-honeypot needs none of them — it is its own glyph. The hue must avoid
-`GlyphColor::Orange`, which is a settlement's and the one variant no species
-authors, and must avoid reading as a threat.
+**Storing the id and not the resolved def is a decision against a stated
+precedent, and the reason is what kind of thing a honeypot is.**
+`ActiveContract` stores the whole resolved `ContractDef` so a file edited or
+deleted mid-run cannot strand or rewrite an agreement already signed. A
+honeypot is not an agreement; it is a device standing in the world, and the
+precedent for those is `restore_nests`, which resolves its species live and
+skips silently when the species is gone. Live resolution is also what lets a
+retuned `.ron` retune honeypots already on the ground, which is the
+behaviour a modder expects of a device and not of a contract. The cost is
+accepted: editing a honeypot's `rarity_cap` mid-run changes what an
+already-placed one will catch.
+
+**There is no corner-mark channel left to spend.** The tile's accounting is
+complete — top edge the rarity bar, top-left the con earmark, top-right a
+nemesis, bottom-right a town patrol, bottom-left the staffed mark, all four
+edges the status outline, the background wash a structure's `Durability`,
+and the bottom edge the progress bar. A sprung honeypot therefore says so
+**through the centre glyph itself**: the char changes, `^` armed to a
+different char sprung. Not a mark, and not a tint — `ATTENTION`/`WARN`/
+`THREAT` are overlay *roles* and a glyph's own colour comes from
+`hud::palette::glyph`, which is a hue table and not a role table. The two
+are different systems and must not be crossed.
+
+The authored hue must avoid: bright cyan (the player's `@`, which nothing
+else may take), bright yellow (unreachable from content by census), and
+`GlyphColor::Orange` (a settlement's, and the one variant no species
+authors). Magenta and cyan are spoken for by the boss and nemesis marks.
+Red would read as a threat, which a honeypot is not. `GlyphColor::Yellow`
+is the suggestion; any hue clearing that list will do.
+
+`EntityView::difficulty` stays `None`. A honeypot is not `Hostile`, so it
+gets *no* con reading rather than one worth nothing — which is the existing
+rule for anything non-hostile, not a new exception.
 
 ## 7. Placement
 
@@ -164,8 +190,17 @@ when the item has a `trap:` def → new `Mode::TrapDirection`.
 `Mode::TrapDirection` is `handle_build_direction_key`'s exact shape: four
 cardinal keys, the direction key itself commits, Esc cancels. It is a new
 `Mode` variant, which **does not fail to compile** — it must be added by
-hand to `render/mod.rs::ALL_MODES` (bumping the array length from 113) and
-to `needs_status_banner`, or it ships as a blank screen.
+hand to `render/mod.rs::ALL_MODES` (bumping the array length from 113), and
+it joins the `every_screen_draws_a_refusal_exactly_once` census that drives
+every `Mode` through `draw`. It is a popup like every other picker, so it
+does **not** join `needs_status_banner`, which names only the screens that
+draw no popup at all.
+
+Examining a honeypot with `x` needs **no new `Mode`** — it reuses the
+existing examine popup. Any detail rows it shows are built through
+`description_rows` in the engine, so the description census covers them and
+a read-only screen's rows stay owned by app-core rather than composed in the
+renderer.
 
 `Game::place_trap(item, dx, dy) -> Outcome` refuses, **every refusal landing
 before anything is spent and each asserted by its own test**:
@@ -193,6 +228,12 @@ is still there afterwards.
 
 `Game::run_traps()` runs inside `tick_inner`, beside
 `maybe_spawn_wild_creature`.
+
+**Honeypots are walked in `(x, y)` order, sorted before any draw.**
+`assembler_system`'s rule: bevy's query iteration order is not stable, so
+two honeypots whose periods elapse on the same tick would consume the shared
+`GameRng` in an order that varies between runs, and that surfaces as an
+intermittent seeded-test failure somewhere else entirely.
 
 Per honeypot: if `next_roll > 0`, decrement and return — **no RNG draw**.
 This is the point of the countdown: 50 honeypots cost about a tenth of a
@@ -225,13 +266,27 @@ On a hit, with **no entity spawned at any point**:
    move underground, and honeypots are surface-only, so it does not bite.
 6. `carried: None`.
 
-The result is stored on the component and the `Glyph`'s `color` is
-rewritten so a sprung honeypot reads differently from an armed one. The
-char stays `^`; only the hue moves, and it moves within the constraints in
-§6. A log line is emitted; it is `Info`-grade news about the world, so
-it is subject to the usual pruning and to `resources::condense` folding
-repeats — a test counting log entries to prove one line fired must sum
-`repeats` or it is vacuous.
+**The draw order is part of the contract**: capture roll, then species pick,
+then rarity, then condition. A seeded test pins that sequence, so reordering
+it is a deliberate change and not a refactor.
+
+`run_traps` deliberately does **not** call `Game::field_escalation`. The
+escalation terms exist to scale a spawned body's `Stats`, and a
+`DownedProgram` carries none — its level is `ZoneLevel` and its worth is
+`grade()`, which folds level, rarity and condition. An escalation term here
+would be a number with nothing to apply to, and joining that function's
+caller census would misreport what the feature does.
+
+The result is stored on the component and the `Glyph`'s `ch` is rewritten so
+a sprung honeypot reads differently from an armed one, per §6. A log line is emitted. Both of its axes are chosen deliberately rather than
+defaulted: it is **not** base news, or `battle_rows` drops it unconditionally
+and it is invisible whenever a fight is open — which `run_traps` can reach,
+since it runs every tick. As a plain `Info` line it is pruned by
+`retain_outcomes_since_battle` like any other narration, which is the right
+lifetime for a transient event. `resources::condense` folds repeats across
+all three log surfaces, so the line must name the species or the tile if two
+catches are to read as two rows, and a test counting entries to prove one
+line fired must sum `repeats` or it is vacuous.
 
 Honeypots tick wherever the player is, including in base space and in the
 Stack. The species window comes from the honeypot's own tile, not the
@@ -256,6 +311,14 @@ entity — because collecting despawns it.
 
 Player-only blocking costs nothing to enforce: `pursuit_field` and the
 patrol walk never consult this ladder, so there is nothing to opt out.
+
+**A sprung honeypot does not join `Game::attention`, deliberately.** It
+would be a legitimate row — unlike the rejected "pack full" idea, the downed
+store has a real capacity in `MAX_DOWNED_PROGRAMS` — but it costs a new
+`AttentionRow::kind` arm threaded through `hud::column::tab_of`'s exhaustive
+match, and threat rows sort ahead of it so it would rarely be the badge's
+leading line anyway. The refusal already logs when collection fails. This is
+the natural follow-up once the feature has been played, not part of it.
 
 Destroying reuses `d` + direction. **This lifts a deliberate gate.** `d` is
 currently refused outside base space, with a comment in
@@ -282,6 +345,10 @@ pub struct TrapSave {
     pub caught: Option<DownedProgram>,
 }
 ```
+
+`TrapSave` is a **named struct and not a tuple struct**. That is the one
+shape the additive-field rule does not protect: a positional tuple gains a
+legacy field the next time a property is added.
 
 `Game::trap_saves_for` and `Game::restore_traps` mirror the nest pair. No
 `pending_cronjobs` deferral: nothing forward-references a honeypot, and a
@@ -340,6 +407,10 @@ named:
 - `carried` is always `None`;
 - the countdown spends no `GameRng` — assert the stream is where it was
   after a span of ticks shorter than one period with a honeypot standing;
+- the draw order is the documented one, pinned against a seed;
+- two honeypots whose periods elapse on the same tick resolve by `(x, y)`
+  and not by query order — the assertion is that a second run of the same
+  seed produces the same two catches;
 - a full downed store leaves the honeypot sprung and moves nothing;
 - a honeypot survives a breach taken on populated ground;
 - `d` on the surface destroys one and returns nothing;
@@ -356,5 +427,10 @@ Three writes each, per the `seams` skill, at implementation time:
   `Stock` buffer, or be work-ordered.
 - **A honeypot clamps rarity before rolling condition** —
   `downed_program_for`'s boss-floor rule, second caller.
-- **A honeypot's capture spends no `GameRng` until its period elapses** —
-  the countdown is what keeps 50 of them off the seeded stream.
+- **A honeypot's capture spends no `GameRng` until its period elapses, and
+  honeypots roll in `(x, y)` order** — the countdown is what keeps 50 of
+  them off the seeded stream, and the sort is what keeps two elapsing
+  together from resolving by bevy's unstable query order.
+- **A honeypot resolves its def live by id, against `ActiveContract`'s
+  precedent** — it is a device standing in the world, like a nest, not an
+  agreement already signed.

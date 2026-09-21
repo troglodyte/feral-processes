@@ -411,6 +411,9 @@ relying on one, and correct all three places if it has moved.
   `wander_step` offers one of the eight neighbours of the tile the body is
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
   the ring it replaced was absolute.
+- **A body may cross a structure's own floor but never stop on it**, the
+  wander declining `Game::structure_tiles` where `blocked_tiles` still emits
+  anchors alone.
 - **One body to a cell, and `hauling::blocked_tiles` takes the structures and
   the bodies as two iterators so no walk can ask the narrower question.**
 - **`party::walks_the_base` is the one definition of which bodies occupy

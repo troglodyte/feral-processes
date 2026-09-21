@@ -3295,3 +3295,54 @@ fn a_failed_study_attempt_says_so() {
         "200 attempts against a sub-1.0 chance must miss at least once, and a miss is news"
     );
 }
+
+/// **The feature, end to end, through nothing but ticks.** Every test above
+/// reaches into `ActiveResearch::study` or calls `settle_study` directly;
+/// this one posts a program, pins a subject and waits, so a seam left
+/// unjoined — the accrual not wired, `settle_study` not called from the tick
+/// — fails here and nowhere else.
+#[test]
+fn an_idle_station_with_a_subject_pinned_uncovers_a_node_on_its_own() {
+    let mut game = Game::new(4470, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    unlock_research_chain(&mut game, "automation");
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    game.set_standing_job(node, true, false).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, subject, node);
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the Station studies, not works"
+    );
+
+    for _ in 0..4000 {
+        game.tick();
+    }
+
+    let found: Vec<String> = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    assert_eq!(
+        found,
+        vec!["armor_bench".to_string()],
+        "zone 1 with only automation researched has exactly one eligible node"
+    );
+    for id in &found {
+        assert!(
+            game.research_nodes(ResearchTree::Base)
+                .iter()
+                .any(|n| &n.id == id),
+            "{id} was found and must arrive on the menu"
+        );
+    }
+    assert!(
+        game.world.get::<Stats>(subject).is_some(),
+        "discovery is free — the subject survives every attempt"
+    );
+}

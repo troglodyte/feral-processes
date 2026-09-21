@@ -711,6 +711,48 @@ impl Game {
         nest_positions
     }
 
+    /// Stands every saved trap back up.
+    ///
+    /// A trap whose item def has gone since the save was written is dropped
+    /// rather than restored, `restore_nests`' handling of a missing species:
+    /// nothing forward-references a trap and a trap references nothing but
+    /// its own item id, so there is no `pending_cronjobs` deferral to owe and
+    /// this can sit anywhere in load order.
+    ///
+    /// The glyph is re-derived from `caught` rather than read back, so the
+    /// char and the state cannot disagree.
+    fn restore_traps(&mut self, traps: Vec<save::TrapSave>) {
+        for t in traps {
+            if self
+                .world
+                .resource::<ItemDb>()
+                .get(t.item.as_str())
+                .is_none()
+            {
+                continue;
+            }
+            let ch = match t.caught.is_some() {
+                true => crate::components::TRAP_GLYPH_SPRUNG,
+                false => crate::components::TRAP_GLYPH_ARMED,
+            };
+            self.world.spawn((
+                crate::components::Trap {
+                    item: t.item,
+                    next_roll: t.next_roll,
+                    caught: t.caught,
+                },
+                Position {
+                    x: t.position.0,
+                    y: t.position.1,
+                },
+                Glyph {
+                    ch,
+                    color: GlyphColor::Yellow,
+                },
+            ));
+        }
+    }
+
     fn restore_caravans(
         &mut self,
         memory: save::CaravanMemorySave,
@@ -1350,6 +1392,8 @@ impl Game {
         // shared with `Game::spawn_nest` — see that function's doc comment,
         // which is the other half of this note.
         let nest_positions = game.restore_nests(data.nests);
+
+        game.restore_traps(data.traps);
 
         game.restore_caravans(data.caravan_memory, data.caravans);
 
@@ -2165,6 +2209,20 @@ impl Game {
         nests
     }
 
+    fn trap_saves_for(&mut self) -> Vec<save::TrapSave> {
+        let mut traps = Vec::new();
+        let mut query = self.world.query::<(&crate::components::Trap, &Position)>();
+        for (trap, pos) in query.iter(&self.world) {
+            traps.push(save::TrapSave {
+                item: trap.item.clone(),
+                position: (pos.x, pos.y),
+                next_roll: trap.next_roll,
+                caught: trap.caught.clone(),
+            });
+        }
+        traps
+    }
+
     fn dig_site_saves_for(&mut self) -> Vec<save::DigSiteSave> {
         let mut dig_sites = Vec::new();
         let mut dig_query = self.world.query::<(&DigSite, &Position, &Durability)>();
@@ -2438,6 +2496,8 @@ impl Game {
 
         let nests = self.nest_saves_for();
 
+        let traps = self.trap_saves_for();
+
         let dig_sites = self.dig_site_saves_for();
 
         let build_sites = self.build_site_saves_for();
@@ -2466,6 +2526,7 @@ impl Game {
             creatures,
             structures,
             nests,
+            traps,
             dig_sites,
             build_sites,
             caravans,

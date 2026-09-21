@@ -563,3 +563,141 @@ fn destroying_empty_ground_is_refused() {
     assert!(game.destroy_trap(1, 0).is_err(), "nothing is there");
     assert_eq!(game.trap_count(), 1, "and the one behind is untouched");
 }
+
+/// A temp path unique to the calling test. A fixed one is shared with the
+/// `dev_template` loop, which deletes files mid-run and produces a panic
+/// naming the load line rather than the collision.
+fn save_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "feral_processes_traps_{tag}_{}.bin",
+        std::process::id()
+    ))
+}
+
+/// A real save to a real file and a real load back. **A RON round trip
+/// cannot catch a skipped field**; only a save-then-load can, and this repo
+/// has shipped a `#[serde(skip)]` that left the round-trip test green.
+#[test]
+fn a_trap_and_what_it_holds_survive_a_save_and_a_load() {
+    let mut game = Game::new(7090, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+    let armed = stand_a_trap(&mut game, pos.x + 3, pos.y - 2, None);
+    game.world.get_mut::<Trap>(armed).unwrap().next_roll = 123;
+    stand_a_trap(&mut game, pos.x - 4, pos.y + 1, Some(a_caught_program()));
+
+    let path = save_path("roundtrip");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.trap_count(), 2, "both stand back up");
+    let back = loaded
+        .find_trap_at(pos.x + 3, pos.y - 2)
+        .expect("the armed one is where it was left");
+    let back = loaded.world.get::<Trap>(back).unwrap();
+    assert_eq!(back.item, honeypot());
+    assert_eq!(back.next_roll, 123, "the countdown survives");
+    assert!(back.caught.is_none());
+
+    let full = loaded
+        .find_trap_at(pos.x - 4, pos.y + 1)
+        .expect("the sprung one too");
+    let held = loaded
+        .world
+        .get::<Trap>(full)
+        .unwrap()
+        .caught
+        .clone()
+        .expect("what it caught survives");
+    let expected = a_caught_program();
+    assert_eq!(
+        (
+            held.species,
+            held.level,
+            held.rarity,
+            held.condition,
+            held.carried
+        ),
+        (
+            expected.species,
+            expected.level,
+            expected.rarity,
+            expected.condition,
+            None
+        )
+    );
+}
+
+#[test]
+fn a_restored_traps_glyph_is_derived_from_what_it_holds() {
+    let mut game = Game::new(7091, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+    stand_a_trap(&mut game, pos.x + 3, pos.y, None);
+    stand_a_trap(&mut game, pos.x + 4, pos.y, Some(a_caught_program()));
+
+    let path = save_path("glyph");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let ch = |game: &mut Game, x: i32| {
+        let e = game.find_trap_at(x, pos.y).unwrap();
+        game.world.get::<Glyph>(e).unwrap().ch
+    };
+    assert_eq!(ch(&mut loaded, pos.x + 3), TRAP_GLYPH_ARMED);
+    assert_eq!(ch(&mut loaded, pos.x + 4), TRAP_GLYPH_SPRUNG);
+}
+
+/// Deleting the item file is a supported install, and a trap placed from it
+/// is dropped rather than restored nameless.
+#[test]
+fn a_trap_whose_item_def_is_gone_is_dropped_on_load() {
+    let mut game = Game::new(7092, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+    stand_a_trap(&mut game, pos.x + 3, pos.y, None);
+
+    let path = save_path("missing_def");
+    game.save(&path).unwrap();
+    let dir =
+        super::support::modded_assets_dir("trap_def_gone", &["honeypot.ron"], &[], &[], &[], &[]);
+    let mut loaded = Game::load(&path, &dir).expect("the load itself still succeeds");
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.trap_count(), 0, "dropped, not restored glyphless");
+}
+
+/// `Game::clear_local_wild` is `With<Hostile>` and a trap carries no
+/// `Hostile`, so surviving a breach is an **omission** — nothing in the
+/// compiler holds it.
+///
+/// Breached on populated ground deliberately: a breach test that despawns
+/// the wild by hand first is vacuous, and this repo has written that one.
+#[test]
+fn a_trap_survives_a_zone_breach() {
+    let mut game = Game::new(7093, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+    stand_a_trap(&mut game, pos.x + 3, pos.y, Some(a_caught_program()));
+
+    let wild = |game: &mut Game| {
+        let set: std::collections::HashSet<Entity> = game
+            .world
+            .query_filtered::<Entity, With<Hostile>>()
+            .iter(&game.world)
+            .collect();
+        set
+    };
+    let before = wild(&mut game);
+    assert!(
+        !before.is_empty(),
+        "the ground has to be stocked or this is vacuous"
+    );
+
+    game.enter_next_zone();
+
+    let after = wild(&mut game);
+    assert!(
+        before.iter().all(|e| !after.contains(e)),
+        "the breach must have cleared the old tier's wild, or nothing was tested"
+    );
+    assert_eq!(game.trap_count(), 1, "the trap is still standing");
+}

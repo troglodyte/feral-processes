@@ -414,8 +414,8 @@ fn every_shipped_assembler_recipe_is_a_single_ingredient() {
         checked += 1;
     }
     assert_eq!(
-        checked, 11,
-        "expected the eleven shipped assemblers; one that lost its recipe would drop out of this scan unnoticed"
+        checked, 12,
+        "expected the twelve shipped assemblers — the Decoy Bench is the twelfth; one that lost its recipe would drop out of this scan unnoticed"
     );
 }
 
@@ -1661,11 +1661,12 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
         }
     }
     assert_eq!(
-        checked, 11,
+        checked, 12,
         "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
          Lathe, Transcriber and Disk Press, plus the Compiler, plus the Armory and \
          Fabricator, which assemble one gear item apiece while staying benches for \
-         the rest, plus the Annealing Node and Refactor Bench — if that changes, \
+         the rest, plus the Annealing Node, Refactor Bench and Decoy Bench — if \
+         that changes, \
          change this count deliberately rather than letting the check go vacuous"
     );
 }
@@ -1744,9 +1745,10 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 17,
+        checked, 18,
         "the plan's table named 15 machines, the Cache Tap is the \
-         sixteenth and the Teardown Rig is the seventeenth; if that count \
+         sixteenth, the Teardown Rig the seventeenth and the Decoy Bench the \
+         eighteenth; if that count \
          changed, change this deliberately rather than letting the check go \
          vacuous"
     );
@@ -4805,8 +4807,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 27,
-        "expected the shipped base tree's 27 nodes; a count that moved means a node was \
+        checked, 28,
+        "expected the shipped base tree's 28 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5212,5 +5214,61 @@ fn every_discoverable_research_node_is_reachable_from_the_visible_tree() {
     assert!(
         db.all().any(|d| d.discoverable),
         "the fixture is vacuous against a tree with nothing discoverable"
+    );
+}
+
+/// The honeypot's whole chain in one place: research → bench → recipe →
+/// `trap:`. Three files author four links between them and nothing in the
+/// compiler holds any of them.
+///
+/// The last assertion is the load-bearing one and the one nothing else
+/// checks: without `assembles` naming the item, the bench is buildable and
+/// the recipe is unassemblable, which reads at the keyboard as the work
+/// order screen simply not listing it.
+#[test]
+fn the_honeypot_is_gated_by_deception_and_nothing_else() {
+    let game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let honeypot = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.id.as_str() == "honeypot")
+        .expect("the honeypot ships");
+    assert_eq!(
+        honeypot.trap.map(|t| t.rarity_cap),
+        Some(Rarity::Silver),
+        "the shipped honeypot's ceiling is Optimized — a higher one is a balance change"
+    );
+    assert_eq!(
+        honeypot
+            .craftable
+            .as_ref()
+            .and_then(|c| c.requires_structure.as_ref())
+            .map(|s| s.as_str()),
+        Some("decoy_bench"),
+        "a honeypot is compiled at the bench, never by hand"
+    );
+
+    let unlockers: Vec<String> = game
+        .research_defs()
+        .into_iter()
+        .filter(|d| d.unlocks_structures.iter().any(|s| s == "decoy_bench"))
+        .map(|d| d.id.to_string())
+        .collect();
+    assert_eq!(
+        unlockers,
+        vec!["deception".to_string()],
+        "exactly one node opens the bench"
+    );
+
+    let bench = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "decoy_bench")
+        .expect("the bench ships");
+    assert_eq!(
+        bench.assembles.as_ref().map(|a| a.item.as_str()),
+        Some("honeypot"),
+        "the bench must name the item or the recipe is unassemblable"
     );
 }

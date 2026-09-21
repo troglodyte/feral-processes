@@ -1151,6 +1151,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::TrapDirection => draw_direction_prompt(
+            "Place Direction",
+            "Place the honeypot which way? (arrows/hjkl, Esc to cancel)",
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Manifest => {
             // Only advertise ←/→ when they actually do something. A wild
             // program reached via `x` is not in the owned list, so cycling
@@ -1499,7 +1506,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 113] = [
+    const ALL_MODES: [Mode; 114] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalEmulate,
@@ -1538,6 +1545,7 @@ mod tests {
         Mode::Remove,
         Mode::RemoveConfirm,
         Mode::RemoveDirection,
+        Mode::TrapDirection,
         Mode::UpgradeDirection,
         Mode::InspectDirection,
         Mode::FrameMap,

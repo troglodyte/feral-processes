@@ -833,6 +833,25 @@ pub struct NestSave {
     pub pending_respawns: Vec<u32>,
 }
 
+/// A trap's state on disk — see `components::Trap`.
+///
+/// **A named struct and not a tuple struct.** Field-named RON protects an
+/// added field; a positional tuple gains a legacy slot the next time a
+/// property is added.
+///
+/// The glyph is not saved: it is display, derived from `caught` on load, and
+/// a saved char is a second copy of the same fact that a retune would
+/// strand. Nor is the rarity ceiling — the item id is stored and the def is
+/// resolved live, `restore_nests`' precedent.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TrapSave {
+    pub item: ItemId,
+    /// **Zone-surface** coordinates. A trap stands nowhere else.
+    pub position: (i32, i32),
+    pub next_roll: u32,
+    pub caught: Option<DownedProgram>,
+}
+
 /// A cell of base-space rock the player has started on — see
 /// `components::DigSite`, whose `Durability` and mark this carries.
 ///
@@ -1177,6 +1196,14 @@ pub struct SaveData {
     /// what that run had.
     #[serde(default)]
     pub dig_sites: Vec<DigSiteSave>,
+    /// Every trap standing on the zone surface — see `components::Trap`.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump and no `dev-saves/` recapture: a file
+    /// written before it existed loads with no traps, which is exactly what
+    /// that run had.
+    #[serde(default)]
+    pub traps: Vec<TrapSave>,
     /// Structures on order and not yet raised — see
     /// `components::BuildSite`.
     ///
@@ -1862,6 +1889,7 @@ mod tests {
             creatures: Vec::new(),
             structures: Vec::new(),
             nests: Vec::new(),
+            traps: Vec::new(),
             dig_sites: Vec::new(),
             build_sites: Vec::new(),
             caravans: Vec::new(),

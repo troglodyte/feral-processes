@@ -458,6 +458,33 @@ impl App {
         }
     }
 
+    /// `[P]lace` + a direction: drop the held placeable on that neighbouring
+    /// tile. `handle_build_direction_key`'s exact shape one verb over.
+    pub(crate) fn handle_trap_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_trap = None;
+            self.close_screen();
+            return;
+        }
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => Some((0, -1)),
+            GameKey::Down | GameKey::Char('j') => Some((0, 1)),
+            GameKey::Left | GameKey::Char('h') => Some((-1, 0)),
+            GameKey::Right | GameKey::Char('l') => Some((1, 0)),
+            _ => None,
+        };
+        let Some((dx, dy)) = dir else { return };
+        let Some(item) = self.pending_trap.take() else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        if let Some(game) = &mut self.game {
+            let outcome = game.place_trap(&item, dx, dy);
+            self.report(outcome);
+        }
+        self.mode = Mode::Playing;
+    }
+
     /// `d` + a direction: demolish whatever stands on that neighbouring
     /// tile.
     ///
@@ -479,6 +506,20 @@ impl App {
             _ => return,
         };
         let Some(game) = &mut self.game else { return };
+        // **On the surface this is a different question entirely, and it must
+        // not call `Game::adjacent_structure`.** That query is over base-space
+        // `Position`s, and a base-space query asked about a surface tile
+        // answers by numeric coincidence — which is the *common* case, since
+        // `find_walkable_start` returns `(0, 0)` whenever it can, so the
+        // anchor, the zone spawn point and base space's origin all carry the
+        // same numbers. `move_player`'s own long comment records what that
+        // cost last time: invisible walls made of the base's machines.
+        if !game.in_base() {
+            let outcome = game.destroy_trap(dir.0, dir.1);
+            self.report(outcome);
+            self.mode = Mode::Playing;
+            return;
+        }
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
             // A request the crew has not raised yet is called off by the
             // same gesture, because it is the same question the player is

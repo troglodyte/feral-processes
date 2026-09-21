@@ -50,4 +50,5 @@ mod telemetry;
 mod tools;
 mod trade;
 mod transfer;
+mod traps;
 mod watch;

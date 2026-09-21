@@ -231,6 +231,10 @@ impl Game {
         self.ensure_local_population();
         self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
+        // Beside the ambient roll because it is the same kind of work: a
+        // `&mut Game` pass over the surface, keyed to a place rather than to
+        // the party, that a bevy system cannot express.
+        self.run_traps();
         // Beside the ambient roll and after `ensure_local_settlements`,
         // which is what resolves the towns this reads: a patrol is a spawn
         // like any other, keyed to a band and a distance rather than to a
@@ -734,6 +738,39 @@ impl Game {
                 .get_mut(&key)
             {
                 known.visited = true;
+            }
+            self.tick();
+            return 0;
+        }
+        if let Some(trap) = self.find_trap_at(nx, ny) {
+            // The fifth arm of the ladder and, like the four above it, not a
+            // step: the player stays where they are either way.
+            //
+            // Nothing stops a wild program spawning onto a trap later —
+            // `standable_near` and `scatter_open_tile` check walkable, not
+            // empty — and that is accepted rather than fixed, because the
+            // creature arm sits above this one: the player fights the
+            // program and the trap is still there afterwards.
+            let caught = self
+                .world
+                .get::<crate::components::Trap>(trap)
+                .and_then(|t| t.caught.clone());
+            match caught {
+                Some(program) => {
+                    let label = self.entity_label(trap);
+                    // `push_downed_program` logs its own refusal when the
+                    // store is full, so a second line here would say it
+                    // twice — and the trap stays sprung, holding what it
+                    // has, for the player to come back to.
+                    if self.push_downed_program(program) {
+                        self.world.despawn(trap);
+                        self.log(format!("You collect the {label}."));
+                    }
+                }
+                None => {
+                    let label = self.entity_label(trap);
+                    self.log(format!("The {label} is still waiting. You step around it."));
+                }
             }
             self.tick();
             return 0;

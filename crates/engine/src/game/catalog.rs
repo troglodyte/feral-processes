@@ -386,6 +386,7 @@ impl Game {
         let consume = def.consume;
         let upgrade = def.upgrade;
         let potency = def.taming_potency;
+        let trap = def.trap;
         let mut lines = Vec::new();
         if let Some(c) = consume {
             let mut parts = Vec::new();
@@ -432,6 +433,12 @@ impl Game {
         // Saying "base" is what stops the line reading as a flat bonus.
         if let Some(p) = potency {
             lines.push(format!("Decompile: base capture {:.0}%", p * 100.0));
+        }
+        // A ceiling reads as the tier's own word, never as a rank, because
+        // that is how every other rarity figure reaches the player.
+        if let Some(t) = trap {
+            let tier = t.rarity_cap.label().unwrap_or("ordinary");
+            lines.push(format!("Catches: up to {tier} programs"));
         }
         lines
     }
@@ -687,6 +694,17 @@ impl Game {
             .resource::<ItemDb>()
             .get(id.as_str())
             .is_some_and(|d| d.consume.is_some())
+    }
+
+    /// Whether `id` may be dropped on the ground as a trap — see
+    /// `ItemDef::trap` and `Game::place_trap`. `is_consumable`'s shape one
+    /// field over, so the inventory screen asks the engine rather than
+    /// reading a def it would then have to interpret.
+    pub fn is_placeable(&self, id: &ItemId) -> bool {
+        self.world
+            .resource::<ItemDb>()
+            .get(id.as_str())
+            .is_some_and(|d| d.trap.is_some())
     }
 
     /// Whether `id` is a pool rather than cargo — see `ItemDef::banked` and

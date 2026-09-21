@@ -97,6 +97,7 @@ mod telemetry;
 mod throw;
 mod trade;
 mod transfer;
+mod traps;
 mod turn;
 mod watch;
 mod weapon_reach;

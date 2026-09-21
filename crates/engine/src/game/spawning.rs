@@ -12,8 +12,9 @@ use crate::tuning::{
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
     MAX_GROUP_SIZE_STEPS, PLATINUM_SPAWN_CHANCE, PRISMATIC_SPAWN_CHANCE, QUALITY_MAX, QUALITY_MIN,
-    QUALITY_SPREAD, QUALITY_STEP, SILVER_SPAWN_CHANCE, WILD_LOCAL_DENSITY_TARGET,
-    WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    QUALITY_SPREAD, QUALITY_STEP, SILVER_SPAWN_CHANCE, TRAP_CAPTURE_CHANCE, TRAP_CONDITION_PENALTY,
+    TRAP_PERIOD_TICKS, WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE,
+    WILD_SPAWN_RADIUS_TILES,
 };
 use crate::world::CHUNK_SIZE;
 use crate::*;
@@ -1451,6 +1452,140 @@ impl Game {
             .iter(&self.world)
             .filter(|p| (p.x - x).abs().max((p.y - y).abs()) <= WILD_SPAWN_RADIUS_TILES)
             .count()
+    }
+
+    /// What level a wild body is when nothing on it says otherwise — the
+    /// current `ZoneLevel`.
+    ///
+    /// An extraction rather than a second read of the resource:
+    /// `ability_user_level` answers this for an entity with no `Experience`
+    /// and `Game::run_traps` has no entity to ask at all, and two
+    /// `resource::<ZoneLevel>()` reads are two formulas to drift.
+    pub(crate) fn wild_body_level(&self) -> u32 {
+        self.world.resource::<ZoneLevel>().0
+    }
+
+    /// One pass over every trap standing on the surface: count its period
+    /// down, and on the tick it elapses, roll for a catch.
+    ///
+    /// **A trap whose period has not elapsed spends no `GameRng` draw**,
+    /// which is the whole point of the countdown: fifty of them cost about a
+    /// tenth of a draw a tick rather than fifty, so every seeded test in the
+    /// engine is unaffected by a run that happens to have traps in it.
+    ///
+    /// **Traps are walked in `(x, y)` order**, `assembler_system`'s rule.
+    /// Bevy's query iteration order is not stable, so two traps elapsing on
+    /// the same tick would otherwise consume the shared `GameRng` in an
+    /// order that varies between runs — which surfaces as an intermittent
+    /// seeded failure somewhere else entirely.
+    ///
+    /// **Deliberately does not call `Game::field_escalation`.** Those terms
+    /// scale a spawned body's `Stats`, and a caught program is a
+    /// `DownedProgram` value with no `Stats` at all — its level is the
+    /// zone's and its worth is `grade()`. An escalation term here would be a
+    /// number with nothing to apply to, and joining that function's caller
+    /// census would misreport what this does.
+    pub(crate) fn run_traps(&mut self) {
+        let mut standing: Vec<(Entity, i32, i32)> = self
+            .world
+            .query_filtered::<(Entity, &Position), With<crate::components::Trap>>()
+            .iter(&self.world)
+            .map(|(e, p)| (e, p.x, p.y))
+            .collect();
+        if standing.is_empty() {
+            return;
+        }
+        standing.sort_by_key(|(_, x, y)| (*x, *y));
+
+        for (entity, x, y) in standing {
+            let item = {
+                let Some(mut trap) = self.world.get_mut::<crate::components::Trap>(entity) else {
+                    continue;
+                };
+                if trap.next_roll > 0 {
+                    trap.next_roll -= 1;
+                    continue;
+                }
+                trap.next_roll = TRAP_PERIOD_TICKS;
+                // A sprung trap still counts its period down — it just has
+                // nowhere to put a second catch — so this sits after the
+                // reset rather than before it.
+                if trap.caught.is_some() {
+                    continue;
+                }
+                trap.item.clone()
+            };
+            let caught = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(TRAP_CAPTURE_CHANCE)
+            };
+            if !caught {
+                continue;
+            }
+            // `allow_boss: false`, so the boss roll is skipped rather than
+            // rolled and discarded — a trap is never a way past a lair.
+            let Some((species, _)) = self.pick_habitat_species(x, y, None, false) else {
+                continue;
+            };
+            let Some(def) = self.world.resource::<SpeciesDb>().get(&species).cloned() else {
+                continue;
+            };
+            let rolled = self.roll_rarity(&def, x, y, false);
+            // The def is resolved live by id every time, never copied onto
+            // the component: a retuned `.ron` retunes a trap already on the
+            // ground, and a deleted one catches nothing more.
+            let cap = self
+                .world
+                .resource::<ItemDb>()
+                .get(item.as_str())
+                .and_then(|d| d.trap)
+                .map(|t| t.rarity_cap)
+                .unwrap_or(Rarity::Ordinary);
+            // **Clamped before the condition, never after.**
+            // `downed_program_for`'s boss-floor rule, second caller:
+            // `roll_condition` prices condition against the rarity the
+            // program actually ships with and `grade()` folds both, so a
+            // condition rolled against the pre-clamp rarity leaves the grade
+            // overstated for exactly the catches the ceiling exists to hold
+            // down.
+            let rarity = rolled.min(cap);
+            // A pure integer formula and not a draw, despite the name — a
+            // trap's whole no-RNG-until-it-fires property budgets no draw
+            // here.
+            let condition = crate::items::DownedProgram::roll_condition(rarity, false, 0.0)
+                .saturating_sub(TRAP_CONDITION_PENALTY);
+            let program = crate::items::DownedProgram {
+                species: species.clone(),
+                level: self.wild_body_level(),
+                boss: false,
+                rarity,
+                condition,
+                // A trap is meant to be worse than winning the fight: a
+                // caught program never hands over the routine it was
+                // running.
+                carried: None,
+            };
+            let label = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&species)
+                .map(|s| s.name.clone())
+                .unwrap_or(species);
+            if let Some(mut trap) = self.world.get_mut::<crate::components::Trap>(entity) {
+                trap.caught = Some(program);
+            }
+            if let Some(mut glyph) = self.world.get_mut::<Glyph>(entity) {
+                glyph.ch = crate::components::TRAP_GLYPH_SPRUNG;
+            }
+            // Names the species *and* the tile: `resources::condense` folds
+            // repeats across all three log surfaces, so two catches reading
+            // the same would draw as one row. A plain `Info` line, not base
+            // news — `battle_rows` drops `MessageSource::Base` outright and
+            // this fires while a fight is open.
+            self.log(format!(
+                "Something took the bait at ({x}, {y}) — a {label}."
+            ));
+        }
     }
 
     pub(crate) fn maybe_spawn_wild_creature(&mut self) {

@@ -2644,6 +2644,40 @@ pub struct Caravan {
     pub announced_stuck: bool,
 }
 
+/// The char an armed trap wears on the map, and the char a sprung one wears.
+///
+/// Two named constants beside the struct rather than literals at the spawn
+/// and the capture, because there is no other channel left to say which
+/// state a trap is in: the tile's four corners, both edges and the
+/// background wash are all claimed, so the distinction rides the centre
+/// glyph's own char. A capture site and a spawn site that disagreed about
+/// which char means which would read as the map lying.
+pub const TRAP_GLYPH_ARMED: char = '^';
+/// See `TRAP_GLYPH_ARMED`. `'U'` is authored by no shipped structure or
+/// species and appears nowhere else in the engine as a glyph.
+pub const TRAP_GLYPH_SPRUNG: char = 'U';
+
+/// A device the player left standing on the zone surface, which catches one
+/// non-boss program over game-time and holds it until collected. Carries
+/// `Position` and `Glyph` alongside this, the way a `Nest` does, and no
+/// `Durability`: a trap is walked into, not attacked.
+///
+/// `Game::run_traps` is the one writer of `next_roll`, `caught` and the
+/// entity's `Glyph::ch` past the spawn.
+#[derive(Component, Clone)]
+pub struct Trap {
+    /// Which item def this was placed from. The rarity ceiling is resolved
+    /// from the def on every read rather than copied here — `restore_nests`'
+    /// precedent and against `ActiveContract`'s: a trap is a device standing
+    /// in the world, not an agreement already signed, so a retuned `.ron`
+    /// retunes one already on the ground and a deleted one drops it.
+    pub item: crate::items::ItemId,
+    /// Ticks until the next capture roll. The countdown is what keeps fifty
+    /// traps off the seeded RNG stream — see `Game::run_traps`.
+    pub next_roll: u32,
+    pub caught: Option<crate::items::DownedProgram>,
+}
+
 /// A stationary spawner for a wild species. Present on the nest entity
 /// itself, which also carries `Position`, `Glyph`, and `Durability` (all
 /// reused as-is — a nest is destroyed the same way a structure is, just

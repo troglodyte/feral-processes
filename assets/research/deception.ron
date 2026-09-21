@@ -1,0 +1,10 @@
+(
+    id: "deception",
+    name: "Deception",
+    description: "A bench that compiles honeypots — decoys you leave on the ground to catch a program without fighting it.",
+    cost: 20,
+    materials: [("bytecode_block", 10)],
+    requires: ["automation"],
+    requires_subject: true,
+    unlocks_structures: ["decoy_bench"],
+)

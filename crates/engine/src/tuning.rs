@@ -5427,6 +5427,40 @@ pub const EMULATION_EDGE: f32 = 1.25;
 /// reason.
 pub const EMULATION_EDGE_PER_PERK_LEVEL: f32 = 0.1;
 
+// ---------------------------------------------------------------------------
+// Traps
+// ---------------------------------------------------------------------------
+
+/// How many traps may stand in a zone at once.
+///
+/// Hidden from the player and not something to be played around: it bounds
+/// the per-tick cost of `Game::run_traps` and the carpet a player could
+/// otherwise lay across every tile they walk. A run that reaches it is a run
+/// that has stopped playing the feature and started farming it.
+pub const TRAP_PLACEMENT_CAP: usize = 50;
+
+/// Ticks between one trap's capture attempts — four minutes at the world's
+/// two ticks a second.
+///
+/// A countdown rather than a per-tick roll, and that is what keeps fifty
+/// traps off the seeded RNG stream: a trap whose period has not elapsed
+/// spends no `GameRng` draw at all.
+pub const TRAP_PERIOD_TICKS: u32 = 480;
+
+/// The chance one elapsed period catches anything — about one catch every
+/// twenty-seven minutes per trap, which is the figure that decides whether
+/// walking back to a trap is worth the trip.
+pub const TRAP_CAPTURE_CHANCE: f64 = 0.15;
+
+/// Points off a caught program's condition, after `roll_condition`, on a
+/// 0..=100 scale.
+///
+/// A trap is meant to be *worse* than beating the program yourself: this,
+/// the authored rarity ceiling and the caught program never carrying a
+/// routine are the three things that hold that, and none of them is a gate
+/// on the feature working.
+pub const TRAP_CONDITION_PENALTY: u8 = 15;
+
 #[cfg(test)]
 mod tests {
     use super::*;

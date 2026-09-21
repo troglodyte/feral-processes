@@ -836,6 +836,25 @@ impl Game {
             "The Anchor".to_string()
         } else if self.world.get::<SurfaceLink>(entity).is_some() {
             "Stack Entrance".to_string()
+        } else if let Some(trap) = self.world.get::<crate::components::Trap>(entity).cloned() {
+            // The map carries armed-against-sprung in the glyph's own char,
+            // which says nothing about this line — and a line reading
+            // "Honeypot" for both states is the one thing `x` exists to
+            // answer. Named through `item_name` rather than a literal, so a
+            // mod's second trap reads as itself.
+            let name = self.item_name(&trap.item);
+            match &trap.caught {
+                Some(caught) => {
+                    let species = self
+                        .world
+                        .resource::<SpeciesDb>()
+                        .get(&caught.species)
+                        .map(|s| s.name.clone())
+                        .unwrap_or_else(|| caught.species.clone());
+                    format!("{name} (holding a {species})")
+                }
+                None => format!("{name} (armed)"),
+            }
         } else if let Some(settlement) = self.world.get::<crate::components::Settlement>(entity) {
             // Off `resources::Settlements` by key, never the def id and
             // never a hand-built string here — `Game::copy_name`'s rule: a

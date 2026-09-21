@@ -464,6 +464,24 @@ any non-finite `taming_potency`, `consume.power`, or
     // catalogue, resting simply stops working outside the base.
     enables_rest: true,
 
+    // Optional; absent on everything that is not a trap. Marks this item as
+    // **placeable**: the player may drop one on an adjacent tile of the open
+    // zone surface, where it stands, blocks them, and over game-time catches
+    // one non-boss program drawn from the species window that tile would
+    // spawn from. It is collected by walking into it once it has caught
+    // something; walking into an empty one is a bump.
+    //
+    // `rarity_cap` is the best tier it will ever catch. A roll above it is
+    // clamped down, never rerolled, so a ceiling makes a trap worse rather
+    // than slower.
+    //
+    // How long a trap takes between attempts and how likely each attempt is
+    // are **not** authorable: they are `crates/engine/src/tuning.rs`'s
+    // (`TRAP_PERIOD_TICKS`, `TRAP_CAPTURE_CHANCE`, `TRAP_CONDITION_PENALTY`),
+    // because difficulty is not content. A better trap is a second file
+    // behind a later research node, not a retuned one.
+    trap: Some((rarity_cap: Silver)),
+
 )
 ```
 

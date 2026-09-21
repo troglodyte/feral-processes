@@ -40,14 +40,14 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
         by_tier.get(&0),
         Some(&vec!["automation", "commerce", "paging", "power_grid"])
     );
-    assert_eq!(by_tier.get(&1).map(Vec::len), Some(8));
+    assert_eq!(by_tier.get(&1).map(Vec::len), Some(9));
     assert_eq!(by_tier.get(&2).map(Vec::len), Some(5));
     assert_eq!(by_tier.get(&3).map(Vec::len), Some(5));
     assert_eq!(by_tier.get(&4).map(Vec::len), Some(3));
     assert_eq!(by_tier.get(&5).map(Vec::len), Some(2));
-    assert_eq!(g.cells.len(), 27, "every shipped base node gets a cell");
+    assert_eq!(g.cells.len(), 28, "every shipped base node gets a cell");
     assert_eq!(g.tiers, 6);
-    assert_eq!(g.widest, 8, "tier 1 is the crowded one now");
+    assert_eq!(g.widest, 9, "tier 1 is the crowded one now");
 }
 
 /// Tier is the *longest* path from a root, so the diamond's short leg
@@ -204,7 +204,7 @@ fn up_and_down_move_within_a_tier_and_clamp() {
         c.sort_by_key(|c| c.slot);
         c
     };
-    assert_eq!(column.len(), 8, "tier 1 is the eight-slot column");
+    assert_eq!(column.len(), 9, "tier 1 is the nine-slot column");
     for pair in column.windows(2) {
         assert_eq!(
             g.step(&pair[0].id, GraphDir::Down),

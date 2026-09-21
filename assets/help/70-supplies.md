@@ -51,4 +51,23 @@ An iso Market takes anything at a Credit a unit, sells back at double until you 
 programs at a tenth of their power. That last one is the sink to remember for a roster full of
 duplicates you were never going to develop.
 
-Read on: [zones and breaching](zones), [your base](your-base), and [the Stack](the-stack).
+Research Deception and you can build a Decoy Bench, which compiles Honeypots out of ICE Breakers.
+A honeypot is a decoy you leave on the ground, and it is the one way to take a program without
+fighting it.
+
+- Place one from your pack: open it, press P, and point at a tile next to you. It stands there
+  until something walks into it. You cannot walk through one — bumping an empty one costs you the
+  turn and nothing else.
+- Given time it catches a program of the kind that tile would have spawned, and holds it. Walk into
+  a full one to collect what it caught, which goes into your downed store like anything you beat.
+  If that store is full it keeps holding it for you.
+- What it catches is worse than what you would have beaten. It never takes a boss, it never takes
+  anything better than Optimized however deep you are, the body comes out in worse condition than a
+  fight would have left it, and it never hands over the routine that program was running. It is a
+  trade of time for safety, and you pay for the safety.
+- They survive a breach, so a field left out in one sector is still working in the next. D and a
+  direction breaks one down where it stands, and hands nothing back — a full one loses what it was
+  holding.
+
+Read on: [zones and breaching](zones), [your base](your-base), [taking a program apart](extraction),
+and [the Stack](the-stack).

@@ -346,16 +346,16 @@ fn the_demolish_key_says_when_there_is_nothing_that_way() {
     );
 }
 
-/// Every structure stands in base space, so a direction key pressed anywhere
-/// else aims at four tiles with nothing of the player's on them. Refused at
-/// the keypress, matching the `base_only` flag the menu's Demolish row
-/// carries and `Game::remove_structure`'s own `require_base`.
+/// `d` opens the prompt wherever it is pressed now, and the *direction*
+/// is what refuses. It used to be refused at the keypress, because outside
+/// base space the four directions aimed at four tiles with nothing of the
+/// player's on them — traps made that false for the surface, so the
+/// question moved into `handle_remove_direction_key`'s own branch.
 ///
-/// The permitted half is `the_demolish_key_says_when_there_is_nothing_that_way`
-/// above, which drives the same key from inside the base and reaches the
-/// direction prompt.
+/// Underground is still nothing-of-yours-to-aim-at, and `destroy_trap`'s
+/// `require_surface` is what says so.
 #[test]
-fn the_demolish_key_is_refused_outside_base_space() {
+fn the_demolish_key_opens_outside_the_base_and_the_direction_refuses() {
     for (standing, mut app) in [
         ("in the Stack", app_inside_a_small_base(243, true)),
         (
@@ -367,17 +367,26 @@ fn the_demolish_key_is_refused_outside_base_space() {
             app.game.as_ref().is_some_and(|g| !g.in_base()),
             "precondition: the fixture really is {standing}"
         );
+        let before = structure_count(&mut app);
 
         app.handle_key(GameKey::Char('d'));
-
         assert_eq!(
             app.mode,
-            Mode::Playing,
-            "the direction prompt must not even open {standing}"
+            Mode::RemoveDirection,
+            "the prompt opens in both spaces now, {standing}"
         );
+
+        app.handle_key(GameKey::Right);
+
+        assert_eq!(app.mode, Mode::Playing);
         assert!(
             app.status_line.is_some(),
-            "a refused key says why rather than doing nothing, {standing}"
+            "an aim with nothing under it says why, {standing}"
+        );
+        assert_eq!(
+            structure_count(&mut app),
+            before,
+            "and a base-space query must never answer a surface aim, {standing}"
         );
     }
 }

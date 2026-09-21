@@ -35,6 +35,13 @@ pub enum DevAction {
     Encounter,
     AdvanceTicks,
     CycleEnemyStrength,
+    /// The one row that opens a screen instead of provoking an event —
+    /// `Mode::SpritePicker`. It lives on the keypad rather than on a key of
+    /// its own because the keypad is already the map's dev door and is
+    /// already bound above the hand-off to `handle_stack_key`, so the forge
+    /// reaches the open grid, base space and a Stack frame through an arm
+    /// that was written once.
+    OpenSpriteForge,
 }
 
 pub struct DevConsoleRow {
@@ -80,6 +87,16 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Cycle enemy strength",
         action: DevAction::CycleEnemyStrength,
+    },
+    // Below the triggers, being the one row that provokes nothing: it opens
+    // the Sprite Forge over whatever the map is showing. Kept here rather
+    // than hidden when `FERAL_DEV_SPRITES` is unset, per this table's
+    // no-row-is-ever-hidden rule — the press refuses with a sentence
+    // instead, which a silent no-op could not be told apart from an unbound
+    // key.
+    DevConsoleRow {
+        label: "Open Sprite Forge",
+        action: DevAction::OpenSpriteForge,
     },
 ];
 
@@ -182,6 +199,13 @@ impl App {
     /// forced sweep that kills the player reaches the game-over check by
     /// exactly the route a real one does.
     fn fire_dev_action(&mut self, action: DevAction) {
+        // Ahead of the game borrow and the `after_world_action` tail alike:
+        // this row opens a screen, which spends no tick and needs no world
+        // to act on. Every arm below it does both.
+        if action == DevAction::OpenSpriteForge {
+            self.open_sprite_forge();
+            return;
+        }
         let Some(game) = self.game.as_mut() else {
             return;
         };
@@ -218,6 +242,11 @@ impl App {
                     )
                 }));
             }
+            // Returned above, before anything here could age the world —
+            // `use_ability`'s `Tamper` arm's pattern, so a row that opens a
+            // screen cannot quietly acquire a tick by being added to this
+            // match instead.
+            DevAction::OpenSpriteForge => unreachable!("handled above"),
         }
         self.after_world_action(true, false, 0);
         match said {

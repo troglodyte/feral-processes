@@ -609,3 +609,129 @@ fn a_pointer_event_outside_the_sprite_editor_changes_nothing() {
     );
     assert!(app.take_sprite_writes().is_empty());
 }
+
+/// The console's own gate plus both of the forge's, on a live run — the
+/// second door's fixture, where `app_with_sprite_forge` is the first
+/// door's and deliberately has no game at all.
+fn open_the_dev_gates(app: &mut App) {
+    app.enable_dev_console_for_test();
+    app.sprite_forge_flag = true;
+    app.install_sprite_dir();
+}
+
+/// Where the forge sits in the keypad. Read off the table rather than
+/// written as a number, `every_console_row_has_a_label_and_the_selection_
+/// stays_in_range`'s rule: the table is the one source of both the label
+/// and the action, so a test that hardcoded `6` would start firing a raid
+/// the day a row is inserted above it.
+fn forge_row() -> usize {
+    App::dev_console_rows()
+        .iter()
+        .position(|row| row.action == DevAction::OpenSpriteForge)
+        .expect("the keypad carries the forge's second door")
+}
+
+/// The whole of what the second door is for: the map is the same
+/// `Mode::Playing` on the open grid, inside base space and down a Stack
+/// frame, and the console key is bound in `handle_playing_key`'s top match
+/// — above the hand-off to `handle_stack_key` — so one arm reaches all
+/// three. Asserted per locale anyway, because "one arm reaches all three"
+/// is a property of where that arm sits and nothing makes it fail to
+/// compile if it moves below the hand-off.
+#[test]
+fn the_console_opens_the_forge_in_every_locale() {
+    let field = {
+        let mut app = test_app(30);
+        open_the_dev_gates(&mut app);
+        app
+    };
+    let based = {
+        let mut app = test_app(31);
+        super::support::found_the_base(&mut app);
+        super::support::stand_in_base(&mut app);
+        open_the_dev_gates(&mut app);
+        app
+    };
+    let stack = {
+        let mut app = super::support::app_underground(32);
+        open_the_dev_gates(&mut app);
+        app
+    };
+
+    for (locale, mut app) in [
+        ("the field", field),
+        ("base space", based),
+        ("the Stack", stack),
+    ] {
+        assert_eq!(
+            app.mode,
+            Mode::Playing,
+            "{locale}: the fixture starts on the map"
+        );
+
+        app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+        assert_eq!(app.mode, Mode::DevConsole, "{locale}: the keypad opens");
+
+        app.menu_selected = forge_row();
+        app.handle_key(GameKey::Enter);
+        assert_eq!(
+            app.mode,
+            Mode::SpritePicker,
+            "{locale}: the forge must open mid-run"
+        );
+
+        app.handle_key(GameKey::Esc);
+        assert_eq!(
+            app.mode,
+            Mode::DevConsole,
+            "{locale}: Esc leaves by the door it came through"
+        );
+    }
+}
+
+/// Opening a screen is not provoking an event: every other row ends in
+/// `after_world_action` and spends a tick, and this one must not — the
+/// forge is reached mid-fight-free but the world should stand exactly where
+/// it was while you draw.
+#[test]
+fn opening_the_forge_spends_no_tick() {
+    let mut app = test_app(33);
+    open_the_dev_gates(&mut app);
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.menu_selected = forge_row();
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        before,
+        "opening a screen must not age the world"
+    );
+}
+
+/// `FERAL_DEV_CONSOLE=1` alone, or an installed build with no checkout to
+/// write art into. The row is still drawn — the keypad hides none of its
+/// rows on purpose — so the press has to say why rather than doing
+/// nothing, which is indistinguishable from the key not being bound.
+#[test]
+fn the_forge_row_refuses_when_the_forge_is_shut() {
+    let mut app = test_app(34);
+    app.enable_dev_console_for_test();
+    assert!(!app.sprite_forge_enabled());
+
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    app.menu_selected = forge_row();
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::DevConsole,
+        "a row this build cannot honour must not open the screen"
+    );
+    assert!(
+        app.status_line.is_some(),
+        "and it must say why rather than doing nothing"
+    );
+}

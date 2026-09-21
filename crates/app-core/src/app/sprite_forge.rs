@@ -278,6 +278,31 @@ impl App {
         self.sprite_forge_flag && self.sprite_dir_installed
     }
 
+    /// The one door into `Mode::SpritePicker`, shared by the main menu's
+    /// `[D]` row and the dev console's `Open Sprite Forge` row.
+    ///
+    /// **`menu_origin` is what tells Esc which door it came through** —
+    /// `handle_group_menu_key`'s seam, reused rather than a second slot,
+    /// because the two doors stand on opposite sides of a run: the menu
+    /// door has no game behind it and the console door has a map the player
+    /// is standing on. Written here rather than at each caller so the
+    /// picker's Esc has exactly one rule to follow.
+    ///
+    /// The refusal is reachable only through the console: the main menu
+    /// builds its key list off `sprite_forge_enabled` and never offers the
+    /// row, where the keypad hides no row at all (see `DEV_ROWS`).
+    pub(crate) fn open_sprite_forge(&mut self) {
+        if !self.sprite_forge_enabled() {
+            self.refuse(
+                "Sprite Forge is off: set FERAL_DEV_SPRITES and run from a checkout.".to_string(),
+            );
+            return;
+        }
+        self.status_line = None;
+        self.menu_origin = Some(self.mode);
+        self.mode = Mode::SpritePicker;
+    }
+
     /// Every name the map can draw a sprite for: each species def, each
     /// structure def, each floor finish, and the two names hardcoded in Rust
     /// (`player` via `DEFAULT_PLAYER_SPRITE`, `anchor`). Sorted by `name`
@@ -406,7 +431,9 @@ impl App {
             .collect()
     }
 
-    /// `Esc` backs all the way out to the main menu. `[t]` toggles a
+    /// `Esc` backs out through `close_screen`, which is the main menu for
+    /// the `[D]` row and the dev keypad for the console's — see
+    /// `open_sprite_forge`. `[t]` toggles a
     /// subject with art between `On` and `Off` (queuing the rename cue) and
     /// does nothing on one with none to toggle. `Enter` opens
     /// `Mode::SpriteEditor` on the highlighted subject — loading its
@@ -420,7 +447,7 @@ impl App {
     /// there is one place that owns the highlight.
     pub(crate) fn handle_sprite_picker_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.mode = Mode::MainMenu;
+            self.close_screen();
             return;
         }
         let subjects = self.sprite_subjects();

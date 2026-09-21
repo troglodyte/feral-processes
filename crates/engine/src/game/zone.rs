@@ -58,6 +58,83 @@ impl Game {
             .count()
     }
 
+    /// Drops one unit of `item` on the tile `(dx, dy)` from the party, where
+    /// it stands as a trap until it catches something or is destroyed.
+    ///
+    /// **Every refusal lands before anything is spent** —
+    /// `commit_caravan_basket`'s rule — and the occupancy question is asked
+    /// through the same finders `move_player`'s ladder uses, never a second
+    /// set: a tile that is placeable to one function and occupied to another
+    /// is how a trap ends up under a nest.
+    ///
+    /// **No `after_tick()` obligation.** This is reached through
+    /// `App::handle_key`, whose tail already calls it — one of the three
+    /// paths that do. A second call here would spend the tick twice.
+    pub fn place_trap(&mut self, item: &ItemId, dx: i32, dy: i32) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't place that right now.".into());
+        }
+        self.require_surface()?;
+        let player = self.player_entity();
+        let name = self.item_name(item).to_string();
+        if self
+            .world
+            .get::<Inventory>(player)
+            .map_or(0, |inv| inv.count(item))
+            == 0
+        {
+            return Err(format!("You have no {name}."));
+        }
+        if !self.is_placeable(item) {
+            return Err(format!("A {name} isn't something you can place."));
+        }
+        // Checked ahead of walkability deliberately: the cap is about the
+        // per-tick cost and the carpet, so a player at it should be told
+        // they are at it wherever they point.
+        if self.trap_count() >= crate::tuning::TRAP_PLACEMENT_CAP {
+            return Err(format!(
+                "You already have {} out. Collect one first.",
+                crate::tuning::TRAP_PLACEMENT_CAP
+            ));
+        }
+        let pos = *self
+            .world
+            .get::<Position>(player)
+            .ok_or_else(|| "You aren't anywhere you can place from.".to_string())?;
+        let (nx, ny) = (pos.x + dx, pos.y + dy);
+        if !self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable {
+            return Err("Nothing would hold it there.".into());
+        }
+        if self.find_wild_creature_at(nx, ny).is_some()
+            || self.find_nest_at(nx, ny).is_some()
+            || self.find_surface_link_at(nx, ny).is_some()
+            || self.find_settlement_at(nx, ny).is_some()
+            || self.find_trap_at(nx, ny).is_some()
+        {
+            return Err("Something is already there.".into());
+        }
+
+        self.world
+            .get_mut::<Inventory>(player)
+            .expect("the count above read the player's own inventory")
+            .take(item.clone(), 1);
+        self.world.spawn((
+            crate::components::Trap {
+                item: item.clone(),
+                next_roll: crate::tuning::TRAP_PERIOD_TICKS,
+                caught: None,
+            },
+            Position { x: nx, y: ny },
+            Glyph {
+                ch: crate::components::TRAP_GLYPH_ARMED,
+                color: GlyphColor::Yellow,
+            },
+        ));
+        self.log(format!("You set a {name} down. Now it waits."));
+        self.tick();
+        Ok(())
+    }
+
     /// Deals one hit of the player's `effective_atk` (against no defense
     /// — a nest has none, only a `Durability` pool) to `nest`. A nest
     /// never retaliates, unlike an ordinary wild-creature encounter — see

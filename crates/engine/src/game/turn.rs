@@ -259,6 +259,13 @@ impl Game {
         // following tick rather than this one — a deliberate one-tick lag, and
         // the alternative is a second settle pass after the schedule.
         self.settle_research();
+        // Immediately after the project settles, for the same reason it sits
+        // where it does: a Research Station staffed this tick is already
+        // posted. After rather than before, so a tick that *completes* a
+        // project leaves `ActiveResearch::id` empty and the Station's next
+        // cycle banks toward a study — the two halves of "study or advance"
+        // hand over on the same tick rather than one apart.
+        self.settle_study();
         self.run_dig_crew();
         // Beside the dig crew and for its two reasons: a builder posted this
         // tick works this tick, and a cycle that ends in

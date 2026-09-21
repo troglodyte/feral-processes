@@ -3134,3 +3134,164 @@ fn a_project_sitting_at_its_cost_banks_nothing_toward_a_study() {
         "the fixture is vacuous if the project completed on its own"
     );
 }
+
+/// **Three early returns hold the bar; only a real attempt spends it.** A
+/// full bar with an empty pen, or with nothing left to find, is banked and
+/// fires the instant the condition clears — which is what makes a discovery
+/// legible as a consequence of the player's action rather than of a timer
+/// they cannot see. A spend-on-hold is the bug that makes it feel arbitrary.
+#[test]
+fn a_study_attempt_is_held_until_a_subject_and_a_pool_are_both_there() {
+    let mut game = Game::new(4460, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let full = crate::tuning::STUDY_ATTEMPT_DATA;
+
+    // Held: a full bar, an empty pen.
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = full;
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        full,
+        "nothing is pinned, so the attempt waits rather than being spent"
+    );
+
+    // Held: a subject, but nothing eligible to find. Zone 1 with nothing
+    // researched is exactly that state — every discoverable node either
+    // waits on `automation` or is gated at `min_zone >= 2`.
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    assert!(
+        !game.is_researched("automation"),
+        "the fixture is vacuous if the pool is already open"
+    );
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        full,
+        "nothing to find, so the attempt waits"
+    );
+
+    // Spent: both conditions clear.
+    unlock_research_chain(&mut game, "automation");
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "with a subject and a pool, the attempt is spent whether or not it hits"
+    );
+}
+
+/// The pool is the whole of what may be found: a prereq-unsatisfied node and
+/// a zone-gated one are never picked, over enough forced attempts that the
+/// absence means something. A discovery is therefore always immediately
+/// researchable.
+#[test]
+fn a_study_never_discovers_outside_the_eligible_pool() {
+    let mut game = Game::new(4461, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    unlock_research_chain(&mut game, "automation");
+    set_zone(&mut game, 1);
+
+    for _ in 0..500 {
+        game.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .study = crate::tuning::STUDY_ATTEMPT_DATA;
+        game.settle_study();
+    }
+
+    let found: Vec<String> = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    assert!(
+        !found.is_empty(),
+        "500 forced attempts must find something, or this test proves nothing"
+    );
+    for id in &found {
+        let def = game.world.resource::<ResearchDb>().get(id).unwrap().clone();
+        assert!(
+            def.min_zone <= 1,
+            "{id} is gated above zone 1 and must not have been found here"
+        );
+        for req in &def.requires {
+            assert!(
+                game.is_researched(req),
+                "{id} was found with {req} unresearched"
+            );
+        }
+    }
+}
+
+/// `settle_study` draws **no** `GameRng` on a tick where no attempt is made
+/// — the arena's own rule, so a base that is not studying cannot shift the
+/// seeded stream out from under everything else in the run.
+#[test]
+fn settle_study_draws_no_rng_when_no_attempt_is_made() {
+    let mut game = Game::new(4462, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "no bar, so no attempt"
+    );
+
+    fn peek(g: &mut Game) -> u64 {
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    reseed_rng(&mut game, 55);
+    let without = peek(&mut game);
+
+    reseed_rng(&mut game, 55);
+    game.settle_study();
+    let with = peek(&mut game);
+
+    assert_eq!(
+        without, with,
+        "an idle study must not touch the shared GameRng stream"
+    );
+}
+
+/// The miss line: an attempt that is spent and finds nothing says so, and
+/// says it as base news. `resources::condense` already folds repeats on all
+/// three log surfaces, so this needs no rate limit of its own.
+#[test]
+fn a_failed_study_attempt_says_so() {
+    let mut game = Game::new(4463, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    unlock_research_chain(&mut game, "automation");
+
+    for _ in 0..200 {
+        game.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .study = crate::tuning::STUDY_ATTEMPT_DATA;
+        game.settle_study();
+    }
+
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|l| l.text.contains("The study turns up nothing.")),
+        "200 attempts against a sub-1.0 chance must miss at least once, and a miss is news"
+    );
+}

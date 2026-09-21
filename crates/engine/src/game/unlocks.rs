@@ -1171,6 +1171,79 @@ impl Game {
         true
     }
 
+    /// Every node a study may find right now: a **base** node that is
+    /// `discoverable`, not already discovered, not already researched, has
+    /// every prerequisite satisfied and is inside the zone the party has
+    /// reached.
+    ///
+    /// **A discovery is therefore always immediately researchable** — the
+    /// node arrives on the menu available rather than locked, which is what
+    /// makes finding one feel like a reward instead of a promissory note.
+    ///
+    /// Draws no RNG and is its own function, so a second discovery source in
+    /// future filters this pool or narrows it rather than restating the
+    /// rule. `ResearchDb::all` is ordered (cheapest first, ties by id), so
+    /// the pool a seeded run indexes into is stable.
+    fn eligible_discoveries(&self) -> Vec<ResearchId> {
+        let db = self.world.resource::<ResearchDb>();
+        let discovered = &self
+            .world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0;
+        db.all()
+            .filter(|d| d.tree == ResearchTree::Base)
+            .filter(|d| d.discoverable)
+            .filter(|d| !discovered.contains(&d.id))
+            .filter(|d| !self.node_researched(d))
+            .filter(|d| d.requires.iter().all(|r| self.prereq_satisfied(r)))
+            .filter(|d| self.research_zone_gate(d).is_none())
+            .map(|d| d.id.clone())
+            .collect()
+    }
+
+    /// One study attempt, if the base has banked one and can spend it.
+    ///
+    /// A `Game` method for `run_repair_bays`' own reason: it draws
+    /// `GameRng`, names the node, logs through `log_base` and raises a
+    /// notification, none of which a bevy system can reach.
+    ///
+    /// **The three early returns hold the bar rather than spending it.** A
+    /// full bar with an empty pen, or with nothing left to find, is banked
+    /// and fires the instant the condition clears. That is what makes a
+    /// discovery legible as a consequence of the player's action rather than
+    /// of a timer they cannot see — and it is why the accrual in
+    /// `systems::deliver_payout` needs no notion of a subject at all.
+    pub(crate) fn settle_study(&mut self) {
+        if self.world.resource::<ActiveResearch>().study < crate::tuning::STUDY_ATTEMPT_DATA {
+            return;
+        }
+        if self.pinned_subject().is_none() {
+            return;
+        }
+        let pool = self.eligible_discoveries();
+        if pool.is_empty() {
+            return;
+        }
+        // Past every hold: the attempt is spent whether or not it lands.
+        self.world.resource_mut::<ActiveResearch>().study = 0;
+        let hit = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(crate::tuning::STUDY_DISCOVERY_CHANCE)
+        };
+        if !hit {
+            // Repeats, and `resources::condense` already folds repeats on
+            // all three log surfaces — no rate limit of its own.
+            self.log_base("The study turns up nothing.");
+            return;
+        }
+        // One draw, over an order `ResearchDb::all` documents as stable.
+        let id = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            pool[rng.0.random_range(0..pool.len())].clone()
+        };
+        self.discover_research(&id);
+    }
+
     pub(crate) fn settle_research(&mut self) {
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;

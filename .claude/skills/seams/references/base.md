@@ -1289,6 +1289,47 @@
   `Carrying` exception exists because freeing a loaded body destroys the goods;
   a body that just died is going to the Bay regardless. `LabourDemand`'s
   shortfall grows while it is down, as it does off shift.
+- **A structure's `footprint` is a claim on placement and a derivation on
+  read**, never stored, and the anchor is the one cell that blocks. That
+  asymmetry is what made "same structure id" cost nothing: a legacy 1x1
+  Research Node already occupies the cell it keeps, so it stands unrefused
+  with a pen it can never use, and there is no migration and no
+  `SAVE_FORMAT_VERSION` bump. The trap is that the reach machinery measures
+  from an *anchor*: `blocked_tiles` emits anchors alone while
+  `footprint_tiles` emits every cell, and the two are deliberately not
+  interchangeable, so `has_station` calls a Station's own floor taken while
+  `station_tiles` would let a body stand there. `at_station` had to grow the
+  same exclusion — two adjacent footprint cells are each other's orthogonal
+  neighbours, so a worker standing on a Station's own floor read as *at* it,
+  and the equivalence test against `station_candidates` is what caught that.
+  Every call site that threads a literal `side: 1` is asserting its
+  destination is single-celled; a census holds the four amenity ones, and
+  `footprint: 0` is rejected at load because an empty cell list makes every
+  placement refusal pass vacuously.
+- **A pinned program is a fifth `ProgramRole` whose consequences are
+  omissions**, and only the rest-repair one fails to compile. The workspace
+  has three exhaustive matches on `ProgramRole`; the labour scheduler, the
+  wander, the party recall and fusion candidacy all compare with `==` and
+  ship silently, so those four are held by one test each and by nothing
+  else. The trap that actually fired: a *posted* program is `Staff`, so
+  `pin_subject`'s `role != Staff` refusal never caught one, and pinning it
+  inserted the marker, logged success and did nothing — `drift_idle_staff`
+  skips any body holding a `Task` before it reads the role at all, so the
+  subject never walked, never arrived, and `pinned_subject()` (arrival is
+  derived off `Position == study_pen`, never stored) stayed `None` forever
+  while every subject-gated node stayed refused. Pinning frees the `Task`,
+  `Downed`'s rule one role over.
+- **A research node's subject gate is one term both the screen and the
+  selection reach through.** It sits outside `research_block_memo`, which
+  memoises per `ItemId` where the subject test is per *node* — and that is
+  exactly how it first shipped broken: the gate lived in `research_block`,
+  whose only caller is `select_research`, while `Game::research_nodes` built
+  `blocked_by` straight off the memo. Nineteen of twenty-seven nodes drew as
+  available with no block line and were refused on selection, under a doc
+  comment claiming the screen and the refusal could not disagree. The tests
+  were green because they compared `select_research`'s error against
+  `research_block` — the same door twice. A block reason is only tested by a
+  test that drives the *screen's* producer.
 
 ## Instrumentation
 

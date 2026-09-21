@@ -112,7 +112,8 @@ pub struct ResearchDef {
     pub opens_routine_tree: bool,
     /// Refuses selection until a tamed program is standing in a `studies`
     /// structure's pen — `Game::research_block`'s gate, filled in by every
-    /// node with `min_zone >= 2` (`assets/research/README.md`). A
+    /// node with `min_zone >= 2` and by the three zone-1 benches
+    /// (`assets/research/README.md`). A
     /// synthesised routine node never sets this: `routine_tree::
     /// synthesise_nodes` leaves it at its default, so the routine tree keeps
     /// its own economy rather than gaining a second gate.

@@ -1801,11 +1801,13 @@ fn a_save_written_before_projects_existed_loads_with_none() {
     let mut game = Game::new(739, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     unlock_research_chain(&mut game, "automation");
-    game.select_research("routine_fabrication").unwrap();
+    // A bootstrap node, so this test stays about the save keys rather than
+    // needing a pinned subject the moment a node it named gained the gate.
+    game.select_research("power_grid").unwrap();
     game.world
         .resource_mut::<crate::resources::ActiveResearch>()
         .progress
-        .insert("routine_fabrication".to_string(), 4);
+        .insert("power_grid".to_string(), 4);
 
     let dir = std::env::temp_dir().join(format!("feral_research_pre_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -1840,7 +1842,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
     let _ = std::fs::remove_dir_all(&dir);
 
     assert_eq!(active_research(&loaded), None);
-    assert_eq!(research_progress(&loaded, "routine_fabrication"), 0);
+    assert_eq!(research_progress(&loaded, "power_grid"), 0);
     assert!(
         loaded.is_researched("automation"),
         "and what the run already researched is untouched"
@@ -2301,10 +2303,9 @@ fn a_second_stations_subject_stays_settled_while_the_first_strains() {
     assert_eq!(mark(second_pen), PinMark::Settled);
 }
 
-/// The eight nodes with no `min_zone` gate — what gets a base running —
-/// stay selectable with nobody pinned. Looped rather than named one at a
-/// time, so a mod or a retune that grows the ungated set is covered for
-/// free.
+/// The five bootstrap nodes — what gets a base running — stay selectable
+/// with nobody pinned. Looped rather than named one at a time, so a mod or a
+/// retune that grows the ungated set is covered for free.
 #[test]
 fn every_ungated_node_is_selectable_with_nobody_pinned() {
     let ungated: Vec<String> = {
@@ -2337,9 +2338,9 @@ fn every_ungated_node_is_selectable_with_nobody_pinned() {
     }
 }
 
-/// Every node with `min_zone >= 2` is refused without a subject, and the
-/// same pin makes it reachable — the census that `decision 13`'s 19/8 split
-/// actually behaves as the refusal test above shows for one node.
+/// Every subject-gated node is refused without a subject, and the same pin
+/// makes it reachable — the census that the 24/5 split actually behaves as
+/// the refusal test above shows for one node.
 #[test]
 fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
     let gated: Vec<String> = {
@@ -2462,7 +2463,7 @@ fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does(
     );
 }
 
-/// The eight ungated nodes must still show no block line from the screen
+/// The ungated nodes must still show no block line from the screen
 /// with nobody pinned — companion census to the test above, so a subject
 /// term applied unconditionally would be caught here.
 #[test]

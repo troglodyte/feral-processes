@@ -9,5 +9,6 @@
     // Fabrication. Without it the bench is a dead end the player has no way
     // to see coming.
     requires: ["routine_fabrication"],
+    requires_subject: true,
     unlocks_structures: ["fabricator"],
 )

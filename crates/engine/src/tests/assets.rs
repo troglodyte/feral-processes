@@ -4761,30 +4761,49 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     );
 }
 
-/// **The 19/8 split (decision 13): every shipped node with `min_zone >= 2`
-/// declares `requires_subject`, and none of the eight ungated ones does.**
-/// A node above zone 1 that forgot the field would ship free of the study
-/// cost the feature exists to charge; one of the eight that gained it by
-/// mistake would silently gate a base's opening machines.
+/// **The 24/5 split: every shipped node with `min_zone >= 2` declares
+/// `requires_subject`, and the only nodes that do not are the five that get
+/// a base running from turn one.** A node above zone 1 that forgot the field
+/// would ship free of the study cost the feature exists to charge; one of the
+/// five that gained it by mistake would silently gate a base's opening
+/// machines. The zone rule is one-way now — the three benches
+/// (`armor_bench`, `weapon_bench`, `routine_fabrication`) are gated at zone 1
+/// deliberately, so the ungated set is named rather than derived.
 #[test]
-fn every_zone_gated_base_node_requires_a_subject_and_no_ungated_one_does() {
+fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are_ungated() {
+    /// What a fresh run may research before it has anyone to spend.
+    const BOOTSTRAP: [&str; 5] = [
+        "automation",
+        "commerce",
+        "fortification",
+        "power_grid",
+        "teardown",
+    ];
     let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let research = game.world.resource::<crate::research::ResearchDb>();
     let mut checked = 0;
+    let mut ungated: Vec<&str> = Vec::new();
     for def in research
         .all()
         .filter(|d| d.tree == crate::research::ResearchTree::Base)
     {
-        assert_eq!(
-            def.min_zone >= 2,
-            def.requires_subject,
-            "{:?} has min_zone {} but requires_subject {} — the two must agree",
-            def.id,
-            def.min_zone,
-            def.requires_subject
-        );
+        if def.min_zone >= 2 {
+            assert!(
+                def.requires_subject,
+                "{:?} has min_zone {} but does not require a subject",
+                def.id, def.min_zone
+            );
+        }
+        if !def.requires_subject {
+            ungated.push(def.id.as_str());
+        }
         checked += 1;
     }
+    ungated.sort_unstable();
+    assert_eq!(
+        ungated, BOOTSTRAP,
+        "the ungated set moved — a node was gated or ungated without this census being told"
+    );
     assert_eq!(
         checked, 27,
         "expected the shipped base tree's 27 nodes; a count that moved means a node was \

@@ -264,6 +264,14 @@ fn divider() -> Vec<Piece> {
 /// no slack for `t trade` or `s save` at any supported size, and they stay cut
 /// exactly as the handoff had them.
 ///
+/// **`D downed` sits with the screens rather than with the verbs**, and it
+/// is what moved the cut: the bar was already full, so a key was going to
+/// drop whatever position this took — `x examine` at 1280x720, `e drain` at
+/// 1920x1080. It is grouped with `b`/`i` because it is a store screen and
+/// not a field action — `D` opens the same page from the map and from the
+/// pack (`App::handle_downed_programs_key`) — and because a segment placed
+/// below the cut is a segment nobody sees.
+///
 /// **`hjkl move` and `. wait` are deliberately not here.** Arrow keys walk as
 /// well as `hjkl` does, so movement is the one verb a player finds without
 /// being told, and `.` does nothing in base space at all
@@ -294,6 +302,7 @@ pub(in crate::render) fn keybar_segments(actions: Option<&[(String, String)]>) -
         divider(),
         keycap("b", "base"),
         keycap("i", "pack"),
+        keycap("D", "downed"),
         keycap("?", "help"),
         keycap("q", "menu"),
         divider(),

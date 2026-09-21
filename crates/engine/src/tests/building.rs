@@ -5022,12 +5022,13 @@ fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
     assert_eq!(floor_rows[0].len(), 5);
 }
 
-/// `Game::view_pinned_at` is the pin mark's own question — does a body
-/// under study stand at this cell — read directly off `UnderStudy` bodies
-/// rather than re-deriving a pen. **Windowed**, `view_station_floor_at`'s own
-/// shape.
+/// `Game::view_pinned_at` is the pin mark's own question — does a **settled**
+/// subject stand at this cell. Carrying `UnderStudy` is not enough: the body
+/// has to be on its own station's pen, so the mark, `Game::pinned_subject`
+/// and the research gate are one answer rather than three.
+/// **Windowed**, `view_station_floor_at`'s own shape.
 #[test]
-fn view_pinned_at_answers_for_the_bodys_own_position() {
+fn view_pinned_at_answers_only_for_a_settled_subject() {
     let (mut game, station) = base_with_station(4601102);
     let program = spawn_tamed(&mut game, 10, 3);
     let pen = game.study_pen(station).unwrap();
@@ -5044,4 +5045,15 @@ fn view_pinned_at_answers_for_the_bodys_own_position() {
     let after = game.view_pinned_at(pen, half, half);
     assert!(at(&after, pen.0, pen.1));
     assert!(!at(&after, pen.0 + 3, pen.1 + 3));
+
+    // Still pinned, no longer settled: the marker rides the body but the
+    // mark does not, which is the whole of the rule above.
+    let mut pos = game.world.get_mut::<Position>(program).unwrap();
+    pos.x = pen.0 + 2;
+    pos.y = pen.1 + 2;
+    let away = game.view_pinned_at(pen, half, half);
+    assert!(
+        away.iter().flatten().all(|&hit| !hit),
+        "a subject away from its pen wears no mark anywhere in the window"
+    );
 }

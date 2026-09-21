@@ -310,6 +310,17 @@ impl Game {
         if self.world.get::<Tamed>(entity).is_none() {
             return true;
         }
+        // **A subject is the one role whose `Position` is definitional.**
+        // `Game::pinned_subject` *reads* the subject off this tile, so it is
+        // the least dishonest position in the game — and it stays live for
+        // the whole walk to the pen, where a sortie's or a companion's is
+        // written once and never again. Its own arm rather than a second
+        // variant in the `Staff` comparison below, because the `Task` clause
+        // there does not apply: pinning frees the `Task` itself, and a body
+        // hidden under a machine's glyph is what that clause is about.
+        if self.program_role(entity) == Some(ProgramRole::UnderStudy) {
+            return true;
+        }
         self.wears_job_mark(entity)
             || (self.program_role(entity) == Some(ProgramRole::Staff)
                 && self.world.get::<Task>(entity).is_none())

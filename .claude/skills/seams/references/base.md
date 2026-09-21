@@ -1331,7 +1331,23 @@
   subject never walked, never arrived, and `pinned_subject()` (arrival is
   derived off `Position == study_pen`, never stored) stayed `None` forever
   while every subject-gated node stayed refused. Pinning frees the `Task`,
-  `Downed`'s rule one role over.
+  `Downed`'s rule one role over. **The census was short by one**: a fifth
+  `==` comparison lives in `Game::position_is_honest`, the *map's* draw gate,
+  so a subject was not drawn at all and the pin brackets sat over bare floor
+  — the player reported it as the brackets replacing the glyph, there being
+  no glyph to replace. Its exactness is right for `Sortie` (an away program
+  must not claim a tile it is not on) and wrong here, where a subject stands
+  exactly where it claims to; fixed as its own arm, since the `Staff` arm's
+  `&& Task.is_none()` clause is about a body hidden under a machine's glyph.
+  **And the mark meant *selected* rather than *settled***:
+  `Game::view_pinned_at` marked every `UnderStudy` body wherever it stood, so
+  the brackets latched on at selection and rode along for the whole walk. It
+  is gated on the body standing on its own pen now, making mark ⇔
+  `pinned_subject` ⇔ gate-satisfied one invariant instead of three answers.
+  Neither was caught because every existing test drove the mark through
+  `pin_subject_at_pen`, which *teleports* the body onto the pen — so nothing
+  ever observed a subject mid-walk, the one state where the two questions
+  differ.
 - **A research node's subject gate is one term both the screen and the
   selection reach through.** It sits outside `research_block_memo`, which
   memoises per `ItemId` where the subject test is per *node* — and that is

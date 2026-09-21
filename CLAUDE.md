@@ -595,6 +595,9 @@ relying on one, and correct all three places if it has moved.
   read, never stored, and the anchor is the one cell that blocks.**
 - **A pinned program is a fifth `ProgramRole` whose consequences are
   omissions, and only the rest-repair one fails to compile.**
+- **The pin mark means *settled*, not *selected***, `view_pinned_at` gated on
+  the subject standing on its own pen so it cannot disagree with
+  `pinned_subject` or the research gate.
 - **A research node's subject gate is one term both the screen and the
   selection reach through**, `research_block_with`, outside the per-`ItemId`
   memo.

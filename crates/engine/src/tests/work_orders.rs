@@ -1340,6 +1340,111 @@ fn two_pinned_programs_cannot_share_the_pen() {
     );
 }
 
+/// Found at the keyboard, two faults on one tile. The brackets latched on the
+/// moment a subject was *selected* and rode along while it walked, and the
+/// body itself was not drawn at all — so the pen showed four red brackets over
+/// bare floor and they read as *replacing* the program rather than marking it.
+///
+/// **The brackets mean "in study", and study begins on arrival.** That is
+/// already what `Game::pinned_subject` says and what the research gate reads,
+/// so the mark now agrees with both instead of being a third answer:
+/// `view_pinned_at` requires the body to be standing on its own station's pen.
+///
+/// **The glyph is the other half.** `position_is_honest` is the map's draw
+/// gate and tests `Staff` **exactly** (`a_dispatched_program_leaves_the_map`'s
+/// rule, where the exactness is right — an away program must not claim a tile
+/// it is not on). A pinned program is `UnderStudy` and `wears_job_mark` is
+/// about a *posted* one, so the fifth `ProgramRole` landed outside the
+/// comparison and stopped being drawn. A subject's `Position` is the least
+/// dishonest one in the game: it *is* where `pinned_subject` reads it from.
+#[test]
+fn a_subject_is_drawn_all_the_way_and_bracketed_only_once_it_settles() {
+    let mut game = Game::new(4214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    // `spawn_tamed_on_map` and not `spawn_tamed`: `view_entities_at` queries
+    // `&Glyph`, which the bare fixture does not insert, so a body spawned
+    // the other way is absent from the map for a reason that has nothing to
+    // do with this rule.
+    let program = spawn_tamed_on_map(&mut game, 3, 1);
+
+    let half = 8;
+    let bracketed = |game: &Game, at: (i32, i32)| {
+        let rows = game.view_pinned_at(pen, half, half);
+        rows[(at.1 - pen.1 + half) as usize][(at.0 - pen.0 + half) as usize]
+    };
+
+    assert!(
+        game.position_is_honest(program),
+        "idle staff are drawn, so this starts from a drawn body"
+    );
+
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    // Selected, not yet settled: drawn as itself, and unmarked.
+    let here = *game.world.get::<Position>(program).unwrap();
+    assert!(
+        game.position_is_honest(program),
+        "a subject on its way to the pen must still be drawn"
+    );
+    assert!(
+        !bracketed(&game, (here.x, here.y)),
+        "the brackets must not appear until the subject has settled in the pen"
+    );
+
+    let mut arrived = false;
+    for _ in 0..40 {
+        game.tick();
+        let p = *game.world.get::<Position>(program).unwrap();
+        assert!(
+            game.position_is_honest(program),
+            "a subject must be drawn at every step of the walk"
+        );
+        if (p.x, p.y) == pen {
+            arrived = true;
+            break;
+        }
+        assert!(
+            !bracketed(&game, (p.x, p.y)),
+            "still walking at {:?}, so still unmarked",
+            (p.x, p.y)
+        );
+    }
+    assert!(arrived, "the subject never reached its pen");
+
+    // Settled: marked, and still drawn — through the map's own filter, not
+    // merely through the predicate behind it.
+    assert!(
+        bracketed(&game, pen),
+        "a settled subject wears the brackets"
+    );
+    let view = game
+        .view_entities_at(pen, 6, 6)
+        .into_iter()
+        .find(|v| v.pos == pen)
+        .expect("the subject must be among the drawn entities at the pen");
+    assert!(
+        views::drawn_on_surface_map(view.is_tamed, view.position_is_honest),
+        "the pen's occupant must survive the map's own filter, or the \
+         brackets draw over bare floor"
+    );
+    assert_ne!(
+        view.glyph, ' ',
+        "the brackets are additional to the glyph, never a replacement for it"
+    );
+}
+
 /// **The lab's floor is not a loitering spot**, found at the keyboard the
 /// first time anyone studied a program: an idle program wandered into the
 /// Station's pen and `Game::pin_subject` answered "Something is already

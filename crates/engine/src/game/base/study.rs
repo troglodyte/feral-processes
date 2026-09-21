@@ -375,25 +375,39 @@ impl Game {
         rows
     }
 
-    /// Every body under study within the `(center, half_w, half_h)` window —
-    /// the pin mark's own question, same window and indexing as
-    /// `view_station_floor_at` beside it. Reads `components::UnderStudy`
-    /// bodies directly rather than re-deriving a pen: arrival is derived off
-    /// a body's own `Position` (`components::UnderStudy`'s doc), so this is
-    /// the same read in the other direction. **The renderer's only way to
-    /// ask, and read once a frame** for `view_station_floor_at`'s reason.
+    /// Every **settled** subject within the `(center, half_w, half_h)` window
+    /// — the pin mark's own question, same window and indexing as
+    /// `view_station_floor_at` beside it. **The renderer's only way to ask,
+    /// and read once a frame** for `view_station_floor_at`'s reason.
+    ///
+    /// A body carrying `components::UnderStudy` is not enough: it must be
+    /// standing on its own station's pen, which is what `Game::pinned_subject`
+    /// and the research gate both already mean by a subject. Read off the
+    /// marker alone this was a *third* answer to that one question, and it
+    /// showed: the brackets latched on the moment a subject was selected and
+    /// rode along for the whole walk to the pen, marking a program that was
+    /// not under study yet.
     pub fn view_pinned_at(&self, center: (i32, i32), half_w: i32, half_h: i32) -> Vec<Vec<bool>> {
         let (cx, cy) = center;
         let width = (2 * half_w + 1).max(0) as usize;
         let height = (2 * half_h + 1).max(0) as usize;
         let mut rows = vec![vec![false; width]; height];
         for e in self.world.iter_entities() {
-            if e.get::<components::UnderStudy>().is_none() {
+            let Some(under_study) = e.get::<components::UnderStudy>() else {
                 continue;
-            }
+            };
             let Some(pos) = e.get::<Position>() else {
                 continue;
             };
+            // **Only once it has settled.** The mark means *in study*, and
+            // study begins on arrival — which is already what
+            // `Game::pinned_subject` answers and what the research gate
+            // reads. Marking every `UnderStudy` body wherever it stood made
+            // this a third answer to that one question, so the brackets
+            // latched on at selection and rode along for the whole walk.
+            if self.study_pen(under_study.station) != Some((pos.x, pos.y)) {
+                continue;
+            }
             let (dx, dy) = (pos.x - cx, pos.y - cy);
             if dx.abs() <= half_w && dy.abs() <= half_h {
                 rows[(dy + half_h) as usize][(dx + half_w) as usize] = true;

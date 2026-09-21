@@ -2842,3 +2842,63 @@ fn a_save_round_trips_what_the_base_has_discovered_and_banked() {
         "a part-banked study attempt must survive a reload"
     );
 }
+
+/// The one door: one id written, one base line, one notification — and a
+/// second call on the same node is inert, which is what lets any caller fire
+/// it without first asking whether the node is already known.
+#[test]
+fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
+    let mut game = Game::new(4430, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let name = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .expect("paging ships")
+        .name
+        .clone();
+    while game.take_notification().is_some() {}
+
+    assert!(game.discover_research("paging"), "a fresh node is news");
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["paging".to_string()],
+        "exactly one id, and only the one asked for"
+    );
+    let said: Vec<String> = game
+        .message_history(500)
+        .iter()
+        .filter(|l| l.text.contains("uncovers"))
+        .map(|l| l.text.clone())
+        .collect();
+    assert_eq!(said, vec![format!("The study uncovers {name}.")]);
+    assert_eq!(game.notifications_pending(), 1);
+
+    // Inert the second time: no second id, no second line, no second popup.
+    while game.take_notification().is_some() {}
+    assert!(!game.discover_research("paging"), "already found");
+    assert_eq!(game.notifications_pending(), 0);
+    assert_eq!(
+        game.message_history(500)
+            .iter()
+            .filter(|l| l.text.contains("uncovers"))
+            .count(),
+        1
+    );
+
+    // An id nothing defines is refused rather than written — a save editor's
+    // typo must not mint a node the tree has never heard of.
+    assert!(!game.discover_research("not_a_node"));
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .len(),
+        1
+    );
+}

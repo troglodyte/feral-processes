@@ -1101,6 +1101,44 @@ impl Game {
     /// subject — or its materials — on one that is still half-researched,
     /// `a_full_bill_alone_does_not_complete_a_project`'s failure with a worse
     /// loss, since a program is not refundable the way a shelf material is.
+    /// **The one door a discovery is written through** — `Game::remember`'s
+    /// rule. `Game::settle_study` is its only caller today; a second
+    /// discovery source is a second caller of this and nothing else.
+    ///
+    /// Reports whether this was news. Idempotent by construction: a node
+    /// already in the set writes nothing, says nothing and pops nothing, so
+    /// no caller needs a check of its own — and an id nothing defines is
+    /// refused before the set is touched, since a name the tree never heard
+    /// of would sit there forever gating nothing.
+    ///
+    /// No `detail`: `Game::research_unlocks` is what *finishing* the node
+    /// buys, and quoting it on the discovery would read as the node already
+    /// being researched.
+    pub fn discover_research(&mut self, id: &str) -> bool {
+        let Some(def) = self.world.resource::<ResearchDb>().get(id).cloned() else {
+            return false;
+        };
+        if !self
+            .world
+            .resource_mut::<crate::resources::DiscoveredResearch>()
+            .0
+            .insert(def.id.clone())
+        {
+            return false;
+        }
+        // `log_base`, matching selection, abandonment and completion: a
+        // discovery is base news and can land while the party is four frames
+        // down the Stack. A plain `log()` is `MessageKind::Info`, which
+        // `retain_outcomes_since_battle` prunes.
+        self.log_base(format!("The study uncovers {}.", def.name));
+        self.notify_filled(
+            crate::notifications::NotificationKind::ResearchDiscovered,
+            &[("name", &def.name), ("description", &def.description)],
+            None,
+        );
+        true
+    }
+
     pub(crate) fn settle_research(&mut self) {
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;

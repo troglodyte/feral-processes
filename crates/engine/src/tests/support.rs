@@ -1138,6 +1138,16 @@ pub(super) fn stand_ample_grid_supply(game: &mut Game) {
 /// by the shortcut, because the tests that are *about* the gate
 /// (`breaching_makes_a_zone_gated_node_available`) breach for real, so a
 /// gate regression cannot hide behind this.
+///
+/// **Now writes to the player's own stores, not only the scratch shelf.**
+/// Since `ResearchDef::requires_subject` landed, every subject-gated node
+/// in the chain spawns a fresh tamed program, pins it, and lets
+/// `settle_research` spend it — the real completion door, this function's
+/// own reason above — so completing one leaves a `DownedProgram` row in
+/// `DownedPrograms` and bumps `resources::NextProgramId`, exactly as a real
+/// study would. A test asserting an exact `DownedPrograms` count, or a
+/// specific `ProgramId`, after calling this on a subject-gated chain
+/// should account for that row rather than be surprised by it.
 pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     fn order(game: &Game, id: &str, out: &mut Vec<String>) {
         let Some(def) = game.world.resource::<ResearchDb>().get(id).cloned() else {

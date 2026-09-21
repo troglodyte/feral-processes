@@ -42,6 +42,25 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.216
+
+Tooling only — nothing about a played game changes.
+
+### The Sprite Forge opens from the map
+
+The dev sprite editor's only door was the main menu, which is unreachable
+once a run has started — so drawing a sprite and seeing it on the map meant
+quitting to the menu, drawing, starting a new run, and walking back to
+whatever the art was for. The dev keypad grows a row for it, and the keypad's
+own key is bound above the hand-off to the Stack handler, so the forge now
+opens on the open grid, in base space and down a Stack frame alike. Esc
+leaves by the door it came through — the keypad for the new row, the main
+menu for the old one — and the art is already live when you get back, since a
+save reloads the sprite in the same frame it lands. The row is drawn even
+with `FERAL_DEV_SPRITES` unset, per the keypad's rule that it hides none of
+its rows, and refuses with a sentence rather than doing nothing, which is
+what an unbound key looks like.
+
 ## 0.13.215
 
 **Your downed programs open straight from the map, with D.** The store was

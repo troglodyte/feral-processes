@@ -261,9 +261,24 @@ impl Game {
                 return Err("There's no route to the pen from here.".into());
             }
         }
+        // A posted program **is** `Staff` — the role check above never sees
+        // its `Task` — so pinning has to free it here or it never is:
+        // `base_staff()` already excludes `UnderStudy`, so
+        // `schedule_base_labour`'s free loop (which only ever visits
+        // `base_staff()`) will never touch this body again, and
+        // `drift_idle_staff`'s body loop skips anything still carrying a
+        // `Task` before it ever reaches the `UnderStudy` arm — so a stale
+        // `Task` also stops the walk to the pen, not only the posting.
+        // `.remove::<Carrying>()` alongside it is `schedule_base_labour`'s
+        // own free-loop rule for a body that is no longer in the pool
+        // (`Downed`'s unconditional free, ahead of the `Carrying` escape):
+        // the scheduler re-posts someone else next tick exactly as it does
+        // when staff shrinks any other way.
         self.world
             .entity_mut(program)
-            .insert(components::UnderStudy { station });
+            .insert(components::UnderStudy { station })
+            .remove::<Task>()
+            .remove::<Carrying>();
         let name = self.creature_label(program);
         self.log(format!("{name} is pinned in the Research Station's pen."));
         Ok(())

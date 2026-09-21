@@ -1340,6 +1340,65 @@ fn two_pinned_programs_cannot_share_the_pen() {
     );
 }
 
+/// C2 (final whole-branch review): a posted program **is** `Staff` —
+/// `Game::pin_subject`'s `role != Staff` refusal never sees it — so pinning
+/// it must free the stale `Task` itself, or three things go quietly wrong:
+/// `schedule_base_labour`'s free loop only ever visits `base_staff()`, which
+/// already excludes an `UnderStudy` body, so a `Task` left on it is never
+/// touched again; `drift_idle_staff`'s body loop opens with
+/// `if self.world.get::<Task>(worker).is_some() { continue; }`, above the
+/// `UnderStudy` arm, so the pinned body never even attempts the walk to its
+/// pen; and `pinned_subject()` — gated on the subject's own `Position`
+/// equalling the pen — then never resolves, so every subject-gated node
+/// stays refused forever. Posted through the real scheduler
+/// (`schedule_base_labour`), never a hand-written `Task`, or the test cannot
+/// tell "the scheduler posted it" from "the fixture pretended it did".
+#[test]
+fn pinning_a_posted_program_frees_its_task_and_walks_to_the_pen() {
+    let mut game = Game::new(19001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    let _ = (lathe, press);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+
+    let staff = hire(&mut game, 1);
+    let program = staff[0];
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+    game.tick();
+    assert_eq!(
+        posted_at(&game, program),
+        Some(mine),
+        "precondition: the real scheduler posted the only staff member to the mine"
+    );
+
+    game.pin_subject(program, station)
+        .expect("a staff program with a route to the pen may be pinned");
+
+    assert!(
+        game.world.get::<Task>(program).is_none(),
+        "pinning must free the stale Task — the scheduler will never touch this body again \
+         to do it, since base_staff() already excludes an UnderStudy program"
+    );
+
+    let mut arrived = false;
+    for _ in 0..80 {
+        game.tick();
+        if game.pinned_subject() == Some(program) {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(
+        arrived,
+        "the freshly pinned program must walk itself to the pen once its stale Task is gone"
+    );
+}
+
 /// The map and the inspector must stay the same set — that is the whole
 /// reason `drawn_on_surface_map` is one function called by both.
 ///

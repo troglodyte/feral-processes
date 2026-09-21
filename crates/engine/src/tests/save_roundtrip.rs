@@ -1003,6 +1003,76 @@ fn a_save_written_before_study_stations_existed_still_loads() {
     );
 }
 
+/// C2 (final whole-branch review): a save carrying **both** a `cronjob`
+/// and a `study_station` for the same creature — reachable from any save
+/// written before pinning froze the program's stale `Task` — must restore
+/// the study tether, not the cronjob.
+///
+/// `Game::creature_save_for`'s writer does not know about `UnderStudy` at
+/// all, so it wrote a `cronjob` for any `Task`-carrying body whether or not
+/// that body was also pinned; the restore chain in `Game::load` was an
+/// `if party_slot … else if cronjob … else if study_station`, so the
+/// cronjob branch always won and the pin was silently dropped on reload.
+/// Built by hand — inserting `Task` and `UnderStudy` on the same body
+/// directly, bypassing `Game::pin_subject` — because that state can no
+/// longer arise through play once pinning frees the stale `Task`; the
+/// point of this test is what an *already-written* save does, not how a
+/// fresh one could produce it.
+#[test]
+fn a_study_station_takes_precedence_over_a_stale_cronjob_on_restore() {
+    let mut game = Game::new(20260923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.world
+        .entity_mut(program)
+        .insert(Task {
+            kind: TaskKind::GatherResource,
+            target: mine,
+            progress: 3,
+            required: 10,
+        })
+        .insert(crate::components::UnderStudy { station });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_study_vs_cronjob_precedence_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("cronjob") && text.contains("study_station"),
+        "the fixture must actually write both fields or this proves nothing"
+    );
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let _ = std::fs::remove_file(&path);
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Analyst"))
+        .expect("the program is back on the roster");
+    assert_eq!(
+        loaded.program_role(back.entity),
+        Some(ProgramRole::UnderStudy),
+        "the study tether must win over a stale cronjob"
+    );
+    assert!(
+        loaded.world.get::<Task>(back.entity).is_none(),
+        "the cronjob must not have been restored alongside the study tether"
+    );
+}
+
 /// The two build rolls are additive behind `#[serde(default = "neutral_roll")]`,
 /// so they cost no `SAVE_FORMAT_VERSION` bump. A bare `#[serde(default)]` on
 /// an `f32` is `0.0`, which would load every program in every pre-feature

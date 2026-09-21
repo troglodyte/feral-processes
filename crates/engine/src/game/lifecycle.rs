@@ -1799,13 +1799,20 @@ impl Game {
             }
             if let Some(slot) = party_slot {
                 ctx.party_slots.push((slot, creature_id));
-            } else if let Some(cronjob) = c.cronjob.clone() {
-                ctx.pending_cronjobs.push((creature_id, cronjob));
             } else if let Some(tile) = c.study_station {
+                // **Checked before `cronjob`.** `Game::pin_subject` frees a
+                // program's stale `Task` the moment it is pinned, so the two
+                // fields no longer co-occur in a save this build writes —
+                // but an older save can carry both for a creature that was
+                // posted when the bug that let that happen shipped, and the
+                // study tether has to be the one that survives a reload,
+                // not the stale job the pin was supposed to have replaced.
                 // Deferred for `pending_cronjobs`' own reason: a Research
                 // Station is one of the structures rebuilt further down
                 // `Game::load`, so there is nothing yet for a tile to name.
                 ctx.pending_study.push((creature_id, tile));
+            } else if let Some(cronjob) = c.cronjob.clone() {
+                ctx.pending_cronjobs.push((creature_id, cronjob));
             }
             // Nothing restores a staff marker, and `c.staff` is read
             // nowhere: the role is derived from the party and the wield,

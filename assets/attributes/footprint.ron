@@ -1,0 +1,9 @@
+(
+    id: "footprint",
+    name: "Footprint",
+    legacy: "Size",
+    short: "how much heap it occupies",
+    meaning: "How much of the heap this program takes up while it runs. A large-Footprint program is a presence wherever it is loaded, and a small one is the kind you forget is resident at all.",
+    base: 45,
+    spread: 16,
+)

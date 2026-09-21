@@ -315,6 +315,21 @@ pub struct SpeciesDef {
     /// (including mods) without this field keep parsing.
     #[serde(default)]
     pub equipment_drop: Option<(ItemId, f32)>,
+    /// This species' own base for each attribute, by
+    /// `attributes::AttributeId` — see `attributes.rs`. Absent, or an id
+    /// the catalogue does not define, falls through to that def's own
+    /// `base`, which is what makes `assets/attributes/` and
+    /// `assets/species/` independent of each other.
+    ///
+    /// The value is a **base** the body mints a spread around, not the
+    /// number the body ends up with, and it is read once at the spawn —
+    /// editing it does not change a body that already exists.
+    ///
+    /// `#[serde(default)]`, so no existing species file — including a
+    /// mod's — needs editing. The shipped seventeen are held to authoring
+    /// all five by `every_shipped_species_authors_every_attribute`.
+    #[serde(default)]
+    pub attributes: std::collections::BTreeMap<String, i32>,
     /// Marks this species as a boss: excluded from the normal per-tile
     /// habitat spawn roll and instead spawned rarely in its place (see
     /// `Game::try_spawn_habitat_creature`), and guaranteed a cache of

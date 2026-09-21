@@ -46,10 +46,25 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 pub(crate) fn fold(seed: u64, words: &[u64]) -> u64 {
     let mut h = seed;
     for &word in words {
-        for byte in word.to_le_bytes() {
-            h ^= byte as u64;
-            h = h.wrapping_mul(FNV_PRIME);
-        }
+        h = fold_bytes(h, &word.to_le_bytes());
+    }
+    h
+}
+
+/// Continues an FNV-1a fold with further **bytes**.
+///
+/// The byte form of `fold`, and the one every string-keyed caller wants: an
+/// id folded as text cannot be reshuffled by a file being added to the
+/// directory beside it, where an index into a sorted catalogue can.
+///
+/// `fold` is expressed through this rather than beside it, so the crate has
+/// exactly one FNV-1a loop. `game::contracts::fold` was the second and now
+/// delegates here.
+pub(crate) fn fold_bytes(seed: u64, bytes: &[u8]) -> u64 {
+    let mut h = seed;
+    for byte in bytes {
+        h ^= *byte as u64;
+        h = h.wrapping_mul(FNV_PRIME);
     }
     h
 }

@@ -4,4 +4,11 @@
     description: "Takes a program apart rather than beating it down. Every decompile attempt lands more often; damage routines land softer.",
     affinities: (damage: 0.8),
     kit: [("ice_breaker", 8), ("core_fragment", 4), ("power_cell", 2)],
+    attributes: {
+        "persistence": 58,
+        "entropy": 44,
+        "bandwidth": 54,
+        "footprint": 42,
+        "parity": 66,
+    },
 )

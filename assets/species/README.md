@@ -400,6 +400,28 @@ is skipped with a warning logged in-game rather than crashing startup.
     taunts: [
         "circles once, unimpressed, and pings them again.",
     ],
+
+    // Optional. This species' own **base** for each attribute, keyed by
+    // attribute id — see `assets/attributes/README.md`. An id this map
+    // does not name falls through to that attribute def's own `base`, so
+    // the two directories stay independent of each other.
+    //
+    // It is a base the body mints a *spread* around, not the number the
+    // body ends up with, and it is read once at the spawn: editing it does
+    // not change a body that already exists. Nothing reads an attribute
+    // for a mechanic — they are what the dossier page shows.
+    //
+    // All seventeen shipped species author all five shipped attributes,
+    // held by `every_shipped_species_authors_every_attribute` in
+    // `crates/engine/src/tests/assets.rs`. The field itself stays
+    // optional, so a mod's species file keeps parsing untouched.
+    attributes: {
+        "persistence": 58,
+        "entropy": 32,
+        "bandwidth": 34,
+        "footprint": 50,
+        "parity": 60,
+    },
 )
 ```
 

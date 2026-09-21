@@ -18,4 +18,11 @@
     work_resource: None,
     is_boss: true,
     abilities: [(id: "broadcast_storm"), (id: "overclock_array", level: 4)],
+    attributes: {
+        "persistence": 74,
+        "entropy": 30,
+        "bandwidth": 72,
+        "footprint": 80,
+        "parity": 66,
+    },
 )

@@ -1,0 +1,9 @@
+(
+    id: "persistence",
+    name: "Persistence",
+    legacy: "Willpower",
+    short: "holds its own state under stress",
+    meaning: "How cleanly this program keeps its own state when things go wrong around it. A program low in Persistence is the one that comes back from a bad fight not quite the same as it went in.",
+    base: 50,
+    spread: 12,
+)

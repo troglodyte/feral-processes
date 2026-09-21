@@ -76,6 +76,13 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // the player was reading down the roster is what Esc returns to.
             | (Mode::Companion, Mode::CompanionMemories)
             | (Mode::CompanionMemories, Mode::Companion)
+            // The dossier is a page of the manifest, and the manifest is
+            // where the roster's row is *parked* for the duration (see this
+            // function's doc). Without this pair, opening `[D]` and pressing
+            // Esc twice lands back on the roster at row 0 rather than on the
+            // program you were reading.
+            | (Mode::Manifest, Mode::Dossier)
+            | (Mode::Dossier, Mode::Manifest)
             // M2, final review: the picker has 49 rows and no scroll, so
             // losing the highlight on Esc from the editor means you cannot
             // edit row 30, back out, and press `t` on the same row.
@@ -259,6 +266,7 @@ impl App {
             Mode::Companion => self.handle_companion_key(key),
             Mode::CompanionEquip => self.handle_companion_equip_key(key),
             Mode::CompanionMemories => self.handle_companion_memories_key(key),
+            Mode::Dossier => self.handle_dossier_key(key),
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
             Mode::FuseName => self.handle_fuse_name_key(key),

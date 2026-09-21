@@ -5272,3 +5272,136 @@ fn the_honeypot_is_gated_by_deception_and_nothing_else() {
         "the bench must name the item or the recipe is unassemblable"
     );
 }
+
+/// Every shipped attribute authors all seven fields, and the two prose
+/// fields are actually prose.
+///
+/// The cost of the catalogue being data, paid: nothing in Rust enumerates
+/// the shipped five, so without this an attribute could ship with an empty
+/// `meaning` and the dossier page would draw a blank line under it.
+#[test]
+fn every_shipped_attribute_says_what_it_means() {
+    let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs = game.attribute_defs();
+    assert_eq!(defs.len(), 5, "the shipped catalogue is five attributes");
+    for def in &defs {
+        assert!(!def.name.is_empty(), "{} has no name", def.id);
+        assert!(!def.legacy.is_empty(), "{} has no legacy name", def.id);
+        assert!(
+            def.short.len() >= 10,
+            "{}'s gloss is too short to say anything: {:?}",
+            def.id,
+            def.short
+        );
+        assert!(
+            def.meaning.split_whitespace().count() >= 15,
+            "{}'s meaning is a phrase, not prose: {:?}",
+            def.id,
+            def.meaning
+        );
+        assert!(
+            def.spread < def.base,
+            "{}: a spread at or above the base can mint a negative attribute",
+            def.id
+        );
+    }
+}
+
+/// The gloss may not promise a mechanic. Decision 2 of the spec: the
+/// sentence saying what an attribute *does* lands with the mechanic that
+/// does it, and until then a claim the player tests and finds false is
+/// worse than no claim.
+#[test]
+fn no_shipped_attribute_claims_an_effect() {
+    let game = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.attribute_defs() {
+        let prose = format!("{} {}", def.short, def.meaning).to_lowercase();
+        for claim in [
+            "increases",
+            "reduces",
+            "improves",
+            "raises",
+            "lowers",
+            "bonus",
+            "chance to",
+            "per point",
+            "rises over",
+            "grows over",
+        ] {
+            assert!(
+                !prose.contains(claim),
+                "{} promises a mechanic ({claim:?}) that nothing implements: {prose}",
+                def.id
+            );
+        }
+    }
+}
+
+/// Every shipped species authors every shipped attribute.
+///
+/// The field is `#[serde(default)]`, so nothing in the compiler or the
+/// loader notices a species that authors none — it simply mints the
+/// catalogue's own bases and reads identically to every other species,
+/// which is the `AbilityDef::spread` failure: a field authored nowhere,
+/// with nobody to find out.
+#[test]
+fn every_shipped_species_authors_every_attribute() {
+    let game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<String> = game
+        .attribute_defs()
+        .iter()
+        .map(|d| d.id.as_str().to_string())
+        .collect();
+    for species in game.species_defs() {
+        // The test fixture is registered into the db at `Game::new` and is
+        // deliberately blank — `the_generic_fixture_species_is_blank_and_
+        // unshipped` is the rule it exists for.
+        if species.id == GENERIC_SPECIES_ID {
+            continue;
+        }
+        for id in &ids {
+            assert!(
+                species.attributes.contains_key(id),
+                "species {} authors no {id}",
+                species.id
+            );
+        }
+        for authored in species.attributes.keys() {
+            assert!(
+                ids.contains(authored),
+                "species {} authors {authored:?}, which no attribute def defines",
+                species.id
+            );
+        }
+    }
+}
+
+/// And every shipped class, which is the player's only authored source —
+/// the player carries no `Creature` and no species.
+#[test]
+fn every_shipped_class_authors_every_attribute() {
+    let game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<String> = game
+        .attribute_defs()
+        .iter()
+        .map(|d| d.id.as_str().to_string())
+        .collect();
+    let classes = game.class_defs();
+    assert_eq!(classes.len(), 8, "the shipped catalogue is eight classes");
+    for class in classes {
+        for id in &ids {
+            assert!(
+                class.attributes.contains_key(id),
+                "class {} authors no {id}",
+                class.name
+            );
+        }
+        for authored in class.attributes.keys() {
+            assert!(
+                ids.contains(authored),
+                "class {} authors {authored:?}, which no attribute def defines",
+                class.name
+            );
+        }
+    }
+}

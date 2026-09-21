@@ -70,6 +70,10 @@ pub(crate) fn generic_species() -> SpeciesDef {
         work_resource: None,
         rich_in: None,
         equipment_drop: None,
+        // Nothing authored, so a fixture body mints each attribute around
+        // its own def's `base` — `generic_species`'s rule, that a fixture
+        // must not shift meaning when a content file is edited.
+        attributes: std::collections::BTreeMap::new(),
         is_boss: false,
         abilities: Vec::new(),
         growth_multiplier: crate::tuning::BASELINE_GROWTH_MULTIPLIER,
@@ -1973,6 +1977,24 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     game.world
         .entity_mut(entity)
         .insert(crate::disposition::Disposition::Steady);
+    // The one component `roster_parts` deliberately does *not* mint — every
+    // real door into the roster goes through `spawn_wild_creature_scaled`
+    // first, which is where a body's attributes come from, and this fixture
+    // skips it. Without this a fixture body saves an empty map and mints
+    // five on the way back in, which is the old-save arm firing on a save
+    // written today.
+    let attrs = crate::attributes::mint(
+        game.world.resource::<crate::attributes::AttributeDb>(),
+        crate::attributes::body_seed(
+            game.world.resource::<crate::world::WorldMap>().seed(),
+            3,
+            3,
+            species.id.as_str(),
+            1,
+        ),
+        &species.attributes,
+    );
+    game.world.entity_mut(entity).insert(attrs);
     game.install_innate_routines(entity);
     entity
 }
@@ -2016,7 +2038,8 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
         .into_iter()
         .next()
         .expect("at least one species");
-    game.world
+    let entity = game
+        .world
         .spawn((
             Creature {
                 species: species.id.clone(),
@@ -2038,7 +2061,23 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
             // this creature disappear, and reads as the debuff not working.
             StatusEffects::default(),
         ))
-        .id()
+        .id();
+    // `spawn_tamed`'s reason, on the wild side: the real spawner mints
+    // these, and a fixture body that saves an empty map and mints five on
+    // the way back in fires the old-save arm on a save written today.
+    let attrs = crate::attributes::mint(
+        game.world.resource::<crate::attributes::AttributeDb>(),
+        crate::attributes::body_seed(
+            game.world.resource::<crate::world::WorldMap>().seed(),
+            player_pos.x,
+            player_pos.y,
+            species.id.as_str(),
+            1,
+        ),
+        &species.attributes,
+    );
+    game.world.entity_mut(entity).insert(attrs);
+    entity
 }
 
 /// The wild-boss counterpart of `spawn_wild_on_player_tile`, for the tests

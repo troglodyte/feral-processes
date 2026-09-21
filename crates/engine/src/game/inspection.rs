@@ -1916,6 +1916,75 @@ impl Game {
         self.program_manifest(entity)
     }
 
+    /// The dossier page's whole derivation: a body's attributes with both
+    /// their names, over a derived header and one sentence of provenance.
+    ///
+    /// `&self` and `Option`, mirroring `Game::manifest` — the subject is
+    /// `App::pending_manifest`, which the manifest already pages through
+    /// with the arrow keys, and `None` is a body that is gone.
+    ///
+    /// **The header folds the stored attribute values, not a re-derived
+    /// `body_seed`.** The body has walked since it spawned, so its
+    /// `Position` is no longer the tile it was minted on, and re-deriving
+    /// here would make a program's checksum change every time it took a
+    /// step. Folding the numbers makes the revision and the checksum a
+    /// function of what is actually on the page — which is what a checksum
+    /// should be — and it is stable across a save and a load for free,
+    /// because the values are.
+    ///
+    /// The catalogue is walked (sorted, by `AttributeDb::iter`) and trimmed
+    /// to `tuning::MAX_ATTRIBUTE_ROWS` **before** the rows are built, so a
+    /// modded catalogue costs the last rows rather than pushing the header
+    /// off a page with no scroll. An id the store has no value for is
+    /// skipped, and an entry the catalogue no longer defines is skipped
+    /// too — every `Memories` reader's rule, and what makes a catalogue
+    /// edited between sessions a supported thing to do.
+    pub fn dossier_report(&self, entity: Entity) -> Option<crate::views::DossierReport> {
+        // `Stats` is this crate's idiom for "this entity is still here".
+        self.world.get::<Stats>(entity)?;
+        let stored = self.world.get::<crate::components::Attributes>(entity);
+        let db = self.world.resource::<crate::attributes::AttributeDb>();
+        let rows: Vec<crate::views::AttributeRow> = db
+            .iter()
+            .take(crate::tuning::MAX_ATTRIBUTE_ROWS)
+            .filter_map(|def| {
+                let value = stored?.get(&def.id)?;
+                Some(crate::views::AttributeRow {
+                    name: def.name.clone(),
+                    legacy: def.legacy.clone(),
+                    value,
+                    short: def.short.clone(),
+                    meaning: def.meaning.clone(),
+                })
+            })
+            .collect();
+        let seed = crate::derive::fold(
+            crate::derive::FNV_BASIS,
+            &stored
+                .into_iter()
+                .flat_map(|a| a.iter().map(|(_, v)| v as i64 as u64).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+        );
+        let name = if self.world.get::<Player>(entity).is_some() {
+            self.world
+                .get::<CustomName>(entity)
+                .map(|n| n.0.clone())
+                .unwrap_or_else(|| "You".to_string())
+        } else {
+            self.creature_label(entity)
+        };
+        Some(crate::views::DossierReport {
+            name,
+            revision: crate::attributes::revision(seed),
+            checksum: crate::attributes::checksum(seed),
+            provenance: self
+                .world
+                .resource::<crate::descriptions::DescriptionDb>()
+                .paragraph("program.dossier", None, seed),
+            rows,
+        })
+    }
+
     fn player_manifest(&self, entity: Entity) -> Option<ManifestView> {
         let stats = self.world.get::<Stats>(entity)?;
         let needs = self.world.get::<PowerReserve>(entity)?;

@@ -357,6 +357,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         staff: _,
         downed: _,
         disgruntled_stranded: _,
+        attributes: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");
@@ -449,6 +450,10 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert_eq!(saved.disgruntled, None, "disgruntled");
     assert!(!saved.staff, "staff");
     assert!(!saved.downed, "downed");
+    // Every shipped attribute, off the wild spawn the fixture was built
+    // from — an empty map here would load as a body the mint has to repair,
+    // which is the old-save arm and not what a save written today means.
+    assert_eq!(saved.attributes.len(), 5, "attributes");
 }
 
 /// The other half of the census: the fields no party member can carry.

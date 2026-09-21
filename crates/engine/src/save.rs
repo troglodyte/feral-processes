@@ -221,6 +221,17 @@ pub struct PlayerSave {
     /// existed, which is exactly the glyph-only player it had.
     #[serde(default)]
     pub icon: Option<String>,
+    /// What this body is like apart from a fight — see
+    /// `components::Attributes`. Persisted rather than re-derived because
+    /// the fold's inputs include the tile it was spawned on, which a body
+    /// that has since walked away no longer stands on.
+    ///
+    /// Additive on a field-named RON struct, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump: an older file carries no key, loads
+    /// empty, and the load path mints it — which is how a run in progress
+    /// gets attributes with no migration.
+    #[serde(default)]
+    pub attributes: std::collections::BTreeMap<crate::attributes::AttributeId, i32>,
 }
 
 /// `serde`'s default for `PlayerSave::glyph` — a save written before
@@ -651,6 +662,17 @@ pub struct CreatureSave {
     /// **not** here: a reload should say the complaint again.
     #[serde(default)]
     pub needs: std::collections::BTreeMap<crate::needs::NeedId, f32>,
+    /// What this body is like apart from a fight — see
+    /// `components::Attributes`. Persisted rather than re-derived because
+    /// the fold's inputs include the tile it was spawned on, which a body
+    /// that has since walked away no longer stands on.
+    ///
+    /// Additive on a field-named RON struct, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump: an older file carries no key, loads
+    /// empty, and the load path mints it — which is how a run in progress
+    /// gets attributes with no migration.
+    #[serde(default)]
+    pub attributes: std::collections::BTreeMap<crate::attributes::AttributeId, i32>,
     /// Which need has this program off its post, if any — see
     /// `components::OffShift`. The one piece of this feature's state that is
     /// not derived, because it is hysteresis: reloaded without it, a program
@@ -1885,6 +1907,7 @@ mod tests {
                 sprite: String::new(),
                 colour: None,
                 icon: None,
+                attributes: Default::default(),
             },
             creatures: Vec::new(),
             structures: Vec::new(),
@@ -1980,6 +2003,7 @@ mod tests {
             disgruntled_stranded: false,
             memories: Vec::new(),
             needs: Default::default(),
+            attributes: Default::default(),
             off_shift: None,
             staff: false,
             downed: false,

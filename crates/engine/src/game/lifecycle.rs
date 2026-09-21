@@ -433,6 +433,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             needs: need_db,
+            attributes: attribute_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -470,6 +471,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -1139,6 +1141,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             needs: need_db,
+            attributes: attribute_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -1194,6 +1197,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -1334,9 +1338,40 @@ impl Game {
         let saved_sorties = std::mem::take(&mut data.player.sorties);
         let saved_routes = std::mem::take(&mut data.player.routes);
         let tutorial_seeded = data.player.tutorial_seeded;
+        let saved_attributes = std::mem::take(&mut data.player.attributes);
+        let player_class = data.player.class;
         let player =
             spawn_player_from_save(&mut world, data.player, player_routines, player_perk_levels);
         world.insert_resource(PlayerEntity(player));
+        // `spawn_player_from_save` is a free fn over `&mut World` with no
+        // `ClassDb` and no `AttributeDb`, exactly like `spawn_player`, so
+        // the player's half of the mint lands here — the same shape the
+        // creature loop uses, one level out. An empty map is what a save
+        // written before this feature carries, and minting on load rather
+        // than on first read is what keeps `Game::dossier_report` a `&self`
+        // derivation.
+        let player_attributes = if saved_attributes.is_empty() {
+            let authored = player_class
+                .and_then(|class| {
+                    world
+                        .resource::<crate::classes::ClassDb>()
+                        .get(class)
+                        .map(|def| def.attributes.clone())
+                })
+                .unwrap_or_default();
+            crate::attributes::mint(
+                world.resource::<crate::attributes::AttributeDb>(),
+                crate::attributes::player_seed(world.resource::<WorldMap>().seed()),
+                &authored,
+            )
+        } else {
+            let mut restored = crate::components::Attributes::default();
+            for (id, value) in &saved_attributes {
+                restored.set(id, *value);
+            }
+            restored
+        };
+        world.entity_mut(player).insert(player_attributes);
 
         if let Some(name) = CustomName::sanitize(Some(player_name)) {
             world.entity_mut(player).insert(CustomName(name));
@@ -1660,6 +1695,31 @@ impl Game {
         }
         let party_slot = c.party_slot;
         let sortie_index = c.sortie_index;
+        // Every creature has these, not only owned ones, so this is
+        // resolved here rather than inside the `tamed` block below. An
+        // empty map is what a save written before the feature carries, and
+        // minting here rather than on first read is what keeps
+        // `Game::dossier_report` a `&self` derivation. Built before the
+        // spawn because the `EntityWorldMut` below holds the world.
+        let attributes = if c.attributes.is_empty() {
+            crate::attributes::mint(
+                self.world.resource::<crate::attributes::AttributeDb>(),
+                crate::attributes::body_seed(
+                    self.world.resource::<WorldMap>().seed(),
+                    c.position.0,
+                    c.position.1,
+                    species.id.as_str(),
+                    c.zone,
+                ),
+                &species.attributes,
+            )
+        } else {
+            let mut restored = crate::components::Attributes::default();
+            for (id, value) in &c.attributes {
+                restored.set(id, *value);
+            }
+            restored
+        };
         let mut entity = self.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -1766,6 +1826,7 @@ impl Game {
                 active: c.field_buffs.clone(),
             });
         }
+        entity.insert(attributes);
         if c.tamed {
             let creature_id = entity.id();
             // Minted here for a file written before ids existed, which
@@ -2115,6 +2176,15 @@ impl Game {
                 .get::<Needs>(e)
                 .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
                 .unwrap_or_default(),
+            // Absent reads as empty, the shape `needs` above takes for a
+            // wild body — and an empty map is what the load path mints
+            // from, so a body that somehow has none is repaired rather
+            // than stranded.
+            attributes: self
+                .world
+                .get::<crate::components::Attributes>(e)
+                .map(|a| a.iter().map(|(id, v)| (id.clone(), v)).collect())
+                .unwrap_or_default(),
             off_shift: self
                 .world
                 .get::<crate::components::OffShift>(e)
@@ -2357,6 +2427,11 @@ impl Game {
                 casualties: s.casualties.clone(),
             })
             .collect();
+        let attrs: std::collections::BTreeMap<crate::attributes::AttributeId, i32> = self
+            .world
+            .get::<crate::components::Attributes>(player)
+            .map(|a| a.iter().map(|(id, v)| (id.clone(), v)).collect())
+            .unwrap_or_default();
         // No membership to gather, `routes::Route`'s own reason: a
         // field-for-field conversion is the whole of it.
         let routes: Vec<save::RouteSave> = self
@@ -2467,6 +2542,7 @@ impl Game {
             sprite: identity.sprite,
             colour: identity.colour,
             icon: identity.icon.as_ref().map(PlayerIcon::encode),
+            attributes: attrs,
         }
     }
 
@@ -2860,6 +2936,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
+    attributes: crate::attributes::AttributeDb,
     sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
@@ -2978,6 +3055,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
+    // Same absent-is-silent rule again — see `AttributeDb`'s own doc. An empty
+    // catalogue mints nothing and leaves the dossier page with no rows, which
+    // is the pre-attribute game.
+    let (attributes, attribute_warnings) =
+        crate::attributes::AttributeDb::load_dir(&assets_dir.join("attributes"))?;
+    warnings.extend(attribute_warnings);
     // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
     // catalogue leaves `Game::sortie_board` with nothing to offer, which is
     // the pre-sortie game.
@@ -3034,6 +3117,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         memories,
         needs,
+        attributes,
         sorties,
         caravans,
         nemesis,

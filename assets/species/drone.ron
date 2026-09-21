@@ -22,4 +22,11 @@
         "circles once, unimpressed, and pings them again.",
         "drops to hover height and waits, rotors idling.",
     ],
+    attributes: {
+        "persistence": 40,
+        "entropy": 28,
+        "bandwidth": 44,
+        "footprint": 30,
+        "parity": 55,
+    },
 )

@@ -147,6 +147,20 @@ pub struct ClassDef {
     pub affinities: Affinities,
     #[serde(default)]
     pub kit: Vec<(ItemId, u32)>,
+    /// The player's only authored source of attribute bases, since the
+    /// player carries no `Creature` and no species — see `attributes.rs`.
+    /// An id the catalogue does not define, or an absent map, falls
+    /// through to each def's own `base`.
+    ///
+    /// The value is a **base** the player mints a spread around, read once
+    /// at creation, so editing it does not change a run already in
+    /// progress.
+    ///
+    /// `#[serde(default)]`, so no existing class file — including a mod's
+    /// — needs editing. The shipped eight are held to authoring all five
+    /// by `every_shipped_class_authors_every_attribute`.
+    #[serde(default)]
+    pub attributes: std::collections::BTreeMap<String, i32>,
 }
 
 /// Every class the game knows about, loaded from `assets/classes/`. See the

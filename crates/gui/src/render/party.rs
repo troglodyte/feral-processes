@@ -1431,6 +1431,7 @@ mod tests {
             disgruntled_stranded: false,
             memories: Vec::new(),
             needs: Default::default(),
+            attributes: Default::default(),
             off_shift: None,
             staff: false,
             downed: false,

@@ -17,4 +17,11 @@
     work_resource: Some("core_fragment"),
     abilities: [(id: "overclock_array", level: 2), (id: "sandbox", level: 4)],
     affinities: (damage: 0.85, buff: 1.3),
+    attributes: {
+        "persistence": 66,
+        "entropy": 24,
+        "bandwidth": 38,
+        "footprint": 52,
+        "parity": 62,
+    },
 )

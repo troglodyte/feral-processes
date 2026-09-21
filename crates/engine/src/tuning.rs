@@ -4904,6 +4904,16 @@ pub const TOOL_SLOT_CAP: u32 = 4;
 /// reopening the screen to an unbounded catalogue.
 pub const MAX_TOOL_ROWS: usize = 8;
 
+/// How many attribute rows `Game::dossier_report` may return —
+/// `MAX_TOOL_ROWS`' own reason: `Mode::Dossier` is a read-only row list
+/// with no scroll, so this doubles as a layout constraint, asserted by
+/// `the_tallest_dossier_fits_its_popup` and verified by mutation. The
+/// catalogue is trimmed against this **before** the page builds its rows,
+/// so a modded twentieth attribute costs the last rows rather than pushing
+/// the header off the bottom in silence. Twice the shipped five, headroom
+/// for a wider catalogue without reopening the page to an unbounded one.
+pub const MAX_ATTRIBUTE_ROWS: usize = 10;
+
 /// `Game::extraction_yield`'s base unit count — the multiplier scaled by
 /// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
 /// (identity `1.0` at `Ordinary`, full condition, level 0). **Checked**

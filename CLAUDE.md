@@ -1467,7 +1467,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 6242 tests
+cargo test --workspace     # 6246 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace --all-targets   # --all-targets or test code is unlinted
 cargo fmt

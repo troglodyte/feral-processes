@@ -2193,6 +2193,7 @@ pub struct ActiveBuffView {
 /// old-school one the row puts in parentheses after it, which is what lets
 /// a player who has never read a line of code know what they are looking
 /// at.
+#[derive(Clone)]
 pub struct AttributeRow {
     pub name: String,
     pub legacy: String,

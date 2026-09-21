@@ -41,6 +41,7 @@ mod crafting;
 mod creation;
 mod depot_filter;
 mod dispatch;
+mod dossier;
 mod extraction;
 mod field;
 mod frame_map;
@@ -1219,6 +1220,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::CompanionMemories => {
             draw_companion_memories(game, app.pending_memory_program, refusal, painter, m)
         }
+        Mode::Dossier => {
+            crate::render::dossier::draw_dossier(game, app.pending_manifest, refusal, painter, m)
+        }
         Mode::EquipSwap => draw_equip_swap(
             game,
             app.pending_swap_slot,
@@ -1506,7 +1510,8 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 114] = [
+    const ALL_MODES: [Mode; 115] = [
+        Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalEmulate,

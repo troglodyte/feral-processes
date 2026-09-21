@@ -609,6 +609,12 @@ fn draw_surface_map(
     // Same indexing as `tiles`, `Game::view_finishes_at`'s own guarantee —
     // read once per frame, beside it, rather than per tile.
     let finishes = game.view_finishes_at(center, hw, hh);
+    // Same shape and the same reason: a fresh `QueryState` and a cloned
+    // `Vec` per tile inside this loop cost ~2,500 `QueryState`
+    // constructions and ~1,250 allocations a frame at a typical pane's tile
+    // count — `view_finishes_at`'s own precedent, read once here instead.
+    let station_floor = game.view_station_floor_at(center, hw, hh);
+    let pinned = game.view_pinned_at(center, hw, hh);
     let entities: Vec<_> = game
         .view_entities_at(center, hw, hh)
         .into_iter()
@@ -880,8 +886,9 @@ fn draw_surface_map(
             // asking it on the zone surface would draw a lab floor over
             // ground these coordinates happen to share only by numeric
             // accident — the same cross-space aliasing `show_effects` and
-            // `cutting` already refuse.
-            if base_pos.is_some() && game.view_station_floor_at(world.0, world.1) {
+            // `cutting` already refuse. `station_floor` is `view_tiles_at`'s
+            // own indexing, read once above rather than requeried here.
+            if base_pos.is_some() && station_floor[ry][rx] {
                 painter.rect(
                     cell.x,
                     cell.y,
@@ -1168,8 +1175,9 @@ fn draw_surface_map(
             // **`marker` gates the top-left corner here too**, extending
             // this same "the Alt marker borrows the top-left corner" rule
             // rather than inventing a second arbitration between the two —
-            // see `corner_marker`'s doc.
-            if base_pos.is_some() && game.view_pinned_at(world.0, world.1) {
+            // see `corner_marker`'s doc. `pinned` is read once above,
+            // `station_floor`'s own reason.
+            if base_pos.is_some() && pinned[ry][rx] {
                 draw_pin_brackets(painter, px, py, tile_px, marker, vig);
             }
             // A nemesis draws a mark on top of its glyph — belt and braces,

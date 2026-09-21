@@ -4921,26 +4921,31 @@ fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project(
 /// `Game::view_station_floor_at` is the renderer's only way to ask which
 /// cells a Research Station's own floor fill belongs on — every non-anchor
 /// footprint cell, and never the anchor itself, which draws the structure's
-/// own glyph and tile.
+/// own glyph and tile. **Windowed**, `view_finishes_at`'s own shape: one call
+/// over `(center, half_w, half_h)` returns the whole set, indexed
+/// `[row][col]` with row `dy + half_h` and col `dx + half_w`.
 #[test]
 fn view_station_floor_at_is_every_non_anchor_footprint_cell() {
-    let (mut game, station) = base_with_station(4601100);
+    let (game, station) = base_with_station(4601100);
     let anchor = *game.world.get::<Position>(station).unwrap();
+    let half = 6;
+    let rows = game.view_station_floor_at((anchor.x, anchor.y), half, half);
+    let at = |dx: i32, dy: i32| rows[(dy + half) as usize][(dx + half) as usize];
 
     assert!(
-        !game.view_station_floor_at(anchor.x, anchor.y),
+        !at(0, 0),
         "the anchor draws the structure's own tile, not the floor fill"
     );
     for (dx, dy) in [(1, 0), (0, 1), (1, 1)] {
         assert!(
-            game.view_station_floor_at(anchor.x + dx, anchor.y + dy),
+            at(dx, dy),
             "({}, {}) is a non-anchor footprint cell of a 2x2 Station",
             anchor.x + dx,
             anchor.y + dy
         );
     }
     assert!(
-        !game.view_station_floor_at(anchor.x + 5, anchor.y + 5),
+        !at(5, 5),
         "a cell well outside the footprint must not draw the fill"
     );
 }
@@ -4955,22 +4960,58 @@ fn view_station_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
     place_home(&mut game);
     let node = spawn_structure_at(&mut game, "research_node", 5, 5);
     let anchor = *game.world.get::<Position>(node).unwrap();
-    assert!(!game.view_station_floor_at(anchor.x, anchor.y));
+    let rows = game.view_station_floor_at((anchor.x, anchor.y), 1, 1);
+    assert!(!rows[1][1]);
+}
+
+/// A cell outside the requested window never appears, even when it would
+/// otherwise be a real footprint or pinned cell — the property that makes a
+/// window call safe to use for a pane rather than the whole base: a caller
+/// asking a smaller box than the map must not read a hit from a structure
+/// well outside it.
+#[test]
+fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
+    let (mut game, station) = base_with_station(4601103);
+    let anchor = *game.world.get::<Position>(station).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, station);
+
+    // A window centred far from the Station and too small to reach it.
+    let far = (anchor.x + 50, anchor.y + 50);
+    let floor_rows = game.view_station_floor_at(far, 2, 2);
+    let pinned_rows = game.view_pinned_at(far, 2, 2);
+    assert!(
+        floor_rows.iter().flatten().all(|&hit| !hit),
+        "the Station's floor sits outside this window"
+    );
+    assert!(
+        pinned_rows.iter().flatten().all(|&hit| !hit),
+        "the pinned subject sits outside this window"
+    );
+    assert_eq!(floor_rows.len(), 5, "a half of 2 is a 5x5 window");
+    assert_eq!(floor_rows[0].len(), 5);
 }
 
 /// `Game::view_pinned_at` is the pin mark's own question — does a body
 /// under study stand at this cell — read directly off `UnderStudy` bodies
-/// rather than re-deriving a pen.
+/// rather than re-deriving a pen. **Windowed**, `view_station_floor_at`'s own
+/// shape.
 #[test]
 fn view_pinned_at_answers_for_the_bodys_own_position() {
     let (mut game, station) = base_with_station(4601102);
     let program = spawn_tamed(&mut game, 10, 3);
     let pen = game.study_pen(station).unwrap();
+    let half = 6;
+    let at = |rows: &Vec<Vec<bool>>, x: i32, y: i32| {
+        rows[(y - pen.1 + half) as usize][(x - pen.0 + half) as usize]
+    };
 
-    assert!(!game.view_pinned_at(pen.0, pen.1));
+    let before = game.view_pinned_at(pen, half, half);
+    assert!(!at(&before, pen.0, pen.1));
 
     pin_subject_at_pen(&mut game, program, station);
 
-    assert!(game.view_pinned_at(pen.0, pen.1));
-    assert!(!game.view_pinned_at(pen.0 + 3, pen.1 + 3));
+    let after = game.view_pinned_at(pen, half, half);
+    assert!(at(&after, pen.0, pen.1));
+    assert!(!at(&after, pen.0 + 3, pen.1 + 3));
 }

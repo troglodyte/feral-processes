@@ -329,42 +329,85 @@ impl Game {
         Ok(())
     }
 
-    /// Whether `(x, y)` is a *non-anchor* footprint cell of a standing
-    /// `studies` structure — one of the three walkable floor cells a
-    /// Research Station draws with its own fill, never the anchor, which
-    /// draws the structure's own glyph. **The renderer's only way to
-    /// ask** — `view_finishes_at`'s precedent, so gui holds no copy of the
-    /// footprint geometry.
-    pub fn view_station_floor_at(&mut self, x: i32, y: i32) -> bool {
-        let mut query = self.world.query::<(&Position, &Structure)>();
-        let rows: Vec<(Position, StructureId)> = query
-            .iter(&self.world)
-            .map(|(p, s)| (*p, s.kind.clone()))
-            .collect();
+    /// Every non-anchor footprint cell of a standing `studies` structure
+    /// within the `(center, half_w, half_h)` window — the three walkable
+    /// floor cells a Research Station draws with its own fill, never the
+    /// anchor, which draws the structure's own glyph. **The renderer's only
+    /// way to ask**, so gui holds no copy of the footprint geometry.
+    ///
+    /// **Read once per frame, beside `view_tiles_at`, rather than once per
+    /// tile** — `view_finishes_at`'s own shape and the same indexing:
+    /// `[row][col]` with row `ty + half_h` for `ty` in `-half_h..=half_h`,
+    /// col symmetric on `tx`. The doc this replaced cited `view_finishes_at`
+    /// as its precedent while doing the opposite — a fresh `QueryState` and a
+    /// cloned `Vec<(Position, StructureId)>` built inside `draw_surface_map`'s
+    /// per-tile loop, ~2,500 `QueryState` constructions and ~1,250
+    /// allocations a frame at a typical pane's tile count. `&self` and
+    /// `iter_entities()` rather than a query, `first_study_station`'s own
+    /// reason: no `QueryState` to construct or repeat.
+    pub fn view_station_floor_at(
+        &self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<bool>> {
+        let (cx, cy) = center;
+        let width = (2 * half_w + 1).max(0) as usize;
+        let height = (2 * half_h + 1).max(0) as usize;
+        let mut rows = vec![vec![false; width]; height];
         let db = self.world.resource::<StructureDb>();
-        rows.into_iter().any(|(p, kind)| {
-            let Some(def) = db.get(&kind) else {
-                return false;
+        for e in self.world.iter_entities() {
+            let Some(structure) = e.get::<Structure>() else {
+                continue;
+            };
+            let Some(def) = db.get(&structure.kind) else {
+                continue;
             };
             if !def.studies {
-                return false;
+                continue;
             }
-            let anchor = (p.x, p.y);
-            anchor != (x, y)
-                && crate::tactical::footprint_cells_at(anchor, def.footprint).contains(&(x, y))
-        })
+            let Some(pos) = e.get::<Position>() else {
+                continue;
+            };
+            let anchor = (pos.x, pos.y);
+            for cell in crate::tactical::footprint_cells_at(anchor, def.footprint) {
+                if cell == anchor {
+                    continue;
+                }
+                let (dx, dy) = (cell.0 - cx, cell.1 - cy);
+                if dx.abs() <= half_w && dy.abs() <= half_h {
+                    rows[(dy + half_h) as usize][(dx + half_w) as usize] = true;
+                }
+            }
+        }
+        rows
     }
 
-    /// Whether a body under study stands at `(x, y)` — the pin mark's own
-    /// question. Reads `components::UnderStudy` bodies directly rather than
-    /// re-deriving a pen: arrival is derived off a body's own `Position`
-    /// (`components::UnderStudy`'s doc), so this is the same read in the
-    /// other direction. **The renderer's only way to ask.**
-    pub fn view_pinned_at(&mut self, x: i32, y: i32) -> bool {
-        let mut query = self.world.query::<(&Position, &components::UnderStudy)>();
-        query
-            .iter(&self.world)
-            .any(|(pos, _)| (pos.x, pos.y) == (x, y))
+    /// Every body under study within the `(center, half_w, half_h)` window —
+    /// the pin mark's own question, same window and indexing as
+    /// `view_station_floor_at` beside it. Reads `components::UnderStudy`
+    /// bodies directly rather than re-deriving a pen: arrival is derived off
+    /// a body's own `Position` (`components::UnderStudy`'s doc), so this is
+    /// the same read in the other direction. **The renderer's only way to
+    /// ask, and read once a frame** for `view_station_floor_at`'s reason.
+    pub fn view_pinned_at(&self, center: (i32, i32), half_w: i32, half_h: i32) -> Vec<Vec<bool>> {
+        let (cx, cy) = center;
+        let width = (2 * half_w + 1).max(0) as usize;
+        let height = (2 * half_h + 1).max(0) as usize;
+        let mut rows = vec![vec![false; width]; height];
+        for e in self.world.iter_entities() {
+            if e.get::<components::UnderStudy>().is_none() {
+                continue;
+            }
+            let Some(pos) = e.get::<Position>() else {
+                continue;
+            };
+            let (dx, dy) = (pos.x - cx, pos.y - cy);
+            if dx.abs() <= half_w && dy.abs() <= half_h {
+                rows[(dy + half_h) as usize][(dx + half_w) as usize] = true;
+            }
+        }
+        rows
     }
 
     /// Both structure-destruction doors call this: a demolished or

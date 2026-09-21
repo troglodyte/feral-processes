@@ -1,5 +1,6 @@
-//! `Mode::DownedPrograms`: the downed-program store, reached from the pack
-//! with `D`, and the tool-and-yield picker for one held program — see
+//! `Mode::DownedPrograms`: the downed-program store, reached with `D` from
+//! the map and from the pack, and the tool-and-yield picker for one held
+//! program — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 6.
 
@@ -19,12 +20,14 @@ impl App {
     pub(crate) fn handle_downed_programs_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             if self.pending_downed_program_index.take().is_none() {
-                // Reached from the pack alone (`D` on `Mode::Inventory`),
-                // never through a group menu — `close_screen`'s
-                // `menu_origin` is for `Mode::BaseMenu`/`Mode::PartyMenu`
-                // and was never set opening this screen, so it would send
-                // Esc to `Mode::Playing` instead of back to the pack.
-                self.mode = Mode::Inventory;
+                // Two doors, one screen: `D` on the map and `D` in the
+                // pack. `close_screen` is what tells them apart —
+                // `Mode::Inventory` sets `menu_origin` opening this screen
+                // and the map does not, so the fallback to `Mode::Playing`
+                // is exactly the map's answer. A hardcoded destination here
+                // would send one of the two routes somewhere the player
+                // never was.
+                self.close_screen();
             } else {
                 self.menu_selected = 0;
             }

@@ -2,7 +2,8 @@
 
 Everything you beat leaves something behind, and it is not loot. A downed program is the body
 itself — a particular one, with the level it had, the rarity it rolled and the state you left it in
-— and it goes into its own store rather than your pack. D from the pack opens it.
+— and it goes into its own store rather than your pack. D opens it, from the map or from inside
+your pack.
 
 The store holds ten. A full store refuses what would not fit and destroys nothing you are already
 carrying, so the cost of ignoring it is what you turn away, not what you lose. A squad coming home

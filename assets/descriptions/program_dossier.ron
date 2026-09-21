@@ -1,0 +1,19 @@
+(
+    subject: "program.dossier",
+    variants: [
+        (
+            openers: [
+                "Compiled somewhere that kept no build log.",
+                "Signed by a key nobody on the Grid still holds.",
+                "Forked off something larger, and never merged back.",
+                "Shipped as a patch, and outlived what it patched.",
+                "Left behind by a contractor who did not document it.",
+                "Written to run for a week. It has not stopped.",
+                "Recovered from a partition that was supposed to be blank.",
+                "One of a batch. The others are not accounted for.",
+                "Assembled out of whatever was resident at the time.",
+                "Its first process never exited, and this is what is left of it.",
+            ],
+        ),
+    ],
+)

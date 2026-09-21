@@ -246,3 +246,111 @@ fn a_minted_old_save_agrees_with_a_fresh_spawn() {
         "the load minted a different body than the place would have"
     );
 }
+
+/// The page's whole derivation, on the player and on a wild body alike —
+/// one call, read by app-core for nothing and by gui for everything.
+#[test]
+fn the_dossier_reports_every_attribute_with_both_its_names() {
+    let mut game = Game::new(4248, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs()[0].id.to_string();
+    let wild = game
+        .spawn_wild_creature_scaled(&species, 100, 100, 1.0, false)
+        .unwrap();
+    for subject in [game.player_entity(), wild] {
+        let report = game
+            .dossier_report(subject)
+            .expect("a live body has a dossier");
+        assert_eq!(report.rows.len(), 5);
+        for row in &report.rows {
+            assert!(!row.name.is_empty());
+            assert!(
+                !row.legacy.is_empty(),
+                "{} lost its old-school name",
+                row.name
+            );
+            assert!(!row.meaning.is_empty(), "{} has no prose", row.name);
+        }
+        assert!(report.revision.starts_with("rev "));
+        assert!(report.checksum.starts_with("0x"));
+    }
+}
+
+/// An empty catalogue is the pre-attribute game, held at the reader's end
+/// too: the page opens, reports no rows and claims nothing.
+#[test]
+fn an_empty_catalogue_reports_a_dossier_with_no_rows() {
+    let mut game = Game::new(4249, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .insert_resource(crate::attributes::AttributeDb::default());
+    let report = game.dossier_report(game.player_entity()).unwrap();
+    assert!(report.rows.is_empty());
+    assert!(
+        !report.revision.is_empty(),
+        "the header is derived, not authored"
+    );
+}
+
+/// The catalogue is trimmed **before** the page's own cap, so a modded
+/// catalogue cannot push the header off the end of a page with no scroll.
+#[test]
+fn the_dossier_is_trimmed_to_its_row_ceiling() {
+    let over = crate::tuning::MAX_ATTRIBUTE_ROWS + 4;
+    let dir = crate::tests::support::scratch_assets_dir("attributes_over_cap");
+    std::fs::create_dir_all(&*dir).unwrap();
+    for n in 0..over {
+        // Zero-padded, so the sort `load_dir` performs is the numeric order
+        // and the trim is observably the *tail* being dropped.
+        std::fs::write(
+            dir.join(format!("a{n:02}.ron")),
+            format!(
+                "(id: \"a{n:02}\", name: \"A{n:02}\", legacy: \"Luck\", \
+                 short: \"a gloss long enough\", meaning: \"Fifteen words of \
+                 prose about this attribute so the shipped census would be \
+                 satisfied by it too.\", base: 50, spread: 10)\n"
+            ),
+        )
+        .unwrap();
+    }
+    let (db, warnings) = crate::attributes::AttributeDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(
+        db.iter().count(),
+        over,
+        "the fixture itself is over the cap"
+    );
+
+    let mut game = Game::new(4252, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Re-minted against the wider catalogue, since the player was minted at
+    // `Game::new` against the shipped five and a row is skipped when the
+    // store has no value for it.
+    let player = game.player_entity();
+    let attrs = crate::attributes::mint(
+        &db,
+        crate::attributes::player_seed(7),
+        &std::collections::BTreeMap::new(),
+    );
+    game.world.entity_mut(player).insert(attrs);
+    game.world.insert_resource(db);
+    let report = game.dossier_report(player).unwrap();
+    assert_eq!(
+        report.rows.len(),
+        crate::tuning::MAX_ATTRIBUTE_ROWS,
+        "a modded catalogue was drawn past the page's ceiling"
+    );
+    assert!(
+        !report.checksum.is_empty(),
+        "the header must survive the trim — it is what the trim protects"
+    );
+}
+
+/// A body that is gone has no dossier, `Game::manifest`'s own answer.
+#[test]
+fn a_despawned_body_has_no_dossier() {
+    let mut game = Game::new(4250, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs()[0].id.to_string();
+    let wild = game
+        .spawn_wild_creature_scaled(&species, 110, 110, 1.0, false)
+        .unwrap();
+    game.world.despawn(wild);
+    assert!(game.dossier_report(wild).is_none());
+}

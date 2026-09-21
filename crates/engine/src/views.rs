@@ -2186,6 +2186,39 @@ pub struct ActiveBuffView {
     pub holder_label: Option<String>,
 }
 
+/// One attribute, as the dossier page draws it — the def's prose joined to
+/// the body's own number.
+///
+/// Both names travel: `name` is this setting's word and `legacy` the
+/// old-school one the row puts in parentheses after it, which is what lets
+/// a player who has never read a line of code know what they are looking
+/// at.
+pub struct AttributeRow {
+    pub name: String,
+    pub legacy: String,
+    pub value: i32,
+    pub short: String,
+    pub meaning: String,
+}
+
+/// The dossier page's whole derivation — `Mode::Dossier`'s only input, and
+/// a second sheet about whatever body `Mode::Manifest` is showing.
+///
+/// **Nothing in here is read for a mechanic.** See `attributes.rs`.
+pub struct DossierReport {
+    /// What the page's title row leads with — `Game::creature_label`'s
+    /// answer, so the dossier and the manifest name the same body the same
+    /// way.
+    pub name: String,
+    pub revision: String,
+    pub checksum: String,
+    /// One sentence of where this program came from, or `None` when
+    /// `assets/descriptions/` has nothing for the subject — a mod's
+    /// prerogative, and the page simply draws no row.
+    pub provenance: Option<String>,
+    pub rows: Vec<AttributeRow>,
+}
+
 /// Everything the engine knows about one subject, for the manifest screen —
 /// the player, a program you own, or a wild one. Shared header fields plus a
 /// `subject` carrying the half that differs, so "the player has no Potential

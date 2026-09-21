@@ -2391,6 +2391,14 @@ fn a_pinned_program_cannot_be_recalled_into_the_party() {
 /// is the one test in this run that would already pass on a stale binary if
 /// the match still had a wildcard — asserted against a real HP deficit
 /// rather than merely against the match compiling.
+///
+/// **A partied control is what makes this non-vacuous.** A plain `Staff`
+/// program is not healed by a rest either, so a lone assertion on the pinned
+/// body cannot tell "`UnderStudy` is excluded" from "the loop never reached
+/// this body at all" — a bug that would drop `UnderStudy` from `owned`
+/// entirely reads as a pass. `partied` is added to the party and left at the
+/// same HP deficit, so the same `game.rest()` call has to heal it while
+/// leaving the pinned subject alone.
 #[test]
 fn a_pinned_program_is_not_healed_by_a_rest() {
     let mut game = Game::new(4123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2403,12 +2411,23 @@ fn a_pinned_program_is_not_healed_by_a_rest() {
         .insert(components::UnderStudy { station });
     game.world.get_mut::<Stats>(program).unwrap().hp = 1;
 
+    let partied = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(partied)
+        .expect("the party is decided at base, and this fixture stands there");
+    game.world.get_mut::<Stats>(partied).unwrap().hp = 1;
+
     game.rest().expect("resting inside the base is free");
 
     assert_eq!(
         game.world.get::<Stats>(program).unwrap().hp,
         1,
         "a pinned subject is not repaired by a rest"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(partied).unwrap().hp,
+        10,
+        "a partied companion at the same deficit must be repaired, proving the \
+         rest loop actually reached both bodies"
     );
 }
 

@@ -758,6 +758,189 @@ impl Game {
         true
     }
 
+    /// Relocates the body standing on `subject` to `destination`, running
+    /// the `Teleport` routine at `index` in the acting body's own
+    /// `actor_abilities`.
+    ///
+    /// **Two aims, so this is its own door** — `tactical_emulate`'s reason
+    /// exactly: `tactical_use_routine` exists to collect and validate a
+    /// single aim, and refuses a relocation for that reason. The subject
+    /// travels to `run_tactical_routine` through
+    /// `resources::PendingTeleportSubject`; the destination is the ordinary
+    /// `aim`.
+    ///
+    /// **Every refusal lands before anything is spent**, that door's own
+    /// rule, and there are nine: no fight, nobody acting, no actions left,
+    /// no such routine, a routine that is not a relocation, whatever
+    /// `ability_unavailable` says (on cooldown, short of Power, not the
+    /// player), a subject past arm's length, a destination past
+    /// `abilities::teleport_reach`, one the invoker cannot see, and one
+    /// `TacticalBattle::can_move_to` refuses. An empty `subject` cell falls
+    /// out of the arm's-length check, since `occupant` answers `None`.
+    ///
+    /// **The subject is any body at arm's length, either side.** The player
+    /// picking themselves is the common case (gap 0), and throwing an
+    /// adjacent hostile back is the control half of the routine — which is
+    /// why the cloak is broken here, on the subject being hostile, rather
+    /// than by `AbilityEffect::breaks_cloak`, which cannot see whose body
+    /// moved.
+    ///
+    /// Reports whether it ran. A run ends the turn through
+    /// `Game::run_tactical_routine`, exactly as every other routine does.
+    pub fn tactical_teleport(
+        &mut self,
+        index: usize,
+        subject: (i32, i32),
+        destination: (i32, i32),
+    ) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.actions_left() == 0 {
+            return false;
+        }
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        let Some(ability) = self.actor_abilities(actor).into_iter().nth(index) else {
+            return false;
+        };
+        if !matches!(ability.effect, AbilityEffect::Teleport) {
+            return false;
+        }
+        if self.ability_unavailable(actor, &ability).is_some() {
+            return false;
+        }
+        let battle = self.world.resource::<TacticalBattle>();
+        // Arm's length, measured `gap` and not `distance`, so a squad is
+        // reached from whichever of its cells is nearest — the door every
+        // footprint question goes through.
+        let Some(body) = battle.occupant(subject) else {
+            return false;
+        };
+        if reach::gap(&battle.cells_of(actor), &battle.cells_of(body))
+            > crate::tuning::TACTICAL_MELEE_RANGE
+        {
+            return false;
+        }
+        if !self.teleport_lands(body, destination) {
+            return false;
+        }
+        // `Single` because a relocation names one cell, which makes this
+        // `line_of_sight` from the invoker — the same call the aim cursor's
+        // outline makes. Asked of the *invoker* and not the subject: the
+        // player is the one aiming.
+        if !reach::aim_in_sight(
+            &self.world.resource::<TacticalBattle>().board,
+            from,
+            destination,
+            AbilityShape::Single,
+        ) {
+            return false;
+        }
+
+        // Set immediately before the one call that reads it, and cleared
+        // unconditionally on the way out — `tactical_emulate`'s pattern,
+        // for its reason: a reaction can fizzle the invocation inside
+        // `run_tactical_routine` before the branch that takes this is ever
+        // reached.
+        self.world
+            .resource_mut::<crate::resources::PendingTeleportSubject>()
+            .0 = Some(body);
+        self.run_tactical_routine(actor, &ability, destination, 0);
+        self.world
+            .resource_mut::<crate::resources::PendingTeleportSubject>()
+            .0 = None;
+        true
+    }
+
+    /// Whether the body at `subject_cell` could be relocated to `cell` — in
+    /// reach of the acting body's `teleport_reach`, and somewhere
+    /// `TacticalBattle::can_move_to` will actually take it.
+    ///
+    /// **The half `tactical_teleport`'s refusal and
+    /// `Game::teleport_destinations`' outline share**, so a cell the player
+    /// is shown as legal cannot be one the commit rejects. Sight is
+    /// deliberately *not* in here: the outline reads it from the invoker's
+    /// own cell and so does the refusal, but this is asked about the
+    /// subject.
+    fn teleport_lands(&self, body: Entity, cell: (i32, i32)) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        let reach = crate::abilities::teleport_reach(self.ability_user_level(actor));
+        reach::gap(&battle.cells_of(body), &[cell]) <= reach && battle.can_move_to(body, cell)
+    }
+
+    /// Every cell holding a body a relocation may pick up — what the aim
+    /// cursor outlines for a relocation's *first* stage.
+    ///
+    /// `teleport_destinations`' rule: a call into the same `reach::gap`
+    /// question `Game::tactical_teleport`'s own refusal asks, so a cell the
+    /// player is shown cannot be one the commit rejects. Every cell of a
+    /// body's footprint is offered, not just its anchor, because
+    /// `TacticalBattle::occupant` resolves any of them to the same body.
+    ///
+    /// The acting body's own cells are included: relocating yourself is the
+    /// routine's common case, and a gap of zero is inside arm's length.
+    pub fn teleport_subjects(&self) -> Vec<(i32, i32)> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        let reaching = battle.cells_of(actor);
+        battle
+            .bodies()
+            .map(|(body, _)| battle.cells_of(body))
+            .filter(|cells| reach::gap(&reaching, cells) <= crate::tuning::TACTICAL_MELEE_RANGE)
+            .flatten()
+            .collect()
+    }
+
+    /// Every cell the body standing on `subject` may be relocated to — what
+    /// the aim cursor outlines for a relocation's second stage.
+    ///
+    /// **A call into the two doors the refusal reads**, never a second
+    /// derivation of what "legal to land on" means — `tactical_placeable_
+    /// cells`' rule, and the reason `TacticalView::player_turn` is a
+    /// cautionary tale: a view that restates an engine predicate in
+    /// different words is the copy that drifts.
+    ///
+    /// The subject's own cell is included, because standing still is a legal
+    /// `move_to` and a cursor that opened on an illegal cell would refuse
+    /// the first key the player pressed.
+    pub fn teleport_destinations(&self, subject: (i32, i32)) -> Vec<(i32, i32)> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let Some(body) = battle.occupant(subject) else {
+            return Vec::new();
+        };
+        let board = &battle.board;
+        board
+            .cells()
+            .filter_map(|(cell, _)| {
+                (self.teleport_lands(body, cell)
+                    && reach::aim_in_sight(board, from, cell, AbilityShape::Single))
+                .then_some(cell)
+            })
+            .collect()
+    }
+
     /// Drops the acting body's emulation — spec §4 "Changing back",
     /// `tactical_defend`'s shape. No Power, no cooldown: the turn already
     /// spent by choosing this is the whole cost.
@@ -835,6 +1018,14 @@ impl Game {
         // ever set to give `use_ability`'s arm anything to install — exactly
         // the wasted round every refusal above exists to prevent.
         if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
+            return false;
+        }
+        // A relocation has two aims and this door collects one. Reached
+        // through it the destination would be read as the subject, and the
+        // Power, the cooldown and the turn would go on relocating whoever
+        // happened to be standing there — `Emulate`'s arm one line up, for
+        // its reason. `Game::tactical_teleport` is its door.
+        if matches!(ability.effect, AbilityEffect::Teleport) {
             return false;
         }
         if self.ability_unavailable(actor, &ability).is_some() {
@@ -1101,6 +1292,33 @@ impl Game {
             // recipient loop, which carries the `unreachable!` arm this
             // branch is what makes actually unreachable.
             self.apply_tamper(actor, ability, kind, duration, aim);
+        } else if matches!(ability.effect, AbilityEffect::Teleport) {
+            // `Tamper`'s branch and its reason: not resolved over
+            // `reach::recipients` at all, so `use_ability` carries an
+            // `unreachable!` arm for it. The subject was named by
+            // `Game::tactical_teleport`, which validated both cells above
+            // its own charge — `move_to` cannot refuse here, and if a
+            // reaction changed the board under it the body simply stays
+            // where it is rather than the turn being handed back.
+            if let Some(body) = self
+                .world
+                .resource_mut::<crate::resources::PendingTeleportSubject>()
+                .0
+                .take()
+                && self
+                    .world
+                    .resource_mut::<TacticalBattle>()
+                    .move_to(body, aim)
+            {
+                // The cloak breaks on the subject being hostile and not on
+                // the effect, `AbilityEffect::breaks_cloak`'s own note: your
+                // own escape names nobody on the other side.
+                if self.world.get::<Hostile>(body).is_some() {
+                    self.break_cloak(actor);
+                }
+                let moved = self.creature_label(body);
+                self.log(format!("{name} relocates {moved}."));
+            }
         } else if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
             // No aim: the recipient is the acting body alone, exactly as
             // the group model's own Special branch builds it, and the image

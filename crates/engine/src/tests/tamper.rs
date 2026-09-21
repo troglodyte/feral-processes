@@ -137,8 +137,9 @@ fn a_tamper_routine_never_runs_on_the_map() {
 /// that reaches a screen. The description is the only place they are told,
 /// which is why this is a census and not a convention.
 ///
-/// Walked off `tactical_only` rather than off a list of ids, so a sixth
-/// tamper routine shipped without the sentence fails the build.
+/// Walked off `tactical_only` rather than off a list of ids, so any further
+/// battle-map-only routine shipped without the sentence fails the build —
+/// `teleport` is the sixth and was caught by exactly that.
 #[test]
 fn every_tactical_only_routine_says_it_is_battle_map_only() {
     const SENTENCE: &str = "Battle maps only.";
@@ -164,7 +165,10 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 5, "the five tamper routines are what ships today");
+    assert_eq!(
+        checked, 6,
+        "the five tamper routines and Teleport are what ships today"
+    );
 }
 
 /// One case per `tamper_faults` refusal, built by hand rather than round-

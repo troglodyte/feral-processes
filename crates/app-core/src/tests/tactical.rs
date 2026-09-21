@@ -1162,3 +1162,180 @@ fn a_taken_over_companion_plays_without_a_key() {
         "advance_tactical must play the companion's turn on dt alone, with no key pressed for it"
     );
 }
+
+/// A relocation aims twice, and the first cell commits nothing.
+///
+/// `emulating_tactical_app`'s shape one routine over: the routine has to be
+/// installed through a save round trip *before* the walk into battle, since
+/// the round trip never persists a fight in progress.
+mod teleport {
+    use super::*;
+
+    /// Row one of the routine picker. Rows 1..9 are the digits and letters
+    /// start at `DIGIT_ROWS`, so `'a'` names nothing on a one-row list.
+    const PICK: GameKey = GameKey::Char('1');
+
+    fn relocating_app() -> App {
+        for seed in 0..200u32 {
+            let mut app = test_app(seed);
+            app.profile.tactical_battles = true;
+            install_player_routines(&mut app, &["teleport"]);
+            // `Game::load` never calls `install_profile`, so the toggle has
+            // to be re-applied after the round trip or the bump below opens
+            // the group model — `emulating_tactical_app`'s own note.
+            let mut game = app.game.take().expect("the fixture has a game");
+            game.install_profile(app.profile.clone());
+            app.game = Some(game);
+
+            let game = app.game.as_mut().unwrap();
+            let player = game.player_status().position;
+            let target = game
+                .view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+            let Some(target) = target else { continue };
+            app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            });
+            if app.mode == Mode::TacticalBattle {
+                let _ = app.take_sounds();
+                wait_for_the_player(&mut app);
+                return app;
+            }
+        }
+        panic!("no seed under 200 put a lone wild program next to the player");
+    }
+
+    /// Picking the routine opens the *subject* cursor, not the ordinary
+    /// one-aim routine cursor.
+    #[test]
+    fn choosing_a_relocation_opens_the_subject_cursor() {
+        let mut app = relocating_app();
+        app.handle_key(GameKey::Char('s'));
+        assert_eq!(app.mode, Mode::TacticalRoutine);
+        app.handle_key(PICK);
+
+        assert_eq!(app.mode, Mode::TacticalAim);
+        assert!(
+            matches!(
+                app.pending_tactical,
+                Some(TacticalIntent::TeleportSubject(_))
+            ),
+            "a relocation opened the single-aim cursor: {:?}",
+            app.pending_tactical
+        );
+    }
+
+    /// Committing the first cell names the subject and re-opens the cursor
+    /// on it — the turn is still the player's and nothing has been charged.
+    #[test]
+    fn the_first_cell_names_the_subject_and_spends_nothing() {
+        let mut app = relocating_app();
+        let before = app
+            .game
+            .as_ref()
+            .unwrap()
+            .tactical_actor()
+            .expect("somebody is acting");
+        app.handle_key(GameKey::Char('s'));
+        app.handle_key(PICK);
+        // The cursor opens on the acting body's own cell, which is always a
+        // legal subject: relocating yourself is the routine's common case.
+        let on = app.tactical_cursor.expect("the cursor is up");
+        app.handle_key(GameKey::Enter);
+
+        assert_eq!(app.mode, Mode::TacticalAim, "the cursor closed");
+        assert_eq!(
+            app.pending_tactical,
+            Some(TacticalIntent::TeleportTo {
+                index: 0,
+                subject: on
+            }),
+            "the first cell did not become the subject"
+        );
+        assert_eq!(
+            app.game.as_ref().unwrap().tactical_actor(),
+            Some(before),
+            "naming a subject spent the turn"
+        );
+    }
+
+    /// And the second cell commits it: the player stands somewhere else and
+    /// the turn is gone.
+    #[test]
+    fn the_second_cell_relocates_the_subject_and_ends_the_turn() {
+        let mut app = relocating_app();
+        let player = app
+            .game
+            .as_ref()
+            .unwrap()
+            .tactical_actor()
+            .expect("somebody is acting");
+        app.handle_key(GameKey::Char('s'));
+        app.handle_key(PICK);
+        let from = app.tactical_cursor.expect("the cursor is up");
+        app.handle_key(GameKey::Enter);
+
+        // One step off the subject's own cell, which the outline offers at
+        // every reach — the floor is 1.
+        let to = app
+            .game
+            .as_ref()
+            .unwrap()
+            .teleport_destinations(from)
+            .into_iter()
+            .find(|&cell| cell != from)
+            .expect("the outline offered nowhere to go");
+        app.tactical_cursor = Some(to);
+        app.handle_key(GameKey::Enter);
+
+        assert_eq!(app.mode, Mode::TacticalBattle, "the cursor stayed up");
+        let game = app.game.as_ref().unwrap();
+        assert_ne!(
+            game.tactical_actor(),
+            Some(player),
+            "the relocation ran and the player kept the turn"
+        );
+        assert_eq!(
+            game.tactical_occupant(to),
+            Some(player),
+            "the player did not move"
+        );
+    }
+
+    /// Esc at either stage spends nothing — a cancelled aim's shape, which
+    /// the chained cursor must not break at the join.
+    #[test]
+    fn escaping_the_second_cursor_spends_nothing() {
+        let mut app = relocating_app();
+        let player = app
+            .game
+            .as_ref()
+            .unwrap()
+            .tactical_actor()
+            .expect("somebody is acting");
+        app.handle_key(GameKey::Char('s'));
+        app.handle_key(PICK);
+        let from = app.tactical_cursor.expect("the cursor is up");
+        app.handle_key(GameKey::Enter);
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::TacticalBattle);
+        assert_eq!(app.pending_tactical, None, "the intent outlived the cursor");
+        let game = app.game.as_ref().unwrap();
+        assert_eq!(
+            game.tactical_actor(),
+            Some(player),
+            "a cancelled relocation spent the turn"
+        );
+        assert_eq!(
+            game.tactical_occupant(from),
+            Some(player),
+            "a cancelled relocation moved the player"
+        );
+    }
+}

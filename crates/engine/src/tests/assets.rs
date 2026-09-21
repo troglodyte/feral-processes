@@ -736,7 +736,9 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Summon { .. }
             | E::Cloak { .. }
             | E::Emulate { .. }
-            | E::Tamper { .. } => continue,
+            | E::Tamper { .. }
+            // A relocation moves no Integrity at all — it moves a body.
+            | E::Teleport => continue,
         };
         checked += 1;
         assert!(
@@ -792,7 +794,11 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             // A tamper always lands — the forecast is the feature, and a
             // tamper that could fumble would turn a guaranteed read into a
             // gamble.
-            | E::Tamper { .. } => false,
+            | E::Tamper { .. }
+            // A relocation always lands, a tamper's reason: the refusals
+            // are all in `Game::tactical_teleport`, above the charge, so
+            // there is nothing left for a roll to decide.
+            | E::Teleport => false,
         };
         if rolls_to_hit {
             aimed += 1;
@@ -982,6 +988,7 @@ fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
                 d.effect,
                 crate::abilities::AbilityEffect::Summon { .. }
                     | crate::abilities::AbilityEffect::Emulate { .. }
+                    | crate::abilities::AbilityEffect::Teleport
             )
         })
     {
@@ -1030,6 +1037,9 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             | E::Jump
             | E::Summon { .. }
             | E::Emulate { .. }
+            // A relocation names a cell; `Game::tactical_teleport` breaks
+            // the cloak itself when the body it moved was a hostile.
+            | E::Teleport
             | E::Symlink => false,
         };
         assert_eq!(

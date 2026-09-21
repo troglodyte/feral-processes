@@ -310,11 +310,18 @@ impl TacticalBattle {
         }
     }
 
-    /// Moves a placed body, or refuses. Standing still is allowed.
+    /// Whether [`move_to`](Self::move_to) would take `body` to `cell` —
+    /// every cell of the footprint anchored there walkable, and held by
+    /// nobody but this body.
     ///
-    /// Refused when any cell of the footprint anchored at `cell` cannot be
-    /// stood on, or is held by a body other than this one.
-    pub fn move_to(&mut self, body: Entity, cell: (i32, i32)) -> bool {
+    /// **Extracted so a caller can ask before it spends.** `move_to` is the
+    /// one writer and calls this rather than restating the rule, because a
+    /// refusal that quotes a different answer from the move it guards is
+    /// exactly the drift `routine_power_cost` records: `Game::
+    /// tactical_teleport` has to refuse an illegal destination *above* its
+    /// charge, and `Game::teleport_destinations` outlines the cells the
+    /// player may aim at with the same question.
+    pub fn can_move_to(&self, body: Entity, cell: (i32, i32)) -> bool {
         if self.cell_of(body).is_none() {
             return false;
         }
@@ -324,7 +331,15 @@ impl TacticalBattle {
             .filter(|&(other, _)| other != body)
             .flat_map(|(other, _)| self.cells_of(other))
             .collect();
-        if !footprint_clear(&self.board, &footprint, &blocked) {
+        footprint_clear(&self.board, &footprint, &blocked)
+    }
+
+    /// Moves a placed body, or refuses. Standing still is allowed.
+    ///
+    /// Refused when any cell of the footprint anchored at `cell` cannot be
+    /// stood on, or is held by a body other than this one.
+    pub fn move_to(&mut self, body: Entity, cell: (i32, i32)) -> bool {
+        if !self.can_move_to(body, cell) {
             return false;
         }
         let slot = self

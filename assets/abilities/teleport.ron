@@ -1,0 +1,17 @@
+(
+    id: "teleport",
+    name: "Teleport",
+    // `target: WholeParty` is the no-picker shape, chosen for Summon's and
+    // Emulate's reason: this routine names its own two cells through
+    // `Game::tactical_teleport` rather than through `ability_recipients`,
+    // so a target that opened a picker would open the wrong one. Nothing
+    // reads it, which is also why no `shape:` or `range:` is authored —
+    // how far it reaches is `abilities::teleport_reach`, half the
+    // invoker's level, and a `range:` here would be a second answer.
+    description: "Relocate yourself or a body at arm's length to a cell you can see. Battle maps only.",
+    target: WholeParty,
+    effect: Teleport,
+    cooldown: 3,
+    power_cost: 8.0,
+    research_zone: 2,
+)

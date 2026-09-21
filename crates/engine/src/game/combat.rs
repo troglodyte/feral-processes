@@ -1481,6 +1481,16 @@ impl Game {
         {
             return Some("only you can emulate".to_string());
         }
+        // Only the player relocates, and this is the gate for every chooser
+        // that offers it — `Emulate`'s arm one line up, for its reason. No
+        // shipped species kit grants `teleport` and no hostile can reach a
+        // research node, so what this closes is a mod's `Routines` edit.
+        // The two paths that bypass this gate need nothing of their own:
+        // a wielded proc and a hostile's retaliation both read
+        // `AbilityEffect::tactical_only`, which is true here.
+        if matches!(ability.effect, AbilityEffect::Teleport) && entity != self.player_entity() {
+            return Some("only you can relocate".to_string());
+        }
         // Emulate's own two refusals — spec §4 "Invoking". `Emulation`
         // itself would already keep it off `entity`'s `actor_abilities`
         // (`Kit::Emulated`'s species list has no Emulate entry), so the
@@ -1589,10 +1599,13 @@ impl Game {
                 // targeting` cannot say that; it knows nothing about
                 // effects. Overridden here instead of widening
                 // `AbilityTarget` for one ability (todo #100 Task 6).
-                targeting: if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
-                    crate::battle::SpecialTargeting::Image
-                } else {
-                    ability.target.targeting()
+                targeting: match ability.effect {
+                    AbilityEffect::Emulate { .. } => crate::battle::SpecialTargeting::Image,
+                    // Two cells rather than one, so it opens the aim cursor
+                    // twice — `Emulate`'s override for `Emulate`'s reason,
+                    // Teleport being authored `target: WholeParty` too.
+                    AbilityEffect::Teleport => crate::battle::SpecialTargeting::Relocate,
+                    _ => ability.target.targeting(),
                 },
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),

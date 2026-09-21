@@ -1809,6 +1809,15 @@ impl Game {
                 AbilityEffect::Tamper { .. } => unreachable!(
                     "AbilityEffect::tactical_only; run_tactical_routine seats a Tamper directly"
                 ),
+                // `Tamper`'s reason again, with a second one of its own: a
+                // relocation is not resolved over recipients at all — it
+                // moves the one body `Game::tactical_teleport` named, which
+                // reaches `run_tactical_routine` through
+                // `resources::PendingTeleportSubject` rather than through
+                // the recipient list this loop walks.
+                AbilityEffect::Teleport => unreachable!(
+                    "AbilityEffect::tactical_only; run_tactical_routine moves the subject directly"
+                ),
             }
         }
         // **After the action resolves**, so the swing's own line is logged

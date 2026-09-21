@@ -685,6 +685,20 @@ pub const TACTICAL_STEPS_PER_SECOND: f32 = 6.0;
 pub enum TacticalIntent {
     Swing,
     Routine(usize),
+    /// A relocation's **first** cursor: which body to pick up.
+    /// `AbilityEffect::Teleport` needs two cells and `Mode::TacticalAim`
+    /// collects one, so the first commit re-opens the cursor as
+    /// `TeleportTo` rather than reaching the engine at all.
+    ///
+    /// The `usize` is a position in `actor_abilities`, every other intent's
+    /// rule — never the picker row.
+    TeleportSubject(usize),
+    /// A relocation's **second** cursor: where to send the body standing on
+    /// `subject`. Committing this one calls `Game::tactical_teleport`.
+    TeleportTo {
+        index: usize,
+        subject: (i32, i32),
+    },
 }
 
 /// How long a refusal ("that ability isn't ready") stays on screen before

@@ -498,6 +498,17 @@ pub enum SpecialTargeting {
     /// overrides it for `AbilityEffect::Emulate` alone rather than widening
     /// `AbilityTarget` for one ability.
     Image,
+    /// Picks a body at arm's length and then a cell to send it to —
+    /// `AbilityEffect::Teleport`, whose two aims are why it has a door of
+    /// its own (`Game::tactical_teleport`). `Image`'s reason for existing,
+    /// one effect over: Teleport is authored `target: WholeParty` too, so
+    /// `special_options_for` overrides it here rather than widening
+    /// `AbilityTarget`.
+    ///
+    /// **Battle maps only.** The effect is `tactical_only`, so
+    /// `battle_special_options` filters it out and the group model's picker
+    /// never sees this value.
+    Relocate,
     /// No choice at all — it resolves the moment it is picked.
     None,
 }

@@ -188,7 +188,7 @@ impl Deed {
                  takes the way back out with it.",
             ),
             Deed::FinishedResearch => Some(
-                "Pick a project at a Research Node, then keep the node staffed and its \
+                "Pick a project at a Research Station, then keep the node staffed and its \
                  materials coming until it lands.",
             ),
         }

@@ -11,6 +11,7 @@ use crate::*;
 #[test]
 fn the_fuse_picker_offers_owned_programs_parked_far_from_the_player() {
     let mut app = app_owning_distant_programs(740, 2);
+    mark_researched(&mut app, "program_refactoring");
     assert_eq!(
         app.game.as_mut().unwrap().owned_pets().len(),
         2,

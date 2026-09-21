@@ -1138,6 +1138,16 @@ pub(super) fn stand_ample_grid_supply(game: &mut Game) {
 /// by the shortcut, because the tests that are *about* the gate
 /// (`breaching_makes_a_zone_gated_node_available`) breach for real, so a
 /// gate regression cannot hide behind this.
+///
+/// **Now writes to the player's own stores, not only the scratch shelf.**
+/// Since `ResearchDef::requires_subject` landed, every subject-gated node
+/// in the chain spawns a fresh tamed program, pins it, and lets
+/// `settle_research` spend it — the real completion door, this function's
+/// own reason above — so completing one leaves a `DownedProgram` row in
+/// `DownedPrograms` and bumps `resources::NextProgramId`, exactly as a real
+/// study would. A test asserting an exact `DownedPrograms` count, or a
+/// specific `ProgramId`, after calling this on a subject-gated chain
+/// should account for that row rather than be surprised by it.
 pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     fn order(game: &Game, id: &str, out: &mut Vec<String>) {
         let Some(def) = game.world.resource::<ResearchDb>().get(id).cloned() else {
@@ -1181,6 +1191,29 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
             Stock::new(1_000_000),
         ))
         .id();
+    // `Game::settle_research` refuses a `requires_subject` node without a
+    // body standing in a `studies` structure's pen (Task 8), so a chain
+    // touching one of the 19 subject-gated nodes needs the same shortcut
+    // this fixture already gives materials: a scratch station, far enough
+    // into negative coordinates that `Game::pinned_subject`'s `(x, y)` sort
+    // picks it over anything a calling test may have placed for real, and a
+    // fresh subject per gated node — `settle_research` despawns it on
+    // completion, so there is nothing left to clean up afterward.
+    let station = game
+        .world
+        .spawn((
+            Structure {
+                kind: "research_node".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_000,
+            },
+        ))
+        .id();
+    let pen = game
+        .study_pen(station)
+        .expect("research_node.ron declares studies");
     for node in chain {
         if game.is_researched(&node) {
             continue;
@@ -1197,6 +1230,13 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
                 *stock.output.entry(item.clone()).or_default() += need;
             }
         }
+        if def.requires_subject {
+            let subject = spawn_tamed(game, 10, 3);
+            game.world.entity_mut(subject).insert((
+                Position { x: pen.0, y: pen.1 },
+                crate::components::UnderStudy { station },
+            ));
+        }
         {
             let mut research = game
                 .world
@@ -1211,6 +1251,7 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
         );
     }
     game.world.despawn(shelf);
+    game.world.despawn(station);
 }
 
 /// Stands the party in base space with a Research Node deployed, which is the
@@ -1526,6 +1567,23 @@ pub(super) fn park_at_post(game: &mut Game, worker: Entity, structure: Entity) {
     pos.y = target.y;
 }
 
+/// Pins `program` in `station`'s pen through the real `Game::pin_subject`
+/// door and then walks it there by hand, `pin_subject_is_refused_when_the
+/// _pen_already_holds_a_body`'s pattern: pinning writes no `Position`
+/// (`components::UnderStudy`'s own doc), so `Game::research_block`'s "a body
+/// is standing in the pen" gate needs a body actually there, and a test
+/// about the gate should not have to tick `drift_idle_staff` to get one.
+pub(super) fn pin_subject_at_pen(game: &mut Game, program: Entity, station: Entity) {
+    let pen = game
+        .study_pen(station)
+        .expect("a station under test must declare studies");
+    game.pin_subject(program, station)
+        .expect("pin_subject should succeed for a staff program with a route");
+    let mut pos = game.world.get_mut::<Position>(program).unwrap();
+    pos.x = pen.0;
+    pos.y = pen.1;
+}
+
 /// How many of `item` are sitting in `structure`'s output buffer.
 pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
     game.world
@@ -1552,6 +1610,41 @@ pub(super) fn place_home(game: &mut Game) {
     game.world.insert_resource(Locale::Surface);
     place_now(game, "home", 0, 0).unwrap();
     game.world.insert_resource(outside);
+}
+
+/// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
+/// `armory` so it needs a program and a real bill exactly like a shipped
+/// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
+/// of that and is for what a standing structure *enables*, not for the
+/// placement or reach machinery a footprint test is about.
+///
+/// Shared by `tests::building`, `tests::hauling` and `tests::work_orders` —
+/// the squad seam's failure was that every fixture was hand-built at
+/// footprint 1, so every anchor-measuring reader stayed green across 5,964
+/// passing tests.
+pub(super) fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
+    let mut def = game
+        .world
+        .resource::<StructureDb>()
+        .get("armory")
+        .cloned()
+        .expect("armory ships");
+    def.id = id.to_string();
+    def.name = id.to_string();
+    def.footprint = footprint;
+    game.world.resource_mut::<StructureDb>().insert(def);
+}
+
+/// A base with a Home standing, a footprint-2 fixture registered under
+/// `id`, and enough Core Fragments to raise it — the shared setup every
+/// footprint test builds on.
+pub(super) fn base_with_footprint_fixture(seed: u32, id: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    footprint_fixture(&mut game, id, 2);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    game
 }
 
 /// How many of `id` the player is holding.
@@ -2252,6 +2345,7 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
 /// Fuses `game`'s two freshest tamed programs together repeatedly to
 /// build up a lineage `depth` fusions deep, returning that program.
 pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
+    unlock_research_chain(game, "program_refactoring");
     let mut current = spawn_tamed(game, 10, 3);
     for _ in 0..depth {
         let partner = spawn_tamed(game, 10, 3);
@@ -2751,20 +2845,28 @@ impl Game {
             .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<crate::base_grid::BaseGrid>().radius();
+        let side = self.structure_footprint_of(structure);
         {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             // The two errands stay distinct, as they were: a machine the
             // base has been built around needs digging out, one with no
             // route may just need you to walk over to it.
-            crate::game::base::hauling::post_reach(grid, from, target, &blocked, pocket_radius)
-                .map_err(|reason| match reason {
-                    crate::game::base::hauling::NoPost::BoxedIn => {
-                        "That structure is walled in — nothing can stand next to it.".to_string()
-                    }
-                    crate::game::base::hauling::NoPost::NoRoute => {
-                        "No route to that structure from here.".to_string()
-                    }
-                })?;
+            crate::game::base::hauling::post_reach(
+                grid,
+                from,
+                target,
+                side,
+                &blocked,
+                pocket_radius,
+            )
+            .map_err(|reason| match reason {
+                crate::game::base::hauling::NoPost::BoxedIn => {
+                    "That structure is walled in — nothing can stand next to it.".to_string()
+                }
+                crate::game::base::hauling::NoPost::NoRoute => {
+                    "No route to that structure from here.".to_string()
+                }
+            })?;
         }
         // The removed player action started the program from the player's
         // tile; `post_worker` no longer writes a `Position` at all, so the

@@ -365,10 +365,10 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     );
 
     tick_until(&mut game, 40, |g| {
-        game::base::hauling::at_station(*g.world.get::<Position>(worker).unwrap(), node_pos)
+        game::base::hauling::at_station(*g.world.get::<Position>(worker).unwrap(), node_pos, 1)
     });
     assert!(
-        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos, 1),
         "it should arrive"
     );
     game.tick();
@@ -1495,5 +1495,127 @@ fn a_researched_depot_rung_takes_a_haul_like_the_first_one() {
     assert!(
         node_output(&game, depot, ids::CORE_FRAGMENT) >= tuning::HAUL_CARRY_CAPACITY,
         "a Mk2 is somewhere a hauler empties into, exactly as the first Depot is"
+    );
+}
+
+// --- The reach machinery widens with the footprint ---
+
+/// `station_candidates` offers every walkable, unblocked orthogonal
+/// neighbour of every footprint cell — the ring around the whole 2x2 — and
+/// never one of the footprint's own four cells, which a worker never posts
+/// on top of.
+#[test]
+fn station_candidates_offers_the_ring_around_the_whole_footprint() {
+    let mut game = base_with_footprint_fixture(3010, "station_candidates_fixture");
+    place_now(&mut game, "station_candidates_fixture", 2, 0).unwrap();
+    let empty = std::collections::HashSet::new();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let candidates: std::collections::HashSet<(i32, i32)> =
+        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, &empty)
+            .into_iter()
+            .map(|p| (p.x, p.y))
+            .collect();
+
+    let expected: std::collections::HashSet<(i32, i32)> = [
+        (1, 0),
+        (2, -1),
+        (4, 0),
+        (3, -1),
+        (1, 1),
+        (2, 2),
+        (4, 1),
+        (3, 2),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        candidates, expected,
+        "the ring around a 2x2 is exactly these eight cells"
+    );
+    for cell in [(2, 0), (3, 0), (2, 1), (3, 1)] {
+        assert!(
+            !candidates.contains(&cell),
+            "a footprint cell is never its own station: {cell:?}"
+        );
+    }
+}
+
+/// The invariant the plan states as the thing that stops the spin:
+/// `at_station` is true for exactly the positions `station_candidates`
+/// returns, and nothing else — checked as an equivalence over a box wide
+/// enough to hold the whole ring plus a margin, not as two spot checks.
+#[test]
+fn at_station_agrees_with_station_candidates_exactly() {
+    let mut game = base_with_footprint_fixture(3011, "at_station_equivalence_fixture");
+    place_now(&mut game, "at_station_equivalence_fixture", 2, 0).unwrap();
+    let structure = Position { x: 2, y: 0 };
+    let side = 2;
+    let empty = std::collections::HashSet::new();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let candidates: std::collections::HashSet<(i32, i32)> =
+        crate::game::base::hauling::station_candidates(grid, structure, side, &empty)
+            .into_iter()
+            .map(|p| (p.x, p.y))
+            .collect();
+
+    for x in -2..=6 {
+        for y in -3..=4 {
+            let worker = Position { x, y };
+            assert_eq!(
+                crate::game::base::hauling::at_station(worker, structure, side),
+                candidates.contains(&(x, y)),
+                "at_station and station_candidates disagree at ({x}, {y})"
+            );
+        }
+    }
+}
+
+/// `Game::blocked_tiles` takes only the anchor of a footprint — a body may
+/// cross the other three cells exactly as it may cross any other laid
+/// floor — while `Game::structure_tiles` takes the whole thing. The two
+/// sets are documented as not interchangeable for this exact reason.
+#[test]
+fn blocked_tiles_takes_the_anchor_and_structure_tiles_takes_the_whole_footprint() {
+    let mut game = base_with_footprint_fixture(3012, "blocked_tiles_fixture");
+    place_now(&mut game, "blocked_tiles_fixture", 2, 0).unwrap();
+
+    let blocked = game.blocked_tiles();
+    assert!(blocked.contains(&(2, 0)), "the anchor blocks a walk");
+    for floor_cell in [(3, 0), (2, 1), (3, 1)] {
+        assert!(
+            !blocked.contains(&floor_cell),
+            "a floor cell must stay walkable: {floor_cell:?}"
+        );
+    }
+
+    let tiles = game.structure_tiles();
+    for cell in [(2, 0), (3, 0), (2, 1), (3, 1)] {
+        assert!(
+            tiles.contains(&cell),
+            "structure_tiles must cover every footprint cell: {cell:?}"
+        );
+    }
+}
+
+/// A hauler's own walk field is built from `Game::blocked_tiles`, so this is
+/// the same claim in the shape the walk actually consults: the anchor never
+/// appears as a reachable cell, and a floor cell does.
+#[test]
+fn a_haulers_walk_field_crosses_footprint_floor_but_never_the_anchor() {
+    let mut game = base_with_footprint_fixture(3013, "hauler_walk_fixture");
+    place_now(&mut game, "hauler_walk_fixture", 2, 0).unwrap();
+    let blocked = game.blocked_tiles();
+    let pocket_radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
+    let from = Position { x: 0, y: 3 };
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let field = crate::game::base::hauling::crew_reach(grid, from, &blocked, pocket_radius);
+
+    assert!(
+        field.contains_key(&(3, 0)),
+        "the walk must be able to step onto the structure's own floor cell"
+    );
+    assert!(
+        !field.contains_key(&(2, 0)),
+        "the walk must never step onto the anchor"
     );
 }

@@ -493,6 +493,25 @@ pub struct CreatureSave {
     /// had.
     #[serde(default)]
     pub patrol_position: Option<(i32, i32)>,
+    /// The Research Station this program is pinned in, if it is
+    /// `ProgramRole::UnderStudy` — identified by the station's own tile for
+    /// `nest_position`'s reason: entity ids aren't stable across a
+    /// save/load round trip. `None` for a program that isn't pinned.
+    ///
+    /// Resolved after `restore_structures`, `pending_cronjobs`'s deferral —
+    /// a station is one of the structures that array rebuilds, so a study
+    /// tether can be no sooner than a cronjob's target is. **A tile
+    /// resolving to no structure, or to one that no longer declares
+    /// `studies`** (a modder deleted or replaced the Station between
+    /// sessions), **drops the pin silently**: the program comes back as
+    /// ordinary `Staff`, which is exactly what standing the Station down
+    /// would have left it as — `nest_position`'s leniency, not a new rule.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** — an older save simply carries no pinned subjects, which is
+    /// what it had.
+    #[serde(default)]
+    pub study_station: Option<(i32, i32)>,
     /// Whether this creature is currently `Pursuing` the player — see that
     /// component's docs. Meaningless unless one of the two tethers above is
     /// also `Some`.
@@ -1903,6 +1922,7 @@ mod tests {
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

@@ -202,6 +202,25 @@ fn fuse_needs_two_programs_to_be_offered() {
     );
 }
 
+/// Fusion is a researched capability (Task 10): even with two programs on
+/// hand, the row stays hidden until `program_refactoring` is researched.
+#[test]
+fn fuse_row_is_hidden_until_fusion_is_researched_then_shown() {
+    let mut app = app_owning_distant_programs(4008, 2);
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        !rows.contains(&"Fuse two programs"),
+        "fusion is unresearched on a fresh run: {rows:?}"
+    );
+
+    mark_researched(&mut app, "program_refactoring");
+    let rows = labels(&app.party_menu_rows());
+    assert!(
+        rows.contains(&"Fuse two programs"),
+        "researching program_refactoring should unlock the row: {rows:?}"
+    );
+}
+
 /// The reason the handler and the renderer must call the same function.
 /// Rows are hidden dynamically, so row 1 of the base menu is whatever
 /// survived the filter — not the first entry of the static table.
@@ -479,5 +498,26 @@ fn the_work_orders_row_appears_once_something_is_orderable() {
         labels(&app.base_menu_rows()).contains(&"Work orders"),
         "a deployed extractor makes its product orderable: {:?}",
         labels(&app.base_menu_rows())
+    );
+}
+
+/// `Mode::PinSubject`'s row: hidden until a `studies` structure stands, and
+/// offered once one does — `Game::study_station` is the closure's own
+/// question, so a mod naming a second `studies` structure needs no change
+/// here.
+#[test]
+fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
+    let mut app = app_owning_a_program_and_a_compiler(883, &[]);
+    stand_in_base(&mut app);
+    assert!(
+        !labels(&app.base_menu_rows()).contains(&"Study a program"),
+        "a Compiler alone declares no `studies` pen"
+    );
+
+    let mut app = app_owning_a_program_and_a_research_station(884);
+    stand_in_base(&mut app);
+    assert!(
+        labels(&app.base_menu_rows()).contains(&"Study a program"),
+        "a standing Research Station must offer the row"
     );
 }

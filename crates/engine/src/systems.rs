@@ -1254,7 +1254,11 @@ pub fn task_progress_system(
         // a load produces nothing. `carrying` covers the arrival tick
         // specifically — a worker that produced there would refill the room
         // its own load needs and be left holding the remainder forever.
-        if !at_station(*worker_pos, *node_pos) || carrying.is_some() {
+        let node_side = structure
+            .and_then(|s| structure_db.get(&s.kind))
+            .map(|d| d.footprint)
+            .unwrap_or(1);
+        if !at_station(*worker_pos, *node_pos, node_side) || carrying.is_some() {
             // `Stranded` is the more specific reading of the same situation:
             // nobody is at the machine, and no amount of waiting will change
             // that. The marker is `haul_step_system`'s, written a tick ago —

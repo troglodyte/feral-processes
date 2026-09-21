@@ -308,12 +308,13 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         stocked
             .into_iter()
-            .find(|(x, y, _)| {
+            .find(|(x, y, e)| {
                 crate::game::base::hauling::reaches(
                     grid,
                     &field,
                     from,
                     Position { x: *x, y: *y },
+                    self.structure_footprint_of(*e),
                     &blocked,
                 )
             })

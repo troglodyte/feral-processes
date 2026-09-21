@@ -5,6 +5,7 @@
     cost: 110,
     materials: [("hardened_shell", 8), ("bytecode_block", 24)],
     min_zone: 3,
+    requires_subject: true,
     requires: ["firewall"],
     unlocks_recipes: [(
         result: "ablative_plating",

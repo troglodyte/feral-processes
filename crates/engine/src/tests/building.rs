@@ -1591,23 +1591,27 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
             .find(|d| &d.id == kind)
             .unwrap_or_else(|| panic!("{kind} ships with the game"));
         let work = def.work.expect("both of these are worked structures");
+        let anchor = Position {
+            x: 3 + i as i32 * 6,
+            y: 4,
+        };
         let node = game
             .world
             .spawn((
                 Structure {
                     kind: kind.to_string(),
                 },
-                Position {
-                    x: 3 + i as i32 * 6,
-                    y: 4,
-                },
+                anchor,
                 ResourceNode {
                     resource: work.produces.clone(),
                     level: None,
                 },
             ))
             .id();
-        stand_player_at_post(&mut game, node);
+        // `stand_player_at_post`'s own offset assumes a footprint of 1 — the
+        // Research Station's is 2, so its east neighbour is one of its own
+        // floor cells rather than a station face.
+        stand_in_base_at(&mut game, anchor.x + i32::from(def.footprint), anchor.y);
 
         game.work_structure(node).unwrap();
 
@@ -1947,13 +1951,17 @@ fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     game.assign_cronjob(worker, node).unwrap();
 
     for _ in 0..200 {
-        if game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
+        if game::base::hauling::at_station(
+            *game.world.get::<Position>(worker).unwrap(),
+            node_pos,
+            1,
+        ) {
             break;
         }
         game.tick();
     }
     assert!(
-        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos, 1),
         "a worker posted from one edge of a full-size base must reach the other"
     );
 }
@@ -2995,6 +3003,28 @@ fn a_program_carrying_goods_is_not_offered_to_a_build() {
     );
 }
 
+/// A pinned subject is standing in a Research Station's pen mid-study —
+/// offering it here would let the picker confirm a spend `commit_program`
+/// then silently declines. `commit_program`'s own reason for the identical
+/// exclusion (see `committing_a_pinned_subject_is_refused` below).
+#[test]
+fn a_pinned_subject_is_not_offered_to_a_build() {
+    let (mut game, station) = base_with_station(20260920);
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(p, station).expect("staff is pinnable");
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a subject under study is not spendable on a build"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one still on staff is offered, so the list is not simply empty"
+    );
+}
+
 /// The program rule may never demand a depth the tier ceiling would not
 /// have let the player reach. If `upgrade_ceiling` ever loosens, this is
 /// what says so out loud instead of leaving an unsatisfiable upgrade.
@@ -3291,6 +3321,19 @@ fn committing_a_downed_program_is_refused() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = tame_at_zone(&mut game, 1);
     game.world.entity_mut(p).insert(Downed);
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// `programs_for_build`'s own reason for the identical exclusion: a program
+/// mid-study is not reachable to spend, so this door refuses too rather than
+/// leaving the rule live only in a picker.
+#[test]
+fn committing_a_pinned_subject_is_refused() {
+    let (mut game, station) = base_with_station(20260922);
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(p, station).expect("staff is pinnable");
 
     assert!(game.commit_program(p).is_none());
     assert!(game.world.get_entity(p).is_ok());
@@ -4284,4 +4327,721 @@ fn a_deploy_is_refused_onto_a_standing_program() {
     // The cell beside it is free, so the refusal is about the body and not
     // about the ground.
     place_now(&mut game, "depot", 3, 1).expect("the next cell along is clear");
+}
+
+// --- Footprint (`StructureDef::footprint`/`studies`) ---
+//
+// The squad seam's failure was that every fixture was hand-built at
+// footprint 1, so every anchor-measuring reader stayed green across 5,964
+// passing tests. `footprint_fixture`/`base_with_footprint_fixture`
+// (`support.rs`) clone `armory` wholesale — same build cost, same
+// `assembles` (so `file_build` tames a program the same way) — and differ
+// from a shipped-def test only in the one field under test, which is the
+// point: a 2x2 fixture that matters is one that could otherwise have been a
+// 1x1 in disguise. Shared with `tests::hauling` and `tests::work_orders`,
+// which need the same shape for the reach machinery.
+
+#[test]
+fn an_unannotated_structure_has_footprint_one_and_does_not_study() {
+    let game = Game::new(2001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game.world.resource::<StructureDb>().get("armory").unwrap();
+    assert_eq!(def.footprint, 1, "an unannotated def claims one cell");
+    assert!(!def.studies, "an unannotated def holds no pen");
+}
+
+#[test]
+fn a_structure_authoring_a_footprint_reads_it_back() {
+    let mut game = Game::new(2002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    footprint_fixture(&mut game, "footprint_fixture_read", 2);
+    assert_eq!(
+        game.world
+            .resource::<StructureDb>()
+            .get("footprint_fixture_read")
+            .unwrap()
+            .footprint,
+        2
+    );
+}
+
+/// **`footprint: 0` parses clean and would otherwise silently break a
+/// structure.** `#[serde(default = "default_footprint")]` only covers an
+/// *absent* field; an authored `0` parses fine, and
+/// `tactical::footprint_cells_at` then returns no cells at all, so every
+/// widened `place_structure` refusal passes vacuously and nothing can ever
+/// post to the structure. `StructureDb::load_dir` rejects it the same way
+/// it rejects any other malformed file — same contract as every other
+/// `*Db::load_dir` in this crate.
+#[test]
+fn a_footprint_of_zero_is_skipped_with_a_warning() {
+    let dir = scratch_assets_dir("footprint_zero");
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(
+        dir.join("broken_footprint.ron"),
+        r#"(
+            id: "broken_footprint", name: "Broken", glyph: 'B', color: Cyan,
+            build_cost: [], work: None, footprint: 0,
+        )"#,
+    )
+    .unwrap();
+
+    let (db, warnings) = StructureDb::load_dir(&dir).unwrap();
+
+    assert!(
+        db.get("broken_footprint").is_none(),
+        "a footprint of 0 claims no cells and must not load"
+    );
+    assert_eq!(warnings.len(), 1, "the skip warns: {warnings:?}");
+}
+
+/// The blocker sits at `(3, 0)` — a non-anchor cell of the 2x2 about to be
+/// placed at `(2, 0)` — and every refusal case below places it there before
+/// attempting the footprint. The fixture trap this guards against: a check
+/// that only ever looked at the anchor would wave every one of these
+/// through.
+#[test]
+fn placing_a_footprint_is_refused_when_a_structure_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2010, "footprint_fixture_struct");
+    place_now(&mut game, "depot", 3, 0).expect("a small blocker stands in a non-anchor cell");
+    let err = game
+        .place_structure("footprint_fixture_struct", 2, 0, None)
+        .expect_err("cell (3, 0) is already occupied by another structure");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_build_site_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2011, "footprint_fixture_site");
+    file_build(&mut game, "depot", 3, 0).expect("a build request is filed at the non-anchor cell");
+    let err = game
+        .place_structure("footprint_fixture_site", 2, 0, None)
+        .expect_err("cell (3, 0) already has a pending request");
+    assert!(
+        err.contains("already set to build"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_dig_mark_occupies_a_non_anchor_cell() {
+    let mut game = base_with_footprint_fixture(2012, "footprint_fixture_mark");
+    // `Strip` needs an existing finish to strip and a bare `None` brush
+    // skips laid floor outright (`set_mark`'s table), so an `Apply` is the
+    // one brush that marks a plain floor cell.
+    game.toggle_mark_box(
+        (3, 0),
+        (3, 0),
+        Some(&FinishOrder::Apply(crate::floors::FloorId::from(
+            "slate_inlay",
+        ))),
+    );
+    let err = game
+        .place_structure("footprint_fixture_mark", 2, 0, None)
+        .expect_err("cell (3, 0) carries a dig mark");
+    assert!(err.contains("dig mark"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_is_refused_when_a_non_anchor_cell_has_no_floor() {
+    let mut game = base_with_footprint_fixture(2013, "footprint_fixture_rock");
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .revert(3, 0);
+    let err = game
+        .place_structure("footprint_fixture_rock", 2, 0, None)
+        .expect_err("cell (3, 0) has no floor under it");
+    assert!(err.contains("no floor there"), "unexpected error: {err}");
+}
+
+#[test]
+fn placing_a_footprint_succeeds_when_every_cell_is_clear() {
+    let mut game = base_with_footprint_fixture(2014, "footprint_fixture_ok");
+    place_now(&mut game, "footprint_fixture_ok", 2, 0)
+        .expect("all four footprint cells are clear floor");
+}
+
+#[test]
+fn find_blocking_structure_at_answers_for_every_footprint_cell() {
+    let mut game = base_with_footprint_fixture(2015, "footprint_fixture_find");
+    place_now(&mut game, "footprint_fixture_find", 2, 0).expect("placed");
+    let anchor = game
+        .find_blocking_structure_at(2, 0)
+        .expect("the anchor cell resolves to the structure");
+    for (fx, fy) in [(3, 0), (2, 1), (3, 1)] {
+        assert_eq!(
+            game.find_blocking_structure_at(fx, fy),
+            Some(anchor),
+            "cell ({fx}, {fy}) should resolve to the same structure as the anchor"
+        );
+    }
+}
+
+#[test]
+fn build_site_at_answers_for_every_footprint_cell_of_a_pending_request() {
+    let mut game = base_with_footprint_fixture(2016, "footprint_fixture_site_find");
+    file_build(&mut game, "footprint_fixture_site_find", 2, 0).expect("filed");
+    let anchor_site = game
+        .build_site_at(2, 0)
+        .expect("the anchor cell has the pending site");
+    for (fx, fy) in [(3, 0), (2, 1), (3, 1)] {
+        assert_eq!(
+            game.build_site_at(fx, fy),
+            Some(anchor_site),
+            "cell ({fx}, {fy}) should resolve to the same pending site as the anchor"
+        );
+    }
+}
+
+// --- The Research Station and its pen (`Game::study_pen`) ---
+
+#[test]
+fn study_pen_is_none_for_a_structure_that_does_not_study() {
+    let mut game = Game::new(4001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "depot", 1, 0).unwrap();
+    let depot = game
+        .find_blocking_structure_at(1, 0)
+        .expect("the depot was just deployed");
+    assert_eq!(game.study_pen(depot), None);
+}
+
+#[test]
+fn study_pen_is_the_footprint_cell_diagonally_opposite_the_anchor() {
+    let mut game = Game::new(4002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 2, 0).unwrap();
+    let station = game
+        .find_blocking_structure_at(2, 0)
+        .expect("the Station was just deployed at its anchor");
+    assert_eq!(
+        game.study_pen(station),
+        Some((3, 1)),
+        "the pen is the footprint cell diagonally opposite the anchor"
+    );
+}
+
+/// Task 1's widened ladder, now reached through the real def rather than a
+/// test fixture — a Station placed with any of its four cells occupied is
+/// refused exactly as the fixture proved it would be.
+#[test]
+fn placing_the_research_station_is_refused_when_a_cell_is_occupied() {
+    let mut game = Game::new(4003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "depot", 3, 0).unwrap();
+
+    let err = game
+        .place_structure("research_node", 2, 0, None)
+        .expect_err("cell (3, 0), one of the Station's own footprint cells, is occupied");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
+}
+
+/// **The legacy case.** The footprint is derived from the current def and
+/// never stored, so a Research Node placed before this def grew to 2x2 can
+/// have neighbours already occupied — exactly what an old save can hold.
+/// `spawn_structure_at` stands in for a loaded save here: it bare-spawns the
+/// `Structure`, bypassing the placement ladder entirely, the same as
+/// `Game::load` restoring an entity that is never re-checked against
+/// `place_structure`'s refusals.
+#[test]
+fn a_legacy_research_node_with_occupied_neighbours_stands_and_blocks_only_its_anchor() {
+    let mut game = Game::new(4004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+
+    // Every one of the anchor's would-be footprint cells is already spoken
+    // for by something else.
+    place_now(&mut game, "depot", 3, 0).unwrap();
+    place_now(&mut game, "depot", 2, 1).unwrap();
+    place_now(&mut game, "depot", 3, 1).unwrap();
+    let east = game
+        .find_blocking_structure_at(3, 0)
+        .expect("the neighbouring depot stands");
+
+    let node = spawn_structure_at(&mut game, "research_node", 2, 0);
+
+    // Stands, and the neighbour it happens to have gained is untouched —
+    // nothing about the wider def evicts either.
+    assert!(game.world.get::<Structure>(node).is_some());
+    assert!(game.world.get::<Structure>(east).is_some());
+
+    // Blocks its anchor, exactly as any standing structure does.
+    assert_eq!(game.find_blocking_structure_at(2, 0), Some(node));
+    let err = game
+        .place_structure("depot", 2, 0, None)
+        .expect_err("the node's own anchor is occupied");
+    assert!(err.contains("already deployed"), "unexpected error: {err}");
+}
+
+// ---------------------------------------------------------------------
+// Pinning and unpinning a subject (Task 5: `Game::pin_subject`/`unpin_subject`)
+//
+// Every refusal below asserts that nothing was written — no
+// `components::UnderStudy`, and the role unchanged — `select_research`'s
+// rule: a single test over one of several refusals passes against all the
+// ones that never write anyway.
+// ---------------------------------------------------------------------
+
+/// A base with a Research Station standing at `(1, -3)` (pen at `(2, -2)`),
+/// shared by every pin/unpin test below.
+fn base_with_station(seed: u32) -> (Game, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    (game, station)
+}
+
+#[test]
+fn pin_subject_is_refused_during_game_over_or_a_battle() {
+    let (mut game, station) = base_with_station(4300);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a finished run cannot pin anyone");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let enemy = spawn_wild_without_routine(&mut game, "scrapper", 5, 5);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![enemy]);
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("mid-battle cannot pin anyone either");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none(),
+        "neither refusal should have written the marker"
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_for_a_program_you_do_not_own() {
+    let (mut game, station) = base_with_station(4301);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let stranger = game.world.spawn_empty().id();
+    game.world.get_mut::<Tamed>(program).unwrap().owner = stranger;
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a program tamed to somebody else cannot be pinned");
+    assert!(err.contains("control"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_already_under_study() {
+    let (mut game, station) = base_with_station(4302);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(program, station)
+        .expect("the first pin should succeed");
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("a program already under study cannot be pinned again");
+    assert!(err.contains("already"), "unexpected error: {err}");
+}
+
+/// A partied, wielded or away-on-sortie program comes home first — saying
+/// so beats `pin_subject` silently recalling it.
+#[test]
+fn pin_subject_is_refused_unless_the_program_is_staff() {
+    let (mut game, station) = base_with_station(4303);
+
+    let partied = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, partied);
+    let err = game
+        .pin_subject(partied, station)
+        .expect_err("a partied program isn't staff");
+    assert!(err.contains("base staff"), "unexpected error: {err}");
+
+    let wielded = spawn_tamed(&mut game, 10, 3);
+    game.wield_program(wielded).unwrap();
+    let err = game
+        .pin_subject(wielded, station)
+        .expect_err("a wielded program isn't staff");
+    assert!(err.contains("base staff"), "unexpected error: {err}");
+
+    for program in [partied, wielded] {
+        assert!(
+            game.world
+                .get::<crate::components::UnderStudy>(program)
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_structure_does_not_study() {
+    let (mut game, _station) = base_with_station(4304);
+    place_now(&mut game, "depot", 3, -3).unwrap();
+    let depot = game.find_blocking_structure_at(3, -3).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .pin_subject(program, depot)
+        .expect_err("a Depot has no pen");
+    assert!(err.contains("pen"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_pen_has_no_floor() {
+    let (mut game, station) = base_with_station(4305);
+    let pen = game.study_pen(station).unwrap();
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .revert(pen.0, pen.1);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("the pen has no floor under it any more");
+    assert!(err.contains("floor"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_the_pen_already_holds_a_body() {
+    let (mut game, station) = base_with_station(4306);
+    let pen = game.study_pen(station).unwrap();
+    let occupant = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(occupant).unwrap().x = pen.0;
+    game.world.get_mut::<Position>(occupant).unwrap().y = pen.1;
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("the pen is occupied");
+    assert!(err.contains("standing"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_is_refused_when_there_is_no_route_to_the_pen() {
+    let (mut game, station) = base_with_station(4307);
+    let program = spawn_tamed(&mut game, 10, 3);
+    // Outside `haul_walk_radius`'s box around the pen entirely, and not
+    // floor either — nowhere a walk could ever reach it from.
+    game.world.get_mut::<Position>(program).unwrap().x = 60;
+    game.world.get_mut::<Position>(program).unwrap().y = 60;
+
+    let err = game
+        .pin_subject(program, station)
+        .expect_err("nothing routes there");
+    assert!(err.contains("route"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+#[test]
+fn pin_subject_succeeds_and_writes_the_marker() {
+    let (mut game, station) = base_with_station(4308);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.pin_subject(program, station).unwrap();
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .map(|u| u.station),
+        Some(station)
+    );
+    assert_eq!(game.program_role(program), Some(ProgramRole::UnderStudy));
+}
+
+#[test]
+fn pin_subject_succeeds_for_a_program_already_standing_on_the_pen() {
+    // The occupancy refusal must exempt the program being pinned — the same
+    // way `place_structure`'s body refusal exempts the program paying for
+    // the build. A program that happens to already be standing on the pen
+    // tile (no walk needed) must not trip "something is already standing in
+    // the pen" against itself.
+    let (mut game, station) = base_with_station(4308100);
+    let pen = game.study_pen(station).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(program).unwrap().x = pen.0;
+    game.world.get_mut::<Position>(program).unwrap().y = pen.1;
+
+    game.pin_subject(program, station)
+        .expect("pinning the occupant of the pen onto itself must succeed");
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .map(|u| u.station),
+        Some(station)
+    );
+}
+
+#[test]
+fn unpin_subject_is_refused_when_nothing_is_pinned() {
+    let (mut game, _station) = base_with_station(4309);
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .unpin_subject(program)
+        .expect_err("an ordinary staff program isn't pinned");
+    assert!(err.contains("pinned"), "unexpected error: {err}");
+}
+
+#[test]
+fn unpin_subject_is_refused_during_game_over_or_a_battle() {
+    let (mut game, station) = base_with_station(4310);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.pin_subject(program, station).unwrap();
+
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let err = game
+        .unpin_subject(program)
+        .expect_err("a finished run cannot unpin anyone");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let enemy = spawn_wild_without_routine(&mut game, "scrapper", 5, 5);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![enemy]);
+    let err = game
+        .unpin_subject(program)
+        .expect_err("mid-battle cannot unpin anyone either");
+    assert!(err.contains("right now"), "unexpected error: {err}");
+
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "neither refusal should have removed the marker"
+    );
+}
+
+/// The round trip: with no active project to speak for (Part C's own
+/// refusal isn't wired yet — see `Game::unpin_subject`'s doc), unpinning
+/// with nothing else in the way returns the program to `Staff`.
+#[test]
+fn pin_then_unpin_returns_the_program_to_staff() {
+    let (mut game, station) = base_with_station(4311);
+    let program = spawn_tamed(&mut game, 10, 3);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+
+    game.pin_subject(program, station).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::UnderStudy));
+
+    game.unpin_subject(program).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+}
+
+// ---------------------------------------------------------------------
+// Losing the station under a running project (Task 9)
+//
+// Both destruction doors release a pinned subject back to `Staff` and
+// abandon the active project — `clear_pending_build_at`'s rule with a
+// second subject: the door left out silently strands a program in a role
+// nothing can get it out of, and nothing fails to compile.
+// ---------------------------------------------------------------------
+
+#[test]
+fn destroying_a_research_station_releases_its_subject_and_abandons_the_project() {
+    let mut game = Game::new(4600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(node)
+        .insert(crate::components::Durability { hp: 10, max_hp: 10 });
+
+    game.damage_structure(node, 10, "Research Station");
+
+    assert!(
+        game.world.get::<Structure>(node).is_none(),
+        "the fixture must actually destroy the Station or this asserts nothing"
+    );
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::Staff),
+        "the subject must be released back to staff"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the project the destroyed Station was serving must be abandoned"
+    );
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "the abandoned project's material orders must leave the queue"
+    );
+}
+
+#[test]
+fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project() {
+    let mut game = Game::new(4601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+
+    game.remove_structure(node).unwrap();
+
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::Staff),
+        "the subject must be released back to staff"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_none()
+    );
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the project the demolished Station was serving must be abandoned"
+    );
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "the abandoned project's material orders must leave the queue"
+    );
+}
+
+/// `Game::view_station_floor_at` is the renderer's only way to ask which
+/// cells a Research Station's own floor fill belongs on — every non-anchor
+/// footprint cell, and never the anchor itself, which draws the structure's
+/// own glyph and tile. **Windowed**, `view_finishes_at`'s own shape: one call
+/// over `(center, half_w, half_h)` returns the whole set, indexed
+/// `[row][col]` with row `dy + half_h` and col `dx + half_w`.
+#[test]
+fn view_station_floor_at_is_every_non_anchor_footprint_cell() {
+    let (game, station) = base_with_station(4601100);
+    let anchor = *game.world.get::<Position>(station).unwrap();
+    let half = 6;
+    let rows = game.view_station_floor_at((anchor.x, anchor.y), half, half);
+    let at = |dx: i32, dy: i32| rows[(dy + half) as usize][(dx + half) as usize];
+
+    assert!(
+        !at(0, 0),
+        "the anchor draws the structure's own tile, not the floor fill"
+    );
+    for (dx, dy) in [(1, 0), (0, 1), (1, 1)] {
+        assert!(
+            at(dx, dy),
+            "({}, {}) is a non-anchor footprint cell of a 2x2 Station",
+            anchor.x + dx,
+            anchor.y + dy
+        );
+    }
+    assert!(
+        !at(5, 5),
+        "a cell well outside the footprint must not draw the fill"
+    );
+}
+
+/// A legacy 1x1 Research Node's own anchor never takes the floor fill — the
+/// non-anchor exclusion alone is what this test pins, through a structure
+/// bare-spawned the way an old save's Node would be restored.
+#[test]
+fn view_station_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
+    let mut game = Game::new(4601101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let node = spawn_structure_at(&mut game, "research_node", 5, 5);
+    let anchor = *game.world.get::<Position>(node).unwrap();
+    let rows = game.view_station_floor_at((anchor.x, anchor.y), 1, 1);
+    assert!(!rows[1][1]);
+}
+
+/// A cell outside the requested window never appears, even when it would
+/// otherwise be a real footprint or pinned cell — the property that makes a
+/// window call safe to use for a pane rather than the whole base: a caller
+/// asking a smaller box than the map must not read a hit from a structure
+/// well outside it.
+#[test]
+fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
+    let (mut game, station) = base_with_station(4601103);
+    let anchor = *game.world.get::<Position>(station).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, station);
+
+    // A window centred far from the Station and too small to reach it.
+    let far = (anchor.x + 50, anchor.y + 50);
+    let floor_rows = game.view_station_floor_at(far, 2, 2);
+    let pinned_rows = game.view_pinned_at(far, 2, 2);
+    assert!(
+        floor_rows.iter().flatten().all(|&hit| !hit),
+        "the Station's floor sits outside this window"
+    );
+    assert!(
+        pinned_rows.iter().flatten().all(|&hit| !hit),
+        "the pinned subject sits outside this window"
+    );
+    assert_eq!(floor_rows.len(), 5, "a half of 2 is a 5x5 window");
+    assert_eq!(floor_rows[0].len(), 5);
+}
+
+/// `Game::view_pinned_at` is the pin mark's own question — does a body
+/// under study stand at this cell — read directly off `UnderStudy` bodies
+/// rather than re-deriving a pen. **Windowed**, `view_station_floor_at`'s own
+/// shape.
+#[test]
+fn view_pinned_at_answers_for_the_bodys_own_position() {
+    let (mut game, station) = base_with_station(4601102);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let pen = game.study_pen(station).unwrap();
+    let half = 6;
+    let at = |rows: &Vec<Vec<bool>>, x: i32, y: i32| {
+        rows[(y - pen.1 + half) as usize][(x - pen.0 + half) as usize]
+    };
+
+    let before = game.view_pinned_at(pen, half, half);
+    assert!(!at(&before, pen.0, pen.1));
+
+    pin_subject_at_pen(&mut game, program, station);
+
+    let after = game.view_pinned_at(pen, half, half);
+    assert!(at(&after, pen.0, pen.1));
+    assert!(!at(&after, pen.0 + 3, pen.1 + 3));
 }

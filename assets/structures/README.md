@@ -605,6 +605,35 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Ownership, not proximity, the same rule as above. This is how the
     // Compiler works.
     extracts_programs: true,
+
+    // Optional; can be left out entirely (defaults to 1). The side of a
+    // square claim on placement, anchored **top-left**: a footprint of 2
+    // claims a 2x2 block, `(dx, dy)` through `(dx + 1, dy + 1)`. The anchor
+    // — the cell `(dx, dy)` names — is the only cell that blocks: it is
+    // impassable and carries the glyph, exactly like a footprint-1
+    // structure. The other `footprint * footprint - 1` cells are this
+    // structure's own walkable floor, open to anything that can stand on
+    // laid ground. Checked only at placement (every cell of the footprint
+    // must be floor, hold no structure, no pending build site and no dig
+    // mark) and never stored, so widening an existing structure's footprint
+    // in a later release needs no save migration — a structure already
+    // standing keeps blocking exactly the one cell it always did, and its
+    // new cells are purely additive. This is the Research Station's shape.
+    //
+    // A footprint of 0 is not a legal way to spell "unannotated" — the
+    // default above only covers a field left out entirely. An authored `0`
+    // parses, claims no cells at all, and would leave every placement
+    // refusal passing vacuously with nothing ever able to post to the
+    // structure, so the loader skips a file that authors one, with a
+    // warning, exactly as it skips any other malformed file.
+    footprint: 2,
+
+    // Optional; can be left out entirely (defaults to false). Whether this
+    // structure can hold a tamed program *under study*, in the footprint
+    // cell diagonally opposite the anchor (see `Game::study_pen`) —
+    // `footprint * footprint > 1` for that cell to exist at all. This is
+    // the Research Station's own field.
+    studies: true,
 )
 ```
 
@@ -634,10 +663,11 @@ order was holding, with everything about it intact.
 A structure named in some research node's `unlocks_structures` can't be
 built until that node is researched — see `assets/research/README.md`. A
 structure named by **no** research file is buildable from turn one, which is
-how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
+how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
 stay available at the start, and why a structure mod that ships no research
 file keeps working unchanged.
 
-The Research Node itself (`research_node.ron`) is the source of Research
+The Research Station itself (`research_node.ron` — the id stayed put when
+the structure grew a pen and a display name) is the source of Research
 Data: assign a tamed program to it via the cronjob menu, same as a Mining
 Node.

@@ -568,6 +568,31 @@ pub struct StructureDef {
     /// mods) improve nothing, exactly as before this field existed.
     #[serde(default)]
     pub extracts_programs: bool,
+    /// The side of a square claim on placement, anchored **top-left** — the
+    /// same meaning and anchoring `tactical::footprint_cells_at` already
+    /// spells, so there is one definition of "a square footprint" in the
+    /// repo rather than two that can drift. The anchor cell (the one
+    /// `place_structure` measures `(dx, dy)` from) is the structure's
+    /// impassable block, carrying its glyph; the other
+    /// `footprint * footprint - 1` cells are its own walkable floor. Checked
+    /// only at placement (`Game::place_structure`'s widened refusal ladder)
+    /// and never stored — a structure already standing is never refused
+    /// retroactively, which is what lets a structure widen its footprint in
+    /// a later release with no save migration: the legacy anchor keeps
+    /// blocking exactly what it always blocked.
+    /// `#[serde(default = "default_footprint")]` — a bare `#[serde(default)]`
+    /// gives `0`, a footprint that claims no cells. That default only covers
+    /// an *absent* field: an authored `footprint: 0` parses clean, so
+    /// `StructureDb::load_dir` rejects it after the fact, the same way it
+    /// handles any other malformed file.
+    #[serde(default = "default_footprint")]
+    pub footprint: u8,
+    /// Whether this structure can hold a tamed program *under study*, in the
+    /// footprint cell diagonally opposite the anchor — see
+    /// `Game::study_pen`. `#[serde(default)]` so every existing structure
+    /// file, including any mod, keeps parsing as a machine with no pen.
+    #[serde(default)]
+    pub studies: bool,
 }
 
 fn default_durability() -> u32 {
@@ -576,6 +601,10 @@ fn default_durability() -> u32 {
 
 fn default_raidable() -> bool {
     true
+}
+
+fn default_footprint() -> u8 {
+    1
 }
 
 #[derive(Resource, Default)]
@@ -690,6 +719,18 @@ impl StructureDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<StructureDef>(&text) {
                 Ok(def) => {
+                    // `#[serde(default = "default_footprint")]` only saves an
+                    // *absent* field — an authored `footprint: 0` parses
+                    // clean and `footprint_cells_at` then returns no cells at
+                    // all, so every widened `place_structure` refusal passes
+                    // vacuously and nothing can ever post to the structure.
+                    if def.footprint == 0 {
+                        warnings.push(format!(
+                            "skipped invalid structure file {path:?}: footprint is 0, which \
+                             claims no cells at all"
+                        ));
+                        continue;
+                    }
                     db.structures.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid structure file {path:?}: {e}")),

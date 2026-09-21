@@ -698,6 +698,56 @@ pub(super) fn draw_build_program(
     );
 }
 
+/// `Mode::PinSubject` — modelled on `draw_build_program`'s shape.
+///
+/// **One row, not two.** `Game::pinned_subject` decides which of two things
+/// this popup is showing: with a subject already pinned, the single row
+/// that releases it, matching `App::handle_pin_subject_key`'s own read of
+/// the same call so the row on screen and the row the key resolves can
+/// never disagree; with nobody pinned, `Game::base_staff` as a picker.
+pub(super) fn draw_pin_subject(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let rows: Vec<Row> = match game.pinned_subject() {
+        Some(subject) => {
+            let name = game.creature_label(subject);
+            vec![item_row(
+                format!("[{}] Release {name} from study", menu_shortcut(0)),
+                selected == 0,
+            )]
+        }
+        None => {
+            let staff = game.base_staff();
+            if staff.is_empty() {
+                vec![text_row("(nobody on the base staff to pin)")]
+            } else {
+                staff
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, entity)| {
+                        item_row(
+                            format!("[{}] {}", menu_shortcut(i), game.creature_label(entity)),
+                            i == selected,
+                        )
+                    })
+                    .collect()
+            }
+        }
+    };
+    draw_popup(
+        "Study a program",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
 /// The roster's standing-instruction toggles for the structure highlighted
 /// there: keep it running, keep it guarded, or work it yourself right now.
 ///

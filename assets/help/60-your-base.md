@@ -111,13 +111,24 @@ The rest of what a base does:
   whole base, and a program posted to the structure that gets hit defends it with its own
   Mitigation.
 - Research is one project at a time, and the base works it. Pick a node on the research screen and
-  every Research Node you have deployed staffs itself and starts feeding it; with nothing picked they
-  stand idle, which the base panel will tell you about. The tree is what unlocks the benches, the
-  recipes and several routines.
+  every Research Station you have deployed staffs itself and starts feeding it; with nothing picked
+  they stand idle, which the base panel will tell you about. The tree is what unlocks the benches,
+  the recipes and several routines.
+- A Research Station is a 2x2 building with a pen in the corner diagonally opposite its own tile.
+  "Study a program" on the base menu pins one of your own programs there — it stops working
+  whatever post it held and walks to the pen by itself, and the same row unpins it again once
+  nothing needs it there.
+- From sector 2 on, most nodes refuse selection until a program is pinned. The research screen
+  marks those rows locked and says so; any program you own satisfies it, and which one does not
+  matter. Finishing the project spends the pinned one: it leaves your roster and lands in your
+  downed-program store exactly as if you had beaten it in a fight, still worth a tool afterward —
+  see [taking a program apart](extraction). Change your mind and abandon the project (`A`) to get
+  the program back as ordinary staff instead of losing it; losing the Station itself does the same.
 - Picking a node also files its material bill as work orders, at the top of the queue, so the base makes the
-  goods the same way it makes anything else. The project completes when it has both the Research Data
-  and the whole bill, and the bill is paid off your shelves — any Depot, any machine buffer, wherever
-  in the base it is sitting. What you are carrying is yours and is never spent on it.
+  goods the same way it makes anything else. The project completes when it has the Research Data,
+  the whole material bill and a pinned subject if the node asks for one — the bill is paid off your
+  shelves, any Depot, any machine buffer, wherever in the base it is sitting. What you are carrying
+  is yours and is never spent on it.
 - A node whose bill names something nothing in your base could ever make is refused outright, and the
   refusal says which machine is missing. Early nodes want raw salvage; deeper ones want what your
   benches turn it into, and a node's bill is always something the nodes before it taught you to make.

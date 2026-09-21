@@ -96,9 +96,9 @@ use battle::{
 };
 use building::{
     build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
-    draw_build_program, draw_remove_confirm, draw_remove_menu, draw_staffing_menu,
-    draw_structure_menu, draw_structures, draw_work_order_pick, draw_work_order_quantity,
-    draw_work_orders,
+    draw_build_program, draw_pin_subject, draw_remove_confirm, draw_remove_menu,
+    draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
+    draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
@@ -1057,6 +1057,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_build_direction(game, pending_structure.as_deref(), refusal, painter, m)
         }
         Mode::BuildProgram => draw_build_program(game, build_commit, selected, refusal, painter, m),
+        Mode::PinSubject => draw_pin_subject(game, selected, refusal, painter, m),
         Mode::Transfer => draw_transfer(
             &transfer_entries,
             app.basket_room,
@@ -1495,7 +1496,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 112] = [
+    const ALL_MODES: [Mode; 113] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalEmulate,
@@ -1521,6 +1522,7 @@ mod tests {
         Mode::Build,
         Mode::BuildDirection,
         Mode::BuildProgram,
+        Mode::PinSubject,
         Mode::DevConsole,
         Mode::Craft,
         Mode::CraftQuantity,

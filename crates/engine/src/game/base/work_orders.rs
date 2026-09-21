@@ -910,6 +910,16 @@ impl Game {
         // every stage below — the `on_shift` filter, the drift's Bay arm,
         // the diff's unconditional free — already knows what to do with.
         self.admit_the_badly_hurt(&staff, &bays);
+        // **The walking pool is wider than the posting pool.** A pinned
+        // subject is not `Staff` — `base_staff` excludes it the moment
+        // `role_of` reads its `components::UnderStudy` marker — so it is
+        // absent from `staff` by construction and would otherwise fall out
+        // of the only pass that walks anything, standing exactly where it
+        // was pinned for the rest of the run. `drift_idle_staff` alone reads
+        // the wider list; every reader below this line reasons about who
+        // can be handed a *job*, which a subject never can.
+        let mut walkers = staff.clone();
+        walkers.extend(self.under_study_bodies());
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
@@ -918,9 +928,15 @@ impl Game {
             // player is most likely to have the screen open on and an
             // unwritten demand would read as no wants rather than no bodies.
             self.record_labour_demand(wanted.len(), 0);
+            // A subject pinned at a base with no other staff still has to
+            // walk to its pen — the case the wider `walkers` list exists
+            // for, and the reason this return does not skip the drift too.
+            if !walkers.is_empty() {
+                self.drift_idle_staff(&walkers, &amenities, &bays);
+            }
             return;
         }
-        self.drift_idle_staff(&staff, &amenities, &bays);
+        self.drift_idle_staff(&walkers, &amenities, &bays);
         // **An off-shift program leaves the posting half of the scheduler,
         // not the drift half.** `drift_idle_staff` above keeps the whole list
         // — it is what walks a body to its amenity — while everything from
@@ -1018,7 +1034,9 @@ impl Game {
                     }
                     let (from, field) = &reach[index];
                     let grid = self.world.resource::<BaseGrid>();
-                    if hauling::reaches(grid, field, *from, at, &blocked) {
+                    // `post` is a `BuildSite` or `DigSite` here, never a
+                    // `Structure` — both are always footprint 1.
+                    if hauling::reaches(grid, field, *from, at, 1, &blocked) {
                         anyone = true;
                         break;
                     }
@@ -1386,8 +1404,12 @@ impl Game {
         let Some(to) = self.world.get::<Position>(target).copied() else {
             return Err(hauling::NoPost::BoxedIn);
         };
+        // `target` is a machine (`GatherResource`) or a `DigSite`
+        // (`Excavate`); `structure_footprint_of` answers `1` for the
+        // latter, since a `DigSite` carries no `Structure`.
+        let side = self.structure_footprint_of(target);
         let grid = self.world.resource::<BaseGrid>();
-        hauling::post_reach(grid, from, to, blocked, pocket_radius)
+        hauling::post_reach(grid, from, to, side, blocked, pocket_radius)
     }
 
     /// Says once that nothing on the staff can walk to `site` —
@@ -1774,7 +1796,10 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let mut sites: Vec<(bool, i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
-            .filter(|(p, ..)| hauling::has_station(grid, *p, &structures))
+            // A dig mark is always footprint 1 — `structures` (the widened
+            // `structure_tiles`) is what carries a real Station's floor
+            // cells into this check.
+            .filter(|(p, ..)| hauling::has_station(grid, *p, 1, &structures))
             .map(|(p, e, f)| (grid.is_solid(p.x, p.y), p.x, p.y, e, f))
             .collect();
         // Cut/tile sites (`finish: None`) sort before finish/strip sites,
@@ -2033,6 +2058,23 @@ impl Game {
                 .world
                 .get::<Position>(worker)
                 .is_some_and(|p| crowded.contains(&(p.x, p.y)));
+            // **Above the Bay arm**, `components::UnderStudy`'s own doc's
+            // reason: the two are disjoint in practice — a benched program
+            // cannot be pinned — so the order only states a claim a test can
+            // check rather than resolving a real conflict. Gated on laid
+            // floor for `Downed`'s exact reason: a program pinned the moment
+            // it stepped out of the Stack carries that surface tile as its
+            // `Position`, and the wander's `entry_tile` arm below is what
+            // puts it on the ring first. `Err` is dropped the same way — it
+            // holds where it stands and keeps `UnderStudy`, since nothing
+            // else may free a subject but `Game::unpin_subject`.
+            if !sharing && on_floor && self.world.get::<components::UnderStudy>(worker).is_some() {
+                let _ = self.step_to_study(worker);
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
             if !sharing && on_floor && self.world.get::<components::Downed>(worker).is_some() {
                 // **`Err` no longer means "stand still", and which kind of
                 // failure it is decides that.** A base with no Bay at all

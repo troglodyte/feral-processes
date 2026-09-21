@@ -291,6 +291,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::InParty => "In your party",
         ProgramRole::Wielded => "Carried as your weapon",
         ProgramRole::Sortie => "Away on a sortie",
+        ProgramRole::UnderStudy => "Under study",
         ProgramRole::Staff => "Base staff",
     }
 }
@@ -749,6 +750,36 @@ mod tests {
             shortcuts,
             (0..3).map(menu_shortcut).collect::<Vec<_>>(),
             "a heading moved a shortcut off the program it belongs to"
+        );
+    }
+
+    /// The fifth role, `role_heading`'s own arm — Task 4's census that the
+    /// new variant answers rather than falling into a fallback that would
+    /// file it under whichever heading happened to sort in front of it.
+    #[test]
+    fn under_study_gets_its_own_heading_between_sortie_and_staff() {
+        let pet = |name: &str, role: ProgramRole| PetInfo {
+            role,
+            party_slot: None,
+            ..test_pet(name, "w|a|m")
+        };
+        let pets = vec![
+            pet("aa", ProgramRole::Sortie),
+            pet("bb", ProgramRole::UnderStudy),
+            pet("cc", ProgramRole::Staff),
+        ];
+        let rows = companion_page_rows(&pets, 0);
+        let headings: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::TextColored(t, _) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            headings,
+            vec!["Away on a sortie", "Under study", "Base staff"],
+            "the pinned run needs its own heading between the other two"
         );
     }
 
@@ -1387,6 +1418,7 @@ mod tests {
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

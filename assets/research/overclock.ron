@@ -5,6 +5,7 @@
     cost: 45,
     materials: [("trace_sniffer", 2), ("logic_wafer", 8)],
     min_zone: 2,
+    requires_subject: true,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
         result: "overclock_core",

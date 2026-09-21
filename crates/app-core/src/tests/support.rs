@@ -299,6 +299,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -380,6 +381,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         field_buffs: Vec::new(),
         nest_position: None,
         patrol_position: None,
+        study_station: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -577,6 +579,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         field_buffs: Vec::new(),
         nest_position: Some(guardian_pos),
         patrol_position: None,
+        study_station: None,
         pursuing: true,
         carrying: None,
         carrying_program: None,
@@ -707,6 +710,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         field_buffs: Vec::new(),
         nest_position: None,
         patrol_position: None,
+        study_station: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -751,6 +755,112 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
             entrance: data.player.position,
         };
     }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// A base with a founded Home, one program on the base staff, and a
+/// standing Research Station — `Mode::PinSubject`'s own fixture,
+/// `app_owning_a_program_and_a_compiler`'s shape with the structure swapped
+/// for one that declares `studies`. The Station is written straight into
+/// the save rather than raised through `Game::place_structure`, which would
+/// file a build request and spend the one program this fixture exists to
+/// keep free to pin — `app_owning_a_program_and_a_compiler_deep`'s own
+/// reason for doing the same with its Compiler.
+///
+/// Leaves `data.locale` untouched, `app_owning_a_program_and_a_compiler`'s
+/// own shape: a caller that needs the party inside calls `stand_in_base`
+/// itself, since the row this fixture exists for is `Locality::Base`.
+pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("research_station", seed);
+    found_the_base(&mut app);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        // Inside `STARTING_POCKET_RADIUS`'s floored diamond around the
+        // origin, unlike a further offset that reads as "somewhere in the
+        // base" but sits on unlaid rock with no route to anywhere —
+        // `pin_subject`'s "no route to the pen" refusal is what a fixture
+        // placed past the pocket's edge actually gets.
+        position: (px + 1, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 1,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 20,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: 1,
+        custom_name: Some("Study Candidate".to_string()),
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: Vec::new(),
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        study_station: None,
+        pursuing: false,
+        carrying: None,
+        carrying_program: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        disgruntled_stranded: false,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    // Footprint 2, clear of both the Home at (0, 0) and the program planted
+    // at `px + 5`.
+    data.structures.push(save::StructureSave {
+        kind: "research_node".to_string(),
+        position: (2, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+    });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
@@ -830,6 +940,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         field_buffs: Vec::new(),
         nest_position: None,
         patrol_position: None,
+        study_station: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -933,6 +1044,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         field_buffs: Vec::new(),
         nest_position: None,
         patrol_position: None,
+        study_station: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1279,6 +1391,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -1373,6 +1486,7 @@ pub(crate) fn app_with_companions_and_cargo(
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -1674,6 +1788,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             field_buffs: Vec::new(),
             nest_position: None,
             patrol_position: None,
+            study_station: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -2034,6 +2149,23 @@ pub(crate) fn app_in_base(seed: u32) -> App {
     app_in_base_with_programs(seed, 0)
 }
 
+/// Marks `id` researched by editing the save directly and reloading —
+/// `app_in_base_with_routine_tree_open`'s trick, generalised: what a test
+/// wants is the research already done, not `Game::select_research` and a
+/// project's own progress replayed through a slow tick loop. Fusion's own
+/// gate, `Game::fusion_unlocked`, reads exactly this: no loaded save
+/// leaves `program_refactoring` researched by default, so any app-core
+/// fixture whose test fuses two programs needs this call first.
+pub(crate) fn mark_researched(app: &mut App, id: &str) {
+    let path = scratch_path("mark_researched", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+    let mut data = save::load_from_file(&path).unwrap();
+    data.researched.push(id.to_string());
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+}
+
 /// Adds one tamed program to `app`'s roster, caught at `zone` — the one
 /// thing about a program `programs_for_build`'s `>=` floor cares about that
 /// no public `Game` method can set. Through the save round trip for the same
@@ -2095,6 +2227,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         field_buffs: Vec::new(),
         nest_position: None,
         patrol_position: None,
+        study_station: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,

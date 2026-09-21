@@ -210,6 +210,11 @@ pub(crate) struct CreatureRestore {
     /// `restore_settlements`, which is what builds the entities a tile has
     /// to name.
     pub(crate) pending_patrols: Vec<(Entity, (i32, i32), bool)>,
+    /// `(program, station tile)` — `pending_cronjobs`' shape and its own
+    /// resolution point: a Research Station is one of the structures that
+    /// array rebuilds, so a study tether can be no sooner than a cronjob's
+    /// target is.
+    pub(crate) pending_study: Vec<(Entity, (i32, i32))>,
 }
 
 impl CreatureRestore {
@@ -234,6 +239,7 @@ impl CreatureRestore {
             sortie_members: Vec::new(),
             pending_cronjobs: Vec::new(),
             pending_patrols: Vec::new(),
+            pending_study: Vec::new(),
         }
     }
 }
@@ -1039,6 +1045,36 @@ impl Game {
         }
     }
 
+    /// Reconnects a restored subject to its Research Station now that both
+    /// sides exist — `attach_cronjobs`'s shape and leniency, one call after
+    /// it for the same reason: a station is one of the structures that
+    /// array just rebuilt.
+    ///
+    /// **A tile naming no structure, or one that no longer declares
+    /// `studies`** (a modder deleted or replaced the Station between
+    /// sessions), **drops the pin silently** rather than failing the load —
+    /// `nest_position`'s rule: the program comes back as ordinary `Staff`,
+    /// which is exactly what standing the Station down would have left it
+    /// as. `Game::study_pen` is the one door that answers "does this
+    /// structure study", so this asks it rather than re-reading the def.
+    fn attach_pinned_subjects(
+        &mut self,
+        pending: Vec<(Entity, (i32, i32))>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        for (program, tile) in pending {
+            let Some(&station) = structure_positions.get(&tile) else {
+                continue;
+            };
+            if self.study_pen(station).is_none() {
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::UnderStudy { station });
+        }
+    }
+
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let mut data = save::load_from_file(path)?;
         // Permadeath's one guarantee, and it is enforced here rather than in
@@ -1373,6 +1409,7 @@ impl Game {
             sortie_members,
             pending_cronjobs,
             pending_patrols,
+            pending_study,
             ..
         } = restore;
         game.world
@@ -1390,6 +1427,7 @@ impl Game {
         let structure_positions = game.restore_structures(data.structures);
 
         game.attach_cronjobs(pending_cronjobs, &structure_positions);
+        game.attach_pinned_subjects(pending_study, &structure_positions);
 
         game.restore_surface_links(data.link_sites);
         // Before `restore_locale`, which records what the party can see from
@@ -1761,6 +1799,18 @@ impl Game {
             }
             if let Some(slot) = party_slot {
                 ctx.party_slots.push((slot, creature_id));
+            } else if let Some(tile) = c.study_station {
+                // **Checked before `cronjob`.** `Game::pin_subject` frees a
+                // program's stale `Task` the moment it is pinned, so the two
+                // fields no longer co-occur in a save this build writes —
+                // but an older save can carry both for a creature that was
+                // posted when the bug that let that happen shipped, and the
+                // study tether has to be the one that survives a reload,
+                // not the stale job the pin was supposed to have replaced.
+                // Deferred for `pending_cronjobs`' own reason: a Research
+                // Station is one of the structures rebuilt further down
+                // `Game::load`, so there is nothing yet for a tile to name.
+                ctx.pending_study.push((creature_id, tile));
             } else if let Some(cronjob) = c.cronjob.clone() {
                 ctx.pending_cronjobs.push((creature_id, cronjob));
             }
@@ -1882,6 +1932,16 @@ impl Game {
             .map(|p| p.town)
             .and_then(|town| self.world.get::<Position>(town))
             .map(|town_pos| (town_pos.x, town_pos.y));
+        // The station's tile, `nest_position`/`patrol_position`'s reason:
+        // entity ids aren't stable across a save/load round trip, so
+        // `components::UnderStudy::station` is resolved to a `Position`
+        // rather than written as-is.
+        let study_station = self
+            .world
+            .get::<crate::components::UnderStudy>(e)
+            .map(|u| u.station)
+            .and_then(|station| self.world.get::<Position>(station))
+            .map(|station_pos| (station_pos.x, station_pos.y));
         Some(save::CreatureSave {
             species,
             position: (pos.x, pos.y),
@@ -1960,6 +2020,7 @@ impl Game {
                 .unwrap_or_default(),
             nest_position,
             patrol_position,
+            study_station,
             pursuing: self.world.get::<Pursuing>(e).is_some(),
             boss: self.world.get::<Boss>(e).is_some(),
             carrying: self

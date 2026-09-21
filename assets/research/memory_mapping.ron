@@ -5,6 +5,7 @@
     cost: 60,
     materials: [("bytecode_block", 12), ("charge_coil", 8)],
     min_zone: 2,
+    requires_subject: true,
     requires: ["paging"],
     unlocks_structures: ["storage_terminal"],
 )

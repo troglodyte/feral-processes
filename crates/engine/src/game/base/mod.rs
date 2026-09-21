@@ -25,6 +25,7 @@ pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod repair;
 pub(crate) mod stock;
+pub(crate) mod study;
 pub(crate) mod tantrum;
 pub(crate) mod teardown;
 pub mod transfer;

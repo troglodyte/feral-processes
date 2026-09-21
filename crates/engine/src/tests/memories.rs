@@ -37,6 +37,7 @@ fn two_programs_through_different_doors_take_different_ids() {
 #[test]
 fn a_fused_program_takes_a_fresh_id() {
     let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 20, 10);
     let b = spawn_tamed(&mut game, 10, 6);
     let parents = [
@@ -735,6 +736,7 @@ fn every_door_into_the_roster_hands_out_a_memory_store() {
         )"#,
     );
     let mut game = Game::new(38, DifficultyMode::Forgiving, &dir).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
     game.install_profile(super::achievements::profile_of("remembering_program", None));
     game.grant_profile_rewards();
 

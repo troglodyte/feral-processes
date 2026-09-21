@@ -1,6 +1,7 @@
 //! The research tree and the recipes and structures it gates.
 
 use super::support::*;
+use crate::items::DownedProgram;
 use crate::*;
 
 #[test]
@@ -811,7 +812,7 @@ fn selecting_research_off_the_base_is_rejected() {
     let err = game.select_research("automation").unwrap_err();
 
     assert!(
-        !err.contains("Research Node"),
+        !err.contains("Research Station"),
         "the locale is the reason, not the plant: {err}"
     );
     assert_eq!(active_research(&game), None);
@@ -859,7 +860,7 @@ fn a_base_with_no_research_node_cannot_take_a_project() {
     let err = game.select_research("automation").unwrap_err();
 
     assert!(
-        err.contains("Research Node"),
+        err.contains("Research Station"),
         "the refusal must name the machine that is missing: {err}"
     );
     assert_eq!(active_research(&game), None);
@@ -1191,7 +1192,7 @@ fn the_zone_gate_is_refused_before_the_machines() {
 
     assert!(err.contains("Zone 2"), "got: {err}");
     assert!(
-        !err.contains("Research Node"),
+        !err.contains("Research Station"),
         "the zone is the reason, not the base's plant: {err}"
     );
 }
@@ -2075,4 +2076,562 @@ fn the_running_project_is_read_out_with_no_node_standing() {
         game.research_readout(),
         Some(ResearchReadout::Earning { .. })
     ));
+}
+
+// ---------------------------------------------------------------------
+// Studying a subject (Task 7): every node from sector 2 up refuses
+// selection until a tamed program is standing in a `studies` structure's
+// pen — `Game::research_block`'s gate, not a second arm on
+// `select_research`, so the row the screen marks blocked and the sentence
+// the player is refused with cannot disagree.
+// ---------------------------------------------------------------------
+
+/// The gate lives in `Game::research_block`, so the refusal is asserted
+/// against a **live call** to it rather than hardcoded prose — the same
+/// drift this repo keeps recording for `chain_break`.
+#[test]
+fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
+    let mut game = Game::new(4400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .cloned()
+        .expect("paging ships and is gated at zone 2 with no other prereqs");
+    assert!(
+        def.requires_subject,
+        "the fixture is vacuous unless paging is actually gated"
+    );
+    let want = game
+        .research_block(&def)
+        .expect("nobody is pinned yet, so the gate must be live");
+
+    let err = game.select_research("paging").unwrap_err();
+
+    assert_eq!(
+        err, want,
+        "select_research's refusal must be research_block's own sentence"
+    );
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and nothing is filed");
+}
+
+/// **A reachability test, not only a refusal test.** A refusal can ship
+/// permanent with every refusal test still green — pinning a program in the
+/// pen must make the identical selection succeed.
+#[test]
+fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
+    let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+
+    game.select_research("paging")
+        .expect("a subject standing in the pen must clear the gate");
+
+    assert_eq!(active_research(&game), Some("paging".to_string()));
+}
+
+/// The eight nodes with no `min_zone` gate — what gets a base running —
+/// stay selectable with nobody pinned. Looped rather than named one at a
+/// time, so a mod or a retune that grows the ungated set is covered for
+/// free.
+#[test]
+fn every_ungated_node_is_selectable_with_nobody_pinned() {
+    let ungated: Vec<String> = {
+        let game = Game::new(4402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.tree == ResearchTree::Base && !d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !ungated.is_empty(),
+        "the fixture is vacuous with nothing ungated"
+    );
+    for id in ungated {
+        let mut game = Game::new(4403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let zone = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .expect("walked out of the same db")
+            .min_zone;
+        set_zone(&mut game, zone);
+
+        game.select_research(&id)
+            .unwrap_or_else(|e| panic!("{id} should be selectable with nobody pinned: {e}"));
+    }
+}
+
+/// Every node with `min_zone >= 2` is refused without a subject, and the
+/// same pin makes it reachable — the census that `decision 13`'s 19/8 split
+/// actually behaves as the refusal test above shows for one node.
+#[test]
+fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
+    let gated: Vec<String> = {
+        let game = Game::new(4404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !gated.is_empty(),
+        "the fixture is vacuous with nothing gated"
+    );
+    for id in gated {
+        let mut game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let def = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .cloned()
+            .expect("walked out of the same db");
+        set_zone(&mut game, def.min_zone);
+        let want = game
+            .research_block(&def)
+            .unwrap_or_else(|| panic!("{id} should be blocked with nobody pinned"));
+
+        let err = game
+            .select_research(&id)
+            .expect_err(&format!("{id} should be refused with nobody pinned"));
+
+        assert_eq!(
+            err, want,
+            "{id}'s refusal must be research_block's own sentence"
+        );
+    }
+}
+
+/// The third refusal on `Game::unpin_subject`: pulling the subject out from
+/// under a project that needs it is refused, and abandoning the project is
+/// how you change your mind — `select_research`'s "already active" refusal,
+/// in shape.
+#[test]
+fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
+    let mut game = Game::new(4406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+
+    let err = game
+        .unpin_subject(program)
+        .expect_err("the active project still needs this subject");
+    assert!(err.contains("abandon"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "the refusal must not have unpinned it"
+    );
+
+    game.abandon_research().unwrap();
+    game.unpin_subject(program)
+        .expect("abandoning the project frees the subject to be unpinned");
+}
+
+// ---------------------------------------------------------------------
+// C1 (final whole-branch review): `research_nodes` must apply the same
+// subject term `select_research` refuses on. Task 7's own tests compared
+// `select_research`'s refusal against a live `research_block` call — the
+// same door twice — which is why a subject gate could reach `select_research`
+// while `research_nodes` (the screen) still read `research_block_memo`
+// directly and never asked the subject question at all. These tests drive
+// `research_nodes` itself.
+// ---------------------------------------------------------------------
+
+/// The screen's own row must carry the same block reason the selection
+/// door refuses with, and pinning a subject must clear it there too — not
+/// only at `select_research`.
+#[test]
+fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does() {
+    let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .cloned()
+        .expect("paging ships and is gated at zone 2 with no other prereqs");
+    assert!(
+        def.requires_subject,
+        "the fixture is vacuous unless paging is actually gated"
+    );
+
+    let want = game
+        .research_block(&def)
+        .expect("nobody is pinned yet, so the gate must be live");
+
+    let row = research_node(&game, "paging");
+    assert_eq!(
+        row.blocked_by,
+        Some(want),
+        "research_nodes's row must carry the same block reason select_research refuses with"
+    );
+
+    // Reachability: pinning a subject must clear the SCREEN's block line,
+    // not only make `select_research` succeed.
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let row = research_node(&game, "paging");
+    assert_eq!(
+        row.blocked_by, None,
+        "pinning a subject must clear research_nodes's block line too"
+    );
+}
+
+/// The eight ungated nodes must still show no block line from the screen
+/// with nobody pinned — companion census to the test above, so a subject
+/// term applied unconditionally would be caught here.
+#[test]
+fn research_nodes_reports_no_block_for_every_ungated_node_with_nobody_pinned() {
+    let ungated: Vec<String> = {
+        let game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.tree == ResearchTree::Base && !d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !ungated.is_empty(),
+        "the fixture is vacuous with nothing ungated"
+    );
+    for id in ungated {
+        let mut game = Game::new(4411, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let zone = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .expect("walked out of the same db")
+            .min_zone;
+        set_zone(&mut game, zone);
+        let row = research_node(&game, &id);
+        assert_eq!(
+            row.blocked_by, None,
+            "{id} should show no block on the screen with nobody pinned"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------
+// M1 (final whole-branch review): `Game::release_study_station` must not
+// over-abandon, and must not silently swallow `abandon_research`'s refusal.
+// ---------------------------------------------------------------------
+
+/// Destroying a Station that happens to hold a subject must not deselect an
+/// *unrelated, ungated* project — `release_study_station` used to call
+/// `abandon_research` whenever the destroyed structure held any subject at
+/// all, regardless of whether the active project needed one.
+#[test]
+fn releasing_a_stations_subject_does_not_abandon_an_ungated_project() {
+    let mut game = Game::new(4700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    game.select_research("automation")
+        .expect("automation is ungated and should be selectable immediately");
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    assert_eq!(
+        active_research(&game),
+        Some("automation".to_string()),
+        "precondition"
+    );
+
+    game.release_study_station(node);
+
+    assert_eq!(
+        active_research(&game),
+        Some("automation".to_string()),
+        "an ungated project must survive the destruction of a station that merely \
+         happened to be holding an unrelated pinned subject"
+    );
+}
+
+/// `abandon_research` refuses during an active battle — its own first
+/// rung — and `release_study_station` used to discard that refusal with a
+/// bare `let _`, leaving a subject-gated project active with no subject and
+/// no word to the player anywhere in the log.
+#[test]
+fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
+    let mut game = Game::new(4701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging")
+        .expect("the pinned subject clears the gate");
+
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 0,
+                mitigation: 1,
+            },
+        ))
+        .id();
+    insert_battle(&mut game, player, vec![wild]);
+    assert!(game.has_active_battle(), "precondition");
+
+    let before = game.message_log(50).len();
+    game.release_study_station(node);
+
+    assert_eq!(
+        active_research(&game),
+        Some("paging".to_string()),
+        "abandon_research must have refused during the battle, leaving the project active"
+    );
+    let after = game.message_log(50);
+    // The pen-release line alone always fires — `release_study_station`'s
+    // first, unconditional log — so the refusal must add a *second* line on
+    // top of it, not merely leave that one line standing.
+    assert_eq!(
+        after.len(),
+        before + 2,
+        "the refusal must not be silently discarded — a second line must say so, \
+         beside the pen-release line: {after:?}"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Completion spends the subject (Task 8)
+// ---------------------------------------------------------------------
+
+/// A minimal filler row for `components::DownedPrograms`, used only to
+/// saturate the store — nothing about its content matters to the tests
+/// that spawn it.
+fn filler_downed_program() -> DownedProgram {
+    DownedProgram {
+        species: "test_generic".to_string(),
+        level: 1,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 50,
+        carried: None,
+    }
+}
+
+/// Decision 5's short-circuit, the subject half: full progress and a full
+/// bill do not complete a subject-gated project once its subject is gone —
+/// `a_full_bill_alone_does_not_complete_a_project`'s failure, with a worse
+/// loss, since a program is not refundable the way a shelf material is.
+///
+/// The subject leaves by a direct removal rather than through
+/// `unpin_subject`, which now refuses this exact case — the door under test
+/// here is `settle_research`'s own gate.
+#[test]
+fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
+    let mut game = Game::new(4500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::UnderStudy>();
+    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
+    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(!game.is_researched("paging"));
+    assert_eq!(
+        node_output(&game, shelf, ids::BYTECODE_BLOCK),
+        stocked,
+        "a project missing its subject must not spend its materials either"
+    );
+}
+
+/// M2 (final whole-branch review): once progress is full and the bill is
+/// paid, a subject-gated project with no pinned subject is exactly as
+/// stalled as one short a material or a full `DownedPrograms` store —
+/// `settle_research`'s own ordering already treats it that way — but
+/// `research_material_shortfall` never said so, so the HUD read "Earning
+/// n/cost" forever with no stall line once the subject was gone. The
+/// subject leaves by direct removal, matching
+/// `a_subject_gated_project_does_not_complete_without_a_pinned_subject`
+/// above — reachable in play via M1's battle case, a second Station
+/// resolving first, or the subject simply being walked off the pen.
+#[test]
+fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
+    let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::UnderStudy>();
+    // The bill is fully paid, so a material line cannot be the reason this
+    // reads as a stall — isolating the subject as the only thing missing.
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+    assert_eq!(
+        game.pinned_subject(),
+        None,
+        "precondition: nobody is in the pen"
+    );
+
+    let shortfall = game.research_material_shortfall().expect(
+        "a full bill and full progress with no pinned subject is exactly as stalled \
+         as one short a material",
+    );
+    assert!(!shortfall.is_empty(), "the stall must name something");
+
+    match game.research_readout() {
+        Some(ResearchReadout::Stalled { short_of, .. }) => {
+            assert_eq!(
+                short_of, shortfall,
+                "the readout must report the same stall research_material_shortfall does"
+            );
+        }
+        other => panic!("expected a Stalled readout, got {other:?}"),
+    }
+}
+
+/// The conversion: `downed_program_for_with_overkill(subject, 0.0)` →
+/// `push_downed_program` → despawn. The level comes off the subject's real
+/// `Experience`, not `ZoneLevel` — `ability_user_level`'s distinction from a
+/// wild kill — and a routine installed on the subject comes back as
+/// `carried`, since nothing about the test species' (declared-nothing) kit
+/// claims it.
+#[test]
+fn completing_a_subject_gated_project_spends_the_pinned_subject() {
+    let mut game = Game::new(4501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Experience>(program).unwrap().level = 4;
+    let species = game.world.get::<Creature>(program).unwrap().species.clone();
+    let prize = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .next()
+        .expect("some shipped ability is wild-poolable");
+    game.world.get_mut::<Routines>(program).unwrap().0 = vec![prize.clone()];
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(game.is_researched("paging"));
+    assert!(
+        game.world.get_entity(program).is_err(),
+        "the subject leaves the world when it is spent"
+    );
+    let held = game
+        .world
+        .get::<DownedPrograms>(game.player_entity())
+        .unwrap()
+        .0
+        .clone();
+    assert_eq!(held.len(), 1, "exactly one DownedProgram must appear");
+    assert_eq!(held[0].species, species);
+    assert_eq!(
+        held[0].level, 4,
+        "level must come from the subject's real Experience, not ZoneLevel"
+    );
+    assert_eq!(
+        held[0].carried,
+        Some(prize),
+        "a routine installed on the subject comes back as carried"
+    );
+}
+
+/// A full `DownedPrograms` store refuses the conversion, and that refusal
+/// blocks the whole completion — reported the way a material shortfall is,
+/// through `Game::research_material_shortfall` — rather than eating the
+/// body and discovering the push failed afterward.
+#[test]
+fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
+    let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging").unwrap();
+    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
+    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    fill_research_progress(&mut game, "paging");
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .unwrap()
+        .cost;
+    {
+        let player = game.player_entity();
+        let mut held = game.world.get_mut::<DownedPrograms>(player).unwrap();
+        held.0 = (0..crate::tuning::MAX_DOWNED_PROGRAMS)
+            .map(|_| filler_downed_program())
+            .collect();
+    }
+    assert_eq!(
+        game.research_material_shortfall(),
+        Some("room for another downed program".to_string()),
+        "a full store must be reported before the bill is even considered"
+    );
+
+    game.tick();
+
+    assert!(
+        !game.is_researched("paging"),
+        "a full store must block completion"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(program)
+            .is_some(),
+        "the subject must still be pinned — nothing was spent"
+    );
+    assert_eq!(
+        research_progress(&game, "paging"),
+        cost,
+        "the progress must be intact"
+    );
+    assert_eq!(
+        node_output(&game, shelf, ids::BYTECODE_BLOCK),
+        stocked,
+        "the materials must be intact too"
+    );
 }

@@ -5,6 +5,7 @@
     cost: 220,
     materials: [("cache_grain", 14), ("charge_coil", 16)],
     min_zone: 4,
+    requires_subject: true,
     requires: ["segmentation"],
     unlocks_structures: ["depot_mk4"],
 )

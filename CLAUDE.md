@@ -588,6 +588,13 @@ relying on one, and correct all three places if it has moved.
   combat rolls, and `quality_percent` still folds only the four.**
 - **A finish is a third dig mark over laid floor, stored beside `BaseGrid`'s
   cells and never in them, and `view_finishes_at` is gui's only door to it.**
+- **A structure's `footprint` is a claim on placement and a derivation on
+  read, never stored, and the anchor is the one cell that blocks.**
+- **A pinned program is a fifth `ProgramRole` whose consequences are
+  omissions, and only the rest-repair one fails to compile.**
+- **A research node's subject gate is one term both the screen and the
+  selection reach through**, `research_block_with`, outside the per-`ItemId`
+  memo.
 
 ### Instrumentation
 

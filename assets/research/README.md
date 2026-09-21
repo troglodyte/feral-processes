@@ -5,7 +5,7 @@ a file in and it becomes a node the next time a game session starts — no
 recompiling required. A malformed file is skipped with a warning logged
 in-game rather than crashing startup.
 
-Research Data is the currency. It comes from a Research Node structure
+Research Data is the currency. It comes from a Research Station structure
 worked by an assigned tamed program, the same way a Mining Node produces
 Core Fragments.
 
@@ -37,7 +37,7 @@ Core Fragments.
     description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
 
     // Research Data a project on this node has to accumulate before it
-    // completes. Research Nodes feed it in while the node is the base's active
+    // completes. Research Stations feed it in while the node is the base's active
     // project; nothing is spent at selection.
     cost: 18,
 
@@ -100,6 +100,34 @@ Core Fragments.
     // from the start — so deleting the flagged node (or the whole file) does
     // not strand a run behind a gate nothing can ever open.
     opens_routine_tree: true,
+
+    // Optional; defaults to false. Refuses selection until a tamed program
+    // is standing in a Research Station's pen — see `assets/structures/
+    // README.md`'s `studies` field. The node stays listed either way
+    // (`ResearchState::Locked` and the block reason are the disclosure, not
+    // hiding the row); the refusal names the same sentence the menu already
+    // marks the row blocked with. Any owned tamed program satisfies any
+    // study — which one does not matter — and completion consumes it into a
+    // `DownedProgram` record in your store, exactly as if it had been
+    // defeated in the field. Every shipped node with `min_zone >= 2` sets
+    // this; the eight that get a base running from turn one
+    // (`automation`, `power_grid`, `commerce`, `teardown`, `fortification`,
+    // `armor_bench`, `routine_fabrication`, `weapon_bench`) do not, so a
+    // fresh run never needs a subject before it has a base worth studying
+    // anyone at. A synthesised routine node never sets this — the routine
+    // tree has its own economy already.
+    requires_subject: true,
+
+    // Optional; defaults to false. Set this on the one node that should
+    // unlock fusing two tamed programs together (the shipped tree sets it
+    // on `program_refactoring`). Until a loaded node carrying it is
+    // researched, fusing is refused. If no loaded node carries it, fusion
+    // is open from the start — `opens_routine_tree`'s exact lenient rule —
+    // so deleting the flagged node (or the whole file) does not strand a
+    // run behind a gate nothing can ever open. There is deliberately no
+    // structure or locality requirement for fusion beyond this: the
+    // research alone unlocks it.
+    unlocks_fusion: true,
 )
 ```
 
@@ -133,7 +161,7 @@ more.
   point — in flagging every step. A tree that flags nothing simply offers no
   advice; the menu then draws every available node the same.
 - **A structure named by no research file is buildable by default.** That is
-  how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
+  how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
   stay available from the start, and it means a structure mod that ships no
   research file keeps working unchanged.
 - A node naming an unknown prerequisite, or an unknown structure in

@@ -4529,6 +4529,79 @@ fn every_structure_that_strips_declares_a_hopper_and_an_output() {
     assert!(checked > 0, "no shipped structure strips programs at all");
 }
 
+/// **Exactly one shipped structure declares `studies`.** The Research
+/// Station is the whole of the feature so far — a second one shipping
+/// unannounced would silently double a run's pace through it.
+#[test]
+fn exactly_one_shipped_structure_declares_studies() {
+    let game = Game::new(4112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let studying: Vec<&StructureId> = structures
+        .all()
+        .filter(|def| def.studies)
+        .map(|def| &def.id)
+        .collect();
+    assert_eq!(
+        studying.len(),
+        1,
+        "expected exactly one studies structure, found {studying:?}"
+    );
+    assert_eq!(studying[0], "research_node");
+}
+
+/// A pen needs a second cell to sit in — the anchor is spoken for by the
+/// glyph, so a footprint-1 `studies` structure would derive a pen on top of
+/// its own blocking cell.
+#[test]
+fn every_studies_structure_declares_a_footprint_of_at_least_two() {
+    let game = Game::new(4113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let mut checked = 0;
+    for def in structures.all() {
+        if !def.studies {
+            continue;
+        }
+        assert!(
+            def.footprint >= 2,
+            "structure {:?} studies but its footprint is only {}",
+            def.id,
+            def.footprint
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no shipped structure studies at all");
+}
+
+/// **What `offshift::in_reach` and every `step_to_post` call beside it rest
+/// on.** `offshift.rs:340`/`:376`, `repair.rs:313` and `morale.rs:272` each
+/// hardcode `1` for a structure's footprint rather than reading a def's own
+/// `footprint`, on the strength of "no shipped amenity or Repair Bay
+/// declares a footprint past 1" alone. A modded 2x2 amenity would parse
+/// clean and walk bodies to the wrong faces with nothing failing to
+/// compile — this is the census that closes it.
+#[test]
+fn every_amenity_and_repair_bay_declares_a_footprint_of_one() {
+    let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let mut checked = 0;
+    for def in structures.all() {
+        if def.services.is_empty() && def.recovery.is_none() {
+            continue;
+        }
+        assert_eq!(
+            def.footprint, 1,
+            "structure {:?} is an amenity or a Repair Bay but its footprint is {} — \
+             offshift::in_reach and every step_to_post call beside it hardcode 1",
+            def.id, def.footprint
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "no shipped structure is an amenity or a Repair Bay at all"
+    );
+}
+
 /// The rig is a bench too, so manual extraction gains a second one. The
 /// Compiler keeps its own flag — moving it would silently downgrade
 /// manual extraction for a run in progress (spec 10.3).
@@ -4685,6 +4758,110 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
         checked >= 40,
         "expected the shipped tree's material bills; {checked} lines is a tree that has \
          quietly gone back to costing Research Data alone"
+    );
+}
+
+/// **The 19/8 split (decision 13): every shipped node with `min_zone >= 2`
+/// declares `requires_subject`, and none of the eight ungated ones does.**
+/// A node above zone 1 that forgot the field would ship free of the study
+/// cost the feature exists to charge; one of the eight that gained it by
+/// mistake would silently gate a base's opening machines.
+#[test]
+fn every_zone_gated_base_node_requires_a_subject_and_no_ungated_one_does() {
+    let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research
+        .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Base)
+    {
+        assert_eq!(
+            def.min_zone >= 2,
+            def.requires_subject,
+            "{:?} has min_zone {} but requires_subject {} — the two must agree",
+            def.id,
+            def.min_zone,
+            def.requires_subject
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 27,
+        "expected the shipped base tree's 27 nodes; a count that moved means a node was \
+         added, removed, or reclassified without this census being told"
+    );
+}
+
+/// A routine node is synthesised, never authored, and must keep its own
+/// economy — `routine_tree::synthesise_nodes` must leave `requires_subject`
+/// at its default rather than gaining a second gate on top of "discover a
+/// family by extracting a rung".
+#[test]
+fn no_synthesised_routine_node_requires_a_subject() {
+    let mut game = Game::new(4115, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research
+        .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Routines)
+    {
+        assert!(
+            !def.requires_subject,
+            "{:?} is a synthesised routine node and must not require a subject",
+            def.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "the fixture is vacuous with no synthesised routine node loaded"
+    );
+}
+
+/// No subject-gated node may sit upstream of an ungated one — a node that
+/// cannot be selected without a subject must not gate content the eight
+/// bootstrap nodes promise a fresh run with nobody pinned yet.
+#[test]
+fn no_subject_gated_node_is_a_prerequisite_of_an_ungated_one() {
+    let game = Game::new(4116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in research.all().filter(|d| !d.requires_subject) {
+        for req in &def.requires {
+            let gated = research.get(req).is_some_and(|d| d.requires_subject);
+            assert!(
+                !gated,
+                "{:?} is ungated but requires {:?}, which is subject-gated",
+                def.id, req
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "the fixture is vacuous with nothing to check — every shipped node has at least one \
+         `requires` edge somewhere in the tree"
+    );
+}
+
+/// **Exactly one shipped node carries `unlocks_fusion`.** Zero would strand
+/// the capability behind a check that always reads open (the lenient rule
+/// makes that harmless, but silent); two would leave `fusion_opener_name`
+/// naming an arbitrary one of them.
+#[test]
+fn exactly_one_shipped_research_node_unlocks_fusion() {
+    let game = Game::new(4117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let openers: Vec<_> = research
+        .all()
+        .filter(|d| d.unlocks_fusion)
+        .map(|d| d.id.clone())
+        .collect();
+    assert_eq!(
+        openers,
+        vec!["program_refactoring".to_string()],
+        "expected exactly program_refactoring to unlock fusion, found {openers:?}"
     );
 }
 

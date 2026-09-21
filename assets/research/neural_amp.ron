@@ -5,6 +5,7 @@
     cost: 55,
     materials: [("trace_sniffer", 3), ("logic_wafer", 8)],
     min_zone: 2,
+    requires_subject: true,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
         result: "neural_amplifier",

@@ -263,30 +263,41 @@ impl Game {
             .any(|(g, pursuing)| g.nest == nest && pursuing.is_some())
     }
 
-    /// Every tile a deployed structure stands on, and nothing else.
+    /// Every cell a deployed structure's **footprint** covers, anchor and
+    /// floor alike — every cell of a 2x2 Research Station, not just the one
+    /// that blocks.
     ///
-    /// **The narrower of the two sets, and the pair is not interchangeable.**
-    /// `blocked_tiles` below answers "may this body step onto that cell" and
-    /// counts the bodies already standing; this one answers "is that post
-    /// approachable at all", which is a question about the ground. The one
-    /// caller is `hauling::has_station`, whose own doc has why counting
-    /// bodies there deadlocks the dig crew.
+    /// **The wider of the two sets, and the pair is not interchangeable.**
+    /// `blocked_tiles` below answers "may a body step onto that cell", and a
+    /// structure's own floor cells are exactly the ones it answers yes for;
+    /// this one answers "is that cell spoken for by a structure at all",
+    /// which is a question about the ground rather than about where a body
+    /// may walk. The one caller is `hauling::has_station`, whose own doc has
+    /// why that distinction — and not merely counting bodies — is what
+    /// deadlocks the dig crew: a marked cell whose only free walkable face
+    /// is a Station's own floor cell is refused here even though
+    /// `blocked_tiles` would let a body stand on it, because this set counts
+    /// that floor cell taken.
     pub(crate) fn structure_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
-        let mut query = self.world.query_filtered::<&Position, With<Structure>>();
-        let positions: Vec<Position> = query.iter(&self.world).copied().collect();
-        crate::game::base::hauling::blocked_tiles(positions.into_iter(), std::iter::empty())
+        let rows = self.structure_footprints();
+        crate::game::base::hauling::footprint_tiles(rows.into_iter().map(|(_, p, side)| (p, side)))
     }
 
     /// Every cell a walk in base space refuses — every deployed structure's
-    /// tile and every body standing in one — from the `Game` side.
+    /// **anchor** and every body standing in one — from the `Game` side.
     /// `haul_step_system` builds the same set from its own queries; both go
     /// through `hauling::blocked_tiles` so the two cannot disagree about what
     /// a blocked cell is.
+    ///
+    /// **The narrower of the two sets** — see `structure_tiles`' doc for why
+    /// a structure's own floor cells are walkable here and taken there.
     pub(crate) fn blocked_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
-        let mut query = self.world.query_filtered::<&Position, With<Structure>>();
-        let structures: Vec<Position> = query.iter(&self.world).copied().collect();
+        let rows = self.structure_footprints();
         let bodies: Vec<Position> = self.base_bodies().into_iter().map(|(_, p)| p).collect();
-        crate::game::base::hauling::blocked_tiles(structures.into_iter(), bodies.into_iter())
+        crate::game::base::hauling::blocked_tiles(
+            rows.into_iter().map(|(_, p, side)| (p, side)),
+            bodies.into_iter(),
+        )
     }
 
     /// Every body standing in base space, with the cell it is standing in.
@@ -337,17 +348,60 @@ impl Game {
     /// other structure either, since removing a Home cascades to every
     /// structure it stands beside — so `None` is the right answer there too,
     /// not a special case.
+    /// **Point-in-footprint, not point-equality.** `(x, y)` need not be a
+    /// structure's own anchor — this answers for any cell any standing
+    /// structure's footprint covers, so a build, a walk or an examine
+    /// pointed at a Research Station's floor cell is answered for the
+    /// Station rather than reading as open ground.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         if !self.in_base() {
             return None;
         }
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<Structure>>();
-        query
+        self.structure_footprints()
+            .into_iter()
+            .find(|(_, p, side)| {
+                crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(x, y))
+            })
+            .map(|(e, _, _)| e)
+    }
+
+    /// A structure kind's footprint side — `1` for anything that fails to
+    /// resolve, the same lenient answer an absent `footprint` field parses
+    /// to.
+    pub(crate) fn structure_footprint(&self, kind: &StructureId) -> u8 {
+        self.world
+            .resource::<StructureDb>()
+            .get(kind)
+            .map(|def| def.footprint)
+            .unwrap_or(1)
+    }
+
+    /// A footprint's side, resolved off an entity's own `Structure` — `1`
+    /// for anything that isn't one, a `DigSite` or `BuildSite` included, so
+    /// a single call answers correctly whichever `TaskKind::Excavate` or
+    /// `GatherResource` hands it.
+    pub(crate) fn structure_footprint_of(&self, entity: Entity) -> u8 {
+        match self.world.get::<Structure>(entity) {
+            Some(s) => self.structure_footprint(&s.kind),
+            None => 1,
+        }
+    }
+
+    /// Every standing structure, with its footprint's side resolved —
+    /// `find_blocking_structure_at`, `structure_tiles` and `blocked_tiles`
+    /// all read these same rows rather than each building their own.
+    pub(crate) fn structure_footprints(&mut self) -> Vec<(Entity, Position, u8)> {
+        let mut query = self.world.query::<(Entity, &Position, &Structure)>();
+        let rows: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)
-            .find(|(_, p)| p.x == x && p.y == y)
-            .map(|(e, _)| e)
+            .map(|(e, p, s)| (e, *p, s.kind.clone()))
+            .collect();
+        rows.into_iter()
+            .map(|(e, p, kind)| {
+                let side = self.structure_footprint(&kind);
+                (e, p, side)
+            })
+            .collect()
     }
 
     /// The Home structure's position, if one is deployed anywhere right

@@ -5,6 +5,7 @@
     cost: 40,
     materials: [("bytecode_block", 20), ("charge_coil", 8)],
     min_zone: 2,
+    requires_subject: true,
     requires: ["power_grid"],
     unlocks_structures: ["cache_tap", "line_driver"],
 )

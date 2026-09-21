@@ -1448,6 +1448,14 @@ pub enum Mode {
     /// `pending_build` without ever calling `place_structure` or
     /// `upgrade_structure`.
     BuildProgram,
+    /// Picking a program to pin in a Research Station's pen, or — "at most
+    /// one subject per station" — releasing the one that is already there.
+    /// `Game::base_staff`'s own shape, modelled on `Mode::BuildProgram`:
+    /// nothing is spent or written until `App::handle_pin_subject_key`
+    /// resolves a row, so Esc simply closes the screen. **One row, not
+    /// two** — `Game::pinned_subject` decides which of the two the screen
+    /// is showing, so there is nowhere for that rule to be stated twice.
+    PinSubject,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -2008,6 +2016,9 @@ impl Mode {
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
+            // Opened from the base menu, `BuildProgram`'s own reason —
+            // never reachable mid-battle at all.
+            | Mode::PinSubject
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer

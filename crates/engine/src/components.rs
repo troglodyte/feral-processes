@@ -1962,6 +1962,23 @@ pub enum Grievance {
 #[derive(Component, Clone, Debug)]
 pub struct Downed;
 
+/// A tamed program pinned in a Research Station's pen — `Game::pin_subject`'s
+/// one door, and the only fact this feature stores.
+///
+/// **Arrival is derived, never stored.** The subject is standing in its pen
+/// exactly when its own `Position` equals `Game::study_pen(station)`; a
+/// second `arrived: bool` here would be a field disagreeing with the
+/// coordinates that already answer the question.
+///
+/// `station` is the structure `Entity`, not a tile: `Game::study_pen` reads
+/// the structure's own `Position` and def fresh on every call, so the pen
+/// moves with the building rather than needing to be re-derived here if a
+/// Station is ever picked up and placed again in a mod.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct UnderStudy {
+    pub station: Entity,
+}
+
 /// One remembered thing: which kind it is, what it was about, when it was
 /// last reinforced, and how many times.
 ///

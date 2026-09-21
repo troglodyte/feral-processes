@@ -106,6 +106,14 @@ impl Game {
             (px + dx, py + dy)
         };
 
+        // Every cell of the footprint being placed, anchored top-left at
+        // `(x, y)` — `footprint: 1` (every structure but the Research
+        // Station) makes this the single cell it always was. Every refusal
+        // below widens from a point check to a check over this whole list,
+        // in the same order, so the ladder's order still decides which
+        // sentence the player gets.
+        let footprint = crate::tactical::footprint_cells_at((x, y), def.footprint);
+
         // Where a build may go, and it is one rule now rather than two: a
         // structure stands on laid floor. There used to be a second, opposite
         // one for a `claims_ground` build, which existed precisely to put
@@ -114,11 +122,18 @@ impl Game {
         //
         // The founding Home skips the check: the pocket it lays does not
         // exist to be measured against yet.
-        if !founding && !self.world.resource::<BaseGrid>().is_floor(x, y) {
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| !self.world.resource::<BaseGrid>().is_floor(fx, fy))
+        {
             return Err("There's no floor there — a structure has to stand on laid ground.".into());
         }
 
-        if self.find_blocking_structure_at(x, y).is_some() {
+        if footprint
+            .iter()
+            .any(|&(fx, fy)| self.find_blocking_structure_at(fx, fy).is_some())
+        {
             return Err("Something is already deployed there.".into());
         }
         // A cell already spoken for by a request nobody has raised yet. A
@@ -126,10 +141,24 @@ impl Game {
         // the two leave the player different errands: one cell needs
         // demolishing, the other needs the crew to catch up — or the request
         // calling off.
-        if self.build_site_at(x, y).is_some() {
+        if footprint
+            .iter()
+            .any(|&(fx, fy)| self.build_site_at(fx, fy).is_some())
+        {
             return Err("Your crew is already set to build something there.".into());
         }
-        // A third refusal on the same ladder, and its own for those two's
+        // A fourth refusal, for the same reason as the two above it: a dig
+        // mark is an instruction the base is already carrying out, and a
+        // structure raised over it would either bury the mark or have the
+        // crew cut the floor out from under a machine standing on it.
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| self.dig_site_at(fx, fy).is_some())
+        {
+            return Err("There's a dig mark there — clear it before building.".into());
+        }
+        // A fifth refusal on the same ladder, and its own for those two's
         // reason: this cell needs a moment rather than a demolition or a
         // cancelled request. Nothing checked it before, so a machine went up
         // on top of a wandering program and left it standing *inside* the
@@ -149,7 +178,7 @@ impl Game {
             && self
                 .base_bodies()
                 .iter()
-                .any(|&(body, p)| (p.x, p.y) == (x, y) && Some(body) != program)
+                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
         {
             return Err("One of your programs is standing there — give it a moment.".into());
         }
@@ -789,18 +818,26 @@ impl Game {
     /// `find_blocking_structure_at`'s counterpart, and it carries the same
     /// `in_base` gate for the same reason: a build site's `Position` is in
     /// base space, so a surface-space query must never be answered by one
-    /// whose coordinates happen to coincide.
+    /// whose coordinates happen to coincide. **Point-in-footprint too**,
+    /// against the footprint of the structure the site *will become* —
+    /// `find_blocking_structure_at`'s rule one tick early, since a request
+    /// for a Research Station claims the same four cells a standing one
+    /// would.
     pub(crate) fn build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         if !self.in_base() {
             return None;
         }
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<BuildSite>>();
-        query
+        let mut query = self.world.query::<(Entity, &Position, &BuildSite)>();
+        let rows: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)
-            .find(|(_, p)| p.x == x && p.y == y)
-            .map(|(e, _)| e)
+            .map(|(e, p, b)| (e, *p, b.structure.clone()))
+            .collect();
+        rows.into_iter()
+            .find(|(_, p, kind)| {
+                let side = self.structure_footprint(kind);
+                crate::tactical::footprint_cells_at((p.x, p.y), side).contains(&(x, y))
+            })
+            .map(|(e, _, _)| e)
     }
 
     /// Every `BuildSite`'s committed program, in query order.
@@ -1240,6 +1277,9 @@ impl Game {
             if let Some(pos) = self.world.get::<Position>(target).copied() {
                 self.clear_pending_build_at(pos.x, pos.y);
             }
+            // The first of the two destruction paths for a subject pinned in
+            // this structure's pen — see `Game::release_study_station`.
+            self.release_study_station(target);
             self.announce_lost_shelf(target);
             self.world.despawn(target);
         }
@@ -1436,7 +1476,7 @@ impl Game {
             .world
             .get::<Position>(structure)
             .ok_or_else(|| "That structure isn't anywhere you can reach.".to_string())?;
-        if !hauling::at_station(here, structure_pos) {
+        if !hauling::at_station(here, structure_pos, self.structure_footprint_of(structure)) {
             return Err(
                 "You have to be standing next to it to work it — get beside it first.".into(),
             );

@@ -1237,6 +1237,168 @@ fn an_idle_program_standing_outside_the_base_is_brought_into_it() {
     );
 }
 
+// ---------------------------------------------------------------------
+// Being under study: the walk to the pen (Task 4)
+// ---------------------------------------------------------------------
+
+/// A pinned program is not `Staff`, so it is absent from `base_staff` and
+/// would otherwise fall out of `drift_idle_staff`'s only pass entirely —
+/// `schedule_base_labour`'s walker list has to be widened past `base_staff`
+/// for this to hold at all, and this test is what would have caught it
+/// standing still forever instead.
+#[test]
+fn a_pinned_program_walks_to_its_pen_and_stops() {
+    let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::UnderStudy { station });
+
+    let mut arrived = false;
+    for _ in 0..40 {
+        game.tick();
+        let p = *game.world.get::<Position>(program).unwrap();
+        if (p.x, p.y) == pen {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(arrived, "the pinned program never reached its pen");
+
+    // Once arrived it stops — `drift_idle_staff`'s `UnderStudy` arm answers
+    // `Ok(())` on an exact match and the wander arm never gets a turn at it.
+    for _ in 0..15 {
+        game.tick();
+        let p = *game.world.get::<Position>(program).unwrap();
+        assert_eq!(
+            (p.x, p.y),
+            pen,
+            "a pinned program must not wander off its pen once it has arrived"
+        );
+    }
+}
+
+/// One body to a cell holds in the pen exactly as it holds everywhere else
+/// in base space — `Game::blocked_tiles` folds every walking body's
+/// position in, the pen's occupant included.
+#[test]
+fn two_pinned_programs_cannot_share_the_pen() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    // Apart to begin with — `two_idle_programs_never_step_onto_one_another`'s
+    // reason: `spawn_tamed` puts every fresh program on the same tile, and
+    // this test is about the pen, not about that separate rule.
+    game.world.get_mut::<Position>(b).unwrap().y += 1;
+    game.world
+        .entity_mut(a)
+        .insert(components::UnderStudy { station });
+    game.world
+        .entity_mut(b)
+        .insert(components::UnderStudy { station });
+
+    for _ in 0..60 {
+        game.tick();
+        let pa = *game.world.get::<Position>(a).unwrap();
+        let pb = *game.world.get::<Position>(b).unwrap();
+        assert_ne!(
+            (pa.x, pa.y),
+            (pb.x, pb.y),
+            "two programs, two tiles — even in the pen"
+        );
+    }
+
+    let pa = *game.world.get::<Position>(a).unwrap();
+    let pb = *game.world.get::<Position>(b).unwrap();
+    let in_pen = [(pa.x, pa.y) == pen, (pb.x, pb.y) == pen];
+    assert_eq!(
+        in_pen.iter().filter(|&&here| here).count(),
+        1,
+        "exactly one of the two should have taken the single pen: {pa:?} {pb:?} vs pen {pen:?}"
+    );
+}
+
+/// C2 (final whole-branch review): a posted program **is** `Staff` —
+/// `Game::pin_subject`'s `role != Staff` refusal never sees it — so pinning
+/// it must free the stale `Task` itself, or three things go quietly wrong:
+/// `schedule_base_labour`'s free loop only ever visits `base_staff()`, which
+/// already excludes an `UnderStudy` body, so a `Task` left on it is never
+/// touched again; `drift_idle_staff`'s body loop opens with
+/// `if self.world.get::<Task>(worker).is_some() { continue; }`, above the
+/// `UnderStudy` arm, so the pinned body never even attempts the walk to its
+/// pen; and `pinned_subject()` — gated on the subject's own `Position`
+/// equalling the pen — then never resolves, so every subject-gated node
+/// stays refused forever. Posted through the real scheduler
+/// (`schedule_base_labour`), never a hand-written `Task`, or the test cannot
+/// tell "the scheduler posted it" from "the fixture pretended it did".
+#[test]
+fn pinning_a_posted_program_frees_its_task_and_walks_to_the_pen() {
+    let mut game = Game::new(19001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    let _ = (lathe, press);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+
+    let staff = hire(&mut game, 1);
+    let program = staff[0];
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+    game.tick();
+    assert_eq!(
+        posted_at(&game, program),
+        Some(mine),
+        "precondition: the real scheduler posted the only staff member to the mine"
+    );
+
+    game.pin_subject(program, station)
+        .expect("a staff program with a route to the pen may be pinned");
+
+    assert!(
+        game.world.get::<Task>(program).is_none(),
+        "pinning must free the stale Task — the scheduler will never touch this body again \
+         to do it, since base_staff() already excludes an UnderStudy program"
+    );
+
+    let mut arrived = false;
+    for _ in 0..80 {
+        game.tick();
+        if game.pinned_subject() == Some(program) {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(
+        arrived,
+        "the freshly pinned program must walk itself to the pen once its stale Task is gone"
+    );
+}
+
 /// The map and the inspector must stay the same set — that is the whole
 /// reason `drawn_on_surface_map` is one function called by both.
 ///
@@ -3370,5 +3532,50 @@ fn a_party_companions_stale_tile_blocks_nothing() {
     assert!(
         !game.blocked_tiles().contains(&(stale.x, stale.y)),
         "a companion standing beside the player blocks no base-space cell"
+    );
+}
+
+// --- The reach machinery widens with the footprint ---
+
+/// **Decided, not discovered.** `has_station` reads `Game::structure_tiles`
+/// (the footprint set) and counts a Station's own floor cells as taken,
+/// while `Game::blocked_tiles` would let a body actually stand on one. A
+/// marked cell whose only free walkable face happens to be a Station's
+/// floor cell is refused here even though a body really could stand there —
+/// narrow, and pinned so nobody "fixes" it later by widening `has_station`'s
+/// set to `blocked_tiles`.
+#[test]
+fn a_stations_own_floor_cell_does_not_count_as_a_dig_marks_only_face() {
+    let mut game = base_with_footprint_fixture(3020, "station_face_fixture");
+    place_now(&mut game, "station_face_fixture", 2, 0).unwrap();
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
+
+    // `(4, 0)` is solid rock just past the fixture's own floor cell at
+    // `(3, 0)`. Its other three orthogonal neighbours are reverted to solid
+    // too, so `(3, 0)` — the fixture's own footprint — is the *only* face
+    // `has_station` could ever offer it.
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.revert(4, 0);
+        grid.revert(5, 0);
+        grid.revert(4, 1);
+        grid.revert(4, -1);
+    }
+    game.toggle_mark_box((4, 0), (4, 0), None);
+    assert!(
+        game.world.resource::<base_grid::BaseGrid>().is_solid(4, 0),
+        "precondition: the marked cell is solid rock, not floor"
+    );
+
+    let worker = spawn_tamed(&mut game, 10, 3);
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        None,
+        "the only free face is the Station's own floor cell, which \
+         `has_station` counts as taken"
     );
 }

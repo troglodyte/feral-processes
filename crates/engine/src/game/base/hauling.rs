@@ -100,10 +100,26 @@ fn touching(a: Position, b: Position) -> bool {
         .any(|(dx, dy)| a.x == b.x + dx && a.y == b.y + dy)
 }
 
-/// True when `worker` stands on one of the four tiles `structure` can be
-/// reached from.
-pub(crate) fn at_station(worker: Position, structure: Position) -> bool {
-    touching(worker, structure)
+/// True when `worker` stands on one of the tiles `structure`'s `side`-wide
+/// footprint can be reached from — touching any one of its cells, anchor or
+/// floor alike. `side: 1` is every structure but the Research Station, and
+/// reduces to `touching(worker, structure)` exactly.
+pub(crate) fn at_station(worker: Position, structure: Position, side: u8) -> bool {
+    let footprint = crate::tactical::footprint_cells_at((structure.x, structure.y), side);
+    // A worker standing *on* one of the footprint's own cells — reachable
+    // only on a floor cell, since the anchor blocks movement — has not
+    // arrived at a post: two adjacent footprint cells are each other's
+    // orthogonal neighbour, so without this a floor cell would satisfy
+    // `touching` against the cell beside it and read as "at station" while
+    // still standing inside the structure. This is the other half of the
+    // equivalence with `station_candidates`, which excludes the footprint's
+    // own cells from the faces it offers for exactly this reason.
+    if footprint.contains(&(worker.x, worker.y)) {
+        return false;
+    }
+    footprint
+        .into_iter()
+        .any(|(x, y)| touching(worker, Position { x, y }))
 }
 
 /// A deployed machine and everything it wants hauled in, as
@@ -181,6 +197,13 @@ pub(crate) fn nearest_depot(
 /// what holds it, since nothing here fails to compile when a half is
 /// forgotten.
 ///
+/// **Emits each structure's anchor only** — its footprint's floor cells stay
+/// walkable — and takes `(Position, u8)` pairs rather than a bare
+/// `Position` so this and `footprint_tiles` below are built from exactly the
+/// same rows: a caller that could hand the two functions different lists
+/// would silently let `structure_tiles` and `blocked_tiles` disagree about
+/// what a structure's cells are.
+///
 /// Built per tick from whatever positions the caller can see, rather than
 /// cached — the same reasoning `haul_step_system` rebuilds its depot list on:
 /// a demolished structure, and a body that has moved on, both have to stop
@@ -188,10 +211,24 @@ pub(crate) fn nearest_depot(
 /// be a new `Resource`, which shifts query iteration order across the whole
 /// engine; `repair::Bays` refuses the same trade for the same reason.
 pub(crate) fn blocked_tiles(
-    structures: impl Iterator<Item = Position>,
+    structures: impl Iterator<Item = (Position, u8)>,
     bodies: impl Iterator<Item = Position>,
 ) -> HashSet<(i32, i32)> {
-    structures.chain(bodies).map(|p| (p.x, p.y)).collect()
+    structures
+        .map(|(p, _)| (p.x, p.y))
+        .chain(bodies.map(|p| (p.x, p.y)))
+        .collect()
+}
+
+/// Every cell of every structure's footprint, anchor and floor alike —
+/// `Game::structure_tiles`' body. `blocked_tiles`' pair, over the same
+/// `(Position, u8)` rows.
+pub(crate) fn footprint_tiles(
+    structures: impl Iterator<Item = (Position, u8)>,
+) -> HashSet<(i32, i32)> {
+    structures
+        .flat_map(|(p, side)| crate::tactical::footprint_cells_at((p.x, p.y), side))
+        .collect()
 }
 
 /// Every tile a worker could stand on to work or deliver to `structure` —
@@ -221,10 +258,11 @@ pub(crate) fn blocked_tiles(
 fn station_tiles(
     grid: &BaseGrid,
     structure: Position,
+    side: u8,
     from: Position,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
-    let mut tiles = station_candidates(grid, structure, blocked);
+    let mut tiles = station_candidates(grid, structure, side, blocked);
     tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
     tiles
 }
@@ -242,19 +280,32 @@ fn station_tiles(
 /// `tests::chains` and `tests::power` fail if it is taken out. An exemption
 /// here was written first and removed again: instrumented, it never fired
 /// once across the whole suite or a 1,200-tick run of a real 106-body save.
-fn station_candidates(
+pub(crate) fn station_candidates(
     grid: &BaseGrid,
     structure: Position,
+    side: u8,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
-    ORTHOGONAL
+    let footprint = crate::tactical::footprint_cells_at((structure.x, structure.y), side);
+    let footprint_set: HashSet<(i32, i32)> = footprint.iter().copied().collect();
+    let mut seen: HashSet<(i32, i32)> = HashSet::new();
+    let mut candidates: Vec<Position> = footprint
         .iter()
-        .map(|(dx, dy)| Position {
-            x: structure.x + dx,
-            y: structure.y + dy,
+        .flat_map(|&(fx, fy)| {
+            ORTHOGONAL.iter().map(move |(dx, dy)| Position {
+                x: fx + dx,
+                y: fy + dy,
+            })
         })
+        // A cell that is itself part of the footprint is not a face to post
+        // at — the worker posts from outside the whole footprint, never on
+        // one of its own floor cells.
+        .filter(|p| !footprint_set.contains(&(p.x, p.y)))
+        .filter(|p| seen.insert((p.x, p.y)))
         .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
-        .collect()
+        .collect();
+    candidates.sort_by_key(|p| (p.x, p.y));
+    candidates
 }
 
 /// Whether anything could stand beside `structure` at all — `NoPost::BoxedIn`
@@ -278,9 +329,10 @@ fn station_candidates(
 pub(crate) fn has_station(
     grid: &BaseGrid,
     structure: Position,
+    side: u8,
     structures: &HashSet<(i32, i32)>,
 ) -> bool {
-    !station_candidates(grid, structure, structures).is_empty()
+    !station_candidates(grid, structure, side, structures).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -325,10 +377,11 @@ fn post_field(
     grid: &BaseGrid,
     from: Position,
     structure: Position,
+    side: u8,
     blocked: &HashSet<(i32, i32)>,
     pocket_radius: i32,
 ) -> Result<PostRoute, NoPost> {
-    let stations = station_tiles(grid, structure, from, blocked);
+    let stations = station_tiles(grid, structure, side, from, blocked);
     if stations.is_empty() {
         return Err(NoPost::BoxedIn);
     }
@@ -397,10 +450,11 @@ pub(crate) fn reaches(
     reach: &HashMap<(i32, i32), u32>,
     from: Position,
     structure: Position,
+    side: u8,
     blocked: &HashSet<(i32, i32)>,
 ) -> bool {
-    at_station(from, structure)
-        || station_candidates(grid, structure, blocked)
+    at_station(from, structure, side)
+        || station_candidates(grid, structure, side, blocked)
             .iter()
             .any(|s| reach.contains_key(&(s.x, s.y)))
 }
@@ -416,13 +470,14 @@ pub(crate) fn post_reach(
     grid: &BaseGrid,
     from: Position,
     structure: Position,
+    side: u8,
     blocked: &HashSet<(i32, i32)>,
     pocket_radius: i32,
 ) -> Result<(), NoPost> {
-    if at_station(from, structure) {
+    if at_station(from, structure, side) {
         return Ok(());
     }
-    post_field(grid, from, structure, blocked, pocket_radius).map(|_| ())
+    post_field(grid, from, structure, side, blocked, pocket_radius).map(|_| ())
 }
 
 /// The one step a worker at `from` takes toward a post at `target` this
@@ -442,10 +497,11 @@ pub(crate) fn step_to_post(
     grid: &BaseGrid,
     from: Position,
     target: Position,
+    side: u8,
     blocked: &HashSet<(i32, i32)>,
     pocket_radius: i32,
 ) -> Result<Option<Position>, NoPost> {
-    let (field, here) = post_field(grid, from, target, blocked, pocket_radius)?;
+    let (field, here) = post_field(grid, from, target, side, blocked, pocket_radius)?;
     Ok(NEIGHBOURS
         .iter()
         .map(|(dx, dy)| (from.x + dx, from.y + dy))
@@ -535,7 +591,7 @@ pub struct HaulGround<'w, 's> {
     /// `Hauler`'s `&mut Position` to bevy — the two halves of the body set
     /// are split by exactly that filter and by nothing else.
     idle: Query<'w, 's, Bystander, NotPosted>,
-    roles: crate::game::party::Roles<'w>,
+    roles: crate::game::party::Roles<'w, 's>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
@@ -762,7 +818,9 @@ pub(crate) fn haul_step_system(
     // once and read for the rest of the tick, two haulers heading for the
     // same free cell would both be told it was free.
     let mut blocked = blocked_tiles(
-        structures.iter().map(|(_, p, _, _)| *p),
+        structures
+            .iter()
+            .map(|(_, p, _, s)| (*p, db.get(&s.kind).map(|d| d.footprint).unwrap_or(1))),
         workers
             .iter()
             .filter(|(entity, _, task, _, _, tamed)| {
@@ -920,10 +978,14 @@ pub(crate) fn haul_step_system(
                     .unwrap_or(Errand::Tend(machine)),
             }
         };
-        let Ok((_, dest_pos, _, _)) = structures.get(errand.destination()) else {
+        let Ok((_, dest_pos, _, dest_structure)) = structures.get(errand.destination()) else {
             continue;
         };
         let dest_pos = *dest_pos;
+        let dest_side = db
+            .get(&dest_structure.kind)
+            .map(|d| d.footprint)
+            .unwrap_or(1);
         // Read before the arms, which take `structures` mutably. The post
         // and not the worker's own tile: by the time an errand acts the two
         // are the same place, and what the analysis groups by is the
@@ -934,7 +996,7 @@ pub(crate) fn haul_step_system(
             .unwrap_or((worker_pos, String::new()));
         let legs = chebyshev(post, dest_pos).max(0) as u32;
 
-        if at_station(worker_pos, dest_pos) {
+        if at_station(worker_pos, dest_pos, dest_side) {
             // A worker standing where it meant to stand is not stranded,
             // whatever it was a tick ago. Cleared here as well as after a
             // successful field because this branch returns before one is
@@ -1084,7 +1146,14 @@ pub(crate) fn haul_step_system(
         // wall of new buildings, a depot demolished behind one, or ground
         // that changed. The worker stands still, and the marker is what turns
         // its machine's status from `Unstaffed` into `Stranded`.
-        let Ok(step) = step_to_post(&grid, worker_pos, dest_pos, &blocked, pocket_radius) else {
+        let Ok(step) = step_to_post(
+            &grid,
+            worker_pos,
+            dest_pos,
+            dest_side,
+            &blocked,
+            pocket_radius,
+        ) else {
             // Only on entry: `since` is the start of the episode, and
             // rewriting it every tick would leave nothing able to tell a
             // route that has just broken from one broken an hour ago. See

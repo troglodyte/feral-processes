@@ -110,6 +110,24 @@ pub struct ResearchDef {
     /// stranded.
     #[serde(default)]
     pub opens_routine_tree: bool,
+    /// Refuses selection until a tamed program is standing in a `studies`
+    /// structure's pen — `Game::research_block`'s gate, filled in by every
+    /// node with `min_zone >= 2` (`assets/research/README.md`). A
+    /// synthesised routine node never sets this: `routine_tree::
+    /// synthesise_nodes` leaves it at its default, so the routine tree keeps
+    /// its own economy rather than gaining a second gate.
+    #[serde(default)]
+    pub requires_subject: bool,
+    /// Marks the node that unlocks fusing two tamed programs together —
+    /// set on `program_refactoring.ron`. Until a loaded node carrying this
+    /// is researched, `Game::fuse_companions` refuses. `opens_routine_tree`'s
+    /// exact shape, including its lenient rule: if no loaded node carries
+    /// it, fusion is open from the start, so a mod that deletes or replaces
+    /// the research tree is not stranded without a capability the base game
+    /// had. A bool per capability rather than a registry of names, `perks.rs`'s
+    /// split — the catalogue is data, the effect is a named query in Rust.
+    #[serde(default)]
+    pub unlocks_fusion: bool,
 }
 
 #[derive(Resource, Default)]

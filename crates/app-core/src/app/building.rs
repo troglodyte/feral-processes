@@ -359,6 +359,49 @@ impl App {
         self.mode = Mode::Playing;
     }
 
+    /// Confirms `Mode::PinSubject`'s one row — modelled on
+    /// `handle_build_program_key`'s shape, with the same "nothing is spent
+    /// until this resolves" property.
+    ///
+    /// **`Game::pinned_subject` decides which of two things this key
+    /// resolves.** With a subject already pinned, the screen is showing the
+    /// single row that releases it, so any row-selecting key (there is only
+    /// the one row) unpins; with nobody pinned, it is the `Game::base_staff`
+    /// picker `render::draw_pin_subject` draws, and a pick spends it on
+    /// `Game::pin_subject`. Two rows would be a second place to state "at
+    /// most one subject per station" — this reads the same fact the screen
+    /// was just drawn from, so the two cannot disagree.
+    pub(crate) fn handle_pin_subject_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let subject = self.game.as_ref().and_then(|g| g.pinned_subject());
+        if let Some(subject) = subject {
+            if self.selected_index(key, 1).is_none() {
+                return;
+            }
+            let Some(game) = &mut self.game else { return };
+            let outcome = game.unpin_subject(subject);
+            self.report(outcome);
+            self.mode = Mode::Playing;
+            return;
+        }
+        let Some(staff) = self.game.as_ref().map(|g| g.base_staff()) else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, staff.len()) else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let Some(station) = game.study_station() else {
+            return;
+        };
+        let outcome = game.pin_subject(staff[idx], station);
+        self.report(outcome);
+        self.mode = Mode::Playing;
+    }
+
     /// Which structure the pending order is for — the def id for a deploy,
     /// and the standing structure's own kind for an upgrade.
     ///

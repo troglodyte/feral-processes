@@ -541,6 +541,7 @@ impl Game {
         // refills it from the save instead (todo #100 Task 5).
         world.insert_resource(crate::resources::EmulationImages::default());
         world.insert_resource(crate::resources::PendingEmulateImage::default());
+        world.insert_resource(crate::resources::PendingTeleportSubject::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -1290,6 +1291,7 @@ impl Game {
             data.emulation_images.into_iter().collect(),
         ));
         world.insert_resource(crate::resources::PendingEmulateImage::default());
+        world.insert_resource(crate::resources::PendingTeleportSubject::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());

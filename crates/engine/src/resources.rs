@@ -2092,6 +2092,21 @@ pub struct EmulationImages(pub BTreeSet<crate::species::SpeciesId>);
 #[derive(Resource, Default)]
 pub struct PendingEmulateImage(pub Option<crate::species::SpeciesId>);
 
+/// The body a `Teleport` is about to relocate, set by
+/// `Game::tactical_teleport` immediately before the one call that reads it
+/// and cleared unconditionally on the way out.
+///
+/// **`PendingEmulateImage`'s shape, and its reason.** A relocation needs
+/// two cells and `Game::run_tactical_routine` takes one `aim`; the aim is
+/// the destination, so the subject travels here rather than widening a
+/// signature four other effects have no use for.
+///
+/// Deliberately not serialized: it is live only for the length of one call
+/// inside an open fight, which is why `Cloaked`'s argument applies and no
+/// `SAVE_FORMAT_VERSION` bump is owed.
+#[derive(Resource, Default)]
+pub struct PendingTeleportSubject(pub Option<bevy_ecs::prelude::Entity>);
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

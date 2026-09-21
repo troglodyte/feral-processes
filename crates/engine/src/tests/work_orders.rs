@@ -1340,6 +1340,110 @@ fn two_pinned_programs_cannot_share_the_pen() {
     );
 }
 
+/// **The lab's floor is not a loitering spot**, found at the keyboard the
+/// first time anyone studied a program: an idle program wandered into the
+/// Station's pen and `Game::pin_subject` answered "Something is already
+/// standing in the pen" while the Station's own examine line read `Idle`,
+/// nobody posted. Both were true and neither was about the other.
+///
+/// The wander declined `structures_by_tile`, which keys on a structure's
+/// `Position` — the **anchor alone** — so a 2x2's three floor cells were
+/// ordinary laid floor to it. `has_station` had already decided a footprint
+/// cell is spoken for (`Game::structure_tiles`, the wider of the two sets);
+/// the wander is now the second reader of that decision rather than a second
+/// opinion about it.
+///
+/// Asserted over every footprint cell and not just the pen: the pen is the
+/// one that blocks a verb today, but a body parked on any of a machine's own
+/// floor is a body standing inside the building.
+#[test]
+fn an_idle_program_never_parks_on_a_stations_own_floor() {
+    let mut game = Game::new(4212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+    // The anchor blocks by itself, so it is not what this is about — the
+    // three cells a body may legally *cross* are.
+    let floor: Vec<(i32, i32)> = crate::tactical::footprint_cells_at((1, -3), 2)
+        .into_iter()
+        .filter(|&c| c != (1, -3))
+        .collect();
+    assert!(floor.contains(&pen), "the pen is one of the floor cells");
+
+    // An ordinary idle body, standing next to the Station with no work
+    // queued anywhere, so the wander is the only thing that moves it.
+    let idler = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(idler).unwrap().x = 3;
+    game.world.get_mut::<Position>(idler).unwrap().y = -2;
+
+    for tick in 0..600 {
+        game.tick();
+        let p = *game.world.get::<Position>(idler).unwrap();
+        assert!(
+            !floor.contains(&(p.x, p.y)),
+            "an idle program parked on the Station's own floor at {:?} (tick {tick}); \
+             the pen is {pen:?}",
+            (p.x, p.y)
+        );
+    }
+}
+
+/// The other half, and the half the player actually hit: a body **already**
+/// standing on the pen when the fix lands — a save from before it, or a
+/// wanderer that got there first. Declining the cell only stops new arrivals,
+/// and `drift_idle_staff`'s `crowded` rule exists because a body that has
+/// *arrived* never consults a walk again. An idle wanderer has not arrived
+/// anywhere, so it steps off on its own and the pin opens up; this is what
+/// says so, rather than leaving it to be true by luck.
+#[test]
+fn a_program_already_parked_on_the_pen_wanders_off_and_frees_it() {
+    let mut game = Game::new(4213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+
+    let squatter = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(squatter).unwrap().x = pen.0;
+    game.world.get_mut::<Position>(squatter).unwrap().y = pen.1;
+    let subject = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(subject).unwrap().x = 3;
+    game.world.get_mut::<Position>(subject).unwrap().y = 1;
+
+    // The refusal the player was handed, still true on the first tick.
+    assert_eq!(
+        game.pin_subject(subject, station).unwrap_err(),
+        "Something is already standing in the pen.",
+        "the squatter must block the pin to begin with, or this proves nothing"
+    );
+
+    let mut freed = false;
+    for _ in 0..200 {
+        game.tick();
+        let p = *game.world.get::<Position>(squatter).unwrap();
+        if (p.x, p.y) != pen {
+            freed = true;
+            break;
+        }
+    }
+    assert!(freed, "the squatter never left the pen");
+    game.pin_subject(subject, station)
+        .expect("with the pen clear the pin must go through");
+}
+
 /// C2 (final whole-branch review): a posted program **is** `Staff` —
 /// `Game::pin_subject`'s `role != Staff` refusal never sees it — so pinning
 /// it must free the stale `Task` itself, or three things go quietly wrong:

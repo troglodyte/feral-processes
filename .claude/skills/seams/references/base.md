@@ -734,8 +734,19 @@
   fixture needs an unfloored cell beside the pocket or the two predicates
   agree and it proves nothing. `park_tile` survives as **`entry_tile`**,
   asked only of a body not on floor: a tamed program's `Position` is the
-  surface tile it was beaten on. Two rejections: never onto a tile another
-  idle body holds, never onto the party's cell.
+  surface tile it was beaten on. Three rejections: never onto a tile another
+  idle body holds, never onto the party's cell, and never onto a cell any
+  structure's **footprint** covers. That last one read `structures_by_tile` —
+  keyed on a structure's own `Position`, the **anchor alone** — until the
+  first time anyone studied a program at the keyboard and an idler parked in
+  the Research Station's pen: `pin_subject` refused with "Something is
+  already standing in the pen" while the Station's examine line read `Idle`,
+  nobody posted, two true sentences neither of which was about the other. It
+  is `Game::structure_tiles` now, so the wander is a second *reader* of
+  `has_station`'s decision rather than a second opinion about it. Declining
+  the cell is only half: a body already parked there is not *arrived* in
+  `crowded`'s sense, so it steps off on its own next beat — pinned by its own
+  test, since that is the half a save written before the fix depends on.
 - **`task_progress_system` and `assembler_system` both write `Task::progress`
   and are `.chain()`ed** — bevy can see the conflict but not the disjointness.
   An assembler's rate comes from **`Task::required`, not `ticks_per_unit`**; a
@@ -1298,7 +1309,9 @@
   from an *anchor*: `blocked_tiles` emits anchors alone while
   `footprint_tiles` emits every cell, and the two are deliberately not
   interchangeable, so `has_station` calls a Station's own floor taken while
-  `station_tiles` would let a body stand there. `at_station` had to grow the
+  `station_tiles` would let a body stand there — and `drift_idle_staff`'s
+  wander is the third reader of that split, having shipped on the wrong side
+  of it. `at_station` had to grow the
   same exclusion — two adjacent footprint cells are each other's orthogonal
   neighbours, so a worker standing on a Station's own floor read as *at* it,
   and the equivalence test against `station_candidates` is what caught that.

@@ -1989,7 +1989,19 @@ impl Game {
         };
         let tick = self.world.resource::<GameClock>().tick;
         let step = tick / crate::tuning::IDLE_STAFF_STEP_TICKS;
-        let occupied = structures_by_tile(self);
+        // **The whole footprint, not the anchor.** `structures_by_tile` keys
+        // on a structure's own `Position`, so a 2x2's three floor cells read
+        // as ordinary laid floor and an idle body parked *inside* the
+        // building — in a Research Station's pen that is `Game::pin_subject`
+        // refused with "Something is already standing in the pen" while the
+        // Station's own examine line reads `Idle`, nobody posted: two true
+        // sentences, neither about the other. `Game::structure_tiles` is the
+        // wider of the two sets and `hauling::has_station` already treats a
+        // footprint cell as spoken for, so this is a second *reader* of that
+        // decision rather than a second opinion about it. A body may still
+        // **cross** the floor — `blocked_tiles` keeps emitting anchors alone,
+        // deliberately — it just may not stop there.
+        let occupied = self.structure_tiles();
         let party = match *self.world.resource::<Locale>() {
             Locale::Base { x, y } => Some((x, y)),
             _ => None,
@@ -2131,7 +2143,7 @@ impl Game {
                 },
                 None => entry_tile(home, index, tick),
             };
-            if occupied.contains_key(&(tile.x, tile.y)) {
+            if occupied.contains(&(tile.x, tile.y)) {
                 continue;
             }
             // **Laid floor, not `walkable`.** `base_entropy_system` reverts

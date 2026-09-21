@@ -42,6 +42,23 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.215
+
+**Your downed programs open straight from the map, with D.** The store was
+two screens deep — the pack, then D from inside it — for something that fills
+up after most fights and is where a beaten program is actually spent. The
+same key now opens it from the map, from your base and from down the Stack,
+and Esc puts you back wherever you pressed it. It is still D inside the pack
+too; one screen, two doors, one key.
+
+**And the corner of the map says how many you are holding.** The box over the
+map's top-left corner already read out what your base is researching and what
+it is holding; the store is a third line under those — `held 3/10`. It costs
+you nothing until the first body goes into it, and the figure turns amber at
+ten, which is the point it starts turning away everything else you beat. A
+full store was previously invisible: it refused the next program, said so
+once in the log, and nothing on screen carried the fact afterwards.
+
 ## 0.13.214
 
 Tooling only — nothing about a played game changes.

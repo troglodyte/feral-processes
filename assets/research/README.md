@@ -5,7 +5,7 @@ a file in and it becomes a node the next time a game session starts — no
 recompiling required. A malformed file is skipped with a warning logged
 in-game rather than crashing startup.
 
-Research Data is the currency. It comes from a Research Node structure
+Research Data is the currency. It comes from a Research Station structure
 worked by an assigned tamed program, the same way a Mining Node produces
 Core Fragments.
 
@@ -37,7 +37,7 @@ Core Fragments.
     description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
 
     // Research Data a project on this node has to accumulate before it
-    // completes. Research Nodes feed it in while the node is the base's active
+    // completes. Research Stations feed it in while the node is the base's active
     // project; nothing is spent at selection.
     cost: 18,
 
@@ -160,7 +160,7 @@ more.
   point — in flagging every step. A tree that flags nothing simply offers no
   advice; the menu then draws every available node the same.
 - **A structure named by no research file is buildable by default.** That is
-  how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
+  how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
   stay available from the start, and it means a structure mod that ships no
   research file keeps working unchanged.
 - A node naming an unknown prerequisite, or an unknown structure in

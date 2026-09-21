@@ -656,10 +656,11 @@ order was holding, with everything about it intact.
 A structure named in some research node's `unlocks_structures` can't be
 built until that node is researched — see `assets/research/README.md`. A
 structure named by **no** research file is buildable from turn one, which is
-how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
+how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
 stay available at the start, and why a structure mod that ships no research
 file keeps working unchanged.
 
-The Research Node itself (`research_node.ron`) is the source of Research
+The Research Station itself (`research_node.ron` — the id stayed put when
+the structure grew a pen and a display name) is the source of Research
 Data: assign a tamed program to it via the cronjob menu, same as a Mining
 Node.

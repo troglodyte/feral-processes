@@ -29,9 +29,10 @@ early will fall behind you unless you develop it, and developing it is four sepa
 - Gear. Any program you own wears a weapon, an armour and a module out of your own cargo, and a
   piece moves freely between them.
 
-Fusing two programs makes one better one. Both have to be yours, they have to be two different
-programs, and neither may already have been fused three times. There is no material cost, because
-losing two programs to gain one is the cost.
+Fusing two programs makes one better one, once Program Refactoring is researched — see
+[your base](your-base). Both have to be yours, they have to be two different programs, and neither
+may already have been fused three times. There is no material cost, because losing two programs to
+gain one is the cost.
 
 - The higher-level parent is dominant: the child takes its species, its level, its Kernel Ring and
   its talents. The other parent's ring and talents are gone.

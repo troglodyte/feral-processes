@@ -7,13 +7,13 @@ Every shipped research node in feral-processes, charted from its own file in
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Research Data is the currency, and it comes from one place: a Research Node
+Research Data is the currency, and it comes from one place: a Research Station
 structure worked by an assigned tamed program, the same way a Mining Node
 produces Core Fragments. So the whole tree below is priced in *base uptime* —
 it is the one progression track you cannot fight your way along.
 
 **The base works one node at a time.** Picking a node makes it the run's active
-project: every deployed Research Node staffs itself and feeds its Research Data
+project: every deployed Research Station staffs itself and feeds its Research Data
 into that node and no other, and with nothing picked they stand idle. The
 `cost` column below is what a project has to accumulate, not a price paid at
 selection — nothing is spent when you pick one. The `materials` bill is filed as
@@ -47,7 +47,7 @@ ever opening a portal.
 | zone 3 | 5 | 635 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Model Inspection |
 
 The gate and the tap compound without either knowing about the other.
-`Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
+`Game::upgrade_ceiling` caps a Research Station at Mk1 in zone 1, Mk2 in zone 2,
 Mk3 in zone 3 — and its cycle succeeds 50% of the time at Mk1 against 90% at
 Mk5. So the band you can buy earliest is also the band you earn slowest, and
 each breach speeds the bank up at the same moment it releases more to spend

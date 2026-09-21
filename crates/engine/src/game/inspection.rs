@@ -1687,7 +1687,7 @@ impl Game {
         {
             rows.push(AttentionRow {
                 kind: AttentionKind::NoResearchProject,
-                text: "Research Node with no project".to_string(),
+                text: "Research Station with no project".to_string(),
                 // `b`, the base menu, which is where Research is reached —
                 // `AttentionRow::key` is "the map key that opens the screen
                 // this is acted on from" and the HUD badge draws it literally.

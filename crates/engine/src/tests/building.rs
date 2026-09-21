@@ -4363,6 +4363,36 @@ fn a_structure_authoring_a_footprint_reads_it_back() {
     );
 }
 
+/// **`footprint: 0` parses clean and would otherwise silently break a
+/// structure.** `#[serde(default = "default_footprint")]` only covers an
+/// *absent* field; an authored `0` parses fine, and
+/// `tactical::footprint_cells_at` then returns no cells at all, so every
+/// widened `place_structure` refusal passes vacuously and nothing can ever
+/// post to the structure. `StructureDb::load_dir` rejects it the same way
+/// it rejects any other malformed file — same contract as every other
+/// `*Db::load_dir` in this crate.
+#[test]
+fn a_footprint_of_zero_is_skipped_with_a_warning() {
+    let dir = scratch_assets_dir("footprint_zero");
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(
+        dir.join("broken_footprint.ron"),
+        r#"(
+            id: "broken_footprint", name: "Broken", glyph: 'B', color: Cyan,
+            build_cost: [], work: None, footprint: 0,
+        )"#,
+    )
+    .unwrap();
+
+    let (db, warnings) = StructureDb::load_dir(&dir).unwrap();
+
+    assert!(
+        db.get("broken_footprint").is_none(),
+        "a footprint of 0 claims no cells and must not load"
+    );
+    assert_eq!(warnings.len(), 1, "the skip warns: {warnings:?}");
+}
+
 /// The blocker sits at `(3, 0)` — a non-anchor cell of the 2x2 about to be
 /// placed at `(2, 0)` — and every refusal case below places it there before
 /// attempting the footprint. The fixture trap this guards against: a check

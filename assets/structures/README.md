@@ -619,6 +619,13 @@ is skipped with a warning logged in-game rather than crashing startup.
     // in a later release needs no save migration — a structure already
     // standing keeps blocking exactly the one cell it always did, and its
     // new cells are purely additive. This is the Research Station's shape.
+    //
+    // A footprint of 0 is not a legal way to spell "unannotated" — the
+    // default above only covers a field left out entirely. An authored `0`
+    // parses, claims no cells at all, and would leave every placement
+    // refusal passing vacuously with nothing ever able to post to the
+    // structure, so the loader skips a file that authors one, with a
+    // warning, exactly as it skips any other malformed file.
     footprint: 2,
 
     // Optional; can be left out entirely (defaults to false). Whether this

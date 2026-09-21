@@ -2301,9 +2301,16 @@ pub struct App {
     /// Which structure `Mode::StructureAssign` is setting standing orders on
     /// — the row that was highlighted on the roster.
     pending_post_structure: Option<Entity>,
-    /// Which group menu opened the screen that is up, if one did — where
+    /// Which screen opened the screen that is up, if one did — where
     /// `App::close_screen` sends Esc. `None` for a screen reached straight
     /// from the map, and cleared the moment the map is reached again.
+    ///
+    /// A group menu in every case but one: `Mode::Inventory` sets it too,
+    /// because `Mode::DownedPrograms` is opened from the map *and* from the
+    /// pack and Esc has to answer which. Safe because the pack itself is
+    /// only ever reached from the map, so nothing it opens can overwrite an
+    /// origin somebody else was still holding — `etch_return`'s trap, one
+    /// field down.
     menu_origin: Option<Mode>,
     /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
     /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot

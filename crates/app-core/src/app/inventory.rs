@@ -94,7 +94,15 @@ impl App {
         // `selected_index` reserves shifted letters for screen actions, so
         // a lowercase binding here would both open this screen and pick a
         // row on the very keypress that opened it.
+        //
+        // The same key on the map opens the same screen, which is where
+        // most visits start; this route survives because the pack is where
+        // a player looking for something they are carrying looks first.
+        // `menu_origin` is what tells Esc which door it came through — set
+        // here and left unset on the map, where `handle_key` clears it on
+        // arrival anyway.
         if key == GameKey::Char('D') {
+            self.menu_origin = Some(Mode::Inventory);
             self.pending_downed_program_index = None;
             self.menu_selected = 0;
             self.mode = Mode::DownedPrograms;

@@ -622,6 +622,24 @@ impl Game {
         Ok(())
     }
 
+    /// How many downed programs are held, against
+    /// `tuning::MAX_DOWNED_PROGRAMS`.
+    ///
+    /// Two scalars and deliberately not `downed_program_rows().len()`: the
+    /// HUD's corner block asks this every frame, and the row builder
+    /// resolves a species display name per held program to answer it. The
+    /// cap travels with the count rather than being read from `tuning` at
+    /// the call site, so a screen quoting `n/max` and the refusal that
+    /// enforces it cannot drift apart.
+    pub fn downed_store(&self) -> (usize, usize) {
+        let held = self
+            .world
+            .get::<DownedPrograms>(self.player_entity())
+            .map(|held| held.0.len())
+            .unwrap_or(0);
+        (held, crate::tuning::MAX_DOWNED_PROGRAMS)
+    }
+
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
     /// whole list. The species' display name falls back to the raw id for a
     /// mod species since removed, `downed_program_label`'s own tolerance,

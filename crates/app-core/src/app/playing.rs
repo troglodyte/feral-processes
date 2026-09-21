@@ -101,6 +101,27 @@ impl App {
                 self.mode = Mode::Inventory;
                 return;
             }
+            // The downed-program store, which is not a pocket of the pack:
+            // a body goes down in most fights and the tool page is where it
+            // is spent, so it gets a door of its own rather than one reached
+            // two screens deep. Kept on `D` — the same key the pack binds —
+            // because one screen with two doors on two different keys is
+            // worse than the extra reach it saves. Uppercase is forced
+            // there, not here: `selected_index` reserves shifted letters for
+            // screen actions, and `d` is demolish on this screen anyway.
+            //
+            // Bound up here beside the digits and for their reason: this
+            // match runs before the hand-off to `handle_stack_key`, so one
+            // arm reaches both locales and there is no second one to drift
+            // from it. Extraction is priced by locale and gated by none —
+            // `extraction_yield` reads a bench tier and nothing about where
+            // the party stands — so a store reachable only on the surface
+            // would be the keyboard disagreeing with the engine.
+            GameKey::Char('D') => {
+                self.pending_downed_program_index = None;
+                self.mode = Mode::DownedPrograms;
+                return;
+            }
             // Examine, in the roguelike sense — `i` went to the pack, and
             // perks moving into the party menu freed the key a player would
             // guess for it anyway.

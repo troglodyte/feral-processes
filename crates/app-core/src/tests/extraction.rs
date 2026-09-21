@@ -1,5 +1,5 @@
-//! `Mode::DownedPrograms`: the pack's `D` key, and the two-phase screen it
-//! opens — a list of held programs, then the tool-and-yield page for
+//! `Mode::DownedPrograms`: the `D` key on the map and in the pack, and the
+//! two-phase screen it opens — a list of held programs, then the tool-and-yield page for
 //! whichever one is picked.
 
 use feral_processes_engine::items::DownedProgram;
@@ -69,6 +69,82 @@ fn lowercase_d_selects_a_row_instead_of_opening_the_downed_programs_screen() {
         app.pending_inventory_item,
         Some(tenth_item),
         "the row it picked must be the fourth-letter row (DIGIT_ROWS + 3), the tenth item"
+    );
+}
+
+/// The store is a top-level screen, not a pocket of the pack: a body downs
+/// in every fight and the tool page is where it is spent, so the map binds
+/// it directly. `D` and not `d` for the pack binding's reason — the two
+/// doors must be the same key, and `d` is demolish on the map.
+#[test]
+fn pressing_uppercase_d_on_the_map_opens_the_downed_programs_screen() {
+    let mut app =
+        app_holding_downed_programs(9010, vec![program("scrapper", 70, Rarity::Gold, 20)]);
+    assert_eq!(app.mode, Mode::Playing, "test premise: standing on the map");
+
+    app.handle_key(GameKey::Char('D'));
+
+    assert_eq!(app.mode, Mode::DownedPrograms);
+    assert!(
+        app.pending_downed_program_index.is_none(),
+        "opening the screen lands on the list, not a program's tool page"
+    );
+}
+
+/// Bound in `handle_playing_key`'s top match, which runs before the
+/// hand-off to `handle_stack_key` — the `1`/`2`/`3` rule. Extraction is
+/// priced but never gated by locale (`extraction_yield` reads a bench tier
+/// and nothing else), so a store reachable only on the surface would be the
+/// keyboard contradicting the engine. A key that fell through to the Stack
+/// handler instead would hit its `_ => {}` as a swallowed press with no
+/// refusal and nothing in the log.
+#[test]
+fn the_store_opens_underground() {
+    let mut app = app_underground(9011);
+    assert!(
+        app.game.as_ref().unwrap().is_underground(),
+        "test premise: the party is down the Stack"
+    );
+
+    app.handle_key(GameKey::Char('D'));
+
+    assert_eq!(app.mode, Mode::DownedPrograms);
+}
+
+/// The two doors share one screen, so Esc has to answer which one it came
+/// through — `menu_origin`, the slot that already answers exactly that for
+/// every screen a group menu opens, rather than a second field beside it.
+/// The map's own arm needs no write: `handle_key` clears `menu_origin`
+/// whenever the map is reached.
+#[test]
+fn esc_from_the_map_route_returns_to_the_map() {
+    let mut app =
+        app_holding_downed_programs(9012, vec![program("scrapper", 70, Rarity::Gold, 20)]);
+    app.handle_key(GameKey::Char('D'));
+    assert_eq!(app.mode, Mode::DownedPrograms);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// And the pack route still lands back on the pack rather than dropping to
+/// the map — the whole point of routing Esc through `menu_origin` rather
+/// than hardcoding either destination.
+#[test]
+fn esc_from_the_pack_route_returns_to_the_pack_and_then_to_the_map() {
+    let mut app = test_app(9013);
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('D'));
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Inventory);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the pack's own Esc still works: the store consumed the origin it set"
     );
 }
 

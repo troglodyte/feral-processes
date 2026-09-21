@@ -18,13 +18,15 @@ Moving and living:
   something finds you mid-recharge, the Outlet is spent and nothing is restored. Inside your base it
   never is.
 
-The three menus:
+Your menus and stores:
 
 - b — base menu: deploy, compile, work orders, base staff, work it yourself, upgrade, demolish,
   structure roster, research, contracts, recipes
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
   develop, perks
 - i — your pack
+- D — the downed programs you are holding, and the tools that take them apart. The same key opens
+  it from inside your pack. See [taking a program apart](extraction).
 
 Acting on the world:
 

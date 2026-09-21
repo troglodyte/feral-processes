@@ -851,6 +851,33 @@ fn downed_program_rows_reflect_the_store_in_order_with_species_names_resolved() 
     );
 }
 
+/// The HUD's corner block reads this every frame, which is why it is not
+/// `downed_program_rows().len()` — that resolves a species name per held
+/// program through `SpeciesDb` and allocates ten Strings to answer a
+/// headcount. Both halves are asserted, because a cap read off the Vec's
+/// own length rather than `tuning::MAX_DOWNED_PROGRAMS` would report
+/// `3/3` and pass any test that only looks at the first figure.
+#[test]
+fn the_downed_store_reports_what_is_held_against_the_cap() {
+    let mut game = Game::new(4493, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(
+        game.downed_store(),
+        (0, tuning::MAX_DOWNED_PROGRAMS),
+        "a fresh run holds nothing and the cap is still the cap"
+    );
+
+    give_downed_program(&mut game, program(70, Rarity::Gold, 20));
+    give_downed_program(&mut game, program(40, Rarity::Silver, 11));
+
+    assert_eq!(game.downed_store(), (2, tuning::MAX_DOWNED_PROGRAMS));
+    assert_eq!(
+        game.downed_store().0,
+        game.downed_program_rows().len(),
+        "the cheap count and the row list must agree, or the HUD and the \
+         screen say different things about the same store"
+    );
+}
+
 #[test]
 fn downed_program_rows_is_empty_with_nothing_held() {
     let game = Game::new(4491, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

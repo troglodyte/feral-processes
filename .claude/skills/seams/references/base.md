@@ -348,6 +348,30 @@
   left the bar standing — and a menu now hides it; that was accepted for
   full names over a glossary of tags. `ItemDef::tag`/`abbrev` survive for
   the base pane's PRODUCTION rows, held unique by their census.
+  **It is three sections now, not two** — `RESEARCHING`, `BASE STOCK`, and
+  the player's own `DOWNED PROGRAMS` off `Game::downed_store`, which is a
+  `(held, cap)` pair and deliberately not `downed_program_rows().len()`: the
+  corner asks every frame and the row builder resolves a species display
+  name per held program to answer a headcount. **The trap is the order the
+  budget is spent in.** The stock section spends whatever it is given — it
+  is the one that counts its overflow as `+N more` — so a fixed-height
+  section appended *after* it is a section a well-stocked base silently
+  deletes, and nothing fails to compile. Both uncuttable sections claim
+  their lines off `fits` **before** the stock rows are allotted `room`;
+  `a_crowded_base_does_not_push_the_store_out_of_the_block` is the gate and
+  fails with the reservation removed (verified by mutation). **Every section
+  says nothing when it has nothing to say**, which is what keeps the box
+  honest about map it is covering: no stock, no `BASE STOCK` header; nothing
+  held, no downed section; all three empty is the `None` that draws no box.
+  A store reading `0/10` is not news, so the section arrives with the first
+  body — which is also when the cap starts to matter. `Line::Pair` carries
+  its figure's ink for one state: a **full** store takes `ATTENTION`, the
+  machine-stall rule, because a full store refuses the next body the world
+  hands over and `10/10` in the ordinary ink is the readout hiding the only
+  number worth reading. The end-to-end gate is
+  `the_base_stock_is_listed_over_the_map_in_base_space` — `draw_stock_block`
+  is handed a count, so only a draw through the real `render::draw` proves
+  the call site asks `Game::downed_store` at all.
   **The running research heads the same box**, from
   `Game::research_readout` — `Idle` needs a Research Node standing, a
   running project is read out whether or not one does, and `Stalled` is a

@@ -473,8 +473,10 @@ impl App {
         }
     }
 
-    /// Where Esc from a screen goes: back to the group menu that opened it,
-    /// or to the map if it was opened from the map.
+    /// Where Esc from a screen goes: back to the screen that opened it, or
+    /// to the map if it was opened from the map. Usually a group menu, but
+    /// `Mode::Inventory` sets it too, for the one screen (`Mode::Downed
+    /// Programs`) the map and the pack both open.
     ///
     /// `menu_origin` is consumed here and cleared whenever the map is
     /// reached (see `App::handle_key`), so completing an action — which

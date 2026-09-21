@@ -70,6 +70,10 @@ pub(crate) fn generic_species() -> SpeciesDef {
         work_resource: None,
         rich_in: None,
         equipment_drop: None,
+        // Nothing authored, so a fixture body mints each attribute around
+        // its own def's `base` — `generic_species`'s rule, that a fixture
+        // must not shift meaning when a content file is edited.
+        attributes: std::collections::BTreeMap::new(),
         is_boss: false,
         abilities: Vec::new(),
         growth_multiplier: crate::tuning::BASELINE_GROWTH_MULTIPLIER,

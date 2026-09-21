@@ -19,4 +19,11 @@
     can_nest: true,
     abilities: [(id: "overclock_array", level: 2), (id: "bastion_shield_v2", level: 4)],
     affinities: (damage: 0.85, buff: 1.3),
+    attributes: {
+        "persistence": 58,
+        "entropy": 32,
+        "bandwidth": 34,
+        "footprint": 50,
+        "parity": 60,
+    },
 )

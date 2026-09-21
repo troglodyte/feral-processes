@@ -5336,3 +5336,72 @@ fn no_shipped_attribute_claims_an_effect() {
         }
     }
 }
+
+/// Every shipped species authors every shipped attribute.
+///
+/// The field is `#[serde(default)]`, so nothing in the compiler or the
+/// loader notices a species that authors none — it simply mints the
+/// catalogue's own bases and reads identically to every other species,
+/// which is the `AbilityDef::spread` failure: a field authored nowhere,
+/// with nobody to find out.
+#[test]
+fn every_shipped_species_authors_every_attribute() {
+    let game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<String> = game
+        .attribute_defs()
+        .iter()
+        .map(|d| d.id.as_str().to_string())
+        .collect();
+    for species in game.species_defs() {
+        // The test fixture is registered into the db at `Game::new` and is
+        // deliberately blank — `the_generic_fixture_species_is_blank_and_
+        // unshipped` is the rule it exists for.
+        if species.id == GENERIC_SPECIES_ID {
+            continue;
+        }
+        for id in &ids {
+            assert!(
+                species.attributes.contains_key(id),
+                "species {} authors no {id}",
+                species.id
+            );
+        }
+        for authored in species.attributes.keys() {
+            assert!(
+                ids.contains(authored),
+                "species {} authors {authored:?}, which no attribute def defines",
+                species.id
+            );
+        }
+    }
+}
+
+/// And every shipped class, which is the player's only authored source —
+/// the player carries no `Creature` and no species.
+#[test]
+fn every_shipped_class_authors_every_attribute() {
+    let game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<String> = game
+        .attribute_defs()
+        .iter()
+        .map(|d| d.id.as_str().to_string())
+        .collect();
+    let classes = game.class_defs();
+    assert_eq!(classes.len(), 8, "the shipped catalogue is eight classes");
+    for class in classes {
+        for id in &ids {
+            assert!(
+                class.attributes.contains_key(id),
+                "class {} authors no {id}",
+                class.name
+            );
+        }
+        for authored in class.attributes.keys() {
+            assert!(
+                ids.contains(authored),
+                "class {} authors {authored:?}, which no attribute def defines",
+                class.name
+            );
+        }
+    }
+}

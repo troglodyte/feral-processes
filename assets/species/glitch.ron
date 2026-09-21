@@ -22,4 +22,11 @@
         "shorts out for a whole second, which on its timescale is a long insult.",
         "renders the pack twice, badly, and discards both.",
     ],
+    attributes: {
+        "persistence": 26,
+        "entropy": 78,
+        "bandwidth": 52,
+        "footprint": 22,
+        "parity": 24,
+    },
 )

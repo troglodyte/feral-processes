@@ -22,4 +22,11 @@
         "logs the pack at debug level and declines to raise it.",
         "schedules them for cleanup and does not mark it urgent.",
     ],
+    attributes: {
+        "persistence": 38,
+        "entropy": 34,
+        "bandwidth": 30,
+        "footprint": 24,
+        "parity": 50,
+    },
 )

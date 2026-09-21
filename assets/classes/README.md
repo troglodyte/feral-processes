@@ -61,6 +61,20 @@ Each file is one class:
 | `description` | One or two sentences of flavour under it. |
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
 | `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. Superseded entirely if the player buys anything on the Kit step; see "What a class is" above. |
+| `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's own **base** for each one. An id this map does not name falls through to that attribute def's own `base`, so the two directories stay independent. |
+
+## Attributes
+
+A class is the player's only authored source of attribute bases — the player
+carries no species. The number here is a **base the player mints a spread
+around**, not the number they end up with, and it is read once at creation:
+editing it does not change a run already in progress. Nothing reads an
+attribute for a mechanic; they are what the dossier page shows.
+
+All eight shipped classes author all five shipped attributes, held by
+`every_shipped_class_authors_every_attribute` in
+`crates/engine/src/tests/assets.rs`. The field itself stays optional, so a
+mod's class file keeps parsing untouched.
 
 ## The damped-axis convention
 

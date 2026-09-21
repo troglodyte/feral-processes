@@ -18,4 +18,11 @@
     work_resource: Some("core_fragment"),
     abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v3", level: 4)],
     affinities: (damage: 0.85, heal: 1.3),
+    attributes: {
+        "persistence": 48,
+        "entropy": 66,
+        "bandwidth": 76,
+        "footprint": 34,
+        "parity": 30,
+    },
 )

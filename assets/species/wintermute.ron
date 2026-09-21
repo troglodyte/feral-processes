@@ -18,4 +18,11 @@
     work_resource: None,
     is_boss: true,
     abilities: [(id: "broadcast_storm"), (id: "null_route", level: 3)],
+    attributes: {
+        "persistence": 80,
+        "entropy": 60,
+        "bandwidth": 78,
+        "footprint": 72,
+        "parity": 74,
+    },
 )

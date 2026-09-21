@@ -1148,6 +1148,20 @@ pub(super) fn stand_ample_grid_supply(game: &mut Game) {
 /// study would. A test asserting an exact `DownedPrograms` count, or a
 /// specific `ProgramId`, after calling this on a subject-gated chain
 /// should account for that row rather than be surprised by it.
+/// Discovers every shipped research node — `research::ResearchDef::
+/// discoverable` hides twenty of them from `Game::research_nodes` and
+/// `Game::research_graph` until a study finds them, and a census of the
+/// tree's *shape*, or of what a named node reports, is about the catalogue
+/// rather than about what this run happens to have uncovered.
+///
+/// Goes through `Game::discover_research`, the one door, so a fixture can
+/// never write a state the game itself could not reach.
+pub(super) fn discover_all_research(game: &mut Game) {
+    for def in game.research_defs() {
+        game.discover_research(&def.id);
+    }
+}
+
 pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     fn order(game: &Game, id: &str, out: &mut Vec<String>) {
         let Some(def) = game.world.resource::<ResearchDb>().get(id).cloned() else {

@@ -410,7 +410,13 @@ mod tests {
     #[test]
     fn every_research_alert_fits_its_screen_once_filled() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(59, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let mut game = Game::new(59, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        // Every shipped node, not only the visible ones: this census
+        // measures content against a screen with no scroll, and
+        // `research_nodes` narrows to what has been discovered.
+        for def in game.research_defs() {
+            game.discover_research(&def.id);
+        }
         let nodes = game.research_nodes(ResearchTree::Base);
         assert!(
             nodes.iter().any(|n| n.unlocks.is_some()),

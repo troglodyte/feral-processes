@@ -729,6 +729,7 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
 
+    game.discover_research("weapon_bench");
     let err = game.select_research("weapon_bench").unwrap_err();
 
     assert!(
@@ -741,7 +742,8 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
 
 #[test]
 fn a_locked_node_reports_which_prerequisites_are_missing() {
-    let game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
     let node = game
         .research_nodes(ResearchTree::Base)
         .into_iter()
@@ -1082,8 +1084,9 @@ fn research_state(game: &Game, id: &str) -> ResearchState {
 
 #[test]
 fn a_node_above_the_players_zone_reports_its_zone() {
-    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     match research_state(&game, &gated.id) {
         ResearchState::Locked { min_zone, .. } => assert_eq!(
             min_zone,
@@ -1101,8 +1104,9 @@ fn a_node_above_the_players_zone_reports_its_zone() {
 /// learns the tier exists. The visible zone-3 band *is* the reason to breach.
 #[test]
 fn a_zone_gated_node_is_still_listed() {
-    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 3);
+    discover_all_research(&mut game);
     assert!(
         game.research_nodes(ResearchTree::Base)
             .iter()
@@ -1117,6 +1121,7 @@ fn a_zone_gated_node_is_still_listed() {
 fn select_research_refuses_a_node_above_the_players_zone() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     base_with_a_research_node(&mut game);
 
@@ -1134,6 +1139,7 @@ fn select_research_refuses_a_node_above_the_players_zone() {
 fn breaching_makes_a_zone_gated_node_available() {
     let mut game = Game::new(718, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     assert!(
         matches!(
@@ -1158,8 +1164,9 @@ fn breaching_makes_a_zone_gated_node_available() {
 
 #[test]
 fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
-    let game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let deep = cheapest_gated_node(&game, 3);
+    discover_all_research(&mut game);
     match research_state(&game, &deep.id) {
         ResearchState::Locked { missing, min_zone } => {
             assert!(
@@ -1184,6 +1191,7 @@ fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
 fn the_zone_gate_is_refused_before_the_machines() {
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     // Deliberately no Research Node: the zone must still be the reason, or a
     // player at zone 1 is sent to build machinery for a node they could not
@@ -1559,7 +1567,9 @@ fn a_research_node_reports_the_conversions_its_structures_perform() {
 
 #[test]
 fn a_research_node_reports_the_recipes_it_unlocks_with_their_quantities() {
-    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    discover_all_research(&mut game);
 
     let node = research_node(&game, "ablative");
 
@@ -1572,7 +1582,9 @@ fn a_research_node_reports_the_recipes_it_unlocks_with_their_quantities() {
 
 #[test]
 fn a_research_node_that_unlocks_no_conversion_reports_none() {
-    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    discover_all_research(&mut game);
 
     let node = research_node(&game, "paging");
 
@@ -1992,7 +2004,8 @@ fn a_project_still_earning_is_not_stalled() {
 /// lists themselves.
 #[test]
 fn a_research_node_reports_everything_it_hands_over() {
-    let game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
 
     assert_eq!(
         research_node(&game, "weapon_bench").unlocks.as_deref(),
@@ -2112,6 +2125,7 @@ fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
         .research_block(&def)
         .expect("nobody is pinned yet, so the gate must be live");
 
+    game.discover_research("paging");
     let err = game.select_research("paging").unwrap_err();
 
     assert_eq!(
@@ -2133,6 +2147,7 @@ fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
 
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("a subject standing in the pen must clear the gate");
 
@@ -2160,6 +2175,7 @@ fn an_earning_subject_gated_project_strains_its_subject() {
     // Pinned, nothing selected: held, not worked.
     assert_eq!(at_pen(&game), PinMark::Settled);
 
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("a subject standing in the pen clears the gate");
 
@@ -2191,6 +2207,7 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
     let half = 4;
     let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
 
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     assert_eq!(at_pen(&game), PinMark::Strained);
 
@@ -2285,6 +2302,7 @@ fn a_second_stations_subject_stays_settled_while_the_first_strains() {
     pin_subject_at_pen(&mut game, a, first);
     pin_subject_at_pen(&mut game, b, second);
 
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
 
     assert_eq!(
@@ -2358,6 +2376,7 @@ fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
     );
     for id in gated {
         let mut game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        discover_all_research(&mut game);
         base_with_a_research_node(&mut game);
         research_prereqs_of(&mut game, &id);
         let def = game
@@ -2393,6 +2412,7 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
 
     let err = game
@@ -2429,6 +2449,7 @@ fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does(
     let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
+    discover_all_research(&mut game);
 
     let def = game
         .world
@@ -2544,6 +2565,7 @@ fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("the pinned subject clears the gate");
 
@@ -2625,6 +2647,7 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -2660,6 +2683,7 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -2715,6 +2739,7 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
         .expect("some shipped ability is wild-poolable");
     game.world.get_mut::<Routines>(program).unwrap().0 = vec![prize.clone()];
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     shelve_research_bill(&mut game, "paging", 8, 8);
     fill_research_progress(&mut game, "paging");
@@ -2756,6 +2781,7 @@ fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
     let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
@@ -2900,5 +2926,111 @@ fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
             .0
             .len(),
         1
+    );
+}
+
+/// A discoverable node is off **both** surfaces until it is found, and on
+/// both after. One predicate feeds `listed_research`, and `research_nodes`
+/// and `research_graph` are both built from it, so the menu and the flow
+/// chart cannot disagree about what exists.
+#[test]
+fn a_discoverable_node_is_absent_from_both_research_surfaces_until_discovered() {
+    let mut game = Game::new(4440, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let listed = |g: &Game| {
+        g.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == "paging")
+    };
+    let drawn = |g: &Game| {
+        g.research_graph(ResearchTree::Base)
+            .cell("paging")
+            .is_some()
+    };
+
+    assert!(!listed(&game), "an undiscovered node is not a menu row");
+    assert!(!drawn(&game), "and not a box on the chart either");
+
+    game.discover_research("paging");
+
+    assert!(listed(&game));
+    assert!(drawn(&game));
+}
+
+/// Leaving a node off the menu is not enough: an id typed into a save editor
+/// or a stale UI row must be refused too — and refused **before anything is
+/// written**, `commit_caravan_basket`'s rule.
+#[test]
+fn select_research_refuses_an_undiscovered_node_before_anything_is_written() {
+    let mut game = Game::new(4441, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let station = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, station);
+
+    let err = game.select_research("paging").unwrap_err();
+
+    assert_eq!(
+        err, "Unknown research.",
+        "a hidden node must not be told apart from one that does not exist"
+    );
+    assert_eq!(active_research(&game), None, "and no project is started");
+    assert!(game.work_orders().is_empty(), "and no bill is filed");
+
+    // The reachability half: discovering it makes the identical call succeed,
+    // so the refusal cannot ship permanent.
+    game.discover_research("paging");
+    game.select_research("paging")
+        .expect("a discovered node is an ordinary node");
+}
+
+/// The regression gate on the visible spine. A node that is not
+/// `discoverable` is listed and selectable exactly as it was — including the
+/// two that cost a subject and stay visible on purpose.
+#[test]
+fn a_node_that_is_not_discoverable_is_untouched_by_the_hiding_rule() {
+    let mut game = Game::new(4442, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let ids: Vec<String> = game
+        .research_nodes(ResearchTree::Base)
+        .iter()
+        .map(|n| n.id.clone())
+        .collect();
+    for id in [
+        "automation",
+        "power_grid",
+        "commerce",
+        "teardown",
+        "fortification",
+        "routine_fabrication",
+        "program_refactoring",
+    ] {
+        assert!(ids.contains(&id.to_string()), "{id} must stay visible");
+    }
+
+    game.select_research("automation")
+        .expect("the visible spine is bought exactly as before");
+}
+
+/// "Researched means known" reaches across this gate too: a node already
+/// bought is never hidden by a later change to what gates it — a save from
+/// before this feature, or a `.ron` edit that adds `discoverable` to
+/// something the player already owns.
+#[test]
+fn an_already_researched_node_stays_listed_even_when_it_is_discoverable() {
+    let mut game = Game::new(4443, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    assert!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .is_empty(),
+        "the fixture is vacuous if the chain discovered it on the way"
+    );
+
+    assert!(
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == "armor_bench"),
+        "a node you already own cannot become invisible"
     );
 }

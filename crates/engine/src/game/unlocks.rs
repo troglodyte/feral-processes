@@ -425,10 +425,33 @@ impl Game {
     /// hides even an already-known rung
     /// (`the_closed_tree_lists_nothing_even_when_a_rung_is_known`). Once
     /// open, a node is listed when `routine_node_reachable` says so.
+    /// Whether a **base** node is visible at all — `listed_research`'s Base
+    /// filter and `select_research`'s refusal, so the menu, the flow chart
+    /// and the door cannot disagree about what exists.
+    ///
+    /// `node_researched` is in there for the routine tree's own
+    /// "researched means known" rule: a node already bought is never hidden
+    /// by a later change to what gates it — a save from before this feature,
+    /// or a `.ron` edit that adds `discoverable` to something the player
+    /// already owns.
+    pub(crate) fn base_node_visible(&self, def: &ResearchDef) -> bool {
+        !def.discoverable
+            || self.node_researched(def)
+            || self
+                .world
+                .resource::<crate::resources::DiscoveredResearch>()
+                .0
+                .contains(&def.id)
+    }
+
     fn listed_research(&self, tree: ResearchTree) -> Vec<&ResearchDef> {
         let db = self.world.resource::<ResearchDb>();
         if tree == ResearchTree::Base {
-            return db.all().filter(|d| d.tree == ResearchTree::Base).collect();
+            return db
+                .all()
+                .filter(|d| d.tree == ResearchTree::Base)
+                .filter(|d| self.base_node_visible(d))
+                .collect();
         }
         let tree_open = self.routine_tree_open();
         db.all()
@@ -912,6 +935,15 @@ impl Game {
             if !self.routine_node_reachable(&def) {
                 return Err("Unknown research.".to_string());
             }
+        }
+        // A hidden base node is refused for the routine tree's exact reason,
+        // one rung down: leaving it off the menu is not enough, because an id
+        // typed into a save editor — or a stale UI row — could otherwise buy
+        // something the player was never shown. The sentence is the routine
+        // tree's own, because telling the player a node exists is precisely
+        // what a hidden node must not do.
+        if def.tree == ResearchTree::Base && !self.base_node_visible(&def) {
+            return Err("Unknown research.".to_string());
         }
         if self.is_researched(id) {
             return Err(format!("{} is already researched.", def.name));

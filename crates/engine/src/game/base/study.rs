@@ -13,6 +13,7 @@ use crate::game::base::hauling::NoPost;
 use crate::game::pursuit::walk_field;
 use crate::resources::ActiveResearch;
 use crate::tuning::haul_walk_radius;
+use crate::views::PinMark;
 use crate::world::NEIGHBOURS;
 use crate::*;
 
@@ -83,6 +84,45 @@ impl Game {
             let pos = e.get::<Position>()?;
             ((pos.x, pos.y) == pen).then_some(e.id())
         })
+    }
+
+    /// The one subject the active project is actually spending right now, or
+    /// `None` when nothing is being worked on a body.
+    ///
+    /// Three terms, and each is a **call** to the door that already answers
+    /// it rather than a second test for it:
+    ///
+    /// 1. the project declares `requires_subject` — a project that spends no
+    ///    body is not straining one, however many are pinned;
+    /// 2. `research_readout` is `Earning` — that is the one place "stalled"
+    ///    is decided (`research_material_shortfall`), so a project waiting on
+    ///    a material line goes still rather than needing a second test for
+    ///    the same stall here;
+    /// 3. the body is `pinned_subject`'s own answer — the same one
+    ///    `settle_research` will spend and `research_block` gates on, so the
+    ///    mark cannot name a different body than the gate does.
+    ///
+    /// Ordered cheapest-first on purpose: `research_readout` walks every
+    /// output buffer through `research_material_shortfall`, and this is a
+    /// per-frame call, so the two map lookups above it are what keep that
+    /// walk off every base that is not running a subject-gated project —
+    /// `Game::attention` gates the same walk the same way.
+    fn strained_subject(&self) -> Option<Entity> {
+        let id = self.world.resource::<ActiveResearch>().id.clone()?;
+        if !self
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)?
+            .requires_subject
+        {
+            return None;
+        }
+        matches!(
+            self.research_readout(),
+            Some(crate::views::ResearchReadout::Earning { .. })
+        )
+        .then(|| self.pinned_subject())
+        .flatten()
     }
 
     /// Every tamed program you own that is pinned somewhere — the second
@@ -387,11 +427,17 @@ impl Game {
     /// showed: the brackets latched on the moment a subject was selected and
     /// rode along for the whole walk to the pen, marking a program that was
     /// not under study yet.
-    pub fn view_pinned_at(&self, center: (i32, i32), half_w: i32, half_h: i32) -> Vec<Vec<bool>> {
+    pub fn view_pinned_at(
+        &self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<PinMark>> {
         let (cx, cy) = center;
         let width = (2 * half_w + 1).max(0) as usize;
         let height = (2 * half_h + 1).max(0) as usize;
-        let mut rows = vec![vec![false; width]; height];
+        let mut rows = vec![vec![PinMark::Unpinned; width]; height];
+        let strained = self.strained_subject();
         for e in self.world.iter_entities() {
             let Some(under_study) = e.get::<components::UnderStudy>() else {
                 continue;
@@ -410,7 +456,11 @@ impl Game {
             }
             let (dx, dy) = (pos.x - cx, pos.y - cy);
             if dx.abs() <= half_w && dy.abs() <= half_h {
-                rows[(dy + half_h) as usize][(dx + half_w) as usize] = true;
+                rows[(dy + half_h) as usize][(dx + half_w) as usize] = if strained == Some(e.id()) {
+                    PinMark::Strained
+                } else {
+                    PinMark::Settled
+                };
             }
         }
         rows

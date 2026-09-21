@@ -3,6 +3,7 @@
 
 use super::support::*;
 use crate::components::Downed;
+use crate::views::PinMark;
 use crate::*;
 
 /// A scratch save path unique to this process and `tag`, so two tests in
@@ -1380,7 +1381,7 @@ fn a_subject_is_drawn_all_the_way_and_bracketed_only_once_it_settles() {
     let half = 8;
     let bracketed = |game: &Game, at: (i32, i32)| {
         let rows = game.view_pinned_at(pen, half, half);
-        rows[(at.1 - pen.1 + half) as usize][(at.0 - pen.0 + half) as usize]
+        rows[(at.1 - pen.1 + half) as usize][(at.0 - pen.0 + half) as usize] != PinMark::Unpinned
     };
 
     assert!(

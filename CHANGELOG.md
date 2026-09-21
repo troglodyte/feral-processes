@@ -42,6 +42,31 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.219
+
+**You can now relocate yourself, or a body standing next to you, across a
+battle map.** Teleport is a routine the research tree teaches in sector 2,
+and it is the first one that aims twice: pick a body at arm's length — your
+own is the common case — then pick a cell to send it to. How far it reaches
+is half your level in cells, floored at one and with no ceiling, so it is a
+short hop when you learn it and spans a board by the deep sectors.
+
+**The destination has to be somewhere you can see, and somewhere the body
+actually fits.** Both cursors outline the cells they will accept, drawn from
+the same two questions the routine asks before it spends anything, so a cell
+you are shown is never one that then refuses you. A squad needs its whole
+block clear. Nothing lands on a body that is already standing there.
+
+**It is an escape you pay for, not a free disengage.** Invoking beside a
+hostile provokes a reaction like any other routine, and a reaction that cuts
+it off keeps the Power and the cooldown — you are still standing where you
+were. Throwing an adjacent hostile back is the other half of the routine, and
+doing that breaks your own cloak where relocating yourself does not.
+
+**Only you can run it.** A companion or a wild program holding it is refused
+with a reason on the row rather than silently doing nothing, which is what a
+mod dropping it into a species kit will see.
+
 ## 0.13.218
 
 **Every program in the Grid now has five attributes you can read, and so do

@@ -2802,3 +2802,43 @@ fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
         "the materials must be intact too"
     );
 }
+
+/// A RON round-trip alone is not enough: `#[serde(skip)]` on a new field
+/// leaves that test green while the field never reaches disk. This goes
+/// through the real `Game::save`/`Game::load` pair.
+#[test]
+fn a_save_round_trips_what_the_base_has_discovered_and_banked() {
+    let mut game = Game::new(4420, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<crate::resources::DiscoveredResearch>()
+        .0
+        .insert("paging".to_string());
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = 3;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_research_discovery_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .contains("paging"),
+        "a discovery is permanent and must survive a reload"
+    );
+    assert_eq!(
+        loaded
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        3,
+        "a part-banked study attempt must survive a reload"
+    );
+}

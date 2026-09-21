@@ -507,6 +507,7 @@ impl Game {
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
         world.init_resource::<crate::resources::DiscoveredRoutines>();
+        world.init_resource::<crate::resources::DiscoveredResearch>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
@@ -1177,7 +1178,11 @@ impl Game {
         world.insert_resource(crate::resources::ActiveResearch {
             id: data.active_research,
             progress: data.research_progress.into_iter().collect(),
+            study: data.study_progress,
         });
+        world.insert_resource(crate::resources::DiscoveredResearch(
+            data.discovered_research.into_iter().collect(),
+        ));
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
         world.insert_resource(crate::resources::DiscoveredRoutines(
@@ -2527,6 +2532,17 @@ impl Game {
                 rows.sort();
                 rows
             },
+            discovered_research: self
+                .world
+                .resource::<crate::resources::DiscoveredResearch>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
+            study_progress: self
+                .world
+                .resource::<crate::resources::ActiveResearch>()
+                .study,
             known_routines: self
                 .world
                 .resource::<KnownRoutines>()

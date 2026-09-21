@@ -164,6 +164,21 @@ pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
 pub struct ActiveResearch {
     pub id: Option<crate::research::ResearchId>,
     pub progress: std::collections::HashMap<crate::research::ResearchId, u32>,
+    /// Research currency banked toward the next study attempt — where a
+    /// Research Station's payout lands while `id` is `None`.
+    ///
+    /// **A field here rather than a resource of its own.** `ActiveResearch`
+    /// is already the answer to *where research currency lands*, so this is
+    /// a second place it can land rather than a second type to ask:
+    /// `systems::deliver_payout`'s signature does not change, neither of its
+    /// two `SystemParam` bundles gains a parameter, and the world gains one
+    /// resource instead of two — one shift in bevy's iteration order rather
+    /// than a self-inflicted second.
+    ///
+    /// Capped at a single attempt (`tuning::STUDY_ATTEMPT_DATA`), so a
+    /// Station studying with an empty pen banks one attempt and holds rather
+    /// than stockpiling.
+    pub study: u32,
 }
 
 impl ActiveResearch {
@@ -180,6 +195,16 @@ impl ActiveResearch {
         let landed = amount.min(cap.saturating_sub(*held));
         *held += landed;
         landed
+    }
+
+    /// Banks `amount` toward the next study attempt, saturating at `cap`.
+    ///
+    /// `credit`'s arithmetic with a different destination. It reports
+    /// nothing because nothing consumes the figure: `deliver_payout`'s study
+    /// branch returns `0` so `systems::cycle_line` stays silent, and the
+    /// study speaks for itself through `Game::settle_study`.
+    pub(crate) fn credit_study(&mut self, amount: u32, cap: u32) {
+        self.study += amount.min(cap.saturating_sub(self.study));
     }
 }
 
@@ -225,6 +250,23 @@ pub struct KnownTools(pub BTreeSet<crate::tools::ToolId>);
 /// the encoded bytes differ run to run.
 #[derive(Resource, Default)]
 pub struct DiscoveredRoutines(pub BTreeSet<crate::abilities::AbilityId>);
+
+/// Which research nodes the base has discovered — see
+/// `research::ResearchDef::discoverable` and `Game::settle_study`. A node in
+/// here is listed in the base tree and buyable; one that is `discoverable`
+/// and not in here is invisible.
+///
+/// **The extension point.** This is a set of ids and is innocent of study:
+/// a second discovery source — a Stack find, a contract reward, a schematic
+/// on a settlement's shelf — is a new caller of `Game::discover_research`,
+/// not a new field, a new gate or a save change. `DiscoveredRoutines` above
+/// is shaped this way already.
+///
+/// A `BTreeSet` for `KnownRoutines`' own reason: the save writes this set
+/// out, and a `HashSet`'s iteration order would make the encoded bytes
+/// differ run to run.
+#[derive(Resource, Default)]
+pub struct DiscoveredResearch(pub BTreeSet<crate::research::ResearchId>);
 
 /// How many lines the log holds before dropping its oldest.
 ///

@@ -1299,6 +1299,20 @@ pub struct SaveData {
     /// the encoded bytes must not depend on map iteration order.
     #[serde(default)]
     pub research_progress: Vec<(crate::research::ResearchId, u32)>,
+    /// Which research nodes the base has discovered — see
+    /// `resources::DiscoveredResearch`. Already sorted: the resource is a
+    /// `BTreeSet`, so the encoded bytes do not depend on iteration order.
+    /// `#[serde(default)]` so a save written before discovery existed loads
+    /// with nothing found, which is the new rule correctly applied rather
+    /// than a migration — the discoverable half of that run's tree hides
+    /// itself and is studied back out.
+    #[serde(default)]
+    pub discovered_research: Vec<crate::research::ResearchId>,
+    /// Research currency banked toward the next study attempt — see
+    /// `resources::ActiveResearch::study`. `#[serde(default)]` for
+    /// `discovered_research`'s reason.
+    #[serde(default)]
+    pub study_progress: u32,
     /// Which routines the player has learned — see `resources::KnownRoutines`.
     /// Sorted on write for the reason `researched` is: the encoded bytes must
     /// not depend on set iteration order.
@@ -1865,6 +1879,8 @@ mod tests {
             researched: Vec::new(),
             active_research: None,
             research_progress: Vec::new(),
+            discovered_research: Vec::new(),
+            study_progress: 0,
             known_routines: Vec::new(),
             known_tools: Vec::new(),
             emulation_images: Vec::new(),
@@ -2226,6 +2242,54 @@ mod tests {
             "an absent tools key must land the starter tool, or this save's \
              material income is gone for good"
         );
+    }
+
+    /// `discovered_research` and `study_progress` are additive behind
+    /// `#[serde(default)]`, so a save written before discovery shipped must
+    /// load with nothing found and nothing banked. For a run in progress
+    /// that means the discoverable half of its tree hides itself and is
+    /// studied back out, which is the new rule correctly applied rather
+    /// than a migration.
+    #[test]
+    fn a_save_written_before_discovery_loads_with_nothing_discovered() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_no_discovery_{}.bin",
+            std::process::id()
+        ));
+        // An empty list writes as a single `discovered_research: []` line,
+        // so the removal below can be line-anchored the way the tools
+        // migration beside it is — a populated list is written across
+        // several lines and cutting only its first would leave the rest
+        // behind as a parse error rather than an absent key.
+        let mut data = sample_data();
+        data.study_progress = 5;
+        save_to_file(&path, &data).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let older: String = text
+            .lines()
+            .filter(|line| {
+                let t = line.trim_start();
+                !t.starts_with("discovered_research:") && !t.starts_with("study_progress:")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // Line-anchored, for the reason the tools migration beside this one
+        // takes the same care: a bare `.contains` would be satisfied by a
+        // substring of some other field and pass for the wrong reason.
+        assert!(
+            older.lines().count() < text.lines().count(),
+            "both keys have to actually be gone for this to prove anything"
+        );
+        std::fs::write(&path, &older).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("a file written before discovery existed must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert!(loaded.discovered_research.is_empty());
+        assert_eq!(loaded.study_progress, 0);
     }
 
     /// The other half of the same default, proven in the same file rather

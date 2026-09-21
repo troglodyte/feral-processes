@@ -1,6 +1,6 @@
 # Honeypot traps
 
-**Status:** design approved, unimplemented.
+**Status:** implemented, 0.13.217.
 
 A placeable consumable that stands on the zone surface, blocks the player,
 and over game-time catches a non-boss program that could have spawned on

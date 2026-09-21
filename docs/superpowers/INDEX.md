@@ -334,6 +334,21 @@ comments is a change of its own, not something to do inside a deploy.
 | --- | --- | --- |
 | `2026-09-20-research-station-study-design` | The Research Node grows into a 2x2 Research Station, and a program pinned in its pen is the subject research is gated on | `StructureDef::footprint`/`studies`, `tactical::footprint_cells_at`, `structures::study_pen`, `ProgramRole::UnderStudy`, `components::UnderStudy`, `Game::pin_subject`/`unpin_subject`/`release_study_station`, `ResearchDef::requires_subject` (19 of 27 shipped nodes) and `unlocks_fusion` all resolve in `crates/engine`; `Mode::PinSubject` and the group-menu row in `crates/app-core`; the Station's floor and the pin mark in `crates/gui`; `assets/structures/research_node.ron` — grown in place, keeping its `research_node` id and filename while its `name:` became "Research Station", so a standing 1x1 Node in an old save is never refused retroactively; `dev-saves/study.ron`. A save change behind `#[serde(default)]` — the subject's station tether — with a real save/load test, not only a RON round trip. Fusion became a researched capability in the same change. Not yet played at the keyboard |
 
+## The spec archived on 2026-09-21, second landing
+
+Archived **on landing** like the one above, and with the same caveat one file
+over: nothing cites the spec's path, so it moved on its own, but
+`docs/superpowers/plans/2026-09-21-honeypot-traps.md` stays in `plans/`
+rather than being deleted — the two plans beside it from 2026-09-18 and
+2026-09-20 set that precedent, and clearing the directory is a change of its
+own. The seam arguments are in the memory graph as `seam:a-traps-quality-is-
+authored-on-the-item-def-never-rolled-per-copy` and its three siblings, which
+is where a reader should be sent.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-21-honeypot-traps-design` | A placeable consumable that stands on the zone surface and catches one non-boss program over game-time, held until collected by hand | `ItemDef::trap`/`items_db::TrapDef`, `components::Trap` with `TRAP_GLYPH_ARMED`/`SPRUNG`, `Game::is_placeable`/`place_trap`/`destroy_trap`/`find_trap_at`/`trap_count`/`run_traps`/`wild_body_level`, the fifth arm of `move_player`'s ladder and `save::TrapSave` in `crates/engine`; `Mode::TrapDirection`, the `[P]lace` row and the lifted `d` gate in `crates/app-core`; the draw arm in `crates/gui`; `assets/research/deception.ron`, `assets/structures/decoy_bench.ron`, `assets/items/honeypot.ron`. A save change behind `#[serde(default)]` with a real save-then-load test, not only a RON round trip. Two deviations the spec could not have known: the recipe is one ingredient because `every_shipped_assembler_recipe_is_a_single_ingredient` is content law, and Deception carries `requires_subject` because only the bootstrap five may be ungated. Not yet played at the keyboard |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

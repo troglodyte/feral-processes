@@ -42,6 +42,39 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.214
+
+Tooling only — nothing about a played game changes.
+
+### The suite presses keys nobody chose
+
+Every long test loop in the suite ticks inside one screen; nothing crossed
+between them, so an arm reached only by an odd order of keypresses was
+unreachable from all 6,242 tests. `soak::walk` drives a real `App` built from
+each `dev-saves/` template through a pseudo-random stream of every key a
+frontend can physically send, and asserts only that nothing panics. The
+alphabet is uniform over the whole printable keyboard rather than weighted
+towards keys the game binds, because an unlisted key is the one most likely
+to reach an unguarded index, and the walk is deliberately ignorant of which
+keys each mode reads — asking would be a second copy of `App::handle_key`'s
+dispatch. `key_sequence` is split from the walk so that a seed replays a
+failure on its own and a shorter walk is a prefix of a longer one.
+
+It found no panic: 250,000 keypresses across the ten templates, and 10,000
+in the suite itself at 1.3 seconds.
+
+What the walk is *not* doing is on the record with it. A purely uniform walk
+drowns in menus — returning to the map needs Esc at one key in 111, and a
+nested popup needs several in a row — so ten templates spent 200 keys each
+and advanced the world by 1 to 5 ticks between them, never reaching the
+mid-run state a template exists for. `ESCAPE_AFTER` makes one stuck step in
+twelve an Esc, which took them to 252 ticks across eight closing modes. Even
+so, at 25,000 keys per template only 0.24% of presses advance the world, and
+twenty-five times the keys bought 2.4 times the ticks: this is a fuzzer for
+screen dispatch, not for a played game, and the per-template figures are
+reported rather than asserted on because which template banks how many ticks
+moves with any content change.
+
 ## 0.13.213
 
 **Most of the research tree is hidden until your base finds it.** Twenty of

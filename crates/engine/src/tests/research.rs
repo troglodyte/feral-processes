@@ -729,6 +729,7 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
 
+    game.discover_research("weapon_bench");
     let err = game.select_research("weapon_bench").unwrap_err();
 
     assert!(
@@ -741,7 +742,8 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
 
 #[test]
 fn a_locked_node_reports_which_prerequisites_are_missing() {
-    let game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
     let node = game
         .research_nodes(ResearchTree::Base)
         .into_iter()
@@ -1082,8 +1084,9 @@ fn research_state(game: &Game, id: &str) -> ResearchState {
 
 #[test]
 fn a_node_above_the_players_zone_reports_its_zone() {
-    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     match research_state(&game, &gated.id) {
         ResearchState::Locked { min_zone, .. } => assert_eq!(
             min_zone,
@@ -1101,8 +1104,9 @@ fn a_node_above_the_players_zone_reports_its_zone() {
 /// learns the tier exists. The visible zone-3 band *is* the reason to breach.
 #[test]
 fn a_zone_gated_node_is_still_listed() {
-    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 3);
+    discover_all_research(&mut game);
     assert!(
         game.research_nodes(ResearchTree::Base)
             .iter()
@@ -1117,6 +1121,7 @@ fn a_zone_gated_node_is_still_listed() {
 fn select_research_refuses_a_node_above_the_players_zone() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     base_with_a_research_node(&mut game);
 
@@ -1134,6 +1139,7 @@ fn select_research_refuses_a_node_above_the_players_zone() {
 fn breaching_makes_a_zone_gated_node_available() {
     let mut game = Game::new(718, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     assert!(
         matches!(
@@ -1158,8 +1164,9 @@ fn breaching_makes_a_zone_gated_node_available() {
 
 #[test]
 fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
-    let game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let deep = cheapest_gated_node(&game, 3);
+    discover_all_research(&mut game);
     match research_state(&game, &deep.id) {
         ResearchState::Locked { missing, min_zone } => {
             assert!(
@@ -1184,6 +1191,7 @@ fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
 fn the_zone_gate_is_refused_before_the_machines() {
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
+    discover_all_research(&mut game);
     research_prereqs_of(&mut game, &gated.id);
     // Deliberately no Research Node: the zone must still be the reason, or a
     // player at zone 1 is sent to build machinery for a node they could not
@@ -1559,7 +1567,9 @@ fn a_research_node_reports_the_conversions_its_structures_perform() {
 
 #[test]
 fn a_research_node_reports_the_recipes_it_unlocks_with_their_quantities() {
-    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    discover_all_research(&mut game);
 
     let node = research_node(&game, "ablative");
 
@@ -1572,7 +1582,9 @@ fn a_research_node_reports_the_recipes_it_unlocks_with_their_quantities() {
 
 #[test]
 fn a_research_node_that_unlocks_no_conversion_reports_none() {
-    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    discover_all_research(&mut game);
 
     let node = research_node(&game, "paging");
 
@@ -1801,11 +1813,13 @@ fn a_save_written_before_projects_existed_loads_with_none() {
     let mut game = Game::new(739, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     unlock_research_chain(&mut game, "automation");
-    game.select_research("routine_fabrication").unwrap();
+    // A bootstrap node, so this test stays about the save keys rather than
+    // needing a pinned subject the moment a node it named gained the gate.
+    game.select_research("power_grid").unwrap();
     game.world
         .resource_mut::<crate::resources::ActiveResearch>()
         .progress
-        .insert("routine_fabrication".to_string(), 4);
+        .insert("power_grid".to_string(), 4);
 
     let dir = std::env::temp_dir().join(format!("feral_research_pre_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -1840,7 +1854,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
     let _ = std::fs::remove_dir_all(&dir);
 
     assert_eq!(active_research(&loaded), None);
-    assert_eq!(research_progress(&loaded, "routine_fabrication"), 0);
+    assert_eq!(research_progress(&loaded, "power_grid"), 0);
     assert!(
         loaded.is_researched("automation"),
         "and what the run already researched is untouched"
@@ -1990,7 +2004,8 @@ fn a_project_still_earning_is_not_stalled() {
 /// lists themselves.
 #[test]
 fn a_research_node_reports_everything_it_hands_over() {
-    let game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
 
     assert_eq!(
         research_node(&game, "weapon_bench").unlocks.as_deref(),
@@ -2110,6 +2125,7 @@ fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
         .research_block(&def)
         .expect("nobody is pinned yet, so the gate must be live");
 
+    game.discover_research("paging");
     let err = game.select_research("paging").unwrap_err();
 
     assert_eq!(
@@ -2131,6 +2147,7 @@ fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
 
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("a subject standing in the pen must clear the gate");
 
@@ -2158,6 +2175,7 @@ fn an_earning_subject_gated_project_strains_its_subject() {
     // Pinned, nothing selected: held, not worked.
     assert_eq!(at_pen(&game), PinMark::Settled);
 
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("a subject standing in the pen clears the gate");
 
@@ -2189,6 +2207,7 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
     let half = 4;
     let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
 
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     assert_eq!(at_pen(&game), PinMark::Strained);
 
@@ -2283,6 +2302,7 @@ fn a_second_stations_subject_stays_settled_while_the_first_strains() {
     pin_subject_at_pen(&mut game, a, first);
     pin_subject_at_pen(&mut game, b, second);
 
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
 
     assert_eq!(
@@ -2301,10 +2321,9 @@ fn a_second_stations_subject_stays_settled_while_the_first_strains() {
     assert_eq!(mark(second_pen), PinMark::Settled);
 }
 
-/// The eight nodes with no `min_zone` gate — what gets a base running —
-/// stay selectable with nobody pinned. Looped rather than named one at a
-/// time, so a mod or a retune that grows the ungated set is covered for
-/// free.
+/// The five bootstrap nodes — what gets a base running — stay selectable
+/// with nobody pinned. Looped rather than named one at a time, so a mod or a
+/// retune that grows the ungated set is covered for free.
 #[test]
 fn every_ungated_node_is_selectable_with_nobody_pinned() {
     let ungated: Vec<String> = {
@@ -2337,9 +2356,9 @@ fn every_ungated_node_is_selectable_with_nobody_pinned() {
     }
 }
 
-/// Every node with `min_zone >= 2` is refused without a subject, and the
-/// same pin makes it reachable — the census that `decision 13`'s 19/8 split
-/// actually behaves as the refusal test above shows for one node.
+/// Every subject-gated node is refused without a subject, and the same pin
+/// makes it reachable — the census that the 24/5 split actually behaves as
+/// the refusal test above shows for one node.
 #[test]
 fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
     let gated: Vec<String> = {
@@ -2357,6 +2376,7 @@ fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
     );
     for id in gated {
         let mut game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        discover_all_research(&mut game);
         base_with_a_research_node(&mut game);
         research_prereqs_of(&mut game, &id);
         let def = game
@@ -2392,6 +2412,7 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
 
     let err = game
@@ -2428,6 +2449,7 @@ fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does(
     let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
+    discover_all_research(&mut game);
 
     let def = game
         .world
@@ -2462,7 +2484,7 @@ fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does(
     );
 }
 
-/// The eight ungated nodes must still show no block line from the screen
+/// The ungated nodes must still show no block line from the screen
 /// with nobody pinned — companion census to the test above, so a subject
 /// term applied unconditionally would be caught here.
 #[test]
@@ -2543,6 +2565,7 @@ fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging")
         .expect("the pinned subject clears the gate");
 
@@ -2624,6 +2647,7 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -2659,6 +2683,7 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -2714,6 +2739,7 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
         .expect("some shipped ability is wild-poolable");
     game.world.get_mut::<Routines>(program).unwrap().0 = vec![prize.clone()];
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     shelve_research_bill(&mut game, "paging", 8, 8);
     fill_research_progress(&mut game, "paging");
@@ -2755,6 +2781,7 @@ fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
     let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
@@ -2799,5 +2826,523 @@ fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
         node_output(&game, shelf, ids::BYTECODE_BLOCK),
         stocked,
         "the materials must be intact too"
+    );
+}
+
+/// A RON round-trip alone is not enough: `#[serde(skip)]` on a new field
+/// leaves that test green while the field never reaches disk. This goes
+/// through the real `Game::save`/`Game::load` pair.
+#[test]
+fn a_save_round_trips_what_the_base_has_discovered_and_banked() {
+    let mut game = Game::new(4420, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<crate::resources::DiscoveredResearch>()
+        .0
+        .insert("paging".to_string());
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = 3;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_research_discovery_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .contains("paging"),
+        "a discovery is permanent and must survive a reload"
+    );
+    assert_eq!(
+        loaded
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        3,
+        "a part-banked study attempt must survive a reload"
+    );
+}
+
+/// The one door: one id written, one base line, one notification — and a
+/// second call on the same node is inert, which is what lets any caller fire
+/// it without first asking whether the node is already known.
+#[test]
+fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
+    let mut game = Game::new(4430, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let name = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .expect("paging ships")
+        .name
+        .clone();
+    while game.take_notification().is_some() {}
+
+    assert!(game.discover_research("paging"), "a fresh node is news");
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["paging".to_string()],
+        "exactly one id, and only the one asked for"
+    );
+    let said: Vec<String> = game
+        .message_history(500)
+        .iter()
+        .filter(|l| l.text.contains("uncovers"))
+        .map(|l| l.text.clone())
+        .collect();
+    assert_eq!(said, vec![format!("The study uncovers {name}.")]);
+    assert_eq!(game.notifications_pending(), 1);
+
+    // Inert the second time: no second id, no second line, no second popup.
+    while game.take_notification().is_some() {}
+    assert!(!game.discover_research("paging"), "already found");
+    assert_eq!(game.notifications_pending(), 0);
+    assert_eq!(
+        game.message_history(500)
+            .iter()
+            .filter(|l| l.text.contains("uncovers"))
+            .count(),
+        1
+    );
+
+    // An id nothing defines is refused rather than written — a save editor's
+    // typo must not mint a node the tree has never heard of.
+    assert!(!game.discover_research("not_a_node"));
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .len(),
+        1
+    );
+}
+
+/// A discoverable node is off **both** surfaces until it is found, and on
+/// both after. One predicate feeds `listed_research`, and `research_nodes`
+/// and `research_graph` are both built from it, so the menu and the flow
+/// chart cannot disagree about what exists.
+#[test]
+fn a_discoverable_node_is_absent_from_both_research_surfaces_until_discovered() {
+    let mut game = Game::new(4440, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let listed = |g: &Game| {
+        g.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == "paging")
+    };
+    let drawn = |g: &Game| {
+        g.research_graph(ResearchTree::Base)
+            .cell("paging")
+            .is_some()
+    };
+
+    assert!(!listed(&game), "an undiscovered node is not a menu row");
+    assert!(!drawn(&game), "and not a box on the chart either");
+
+    game.discover_research("paging");
+
+    assert!(listed(&game));
+    assert!(drawn(&game));
+}
+
+/// Leaving a node off the menu is not enough: an id typed into a save editor
+/// or a stale UI row must be refused too — and refused **before anything is
+/// written**, `commit_caravan_basket`'s rule.
+#[test]
+fn select_research_refuses_an_undiscovered_node_before_anything_is_written() {
+    let mut game = Game::new(4441, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let station = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, station);
+
+    let err = game.select_research("paging").unwrap_err();
+
+    assert_eq!(
+        err, "Unknown research.",
+        "a hidden node must not be told apart from one that does not exist"
+    );
+    assert_eq!(active_research(&game), None, "and no project is started");
+    assert!(game.work_orders().is_empty(), "and no bill is filed");
+
+    // The reachability half: discovering it makes the identical call succeed,
+    // so the refusal cannot ship permanent.
+    game.discover_research("paging");
+    game.select_research("paging")
+        .expect("a discovered node is an ordinary node");
+}
+
+/// The regression gate on the visible spine. A node that is not
+/// `discoverable` is listed and selectable exactly as it was — including the
+/// two that cost a subject and stay visible on purpose.
+#[test]
+fn a_node_that_is_not_discoverable_is_untouched_by_the_hiding_rule() {
+    let mut game = Game::new(4442, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let ids: Vec<String> = game
+        .research_nodes(ResearchTree::Base)
+        .iter()
+        .map(|n| n.id.clone())
+        .collect();
+    for id in [
+        "automation",
+        "power_grid",
+        "commerce",
+        "teardown",
+        "fortification",
+        "routine_fabrication",
+        "program_refactoring",
+    ] {
+        assert!(ids.contains(&id.to_string()), "{id} must stay visible");
+    }
+
+    game.select_research("automation")
+        .expect("the visible spine is bought exactly as before");
+}
+
+/// "Researched means known" reaches across this gate too: a node already
+/// bought is never hidden by a later change to what gates it — a save from
+/// before this feature, or a `.ron` edit that adds `discoverable` to
+/// something the player already owns.
+#[test]
+fn an_already_researched_node_stays_listed_even_when_it_is_discoverable() {
+    let mut game = Game::new(4443, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "armor_bench");
+    assert!(
+        game.world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .is_empty(),
+        "the fixture is vacuous if the chain discovered it on the way"
+    );
+
+    assert!(
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == "armor_bench"),
+        "a node you already own cannot become invisible"
+    );
+}
+
+/// One payout lands in exactly one place, and the branch is `id.is_none()`
+/// — never both, asserted on the same payout.
+#[test]
+fn a_research_payout_feeds_the_study_or_the_project_and_never_both() {
+    let mut game = Game::new(4450, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    game.set_standing_job(node, true, false).unwrap();
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    let banked = game
+        .world
+        .resource::<crate::resources::ActiveResearch>()
+        .study;
+    assert!(
+        banked > 0,
+        "an idle Station's cycles must bank toward a study attempt, not land nowhere"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .progress
+            .is_empty(),
+        "with nothing selected, nothing may reach a project's progress"
+    );
+
+    game.select_research("automation").unwrap();
+    let before = game
+        .world
+        .resource::<crate::resources::ActiveResearch>()
+        .study;
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        before,
+        "with a project selected the study banks nothing — one or the other"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .progress
+            .values()
+            .sum::<u32>()
+            > 0,
+        "and the project is the one that moves"
+    );
+}
+
+/// The gate is `id.is_none()` and **not** `landed == 0`. A project sitting
+/// at its cost also lands nothing and will settle next tick; feeding the
+/// study from it would make "study or advance" a lie for one tick an
+/// attentive player could farm.
+#[test]
+fn a_project_sitting_at_its_cost_banks_nothing_toward_a_study() {
+    let mut game = Game::new(4451, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get("cold_archive")
+        .expect("a deep, expensive node nothing in this fixture will finish")
+        .cost;
+    game.discover_research("cold_archive");
+    {
+        let mut research = game
+            .world
+            .resource_mut::<crate::resources::ActiveResearch>();
+        research.id = Some("cold_archive".to_string());
+        research.progress.insert("cold_archive".to_string(), cost);
+    }
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "a full project lands nothing and must bank nothing"
+    );
+    assert_eq!(
+        active_research(&game).as_deref(),
+        Some("cold_archive"),
+        "the fixture is vacuous if the project completed on its own"
+    );
+}
+
+/// **Three early returns hold the bar; only a real attempt spends it.** A
+/// full bar with an empty pen, or with nothing left to find, is banked and
+/// fires the instant the condition clears — which is what makes a discovery
+/// legible as a consequence of the player's action rather than of a timer
+/// they cannot see. A spend-on-hold is the bug that makes it feel arbitrary.
+#[test]
+fn a_study_attempt_is_held_until_a_subject_and_a_pool_are_both_there() {
+    let mut game = Game::new(4460, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let full = crate::tuning::STUDY_ATTEMPT_DATA;
+
+    // Held: a full bar, an empty pen.
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = full;
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        full,
+        "nothing is pinned, so the attempt waits rather than being spent"
+    );
+
+    // Held: a subject, but nothing eligible to find. Zone 1 with nothing
+    // researched is exactly that state — every discoverable node either
+    // waits on `automation` or is gated at `min_zone >= 2`.
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    assert!(
+        !game.is_researched("automation"),
+        "the fixture is vacuous if the pool is already open"
+    );
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        full,
+        "nothing to find, so the attempt waits"
+    );
+
+    // Spent: both conditions clear.
+    unlock_research_chain(&mut game, "automation");
+    game.settle_study();
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "with a subject and a pool, the attempt is spent whether or not it hits"
+    );
+}
+
+/// The pool is the whole of what may be found: a prereq-unsatisfied node and
+/// a zone-gated one are never picked, over enough forced attempts that the
+/// absence means something. A discovery is therefore always immediately
+/// researchable.
+#[test]
+fn a_study_never_discovers_outside_the_eligible_pool() {
+    let mut game = Game::new(4461, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    unlock_research_chain(&mut game, "automation");
+    set_zone(&mut game, 1);
+
+    for _ in 0..500 {
+        game.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .study = crate::tuning::STUDY_ATTEMPT_DATA;
+        game.settle_study();
+    }
+
+    let found: Vec<String> = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    assert!(
+        !found.is_empty(),
+        "500 forced attempts must find something, or this test proves nothing"
+    );
+    for id in &found {
+        let def = game.world.resource::<ResearchDb>().get(id).unwrap().clone();
+        assert!(
+            def.min_zone <= 1,
+            "{id} is gated above zone 1 and must not have been found here"
+        );
+        for req in &def.requires {
+            assert!(
+                game.is_researched(req),
+                "{id} was found with {req} unresearched"
+            );
+        }
+    }
+}
+
+/// `settle_study` draws **no** `GameRng` on a tick where no attempt is made
+/// — the arena's own rule, so a base that is not studying cannot shift the
+/// seeded stream out from under everything else in the run.
+#[test]
+fn settle_study_draws_no_rng_when_no_attempt_is_made() {
+    let mut game = Game::new(4462, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "no bar, so no attempt"
+    );
+
+    fn peek(g: &mut Game) -> u64 {
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    reseed_rng(&mut game, 55);
+    let without = peek(&mut game);
+
+    reseed_rng(&mut game, 55);
+    game.settle_study();
+    let with = peek(&mut game);
+
+    assert_eq!(
+        without, with,
+        "an idle study must not touch the shared GameRng stream"
+    );
+}
+
+/// The miss line: an attempt that is spent and finds nothing says so, and
+/// says it as base news. `resources::condense` already folds repeats on all
+/// three log surfaces, so this needs no rate limit of its own.
+#[test]
+fn a_failed_study_attempt_says_so() {
+    let mut game = Game::new(4463, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    unlock_research_chain(&mut game, "automation");
+
+    for _ in 0..200 {
+        game.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .study = crate::tuning::STUDY_ATTEMPT_DATA;
+        game.settle_study();
+    }
+
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|l| l.text.contains("The study turns up nothing.")),
+        "200 attempts against a sub-1.0 chance must miss at least once, and a miss is news"
+    );
+}
+
+/// **The feature, end to end, through nothing but ticks.** Every test above
+/// reaches into `ActiveResearch::study` or calls `settle_study` directly;
+/// this one posts a program, pins a subject and waits, so a seam left
+/// unjoined — the accrual not wired, `settle_study` not called from the tick
+/// — fails here and nowhere else.
+#[test]
+fn an_idle_station_with_a_subject_pinned_uncovers_a_node_on_its_own() {
+    let mut game = Game::new(4470, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    unlock_research_chain(&mut game, "automation");
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    game.set_standing_job(node, true, false).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, subject, node);
+    assert_eq!(
+        active_research(&game),
+        None,
+        "the Station studies, not works"
+    );
+
+    for _ in 0..4000 {
+        game.tick();
+    }
+
+    let found: Vec<String> = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    assert_eq!(
+        found,
+        vec!["armor_bench".to_string()],
+        "zone 1 with only automation researched has exactly one eligible node"
+    );
+    for id in &found {
+        assert!(
+            game.research_nodes(ResearchTree::Base)
+                .iter()
+                .any(|n| &n.id == id),
+            "{id} was found and must arrive on the menu"
+        );
+    }
+    assert!(
+        game.world.get::<Stats>(subject).is_some(),
+        "discovery is free — the subject survives every attempt"
     );
 }

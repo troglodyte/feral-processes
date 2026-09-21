@@ -30,6 +30,22 @@ impl Game {
             .collect()
     }
 
+    /// Every research node the catalogue holds, **unfiltered by discovery**
+    /// — `structure_defs`' shape and its reason: a renderer needs the shipped
+    /// content to measure itself against, and `Game::research_nodes` answers
+    /// the narrower question of what the player may see right now.
+    ///
+    /// The gui's layout censuses read this: measured through
+    /// `research_nodes` they would shrink to the seven visible nodes the
+    /// moment discovery shipped, and pass vacuously on the twenty widest.
+    pub fn research_defs(&self) -> Vec<crate::research::ResearchDef> {
+        self.world
+            .resource::<crate::research::ResearchDb>()
+            .all()
+            .cloned()
+            .collect()
+    }
+
     /// Every loaded finish, id-sorted (`FloorDb::iter`'s own order) — the
     /// brush cycle's and the sprite editor's shared read of the catalogue.
     pub fn floor_defs(&self) -> Vec<crate::floors::FloorDef> {

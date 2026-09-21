@@ -2064,6 +2064,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     // Prereqs are checked ahead of the zone gate, so the Grid has to be in
     // hand for the refusal under test to be the zone rather than the tree.
     unlock_research_chain(&mut game, "power_grid");
+    game.discover_research("cache_coherence");
     let too_early = game
         .select_research("cache_coherence")
         .expect_err("and Cache Coherence waits on the breach");
@@ -4885,6 +4886,7 @@ fn destroying_a_research_station_releases_its_subject_and_abandons_the_project()
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(node)
@@ -4924,6 +4926,7 @@ fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project(
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
     game.select_research("paging").unwrap();
 
     game.remove_structure(node).unwrap();

@@ -5,5 +5,7 @@
     cost: 24,
     materials: [("bytecode_block", 12), ("charge_coil", 4)],
     requires: ["automation"],
+    requires_subject: true,
+    discoverable: true,
     unlocks_structures: ["armory"],
 )

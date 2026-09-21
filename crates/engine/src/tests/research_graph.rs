@@ -5,9 +5,12 @@ use crate::*;
 use std::collections::BTreeMap;
 
 fn graph(seed: u32) -> ResearchGraph {
-    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir())
-        .unwrap()
-        .research_graph(ResearchTree::Base)
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Every shipped node, not only the visible ones: this file is a census of
+    // the tree's *shape*, and `research_graph` narrows to what has been
+    // discovered.
+    discover_all_research(&mut game);
+    game.research_graph(ResearchTree::Base)
 }
 
 /// The shipped tree's shape, so a content change that reshapes it is a
@@ -84,7 +87,8 @@ fn every_edge_points_strictly_rightward() {
 /// One edge per `requires` entry, both ends naming a loaded node.
 #[test]
 fn the_edge_list_is_every_requires_entry_and_nothing_else() {
-    let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
     let g = game.research_graph(ResearchTree::Base);
     let ids: Vec<&str> = g.cells.iter().map(|c| c.id.as_str()).collect();
     for (from, to) in &g.edges {
@@ -145,6 +149,7 @@ fn the_layout_is_deterministic_across_calls_and_across_games() {
 #[test]
 fn researching_a_node_does_not_move_the_layout() {
     let mut game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
     let before = game.research_graph(ResearchTree::Base);
     let taken = game
         .research_nodes(ResearchTree::Base)

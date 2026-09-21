@@ -477,10 +477,11 @@ pub(crate) fn resolve_gather_cycle(
 /// The research currency is checked **ahead of** the banked branch, because it
 /// is the narrower question: the research currency *is* banked, so the other
 /// order sends every unit of it to a bank nothing spends and the project never
-/// moves. With no project selected it lands nowhere and returns 0 — the same
-/// "landed nothing" figure a full `Stock` answers with, and silent by design:
-/// the node reads `Idle` in every case but a hand-posted `StandingJob`, which
-/// is the player's own instruction.
+/// moves. With no project selected it banks toward a study attempt instead —
+/// `ActiveResearch::study`, spent by `Game::settle_study` — and still returns
+/// 0, the same "landed nothing" figure a full `Stock` answers with, and
+/// silent by design: the node reads `Idle` in every case but a hand-posted
+/// `StandingJob`, which is the player's own instruction.
 pub(crate) fn deliver_payout(
     resource: &ItemId,
     payout: u32,
@@ -491,6 +492,19 @@ pub(crate) fn deliver_payout(
     research_defs: &crate::research::ResearchDb,
 ) -> u32 {
     if items.research_currency() == Some(resource) {
+        // **`id.is_none()`, not `landed == 0`.** They are different states: a
+        // project sitting *at* its cost also lands nothing and will settle
+        // next tick, and feeding the study from it would make "study or
+        // advance" a lie for one tick an attentive player could farm.
+        //
+        // Returning `0` is what keeps `cycle_line` silent, exactly as it is
+        // today — the study speaks for itself through `Game::settle_study`
+        // rather than through a cycle line reading "extracted 0 Research
+        // Data".
+        if research.id.is_none() {
+            research.credit_study(payout, crate::tuning::STUDY_ATTEMPT_DATA);
+            return 0;
+        }
         let cap = research
             .id
             .as_ref()

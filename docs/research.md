@@ -7,20 +7,31 @@ Every shipped research node in feral-processes, charted from its own file in
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Research Data is the currency, and it comes from one place: a Research Station
+Research Data is the currency, and it comes from one place: a Research Node
 structure worked by an assigned tamed program, the same way a Mining Node
 produces Core Fragments. So the whole tree below is priced in *base uptime* —
 it is the one progression track you cannot fight your way along.
 
 **The base works one node at a time.** Picking a node makes it the run's active
-project: every deployed Research Station staffs itself and feeds its Research Data
-into that node and no other, and with nothing picked they stand idle. The
+project: every deployed Research Node staffs itself and feeds its Research Data
+into that node and no other, and with nothing picked they *study* instead. The
 `cost` column below is what a project has to accumulate, not a price paid at
 selection — nothing is spent when you pick one. The `materials` bill is filed as
 high-priority work orders at the same moment, and paid off the base's own
 shelves once the progress is in; a bill naming something nothing standing in the
 base could make refuses the pick outright. Abandoning keeps the progress
 earned.
+
+**Most of the tree is hidden until the base finds it.** Every node below that
+costs a subject, bar Routine Fabrication and Program Refactoring, is marked
+`discoverable` in its own file: it is off the menu and off the flow chart
+until a study uncovers it. A Research Station with a program posted on it and
+no project selected banks its output into study attempts, and an attempt made
+with a tamed program pinned in the Station's pen rolls over every node that is
+still undiscovered, has its prerequisites researched and is inside the zone you
+have reached — so anything you find, you can research straight away. The five
+that get a base running (Automation, Power Grid, Isometric Commerce, Teardown,
+Fortification) are visible from turn one, as are the two benches above.
 
 | | |
 |---|---|
@@ -47,7 +58,7 @@ ever opening a portal.
 | zone 3 | 5 | 635 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Model Inspection |
 
 The gate and the tap compound without either knowing about the other.
-`Game::upgrade_ceiling` caps a Research Station at Mk1 in zone 1, Mk2 in zone 2,
+`Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
 Mk3 in zone 3 — and its cycle succeeds 50% of the time at Mk1 against 90% at
 Mk5. So the band you can buy earliest is also the band you earn slowest, and
 each breach speeds the bank up at the same moment it releases more to spend

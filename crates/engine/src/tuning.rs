@@ -5347,6 +5347,54 @@ pub fn routine_research_cost(scope_rank: u8, version: (u32, u32), zone: u32) -> 
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Research: discovery by study
+// ─────────────────────────────────────────────────────────────────────────
+//
+// See `Game::settle_study`. A Research Station with no project selected
+// banks its payout into study attempts instead of landing it nowhere; each
+// full bar with a subject pinned is one roll over the eligible undiscovered
+// pool.
+//
+// **Priced against the Station, not fitted against `balance_sim`**, which
+// models no base production at all. The arithmetic, at the worst rung the
+// feature is ever played at — a tier-1 Station in zone 1, staffed by a
+// program at the baseline aptitude with no memories:
+//
+//   cycle length   `research_node.ron`'s `ticks_per_unit: 14`, unscaled by
+//                  tier (`systems::work_ticks_at_speed` scales on speed and
+//                  build quality, not tier)
+//   yield rate     `systems::mining_success_chance(level 1, …)` = 0.5
+//   payout         `systems::node_payout(tier 1, zone 1)` = 1
+//   ⇒ ~1 Research Data per 28 ticks, and the world runs at
+//     `app_core::WORLD_SPEED_MULTIPLIER` = 2 ticks a second: **14s per unit**
+//
+// So one attempt is ~56 s of an idle Station, and a discovery is ~2.7
+// minutes of them — "a handful of minutes at the keyboard, not an hour." By
+// mid-run (tier 3, zone 2) the payout is 4 a cycle and the same discovery is
+// ~40 s, which is the right shape: the Station you invested in uncovers the
+// tree faster.
+//
+// The second anchor is the tree's own prices. `automation` costs 8 Research
+// Data and `armor_bench` 24, so an attempt is half the cheapest node and a
+// sixth of a bench — **finding a node is cheaper than researching it**, or
+// discovery would read as a second research cost rather than as a prelude.
+//
+// **This is the one number in the feature that only play can confirm**, and
+// nothing here can be played by an agent. What the above is blind to: how
+// often a player actually leaves a Station idle, and whether twenty
+// discoveries spread across ten sectors feels like uncovering a tree or like
+// waiting for one.
+
+/// Research Data banked per study attempt — `ActiveResearch::study`'s cap,
+/// and the bar `Game::settle_study` spends. See the section note above.
+pub const STUDY_ATTEMPT_DATA: u32 = 4;
+
+/// The roll a spent study attempt makes. A miss logs and costs the attempt;
+/// there is no pity counter, because the bar itself is already the pacing.
+/// See the section note above.
+pub const STUDY_DISCOVERY_CHANCE: f64 = 0.35;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Player emulation
 // ─────────────────────────────────────────────────────────────────────────
 //

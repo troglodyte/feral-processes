@@ -191,6 +191,15 @@ pub enum NotificationKind {
     /// derived from live defs, and `None` for a node that opens nothing —
     /// which a hole in the body could only fill with a blank paragraph.
     ResearchComplete,
+    /// A study attempt has uncovered a research node — `Game::settle_study`,
+    /// through `Game::discover_research`.
+    ///
+    /// **`Always`**: a run has up to twenty discoveries and each is news.
+    /// Templated off the node's own `name` and `description`, so there is no
+    /// second copy of that prose to drift — the achievement seam's argument.
+    /// No `detail`: what the node *unlocks* is what finishing it buys, and
+    /// quoting it here would read as the node already being researched.
+    ResearchDiscovered,
 }
 
 /// One notification's authored copy.
@@ -223,7 +232,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 17] {
+    pub fn all() -> [NotificationKind; 18] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -242,6 +251,7 @@ impl NotificationKind {
             NotificationKind::SettlementGrown,
             NotificationKind::LevelCapReached,
             NotificationKind::ResearchComplete,
+            NotificationKind::ResearchDiscovered,
         ]
     }
 
@@ -457,6 +467,17 @@ impl NotificationKind {
                 color: GlyphColor::Cyan,
                 repeat: Repeat::Always,
             },
+            NotificationKind::ResearchDiscovered => NotificationDef {
+                title: "Research Discovered",
+                body: "{name}\n\n{description}",
+                sprite: None,
+                // `ResearchComplete`'s glyph and hue: the same machine did
+                // the work, and the two halves of one node's story should
+                // not look like two different systems.
+                glyph: 'R',
+                color: GlyphColor::Cyan,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -494,6 +515,10 @@ impl NotificationKind {
             NotificationKind::SettlementGrown => "milestone_settlement_grown",
             NotificationKind::LevelCapReached => "milestone_level_cap",
             NotificationKind::ResearchComplete => "milestone_research_complete",
+            // `Always`, so nothing is ever latched under this — but the
+            // match is exhaustive and the string is a file format from here
+            // on all the same.
+            NotificationKind::ResearchDiscovered => "milestone_research_discovered",
         }
     }
 }

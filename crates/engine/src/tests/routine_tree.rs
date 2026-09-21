@@ -5,7 +5,8 @@ use crate::research::ResearchTree;
 use crate::routine_tree::{family, gets_node, routine_prereq, scope_rank, version};
 use crate::species::SpeciesDb;
 use crate::tests::support::{
-    base_with_a_research_node, set_zone, stand_in_base, test_assets_dir, unlock_research_chain,
+    base_with_a_research_node, discover_all_research, set_zone, stand_in_base, test_assets_dir,
+    unlock_research_chain,
 };
 use crate::views::{GraphDir, ResearchState};
 use crate::{DifficultyMode, Game};
@@ -951,7 +952,8 @@ fn active_research_progress_is_unfiltered_by_tree_and_shows_on_the_other_screen(
 
 #[test]
 fn the_base_trees_output_is_unchanged_apart_from_the_deleted_nodes() {
-    let game = Game::new(9139, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(9139, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
     let rows = game.research_nodes(ResearchTree::Base);
     assert!(!rows.is_empty());
     assert!(

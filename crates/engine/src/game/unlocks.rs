@@ -425,10 +425,33 @@ impl Game {
     /// hides even an already-known rung
     /// (`the_closed_tree_lists_nothing_even_when_a_rung_is_known`). Once
     /// open, a node is listed when `routine_node_reachable` says so.
+    /// Whether a **base** node is visible at all — `listed_research`'s Base
+    /// filter and `select_research`'s refusal, so the menu, the flow chart
+    /// and the door cannot disagree about what exists.
+    ///
+    /// `node_researched` is in there for the routine tree's own
+    /// "researched means known" rule: a node already bought is never hidden
+    /// by a later change to what gates it — a save from before this feature,
+    /// or a `.ron` edit that adds `discoverable` to something the player
+    /// already owns.
+    pub(crate) fn base_node_visible(&self, def: &ResearchDef) -> bool {
+        !def.discoverable
+            || self.node_researched(def)
+            || self
+                .world
+                .resource::<crate::resources::DiscoveredResearch>()
+                .0
+                .contains(&def.id)
+    }
+
     fn listed_research(&self, tree: ResearchTree) -> Vec<&ResearchDef> {
         let db = self.world.resource::<ResearchDb>();
         if tree == ResearchTree::Base {
-            return db.all().filter(|d| d.tree == ResearchTree::Base).collect();
+            return db
+                .all()
+                .filter(|d| d.tree == ResearchTree::Base)
+                .filter(|d| self.base_node_visible(d))
+                .collect();
         }
         let tree_open = self.routine_tree_open();
         db.all()
@@ -913,6 +936,15 @@ impl Game {
                 return Err("Unknown research.".to_string());
             }
         }
+        // A hidden base node is refused for the routine tree's exact reason,
+        // one rung down: leaving it off the menu is not enough, because an id
+        // typed into a save editor — or a stale UI row — could otherwise buy
+        // something the player was never shown. The sentence is the routine
+        // tree's own, because telling the player a node exists is precisely
+        // what a hidden node must not do.
+        if def.tree == ResearchTree::Base && !self.base_node_visible(&def) {
+            return Err("Unknown research.".to_string());
+        }
         if self.is_researched(id) {
             return Err(format!("{} is already researched.", def.name));
         }
@@ -1101,6 +1133,117 @@ impl Game {
     /// subject — or its materials — on one that is still half-researched,
     /// `a_full_bill_alone_does_not_complete_a_project`'s failure with a worse
     /// loss, since a program is not refundable the way a shelf material is.
+    /// **The one door a discovery is written through** — `Game::remember`'s
+    /// rule. `Game::settle_study` is its only caller today; a second
+    /// discovery source is a second caller of this and nothing else.
+    ///
+    /// Reports whether this was news. Idempotent by construction: a node
+    /// already in the set writes nothing, says nothing and pops nothing, so
+    /// no caller needs a check of its own — and an id nothing defines is
+    /// refused before the set is touched, since a name the tree never heard
+    /// of would sit there forever gating nothing.
+    ///
+    /// No `detail`: `Game::research_unlocks` is what *finishing* the node
+    /// buys, and quoting it on the discovery would read as the node already
+    /// being researched.
+    pub fn discover_research(&mut self, id: &str) -> bool {
+        let Some(def) = self.world.resource::<ResearchDb>().get(id).cloned() else {
+            return false;
+        };
+        if !self
+            .world
+            .resource_mut::<crate::resources::DiscoveredResearch>()
+            .0
+            .insert(def.id.clone())
+        {
+            return false;
+        }
+        // `log_base`, matching selection, abandonment and completion: a
+        // discovery is base news and can land while the party is four frames
+        // down the Stack. A plain `log()` is `MessageKind::Info`, which
+        // `retain_outcomes_since_battle` prunes.
+        self.log_base(format!("The study uncovers {}.", def.name));
+        self.notify_filled(
+            crate::notifications::NotificationKind::ResearchDiscovered,
+            &[("name", &def.name), ("description", &def.description)],
+            None,
+        );
+        true
+    }
+
+    /// Every node a study may find right now: a **base** node that is
+    /// `discoverable`, not already discovered, not already researched, has
+    /// every prerequisite satisfied and is inside the zone the party has
+    /// reached.
+    ///
+    /// **A discovery is therefore always immediately researchable** — the
+    /// node arrives on the menu available rather than locked, which is what
+    /// makes finding one feel like a reward instead of a promissory note.
+    ///
+    /// Draws no RNG and is its own function, so a second discovery source in
+    /// future filters this pool or narrows it rather than restating the
+    /// rule. `ResearchDb::all` is ordered (cheapest first, ties by id), so
+    /// the pool a seeded run indexes into is stable.
+    fn eligible_discoveries(&self) -> Vec<ResearchId> {
+        let db = self.world.resource::<ResearchDb>();
+        let discovered = &self
+            .world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0;
+        db.all()
+            .filter(|d| d.tree == ResearchTree::Base)
+            .filter(|d| d.discoverable)
+            .filter(|d| !discovered.contains(&d.id))
+            .filter(|d| !self.node_researched(d))
+            .filter(|d| d.requires.iter().all(|r| self.prereq_satisfied(r)))
+            .filter(|d| self.research_zone_gate(d).is_none())
+            .map(|d| d.id.clone())
+            .collect()
+    }
+
+    /// One study attempt, if the base has banked one and can spend it.
+    ///
+    /// A `Game` method for `run_repair_bays`' own reason: it draws
+    /// `GameRng`, names the node, logs through `log_base` and raises a
+    /// notification, none of which a bevy system can reach.
+    ///
+    /// **The three early returns hold the bar rather than spending it.** A
+    /// full bar with an empty pen, or with nothing left to find, is banked
+    /// and fires the instant the condition clears. That is what makes a
+    /// discovery legible as a consequence of the player's action rather than
+    /// of a timer they cannot see — and it is why the accrual in
+    /// `systems::deliver_payout` needs no notion of a subject at all.
+    pub(crate) fn settle_study(&mut self) {
+        if self.world.resource::<ActiveResearch>().study < crate::tuning::STUDY_ATTEMPT_DATA {
+            return;
+        }
+        if self.pinned_subject().is_none() {
+            return;
+        }
+        let pool = self.eligible_discoveries();
+        if pool.is_empty() {
+            return;
+        }
+        // Past every hold: the attempt is spent whether or not it lands.
+        self.world.resource_mut::<ActiveResearch>().study = 0;
+        let hit = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(crate::tuning::STUDY_DISCOVERY_CHANCE)
+        };
+        if !hit {
+            // Repeats, and `resources::condense` already folds repeats on
+            // all three log surfaces — no rate limit of its own.
+            self.log_base("The study turns up nothing.");
+            return;
+        }
+        // One draw, over an order `ResearchDb::all` documents as stable.
+        let id = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            pool[rng.0.random_range(0..pool.len())].clone()
+        };
+        self.discover_research(&id);
+    }
+
     pub(crate) fn settle_research(&mut self) {
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;

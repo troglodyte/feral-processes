@@ -42,6 +42,19 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.211
+
+**A program pinned for study is drawn again, and keeps its own glyph.** It had
+been disappearing from the map the moment you selected it — the whole walk to
+the Research Station and once standing in the pen — so the four red brackets
+that mark a subject sat on bare floor and read as though they had replaced the
+program. They are a mark on top of the glyph, not a substitute for it.
+
+**And those brackets now appear only once the subject has settled into the
+pen**, rather than the instant you pick one. A program on its way over is
+simply one of your programs walking somewhere; it is under study when it
+arrives, which is also the moment its project can proceed.
+
 ## 0.13.210
 
 **Your programs stop loitering inside the Research Station.** An idle program

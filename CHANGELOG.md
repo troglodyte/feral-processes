@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.210
+
+**Your programs stop loitering inside the Research Station.** An idle program
+could wander into the Station's pen and sit there, and pinning a subject then
+refused with "Something is already standing in the pen" while the Station's own
+examine line still read Idle, nobody assigned — two true sentences that could
+not be reconciled from the outside. A program may now walk across a building's
+own floor but not stop on it, so the pen stays clear for the subject. A program
+already parked on one steps off by itself, so a base that had got into this
+state comes right without anything being rebuilt.
+
 ## 0.13.209
 
 **Research now spends a program.** Every node from sector 2 up refuses to

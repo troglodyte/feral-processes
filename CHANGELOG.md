@@ -42,6 +42,20 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.212
+
+**A program pinned in a Research Station now jitters while its project is
+actually running.** A settled subject wore four red brackets and then sat
+perfectly still, which read the same whether the base was working on it or
+merely holding it. It rattles in place now — the body alone, inside brackets
+that stay put — so the pen says at a glance that something is being done to
+the program standing in it.
+
+**It goes still the moment the work does.** Only the one program the running
+project is actually spending jitters, so a project that needs no subject, a
+project parked waiting on a material it cannot pay for, and a second Station's
+subject all leave their programs standing quietly.
+
 ## 0.13.211
 
 **A program pinned for study is drawn again, and keeps its own glyph.** It had

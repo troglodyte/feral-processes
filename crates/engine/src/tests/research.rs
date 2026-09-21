@@ -3034,3 +3034,103 @@ fn an_already_researched_node_stays_listed_even_when_it_is_discoverable() {
         "a node you already own cannot become invisible"
     );
 }
+
+/// One payout lands in exactly one place, and the branch is `id.is_none()`
+/// — never both, asserted on the same payout.
+#[test]
+fn a_research_payout_feeds_the_study_or_the_project_and_never_both() {
+    let mut game = Game::new(4450, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    game.set_standing_job(node, true, false).unwrap();
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    let banked = game
+        .world
+        .resource::<crate::resources::ActiveResearch>()
+        .study;
+    assert!(
+        banked > 0,
+        "an idle Station's cycles must bank toward a study attempt, not land nowhere"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .progress
+            .is_empty(),
+        "with nothing selected, nothing may reach a project's progress"
+    );
+
+    game.select_research("automation").unwrap();
+    let before = game
+        .world
+        .resource::<crate::resources::ActiveResearch>()
+        .study;
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        before,
+        "with a project selected the study banks nothing — one or the other"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .progress
+            .values()
+            .sum::<u32>()
+            > 0,
+        "and the project is the one that moves"
+    );
+}
+
+/// The gate is `id.is_none()` and **not** `landed == 0`. A project sitting
+/// at its cost also lands nothing and will settle next tick; feeding the
+/// study from it would make "study or advance" a lie for one tick an
+/// attentive player could farm.
+#[test]
+fn a_project_sitting_at_its_cost_banks_nothing_toward_a_study() {
+    let mut game = Game::new(4451, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get("cold_archive")
+        .expect("a deep, expensive node nothing in this fixture will finish")
+        .cost;
+    game.discover_research("cold_archive");
+    {
+        let mut research = game
+            .world
+            .resource_mut::<crate::resources::ActiveResearch>();
+        research.id = Some("cold_archive".to_string());
+        research.progress.insert("cold_archive".to_string(), cost);
+    }
+
+    for _ in 0..400 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        0,
+        "a full project lands nothing and must bank nothing"
+    );
+    assert_eq!(
+        active_research(&game).as_deref(),
+        Some("cold_archive"),
+        "the fixture is vacuous if the project completed on its own"
+    );
+}

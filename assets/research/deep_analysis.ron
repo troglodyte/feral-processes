@@ -6,6 +6,7 @@
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,
     requires_subject: true,
+    discoverable: true,
     requires: ["routine_fabrication"],
     unlocks_tools: ["core_tap", "harness_puller"],
 )

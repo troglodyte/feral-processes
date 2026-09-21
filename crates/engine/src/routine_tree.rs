@@ -208,6 +208,9 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 teaches: Some(def.id.clone()),
                 opens_routine_tree: false,
                 requires_subject: false,
+                // A synthesised routine node is never hidden: the routine
+                // tree has its own gate in `opens_routine_tree`.
+                discoverable: false,
                 unlocks_fusion: false,
             }
         })

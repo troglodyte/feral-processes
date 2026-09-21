@@ -6,6 +6,7 @@
     materials: [("power_cell", 10), ("cache_grain", 8)],
     min_zone: 2,
     requires_subject: true,
+    discoverable: true,
     requires: ["cache_coherence"],
     unlocks_recipes: [
         (

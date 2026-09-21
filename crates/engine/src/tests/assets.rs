@@ -5111,3 +5111,106 @@ fn deleting_the_fork_routines_leaves_the_game_as_it_was() {
     assert!(db.get("fork_cluster").is_none());
     assert!(db.all().count() > 0, "every other routine is still there");
 }
+
+/// **The census.** `discoverable` is `#[serde(default)]`, so a shipped tree
+/// that authors it nowhere is *invisible* rather than wrong — every node
+/// lists, every test stays green, and the feature has silently not shipped.
+/// This repo has already been bitten by exactly that.
+///
+/// `routine_fabrication` and `program_refactoring` are named on the other
+/// side deliberately: they carry `requires_subject` like the twenty, and
+/// leaving them visible is what keeps the routine tree and companion fusion
+/// arriving when they do today rather than behind a dice roll.
+#[test]
+fn exactly_the_twenty_named_research_nodes_are_discoverable() {
+    let game = Game::new(4118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut found: Vec<&str> = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .all()
+        .filter(|d| d.discoverable)
+        .map(|d| d.id.as_str())
+        .collect();
+    found.sort();
+    assert_eq!(
+        found,
+        vec![
+            "ablative",
+            "armor_bench",
+            "cache_coherence",
+            "capacitance",
+            "charge_density",
+            "cold_archive",
+            "cortex",
+            "deep_analysis",
+            "dispatch",
+            "firewall",
+            "memory_mapping",
+            "model_inspection",
+            "monofilament",
+            "neural_amp",
+            "overclock",
+            "paging",
+            "segmentation",
+            "shard_mapping",
+            "virtual_memory",
+            "weapon_bench",
+        ],
+        "the discoverable set is a content decision and nothing in ResearchDef states it"
+    );
+    for id in ["routine_fabrication", "program_refactoring"] {
+        let def = game
+            .world
+            .resource::<crate::research::ResearchDb>()
+            .get(id)
+            .expect("both ship");
+        assert!(
+            def.requires_subject && !def.discoverable,
+            "{id} costs a subject and must still be visible from turn one"
+        );
+    }
+}
+
+/// **A discoverable node must be reachable.** A node whose `requires`
+/// closure bottoms out in something that can itself never be discovered is
+/// a dead branch, and it ships silent: the menu simply never grows it.
+///
+/// Walked to a fixed point rather than recursively, so a cycle in the tree
+/// terminates here instead of blowing the stack — `ResearchDb::load_dir`
+/// does not reject one.
+#[test]
+fn every_discoverable_research_node_is_reachable_from_the_visible_tree() {
+    let game = Game::new(4119, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::research::ResearchDb>();
+    // Seed: everything visible from turn one is reachable by definition.
+    let mut reachable: std::collections::HashSet<&str> = db
+        .all()
+        .filter(|d| !d.discoverable)
+        .map(|d| d.id.as_str())
+        .collect();
+    loop {
+        let grown: Vec<&str> = db
+            .all()
+            .filter(|d| !reachable.contains(d.id.as_str()))
+            .filter(|d| d.requires.iter().all(|r| reachable.contains(r.as_str())))
+            .map(|d| d.id.as_str())
+            .collect();
+        if grown.is_empty() {
+            break;
+        }
+        reachable.extend(grown);
+    }
+    let stranded: Vec<&str> = db
+        .all()
+        .filter(|d| d.discoverable && !reachable.contains(d.id.as_str()))
+        .map(|d| d.id.as_str())
+        .collect();
+    assert!(
+        stranded.is_empty(),
+        "these nodes can never enter the eligible pool, so they can never be found: {stranded:?}"
+    );
+    assert!(
+        db.all().any(|d| d.discoverable),
+        "the fixture is vacuous against a tree with nothing discoverable"
+    );
+}

@@ -6,6 +6,7 @@
     materials: [("power_cell", 24), ("bytecode_block", 12)],
     min_zone: 3,
     requires_subject: true,
+    discoverable: true,
     requires: ["charge_density"],
     unlocks_recipes: [
         (

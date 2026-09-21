@@ -6,6 +6,7 @@
     materials: [("cache_grain", 26), ("bytecode_block", 40)],
     min_zone: 5,
     requires_subject: true,
+    discoverable: true,
     requires: ["virtual_memory"],
     unlocks_structures: ["depot_mk5"],
 )

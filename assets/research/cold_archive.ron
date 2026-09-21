@@ -6,6 +6,7 @@
     materials: [("cache_grain", 45), ("charge_coil", 40)],
     min_zone: 6,
     requires_subject: true,
+    discoverable: true,
     requires: ["shard_mapping"],
     unlocks_structures: ["depot_mk6"],
 )

@@ -10,5 +10,6 @@
     // to see coming.
     requires: ["routine_fabrication"],
     requires_subject: true,
+    discoverable: true,
     unlocks_structures: ["fabricator"],
 )

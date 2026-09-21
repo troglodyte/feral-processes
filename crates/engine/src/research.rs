@@ -119,6 +119,23 @@ pub struct ResearchDef {
     /// its own economy rather than gaining a second gate.
     #[serde(default)]
     pub requires_subject: bool,
+    /// Hidden from the base tree until the base has discovered it — see
+    /// `resources::DiscoveredResearch` and `Game::settle_study`. A Research
+    /// Station with no project selected banks its payout into study
+    /// attempts, and an attempt with a subject pinned rolls over the
+    /// eligible undiscovered pool.
+    ///
+    /// **Its own field, not `requires_subject` doing double duty.** *Does
+    /// buying this cost a program?* and *is this hidden until found?* are
+    /// different questions; one flag answering both makes a node that costs
+    /// a subject but should be visible from turn one — `routine_fabrication`
+    /// is exactly that — unrepresentable.
+    ///
+    /// `#[serde(default)]` is load-bearing in the usual direction and in one
+    /// more: the default is `false`, so a mod's tree cannot hide itself by
+    /// the field arriving.
+    #[serde(default)]
+    pub discoverable: bool,
     /// Marks the node that unlocks fusing two tamed programs together —
     /// set on `program_refactoring.ron`. Until a loaded node carrying this
     /// is researched, `Game::fuse_companions` refuses. `opens_routine_tree`'s

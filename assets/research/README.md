@@ -120,6 +120,29 @@ Core Fragments.
     // tree has its own economy already.
     requires_subject: true,
 
+    // Optional; defaults to false. Hides the node from the base research
+    // tree until the base has *found* it. A Research Station with a program
+    // posted on it and no project selected studies instead of extracting:
+    // each full bar is one attempt, and an attempt with a tamed program
+    // pinned in the pen rolls over every node that is discoverable, still
+    // undiscovered, has its prerequisites researched and is inside the zone
+    // you have reached. A hit announces itself and the node joins the menu,
+    // where it is then researched exactly as any other — `requires_subject`
+    // included.
+    //
+    // Independent of `requires_subject` on purpose. That one says buying
+    // this costs a program; this one says the node is hidden until found. A
+    // node may be either, both or neither. The twenty shipped nodes that set
+    // this are every `requires_subject` node except `routine_fabrication`
+    // and `program_refactoring`, which stay visible so the routine tree and
+    // fusion keep arriving when they do today.
+    //
+    // A node whose `requires` closure can never be satisfied from the
+    // visible tree can never be found — the census
+    // `every_discoverable_research_node_is_reachable_from_the_visible_tree`
+    // fails the build on one.
+    discoverable: true,
+
     // Optional; defaults to false. Set this on the one node that should
     // unlock fusing two tamed programs together (the shipped tree sets it
     // on `program_refactoring`). Until a loaded node carrying it is
@@ -196,6 +219,10 @@ more.
   its product's own `craftable.cost` and is already covered by that recipe.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
+- **A discoverable node must be reachable from the visible tree.** Its
+  prerequisites must bottom out in nodes that are visible from turn one or
+  are themselves discoverable and reachable. A node behind a prerequisite
+  nothing can ever discover is a dead branch that ships silent.
 - Nodes are listed cheapest first, ties broken by id, so the menu numbering
   is stable across sessions.
 

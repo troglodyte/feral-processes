@@ -304,6 +304,44 @@ impl Game {
         Ok(())
     }
 
+    /// Whether `(x, y)` is a *non-anchor* footprint cell of a standing
+    /// `studies` structure — one of the three walkable floor cells a
+    /// Research Station draws with its own fill, never the anchor, which
+    /// draws the structure's own glyph. **The renderer's only way to
+    /// ask** — `view_finishes_at`'s precedent, so gui holds no copy of the
+    /// footprint geometry.
+    pub fn view_station_floor_at(&mut self, x: i32, y: i32) -> bool {
+        let mut query = self.world.query::<(&Position, &Structure)>();
+        let rows: Vec<(Position, StructureId)> = query
+            .iter(&self.world)
+            .map(|(p, s)| (*p, s.kind.clone()))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        rows.into_iter().any(|(p, kind)| {
+            let Some(def) = db.get(&kind) else {
+                return false;
+            };
+            if !def.studies {
+                return false;
+            }
+            let anchor = (p.x, p.y);
+            anchor != (x, y)
+                && crate::tactical::footprint_cells_at(anchor, def.footprint).contains(&(x, y))
+        })
+    }
+
+    /// Whether a body under study stands at `(x, y)` — the pin mark's own
+    /// question. Reads `components::UnderStudy` bodies directly rather than
+    /// re-deriving a pen: arrival is derived off a body's own `Position`
+    /// (`components::UnderStudy`'s doc), so this is the same read in the
+    /// other direction. **The renderer's only way to ask.**
+    pub fn view_pinned_at(&mut self, x: i32, y: i32) -> bool {
+        let mut query = self.world.query::<(&Position, &components::UnderStudy)>();
+        query
+            .iter(&self.world)
+            .any(|(pos, _)| (pos.x, pos.y) == (x, y))
+    }
+
     /// Both structure-destruction doors call this: a demolished or
     /// destroyed `studies` structure releases its subject back to
     /// `ProgramRole::Staff` and abandons whatever project is active —

@@ -4917,3 +4917,60 @@ fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project(
         "the abandoned project's material orders must leave the queue"
     );
 }
+
+/// `Game::view_station_floor_at` is the renderer's only way to ask which
+/// cells a Research Station's own floor fill belongs on — every non-anchor
+/// footprint cell, and never the anchor itself, which draws the structure's
+/// own glyph and tile.
+#[test]
+fn view_station_floor_at_is_every_non_anchor_footprint_cell() {
+    let (mut game, station) = base_with_station(4601100);
+    let anchor = *game.world.get::<Position>(station).unwrap();
+
+    assert!(
+        !game.view_station_floor_at(anchor.x, anchor.y),
+        "the anchor draws the structure's own tile, not the floor fill"
+    );
+    for (dx, dy) in [(1, 0), (0, 1), (1, 1)] {
+        assert!(
+            game.view_station_floor_at(anchor.x + dx, anchor.y + dy),
+            "({}, {}) is a non-anchor footprint cell of a 2x2 Station",
+            anchor.x + dx,
+            anchor.y + dy
+        );
+    }
+    assert!(
+        !game.view_station_floor_at(anchor.x + 5, anchor.y + 5),
+        "a cell well outside the footprint must not draw the fill"
+    );
+}
+
+/// A legacy 1x1 Research Node's own anchor never takes the floor fill — the
+/// non-anchor exclusion alone is what this test pins, through a structure
+/// bare-spawned the way an old save's Node would be restored.
+#[test]
+fn view_station_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
+    let mut game = Game::new(4601101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let node = spawn_structure_at(&mut game, "research_node", 5, 5);
+    let anchor = *game.world.get::<Position>(node).unwrap();
+    assert!(!game.view_station_floor_at(anchor.x, anchor.y));
+}
+
+/// `Game::view_pinned_at` is the pin mark's own question — does a body
+/// under study stand at this cell — read directly off `UnderStudy` bodies
+/// rather than re-deriving a pen.
+#[test]
+fn view_pinned_at_answers_for_the_bodys_own_position() {
+    let (mut game, station) = base_with_station(4601102);
+    let program = spawn_tamed(&mut game, 10, 3);
+    let pen = game.study_pen(station).unwrap();
+
+    assert!(!game.view_pinned_at(pen.0, pen.1));
+
+    pin_subject_at_pen(&mut game, program, station);
+
+    assert!(game.view_pinned_at(pen.0, pen.1));
+    assert!(!game.view_pinned_at(pen.0 + 3, pen.1 + 3));
+}

@@ -30,6 +30,18 @@ const BUILD_SITE_FILL: Color = Color::new(0.30, 0.30, 0.32, 1.0);
 const BUILD_SITE_EDGE: Color = Color::new(0.16, 0.16, 0.18, 1.0);
 const BUILD_SITE_EDGE_PX: f32 = 2.0;
 
+/// A Research Station's own three walkable floor cells — dark yellow/brown,
+/// and outside `hud::palette` for `BUILD_SITE_FILL`'s own reason: the
+/// palette is addressed by role and has no word for "a lab's own floor".
+///
+/// **Drawn with no biome pattern and no outline.** `marks::outline_open`
+/// already owns the tile-edge ring, drawing a machine's walls as 2px lines
+/// flush at the tile's edges, and the existing corner marks carry insets
+/// specifically so nothing reads as painting one of those absent lines back
+/// in — keeping this fill flat and unringed is what leaves the ring
+/// available for the pin brackets (`marks::pin_bracket_rects`) instead.
+const STATION_FLOOR_FILL: Color = Color::new(0.30, 0.23, 0.09, 1.0);
+
 /// The Excavation plan's three washes, all one hue so a plan reads as one
 /// thing. A committed mark's fill is dim enough to walk over without the
 /// base becoming unreadable and its edge carries the shape; the box being
@@ -861,6 +873,23 @@ fn draw_surface_map(
                 }
                 draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig, cloud);
             }
+            // A Research Station's own floor — one of its three non-anchor
+            // footprint cells — takes a flat fill over whatever biome was
+            // just drawn underneath. Checked only in base space:
+            // `Game::view_station_floor_at` reads base-space `Position`s, so
+            // asking it on the zone surface would draw a lab floor over
+            // ground these coordinates happen to share only by numeric
+            // accident — the same cross-space aliasing `show_effects` and
+            // `cutting` already refuse.
+            if base_pos.is_some() && game.view_station_floor_at(world.0, world.1) {
+                painter.rect(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    at_level(STATION_FLOOR_FILL, vig),
+                );
+            }
             // A structure the crew has not raised yet: a flat dark slab with
             // a darker edge, drawn over the ground and under everything that
             // stands on it.
@@ -1132,6 +1161,16 @@ fn draw_surface_map(
             draw_difficulty_mark(painter, earmark, px, py, tile_px, vig);
             if marker {
                 draw_unseen_marker(painter, px, py, glyph_px, vig);
+            }
+            // A body under study wears four red L-brackets on the tile-edge
+            // ring — `marks::draw_pin_brackets`'s own doc has the geometry.
+            // Base-space only, `view_station_floor_at`'s own reason above.
+            // **`marker` gates the top-left corner here too**, extending
+            // this same "the Alt marker borrows the top-left corner" rule
+            // rather than inventing a second arbitration between the two —
+            // see `corner_marker`'s doc.
+            if base_pos.is_some() && game.view_pinned_at(world.0, world.1) {
+                draw_pin_brackets(painter, px, py, tile_px, marker, vig);
             }
             // A nemesis draws a mark on top of its glyph — belt and braces,
             // since a nemesis is worth noticing even at a glance that only
@@ -1475,8 +1514,8 @@ mod tests {
     use super::*;
     use crate::paint::SpriteTable;
     use crate::paint::{
-        painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
-        painted_text_boxes, with_painter, with_sprites,
+        painted_images, painted_line_count, painted_rect_fill_count, painted_rect_stroke_count,
+        painted_text, painted_text_boxes, with_painter, with_sprites,
     };
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
@@ -5159,6 +5198,278 @@ mod tests {
                  tile cannot tell them apart"
             );
         }
+    }
+    /// A base with a founded Home and a standing Research Station — footprint
+    /// `2`, `studies: true` per `assets/structures/research_node.ron` — with
+    /// nobody pinned to it yet.
+    ///
+    /// `Game::place_structure` would file a build *request* for anything but
+    /// Home rather than raising it (`Game::spawn_structure`'s doc), so the
+    /// Station is written straight into the save the way
+    /// `test_support::app_in_base_with_a_compiler` stands its Compiler up:
+    /// `place_structure` would spend a tamed program this fixture has no need
+    /// to own, and the engine exposes no cheaper way to stand a structure up
+    /// from outside its own crate.
+    fn game_with_a_research_station(seed: u32, anchor: (i32, i32)) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+
+        let path = crate::render::test_support::scratch_path("research_station", seed);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        data.structures
+            .push(feral_processes_engine::save::StructureSave {
+                kind: "research_node".to_string(),
+                position: anchor,
+                durability: None,
+                tier: None,
+                stock_input: Vec::new(),
+                stock_output: Vec::new(),
+                standing_work: false,
+                standing_guard: false,
+                denied_items: Vec::new(),
+                power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+                build_quality: 1.0,
+                racked: Vec::new(),
+                hopper: Vec::new(),
+                hopper_progress: 0,
+                standing_tool: None,
+            });
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        Game::load(&path, &test_assets()).unwrap()
+    }
+
+    /// Whether a painted fill is `STATION_FLOOR_FILL`, up to the vignette's
+    /// own scaling and `Color32`'s rounding — a hue-only match rather than an
+    /// exact one, since exactly which tile the camera happens to centre on
+    /// moves `vig` by a fraction of a percent. `BUILD_SITE_FILL`'s grey and
+    /// `Biome::Platform`'s dark navy both sit far enough from this hue that
+    /// the tolerance cannot mistake either for it.
+    fn is_station_floor_fill(c: bevy_egui::egui::Color32) -> bool {
+        let close = |ch: u8, target: f32| ((ch as f32) - target * 255.0).abs() < 12.0;
+        c.a() == 255
+            && close(c.r(), STATION_FLOOR_FILL.r)
+            && close(c.g(), STATION_FLOOR_FILL.g)
+            && close(c.b(), STATION_FLOOR_FILL.b)
+    }
+
+    /// The three non-anchor footprint cells of a standing Research Station
+    /// take `STATION_FLOOR_FILL`; the anchor — which draws the structure's
+    /// own tile and glyph — never does. A plain Home (footprint 1,
+    /// `studies: false`) draws no floor cell at all, the ordinary case the
+    /// render path can reach; the genuinely legacy case (a bare-spawned 1x1
+    /// Research Node predating this task) has no door in from outside the
+    /// engine crate and is pinned at the engine level instead, in
+    /// `tests/building.rs::view_station_floor_at_excludes_a_bare_spawned_
+    /// nodes_own_anchor`.
+    #[test]
+    fn a_research_stations_floor_takes_the_fill_and_its_anchor_does_not() {
+        let anchor = (3, 0);
+        let mut game = game_with_a_research_station(560_100, anchor);
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, with_station) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                anchor,
+                false,
+            );
+        });
+        let floor_fills = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
+            painted_fills_and_strokes(shapes)
+                .0
+                .into_iter()
+                .filter(|c| is_station_floor_fill(*c))
+                .count()
+        };
+        assert_eq!(
+            floor_fills(&with_station),
+            3,
+            "exactly the three non-anchor footprint cells take the floor fill"
+        );
+
+        let mut bare = Game::new(560_101, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        bare.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        bare.enter_base().expect("the party steps inside");
+        let mut fx2 = Fx::new();
+        let (_, without_station) = with_painter(|p| {
+            let status = bare.player_status();
+            draw_surface_map(
+                &mut bare,
+                &mut fx2,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+                false,
+            );
+        });
+        assert_eq!(
+            floor_fills(&without_station),
+            0,
+            "a structure with no `studies` footprint draws no floor cells at all"
+        );
+    }
+
+    /// **`draw_pin_brackets`' own `hide_top_left` parameter**, unit-tested
+    /// directly the way `nothing_draws_a_con_mark_without_a_con_read` tests
+    /// `draw_difficulty_mark` — a body under study is by definition owned,
+    /// and `EntityView::unseen_routine`'s doc says that reads `false` for
+    /// anything the player owns, so `marker` and `view_pinned_at` can never
+    /// both be true on any tile real play reaches. What this pins is the
+    /// drawing primitive's own contract, which the corner-marker rule at the
+    /// `draw_surface_map` call site depends on holding.
+    #[test]
+    fn the_top_left_pin_bracket_yields_to_the_alt_marker() {
+        let (_, hidden) = with_painter(|p| {
+            draw_pin_brackets(p, 0.0, 0.0, CELL, true, 1.0);
+        });
+        let (_, shown) = with_painter(|p| {
+            draw_pin_brackets(p, 0.0, 0.0, CELL, false, 1.0);
+        });
+        assert_eq!(
+            painted_line_count(&hidden),
+            6,
+            "three corners drawn, two strokes each, with the top-left suppressed"
+        );
+        assert_eq!(
+            painted_line_count(&shown),
+            8,
+            "all four corners draw when nothing borrows the top-left"
+        );
+    }
+
+    /// **The corner census — a proof, not a suppression.** A body under
+    /// study can wear none of the four corner marks a tile can carry: the
+    /// con earmark (`ConRead::of` answers `None` for anything that is not
+    /// hostile), the nemesis mark and the patrol mark (both wild-only), and
+    /// the staffed mark (`wears_job_mark` is about a posted program, and
+    /// `UnderStudy` is not `Staff`). All four are unreachable today for this
+    /// reason alone — this test fails loudly the day a con read starts
+    /// applying to an owned program, which is exactly when this ring needs
+    /// re-examining.
+    #[test]
+    fn a_program_under_study_wears_none_of_the_four_corner_marks() {
+        let anchor = (3, 0);
+        let mut game = game_with_a_research_station(560_102, anchor);
+        let pen = (anchor.0 + 1, anchor.1 + 1);
+
+        let species = game.species_defs()[0].id.clone();
+        let path = crate::render::test_support::scratch_path("under_study_census", 560_102);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        data.creatures
+            .push(feral_processes_engine::save::CreatureSave {
+                sortie_index: None,
+                boss: false,
+                species,
+                position: pen,
+                hp: 10,
+                max_hp: 10,
+                atk: 3,
+                mitigation: 2,
+                tamed: true,
+                power: 100.0,
+                level: 1,
+                xp: 0,
+                xp_to_next: 10,
+                cronjob: None,
+                party_slot: None,
+                wielded: false,
+                zone: 1,
+                custom_name: Some("Census Subject".to_string()),
+                hp_roll: 1.0,
+                atk_roll: 1.0,
+                def_roll: 1.0,
+                growth_roll: 1.0,
+                assembly_roll: 1.0,
+                extraction_roll: 1.0,
+                fusions: 0,
+                refactors: 0,
+                purchased_tiers: 0,
+                ring: 0,
+                talents: Vec::new(),
+                bought_stats: Default::default(),
+                routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+                field_buffs: Vec::new(),
+                nest_position: None,
+                patrol_position: None,
+                study_station: None,
+                pursuing: false,
+                carrying: None,
+                carrying_program: None,
+                rarity: Default::default(),
+                nemesis_grudges: 0,
+                equipment: Vec::new(),
+                program_id: 0,
+                disposition: None,
+                disgruntled: None,
+                disgruntled_stranded: false,
+                memories: Vec::new(),
+                needs: Default::default(),
+                off_shift: None,
+                staff: false,
+                downed: false,
+            });
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        let mut game = Game::load(&path, &test_assets()).unwrap();
+
+        let station = game
+            .view_entities_at(anchor, 4, 4)
+            .into_iter()
+            .find(|e| e.is_structure && e.pos == anchor)
+            .expect("the Station stands at its anchor")
+            .entity;
+        let staff = game.base_staff();
+        assert_eq!(
+            staff.len(),
+            1,
+            "the census subject is the base's only staff"
+        );
+        let program = staff[0];
+
+        game.pin_subject(program, station)
+            .expect("a Staff program standing on its own pen must be pinnable");
+        assert_eq!(
+            game.program_role(program),
+            Some(feral_processes_engine::ProgramRole::UnderStudy),
+            "pinning must actually land the fifth role, or this census proves nothing"
+        );
+
+        let view = game
+            .view_entities_at(pen, 4, 4)
+            .into_iter()
+            .find(|e| e.entity == program)
+            .expect("the pinned program is still where it was standing");
+
+        assert_eq!(
+            view.difficulty, None,
+            "a con read must not reach an owned program"
+        );
+        assert!(!view.nemesis, "a nemesis mark is wild-only");
+        assert_eq!(view.patrol, None, "a patrol mark is wild-only");
+        assert!(
+            !view.wears_job_mark,
+            "the staffed mark is about a posted program, and UnderStudy is not Staff"
+        );
     }
 }
 

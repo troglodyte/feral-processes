@@ -43,20 +43,14 @@ impl Game {
     /// none stands — `assembler_system`'s sorting rule, so `research_block`'s
     /// gate and `settle_research`'s "which subject is spent" read the same
     /// station and cannot resolve two Stations differently between runs.
+    /// `pub` rather than `pub(crate)`: the base menu's row and
+    /// `Mode::PinSubject`'s picker both live in app-core, not this crate.
     ///
     /// `&self`, like `producers_of` beside it: `research_block` is read from
     /// the screen as well as from `select_research`, so this walks
     /// `World::iter_entities` rather than taking the `&mut self` a bevy
     /// query needs.
     pub fn study_station(&self) -> Option<Entity> {
-        self.first_study_station()
-    }
-
-    /// `study_station`'s own implementation — kept private so the sort rule
-    /// stays in one place; `study_station` is its public name for callers
-    /// outside the engine crate (the base menu's row and `Mode::PinSubject`'s
-    /// picker) that have no business naming a "first" anything themselves.
-    fn first_study_station(&self) -> Option<Entity> {
         let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
@@ -72,16 +66,14 @@ impl Game {
         found.first().map(|(_, _, e)| *e)
     }
 
-    /// The program standing in the pen of `first_study_station`'s chosen
-    /// station — `None` when no `studies` structure stands, or when its pen
-    /// is empty. **The one door**: `research_block`'s gate,
-    /// `settle_research`'s "which subject is spent" and `Mode::PinSubject`'s
-    /// own choice of what to draw all call this rather than each re-deriving
-    /// a station and a corner, so they cannot read the base's one active
-    /// subject differently. `pub` rather than `pub(crate)` since the screen
-    /// that reaches it lives in app-core, not this crate.
+    /// The program standing in the pen of `study_station`'s chosen station —
+    /// `None` when no `studies` structure stands, or when its pen is empty.
+    /// **The one door**: `research_block`'s gate, `settle_research`'s "which
+    /// subject is spent" and `Mode::PinSubject`'s own choice of what to draw
+    /// all call this rather than each re-deriving a station and a corner, so
+    /// they cannot read the base's one active subject differently.
     pub fn pinned_subject(&self) -> Option<Entity> {
-        let station = self.first_study_station()?;
+        let station = self.study_station()?;
         let pen = self.study_pen(station)?;
         self.world.iter_entities().find_map(|e| {
             let under_study = e.get::<components::UnderStudy>()?;
@@ -343,7 +335,7 @@ impl Game {
     /// cloned `Vec<(Position, StructureId)>` built inside `draw_surface_map`'s
     /// per-tile loop, ~2,500 `QueryState` constructions and ~1,250
     /// allocations a frame at a typical pane's tile count. `&self` and
-    /// `iter_entities()` rather than a query, `first_study_station`'s own
+    /// `iter_entities()` rather than a query, `study_station`'s own
     /// reason: no `QueryState` to construct or repeat.
     pub fn view_station_floor_at(
         &self,

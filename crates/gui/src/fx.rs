@@ -148,6 +148,29 @@ const STAFFED_BOB_PHASE_STEP: f64 = 0.15;
 /// How many distinct phases marks are spread across before repeating.
 const PHASE_KEYS: u64 = 64;
 
+/// What share of the room it has a subject under study rattles within, how
+/// often it re-sites, and how far out of step two subjects are.
+///
+/// **A share and not a pixel count.** The ink already sits inside a margin —
+/// `(tile_px - glyph_px) / 2`, which is 2px at zoom 1 and grows with every
+/// step of the ladder — and that margin is exactly the room the rattle has
+/// before it reaches the brackets on the tile-edge ring. Spending a fraction
+/// of it makes the bound structural at every zoom, where a fixed `2.0` was
+/// both flush against the brackets at zoom 1 and invisible at zoom 4.
+///
+/// **Sample-and-hold, and that is the whole of the rattle.** The offset is
+/// held flat for a step and then snaps somewhere else, which is what reads as
+/// strain rather than as a body swaying. Nothing eases between steps: an ease
+/// at this rate is a wobble, and a wobble reads as comfortable.
+///
+/// `STRAIN_STEP_HZ` is the one number that decides whether this is a rattle
+/// or television static. Fast enough and every frame gets its own offset,
+/// which is the failure mode `cloud_shade` records; ~14 Hz holds each
+/// position for several frames at any rate the game runs at.
+const STRAIN_JITTER_SHARE: f32 = 0.75;
+const STRAIN_STEP_HZ: f64 = 14.0;
+const STRAIN_PHASE_STEP: f64 = 0.37;
+
 /// How slowly a stranded machine's mark blinks, and how far down it dims.
 ///
 /// The floor is deliberately not zero. A mark that vanished outright would,
@@ -406,6 +429,32 @@ fn staffed_bob_offset(time: f64, phase_key: u64) -> f32 {
     // no more out of step than a small one.
     let turns = time * STAFFED_BOB_HZ + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
     STAFFED_BOB_PX * (1.0 - (turns * std::f64::consts::TAU).cos()) as f32 / 2.0
+}
+
+/// Where a subject under study sits this instant, as an offset off the middle
+/// of its tile — **held flat for a step, then snapped somewhere else**.
+///
+/// The held value is an incommensurate sine sum sampled at the step boundary,
+/// `cloud_shade`'s argument in one dimension: a hash per step would do the
+/// same job, but the frequencies here have no common period, so a player who
+/// sits and watches a pinned program never sees the rattle come round. The
+/// two axes are summed from different frequencies so the body does not travel
+/// along a diagonal, which is what a shared signal scaled twice would read as.
+///
+/// Phase-keyed by the body for `staffed_bob_offset`'s reason, and wrapped the
+/// same way: two subjects in two Stations rattle out of step, so the pens read
+/// as two programs under strain rather than as one animation drawn twice.
+fn strain_offset(time: f64, phase_key: u64) -> (f32, f32) {
+    // The step's own instant, not the frame's — everything below is a
+    // function of this, so the offset is constant for the whole step.
+    let t = (time * STRAIN_STEP_HZ).floor() / STRAIN_STEP_HZ;
+    let phase = (phase_key % PHASE_KEYS) as f64 * STRAIN_PHASE_STEP;
+    let tau = std::f64::consts::TAU;
+    let x = 0.6 * (tau * (t * 1.00 + phase)).sin() + 0.4 * (tau * (t * 2.37 + phase)).sin();
+    let y = 0.6 * (tau * (t * 1.43 - phase)).sin() + 0.4 * (tau * (t * 3.11 - phase)).sin();
+    // The two amplitudes sum to one, so this is -1..1 on both axes by
+    // construction and `strain_jitter`'s margin is the only scale.
+    (x as f32, y as f32)
 }
 
 /// Alpha for a stranded machine's mark: a slow square wave rather than the
@@ -1132,6 +1181,31 @@ impl Fx {
         staffed_bob_offset(self.now, entity.to_bits()) - STAFFED_BOB_PX / 2.0
     }
 
+    /// How far to offset the **ink** of a body a research project is
+    /// spending right now — `views::PinMark::Strained`'s own motion.
+    ///
+    /// The ink alone, never the pin brackets: the brackets are the pen, and a
+    /// pen that shakes with what it is holding says the apparatus is loose
+    /// rather than that the body is under stress. They also sit on the
+    /// tile-edge ring, where any offset at all overhangs the neighbouring
+    /// cell, while the glyph sits `(tile_px - glyph_px) / 2` inside it and
+    /// has the room to spare.
+    ///
+    /// `margin` is the room the ink has — the caller's own
+    /// `(tile_px - glyph_px) / 2` — and the **share** of it spent stays
+    /// private to this module, `centred_bob`'s rule: an amplitude the call
+    /// site could reach is an amplitude the call site can disagree about.
+    /// Passing the margin rather than a zoom keeps the bound structural, so
+    /// the rattle cannot reach the brackets at any step of the ladder.
+    pub fn strain_jitter(&self, entity: Entity, margin: f32) -> (f32, f32) {
+        if !self.enabled {
+            return (0.0, 0.0);
+        }
+        let (x, y) = strain_offset(self.now, entity.to_bits());
+        let reach = margin * STRAIN_JITTER_SHARE;
+        (reach * x, reach * y)
+    }
+
     /// Alpha for a mark whose machine is full with nowhere to unload.
     ///
     /// Deliberately *not* phase-keyed the way `staffed_bob` is: two stranded
@@ -1845,6 +1919,117 @@ mod tests {
             .battle_center(Some((entity, (4, 4), 1)))
             .expect("a body is acting");
         assert_eq!(center, (4, 4));
+    }
+
+    /// **Sample-and-hold is the rattle**, and this is the half a smooth curve
+    /// would fail: the offset is one value for the whole of a step and a
+    /// different one in the next. Asserted across several steps rather than
+    /// one boundary, so a curve that happens to be flat somewhere cannot pass.
+    #[test]
+    fn a_strain_offset_holds_for_a_step_and_then_snaps() {
+        let key = 7u64;
+        let step = 1.0 / STRAIN_STEP_HZ;
+        for n in 0..12 {
+            let base = n as f64 * step;
+            let early = strain_offset(base + step * 0.05, key);
+            let late = strain_offset(base + step * 0.95, key);
+            assert_eq!(
+                early, late,
+                "the offset must not move inside step {n}: {early:?} then {late:?}"
+            );
+            let next = strain_offset(base + step * 1.05, key);
+            assert_ne!(
+                early, next,
+                "step {n} and the one after it must not land in the same place"
+            );
+        }
+    }
+
+    /// The raw curve is normalised, which is what lets `strain_jitter` treat
+    /// the caller's margin as the only scale.
+    #[test]
+    fn a_strain_offset_is_normalised() {
+        for key in 0..PHASE_KEYS {
+            for n in 0..400 {
+                let (dx, dy) = strain_offset(n as f64 / STRAIN_STEP_HZ, key);
+                assert!(
+                    dx.abs() <= 1.0 + 1e-4 && dy.abs() <= 1.0 + 1e-4,
+                    "key {key} step {n} is not normalised: {dx}, {dy}"
+                );
+            }
+        }
+    }
+
+    /// **The margin is the budget**, at every step of the zoom ladder: the
+    /// ink rattles inside the room it already has and never reaches the
+    /// brackets on the tile-edge ring. `map_cell` gives a margin of 2px at
+    /// zoom 1 and 2px more at every step above it, so the tightest zoom is
+    /// the case that has to hold.
+    #[test]
+    fn a_strained_body_rattles_inside_the_margin_it_was_given() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(11).unwrap();
+        for zoom in 1..=4 {
+            let margin =
+                (crate::text::map_cell(zoom).0 - crate::text::map_cell(zoom).1 as f32) / 2.0;
+            for n in 0..200 {
+                fx.now = n as f64 / STRAIN_STEP_HZ;
+                let (dx, dy) = fx.strain_jitter(entity, margin);
+                assert!(
+                    dx.abs() < margin && dy.abs() < margin,
+                    "zoom {zoom} step {n} reached the brackets: {dx}, {dy} against {margin}"
+                );
+            }
+        }
+    }
+
+    /// **The two axes are not one signal scaled twice.** Summed from the same
+    /// frequencies, the body would slide along a diagonal and read as drifting
+    /// rather than as rattling — so the axes must disagree, and not merely at
+    /// one lucky instant.
+    #[test]
+    fn a_strain_offset_does_not_travel_on_a_diagonal() {
+        let key = 3u64;
+        let apart = (0..200)
+            .filter(|n| {
+                let (dx, dy) = strain_offset(*n as f64 / STRAIN_STEP_HZ, key);
+                (dx - dy).abs() > 0.2
+            })
+            .count();
+        assert!(
+            apart > 150,
+            "the two axes track each other: only {apart} of 200 steps differ"
+        );
+    }
+
+    /// Two subjects in two Stations rattle out of step — `staffed_bob`'s own
+    /// rule, so two pens read as two programs under strain rather than as one
+    /// animation drawn twice.
+    #[test]
+    fn two_strained_subjects_rattle_out_of_step() {
+        let together = (0..200)
+            .filter(|n| {
+                let t = *n as f64 / STRAIN_STEP_HZ;
+                strain_offset(t, 1) == strain_offset(t, 2)
+            })
+            .count();
+        assert_eq!(
+            together, 0,
+            "two keys landed on the same offset {together} times out of 200"
+        );
+    }
+
+    /// Animations off is still off — `staffed_bob`'s and `stranded_blink`'s
+    /// own rule, which `strain_jitter` joins rather than restates.
+    #[test]
+    fn a_disabled_fx_strains_nobody() {
+        let mut fx = Fx::new();
+        fx.enabled = false;
+        fx.now = 4.2;
+        assert_eq!(
+            fx.strain_jitter(Entity::from_raw_u32(9).unwrap(), 8.0),
+            (0.0, 0.0)
+        );
     }
 
     /// The mark bobs *up* out of its rest position and never below it. Its

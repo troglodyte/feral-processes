@@ -1347,7 +1347,23 @@
   Neither was caught because every existing test drove the mark through
   `pin_subject_at_pen`, which *teleports* the body onto the pen — so nothing
   ever observed a subject mid-walk, the one state where the two questions
-  differ.
+  differ. **`PinMark::Strained` is the same walk's answer narrowed, not a
+  second door.** A body rattles while the project spending it is earning, and
+  the three terms are each a *call*: `requires_subject` off the def (a project
+  that spends no body strains nobody, however many are pinned),
+  `research_readout` being `Earning` (so the stall stays
+  `research_material_shortfall`'s one decision rather than being tested twice),
+  and `pinned_subject`'s own answer (so the mark and the gate cannot name
+  different programs while a second Station holds its own settled subject). A
+  `view_strained_at` beside `view_pinned_at` would have been the fourth answer
+  to the one question this seam exists to keep singular. **The motion is the
+  ink's alone** — the brackets sit on the tile-edge ring, where any offset
+  overhangs the neighbouring cell, and a pen that shakes with what it holds
+  reads as loose apparatus rather than as a body under stress. Its amplitude
+  is a share of `(tile_px - glyph_px) / 2`, the margin the ink already has,
+  and not a pixel count: at zoom 1 that margin is exactly 2px, so the fixed
+  `2.0` this started as put a sprite flush against its own brackets at the
+  tightest zoom and was invisible at the widest.
 - **A research node's subject gate is one term both the screen and the
   selection reach through.** It sits outside `research_block_memo`, which
   memoises per `ItemId` where the subject test is per *node* — and that is

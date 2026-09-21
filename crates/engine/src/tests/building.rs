@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::components::Downed;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STARTING_POCKET_RADIUS, haul_walk_radius};
+use crate::views::PinMark;
 use crate::*;
 
 /// The pocket is a chamfered box, not the square it would be without
@@ -5015,7 +5016,10 @@ fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
         "the Station's floor sits outside this window"
     );
     assert!(
-        pinned_rows.iter().flatten().all(|&hit| !hit),
+        pinned_rows
+            .iter()
+            .flatten()
+            .all(|&m| m == PinMark::Unpinned),
         "the pinned subject sits outside this window"
     );
     assert_eq!(floor_rows.len(), 5, "a half of 2 is a 5x5 window");
@@ -5033,18 +5037,20 @@ fn view_pinned_at_answers_only_for_a_settled_subject() {
     let program = spawn_tamed(&mut game, 10, 3);
     let pen = game.study_pen(station).unwrap();
     let half = 6;
-    let at = |rows: &Vec<Vec<bool>>, x: i32, y: i32| {
+    let at = |rows: &Vec<Vec<PinMark>>, x: i32, y: i32| {
         rows[(y - pen.1 + half) as usize][(x - pen.0 + half) as usize]
     };
 
     let before = game.view_pinned_at(pen, half, half);
-    assert!(!at(&before, pen.0, pen.1));
+    assert_eq!(at(&before, pen.0, pen.1), PinMark::Unpinned);
 
     pin_subject_at_pen(&mut game, program, station);
 
+    // `Settled` and not `Strained`: nothing is selected, so no project is
+    // spending this body — see `view_pinned_at`'s three terms.
     let after = game.view_pinned_at(pen, half, half);
-    assert!(at(&after, pen.0, pen.1));
-    assert!(!at(&after, pen.0 + 3, pen.1 + 3));
+    assert_eq!(at(&after, pen.0, pen.1), PinMark::Settled);
+    assert_eq!(at(&after, pen.0 + 3, pen.1 + 3), PinMark::Unpinned);
 
     // Still pinned, no longer settled: the marker rides the body but the
     // mark does not, which is the whole of the rule above.
@@ -5053,7 +5059,7 @@ fn view_pinned_at_answers_only_for_a_settled_subject() {
     pos.y = pen.1 + 2;
     let away = game.view_pinned_at(pen, half, half);
     assert!(
-        away.iter().flatten().all(|&hit| !hit),
+        away.iter().flatten().all(|&m| m == PinMark::Unpinned),
         "a subject away from its pen wears no mark anywhere in the window"
     );
 }

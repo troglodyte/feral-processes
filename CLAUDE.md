@@ -598,6 +598,8 @@ relying on one, and correct all three places if it has moved.
 - **The pin mark means *settled*, not *selected***, `view_pinned_at` gated on
   the subject standing on its own pen so it cannot disagree with
   `pinned_subject` or the research gate.
+- **`PinMark::Strained` narrows that one answer rather than opening a second
+  door, and only the body's own ink rattles.**
 - **A research node's subject gate is one term both the screen and the
   selection reach through**, `research_block_with`, outside the per-`ItemId`
   memo.

@@ -5,6 +5,7 @@ use super::stack::draw_stack;
 use super::terrain::*;
 use super::*;
 use feral_processes_engine::views::DigMark;
+use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
 
 /// A pending build site's slab and its edge.
@@ -933,6 +934,27 @@ fn draw_surface_map(
             // apply to everything on the map evenly, while per-tile jitter is
             // a property of the ground, not of what stands on it.
             let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
+            // A body a research project is spending right now rattles in its
+            // pen. **The ink alone** — the offset is added to the sprite and
+            // the glyph below and to nothing else, so the brackets, the
+            // rarity bar, the corner marks and the progress bar all keep
+            // reading bare `px`/`py` and the pen stays still around it. See
+            // `Fx::strain_jitter`.
+            //
+            // Keyed on the actor, `centred_bob`'s rule: two subjects in two
+            // Stations rattle out of step. Base-space gated exactly as the
+            // brackets are below — `view_pinned_at` reads base-space
+            // `Position`s, and out on the zone surface these coordinates mean
+            // something else entirely.
+            let (jx, jy) = match actor {
+                Some(ev) if base_pos.is_some() && pinned[ry][rx] == PinMark::Strained => {
+                    // The ink's own margin is the budget — `Fx::strain_jitter`
+                    // has the argument. Recomputed rather than hoisted off the
+                    // `inset` below it, which is scoped to the sprite attempt.
+                    fx.strain_jitter(ev.entity, (tile_px - glyph_px as f32) / 2.0)
+                }
+                _ => (0.0, 0.0),
+            };
             // The sprite attempt is hoisted out of the glyph draw below
             // because **its answer is what decides where the con read
             // goes** — see `ConRead::of`. `is_some_and` and not an `if let`
@@ -1034,13 +1056,19 @@ fn draw_surface_map(
                 (drawn_icon
                     && painter.sprite(
                         crate::sprites::DRAWN_ICON_KEY,
-                        px + inset,
-                        py + inset,
+                        px + inset + jx,
+                        py + inset + jy,
                         glyph_px as f32,
                         neutral,
                     ))
                     || sprite.is_some_and(|name| {
-                        painter.sprite(name, px + inset, py + inset, glyph_px as f32, color)
+                        painter.sprite(
+                            name,
+                            px + inset + jx,
+                            py + inset + jy,
+                            glyph_px as f32,
+                            color,
+                        )
                     })
             });
             // Decided once, read twice — here for the glyph's ink and below
@@ -1057,8 +1085,8 @@ fn draw_surface_map(
             {
                 let glyph = ch.to_string();
                 let dims = painter.measure_map(&glyph, glyph_px);
-                let tx = px + (tile_px - dims.width) / 2.0;
-                let ty = py + (tile_px + dims.height) / 2.0;
+                let tx = px + (tile_px - dims.width) / 2.0 + jx;
+                let ty = py + (tile_px + dims.height) / 2.0 + jy;
                 painter.map(&glyph, tx, ty, glyph_px, con.glyph_ink(color, vig));
             }
             // The caret, bouncing in the middle of the slab.
@@ -1177,7 +1205,7 @@ fn draw_surface_map(
             // rather than inventing a second arbitration between the two —
             // see `corner_marker`'s doc. `pinned` is read once above,
             // `station_floor`'s own reason.
-            if base_pos.is_some() && pinned[ry][rx] {
+            if base_pos.is_some() && pinned[ry][rx] != PinMark::Unpinned {
                 draw_pin_brackets(painter, px, py, tile_px, marker, vig);
             }
             // A nemesis draws a mark on top of its glyph — belt and braces,
@@ -5373,17 +5401,24 @@ mod tests {
     /// reason alone — this test fails loudly the day a con read starts
     /// applying to an owned program, which is exactly when this ring needs
     /// re-examining.
-    #[test]
-    fn a_program_under_study_wears_none_of_the_four_corner_marks() {
-        let anchor = (3, 0);
-        let mut game = game_with_a_research_station(560_102, anchor);
+    /// `game_with_a_research_station` plus a program settled in its pen, and
+    /// optionally a project running — the two things `Game::view_pinned_at`
+    /// reads, built through the save rather than through `select_research`,
+    /// whose zone, prereq and chain gates are not what either caller is
+    /// testing.
+    fn game_with_a_pinned_subject(
+        seed: u32,
+        anchor: (i32, i32),
+        active_research: Option<&str>,
+    ) -> (Game, Entity) {
+        let mut game = game_with_a_research_station(seed, anchor);
         let pen = (anchor.0 + 1, anchor.1 + 1);
-
         let species = game.species_defs()[0].id.clone();
-        let path = crate::render::test_support::scratch_path("under_study_census", 560_102);
+        let path = crate::render::test_support::scratch_path("pinned_subject", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        data.active_research = active_research.map(|id| id.to_string());
         data.creatures
             .push(feral_processes_engine::save::CreatureSave {
                 sortie_index: None,
@@ -5461,6 +5496,127 @@ mod tests {
             Some(feral_processes_engine::ProgramRole::UnderStudy),
             "pinning must actually land the fifth role, or this census proves nothing"
         );
+        (game, program)
+    }
+
+    /// **The body rattles and the pen does not.** The whole of
+    /// `views::PinMark::Strained`'s render contract, asserted against two
+    /// frames of the same scene at two `Fx` clocks: the subject's ink lands
+    /// somewhere different, and every line segment on the map — which on this
+    /// scene is the four pin brackets and nothing else — lands in exactly the
+    /// same place.
+    ///
+    /// Both halves matter. Offsetting `px`/`py` for the whole cell instead of
+    /// for the ink alone compiles, looks right against one screenshot, and
+    /// walks the brackets off their own tile-edge ring into the neighbouring
+    /// cell — which reads as the pen being loose rather than the body being
+    /// worked.
+    #[test]
+    fn a_strained_subject_rattles_inside_still_brackets() {
+        let anchor = (3, 0);
+        let pen = (anchor.0 + 1, anchor.1 + 1);
+        let (mut game, program) = game_with_a_pinned_subject(560_104, anchor, Some("paging"));
+        assert_eq!(
+            game.view_pinned_at(pen, 1, 1)[1][1],
+            PinMark::Strained,
+            "the fixture is vacuous unless the project is actually working this body"
+        );
+        let glyph = game
+            .view_entities_at(pen, 4, 4)
+            .into_iter()
+            .find(|e| e.entity == program)
+            .expect("the subject is drawn at its pen")
+            .glyph
+            .to_string();
+
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let frame = |game: &mut Game, now: f64| {
+            let mut fx = Fx::new();
+            fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+            let (_, shapes) = with_painter(|p| {
+                let status = game.player_status();
+                draw_surface_map(
+                    game,
+                    &mut fx,
+                    p,
+                    Rect::new(0.0, 0.0, 800.0, 600.0),
+                    tile_px,
+                    glyph_px,
+                    &status,
+                    None,
+                    status.position,
+                    false,
+                );
+            });
+            shapes
+        };
+        // Every line segment and every rect the map painted, by position
+        // alone — the brackets are among the lines, and the claim is the
+        // stronger one that *nothing* on the map moves but the ink. Colours
+        // are deliberately left out of the key: the cloud field drifts with
+        // the clock, which changes what tiles are shaded and not where
+        // anything sits.
+        let geometry = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
+            let q = |v: f32| (v * 16.0).round() as i32;
+            let mut points: Vec<[i32; 4]> = shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::LineSegment { points, .. } => Some([
+                        q(points[0].x),
+                        q(points[0].y),
+                        q(points[1].x),
+                        q(points[1].y),
+                    ]),
+                    bevy_egui::egui::Shape::Rect(r) => Some([
+                        q(r.rect.min.x),
+                        q(r.rect.min.y),
+                        q(r.rect.max.x),
+                        q(r.rect.max.y),
+                    ]),
+                    _ => None,
+                })
+                .collect();
+            points.sort_unstable();
+            points
+        };
+        // Where the subject's own ink landed.
+        let ink = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
+            let mut found: Vec<(i32, i32)> = crate::paint::painted_text_boxes(shapes)
+                .into_iter()
+                .filter(|(_, text, _)| *text == glyph)
+                .map(|(_, _, r)| ((r.x * 16.0).round() as i32, (r.y * 16.0).round() as i32))
+                .collect();
+            found.sort_unstable();
+            found
+        };
+
+        // Two clocks far enough apart to be different `STRAIN_STEP_HZ` steps.
+        let early = frame(&mut game, 0.0);
+        let late = frame(&mut game, 1.37);
+
+        assert!(
+            !geometry(&early).is_empty(),
+            "the map drew nothing at all, so this proves nothing"
+        );
+        assert_eq!(
+            geometry(&early),
+            geometry(&late),
+            "the pen must not move with the body it is holding, and nor must \
+             anything else on the map"
+        );
+        assert_eq!(ink(&early).len(), 1, "exactly one tile draws this glyph");
+        assert_ne!(
+            ink(&early),
+            ink(&late),
+            "a body a project is spending must not sit still"
+        );
+    }
+
+    #[test]
+    fn a_program_under_study_wears_none_of_the_four_corner_marks() {
+        let anchor = (3, 0);
+        let pen = (anchor.0 + 1, anchor.1 + 1);
+        let (mut game, program) = game_with_a_pinned_subject(560_102, anchor, None);
 
         let view = game
             .view_entities_at(pen, 4, 4)

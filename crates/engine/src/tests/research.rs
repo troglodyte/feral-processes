@@ -1,7 +1,9 @@
 //! The research tree and the recipes and structures it gates.
 
 use super::support::*;
+use crate::base_grid::BaseGrid;
 use crate::items::DownedProgram;
+use crate::views::{PinMark, ResearchReadout};
 use crate::*;
 
 #[test]
@@ -2133,6 +2135,170 @@ fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
         .expect("a subject standing in the pen must clear the gate");
 
     assert_eq!(active_research(&game), Some("paging".to_string()));
+}
+
+/// The strain mark's three terms, asserted one at a time: a subject-gated
+/// project that is **earning** is the only state that stresses a body.
+///
+/// Read off the pin alone this would have been a second answer to "which body
+/// is under study" — the fault `view_pinned_at`'s settle gate already closed
+/// once, with the brackets latching at selection and riding the whole walk to
+/// the pen. `Strained` is the same walk's answer, narrowed.
+#[test]
+fn an_earning_subject_gated_project_strains_its_subject() {
+    let mut game = Game::new(4402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let pen = game.study_pen(node).unwrap();
+    let half = 4;
+    let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
+
+    // Pinned, nothing selected: held, not worked.
+    assert_eq!(at_pen(&game), PinMark::Settled);
+
+    game.select_research("paging")
+        .expect("a subject standing in the pen clears the gate");
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "the fixture is vacuous unless the project is actually earning"
+    );
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Strained,
+        "the body a subject-gated project is spending strains while it earns"
+    );
+}
+
+/// The stall is `research_material_shortfall`'s, and the mark reads it through
+/// `research_readout` rather than testing for it a second time — so a project
+/// parked on an unpaid bill lets its subject go still.
+#[test]
+fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
+    let mut game = Game::new(4403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let pen = game.study_pen(node).unwrap();
+    let half = 4;
+    let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
+
+    game.select_research("paging").unwrap();
+    assert_eq!(at_pen(&game), PinMark::Strained);
+
+    fill_research_progress(&mut game, "paging");
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Stalled { .. })
+        ),
+        "precondition: nothing on the shelves pays paging's bill"
+    );
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Settled,
+        "a project waiting on a material line is not working its subject"
+    );
+}
+
+/// A project that declares no `requires_subject` spends no body, however many
+/// are pinned — the first of the three terms, and the one a mark derived from
+/// "is research running" alone would miss.
+#[test]
+fn an_ungated_project_leaves_a_pinned_body_settled() {
+    let mut game = Game::new(4404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let pen = game.study_pen(node).unwrap();
+    let half = 4;
+
+    game.select_research("automation")
+        .expect("automation is ungated");
+    assert!(
+        !game
+            .world
+            .resource::<ResearchDb>()
+            .get("automation")
+            .unwrap()
+            .requires_subject,
+        "the fixture is vacuous unless automation really spends no subject"
+    );
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "and unless it is actually earning"
+    );
+
+    assert_eq!(
+        game.view_pinned_at(pen, half, half)[half as usize][half as usize],
+        PinMark::Settled,
+    );
+}
+
+/// **Exactly one body strains, and it is the gate's own.** A second station
+/// with its own settled subject keeps plain brackets: `Game::pinned_subject`
+/// names the `(x, y)`-sorted first station's occupant, and that is the body
+/// `Game::settle_research` will spend — so the mark cannot point at a
+/// different program than the one being consumed.
+#[test]
+fn a_second_stations_subject_stays_settled_while_the_first_strains() {
+    let mut game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let first = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    // Sorted **after** the first station's `(2, 2)`, so `study_station` keeps
+    // naming the first one and the gate keeps naming its body — which is the
+    // asymmetry under test. Its own floor is laid explicitly: the starting
+    // pocket does not reach a second 2x2 machine, and `pin_subject` refuses a
+    // pen with no floor under it.
+    for x in 2..=5 {
+        for y in -1..=1 {
+            game.world.resource_mut::<BaseGrid>().lay_floor(x, y);
+        }
+    }
+    let second = spawn_machine_at(&mut game, "research_node", 4, 0);
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 5);
+    let first_pen = game.study_pen(first).unwrap();
+    let second_pen = game.study_pen(second).unwrap();
+    // The run's starting program wanders the base and may be standing on a
+    // pen, which `pin_subject` refuses outright. Nothing about that refusal
+    // is under test here.
+    for (body, pos) in game.base_bodies() {
+        if (pos.x, pos.y) == first_pen || (pos.x, pos.y) == second_pen {
+            let mut p = game.world.get_mut::<Position>(body).unwrap();
+            p.x = 0;
+            p.y = 0;
+        }
+    }
+    pin_subject_at_pen(&mut game, a, first);
+    pin_subject_at_pen(&mut game, b, second);
+
+    game.select_research("paging").unwrap();
+
+    assert_eq!(
+        game.pinned_subject(),
+        Some(a),
+        "the fixture is vacuous unless the gate names the first station's body"
+    );
+    // One window wide enough to hold both pens, so the two answers come out
+    // of a single walk rather than two.
+    let half = 24;
+    let mark = |pen: (i32, i32)| {
+        game.view_pinned_at(first_pen, half, half)[(pen.1 - first_pen.1 + half) as usize]
+            [(pen.0 - first_pen.0 + half) as usize]
+    };
+    assert_eq!(mark(first_pen), PinMark::Strained);
+    assert_eq!(mark(second_pen), PinMark::Settled);
 }
 
 /// The eight nodes with no `min_zone` gate — what gets a base running —

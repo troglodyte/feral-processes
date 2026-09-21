@@ -4572,6 +4572,36 @@ fn every_studies_structure_declares_a_footprint_of_at_least_two() {
     assert!(checked > 0, "no shipped structure studies at all");
 }
 
+/// **What `offshift::in_reach` and every `step_to_post` call beside it rest
+/// on.** `offshift.rs:340`/`:376`, `repair.rs:313` and `morale.rs:272` each
+/// hardcode `1` for a structure's footprint rather than reading a def's own
+/// `footprint`, on the strength of "no shipped amenity or Repair Bay
+/// declares a footprint past 1" alone. A modded 2x2 amenity would parse
+/// clean and walk bodies to the wrong faces with nothing failing to
+/// compile — this is the census that closes it.
+#[test]
+fn every_amenity_and_repair_bay_declares_a_footprint_of_one() {
+    let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let mut checked = 0;
+    for def in structures.all() {
+        if def.services.is_empty() && def.recovery.is_none() {
+            continue;
+        }
+        assert_eq!(
+            def.footprint, 1,
+            "structure {:?} is an amenity or a Repair Bay but its footprint is {} — \
+             offshift::in_reach and every step_to_post call beside it hardcode 1",
+            def.id, def.footprint
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "no shipped structure is an amenity or a Repair Bay at all"
+    );
+}
+
 /// The rig is a bench too, so manual extraction gains a second one. The
 /// Compiler keeps its own flag — moving it would silently downgrade
 /// manual extraction for a run in progress (spec 10.3).

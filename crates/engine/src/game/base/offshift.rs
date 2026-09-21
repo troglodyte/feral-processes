@@ -336,7 +336,9 @@ impl Game {
 /// at `radius: 1` instead of stepping over each other.
 pub(crate) fn in_reach(here: Position, site: Position, radius: i32) -> bool {
     // No shipped amenity or Repair Bay declares a footprint past 1, so
-    // `at_station`'s side is the default here.
+    // `at_station`'s side is the default here —
+    // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`
+    // is the census that holds it.
     at_station(here, site, 1) || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
 }
 
@@ -372,7 +374,8 @@ impl Game {
         }
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        // `in_reach`'s own note: no shipped amenity is wider than 1.
+        // `in_reach`'s own note: no shipped amenity is wider than 1, held by
+        // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,

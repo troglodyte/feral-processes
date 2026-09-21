@@ -309,7 +309,8 @@ impl Game {
         }
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        // `in_reach`'s own note: no shipped Repair Bay is wider than 1.
+        // `in_reach`'s own note: no shipped Repair Bay is wider than 1, held
+        // by `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
         let Some(tile) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,

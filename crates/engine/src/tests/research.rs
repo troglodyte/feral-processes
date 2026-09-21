@@ -2334,6 +2334,98 @@ fn research_nodes_reports_no_block_for_every_ungated_node_with_nobody_pinned() {
 }
 
 // ---------------------------------------------------------------------
+// M1 (final whole-branch review): `Game::release_study_station` must not
+// over-abandon, and must not silently swallow `abandon_research`'s refusal.
+// ---------------------------------------------------------------------
+
+/// Destroying a Station that happens to hold a subject must not deselect an
+/// *unrelated, ungated* project — `release_study_station` used to call
+/// `abandon_research` whenever the destroyed structure held any subject at
+/// all, regardless of whether the active project needed one.
+#[test]
+fn releasing_a_stations_subject_does_not_abandon_an_ungated_project() {
+    let mut game = Game::new(4700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    game.select_research("automation")
+        .expect("automation is ungated and should be selectable immediately");
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    assert_eq!(
+        active_research(&game),
+        Some("automation".to_string()),
+        "precondition"
+    );
+
+    game.release_study_station(node);
+
+    assert_eq!(
+        active_research(&game),
+        Some("automation".to_string()),
+        "an ungated project must survive the destruction of a station that merely \
+         happened to be holding an unrelated pinned subject"
+    );
+}
+
+/// `abandon_research` refuses during an active battle — its own first
+/// rung — and `release_study_station` used to discard that refusal with a
+/// bare `let _`, leaving a subject-gated project active with no subject and
+/// no word to the player anywhere in the log.
+#[test]
+fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
+    let mut game = Game::new(4701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.select_research("paging")
+        .expect("the pinned subject clears the gate");
+
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 0,
+                mitigation: 1,
+            },
+        ))
+        .id();
+    insert_battle(&mut game, player, vec![wild]);
+    assert!(game.has_active_battle(), "precondition");
+
+    let before = game.message_log(50).len();
+    game.release_study_station(node);
+
+    assert_eq!(
+        active_research(&game),
+        Some("paging".to_string()),
+        "abandon_research must have refused during the battle, leaving the project active"
+    );
+    let after = game.message_log(50);
+    // The pen-release line alone always fires — `release_study_station`'s
+    // first, unconditional log — so the refusal must add a *second* line on
+    // top of it, not merely leave that one line standing.
+    assert_eq!(
+        after.len(),
+        before + 2,
+        "the refusal must not be silently discarded — a second line must say so, \
+         beside the pen-release line: {after:?}"
+    );
+}
+
+// ---------------------------------------------------------------------
 // Completion spends the subject (Task 8)
 // ---------------------------------------------------------------------
 

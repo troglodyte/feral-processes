@@ -394,6 +394,30 @@ impl Game {
         self.log(format!(
             "{name} is released from the pen — the Research Station is gone."
         ));
-        let _ = self.abandon_research();
+        // Only a project that actually spends *this* subject has lost
+        // anything. An ungated project running alongside an unrelated pin
+        // must not be deselected just because some structure's subject was
+        // released — `settle_research`'s own `requires_subject` gate is the
+        // same question, asked here at destruction instead of completion.
+        let requires_subject = self
+            .world
+            .resource::<ActiveResearch>()
+            .id
+            .clone()
+            .and_then(|id| self.world.resource::<ResearchDb>().get(&id).cloned())
+            .is_some_and(|def| def.requires_subject);
+        if requires_subject && let Err(reason) = self.abandon_research() {
+            // `abandon_research` refuses during a battle or game over — its
+            // own first rung. The project is left active with no subject,
+            // which is exactly `research_material_shortfall`'s
+            // `requires_subject && pinned_subject().is_none()` stall (see
+            // that function), so this is not the only word the player ever
+            // gets — but it is the one at the moment it happened, and a
+            // bare `let _` here said nothing at all.
+            self.log_base(format!(
+                "The active research project lost its subject and could not be abandoned: \
+                 {reason}"
+            ));
+        }
     }
 }

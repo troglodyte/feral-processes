@@ -318,6 +318,22 @@ said "not implemented" and was corrected in the move.
 | `2026-09-16-handles-and-memory-schema-design` | A program's handle, and the memory schema under mood | `handles::of`, `memories::mood` |
 | `2026-09-16-tactical-reactions-design` | A reaction swing when a body leaves reach | `Game::provoke`, `battle::resolve_free_attack` |
 
+## The spec archived on 2026-09-21
+
+Archived **on landing**, ahead of the branch's own merge. Nothing in `crates/`
+or `assets/` cites the *spec's* path, so it moved on its own — but five source
+doc comments cite the **plan's** path instead (`game/turn.rs`, `game/party.rs`,
+`tests/watch.rs` and two in `tests/party.rs`), naming it as the record for
+decisions 2 and 3. Plans are ephemeral here by convention, so those citations
+are pinned to a file git history is supposed to be the archive of. The
+arguments themselves are in the memory graph as `seam:structure-footprint` and
+`seam:under-study`, which is where a reader should be sent; repointing the five
+comments is a change of its own, not something to do inside a deploy.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-20-research-station-study-design` | The Research Node grows into a 2x2 Research Station, and a program pinned in its pen is the subject research is gated on | `StructureDef::footprint`/`studies`, `tactical::footprint_cells_at`, `structures::study_pen`, `ProgramRole::UnderStudy`, `components::UnderStudy`, `Game::pin_subject`/`unpin_subject`/`release_study_station`, `ResearchDef::requires_subject` (19 of 27 shipped nodes) and `unlocks_fusion` all resolve in `crates/engine`; `Mode::PinSubject` and the group-menu row in `crates/app-core`; the Station's floor and the pin mark in `crates/gui`; `assets/structures/research_node.ron` — grown in place, keeping its `research_node` id and filename while its `name:` became "Research Station", so a standing 1x1 Node in an old save is never refused retroactively; `dev-saves/study.ron`. A save change behind `#[serde(default)]` — the subject's station tether — with a real save/load test, not only a RON round trip. Fusion became a researched capability in the same change. Not yet played at the keyboard |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

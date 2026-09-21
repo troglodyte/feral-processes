@@ -256,7 +256,8 @@ fn every_shipped_item_with_an_effect_field_gets_a_line() {
         let declares = def.grants.is_some()
             || def.consume.is_some()
             || def.upgrade.is_some()
-            || def.taming_potency.is_some();
+            || def.taming_potency.is_some()
+            || def.trap.is_some();
         assert_eq!(
             declares,
             !game.item_effects(&def.id).is_empty(),
@@ -264,4 +265,83 @@ fn every_shipped_item_with_an_effect_field_gets_a_line() {
             def.id.as_str()
         );
     }
+}
+
+/// A fixture item authoring a `trap:` — the shipped honeypot does not exist
+/// until the assets land, and this is about the field rather than the item.
+const TRAP_ITEM: &str = r#"(
+    id: "fixture_trap",
+    name: "Fixture Trap",
+    description: "A test decoy.",
+    value: Some(1),
+    trap: Some((rarity_cap: Silver)),
+)"#;
+
+/// An item authoring no `trap:` at all, which is the `#[serde(default)]`
+/// claim: without the default the field ships mandatory and every mod's
+/// item files stop loading.
+const PLAIN_ITEM: &str = r#"(
+    id: "fixture_plain",
+    name: "Fixture Plain",
+    description: "Ordinary cargo.",
+    value: Some(1),
+)"#;
+
+#[test]
+fn an_item_authoring_a_trap_is_placeable_and_one_without_is_not() {
+    let dir = super::support::modded_assets_dir(
+        "trap_field",
+        &[],
+        &[
+            ("fixture_trap.ron", TRAP_ITEM),
+            ("fixture_plain.ron", PLAIN_ITEM),
+        ],
+        &[],
+        &[],
+        &[],
+    );
+    let game = Game::new(21, DifficultyMode::Forgiving, &dir).unwrap();
+
+    let trap = ItemId::from("fixture_trap");
+    let plain = ItemId::from("fixture_plain");
+    assert!(
+        game.item_defs().iter().any(|d| d.id == trap),
+        "the trap fixture did not parse — a skipped file reads as the field doing nothing"
+    );
+    assert!(
+        game.item_defs().iter().any(|d| d.id == plain),
+        "the plain fixture did not parse"
+    );
+
+    assert!(game.is_placeable(&trap), "a `trap:` item is placeable");
+    assert!(
+        !game.is_placeable(&plain),
+        "an item authoring no `trap:` is ordinary cargo"
+    );
+    assert!(
+        !game.is_placeable(&ItemId::from("nothing_by_this_name")),
+        "an unknown id is not placeable"
+    );
+}
+
+#[test]
+fn a_traps_effect_line_names_its_rarity_ceiling() {
+    let dir = super::support::modded_assets_dir(
+        "trap_effect_line",
+        &[],
+        &[("fixture_trap.ron", TRAP_ITEM)],
+        &[],
+        &[],
+        &[],
+    );
+    let game = Game::new(22, DifficultyMode::Forgiving, &dir).unwrap();
+
+    let lines = game.item_effects(&ItemId::from("fixture_trap"));
+    // Asked of the type, never hand-typed, so a renamed tier moves the
+    // test with the code.
+    let tier = Rarity::Silver.label().expect("Silver reads as a tier");
+    assert!(
+        lines.iter().any(|l| l.contains(tier)),
+        "the effect lines should name the ceiling, got {lines:?}"
+    );
 }

@@ -4,7 +4,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::components::FieldBuffKind;
+use crate::components::{FieldBuffKind, Rarity};
 use crate::items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId};
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
@@ -102,6 +102,19 @@ pub struct CraftableDef {
     pub requires_structure: Option<StructureId>,
 }
 
+/// What a placeable trap catches — see `components::Trap` and
+/// `Game::run_traps`.
+///
+/// The ceiling is the only authored figure. How long a honeypot takes and
+/// how likely it is to catch anything are difficulty, which is
+/// `tuning.rs`'s and deliberately not a modder's.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrapDef {
+    /// The best rarity this trap will ever catch. A roll above it is
+    /// clamped down, never rerolled.
+    pub rarity_cap: Rarity,
+}
+
 /// How many characters `ItemDef::tag` derives. Two, because the base stock
 /// strip is one row wide and a tag any longer costs a pile off the end of
 /// it — see `Game::base_stock`.
@@ -140,6 +153,17 @@ pub struct ItemDef {
     pub consume: Option<ConsumeDef>,
     #[serde(default)]
     pub craftable: Option<CraftableDef>,
+    /// Authored on any item the player may place on the ground as a trap —
+    /// see `Game::place_trap` and `components::Trap`. Absent on everything
+    /// that is not one, which is every shipped item but the honeypot.
+    ///
+    /// A struct rather than a bare `Option<Rarity>` because it matches how
+    /// every other capability on this def is authored, and because a second
+    /// tier's own period or capture chance would land in it.
+    /// `#[serde(default)]` so every existing mod's items keep parsing, as
+    /// ordinary cargo that cannot be placed.
+    #[serde(default)]
+    pub trap: Option<TrapDef>,
     /// Species that drop this item, each with its own 0.0-1.0 chance. The
     /// inverse of `SpeciesDef::equipment_drop`: an item names its sources
     /// instead of every species naming the item. Both are honoured and
@@ -557,6 +581,8 @@ impl ItemDb {
                     upgrade: None,
                     // A disk is installed, not slept against.
                     enables_rest: false,
+                    // Installed or fitted, never dropped on the ground.
+                    trap: None,
                     // Every disk derives the same family tag, "ED" — the
                     // one place `ItemDef::tag`'s per-item promise does not
                     // hold. Two disks sitting in one Depot do draw two "ED"
@@ -636,6 +662,8 @@ impl ItemDb {
                     range: None,
                     upgrade: None,
                     enables_rest: false,
+                    // Installed or fitted, never dropped on the ground.
+                    trap: None,
                     // `ItemDef::tag` takes the first two words' initials,
                     // so a carrier derives its *tool's* tag rather than a
                     // shared "Carrier" one — distinct per tool, which is

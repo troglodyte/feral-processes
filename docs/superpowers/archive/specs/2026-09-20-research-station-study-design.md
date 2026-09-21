@@ -1,7 +1,10 @@
 # The Research Station and studying a program
 
 **Date:** 2026-09-20
-**Status:** design approved 2026-09-20 in brainstorming, not implemented.
+**Status:** implemented on `feat/research-station-study`, all twelve tasks plus
+a review pass (C1-C2, I1-I3, M1-M8). Archived on landing 2026-09-21. Not yet
+played at the keyboard. The seam arguments are in the memory graph as
+`seam:structure-footprint` and `seam:under-study`.
 **Todo:** no number; raised in conversation.
 
 The Research Node grows from one cell to a 2x2 Research Station. Its anchor

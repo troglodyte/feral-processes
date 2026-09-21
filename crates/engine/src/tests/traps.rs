@@ -443,3 +443,123 @@ fn springing_changes_the_glyph_and_a_second_period_does_not_overwrite_it() {
         "a full trap holds what it caught until it is collected"
     );
 }
+
+fn downed_count(game: &Game) -> usize {
+    game.world
+        .get::<DownedPrograms>(game.player_entity())
+        .map(|d| d.0.len())
+        .unwrap_or(0)
+}
+
+#[test]
+fn walking_into_an_armed_trap_is_a_bump() {
+    let mut game = Game::new(7080, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = clear_target(&mut game, 1, 0);
+    stand_a_trap(&mut game, nx, ny, None);
+    let before = player_tile(&game);
+    let clock = game.world.resource::<GameClock>().tick;
+
+    game.move_player(1, 0);
+
+    assert_eq!(player_tile(&game), before, "a trap blocks the player");
+    assert_eq!(game.trap_count(), 1, "and is still standing");
+    assert!(
+        game.world.resource::<GameClock>().tick > clock,
+        "a bump spends a tick, exactly as the settlement arm does"
+    );
+}
+
+#[test]
+fn walking_into_a_sprung_trap_collects_it() {
+    let mut game = Game::new(7081, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = clear_target(&mut game, 1, 0);
+    stand_a_trap(&mut game, nx, ny, Some(a_caught_program()));
+    let before = player_tile(&game);
+    let held_before = downed_count(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(downed_count(&game), held_before + 1, "the program is taken");
+    assert_eq!(game.trap_count(), 0, "and the trap is gone with it");
+    assert_eq!(
+        player_tile(&game),
+        before,
+        "collecting is not a step either"
+    );
+}
+
+#[test]
+fn collecting_with_the_store_full_moves_nothing() {
+    let mut game = Game::new(7082, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = clear_target(&mut game, 1, 0);
+    stand_a_trap(&mut game, nx, ny, Some(a_caught_program()));
+    let player = game.player_entity();
+    {
+        let mut store = game.world.get_mut::<DownedPrograms>(player).unwrap();
+        while store.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS {
+            store.0.push(a_caught_program());
+        }
+    }
+    let before = player_tile(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        downed_count(&game),
+        crate::tuning::MAX_DOWNED_PROGRAMS,
+        "a full store takes nothing more"
+    );
+    assert_eq!(game.trap_count(), 1, "and the trap keeps what it caught");
+    assert!(
+        game.find_trap_at(nx, ny)
+            .and_then(|t| game.world.get::<Trap>(t))
+            .is_some_and(|t| t.caught.is_some()),
+        "still sprung, to come back to"
+    );
+    assert_eq!(player_tile(&game), before);
+}
+
+#[test]
+fn destroying_a_trap_hands_back_nothing() {
+    let mut game = Game::new(7083, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = clear_target(&mut game, 1, 0);
+    stand_a_trap(&mut game, nx, ny, None);
+    let held_before = held(&game, &honeypot());
+
+    game.destroy_trap(1, 0).expect("it is right there");
+
+    assert_eq!(game.trap_count(), 0);
+    assert_eq!(
+        held(&game, &honeypot()),
+        held_before,
+        "no refund — the half a despawn test misses"
+    );
+}
+
+#[test]
+fn destroying_a_sprung_trap_loses_what_it_caught() {
+    let mut game = Game::new(7084, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = clear_target(&mut game, 1, 0);
+    stand_a_trap(&mut game, nx, ny, Some(a_caught_program()));
+    let held_before = downed_count(&game);
+
+    game.destroy_trap(1, 0).expect("it is right there");
+
+    assert_eq!(game.trap_count(), 0);
+    assert_eq!(
+        downed_count(&game),
+        held_before,
+        "demolishing is not a second way to collect"
+    );
+}
+
+#[test]
+fn destroying_empty_ground_is_refused() {
+    let mut game = Game::new(7085, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    clear_target(&mut game, 1, 0);
+    let pos = player_tile(&game);
+    stand_a_trap(&mut game, pos.x - 1, pos.y, None);
+
+    assert!(game.destroy_trap(1, 0).is_err(), "nothing is there");
+    assert_eq!(game.trap_count(), 1, "and the one behind is untouched");
+}

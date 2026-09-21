@@ -742,6 +742,39 @@ impl Game {
             self.tick();
             return 0;
         }
+        if let Some(trap) = self.find_trap_at(nx, ny) {
+            // The fifth arm of the ladder and, like the four above it, not a
+            // step: the player stays where they are either way.
+            //
+            // Nothing stops a wild program spawning onto a trap later —
+            // `standable_near` and `scatter_open_tile` check walkable, not
+            // empty — and that is accepted rather than fixed, because the
+            // creature arm sits above this one: the player fights the
+            // program and the trap is still there afterwards.
+            let caught = self
+                .world
+                .get::<crate::components::Trap>(trap)
+                .and_then(|t| t.caught.clone());
+            match caught {
+                Some(program) => {
+                    let label = self.entity_label(trap);
+                    // `push_downed_program` logs its own refusal when the
+                    // store is full, so a second line here would say it
+                    // twice — and the trap stays sprung, holding what it
+                    // has, for the player to come back to.
+                    if self.push_downed_program(program) {
+                        self.world.despawn(trap);
+                        self.log(format!("You collect the {label}."));
+                    }
+                }
+                None => {
+                    let label = self.entity_label(trap);
+                    self.log(format!("The {label} is still waiting. You step around it."));
+                }
+            }
+            self.tick();
+            return 0;
+        }
         // **No structure is consulted here.** Every `Structure` stands in
         // base space — `Structure` is the space tag, and there is exactly
         // one spawn site — so its `Position` is in a different coordinate

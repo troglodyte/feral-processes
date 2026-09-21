@@ -135,6 +135,29 @@ impl Game {
         Ok(())
     }
 
+    /// Destroys the trap on the tile `(dx, dy)` from the party.
+    ///
+    /// **Hands back nothing** — no material refund, and a sprung one loses
+    /// what it caught. Reusing the demolish gesture with no confirmation is
+    /// a taken decision: the trap is on the ground in front of the player
+    /// and the only way to be holding one again is to compile it.
+    pub fn destroy_trap(&mut self, dx: i32, dy: i32) -> Result<(), String> {
+        self.require_surface()?;
+        let player = self.player_entity();
+        let pos = *self
+            .world
+            .get::<Position>(player)
+            .ok_or_else(|| "You aren't anywhere you can reach from.".to_string())?;
+        let trap = self
+            .find_trap_at(pos.x + dx, pos.y + dy)
+            .ok_or_else(|| "Nothing of yours to demolish there.".to_string())?;
+        let label = self.entity_label(trap);
+        self.world.despawn(trap);
+        self.log(format!("You break the {label} down. Nothing comes back."));
+        self.tick();
+        Ok(())
+    }
+
     /// Deals one hit of the player's `effective_atk` (against no defense
     /// — a nest has none, only a `Durability` pool) to `nest`. A nest
     /// never retaliates, unlike an ordinary wild-creature encounter — see

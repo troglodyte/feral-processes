@@ -649,6 +649,23 @@ pub enum AbilityEffect {
         /// unused `tuning::EMULATION_ROUNDS` that used to duplicate it.
         rounds: u32,
     },
+    /// Relocates a body at arm's length to a free cell — the player's own
+    /// escape and their one way to move somebody else.
+    ///
+    /// Carries no fields. How far it reaches is not authored: it is
+    /// `Game::teleport_reach`, half the invoker's level, so a `range:` on
+    /// the file would be a second answer to a question the level already
+    /// settles.
+    ///
+    /// **Two aims, so it has its own door.** `Game::tactical_use_routine`
+    /// exists to collect and validate exactly one, which is why `Emulate`
+    /// is refused there; this is refused there for the same reason and
+    /// resolves through `Game::tactical_teleport` instead. The subject
+    /// reaches `run_tactical_routine` through
+    /// `resources::PendingTeleportSubject`, `PendingEmulateImage`'s shape,
+    /// and `use_ability` carries an `unreachable!` arm for it exactly as it
+    /// does for `Decompile`, `Summon` and `Tamper`.
+    Teleport,
 }
 
 impl AbilityEffect {
@@ -687,6 +704,9 @@ impl AbilityEffect {
     pub fn tactical_only(&self) -> bool {
         match self {
             AbilityEffect::Tamper { .. } => true,
+            // Relocating a body means nothing where there are no cells to
+            // relocate it between. `Tamper`'s arm, and its reason.
+            AbilityEffect::Teleport => true,
             AbilityEffect::Damage { .. }
             | AbilityEffect::Heal { .. }
             | AbilityEffect::Buff { .. }
@@ -735,8 +755,14 @@ impl AbilityEffect {
             // ceiling, `Cloak`'s own reason — the strength an image fights
             // with is `progression::emulated_stats`'s job, not an
             // affinity's.
+            //
+            // `Teleport` joins them last: where a body ends up is a cell,
+            // not a quantity, and how far it may go is its invoker's level
+            // — an affinity multiplying a cell count would be a second
+            // answer to `teleport_reach`'s question.
             AbilityEffect::Cleanse
             | AbilityEffect::Decompile
+            | AbilityEffect::Teleport
             | AbilityEffect::Phase
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
@@ -783,6 +809,11 @@ impl AbilityEffect {
             | AbilityEffect::Summon { .. }
             // Adopting an image tends your own kit, `Buff`'s reason exactly.
             | AbilityEffect::Emulate { .. }
+            // A relocation names a *cell*, and the common case is your own
+            // escape. Whether it was aggressive depends on whose body moved,
+            // which this signature cannot see — so `Game::tactical_teleport`
+            // calls `break_cloak` itself, and only for a hostile subject.
+            | AbilityEffect::Teleport
             | AbilityEffect::Symlink => false,
         }
     }
@@ -1737,7 +1768,32 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
         AbilityEffect::Emulate { rounds } => {
             format!("Adopts a known image's kit for {rounds} rounds")
         }
+        // The reach is a *call*, never the sentence's own arithmetic: this
+        // page and the refusal that enforces it must quote the same number,
+        // which is what `teleport_reach` being one function buys.
+        AbilityEffect::Teleport => format!(
+            "Relocates a body at arm's length up to {} cells",
+            teleport_reach(level)
+        ),
     }
+}
+
+/// How far a `Teleport` invoked by a body at `level` may send its subject,
+/// in cells.
+///
+/// **The one derivation, and it takes a level rather than an entity** so the
+/// inspect page (`effect_label`, which has no `Game`), the refusal
+/// (`Game::tactical_teleport`) and the outline the player aims with
+/// (`Game::teleport_destinations`) are three callers of one formula rather
+/// than three copies of it — `routine_power_cost`'s rule, where the two
+/// sites that disagreed were a refusal and a charge.
+///
+/// **Floored at 1 and unbounded above.** The floor is what keeps a holder
+/// below `TELEPORT_LEVELS_PER_CELL` from owning a routine that spends Power
+/// to move a body nowhere; there is no ceiling because the reach growing
+/// past the board is the point of levelling it.
+pub fn teleport_reach(level: u32) -> u32 {
+    (level / crate::tuning::TELEPORT_LEVELS_PER_CELL).max(1)
 }
 
 /// A damage band as the player reads it — a single number when the band has

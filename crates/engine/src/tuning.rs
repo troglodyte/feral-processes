@@ -5076,6 +5076,20 @@ pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
 /// positioning this model is built on optional.
 pub const TACTICAL_MELEE_RANGE: u32 = 1;
 
+/// Levels bought per cell of a `Teleport`'s reach — see
+/// `abilities::teleport_reach`, which is the formula and the floor.
+///
+/// Two, so the reach is half the invoker's level. Against `zone_level_cap`
+/// that is three cells on arrival in sector 2 and grows to span a board by
+/// the deep sectors, which is deliberate: the routine is bought once and the
+/// levels are what make it worth carrying. It is **uncapped on purpose** —
+/// a ceiling here would make every level past it buy nothing, which reads
+/// at the keyboard exactly like the routine being broken.
+///
+/// Zero would divide by zero, and one makes the reach the level itself,
+/// which outruns `TACTICAL_BOARD_LARGE` before a player leaves sector 3.
+pub const TELEPORT_LEVELS_PER_CELL: u32 = 2;
+
 /// The furthest a weapon may author a swing, in cells.
 ///
 /// Three, which is half `TACTICAL_DEPLOY_GAP`: a weapon that reached the far

@@ -5551,9 +5551,18 @@ mod teleport {
             game.ability_unavailable(player, &def).is_none(),
             "the player was refused their own routine"
         );
-        assert!(
-            game.ability_unavailable(pack[0], &def).is_some(),
-            "a hostile holding Teleport was offered it"
+        // A full reserve on the hostile is load-bearing, and the trap it
+        // closes is the one `ability_unavailable`'s own doc records: a
+        // hostile holds no `PowerReserve` by design, so *every* priced
+        // routine is already refused it and an assertion made without this
+        // line passes with the player-only gate deleted.
+        game.world
+            .entity_mut(pack[0])
+            .insert(PowerReserve::new(crate::components::POWER_MAX));
+        assert_eq!(
+            game.ability_unavailable(pack[0], &def).as_deref(),
+            Some("only you can relocate"),
+            "a body that could afford Teleport was offered it"
         );
     }
 
@@ -5643,10 +5652,12 @@ mod teleport {
                 .resource_mut::<TacticalBattle>()
                 .move_to(pack[0], two_away)
         );
+        let landing = destination(&game, two_away);
+        assert_ne!(landing, at, "the fixture aimed at the player's own cell");
         let power = power_of(&game, player);
 
         assert!(
-            !game.tactical_teleport(0, two_away, at),
+            !game.tactical_teleport(0, two_away, landing),
             "a body two cells away was picked up"
         );
         spent_nothing(&game, player, power);
@@ -5713,6 +5724,48 @@ mod teleport {
         assert!(
             !game.tactical_teleport(0, at, beside),
             "the player was relocated onto an occupied cell"
+        );
+        spent_nothing(&game, player, power);
+    }
+
+    /// A cell the invoker cannot see is refused, and dropped from the
+    /// outline by the same call — `reach::aim_in_sight` with a `Single`
+    /// shape, which is `line_of_sight` from the invoker's own cell.
+    ///
+    /// Asserted in both directions off one blocked cell: a refusal the
+    /// outline still offered would be a cursor the player can move onto and
+    /// not commit from.
+    #[test]
+    fn a_destination_out_of_sight_is_refused_and_never_offered() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 40);
+        let player = armed(&mut game);
+        let from = cell_of(&game, player);
+        // Two cells out along a straight run, with the cell between them
+        // walled: `line_of_sight` excludes its endpoints, so a neighbour
+        // could never be hidden by anything.
+        let (behind, wall) = game
+            .teleport_destinations(from)
+            .into_iter()
+            .find_map(|cell| {
+                let between = (
+                    from.0 + (cell.0 - from.0) / 2,
+                    from.1 + (cell.1 - from.1) / 2,
+                );
+                (distance(from, cell) == 2 && between != from && between != cell)
+                    .then_some((cell, between))
+            })
+            .expect("no cell two steps out with one between");
+        block_cell(&mut game, wall);
+        let power = power_of(&game, player);
+
+        assert!(
+            !game.teleport_destinations(from).contains(&behind),
+            "the outline offered a cell the invoker cannot see"
+        );
+        assert!(
+            !game.tactical_teleport(0, from, behind),
+            "a destination out of sight was accepted"
         );
         spent_nothing(&game, player, power);
     }

@@ -42,6 +42,18 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.220
+
+**The key that opens your downed programs is named on the control bar now.**
+`D` opens the store from the map and from the pack, and the bar along the
+bottom of the log named neither — the only place it was written down was the
+manual. It sits with the other screens, beside `b base` and `i pack`.
+
+**One key fell off the end of the bar to pay for it.** The bar is one row
+with no wrap, so it draws what fits and drops the rest: `x examine` is now
+past the cut at 1280x720 and `e drain` at 1920x1080. Both are still in the
+manual under `?`, which is where every key this bar cannot hold lives.
+
 ## 0.13.219
 
 **You can now relocate yourself, or a body standing next to you, across a

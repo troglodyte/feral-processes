@@ -32,6 +32,32 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// Finds a `Trap` at `(x, y)`, if any — checked in `move_player`'s
+    /// ladder, so walking onto one collects or bumps instead of stepping.
+    ///
+    /// Answers the `Entity` and nothing else: every caller either despawns
+    /// it or reads its component, and a second return shape would be a
+    /// second place the read of `Trap` is spelled. `find_nest_at` is the
+    /// precedent.
+    pub(crate) fn find_trap_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<crate::components::Trap>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// How many traps stand anywhere in this zone — `TRAP_PLACEMENT_CAP`'s
+    /// half of `place_trap`'s refusal ladder.
+    pub(crate) fn trap_count(&mut self) -> usize {
+        self.world
+            .query_filtered::<(), With<crate::components::Trap>>()
+            .iter(&self.world)
+            .count()
+    }
+
     /// Deals one hit of the player's `effective_atk` (against no defense
     /// — a nest has none, only a `Durability` pool) to `nest`. A nest
     /// never retaliates, unlike an ordinary wild-creature encounter — see

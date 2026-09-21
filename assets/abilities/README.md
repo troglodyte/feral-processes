@@ -82,7 +82,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of fifteen:
+    // What it does to each recipient. Exactly one of sixteen:
     //
     //   Damage(power: 6, spread: 2)
     //     Direct damage through the same resolution a move uses: an attack
@@ -326,6 +326,38 @@ way deleting the Currency item does.
     //     every other incoherent shape here. This is what `cold_sample.ron`,
     //     `heat_injection.ron`, `inference_probe.ron`, `prompt_injection.ron`
     //     and `hallucination.ron` use.
+    //
+    //   Teleport
+    //     Relocates a body standing at arm's length to a free cell the
+    //     invoker can see — an escape, and the one way to move somebody
+    //     else. **Battle maps only**, `Tamper`'s rule: there are no cells
+    //     to relocate between in the group model or the Stack.
+    //
+    //     Carries no fields, and authoring a `range:` on one does nothing.
+    //     How far it reaches is `abilities::teleport_reach` — half the
+    //     invoker's level, floored at one cell and uncapped above — so a
+    //     `range:` here would be a second answer to a question the level
+    //     already settles. `shape:` is unread for the same reason: the two
+    //     cells are collected by `Game::tactical_teleport` rather than by
+    //     the shape machinery.
+    //
+    //     `target:` is unread too. Author `WholeParty`, `Summon`'s and
+    //     `Emulate`'s rule: it is the shape that opens no ally or group
+    //     picker, and this routine opens the aim cursor twice instead —
+    //     once on a body at arm's length, once on where to send it. It is
+    //     outside the naming scheme below for that reason.
+    //
+    //     **Only the player may run one.** A companion or a hostile holding
+    //     it is refused at `Game::ability_unavailable`, `Emulate`'s gate, so
+    //     authoring it on a species kit greys the row rather than
+    //     misbehaving.
+    //
+    //     The subject may be on either side: relocating yourself is the
+    //     common case, and throwing an adjacent hostile back is the control
+    //     half of the routine. `cooldown` and `power_cost` are the whole
+    //     price — invoking beside a hostile provokes a reaction like any
+    //     other routine, and a reaction that cuts it off keeps both. This
+    //     is what `teleport.ron` uses.
     //
     //   Emulate(rounds: 10)
     //     Adopts a known image's kit for `rounds` battle rounds: the
@@ -621,10 +653,11 @@ appear in the battle picker at all, so "cheaper rung" is not a question that
 applies) and so is `exclusive` (it has no cheaper rung anywhere by design —
 a boss drop or a trader shelf, never a species or a research node — so the
 ladder the census protects cannot exist for it). A **tactical-only** effect
-(`AbilityEffect::tactical_only()`, true for `Tamper` alone today) joins them
+(`AbilityEffect::tactical_only()`, true for `Tamper` and `Teleport`) joins them
 for a third reason: it is reachable only by research, never by a species kit
 or the hunt pool, so `Heat Injection Group` and `Hallucination Group` may
-ship with no Single rung at all. `Dropout` still needs one — `dropout`
+ship with no Single rung at all. `Teleport` is outside the naming scheme for
+the same reason `Summon` and `Emulate` are — its `target:` is not a scope. `Dropout` still needs one — `dropout`
 beside `dropout_group` — because a plain Stun is an ordinary group-model
 effect rather than a tactical-only one, so the census holds it to the same
 rule as `Hard Lock` and every other Stun family: it may not open at Group.

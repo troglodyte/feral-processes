@@ -40,10 +40,7 @@ impl App {
                 self.mode = Mode::Options;
             }
             Some('r') => self.open_arena(),
-            Some('d') => {
-                self.status_line = None;
-                self.mode = Mode::SpritePicker;
-            }
+            Some('d') => self.open_sprite_forge(),
             Some('q') => self.mode = Mode::QuitAppConfirm,
             _ => {}
         }

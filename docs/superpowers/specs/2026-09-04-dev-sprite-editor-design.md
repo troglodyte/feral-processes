@@ -40,6 +40,16 @@ player ever sees it.
 
 ### It is a main-menu row, not a fifth binary
 
+> **Amended after shipping.** It is now a main-menu row *and* a dev-console
+> row, because the main menu is unreachable once a run has started and the
+> whole point of the editor is drawing art and seeing it on the map. The
+> keypad already opens on the map in all three locales — the open grid, base
+> space and a Stack frame — so `DevAction::OpenSpriteForge` reaches every one
+> of them through an arm that was written once. Acceptance 1 below is
+> unchanged: with `FERAL_DEV_SPRITES` unset the row is still drawn (the
+> keypad hides none of its rows) but the press refuses, and the mode stays
+> unreachable.
+
 Behind `FERAL_DEV_SPRITES`, read through `dev_console::dev_flag` — the same
 predicate `FERAL_DEV_ARENA` and `FERAL_DEV_REVEAL` use. Two answers to "is a
 dev flag set" is drift this repo has already caught once, so there is one

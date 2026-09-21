@@ -757,10 +757,13 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
             &m,
         ),
         Mode::BattleResult => draw_battle(app, fx, painter, &m),
-        // Full-pane, like `Mode::FrameMap`: both hang off the main menu
-        // (`app.game` is `None` the whole time either is open) and neither
-        // draws a popup box to put a refusal in, so both take `needs_status_
-        // banner`'s door instead of a `refusal` argument here.
+        // Full-pane, like `Mode::FrameMap`, and neither draws a popup box to
+        // put a refusal in, so both take `needs_status_banner`'s door
+        // instead of a `refusal` argument here. Reached from the main menu
+        // (`app.game` is `None`) *and*, since the dev keypad grew a row for
+        // it, from the map mid-run — so neither arm may read `app.game`,
+        // and neither does: the picker's rows come off the asset tree and
+        // the editor's canvas off `App` itself.
         Mode::SpritePicker => draw_sprite_picker(app, painter, &m),
         Mode::SpriteEditor => draw_sprite_editor(app, painter, &m),
         _ => {

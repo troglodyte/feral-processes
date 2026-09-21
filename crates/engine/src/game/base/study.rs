@@ -48,6 +48,14 @@ impl Game {
     /// the screen as well as from `select_research`, so this walks
     /// `World::iter_entities` rather than taking the `&mut self` a bevy
     /// query needs.
+    pub fn study_station(&self) -> Option<Entity> {
+        self.first_study_station()
+    }
+
+    /// `study_station`'s own implementation — kept private so the sort rule
+    /// stays in one place; `study_station` is its public name for callers
+    /// outside the engine crate (the base menu's row and `Mode::PinSubject`'s
+    /// picker) that have no business naming a "first" anything themselves.
     fn first_study_station(&self) -> Option<Entity> {
         let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
@@ -66,11 +74,13 @@ impl Game {
 
     /// The program standing in the pen of `first_study_station`'s chosen
     /// station — `None` when no `studies` structure stands, or when its pen
-    /// is empty. **The one door**: `research_block`'s gate and
-    /// `settle_research`'s "which subject is spent" both call this rather
-    /// than each re-deriving a station and a corner, so they cannot read the
-    /// base's one active subject differently.
-    pub(crate) fn pinned_subject(&self) -> Option<Entity> {
+    /// is empty. **The one door**: `research_block`'s gate,
+    /// `settle_research`'s "which subject is spent" and `Mode::PinSubject`'s
+    /// own choice of what to draw all call this rather than each re-deriving
+    /// a station and a corner, so they cannot read the base's one active
+    /// subject differently. `pub` rather than `pub(crate)` since the screen
+    /// that reaches it lives in app-core, not this crate.
+    pub fn pinned_subject(&self) -> Option<Entity> {
         let station = self.first_study_station()?;
         let pen = self.study_pen(station)?;
         self.world.iter_entities().find_map(|e| {

@@ -174,6 +174,21 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // **One row, not two.** It reads as unpin when a subject is already
+        // pinned — `render::draw_pin_subject` is what decides that, off
+        // `Game::pinned_subject` — because "at most one subject per
+        // station" is the rule and a second row would be a second place to
+        // state it.
+        label: "Study a program",
+        target: Mode::PinSubject,
+        locality: Locality::Base,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| g.study_station().is_some())
+        },
+    },
+    GroupEntry {
         label: "Routine research",
         target: Mode::RoutineResearch,
         locality: Locality::Anywhere,

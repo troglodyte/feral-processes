@@ -1477,3 +1477,86 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
         "row 1 named the better builder, so that is the program that must have been spent"
     );
 }
+
+/// Opening the screen with nobody pinned lists the base staff, and picking
+/// a row pins the program it names.
+#[test]
+fn picking_a_program_in_the_study_screen_pins_it() {
+    let mut app = app_owning_a_program_and_a_research_station(885);
+    stand_in_base(&mut app);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+
+    open_via_menu(&mut app, 'b', "Study a program");
+    assert_eq!(app.mode, Mode::PinSubject);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::UnderStudy),
+        "picking the row must actually pin the program"
+    );
+}
+
+/// **One row, not two.** With a subject already pinned, the same screen's
+/// one row reads as unpin, and confirming it releases the subject back to
+/// `Staff` — `Game::pinned_subject` is what the screen and the key both
+/// read, so the two cannot disagree about which state they are in.
+#[test]
+fn the_study_screen_unpins_the_current_subject_through_its_one_row() {
+    let mut app = app_owning_a_program_and_a_research_station(886);
+    stand_in_base(&mut app);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+    let station = app.game.as_mut().unwrap().study_station().unwrap();
+    app.game
+        .as_mut()
+        .unwrap()
+        .pin_subject(program, station)
+        .expect("a Staff program standing near its own pen can be pinned");
+    // `Game::pinned_subject` — what both the screen and the key read —
+    // requires the subject to have *arrived*, `UnderStudy`'s doc: arrival
+    // is derived off the body's own `Position`, never latched at the
+    // moment it is pinned. A handful of `wait`s is more than the few tiles
+    // this fixture's program has to cross.
+    for _ in 0..8 {
+        app.game.as_mut().unwrap().wait();
+    }
+    assert!(
+        app.game.as_mut().unwrap().pinned_subject().is_some(),
+        "precondition: the subject must have reached the pen before this test can mean anything"
+    );
+
+    open_via_menu(&mut app, 'b', "Study a program");
+    assert_eq!(app.mode, Mode::PinSubject);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::Staff),
+        "the one row on screen must have released the subject"
+    );
+}
+
+/// Esc discards nothing — `handle_pin_subject_key`'s own rule, matching
+/// `escaping_the_picker_files_nothing_and_spends_nothing`'s shape.
+#[test]
+fn escaping_the_study_screen_pins_nobody() {
+    let mut app = app_owning_a_program_and_a_research_station(887);
+    stand_in_base(&mut app);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+
+    open_via_menu(&mut app, 'b', "Study a program");
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(
+        app.mode,
+        Mode::BaseMenu,
+        "Esc from a group-menu screen returns to the menu it opened from"
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::Staff),
+        "Esc must not have pinned anyone"
+    );
+}

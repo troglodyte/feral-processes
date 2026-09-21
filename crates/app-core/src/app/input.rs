@@ -225,6 +225,7 @@ impl App {
             Mode::DevConsole => self.handle_dev_console_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::BuildProgram => self.handle_build_program_key(key),
+            Mode::PinSubject => self.handle_pin_subject_key(key),
             Mode::Craft => self.handle_craft_key(key),
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),
             Mode::Compiling => self.handle_compiling_key(key),

@@ -500,3 +500,24 @@ fn the_work_orders_row_appears_once_something_is_orderable() {
         labels(&app.base_menu_rows())
     );
 }
+
+/// `Mode::PinSubject`'s row: hidden until a `studies` structure stands, and
+/// offered once one does — `Game::study_station` is the closure's own
+/// question, so a mod naming a second `studies` structure needs no change
+/// here.
+#[test]
+fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
+    let mut app = app_owning_a_program_and_a_compiler(883, &[]);
+    stand_in_base(&mut app);
+    assert!(
+        !labels(&app.base_menu_rows()).contains(&"Study a program"),
+        "a Compiler alone declares no `studies` pen"
+    );
+
+    let mut app = app_owning_a_program_and_a_research_station(884);
+    stand_in_base(&mut app);
+    assert!(
+        labels(&app.base_menu_rows()).contains(&"Study a program"),
+        "a standing Research Station must offer the row"
+    );
+}

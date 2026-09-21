@@ -573,7 +573,7 @@ impl Game {
                 // clears next.
                 let blocked_by = match state {
                     ResearchState::Unlocked | ResearchState::Active => None,
-                    _ => self.research_block_memo(def, &mut blocks),
+                    _ => self.research_block_with(def, &mut blocks),
                 };
                 ResearchStatus {
                     id: def.id.clone(),
@@ -763,16 +763,37 @@ impl Game {
     /// same sentence the work-order screen shows, and two spellings of one
     /// refusal is the drift this repo keeps recording.
     pub(crate) fn research_block(&self, def: &ResearchDef) -> Option<String> {
+        self.research_block_with(def, &mut HashMap::new())
+    }
+
+    /// `research_block`, but taking the caller's own per-item memo rather
+    /// than minting one — `research_nodes`' door, so its whole pass shares
+    /// one map instead of paying `chain_break`'s cost per node.
+    ///
+    /// **The one definition of the term**, so `research_block` and
+    /// `research_nodes` cannot read the subject gate differently: both call
+    /// this rather than each holding a copy, which is what let a subject
+    /// gate reach `select_research` while the screen still called
+    /// `research_block_memo` beneath it and never asked the question. The
+    /// subject check stays **outside** `research_block_memo` (below), which
+    /// memoises per `ItemId` — this is a question per *node*, not per item,
+    /// so it is checked here, once, before delegating.
+    fn research_block_with(
+        &self,
+        def: &ResearchDef,
+        seen: &mut HashMap<ItemId, Option<String>>,
+    ) -> Option<String> {
         if def.requires_subject && self.pinned_subject().is_none() {
             return Some(
                 "Pin a tamed program in a Research Station's pen before researching this."
                     .to_string(),
             );
         }
-        self.research_block_memo(def, &mut HashMap::new())
+        self.research_block_memo(def, seen)
     }
 
-    /// `research_block`, reusing an answer per item across a whole screen pass.
+    /// `research_block_with`, reusing an answer per item across a whole
+    /// screen pass.
     ///
     /// **The memo is the difference between a derivation and a per-frame cost.**
     /// `chain_break` walks every entity in the world and rebuilds

@@ -2245,6 +2245,95 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
 }
 
 // ---------------------------------------------------------------------
+// C1 (final whole-branch review): `research_nodes` must apply the same
+// subject term `select_research` refuses on. Task 7's own tests compared
+// `select_research`'s refusal against a live `research_block` call — the
+// same door twice — which is why a subject gate could reach `select_research`
+// while `research_nodes` (the screen) still read `research_block_memo`
+// directly and never asked the subject question at all. These tests drive
+// `research_nodes` itself.
+// ---------------------------------------------------------------------
+
+/// The screen's own row must carry the same block reason the selection
+/// door refuses with, and pinning a subject must clear it there too — not
+/// only at `select_research`.
+#[test]
+fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does() {
+    let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .cloned()
+        .expect("paging ships and is gated at zone 2 with no other prereqs");
+    assert!(
+        def.requires_subject,
+        "the fixture is vacuous unless paging is actually gated"
+    );
+
+    let want = game
+        .research_block(&def)
+        .expect("nobody is pinned yet, so the gate must be live");
+
+    let row = research_node(&game, "paging");
+    assert_eq!(
+        row.blocked_by,
+        Some(want),
+        "research_nodes's row must carry the same block reason select_research refuses with"
+    );
+
+    // Reachability: pinning a subject must clear the SCREEN's block line,
+    // not only make `select_research` succeed.
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let row = research_node(&game, "paging");
+    assert_eq!(
+        row.blocked_by, None,
+        "pinning a subject must clear research_nodes's block line too"
+    );
+}
+
+/// The eight ungated nodes must still show no block line from the screen
+/// with nobody pinned — companion census to the test above, so a subject
+/// term applied unconditionally would be caught here.
+#[test]
+fn research_nodes_reports_no_block_for_every_ungated_node_with_nobody_pinned() {
+    let ungated: Vec<String> = {
+        let game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|d| d.tree == ResearchTree::Base && !d.requires_subject)
+            .map(|d| d.id.clone())
+            .collect()
+    };
+    assert!(
+        !ungated.is_empty(),
+        "the fixture is vacuous with nothing ungated"
+    );
+    for id in ungated {
+        let mut game = Game::new(4411, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        base_with_a_research_node(&mut game);
+        research_prereqs_of(&mut game, &id);
+        let zone = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&id)
+            .expect("walked out of the same db")
+            .min_zone;
+        set_zone(&mut game, zone);
+        let row = research_node(&game, &id);
+        assert_eq!(
+            row.blocked_by, None,
+            "{id} should show no block on the screen with nobody pinned"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------
 // Completion spends the subject (Task 8)
 // ---------------------------------------------------------------------
 

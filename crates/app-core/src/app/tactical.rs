@@ -158,6 +158,14 @@ impl App {
         }
         // `SpecialOption::index` is a position in `actor_abilities`, which
         // is what `tactical_use_routine` indexes — never the row.
+        // A relocation aims twice — a body at arm's length, then a cell to
+        // send it to — so it opens the cursor on the first of the two and
+        // `commit_tactical_aim` re-opens it on the second. Routed off the
+        // engine's own `targeting`, `SpecialTargeting::Image` one line up.
+        if option.targeting == SpecialTargeting::Relocate {
+            self.open_tactical_aim(TacticalIntent::TeleportSubject(option.index));
+            return;
+        }
         self.open_tactical_aim(TacticalIntent::Routine(option.index));
     }
 
@@ -397,6 +405,27 @@ impl App {
                 None => false,
             },
             TacticalIntent::Routine(index) => game.tactical_use_routine(index, aim),
+            // The first of a relocation's two cells spends nothing and
+            // commits nothing: it re-opens the cursor on the body it just
+            // named. Refused here rather than at the engine's door so the
+            // player gets the message while the cursor is still up —
+            // `Game::tactical_teleport` would refuse the same cell, but a
+            // turn spent walking back to the routine list to find out is
+            // not what the other intents do.
+            TacticalIntent::TeleportSubject(index) => {
+                if game.teleport_subjects().contains(&aim) {
+                    self.open_tactical_aim(TacticalIntent::TeleportTo {
+                        index,
+                        subject: aim,
+                    });
+                    self.tactical_cursor = Some(aim);
+                    return;
+                }
+                false
+            }
+            TacticalIntent::TeleportTo { index, subject } => {
+                game.tactical_teleport(index, subject, aim)
+            }
         };
         if !landed {
             self.refuse("Not from here.");

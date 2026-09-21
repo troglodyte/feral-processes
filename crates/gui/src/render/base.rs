@@ -272,6 +272,21 @@ pub(super) fn draw_playing_base(
             .as_mut()
             .map(|g| g.tactical_placeable_cells(index))
             .unwrap_or_default(),
+        // A relocation's two cursors outline the two sets its own door
+        // refuses against — the bodies at arm's length, then the cells that
+        // body may be sent to. Calls, not a second derivation: the outline
+        // and the commit must not disagree about one cell.
+        (Some(_), Some(feral_processes_app_core::TacticalIntent::TeleportSubject(_))) => app
+            .game
+            .as_ref()
+            .map(|g| g.teleport_subjects())
+            .unwrap_or_default(),
+        (Some(_), Some(feral_processes_app_core::TacticalIntent::TeleportTo { subject, .. })) => {
+            app.game
+                .as_ref()
+                .map(|g| g.teleport_destinations(subject))
+                .unwrap_or_default()
+        }
         _ => Vec::new(),
     };
     let mode = app.mode;

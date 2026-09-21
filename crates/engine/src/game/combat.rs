@@ -1599,10 +1599,13 @@ impl Game {
                 // targeting` cannot say that; it knows nothing about
                 // effects. Overridden here instead of widening
                 // `AbilityTarget` for one ability (todo #100 Task 6).
-                targeting: if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
-                    crate::battle::SpecialTargeting::Image
-                } else {
-                    ability.target.targeting()
+                targeting: match ability.effect {
+                    AbilityEffect::Emulate { .. } => crate::battle::SpecialTargeting::Image,
+                    // Two cells rather than one, so it opens the aim cursor
+                    // twice — `Emulate`'s override for `Emulate`'s reason,
+                    // Teleport being authored `target: WholeParty` too.
+                    AbilityEffect::Teleport => crate::battle::SpecialTargeting::Relocate,
+                    _ => ability.target.targeting(),
                 },
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
                 unavailable: self.ability_unavailable(entity, &ability),

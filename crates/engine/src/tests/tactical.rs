@@ -5728,6 +5728,41 @@ mod teleport {
         spent_nothing(&game, player, power);
     }
 
+    /// The first stage's outline offers exactly the bodies the door will
+    /// accept — the acting body's own cells included, and nothing standing
+    /// further out.
+    #[test]
+    fn the_subject_outline_offers_every_body_at_arms_length_and_no_other() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 40);
+        let player = armed(&mut game);
+        let at = cell_of(&game, player);
+        let beside = free_neighbour(&game, at);
+        place_one(&mut game, pack[0], beside);
+
+        let offered = game.teleport_subjects();
+        assert!(
+            offered.contains(&at),
+            "the outline did not offer the player their own cell"
+        );
+        assert!(
+            offered.contains(&beside),
+            "the outline did not offer the hostile standing beside them"
+        );
+
+        // Walk the same body out of reach and it must leave the outline.
+        let two_away = game
+            .teleport_destinations(at)
+            .into_iter()
+            .find(|&cell| distance(at, cell) == 2)
+            .expect("no cell two steps out");
+        place_one(&mut game, pack[0], two_away);
+        assert!(
+            !game.teleport_subjects().contains(&two_away),
+            "the outline offered a body two cells away"
+        );
+    }
+
     /// A cell the invoker cannot see is refused, and dropped from the
     /// outline by the same call — `reach::aim_in_sight` with a `Single`
     /// shape, which is `line_of_sight` from the invoker's own cell.

@@ -878,6 +878,33 @@ impl Game {
         reach::gap(&battle.cells_of(body), &[cell]) <= reach && battle.can_move_to(body, cell)
     }
 
+    /// Every cell holding a body a relocation may pick up — what the aim
+    /// cursor outlines for a relocation's *first* stage.
+    ///
+    /// `teleport_destinations`' rule: a call into the same `reach::gap`
+    /// question `Game::tactical_teleport`'s own refusal asks, so a cell the
+    /// player is shown cannot be one the commit rejects. Every cell of a
+    /// body's footprint is offered, not just its anchor, because
+    /// `TacticalBattle::occupant` resolves any of them to the same body.
+    ///
+    /// The acting body's own cells are included: relocating yourself is the
+    /// routine's common case, and a gap of zero is inside arm's length.
+    pub fn teleport_subjects(&self) -> Vec<(i32, i32)> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        let reaching = battle.cells_of(actor);
+        battle
+            .bodies()
+            .map(|(body, _)| battle.cells_of(body))
+            .filter(|cells| reach::gap(&reaching, cells) <= crate::tuning::TACTICAL_MELEE_RANGE)
+            .flatten()
+            .collect()
+    }
+
     /// Every cell the body standing on `subject` may be relocated to — what
     /// the aim cursor outlines for a relocation's second stage.
     ///

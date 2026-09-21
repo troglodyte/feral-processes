@@ -400,6 +400,18 @@ impl App {
             // ally or a group, so it gets a mode of its own rather than
             // `Mode::BattleAlly`'s list of party members.
             SpecialTargeting::Image => self.mode = Mode::BattleEmulate,
+            // Unreachable: a relocation is `AbilityEffect::tactical_only`,
+            // so `battle_special_options` never puts one on this picker.
+            // A refusal rather than an `unreachable!` because this is an
+            // input handler — `use_ability` may panic on first hit to turn
+            // a hole in that filter into a crash, but a key press that
+            // crashes the game costs a run, and there is no board here to
+            // aim a relocation at whatever the filter did.
+            SpecialTargeting::Relocate => {
+                self.pending_battle_action = None;
+                self.pending_special_ability = None;
+                self.refuse(format!("{} needs a battle map.", chosen.name));
+            }
             // Nothing left to choose — commit the action now rather than
             // opening a picker with one meaningless row. Which side it
             // sweeps is the engine's answer, not a guess made here.

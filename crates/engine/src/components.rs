@@ -2423,6 +2423,17 @@ pub enum FinishOrder {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Besieger;
 
+/// Which structure a besieger's `Carrying` load came out of.
+///
+/// **Killing a carrier before the door drops the goods back into this
+/// structure, if it still stands** — `game::siege::raiders`'s single most
+/// load-bearing line, and what makes interception the shape of the fight
+/// rather than a race. Written alongside `Carrying` at the moment of the
+/// steal and read once, by `game::siege::raiders::drop_besieger_cargo` on
+/// the reap that follows a kill.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct StolenFrom(pub Entity);
+
 /// The character a pending build site draws.
 ///
 /// **A caret, and orange.** The renderer paints its own dark frame around

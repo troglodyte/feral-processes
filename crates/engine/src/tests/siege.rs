@@ -1390,3 +1390,243 @@ mod raiders_citizenship {
         assert!(game.position_is_honest(besieger));
     }
 }
+
+/// `Game::besieger_turn`'s steal arm (Task 12).
+mod raiders_steal {
+    use super::*;
+    use crate::components::{Besieger, Carrying, Glyph, GlyphColor, StolenFrom, Structure};
+    use crate::game::siege::board;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::BattleSpec;
+    use crate::tuning::HAUL_CARRY_CAPACITY;
+    use crate::world::Biome;
+
+    /// A real base pocket, opened as a `TacticalBattle` through the exact
+    /// board a siege would build. `besieger_turn` re-derives the door the
+    /// same way (`board::build`), so this fixture and the code under test
+    /// always agree about where it is. Returns the door's board cell.
+    fn open_pocket_battle(game: &mut Game) -> (i32, i32) {
+        game.lay_starting_pocket();
+        let siege_board = board::build(game).unwrap();
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        game.world
+            .insert_resource(TacticalBattle::open(spec, siege_board.board.clone()));
+        siege_board.door
+    }
+
+    fn spawn_besieger(game: &mut Game) -> Entity {
+        game.world
+            .spawn((
+                Glyph {
+                    ch: 'r',
+                    color: GlyphColor::Red,
+                },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                Hostile,
+                Besieger,
+            ))
+            .id()
+    }
+
+    fn spawn_stocked_structure(game: &mut Game, qty: u32) -> Entity {
+        let mut stock = Stock::new(1000);
+        stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), qty);
+        game.world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                stock,
+            ))
+            .id()
+    }
+
+    fn core_fragment() -> ItemId {
+        ItemId::from(ids::CORE_FRAGMENT)
+    }
+
+    /// Adjacent to a stocked structure, a besieger steals and makes for the
+    /// door, over as many beats as the whole trip takes — and once through
+    /// it, the roster is empty and the fight reads as won, the same
+    /// `settle_tactical` answer a wipe gives.
+    #[test]
+    fn a_raider_beside_a_stocked_structure_steals_and_departs() {
+        let mut game = Game::new(980, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let structure = spawn_stocked_structure(&mut game, 3);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(
+            game.besieger_turn(besieger),
+            "adjacent to a stocked structure, a besieger must steal"
+        );
+        assert!(
+            game.world.get::<Carrying>(besieger).is_some(),
+            "it must now be carrying"
+        );
+        let after_steal = game
+            .world
+            .get::<Stock>(structure)
+            .unwrap()
+            .output
+            .get(&core_fragment())
+            .copied()
+            .unwrap_or(0);
+        assert!(after_steal < 3, "stealing must take units off the shelf");
+
+        for _ in 0..20 {
+            if game.world.get_resource::<TacticalBattle>().is_none() {
+                break;
+            }
+            game.besieger_turn(besieger);
+        }
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "a lone besieger that reached the door and left empties the \
+             roster, which the fight reads as won"
+        );
+    }
+
+    /// A raider killed while carrying drops what it held back into the
+    /// structure it came from, if that still stands — the base's total
+    /// stock unchanged across the whole episode.
+    #[test]
+    fn a_raider_killed_one_cell_short_of_the_door_drops_what_it_held() {
+        let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let door = open_pocket_battle(&mut game);
+        let structure = spawn_stocked_structure(&mut game, 2);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            // One cell short of the door, already carrying — the steal
+            // itself is Task 12's other test's concern.
+            battle.place(besieger, (door.0 + 1, door.1));
+            battle.set_initiative(vec![besieger]);
+        }
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 3,
+            },
+            StolenFrom(structure),
+        ));
+        let total_before = 2 /* on the shelf */ + 3 /* carried */;
+
+        game.world.get_mut::<Stats>(besieger).unwrap().hp = 0;
+        let round_before = game.world.resource::<TacticalBattle>().round;
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_actions_left(0);
+        game.hand_on_turn(besieger, round_before);
+
+        let total_after = game
+            .world
+            .get::<Stock>(structure)
+            .unwrap()
+            .output
+            .get(&core_fragment())
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            total_after, total_before,
+            "the base's total stock must be unchanged across the whole episode"
+        );
+    }
+
+    /// A raider with nothing in reach to take does not stand still — it
+    /// falls through to the generic AI.
+    #[test]
+    fn a_raider_with_nothing_to_take_falls_through_to_the_generic_ai() {
+        let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(besieger, (1, 1));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(
+            !game.besieger_turn(besieger),
+            "nothing adjacent to take must fall through rather than act"
+        );
+    }
+
+    /// The hook actually reaches real gameplay's pacing door,
+    /// `Game::tactical_ai_beat` — not just `Game::besieger_turn` called
+    /// directly, which every other test in this module does. Without the
+    /// `run_tactical_beat` hook a besieger would fight like an ordinary
+    /// hostile in real play and only steal under a test that drives its
+    /// turn by hand.
+    #[test]
+    fn the_pacing_driver_reaches_the_steal_hook() {
+        let mut game = Game::new(984, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let structure = spawn_stocked_structure(&mut game, 3);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        use crate::tactical::ai::AiBeat;
+        assert_eq!(game.tactical_ai_beat(), AiBeat::Acted);
+        assert!(
+            game.world.get::<Carrying>(besieger).is_some(),
+            "the real per-frame pacing door must reach the steal hook too"
+        );
+    }
+
+    /// The carry cap bounds one raider's haul, against the shared constant
+    /// rather than a literal.
+    #[test]
+    fn the_carry_cap_bounds_one_raiders_haul() {
+        let mut game = Game::new(983, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let plenty = HAUL_CARRY_CAPACITY + 5;
+        let structure = spawn_stocked_structure(&mut game, plenty);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(game.besieger_turn(besieger));
+
+        let carrying = game.world.get::<Carrying>(besieger).unwrap();
+        assert_eq!(carrying.qty, HAUL_CARRY_CAPACITY);
+        let remaining = game
+            .world
+            .get::<Stock>(structure)
+            .unwrap()
+            .output
+            .get(&core_fragment())
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(remaining, plenty - HAUL_CARRY_CAPACITY);
+    }
+}

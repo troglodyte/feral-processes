@@ -1670,6 +1670,18 @@ impl Game {
             .filter(|&e| !self.creature_alive(e))
             .collect();
         for body in fallen {
+            // **Before the removal**, so `drop_besieger_cargo`'s fallback
+            // search over `TacticalBattle::bodies` still sees this body's
+            // own cell — `crate::components::Besieger`'s own load-bearing
+            // line: a carrier killed short of the door drops what it held
+            // rather than deleting it from the base's stock entirely.
+            if self
+                .world
+                .get::<crate::components::Besieger>(body)
+                .is_some()
+            {
+                crate::game::siege::raiders::drop_besieger_cargo(self, body);
+            }
             self.world.resource_mut::<TacticalBattle>().remove(body);
             // A fallen companion is reaped at teardown, not here — the same
             // deferral the abstract model makes, and `bench_or_dissolve` is
@@ -1714,7 +1726,7 @@ impl Game {
     /// and it is theirs alone to make: a companion can break off and leave
     /// the party fighting on, but the player is the one holding the fight
     /// open, so their leaving closes it exactly as `battle_flee` does.
-    fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
+    pub(crate) fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
         // Every reap and every departure comes through here, including the
         // reap in the round's upkeep that no hand-on follows — so a decoy
         // never outlives the last body it was fooling by a turn.

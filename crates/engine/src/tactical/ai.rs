@@ -579,6 +579,32 @@ impl Game {
     /// back off `TacticalBattle` by every beat after it, which is what holds
     /// this to **one `GameRng` draw a turn** rather than one a cell.
     fn run_tactical_beat(&mut self, actor: Entity, temperature: f32) -> AiBeat {
+        // **The one hook, ahead of everything below it.** The plan's own
+        // text points at `Game::tactical_ai_turn`'s top, but real play never
+        // calls that door — `App::advance_tactical` drives
+        // `Game::tactical_ai_beat`, which reaches `run_tactical_beat`
+        // directly — so a besieger's steal/wreck/withdraw behaviour has to
+        // sit here, the one place this file's own doc already says every
+        // driver (`tactical_ai_beat`, `tactical_ai_turn_at`,
+        // `tactical_drive_turn`) shares a turn through. `Game::besieger_turn`
+        // returns `false` when there is nothing siege-shaped to do, which is
+        // what lets a cornered besieger still fight back through the
+        // ordinary AI below.
+        if self
+            .world
+            .get::<crate::components::Besieger>(actor)
+            .is_some()
+            && self.besieger_turn(actor)
+        {
+            let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+                return AiBeat::Acted;
+            };
+            return if battle.actor() == Some(actor) {
+                AiBeat::Stepped
+            } else {
+                AiBeat::Acted
+            };
+        }
         let sides = self.tactical_sides(actor);
         if sides.targets.is_empty() {
             self.tactical_end_turn();

@@ -1248,6 +1248,12 @@ impl Game {
         self.world
             .entity_mut(front)
             .remove::<(Hostile, WanderAi, NestGuardian, TownPatrol, Pursuing)>();
+        // A captured carrier gives its plunder back exactly as a killed one
+        // does, while it is still on the board for the nearest-Depot
+        // fallback to measure from.
+        if self.world.get::<Besieger>(front).is_some() {
+            crate::game::siege::raiders::drop_besieger_cargo(self, front);
+        }
         self.world
             .entity_mut(front)
             .remove::<(Besieger, Carrying, StolenFrom)>();

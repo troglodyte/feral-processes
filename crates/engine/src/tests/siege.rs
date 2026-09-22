@@ -3489,7 +3489,9 @@ mod rereview_findings {
         // A besieger mid-haul when it is captured — `decompile_body` must
         // strip this too, not just `Besieger` itself, or a captured
         // companion keeps hauling a shelf's stolen goods around forever.
-        let stale_source = game.world.spawn_empty().id();
+        // A source still holding a `Stock`, so the capture has somewhere
+        // to put the goods back — a kill would, and so must a capture.
+        let stale_source = game.world.spawn(crate::components::Stock::default()).id();
         game.world.entity_mut(besieger).insert((
             Carrying {
                 item: core_fragment(),
@@ -3552,6 +3554,16 @@ mod rereview_findings {
             }
         }
         assert!(captured, "the besieger was never captured");
+        assert_eq!(
+            game.world
+                .get::<crate::components::Stock>(stale_source)
+                .unwrap()
+                .output
+                .get(&core_fragment())
+                .copied(),
+            Some(1),
+            "a captured carrier must drop its cargo back, as a kill does"
+        );
         assert!(
             game.world.get::<Besieger>(besieger).is_none(),
             "decompile_body must strip Besieger on capture"

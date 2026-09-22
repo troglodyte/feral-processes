@@ -46,9 +46,8 @@ impl Game {
     /// says.
     ///
     /// `false` on the same reasons `board::build` and an absent `base_pos`
-    /// already refuse for — `Game::siege_check` reads that exactly as it
-    /// reads a refused `resolve_siege_offscreen`: the pressure a held tick
-    /// built is still owed.
+    /// already refuse for — `Game::siege_check` then resolves the siege
+    /// off-screen instead of staging it.
     pub(crate) fn open_siege(&mut self) -> bool {
         let Some(siege_board) = board::build(self) else {
             return false;
@@ -138,9 +137,8 @@ impl Game {
         // as "not a siege" to `siege::raiders::siege_morale_broken` and
         // `siege::persist::assemble` alike, so it would neither ever end on
         // a morale break nor ever save. Reported exactly as `board::build`
-        // and an absent `base_pos` already are: `false`, which
-        // `Game::siege_check` reads as the pressure still being owed rather
-        // than spent on a fight that never opened.
+        // and an absent `base_pos` already are: `false`, on which
+        // `Game::siege_check` resolves the siege off-screen instead.
         if seated.is_empty() {
             for &raider in &raiders {
                 self.world.despawn(raider);

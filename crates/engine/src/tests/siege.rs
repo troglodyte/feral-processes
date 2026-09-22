@@ -1449,8 +1449,21 @@ mod raiders_steal {
             biome: Biome::OpenGrid,
             bodies: 1,
         };
-        game.world
-            .insert_resource(TacticalBattle::open(spec, siege_board.board.clone()));
+        let mut battle = TacticalBattle::open(spec, siege_board.board.clone());
+        // `Game::besieger_turn` reads `battle.siege_door` rather than
+        // rebuilding the board every beat (a dig finishing mid-siege must
+        // not move where the door is read as standing) — this fixture has
+        // to carry the same value `Game::open_siege` would have written, or
+        // every besieger under test reads a phantom door at `(0, 0)`.
+        battle.siege_door = siege_board.door;
+        // Seated at the door so `Game::settle_tactical` does not read the
+        // fight as a jack-out the moment a besieger's own turn wraps the
+        // round (`reap_tactical_dead`'s unconditional `settle_tactical`
+        // call) — a fixture that never seats the player at all reads
+        // `battle.cell_of(player)` as `None`, which is the same "gone" a
+        // real jack-out leaves.
+        battle.place(game.player_entity(), siege_board.door);
+        game.world.insert_resource(battle);
         siege_board.door
     }
 
@@ -1625,7 +1638,12 @@ mod raiders_steal {
         }
 
         use crate::tactical::ai::AiBeat;
-        assert_eq!(game.tactical_ai_beat(), AiBeat::Acted);
+        // `Stepped`, not `Acted`: this besieger is the fight's only
+        // initiative slot, so spending its one action wraps the round
+        // straight back onto itself (`TacticalBattle::end_turn`'s `wrap`)
+        // rather than handing off to anybody else — `battle.actor()` still
+        // names it once the beat returns.
+        assert_eq!(game.tactical_ai_beat(), AiBeat::Stepped);
         assert!(
             game.world.get::<Carrying>(besieger).is_some(),
             "the real per-frame pacing door must reach the steal hook too"
@@ -1684,8 +1702,21 @@ mod raiders_wreck {
             biome: Biome::OpenGrid,
             bodies: 1,
         };
-        game.world
-            .insert_resource(TacticalBattle::open(spec, siege_board.board.clone()));
+        let mut battle = TacticalBattle::open(spec, siege_board.board.clone());
+        // `Game::besieger_turn` reads `battle.siege_door` rather than
+        // rebuilding the board every beat (a dig finishing mid-siege must
+        // not move where the door is read as standing) — this fixture has
+        // to carry the same value `Game::open_siege` would have written, or
+        // every besieger under test reads a phantom door at `(0, 0)`.
+        battle.siege_door = siege_board.door;
+        // Seated at the door so `Game::settle_tactical` does not read the
+        // fight as a jack-out the moment a besieger's own turn wraps the
+        // round (`reap_tactical_dead`'s unconditional `settle_tactical`
+        // call) — a fixture that never seats the player at all reads
+        // `battle.cell_of(player)` as `None`, which is the same "gone" a
+        // real jack-out leaves.
+        battle.place(game.player_entity(), siege_board.door);
+        game.world.insert_resource(battle);
         siege_board.door
     }
 
@@ -1829,6 +1860,16 @@ mod raiders_withdraw {
         };
         let mut battle = TacticalBattle::open(spec, siege_board.board.clone());
         battle.siege_pack = pack;
+        // See the other `open_pocket_battle`s: `Game::besieger_turn` reads
+        // `battle.siege_door` rather than rebuilding the board every beat.
+        battle.siege_door = siege_board.door;
+        // Seated at the door so `Game::settle_tactical` does not read the
+        // fight as a jack-out the moment a besieger's own turn wraps the
+        // round (`reap_tactical_dead`'s unconditional `settle_tactical`
+        // call) — a fixture that never seats the player at all reads
+        // `battle.cell_of(player)` as `None`, which is the same "gone" a
+        // real jack-out leaves.
+        battle.place(game.player_entity(), siege_board.door);
         game.world.insert_resource(battle);
         siege_board.door
     }
@@ -1867,7 +1908,14 @@ mod raiders_withdraw {
         {
             let mut battle = game.world.resource_mut::<TacticalBattle>();
             for (i, &b) in besiegers.iter().enumerate() {
-                battle.place(b, (3, i as i32));
+                // `(2, i)`, not `(3, i)`: the survivor this test reads
+                // (index `down`) must start more than `TACTICAL_MELEE_RANGE`
+                // from the door, or the fixed adjacency-based leave check
+                // (C1) reads it as already having reached the door and
+                // despawns it on this very call — which is correct behaviour
+                // for that case, but leaves nothing here to assert the
+                // "moves doorward" claim against.
+                battle.place(b, (2, i as i32));
             }
             battle.set_initiative(besiegers.clone());
         }
@@ -1884,6 +1932,10 @@ mod raiders_withdraw {
             .resource::<TacticalBattle>()
             .cell_of(survivor)
             .unwrap();
+        assert!(
+            chebyshev(before, door) > 1,
+            "the fixture must place the survivor away from the door"
+        );
 
         assert!(
             game.besieger_turn(survivor),
@@ -2628,6 +2680,696 @@ mod persist {
             32,
             "adding a siege field is additive under field-named RON and must \
              not cost a version bump"
+        );
+    }
+}
+
+/// Review findings (2026-09-22 `feat/siege` review) fixed against real
+/// doors: `Game::open_siege` on a base with a real Home spawned via
+/// `place_home` at `BASE_EXIT_CELL`, `Game::tactical_ai_beat` for AI turns,
+/// and a real `game.save()`/`Game::load()` round trip for the save fix.
+mod review_findings {
+    use super::*;
+    use crate::base_grid::BaseGrid;
+    use crate::components::{Besieger, Carrying, Downed, StolenFrom, Structure};
+    use crate::items::ids;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::ai::AiBeat;
+    use crate::tactical::map::{BattleCell, BattleSpec, Board};
+    use crate::tuning::HAUL_CARRY_CAPACITY;
+    use crate::world::Biome;
+
+    fn core_fragment() -> ItemId {
+        ItemId::from(ids::CORE_FRAGMENT)
+    }
+
+    /// A real base — `place_home`'s real `spawn_structure` door at
+    /// `BASE_EXIT_CELL` — with the player standing at `player_at` rather
+    /// than on the door, and a real `Game::open_siege` fired on it.
+    fn open_real_siege(seed: u32, player_at: (i32, i32)) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        stand_in_base_at(&mut game, player_at.0, player_at.1);
+        set_zone(&mut game, 2);
+        assert!(
+            game.open_siege(),
+            "a real base with the player home must open a real siege"
+        );
+        game
+    }
+
+    fn any_besieger(game: &Game) -> Entity {
+        game.world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Besieger>(e).is_some())
+            .expect("a real siege must seat at least one besieger")
+    }
+
+    /// A free, open neighbour of `near` — raiders seed several deep around
+    /// the door (§4's "one body to a cell means they file in at and behind
+    /// it"), so a hardcoded offset can land on whichever one got there
+    /// first instead of the cell this test actually wants to control.
+    fn free_neighbour(battle: &TacticalBattle, near: (i32, i32)) -> (i32, i32) {
+        const OFFSETS: [(i32, i32); 8] = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ];
+        OFFSETS
+            .into_iter()
+            .map(|(dx, dy)| (near.0 + dx, near.1 + dy))
+            .find(|&cell| {
+                battle.board.cell(cell.0, cell.1) == BattleCell::Open
+                    && battle.occupant(cell).is_none()
+            })
+            .expect("the door must have at least one free neighbour on a fresh siege")
+    }
+
+    // ---- C1: the Home really occupies the door, and a carrier leaves anyway.
+
+    #[test]
+    fn c1_home_stands_on_the_door_and_a_carrier_leaves_through_it_anyway() {
+        let mut game = open_real_siege(200_001, (2, 0));
+        let (door, home) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let door = battle.siege_door;
+            let home = battle
+                .occupant(door)
+                .expect("the Home must be seated as a body on the door cell");
+            (door, home)
+        };
+        assert!(
+            game.world.get::<Structure>(home).is_some(),
+            "whatever occupies the door must be the Home structure"
+        );
+        let _ = door;
+
+        let besieger = any_besieger(&game);
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(home),
+        ));
+        // Unkillable, and the only body with a turn — so the only way this
+        // entity can vanish inside the loop below is `besieger_leaves`'s own
+        // despawn, not a stray combat death (its own, or the player's, which
+        // would close the whole fight and let the C5 sweep account for it
+        // instead) standing in for it.
+        game.world.get_mut::<Stats>(besieger).unwrap().hp = 1_000_000;
+        game.world.get_mut::<Stats>(besieger).unwrap().max_hp = 1_000_000;
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().hp = 1_000_000;
+        game.world.get_mut::<Stats>(player).unwrap().max_hp = 1_000_000;
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        let mut left = false;
+        for _ in 0..200 {
+            if game.world.get::<Besieger>(besieger).is_none() {
+                left = true;
+                break;
+            }
+            game.tactical_ai_beat();
+        }
+        assert!(
+            left,
+            "a carrying besieger must eventually reach and leave through \
+             the door even though the Home stands on it"
+        );
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_some(),
+            "other besiegers remain seated, so this must be the one leaving \
+             through the door, not the whole fight closing some other way"
+        );
+    }
+
+    // ---- C2: a carrier does not steal twice from the shelf it is still
+    // standing beside.
+
+    #[test]
+    fn c2_a_carrier_does_not_overwrite_its_load_with_a_second_steal() {
+        let mut game = Game::new(200_002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let depot_def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "depot")
+            .expect("the shipped catalogue has a Depot");
+        // Well clear of the door and the Home standing on it — `(-1, 0)`
+        // is itself the door's own neighbour and this fixture needs a free
+        // cell beside the Depot, not one the Home already occupies.
+        let depot = game.spawn_structure(&depot_def, 2, 2, None);
+        let hoard = 2 * HAUL_CARRY_CAPACITY + 1;
+        game.world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(core_fragment(), hoard);
+        stand_in_base_at(&mut game, -2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let besieger = any_besieger(&game);
+        let depot_cell = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(depot)
+            .expect("the Depot must have seated as a body");
+        let beside = (depot_cell.0 - 1, depot_cell.1);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(besieger, beside),
+            "the fixture must actually free the cell it seats the besieger on"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        assert!(
+            game.besieger_turn(besieger),
+            "adjacent to a stocked Depot, it must steal"
+        );
+        // Its own turn only steals — it never walks away on the same turn
+        // it filled its hold — so it is still standing beside the shelf for
+        // the beat this repro is about.
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().cell_of(besieger),
+            Some(beside),
+            "stealing must not move the besieger"
+        );
+
+        game.besieger_turn(besieger);
+
+        let remaining = game
+            .world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&core_fragment())
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            remaining,
+            hoard - HAUL_CARRY_CAPACITY,
+            "a second steal from the same shelf must not fire while still carrying"
+        );
+    }
+
+    // ---- C3: a save/load round trip seats the player at their own board
+    // cell, not the door.
+
+    #[test]
+    fn c3_a_save_load_round_trip_seats_the_player_off_the_door() {
+        let mut game = open_real_siege(200_003, (2, 0));
+        let (expected_cell, door) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            (
+                battle
+                    .cell_of(game.player_entity())
+                    .expect("the player must be seated"),
+                battle.siege_door,
+            )
+        };
+        assert_ne!(
+            expected_cell, door,
+            "the fixture must actually stand the player off the door"
+        );
+
+        let scratch = scratch_assets_dir("siege_c3_player_cell");
+        std::fs::create_dir_all(&*scratch).unwrap();
+        let path = scratch.join("save.bin");
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+        assert!(
+            loaded.in_tactical_battle(),
+            "the siege must survive the round trip"
+        );
+        let player = loaded.player_entity();
+        let cell = loaded.world.resource::<TacticalBattle>().cell_of(player);
+        assert_eq!(
+            cell,
+            Some(expected_cell),
+            "the player must reload at their own board cell, not the door \
+             or a base-space anchor coordinate"
+        );
+    }
+
+    // ---- C4: a staff body killed on the board is benched, not left dead
+    // in the roster.
+
+    #[test]
+    fn c4_staff_killed_on_the_board_is_benched_not_stuck_at_zero_hp() {
+        let mut game = Game::new(200_004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let staff = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(staff).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        stand_in_base_at(&mut game, 3, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+        assert!(
+            game.world
+                .resource::<TacticalBattle>()
+                .cell_of(staff)
+                .is_some(),
+            "the staff body must have seated on the real board"
+        );
+
+        game.world.get_mut::<Stats>(staff).unwrap().hp = 0;
+        // A round wrap through the real door — `Game::tactical_end_turn` —
+        // rather than a direct call into the private reap, so this proves
+        // the production turn-ending path actually reaches it.
+        let player = game.player_entity();
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player]);
+        game.tactical_end_turn();
+
+        assert_eq!(
+            game.world.get::<Stats>(staff).map(|s| s.hp),
+            Some(1),
+            "a Forgiving bench leaves the body at 1 HP, not stuck at 0"
+        );
+        assert!(
+            game.world.get::<Downed>(staff).is_some(),
+            "the body must be benched (Downed) rather than left dead in the roster"
+        );
+    }
+
+    // ---- C5: a jack-out sweeps every stray besieger off the board.
+
+    #[test]
+    fn c5_a_jack_out_sweeps_the_stray_besiegers() {
+        let mut game = open_real_siege(200_005, (2, 0));
+        let besiegers: Vec<Entity> = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| game.world.get::<Besieger>(e).is_some())
+                .collect()
+        };
+        assert!(!besiegers.is_empty());
+
+        // A siege is always tactical (§2 of the design), and a tactical
+        // fight has no `BattleState` for `Game::battle_flee` to read — that
+        // door is the abstract group model's own, gated on it. On a battle
+        // map "the player's own [step off the board] is the jack-out"
+        // (`Game::depart_tactical`'s doc), so this walks the player to a
+        // free, open cell on the board's true edge and steps off it —
+        // scanned rather than hand-picked, since the flood-filled pocket's
+        // exact shape (`PLATFORM_CORNER_CUT`) is not this test's to assume.
+        let player = game.player_entity();
+        let (edge_cell, out_dir) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let occupied: std::collections::HashSet<(i32, i32)> =
+                battle.bodies().map(|(_, cell)| cell).collect();
+            let side = battle.board.side;
+            (0..side)
+                .flat_map(|y| (0..side).map(move |x| (x, y)))
+                .filter(|&(x, y)| battle.board.cell(x, y) == BattleCell::Open)
+                .filter(|cell| !occupied.contains(cell))
+                .find_map(|(x, y)| {
+                    [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                        .into_iter()
+                        .find(|&(dx, dy)| !battle.board.in_bounds(x + dx, y + dy))
+                        .map(|dir| ((x, y), dir))
+                })
+                .expect("a flood-filled board must touch its own bounding box somewhere")
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, edge_cell),
+            "the fixture must be able to stand the player at the board's own edge"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player]);
+
+        assert_eq!(
+            game.tactical_step(out_dir),
+            crate::tactical::turn::StepOutcome::Departed,
+            "stepping off the board's own edge must be read as the player's \
+             own departure"
+        );
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "the player's own departure must close the fight"
+        );
+        for &b in &besiegers {
+            assert!(
+                game.world.get::<Besieger>(b).is_none(),
+                "a besieger left standing after the player's departure must \
+                 not survive as a stray Hostile wandering the base"
+            );
+        }
+    }
+
+    // ---- I1: base staff act under the AI during a siege.
+
+    #[test]
+    fn i1_a_staff_body_acts_under_the_ai_during_a_siege() {
+        let mut game = Game::new(200_006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let staff = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(staff).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        stand_in_base_at(&mut game, 3, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+        assert!(
+            game.world
+                .resource::<TacticalBattle>()
+                .cell_of(staff)
+                .is_some(),
+            "the staff body must have seated on the real board"
+        );
+
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![staff]);
+
+        assert!(
+            !game.tactical_awaits_input(),
+            "base staff must act under the AI in a siege, not wait on a \
+             key the player never gets to press"
+        );
+        assert_ne!(
+            game.tactical_ai_beat(),
+            AiBeat::Idle,
+            "the AI must actually drive the staff body's own turn"
+        );
+    }
+
+    // ---- I2: a swing at a Durability-less structure does not remove it.
+
+    #[test]
+    fn i2_a_swing_at_the_home_does_not_delete_it_from_the_board() {
+        let mut game = open_real_siege(200_007, (2, 0));
+        let (door, home) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            (
+                battle.siege_door,
+                battle.occupant(battle.siege_door).unwrap(),
+            )
+        };
+        let besieger = any_besieger(&game);
+        let beside = free_neighbour(game.world.resource::<TacticalBattle>(), door);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(besieger, beside),
+            "the fixture must actually free the cell beside the door"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        assert!(
+            game.tactical_attack(home),
+            "a besieger adjacent to the Home must be able to swing at it"
+        );
+
+        assert!(
+            game.world.get::<Structure>(home).is_some(),
+            "the Home itself must still exist — it has no Durability to lose"
+        );
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().cell_of(home),
+            Some(door),
+            "one swing at a Durability-less structure must not remove it \
+             from the board"
+        );
+    }
+
+    // ---- M1: `besieger_turn` reads the frozen `siege_door`, not a fresh
+    // rebuild that a mid-siege dig could move.
+
+    #[test]
+    fn m1_besieger_turn_reads_the_frozen_door_not_a_live_rebuild() {
+        let mut game = open_real_siege(200_008, (2, 0));
+        let frozen_door = game.world.resource::<TacticalBattle>().siege_door;
+
+        // Extends the flood fill's bounding box, shifting the origin (and
+        // so the board coordinate) a *fresh* `board::build` would compute
+        // for the same physical door — the board this fight already opened
+        // on does not move with it.
+        {
+            let mut grid = game.world.resource_mut::<BaseGrid>();
+            grid.lay_floor(-5, 0);
+        }
+        let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().door;
+        assert_ne!(
+            rebuilt_door, frozen_door,
+            "the fixture must actually shift the origin for this test to mean anything"
+        );
+
+        let besieger = any_besieger(&game);
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(besieger),
+        ));
+        let beside_frozen = free_neighbour(game.world.resource::<TacticalBattle>(), frozen_door);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(besieger, beside_frozen),
+            "the fixture must actually free the cell beside the frozen door"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        game.besieger_turn(besieger);
+
+        assert!(
+            game.world.get::<Besieger>(besieger).is_none(),
+            "adjacent to the frozen door while carrying, it must leave — \
+             a fresh rebuild would have named a different door and missed it"
+        );
+    }
+
+    // ---- M2: an empty pack does not open a siege at all.
+
+    #[test]
+    fn m2_an_empty_pack_does_not_open_a_siege() {
+        let mut game = Game::new(200_009, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+
+        let (ax, ay) = game
+            .anchor_position()
+            .expect("Game::new always spawns the one anchor");
+        {
+            let mut wm = game.world.resource_mut::<WorldMap>();
+            let mut tile = wm.tile(ax, ay);
+            tile.walkable = false;
+            wm.set_override(ax, ay, tile);
+        }
+
+        assert!(
+            !game.open_siege(),
+            "a pack with nowhere to spawn must not open a siege with no \
+             hostiles in it"
+        );
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "no board should have opened at all"
+        );
+    }
+
+    // ---- M4: a besieger leaving on the round's last rung still buys that
+    // round's turret fire.
+
+    #[test]
+    fn m4_a_besieger_leaving_on_the_last_rung_still_buys_the_rounds_turret_fire() {
+        let mut game = Game::new(200_010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let side = 10;
+        let mut board = Board::solid(side);
+        for y in 0..side {
+            for x in 0..side {
+                board.set(x, y, BattleCell::Open);
+            }
+        }
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 4,
+        };
+        let mut battle = TacticalBattle::open(spec, board);
+        let door = (0, 0);
+        battle.siege_door = door;
+        battle.siege_pack = 2;
+
+        let player = game.player_entity();
+        let leaving = game
+            .world
+            .spawn((
+                Hostile,
+                Besieger,
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 0,
+                },
+            ))
+            .id();
+        let target = game
+            .world
+            .spawn((
+                Hostile,
+                Besieger,
+                Stats {
+                    hp: 10_000,
+                    max_hp: 10_000,
+                    atk: 0,
+                    mitigation: 0,
+                },
+            ))
+            .id();
+        let turret = game
+            .world
+            .spawn(Structure {
+                kind: "turret".to_string(),
+            })
+            .id();
+
+        battle.place(player, (9, 9));
+        battle.place(leaving, (1, 0));
+        battle.place(turret, (2, 2));
+        battle.place(target, (2, 7));
+        // `target`, then `leaving` on the last rung.
+        battle.set_initiative(vec![target, leaving]);
+        game.world.insert_resource(battle);
+        game.world.entity_mut(leaving).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(leaving),
+        ));
+
+        // Advances the cursor onto `leaving` without resolving `target`'s
+        // turn through combat — a raw `TacticalBattle` API call to set up
+        // the scene, not the mechanism this test is about.
+        game.world.resource_mut::<TacticalBattle>().end_turn();
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(leaving),
+            "the fixture must put the leaving besieger on the last rung"
+        );
+
+        assert!(
+            game.besieger_turn(leaving),
+            "adjacent to the door while carrying, it must leave"
+        );
+
+        let hp = game.world.get::<Stats>(target).unwrap().hp;
+        assert!(
+            hp < 10_000,
+            "the round the leaving besieger's own departure wraps must \
+             still fire the turrets, not skip that round's upkeep entirely"
+        );
+    }
+
+    // ---- M3: a dead carrier's fallback drop goes to a real Depot, never
+    // to the Home or any other non-storage structure.
+
+    #[test]
+    fn m3_a_dead_carriers_fallback_drop_never_lands_in_the_home() {
+        let mut game = Game::new(200_011, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let depot_def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "depot")
+            .expect("the shipped catalogue has a Depot");
+        let depot = game.spawn_structure(&depot_def, 2, 2, None);
+        stand_in_base_at(&mut game, -2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let besieger = any_besieger(&game);
+        // Its source structure is gone (a stale id nothing resolves to any
+        // more), so `drop_besieger_cargo` must fall all the way through to
+        // its Depot-only fallback rather than the Home, which — like every
+        // structure — carries a `Stock` of its own (`Game::spawn_structure`
+        // inserts one unconditionally) but is not a place a hauler, or this
+        // fallback, may ever put goods.
+        let stale_source = game.world.spawn_empty().id();
+        game.world.despawn(stale_source);
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 3,
+            },
+            StolenFrom(stale_source),
+        ));
+        game.world.get_mut::<Stats>(besieger).unwrap().hp = 0;
+
+        let player = game.player_entity();
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player]);
+        game.tactical_end_turn();
+
+        let (home_stock, home) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let home = battle
+                .occupant(battle.siege_door)
+                .expect("the Home must still be seated");
+            (
+                game.world
+                    .get::<Stock>(home)
+                    .map(|s| s.output_used())
+                    .unwrap_or(0),
+                home,
+            )
+        };
+        assert_eq!(
+            home_stock, 0,
+            "the Home's own Stock must never receive a dead carrier's fallback drop"
+        );
+        let _ = home;
+        let depot_stock = game
+            .world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&core_fragment())
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            depot_stock, 3,
+            "the fallback must still land the goods somewhere real — a Depot"
         );
     }
 }

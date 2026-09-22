@@ -309,6 +309,33 @@
   the `chains` dev template's supplier bank around one: a hauler has to
   stand beside a Depot to deliver, so a supplier bank ringing one boxes it
   in. Keep a free tile on every Depot.
+- **The raid clock is spent by a sweep, not by reaching its threshold, and
+  both floors hold the pressure rather than forgiving it.**
+  `resources::RaidPressure` accrues `RAID_PRESSURE_PER_ZONE * zone` a tick
+  against an interval drawn once per sweep, replacing a `0.012` per-tick roll
+  that fired every 42 seconds of play — too frequent for any one sweep to
+  carry weight, and memoryless, so no stretch could read as safe or
+  threatened. Three holds, and each closes a different trap. `RAID_MIN_ZONE`
+  gates **accrual**: as a gate on firing, sector 1 would build pressure it
+  could never spend and a player would be swept within a tick or two of
+  breaching into sector 2, punished for the quiet the exemption had just
+  granted. `RAID_MIN_BASE_STAFF` gates **firing** and the clock holds — under
+  the roll a base below the floor dodged every draw, so benching your own
+  crew was a way never to be swept; held, the sweep waits for a base that can
+  absorb it, which is what the floor was always for. And `run_raid` returns
+  `bool` so a tick with nothing standing to sweep holds too: resetting on a
+  no-op rewinds the meter every tick a base is bare, so the first machine a
+  player raises would buy them an interval they had not served. The jitter is
+  on the **target**, never the accrual — summed over ~2400 ticks the law of
+  large numbers flattens a per-tick jitter to within a percent of its mean
+  and the clock is a metronome again. `RAID_PRESSURE_WARN_PERCENT` is read
+  off the *drawn* target, latched on `warned`, or the line is an inequality
+  said twice a second for four minutes. `SETTLEMENT_RAID_CHANCE_PER_TICK` is
+  coupled and moved with it: its own doc calls it the rarer of the two
+  events, and against a 2400-tick clock the old `0.006` was fourteen times
+  *more* frequent than the sweep. **Unmeasured** — `balance_sim` has no raid
+  term and `tuning.rs` says no instrument here models one, so every figure
+  was reasoned from the tick rate rather than measured.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.** Every `VisualEffect` names a structure's tile, so
   the queue is base-space by construction — ungated, `tile_flash` and

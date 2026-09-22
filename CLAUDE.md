@@ -315,6 +315,8 @@ relying on one, and correct all three places if it has moved.
   machine, asked of `ledger` fresh.
 - **`collect::plan_adjacent_take` is the one machine-to-machine reach**, the
   assembler's pull and a supplier's fuel walking the same four tiles.
+- **The raid clock is spent by a sweep, not by reaching its threshold, and
+  both floors hold the pressure rather than forgiving it.**
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.**
 - **The map pane's top-left corner is one box of three sections —

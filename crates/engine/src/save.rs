@@ -1487,6 +1487,12 @@ pub struct SaveData {
     /// with a fresh clock and costs no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub raid_pressure: crate::resources::RaidPressure,
+    /// How close the base is to its next siege — see
+    /// `resources::SiegePressure`. `raid_pressure`'s reason, and additive
+    /// for the same one: a save written before this field existed loads
+    /// with a fresh clock and costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub siege_pressure: crate::resources::SiegePressure,
     /// Contracts the run is holding, with their progress — see
     /// `resources::ActiveContracts`. Each carries the whole resolved
     /// `ContractDef`, so a contract whose asset file has since been edited or
@@ -1959,6 +1965,7 @@ mod tests {
             compass: crate::resources::CompassBearing::default(),
             trace: 0,
             raid_pressure: crate::resources::RaidPressure::default(),
+            siege_pressure: crate::resources::SiegePressure::default(),
             contracts: Vec::new(),
             contracts_done: Vec::new(),
             work_orders: Vec::new(),

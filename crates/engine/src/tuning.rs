@@ -3028,6 +3028,47 @@ pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
 pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Sieges
+// ─────────────────────────────────────────────────────────────────────────
+
+/// How much pressure one tick of a sector adds to `resources::SiegePressure`,
+/// per sector level — `RAID_PRESSURE_PER_ZONE`'s shape, and `1` for the same
+/// reason: the threshold is authored in these units.
+pub const SIEGE_PRESSURE_PER_ZONE: u32 = 1;
+
+/// The pressure a base spends between sieges, before jitter.
+///
+/// **Authored in minutes of play and written here in ticks**, `
+/// RAID_PRESSURE_THRESHOLD`'s method: the world runs at
+/// `app_core::WORLD_SPEED_MULTIPLIER` = 2 ticks a second, and
+/// `SIEGE_PRESSURE_PER_ZONE * zone` accrues per tick, so the interval in
+/// minutes is `SIEGE_PRESSURE_THRESHOLD / (SIEGE_PRESSURE_PER_ZONE * zone) /
+/// 2 / 60`. At `14_400` that is **60 minutes in sector 2** and **20 minutes
+/// in sector 6** — a siege is meant to be an event a run meets a handful of
+/// times, not a chore met every session, so its interval is much longer
+/// than the sweep's.
+pub const SIEGE_PRESSURE_THRESHOLD: u32 = 14_400;
+
+/// How far either side of `SIEGE_PRESSURE_THRESHOLD` a drawn interval may
+/// land, in percent — `RAID_PRESSURE_JITTER_PERCENT`'s reason, drawn once
+/// per interval and never per tick.
+pub const SIEGE_PRESSURE_JITTER_PERCENT: u32 = 25;
+
+/// How far through an interval the approach warning fires, in percent of
+/// the drawn target — `RAID_PRESSURE_WARN_PERCENT`'s shape. Landed here in
+/// Task 1 rather than Task 2 because `Game::dev_wind_siege_clock` needs it
+/// to wind to a warn point before Task 2 gives the warning itself a body;
+/// `SIEGE_WARN_FLOOR_TICKS`, the second half of the warning's own timing,
+/// follows in Task 2.
+pub const SIEGE_PRESSURE_WARN_PERCENT: u32 = 80;
+
+/// The first sector a siege may reach. `RAID_MIN_ZONE`'s twin, gating
+/// **accrual** and never firing — see `Game::siege_check`'s first line for
+/// why gating firing instead would ambush a player the instant they cross
+/// into the sector that can spend the pressure the opening sector banked.
+pub const SIEGE_MIN_ZONE: u32 = 2;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
 

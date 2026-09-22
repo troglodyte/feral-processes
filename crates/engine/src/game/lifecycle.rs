@@ -550,6 +550,7 @@ impl Game {
         world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
         world.init_resource::<crate::resources::RaidPressure>();
+        world.init_resource::<crate::resources::SiegePressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -1301,6 +1302,7 @@ impl Game {
         world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
         world.init_resource::<crate::resources::RaidPressure>();
+        world.init_resource::<crate::resources::SiegePressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -1566,6 +1568,7 @@ impl Game {
         game.world
             .insert_resource(crate::resources::Trace(data.trace));
         game.world.insert_resource(data.raid_pressure);
+        game.world.insert_resource(data.siege_pressure);
         // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
@@ -2735,6 +2738,7 @@ impl Game {
                 .clone(),
             trace: self.trace(),
             raid_pressure: *self.world.resource::<crate::resources::RaidPressure>(),
+            siege_pressure: *self.world.resource::<crate::resources::SiegePressure>(),
             contracts: self
                 .world
                 .resource::<crate::resources::ActiveContracts>()

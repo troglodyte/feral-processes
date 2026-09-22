@@ -81,6 +81,7 @@ mod settlement_market;
 mod settlement_patrols;
 mod settlement_relations;
 mod settlements;
+mod siege;
 mod sorties;
 mod spawning;
 mod sprite_palette;

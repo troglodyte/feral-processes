@@ -1807,6 +1807,28 @@ pub struct RaidPressure {
     pub warned: bool,
 }
 
+/// How close the base is to its next siege — `RaidPressure`'s shape, built
+/// the same way and for the same reason, and deliberately **not** that
+/// resource: a siege is a separate event with its own clock, so a sweep and
+/// a siege can each be mid-interval at once without one resetting the
+/// other. See `Game::siege_check` (`game/siege/clock.rs`).
+///
+/// `next_at` is drawn lazily on the first tick that accrues, for
+/// `RaidPressure::next_at`'s reason: `Game::new` spends no `GameRng` draw on
+/// a meter most runs never reach sector 2 for.
+///
+/// `warned` latches the approach line for one interval, `RaidPressure`'s
+/// reason: read fresh it is a per-tick inequality and fires twice a second.
+///
+/// Saved, `RaidPressure`'s reason: without persistence, saving in front of a
+/// siege and reloading would be a free reset.
+#[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiegePressure {
+    pub level: u32,
+    pub next_at: Option<u32>,
+    pub warned: bool,
+}
+
 /// The next `components::ProgramId` to hand out. Advanced by
 /// `Game::roster_parts`, which is the only thing that mints one.
 ///

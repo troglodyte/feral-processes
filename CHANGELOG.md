@@ -42,6 +42,14 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.225
+
+**The icon designer's palette now has a transparent swatch, first in the
+row and drawn as a checker.** Before, only Backspace could erase a cell, and
+nothing on screen said so; now you can pick "no colour" like any other and
+paint holes with Space, or click it in the sprite editor. The editor still
+opens on the first real colour, and saved icons are unchanged.
+
 ## 0.13.224
 
 **You can now build a Wall: five Core Fragments, no research needed.** You

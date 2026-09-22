@@ -3899,4 +3899,58 @@ mod rereview_findings {
              the raid precedent's own rule"
         );
     }
+
+    // ---- M2-m: an unseatable pack falls back to an off-screen resolution
+    // instead of holding the pressure and re-drawing `GameRng` forever.
+
+    #[test]
+    fn m2m_an_unseatable_pack_falls_back_to_offscreen_resolution() {
+        let mut game = Game::new(210_007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        establish_base(&mut game, true);
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+
+        // `open_siege`'s own empty-pack repro (`m2_an_empty_pack_does_not_
+        // open_a_siege`): make the anchor tile unwalkable so
+        // `spawn_siege_pack` seats nobody, every tick, forever.
+        let (ax, ay) = game
+            .anchor_position()
+            .expect("Game::new always spawns the one anchor");
+        {
+            let mut wm = game.world.resource_mut::<WorldMap>();
+            let mut tile = wm.tile(ax, ay);
+            tile.walkable = false;
+            wm.set_override(ax, ay, tile);
+        }
+
+        // Wound to the fire point directly rather than ticked there —
+        // thousands of ticks through the real clock would let a *first*
+        // successful off-screen resolution consume this fixture's own
+        // small pool of staff and structures well before the loop ends,
+        // which would trip `nothing_to_besiege`'s hold for a real and
+        // unrelated reason and read as this fix having failed.
+        {
+            let mut pressure = game.world.resource_mut::<crate::resources::SiegePressure>();
+            pressure.next_at = Some(SIEGE_PRESSURE_THRESHOLD);
+            pressure.level = SIEGE_PRESSURE_THRESHOLD;
+        }
+
+        // Through the real clock, one tick — `resolve_siege_offscreen` is
+        // documented `Always true` once `nothing_to_besiege` has already
+        // passed, so a single tick at the fire point must resolve.
+        game.siege_check();
+
+        assert_eq!(
+            game.siege_pressure(),
+            0,
+            "an unseatable pack must still resolve — off-screen — rather \
+             than hold its pressure and retry forever"
+        );
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "nothing could seat, so the on-screen board must never have \
+             opened"
+        );
+    }
 }

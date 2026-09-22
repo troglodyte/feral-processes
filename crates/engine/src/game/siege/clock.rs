@@ -87,8 +87,18 @@ impl Game {
         // standing in base space, `Game::resolve_siege_offscreen`
         // everywhere else — the one departure from `raid_check`'s single
         // fire, since a sweep has no on-screen half.
+        // **`open_siege` failing at home falls back to an off-screen
+        // resolution, rather than holding the pressure again.** The two
+        // refusals `open_siege` can give beyond this point — the door
+        // itself unwalkable, or a pack that rolled but seated nobody — are
+        // both persistent conditions of the base and the sector, not a
+        // one-tick fluke, so a bare hold would retry (and redraw
+        // `spawn_siege_pack`'s `GameRng`) every tick from here on with no
+        // way to ever spend the pressure it built. The abstract resolution
+        // reads no location at all, so it is a legitimate answer to a
+        // siege that could not be staged, not merely a consolation prize.
         let fired = match self.base_pos() {
-            Some(_) => self.open_siege(),
+            Some(_) => self.open_siege() || self.resolve_siege_offscreen(),
             None => self.resolve_siege_offscreen(),
         };
         if !fired {

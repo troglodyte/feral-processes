@@ -32,6 +32,10 @@ pub(crate) const CURSOR_COLOR: Color = WHITE;
 const CURSOR_THICKNESS: f32 = 2.0;
 pub(crate) const SELECTED_SWATCH_COLOR: Color = WHITE;
 const SELECTED_SWATCH_THICKNESS: f32 = 2.0;
+/// The transparent swatch's second checker tone, over `SCREEN_BG` — a
+/// checker rather than a plain `SCREEN_BG` square, which would read as a
+/// gap in the row rather than a colour you can pick.
+const CHECKER_LIGHT: Color = Color::new(0.30, 0.31, 0.34, 1.0);
 
 /// A swatch's gap to its neighbour, as a fraction of the swatch's own
 /// side — the icon editor's shipped `SWATCH_GAP_LINES / SWATCH_LINES`
@@ -94,23 +98,33 @@ pub(crate) fn palette_color((r, g, b): (u8, u8, u8)) -> Color {
     Color::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
 }
 
+/// How many swatches a row draws for a palette of `palette_len` colours:
+/// the transparent swatch (index 0) and then every entry, so a drawn
+/// position is the palette index itself. Every site that sizes or
+/// hit-tests a row reads this rather than adding its own `+ 1`.
+pub(crate) fn swatch_count(palette_len: usize) -> usize {
+    palette_len + 1
+}
+
 /// Draws a row of palette swatches and the selected one's outline, and
 /// nothing else — no background, no border, no label. `rect` is the exact
 /// box the row fills — `rect.h` is the swatch side, `rect.w` its total
 /// width — so a caller that already computed a narrower strip than its
 /// canvas (the icon editor's palette panel) hands over something this
-/// function reproduces exactly rather than re-deriving. Takes no
+/// function reproduces exactly rather than re-deriving. `selected` is a
+/// palette index and also the drawn position — see `swatch_count`. Takes no
 /// `CanvasView`: a swatch row is not a property of a canvas, only of a
 /// palette and which entry is selected.
 pub(crate) fn draw_swatch_row(p: &Painter, rect: Rect, selected: u8, palette: &[(u8, u8, u8)]) {
     let swatch = rect.h;
     let gap = swatch * SWATCH_GAP_RATIO;
-    for (i, &rgb) in palette.iter().enumerate() {
+    for i in 0..swatch_count(palette.len()) {
         let x = rect.x + i as f32 * (swatch + gap);
-        p.rect(x, rect.y, swatch, swatch, palette_color(rgb));
-        // `selected` is 1-based — index 0 means transparent and is not a
-        // swatch, `app::canvas_editor::FIRST_COLOUR`.
-        if selected as usize == i + 1 {
+        match i {
+            0 => draw_checker(p, x, rect.y, swatch),
+            n => p.rect(x, rect.y, swatch, swatch, palette_color(palette[n - 1])),
+        }
+        if selected as usize == i {
             p.rect_lines(
                 x,
                 rect.y,
@@ -121,6 +135,14 @@ pub(crate) fn draw_swatch_row(p: &Painter, rect: Rect, selected: u8, palette: &[
             );
         }
     }
+}
+
+/// The transparent swatch: a 2x2 checker, the convention for "no colour".
+fn draw_checker(p: &Painter, x: f32, y: f32, side: f32) {
+    let half = side / 2.0;
+    p.rect(x, y, side, side, SCREEN_BG);
+    p.rect(x, y, half, half, CHECKER_LIGHT);
+    p.rect(x + half, y + half, half, half, CHECKER_LIGHT);
 }
 
 #[cfg(test)]
@@ -181,6 +203,34 @@ mod tests {
             .into_iter()
             .fold(0.0_f32, f32::max);
         assert_eq!(widest, cell, "brush 1's cursor is exactly one cell wide");
+    }
+
+    /// The transparent swatch is drawn first, and selecting index 0
+    /// outlines it — the drawn position and the palette index are one
+    /// number, so a click and an arrow key cannot disagree about it.
+    #[test]
+    fn the_transparent_swatch_leads_the_row_and_can_be_selected() {
+        let palette: [(u8, u8, u8); 3] = [(255, 0, 0), (0, 255, 0), (0, 0, 255)];
+        let rect = Rect::new(0.0, 0.0, 60.0, 10.0);
+        let stride = 10.0 * (1.0 + SWATCH_GAP_RATIO);
+        for selected in [0u8, 1, 3] {
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw_swatch_row(p, rect, selected, &palette));
+            let outlined = crate::paint::painted_rect_stroke_boxes(&shapes, SELECTED_SWATCH_COLOR);
+            assert_eq!(outlined.len(), 1, "exactly one swatch is outlined");
+            let want = selected as f32 * stride;
+            assert!(
+                (outlined[0].min.x - want).abs() < 0.5,
+                "index {selected} must outline drawn position {selected} at x={want}, got {}",
+                outlined[0].min.x
+            );
+        }
+        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_row(p, rect, 1, &palette));
+        assert!(
+            crate::paint::painted_rect_fill_count(&shapes, CHECKER_LIGHT) >= 1,
+            "the transparent swatch is drawn as a checker"
+        );
+        assert_eq!(swatch_count(palette.len()), 4);
     }
 
     /// `draw_swatch_row` draws only the row: no grid cell and no cursor,

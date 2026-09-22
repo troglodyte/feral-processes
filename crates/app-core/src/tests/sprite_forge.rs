@@ -561,10 +561,9 @@ fn secondary_button_paints_index_zero_erase() {
 
 #[test]
 fn a_swatch_hit_selects_it() {
-    // `PointerHit::Swatch(6)` is `swatch_at`'s 0-based drawn position — the
-    // *seventh* swatch on screen — so it must land on `selected == 7`, not
-    // `6`. The old `== 6` expectation enshrined C1's off-by-one: the mouse
-    // selected the swatch to the left of the one it outlined.
+    // `PointerHit::Swatch(6)` is `swatch_at`'s 0-based drawn position, and
+    // position 0 is the transparent swatch — so the drawn position *is* the
+    // palette index and there is no conversion to get wrong.
     let mut app = app_with_sprite_forge(28);
     open_editor(&mut app, "anchor");
     assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 1);
@@ -579,7 +578,7 @@ fn a_swatch_hit_selects_it() {
         PointerButton::Primary,
         PointerPhase::Up,
     );
-    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 7);
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 6);
 }
 
 #[test]

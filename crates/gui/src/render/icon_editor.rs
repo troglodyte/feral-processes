@@ -34,10 +34,11 @@ use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
 /// the size both layout censuses below were verified against.
 const CANVAS_CELL_LINES: f32 = 2.4;
 /// A palette swatch's side, in the same units. Smaller than a canvas cell,
-/// because the strip is fifteen swatches and fourteen gaps wide and has to
-/// sit under a canvas that is `ICON_GRID` cells: the ceiling is
-/// `(ICON_GRID * CANVAS_CELL_LINES - 14 * SWATCH_GAP_LINES) / 15`, which is
-/// 1.0 at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
+/// because the strip is sixteen swatches (fifteen colours and the
+/// transparent one) and fifteen gaps wide and has to sit under a canvas
+/// that is `ICON_GRID` cells: the ceiling is
+/// `(ICON_GRID * CANVAS_CELL_LINES - 15 * SWATCH_GAP_LINES) / 16`, which is
+/// 0.92 at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
 /// holds it — the constant shipped at 1.4 against a comment claiming this
 /// exact rule, and nothing measured the two together.
 const SWATCH_LINES: f32 = 0.9;
@@ -105,7 +106,7 @@ fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
     let palette_label_y = canvas.y + canvas.h + gap + m.line_height;
     let swatch = m.line_height * SWATCH_LINES;
     let swatch_gap = m.line_height * SWATCH_GAP_LINES;
-    let n = ICON_PALETTE.len() as f32;
+    let n = canvas::swatch_count(ICON_PALETTE.len()) as f32;
     let palette_w = swatch * n + swatch_gap * (n - 1.0) + m.inset * 2.0;
     let palette_h = swatch + m.inset * 2.0;
     let palette = Rect::new(
@@ -292,7 +293,7 @@ mod tests {
 
     /// **The palette sits under the canvas without growing past it** —
     /// `SWATCH_LINES`' own stated constraint, which the constant used to
-    /// violate by ~120px while nothing measured it. The strip is fifteen
+    /// violate by ~120px while nothing measured it. The strip is sixteen
     /// swatches wide against eight canvas cells, so the two sizes are not
     /// free of each other and a comment cannot hold them in step.
     #[test]

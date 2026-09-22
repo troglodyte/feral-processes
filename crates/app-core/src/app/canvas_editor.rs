@@ -45,8 +45,10 @@ use feral_processes_engine::icon::Canvas;
 /// is invisible outside two dev/creation screens.
 pub(crate) const ICON_UNDO_DEPTH: usize = 32;
 
-/// The lowest selectable swatch. Zero is not on the list — it means
-/// transparent, and `Backspace` is the verb that reaches it.
+/// The swatch an editor opens on — the palette's first colour, not the
+/// transparent swatch at index 0 in front of it, which is selectable like
+/// any other (`Backspace` is a shortcut to it, not the only way there) but
+/// would make a first `Space` paint nothing visible.
 const FIRST_COLOUR: u8 = 1;
 
 /// Which of the editor's two panels the arrows are driving.
@@ -185,10 +187,11 @@ impl CanvasEditor {
     }
 
     /// Selects a swatch directly, clamped to the palette this editor opened
-    /// with — the click-driven twin of the palette panel's arrow keys.
+    /// with, index 0 being the transparent swatch — the click-driven twin of
+    /// the palette panel's arrow keys.
     /// `App::handle_pointer`'s `PointerHit::Swatch` arm is the real caller.
     pub(crate) fn pick_swatch(&mut self, index: u8) {
-        self.selected = (index as i32).clamp(FIRST_COLOUR as i32, self.palette_len as i32) as u8;
+        self.selected = index.min(self.palette_len);
     }
 
     /// Snaps `(x, y)` to a legal brush anchor — `Self::snap`'s own rule,
@@ -274,9 +277,8 @@ impl CanvasEditor {
                 self.cursor.1 = Self::snap(self.cursor.1 as i32 + dy * brush, last, brush);
             }
             CanvasFocus::Palette => {
-                self.selected = (self.selected as i32 + dx + dy)
-                    .clamp(FIRST_COLOUR as i32, self.palette_len as i32)
-                    as u8;
+                self.selected =
+                    (self.selected as i32 + dx + dy).clamp(0, self.palette_len as i32) as u8;
             }
         }
     }

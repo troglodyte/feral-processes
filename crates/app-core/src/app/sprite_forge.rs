@@ -538,16 +538,12 @@ impl App {
     /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
     /// erase — on `Secondary`), a `Swatch` selects.
     ///
-    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn
-    /// position** (its own doc comment says so), while `pick_swatch` — and
-    /// `CanvasView::selected` it writes — is 1-based (`FIRST_COLOUR = 1`;
-    /// `draw_swatch_row` outlines the swatch where `selected == i + 1`). The
-    /// `+ 1` below is that one conversion, made once at the seam neither
-    /// side's own test could see: `swatch_at` correctly tests its own
-    /// 0-based answer, `pick_swatch` correctly tests its own 1-based input,
-    /// and nothing crossed the boundary between the two until this line
-    /// existed. Get this wrong and the mouse selects the swatch to the left
-    /// of the one it outlines, and the palette's last entry is unreachable.
+    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
+    /// and that is the palette index itself**: `draw_swatch_row` draws the
+    /// transparent swatch (index 0) first and palette entry `n` at position
+    /// `n`. It used to be a `+ 1` conversion here, and getting that wrong
+    /// selected the swatch left of the one outlined; with no conversion
+    /// there is nothing at this seam to get wrong.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
         if self.mode != Mode::SpriteEditor {
             return;
@@ -571,7 +567,7 @@ impl App {
                 let (x, y) = sprite_editor.editor.snap_to_brush(x, y);
                 sprite_editor.editor.paint_at(x, y, index);
             }
-            PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index + 1),
+            PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
         }
         if phase == PointerPhase::Up {
             sprite_editor.editor.end_stroke();

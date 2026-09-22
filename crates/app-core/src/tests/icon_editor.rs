@@ -132,7 +132,13 @@ fn the_palette_selection_does_not_wrap_at_either_end() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Tab);
     editor.handle_key(GameKey::Left);
-    assert_eq!(editor.view().canvas.selected, 1, "index 0 is not a swatch");
+    assert_eq!(
+        editor.view().canvas.selected,
+        0,
+        "the transparent swatch sits left of the first colour"
+    );
+    editor.handle_key(GameKey::Left);
+    assert_eq!(editor.view().canvas.selected, 0);
     for _ in 0..40 {
         editor.handle_key(GameKey::Right);
     }
@@ -166,6 +172,21 @@ fn space_paints_while_the_palette_has_focus() {
     editor.handle_key(GameKey::Right);
     editor.handle_key(GameKey::Char(' '));
     assert_eq!(cell(&editor, 2, 3), 2);
+}
+
+/// The transparent swatch is a colour like any other: selected, it paints
+/// a hole with `Space`, so erasing needs no second verb to know about.
+#[test]
+fn the_transparent_swatch_paints_a_hole() {
+    let mut editor = blank_editor();
+    move_cursor_to(&mut editor, 5, 5);
+    editor.handle_key(GameKey::Char(' '));
+    assert_eq!(cell(&editor, 5, 5), 1);
+
+    editor.handle_key(GameKey::Tab);
+    editor.handle_key(GameKey::Left);
+    editor.handle_key(GameKey::Char(' '));
+    assert_eq!(cell(&editor, 5, 5), 0);
 }
 
 #[test]

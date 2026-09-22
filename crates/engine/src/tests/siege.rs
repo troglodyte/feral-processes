@@ -1981,3 +1981,207 @@ mod raiders_withdraw {
         );
     }
 }
+
+/// `Game::fire_turrets` (Task 15).
+mod turrets_fire {
+    use super::*;
+    use crate::structures::TurretDef;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::{BattleCell, BattleSpec, Board};
+    use crate::world::Biome;
+
+    fn open_fight(game: &mut Game, side: i32) {
+        let mut board = Board::solid(side);
+        for y in 0..side {
+            for x in 0..side {
+                board.set(x, y, BattleCell::Open);
+            }
+        }
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        game.world
+            .insert_resource(TacticalBattle::open(spec, board));
+    }
+
+    fn spawn_turret(game: &mut Game) -> Entity {
+        game.world
+            .spawn(Structure {
+                kind: "turret".to_string(),
+            })
+            .id()
+    }
+
+    fn spawn_hostile(game: &mut Game, hp: i32) -> Entity {
+        game.world
+            .spawn((
+                Hostile,
+                Stats {
+                    hp,
+                    max_hp: hp,
+                    atk: 0,
+                    mitigation: 0,
+                },
+            ))
+            .id()
+    }
+
+    fn turret_def(game: &Game) -> TurretDef {
+        game.structure_defs()
+            .into_iter()
+            .find(|d| d.id == "turret")
+            .expect("turret.ron should load as a structure")
+            .turret
+            .expect("turret.ron should declare a turret")
+    }
+
+    /// A turret in range with line of sight damages the nearest hostile at
+    /// the round's start, and the initiative order's length does not
+    /// change — a turret holds no slot to begin with.
+    #[test]
+    fn a_turret_in_range_damages_the_nearest_hostile() {
+        let mut game = Game::new(996, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_fight(&mut game, 20);
+        let def = turret_def(&game);
+        let turret = spawn_turret(&mut game);
+        let hostile = spawn_hostile(&mut game, 10_000);
+        let player = game.player_entity();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(turret, (0, 0));
+            battle.place(hostile, (def.range as i32, 0));
+            battle.place(player, (10, 10));
+            battle.set_initiative(vec![player, hostile]);
+        }
+        let before: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+
+        game.fire_turrets();
+
+        let hp = game.world.get::<Stats>(hostile).unwrap().hp;
+        assert!(hp < 10_000, "a turret in range must damage its target");
+        let after: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+        assert_eq!(
+            before, after,
+            "a turret holds no initiative slot and must not add one"
+        );
+    }
+
+    /// A turret with no line of sight to the only hostile fires at nothing.
+    #[test]
+    fn a_turret_with_no_line_of_sight_fires_at_nothing() {
+        let mut game = Game::new(997, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_fight(&mut game, 20);
+        let turret = spawn_turret(&mut game);
+        let hostile = spawn_hostile(&mut game, 10_000);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(turret, (0, 0));
+            battle.place(hostile, (2, 0));
+            // `Cover` is the only `BattleCell` kind that blocks sight —
+            // `Blocked` is a chasm you can see over and cannot cross.
+            battle.board.set(1, 0, BattleCell::Cover);
+            battle.set_initiative(vec![hostile]);
+        }
+
+        game.fire_turrets();
+
+        let hp = game.world.get::<Stats>(hostile).unwrap().hp;
+        assert_eq!(
+            hp, 10_000,
+            "a turret with no line of sight must not hit blind"
+        );
+    }
+
+    /// A turret out of range fires at nothing.
+    #[test]
+    fn a_turret_out_of_range_fires_at_nothing() {
+        let mut game = Game::new(998, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_fight(&mut game, 20);
+        let def = turret_def(&game);
+        let turret = spawn_turret(&mut game);
+        let hostile = spawn_hostile(&mut game, 10_000);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(turret, (0, 0));
+            battle.place(hostile, (def.range as i32 + 1, 0));
+            battle.set_initiative(vec![hostile]);
+        }
+
+        game.fire_turrets();
+
+        let hp = game.world.get::<Stats>(hostile).unwrap().hp;
+        assert_eq!(
+            hp, 10_000,
+            "a turret out of range must not reach its target"
+        );
+    }
+
+    /// Two hostiles at different distances: the nearer is hit.
+    #[test]
+    fn the_nearer_of_two_hostiles_is_hit() {
+        let mut game = Game::new(999, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_fight(&mut game, 20);
+        let turret = spawn_turret(&mut game);
+        let near = spawn_hostile(&mut game, 10_000);
+        let far = spawn_hostile(&mut game, 10_000);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(turret, (0, 0));
+            battle.place(near, (1, 0));
+            battle.place(far, (3, 0));
+            battle.set_initiative(vec![near, far]);
+        }
+
+        game.fire_turrets();
+
+        assert!(
+            game.world.get::<Stats>(near).unwrap().hp < 10_000,
+            "the nearer hostile must be hit"
+        );
+        assert_eq!(
+            game.world.get::<Stats>(far).unwrap().hp,
+            10_000,
+            "the farther hostile must be untouched"
+        );
+    }
+
+    /// A destroyed turret stops firing.
+    #[test]
+    fn a_destroyed_turret_stops_firing() {
+        let mut game = Game::new(1000, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_fight(&mut game, 20);
+        let turret = spawn_turret(&mut game);
+        let hostile = spawn_hostile(&mut game, 10_000);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(turret, (0, 0));
+            battle.place(hostile, (1, 0));
+            battle.set_initiative(vec![hostile]);
+            // Destroyed: removed from the board and despawned, the way
+            // `damage_structure`'s own teardown leaves one.
+            battle.remove(turret);
+        }
+        game.world.despawn(turret);
+
+        game.fire_turrets();
+
+        assert_eq!(
+            game.world.get::<Stats>(hostile).unwrap().hp,
+            10_000,
+            "a destroyed turret must not fire"
+        );
+    }
+}

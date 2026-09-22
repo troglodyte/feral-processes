@@ -1594,6 +1594,11 @@ impl Game {
     /// The tick is skipped when the reap closed the fight, because
     /// `settle_tactical` spent the round's tick on the way out.
     fn tactical_round_upkeep(&mut self) {
+        // A turret is a property of a structure, not a combatant — no
+        // initiative slot, so it fires here, once a round, rather than
+        // taking a turn. Ahead of the reap below, so a besieger a turret
+        // kills is swept the same beat it fell.
+        self.fire_turrets();
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
         self.reap_tactical_dead(None);

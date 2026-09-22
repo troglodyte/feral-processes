@@ -40,7 +40,7 @@ const BUILD_SITE_EDGE_PX: f32 = 2.0;
 /// flush at the tile's edges, and the existing corner marks carry insets
 /// specifically so nothing reads as painting one of those absent lines back
 /// in — keeping this fill flat and unringed is what leaves the ring
-/// available for the pin brackets (`marks::pin_bracket_rects`) instead.
+/// available for the pin marks (`marks::pin_mark_rects`) instead.
 const STATION_FLOOR_FILL: Color = Color::new(0.30, 0.23, 0.09, 1.0);
 
 /// The Excavation plan's three washes, all one hue so a plan reads as one
@@ -952,14 +952,15 @@ fn draw_surface_map(
             let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
             // A body a research project is spending right now rattles in its
             // pen. **The ink alone** — the offset is added to the sprite and
-            // the glyph below and to nothing else, so the brackets, the
-            // rarity bar, the corner marks and the progress bar all keep
+            // the glyph below and to nothing else, so the pen's four
+            // squares, the rarity bar, the other corner marks and the
+            // progress bar all keep
             // reading bare `px`/`py` and the pen stays still around it. See
             // `Fx::strain_jitter`.
             //
             // Keyed on the actor, `centred_bob`'s rule: two subjects in two
             // Stations rattle out of step. Base-space gated exactly as the
-            // brackets are below — `view_pinned_at` reads base-space
+            // pin marks are below — `view_pinned_at` reads base-space
             // `Position`s, and out on the zone surface these coordinates mean
             // something else entirely.
             let (jx, jy) = match actor {
@@ -1213,8 +1214,9 @@ fn draw_surface_map(
             if marker {
                 draw_unseen_marker(painter, px, py, glyph_px, vig);
             }
-            // A body under study wears four red L-brackets on the tile-edge
-            // ring — `marks::draw_pin_brackets`'s own doc has the geometry.
+            // A body under study wears four small red squares on the
+            // tile-edge ring — `marks::draw_pin_marks`'s own doc has the
+            // geometry.
             // Base-space only, `view_station_floor_at`'s own reason above.
             // **`marker` gates the top-left corner here too**, extending
             // this same "the Alt marker borrows the top-left corner" rule
@@ -1222,7 +1224,7 @@ fn draw_surface_map(
             // see `corner_marker`'s doc. `pinned` is read once above,
             // `station_floor`'s own reason.
             if base_pos.is_some() && pinned[ry][rx] != PinMark::Unpinned {
-                draw_pin_brackets(painter, px, py, tile_px, marker, vig);
+                draw_pin_marks(painter, px, py, tile_px, marker, vig);
             }
             // A nemesis draws a mark on top of its glyph — belt and braces,
             // since a nemesis is worth noticing even at a glance that only
@@ -1566,8 +1568,8 @@ mod tests {
     use super::*;
     use crate::paint::SpriteTable;
     use crate::paint::{
-        painted_images, painted_line_count, painted_rect_fill_count, painted_rect_stroke_count,
-        painted_text, painted_text_boxes, with_painter, with_sprites,
+        painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
+        painted_text_boxes, with_painter, with_sprites,
     };
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
@@ -5396,7 +5398,7 @@ mod tests {
         );
     }
 
-    /// **`draw_pin_brackets`' own `hide_top_left` parameter**, unit-tested
+    /// **`draw_pin_marks`' own `hide_top_left` parameter**, unit-tested
     /// directly the way `nothing_draws_a_con_mark_without_a_con_read` tests
     /// `draw_difficulty_mark` — a body under study is by definition owned,
     /// and `EntityView::unseen_routine`'s doc says that reads `false` for
@@ -5405,21 +5407,21 @@ mod tests {
     /// drawing primitive's own contract, which the corner-marker rule at the
     /// `draw_surface_map` call site depends on holding.
     #[test]
-    fn the_top_left_pin_bracket_yields_to_the_alt_marker() {
+    fn the_top_left_pin_mark_yields_to_the_alt_marker() {
         let (_, hidden) = with_painter(|p| {
-            draw_pin_brackets(p, 0.0, 0.0, CELL, true, 1.0);
+            draw_pin_marks(p, 0.0, 0.0, CELL, true, 1.0);
         });
         let (_, shown) = with_painter(|p| {
-            draw_pin_brackets(p, 0.0, 0.0, CELL, false, 1.0);
+            draw_pin_marks(p, 0.0, 0.0, CELL, false, 1.0);
         });
         assert_eq!(
-            painted_line_count(&hidden),
-            6,
-            "three corners drawn, two strokes each, with the top-left suppressed"
+            painted_rect_fill_count(&hidden, marks::PIN_MARK_COLOR),
+            3,
+            "three corners drawn, with the top-left suppressed"
         );
         assert_eq!(
-            painted_line_count(&shown),
-            8,
+            painted_rect_fill_count(&shown, marks::PIN_MARK_COLOR),
+            4,
             "all four corners draw when nothing borrows the top-left"
         );
     }
@@ -5535,17 +5537,16 @@ mod tests {
     /// **The body rattles and the pen does not.** The whole of
     /// `views::PinMark::Strained`'s render contract, asserted against two
     /// frames of the same scene at two `Fx` clocks: the subject's ink lands
-    /// somewhere different, and every line segment on the map — which on this
-    /// scene is the four pin brackets and nothing else — lands in exactly the
-    /// same place.
+    /// somewhere different, and every line and every rect the map painted —
+    /// the four pin marks among them — lands in exactly the same place.
     ///
     /// Both halves matter. Offsetting `px`/`py` for the whole cell instead of
     /// for the ink alone compiles, looks right against one screenshot, and
-    /// walks the brackets off their own tile-edge ring into the neighbouring
+    /// walks the pen off its own tile-edge ring into the neighbouring
     /// cell — which reads as the pen being loose rather than the body being
     /// worked.
     #[test]
-    fn a_strained_subject_rattles_inside_still_brackets() {
+    fn a_strained_subject_rattles_inside_a_still_pen() {
         let anchor = (3, 0);
         let pen = (anchor.0 + 1, anchor.1 + 1);
         let (mut game, program) = game_with_a_pinned_subject(560_104, anchor, Some("paging"));
@@ -5584,7 +5585,7 @@ mod tests {
             shapes
         };
         // Every line segment and every rect the map painted, by position
-        // alone — the brackets are among the lines, and the claim is the
+        // alone — the pin marks are among the rects, and the claim is the
         // stronger one that *nothing* on the map moves but the ink. Colours
         // are deliberately left out of the key: the cloud field drifts with
         // the clock, which changes what tiles are shaded and not where

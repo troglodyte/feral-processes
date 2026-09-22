@@ -154,9 +154,9 @@ const PHASE_KEYS: u64 = 64;
 /// **A share and not a pixel count.** The ink already sits inside a margin —
 /// `(tile_px - glyph_px) / 2`, which is 2px at zoom 1 and grows with every
 /// step of the ladder — and that margin is exactly the room the rattle has
-/// before it reaches the brackets on the tile-edge ring. Spending a fraction
-/// of it makes the bound structural at every zoom, where a fixed `2.0` was
-/// both flush against the brackets at zoom 1 and invisible at zoom 4.
+/// before it reaches the pen's marks on the tile-edge ring. Spending a
+/// fraction of it makes the bound structural at every zoom, where a fixed
+/// `2.0` was both flush against them at zoom 1 and invisible at zoom 4.
 ///
 /// **Sample-and-hold, and that is the whole of the rattle.** The offset is
 /// held flat for a step and then snaps somewhere else, which is what reads as
@@ -1184,9 +1184,9 @@ impl Fx {
     /// How far to offset the **ink** of a body a research project is
     /// spending right now — `views::PinMark::Strained`'s own motion.
     ///
-    /// The ink alone, never the pin brackets: the brackets are the pen, and a
-    /// pen that shakes with what it is holding says the apparatus is loose
-    /// rather than that the body is under stress. They also sit on the
+    /// The ink alone, never the pin marks: those four squares are the pen,
+    /// and a pen that shakes with what it is holding says the apparatus is
+    /// loose rather than that the body is under stress. They also sit on the
     /// tile-edge ring, where any offset at all overhangs the neighbouring
     /// cell, while the glyph sits `(tile_px - glyph_px) / 2` inside it and
     /// has the room to spare.
@@ -1196,7 +1196,7 @@ impl Fx {
     /// private to this module, `centred_bob`'s rule: an amplitude the call
     /// site could reach is an amplitude the call site can disagree about.
     /// Passing the margin rather than a zoom keeps the bound structural, so
-    /// the rattle cannot reach the brackets at any step of the ladder.
+    /// the rattle cannot reach the pen at any step of the ladder.
     pub fn strain_jitter(&self, entity: Entity, margin: f32) -> (f32, f32) {
         if !self.enabled {
             return (0.0, 0.0);
@@ -1961,8 +1961,8 @@ mod tests {
     }
 
     /// **The margin is the budget**, at every step of the zoom ladder: the
-    /// ink rattles inside the room it already has and never reaches the
-    /// brackets on the tile-edge ring. `map_cell` gives a margin of 2px at
+    /// ink rattles inside the room it already has and never reaches the pin
+    /// marks on the tile-edge ring. `map_cell` gives a margin of 2px at
     /// zoom 1 and 2px more at every step above it, so the tightest zoom is
     /// the case that has to hold.
     #[test]
@@ -1977,7 +1977,7 @@ mod tests {
                 let (dx, dy) = fx.strain_jitter(entity, margin);
                 assert!(
                     dx.abs() < margin && dy.abs() < margin,
-                    "zoom {zoom} step {n} reached the brackets: {dx}, {dy} against {margin}"
+                    "zoom {zoom} step {n} reached the pen: {dx}, {dy} against {margin}"
                 );
             }
         }

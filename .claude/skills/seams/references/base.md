@@ -1357,15 +1357,15 @@
   while every subject-gated node stayed refused. Pinning frees the `Task`,
   `Downed`'s rule one role over. **The census was short by one**: a fifth
   `==` comparison lives in `Game::position_is_honest`, the *map's* draw gate,
-  so a subject was not drawn at all and the pin brackets sat over bare floor
-  — the player reported it as the brackets replacing the glyph, there being
+  so a subject was not drawn at all and the pin mark sat over bare floor
+  — the player reported it as the mark replacing the glyph, there being
   no glyph to replace. Its exactness is right for `Sortie` (an away program
   must not claim a tile it is not on) and wrong here, where a subject stands
   exactly where it claims to; fixed as its own arm, since the `Staff` arm's
   `&& Task.is_none()` clause is about a body hidden under a machine's glyph.
   **And the mark meant *selected* rather than *settled***:
   `Game::view_pinned_at` marked every `UnderStudy` body wherever it stood, so
-  the brackets latched on at selection and rode along for the whole walk. It
+  the mark latched on at selection and rode along for the whole walk. It
   is gated on the body standing on its own pen now, making mark ⇔
   `pinned_subject` ⇔ gate-satisfied one invariant instead of three answers.
   Neither was caught because every existing test drove the mark through
@@ -1381,12 +1381,13 @@
   different programs while a second Station holds its own settled subject). A
   `view_strained_at` beside `view_pinned_at` would have been the fourth answer
   to the one question this seam exists to keep singular. **The motion is the
-  ink's alone** — the brackets sit on the tile-edge ring, where any offset
+  ink's alone** — the pen's four squares sit on the tile-edge ring, where
+  any offset
   overhangs the neighbouring cell, and a pen that shakes with what it holds
   reads as loose apparatus rather than as a body under stress. Its amplitude
   is a share of `(tile_px - glyph_px) / 2`, the margin the ink already has,
   and not a pixel count: at zoom 1 that margin is exactly 2px, so the fixed
-  `2.0` this started as put a sprite flush against its own brackets at the
+  `2.0` this started as put a sprite flush against its own pen at the
   tightest zoom and was invisible at the widest.
 - **A research node's subject gate is one term both the screen and the
   selection reach through.** It sits outside `research_block_memo`, which

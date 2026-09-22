@@ -107,14 +107,14 @@ pub enum ResearchReadout {
 /// the one question rather than a second one asked beside it. A separate
 /// "which body is straining" door would be a fourth answer to "which body is
 /// under study", which is the shape that already shipped wrong once: read off
-/// the `components::UnderStudy` marker alone, the brackets latched on at
+/// the `components::UnderStudy` marker alone, the mark latched on at
 /// selection and rode along for the whole walk to the pen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinMark {
     /// Nothing under study stands here.
     Unpinned,
-    /// A subject has settled in its station's pen. Brackets, and no motion:
-    /// the base is holding it, not working it.
+    /// A subject has settled in its station's pen. The pen's marks, and no
+    /// motion: the base is holding it, not working it.
     Settled,
     /// The subject the active project is actually spending, while that
     /// project is earning — `Game::view_pinned_at` has the three terms.

@@ -471,14 +471,14 @@ pub(super) fn outline_open(
     }
 }
 
-/// The pin mark's leg length, as a fraction of the tile — long enough to
-/// read as an L rather than a dot at the zoom levels `map_cell` ships.
-const PIN_BRACKET_LEG: f32 = 0.30;
-
-/// The pin mark's stroke weight — `outline_open`'s own 2px, so a Station's
-/// wall (drawn on the anchor cell alone) and the bracket sitting on its
-/// floor read as the same weight of line.
-const PIN_BRACKET_PX: f32 = 2.0;
+/// The pin mark's side, as a fraction of the tile — four filled squares
+/// rather than four outlines, so the mark reads at the zoom levels
+/// `map_cell` ships without a stroke weight to keep in step with anything.
+///
+/// Smaller than the 0.30 the L-brackets it replaced spent: a leg is two
+/// 2px strokes and a square is solid, so matching their *ink* is what keeps
+/// a pen from reading as four blocks with a body squeezed between them.
+const PIN_MARK_SIDE: f32 = 0.20;
 
 /// The pin mark's own colour. Plain red, outside `hud::palette`'s role
 /// table for `render/base.rs::STATION_FLOOR_FILL`'s own reason: the palette
@@ -487,19 +487,21 @@ const PIN_BRACKET_PX: f32 = 2.0;
 /// corner census in `render/base.rs`'s tests is the proof of exactly that —
 /// and `OFFLINE` means a machine that has stopped resolving itself, not a
 /// fact about a body standing in a pen.
-const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
+pub(super) const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
 
-/// Where the pin mark's four L-brackets sit — one bounding box per corner,
-/// in **top-left, top-right, bottom-left, bottom-right** order, matching
-/// the order `draw_pin_brackets` draws them in.
+/// Where the pin mark's four squares sit — one per corner, in **top-left,
+/// top-right, bottom-left, bottom-right** order, matching the order
+/// `draw_pin_marks` draws them in.
 ///
 /// Flush against the tile-edge ring rather than inset like every other
 /// mark in this file: a Station's floor cell never draws `outline_open`
 /// (`render/base.rs::STATION_FLOOR_FILL`'s doc), so there is no wall here
-/// for a flush bracket to read as painting back in.
+/// for a flush square to read as painting back in. That flush seat is also
+/// what keeps these apart from the nemesis and patrol marks, which are the
+/// same shape a `IDENTITY_MARK_INSET` further in.
 ///
 /// **Clear of `RARITY_BAR_PX` at the top and `PROGRESS_BAR_PX` at the
-/// bottom** — both bars run the tile's full width, so a bracket sharing
+/// bottom** — both bars run the tile's full width, so a square sharing
 /// their row would either sit under them or paint over them. The bottom
 /// pair reads `progress_bar_rect`'s own `y` for their floor, `staffed_mark_
 /// rect`'s and `patrol_mark_rect`'s own pattern, so a change to the bar's
@@ -508,8 +510,8 @@ const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
 /// A free function so the geometry is unit-testable without a `Painter` —
 /// `nemesis_mark_rect`'s own reason, given here as this file's first test
 /// module.
-pub(super) fn pin_bracket_rects(px: f32, py: f32, tile_px: f32) -> [Rect; 4] {
-    let size = tile_px * PIN_BRACKET_LEG;
+pub(super) fn pin_mark_rects(px: f32, py: f32, tile_px: f32) -> [Rect; 4] {
+    let size = tile_px * PIN_MARK_SIDE;
     let right = px + tile_px - 1.0 - size;
     let top = py + RARITY_BAR_PX;
     let bottom = progress_bar_rect(px, py, tile_px).y - size;
@@ -521,8 +523,8 @@ pub(super) fn pin_bracket_rects(px: f32, py: f32, tile_px: f32) -> [Rect; 4] {
     ]
 }
 
-/// Draws the pin mark — four red L-brackets on the tile-edge ring, one per
-/// corner of `pin_bracket_rects`, `* vig` like every other mark so an
+/// Draws the pin mark — four red squares on the tile-edge ring, one per
+/// corner of `pin_mark_rects`, `* vig` like every other mark so an
 /// edge-of-light tile does not leave them burning.
 ///
 /// **`hide_top_left` suppresses the first corner alone**, extending
@@ -530,7 +532,7 @@ pub(super) fn pin_bracket_rects(px: f32, py: f32, tile_px: f32) -> [Rect; 4] {
 /// the top-left corner while `reveal` is held" rule rather than inventing a
 /// second arbitration — the caller passes the same `marker` bool that
 /// already gates `draw_unseen_marker`.
-pub(super) fn draw_pin_brackets(
+pub(super) fn draw_pin_marks(
     painter: &Painter,
     px: f32,
     py: f32,
@@ -539,24 +541,11 @@ pub(super) fn draw_pin_brackets(
     vig: f32,
 ) {
     let color = at_level(PIN_MARK_COLOR, vig);
-    let rects = pin_bracket_rects(px, py, tile_px);
-    // (rect, draw the box's top edge rather than its bottom, draw its left
-    // edge rather than its right) — the two strokes an "L" opening toward
-    // the tile's centre needs, one per corner.
-    let corners = [
-        (rects[0], true, true),
-        (rects[1], true, false),
-        (rects[2], false, true),
-        (rects[3], false, false),
-    ];
-    for (i, (rect, top_edge, left_edge)) in corners.into_iter().enumerate() {
+    for (i, rect) in pin_mark_rects(px, py, tile_px).into_iter().enumerate() {
         if i == 0 && hide_top_left {
             continue;
         }
-        let y = if top_edge { rect.y } else { rect.y + rect.h };
-        painter.line(rect.x, y, rect.x + rect.w, y, PIN_BRACKET_PX, color);
-        let x = if left_edge { rect.x } else { rect.x + rect.w };
-        painter.line(x, rect.y, x, rect.y + rect.h, PIN_BRACKET_PX, color);
+        painter.rect(rect.x, rect.y, rect.w, rect.h, color);
     }
 }
 
@@ -597,13 +586,13 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
 mod tests {
     use super::*;
 
-    /// Both bars run the tile's full width, so a bracket sharing their row
+    /// Both bars run the tile's full width, so a square sharing their row
     /// would sit under or over them rather than beside them.
     #[test]
-    fn pin_bracket_rects_clear_the_rarity_bar_and_the_progress_bar() {
+    fn pin_mark_rects_clear_the_rarity_bar_and_the_progress_bar() {
         for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
             let (px, py) = (100.0, 200.0);
-            let rects = pin_bracket_rects(px, py, tile_px);
+            let rects = pin_mark_rects(px, py, tile_px);
             let progress_top = progress_bar_rect(px, py, tile_px).y;
             for (i, r) in rects.iter().enumerate() {
                 assert!(
@@ -621,12 +610,12 @@ mod tests {
         }
     }
 
-    /// Top-left, top-right, bottom-left, bottom-right — `draw_pin_brackets`'
+    /// Top-left, top-right, bottom-left, bottom-right — `draw_pin_marks`'
     /// own indexing depends on this order.
     #[test]
-    fn pin_bracket_rects_are_ordered_by_corner() {
+    fn pin_mark_rects_are_ordered_by_corner() {
         let (px, py, tile_px) = (0.0_f32, 0.0_f32, 32.0_f32);
-        let rects = pin_bracket_rects(px, py, tile_px);
+        let rects = pin_mark_rects(px, py, tile_px);
         let mid_x = px + tile_px / 2.0;
         let mid_y = py + tile_px / 2.0;
         assert!(
@@ -649,11 +638,13 @@ mod tests {
 
     /// Flush against the tile-edge ring, unlike every other mark in this
     /// file — a Station's floor cell never draws `outline_open`, so there
-    /// is no wall for a flush bracket to read as painting back in.
+    /// is no wall for a flush square to read as painting back in, and the
+    /// inset the nemesis and patrol marks carry is what tells those apart
+    /// from these on a tile that could somehow wear both.
     #[test]
-    fn pin_bracket_rects_sit_flush_on_the_left_and_right_edges() {
+    fn pin_mark_rects_sit_flush_on_the_left_and_right_edges() {
         let (px, py, tile_px) = (10.0_f32, 20.0_f32, 32.0_f32);
-        let rects = pin_bracket_rects(px, py, tile_px);
+        let rects = pin_mark_rects(px, py, tile_px);
         assert_eq!(
             rects[0].x, px,
             "top-left should be flush against the left edge"

@@ -1646,6 +1646,8 @@ impl Game {
             pending_cronjobs,
             pending_patrols,
             pending_study,
+            pending_siege_members,
+            pending_stolen_from,
         } = ctx;
         self.world
             .insert_resource(crate::resources::NextProgramId(next_program_id));
@@ -1661,6 +1663,19 @@ impl Game {
         // Wild-only — `spawn_creature_from_save` fills this on its untamed
         // arm, and `commit_program` refuses anything the player does not own.
         debug_assert!(pending_patrols.is_empty(), "a refunded program is tamed");
+        // A program mid-battle is not idle staff a build request could ever
+        // have committed — `sortie_members`'s own assertion above, applied
+        // to the other membership a snapshot cannot carry.
+        debug_assert!(
+            pending_siege_members.is_empty(),
+            "a committed program is never seated in a battle"
+        );
+        // Wild-only, `pending_patrols`' own reason: only a besieger carries
+        // `components::StolenFrom`.
+        debug_assert!(
+            pending_stolen_from.is_empty(),
+            "a refunded program is tamed"
+        );
         // Deliberately dropped, and not for want of a structure to resolve
         // it against. `schedule_base_labour` posts staff again on the next
         // tick, and re-inserting the snapshot's `Task` into a base that has

@@ -321,6 +321,80 @@ pub struct RouteSave {
     pub proceeds: u32,
 }
 
+/// A siege in progress, assembled from the board and the bodies rather
+/// than by serialising `tactical::TacticalBattle` itself — see that type's
+/// own doc for why it does not gain `Serialize`. `game::siege::persist::
+/// assemble` is the one writer and `restore` the one reader; membership
+/// rides `CreatureSave::siege_cell`/`siege_order` the way a sortie's rides
+/// `sortie_index`, `SortieSave`'s reason: entity ids are not stable across
+/// a save/load round trip, so this carries no member list of its own.
+///
+/// A named struct, never a positional tuple — the save seam's own rule,
+/// since a positional shape costs a legacy field the moment the next
+/// property is added.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SiegeSave {
+    pub spec: crate::tactical::map::BattleSpec,
+    /// The board's own extent — `tactical::map::Board::side`, which a
+    /// siege board departs from `spec`'s derived one, `game::siege::mod`'s
+    /// own reason: `BattleSpec::side()` is never read on the spec a siege
+    /// mints.
+    pub side: i32,
+    /// Every cell of the board, row-major — `tactical::map::Board::cells`'
+    /// own order, which `Board::from_cells` trusts back.
+    pub cells: Vec<crate::tactical::map::BattleCell>,
+    /// The base-space cell the board's `(0, 0)` maps to —
+    /// `game::siege::board::SiegeBoard::origin`.
+    pub origin: (i32, i32),
+    /// `BASE_EXIT_CELL`, in board coordinates — `game::siege::board::
+    /// SiegeBoard::door`.
+    pub door: (i32, i32),
+    pub round: u32,
+    /// The currently-acting body's own `CreatureSave::siege_order` value —
+    /// **not** a raw index into the reconstructed initiative list, which a
+    /// member that fails to reload would shift every entry after. `persist::
+    /// restore` looks this order up among the members that did reload
+    /// rather than indexing with it, and falls back to the front of the
+    /// order on the rare save where that exact body is the one missing.
+    pub turn: u32,
+    pub actions_left: u8,
+    /// `TacticalBattle::siege_pack` — the pack size the fight was seated
+    /// with, which `siege::raiders::siege_morale_broken` reads to know how
+    /// close the pack already is to a morale break. Also this type's own
+    /// "is this a siege" signal: `TacticalBattle::siege_pack` is `0` for
+    /// every fight that is not one, so `persist::assemble` reads that
+    /// straight off the resource rather than duplicating the test here.
+    pub siege_pack: u32,
+    /// The player's own order value in the initiative at save time —
+    /// `turn`'s reason, and the one member `CreatureSave` cannot carry it
+    /// for: the player is never one of `SaveData::creatures`, it is
+    /// `SaveData::player`, a singleton restored before the creature array
+    /// even runs.
+    pub player_order: u32,
+    /// The player's own board cell at save time, read straight off
+    /// `TacticalBattle::cell_of` the way every other body's is.
+    ///
+    /// **Not re-derived from `PlayerSave::position`.** In base space that
+    /// field stays pinned to the surface anchor tile — `Position` is not
+    /// the party's base-space coordinate, `Locale::Base` is (see CLAUDE.md,
+    /// "Base-space Position is pinned to the anchor") — and
+    /// `game::siege::persist::restore` runs before `Game::restore_locale`
+    /// besides, so `Game::base_pos()` has nothing to answer yet either way.
+    ///
+    /// **`Option`, not a bare tuple defaulting to `(0, 0)`.** A save written
+    /// before this field existed has no board cell to give back, and `(0,
+    /// 0)` is not a stand-in for "unknown" — it is an ordinary board
+    /// coordinate a real siege can floor, occupy or leave outside its own
+    /// bounding box, so a bare default silently seats the player wherever
+    /// that coordinate happens to fall (or drops the siege outright when it
+    /// falls on nothing `TacticalBattle::place` will take). `None` reads
+    /// honestly instead, and `persist::restore` falls back to `saved.door`
+    /// — the same "reloads at the door" behaviour the field was always
+    /// meant to have for an old save, spelled correctly this time.
+    #[serde(default)]
+    pub player_cell: Option<(i32, i32)>,
+}
+
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build
 /// request's commit and refund can hand a copy on without taking ownership
 /// of the site's own field. `Debug` for the same reason — `BuildSite`
@@ -725,6 +799,50 @@ pub struct CreatureSave {
     /// the feature not working.
     #[serde(default)]
     pub downed: bool,
+    /// This body's own board cell in an in-progress siege — see
+    /// `tactical::TacticalBattle`. `Some` only alongside `siege_order`, and
+    /// only for a body that was actually seated when the run was saved;
+    /// `game::siege::persist` is the one writer and the one reader.
+    ///
+    /// Membership rides these two fields the way a sortie's rides
+    /// `sortie_index`, `PlayerSave::sorties`' reason: entity ids are not
+    /// stable across a save/load round trip, so `save::SiegeSave` carries no
+    /// member list of its own.
+    ///
+    /// Additive behind `#[serde(default)]`, so a save written before sieges
+    /// existed loads with no siege in progress, and costs no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub siege_cell: Option<(i32, i32)>,
+    /// This body's own index into the siege's turn order at the moment it
+    /// was saved — see `tactical::TacticalBattle::initiative`.
+    /// `game::siege::persist::restore` looks a saved actor up by this value
+    /// rather than by a raw position, since a body that fails to reload
+    /// (its species file was deleted between sessions) would otherwise
+    /// shift every index after it.
+    ///
+    /// Additive behind `#[serde(default)]`, `siege_cell`'s reason.
+    #[serde(default)]
+    pub siege_order: Option<u32>,
+    /// Whether this wild creature is a `components::Besieger` — a raider in
+    /// an in-progress siege. Only meaningful when `tamed` is false; nothing
+    /// tamed is ever a besieger.
+    ///
+    /// Additive behind `#[serde(default)]`, `siege_cell`'s reason: a save
+    /// written before sieges existed loads with every creature an ordinary
+    /// wild program, which is what it was.
+    #[serde(default)]
+    pub besieger: bool,
+    /// Which structure this besieger's `carrying` load came out of, by
+    /// tile rather than entity id — `components::StolenFrom`,
+    /// `nest_position`'s reason: entity ids aren't stable across a
+    /// save/load round trip. Resolved after `SaveData::structures` loads,
+    /// `pending_cronjobs`'s deferral, and dropped silently if that
+    /// structure no longer stands. Only meaningful alongside `carrying`.
+    ///
+    /// Additive behind `#[serde(default)]`, `siege_cell`'s reason.
+    #[serde(default)]
+    pub stolen_from: Option<(i32, i32)>,
 }
 
 /// `serde`'s default for an individual roll — the neutral 1.0, because a
@@ -1487,6 +1605,22 @@ pub struct SaveData {
     /// with a fresh clock and costs no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub raid_pressure: crate::resources::RaidPressure,
+    /// How close the base is to its next siege — see
+    /// `resources::SiegePressure`. `raid_pressure`'s reason, and additive
+    /// for the same one: a save written before this field existed loads
+    /// with a fresh clock and costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub siege_pressure: crate::resources::SiegePressure,
+    /// A siege in progress, if the player saved mid-fight — see
+    /// `SiegeSave`. `game::siege::persist::assemble` is the one writer;
+    /// `TacticalBattle` itself is never serialised, so a save written
+    /// before sieges existed, or one saved between sieges, carries `None`
+    /// either way.
+    ///
+    /// Additive behind `#[serde(default)]`, `siege_pressure`'s reason: no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub siege: Option<SiegeSave>,
     /// Contracts the run is holding, with their progress — see
     /// `resources::ActiveContracts`. Each carries the whole resolved
     /// `ContractDef`, so a contract whose asset file has since been edited or
@@ -1959,6 +2093,8 @@ mod tests {
             compass: crate::resources::CompassBearing::default(),
             trace: 0,
             raid_pressure: crate::resources::RaidPressure::default(),
+            siege_pressure: crate::resources::SiegePressure::default(),
+            siege: None,
             contracts: Vec::new(),
             contracts_done: Vec::new(),
             work_orders: Vec::new(),
@@ -2021,6 +2157,10 @@ mod tests {
             off_shift: None,
             staff: false,
             downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
         }
     }
 

@@ -4169,7 +4169,7 @@ fn a_sweep_destroys_a_depots_shelf_rather_than_returning_it() {
         .insert(crate::components::Durability { hp: 10, max_hp: 10 });
 
     let before = carried(&game, &cell);
-    game.damage_structure(depot, 10, "Depot");
+    game.damage_structure(depot, 10, "Depot", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Stock>(depot).is_none(),
@@ -4892,7 +4892,7 @@ fn destroying_a_research_station_releases_its_subject_and_abandons_the_project()
         .entity_mut(node)
         .insert(crate::components::Durability { hp: 10, max_hp: 10 });
 
-    game.damage_structure(node, 10, "Research Station");
+    game.damage_structure(node, 10, "Research Station", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Structure>(node).is_none(),

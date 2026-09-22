@@ -417,6 +417,14 @@ impl Game {
         self.world.get::<Structure>(entity).is_some()
             || self.world.get::<BuildSite>(entity).is_some()
             || self.world.get::<Tamed>(entity).is_some()
+            // A besieger's `Position` is a base-space cell for the length of
+            // the siege — `components::Besieger`'s own doc — and without this
+            // arm it reads as an ordinary wild `Creature` standing on the
+            // zone surface the two coordinate spaces happen to alias onto.
+            || self
+                .world
+                .get::<crate::components::Besieger>(entity)
+                .is_some()
     }
 
     /// The first creature or structure along the row or column the player is
@@ -1690,6 +1698,17 @@ impl Game {
             rows.push(AttentionRow {
                 kind: AttentionKind::RaidIncoming,
                 text: "GC Entropy Sweep forming".to_string(),
+                key: 'b',
+                threat: true,
+            });
+        }
+
+        // Beside the sweep's own row, for the same reason: a siege that has
+        // announced itself outranks a node standing idle.
+        if self.siege_warned() {
+            rows.push(AttentionRow {
+                kind: AttentionKind::SiegeIncoming,
+                text: "Siege forming".to_string(),
                 key: 'b',
                 threat: true,
             });

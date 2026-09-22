@@ -3028,6 +3028,107 @@ pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
 pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Sieges
+// ─────────────────────────────────────────────────────────────────────────
+
+/// How much pressure one tick of a sector adds to `resources::SiegePressure`,
+/// per sector level — `RAID_PRESSURE_PER_ZONE`'s shape, and `1` for the same
+/// reason: the threshold is authored in these units.
+pub const SIEGE_PRESSURE_PER_ZONE: u32 = 1;
+
+/// The pressure a base spends between sieges, before jitter.
+///
+/// **Authored in minutes of play and written here in ticks**, `
+/// RAID_PRESSURE_THRESHOLD`'s method: the world runs at
+/// `app_core::WORLD_SPEED_MULTIPLIER` = 2 ticks a second, and
+/// `SIEGE_PRESSURE_PER_ZONE * zone` accrues per tick, so the interval in
+/// minutes is `SIEGE_PRESSURE_THRESHOLD / (SIEGE_PRESSURE_PER_ZONE * zone) /
+/// 2 / 60`. At `14_400` that is **60 minutes in sector 2** and **20 minutes
+/// in sector 6** — a siege is meant to be an event a run meets a handful of
+/// times, not a chore met every session, so its interval is much longer
+/// than the sweep's.
+pub const SIEGE_PRESSURE_THRESHOLD: u32 = 14_400;
+
+/// How far either side of `SIEGE_PRESSURE_THRESHOLD` a drawn interval may
+/// land, in percent — `RAID_PRESSURE_JITTER_PERCENT`'s reason, drawn once
+/// per interval and never per tick.
+pub const SIEGE_PRESSURE_JITTER_PERCENT: u32 = 25;
+
+/// How far through an interval the approach warning fires, in percent of
+/// the drawn target — `RAID_PRESSURE_WARN_PERCENT`'s shape. Landed here in
+/// Task 1 rather than Task 2 because `Game::dev_wind_siege_clock` needs it
+/// to wind to a warn point before Task 2 gives the warning itself a body;
+/// `SIEGE_WARN_FLOOR_TICKS`, the second half of the warning's own timing,
+/// follows in Task 2.
+pub const SIEGE_PRESSURE_WARN_PERCENT: u32 = 80;
+
+/// The wall-clock floor under the approach warning, in ticks — the fewest
+/// ticks of notice a siege gives however deep the drawn interval is.
+///
+/// A sweep's answer to its own warning is "post someone at the machine you
+/// care about", so a percentage share of the interval is right for it: the
+/// window shrinks with depth exactly as the interval does, and the answer
+/// takes no longer in a deep sector than a shallow one. A siege's answer is
+/// "get home", and the trip is longest in exactly the sectors where
+/// `SIEGE_PRESSURE_WARN_PERCENT`'s share is shortest — so the siege warns at
+/// whichever is earlier, the share or this floor, converted through the
+/// sector's own accrual rate since the floor is stated in ticks and the
+/// meter is not a clock.
+///
+/// **Unvalidated.** `960` is 8 minutes, picked as a defensible number and
+/// not a measured one — nothing in this repo models the walk home from a
+/// deep Stack frame. Play it before trusting it.
+pub const SIEGE_WARN_FLOOR_TICKS: u32 = 960;
+
+/// The first sector a siege may reach. `RAID_MIN_ZONE`'s twin, gating
+/// **accrual** and never firing — see `Game::siege_check`'s first line for
+/// why gating firing instead would ambush a player the instant they cross
+/// into the sector that can spend the pressure the opening sector banked.
+pub const SIEGE_MIN_ZONE: u32 = 2;
+
+/// The base size of a besieging pack, before `SIEGE_PACK_PER_ZONE` scales it
+/// with sector — see `siege::offscreen::pack_size`. The off-screen
+/// resolution and the fought fight must field the same pack, so this is
+/// read through that one function rather than restated at either call site.
+pub const SIEGE_PACK_BASE: u32 = 4;
+
+/// How much a besieging pack grows per sector, added to `SIEGE_PACK_BASE`
+/// and capped at `SIEGE_PACK_MAX`.
+pub const SIEGE_PACK_PER_ZONE: u32 = 1;
+
+/// The largest a besieging pack may grow, whatever the sector.
+pub const SIEGE_PACK_MAX: u32 = 12;
+
+/// Each on-shift staff body's contribution to the off-screen defence a
+/// siege is priced against, in `Game::resolve_siege_offscreen`'s shortfall
+/// formula. A body actually fought beside in the tactical fight is worth
+/// far more than this — the figure only prices the base's *passive*
+/// resistance while its owner is away, `defending_base_staff_count`'s own
+/// pool, counted regardless of what job each body happens to be posted to.
+pub const SIEGE_STAFF_DEFENSE: u32 = 2;
+
+/// Units lifted from base shelves per unanswered point of an off-screen
+/// siege's shortfall.
+pub const SIEGE_STEAL_PER_POINT: u32 = 4;
+
+/// Structure `Durability` lost per unanswered point of an off-screen
+/// siege's shortfall.
+pub const SIEGE_DAMAGE_PER_POINT: u32 = 3;
+
+/// How much unanswered shortfall it takes to bench one staff body in an
+/// off-screen siege — `shortfall / SIEGE_POINTS_PER_CASUALTY` bodies,
+/// through the same door a Forgiving death already uses
+/// (`Game::bench_or_dissolve`).
+pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
+
+/// How much of the besieging pack has to be down — killed or gone through
+/// the door with its plunder, `Game::besieger_turn`'s own reading of "down"
+/// — before the rest withdraw unconditionally. Half the pack breaking a
+/// siege is the spec's own figure; there is no quota and no round limit
+/// besides it.
+pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
 

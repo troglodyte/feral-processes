@@ -184,7 +184,10 @@ impl Game {
     /// a seeded run always produces the same order. `roll_initiative`'s
     /// rule, and the roll itself is that function's roll: both go through
     /// `Game::initiative_roll`.
-    fn roll_turn_order(&mut self, standing: &[Entity]) -> Vec<Entity> {
+    ///
+    /// `pub(crate)` so `Game::open_siege` (`game/siege/mod.rs`) can seat a
+    /// siege's order the same way rather than restating the roll.
+    pub(crate) fn roll_turn_order(&mut self, standing: &[Entity]) -> Vec<Entity> {
         let mut rolled: Vec<(i32, Entity)> = standing
             .iter()
             .map(|&entity| (self.initiative_roll(entity), entity))
@@ -554,6 +557,43 @@ impl Game {
         }
         if self.is_cloaked(target) {
             return false;
+        }
+
+        // **A structure has no `Stats`, so it cannot go through
+        // `Game::apply_damage` — the only door that damages a *creature*.**
+        // A swing at one routes to `Game::damage_structure` instead and
+        // returns here, before any of the per-body machinery below (which
+        // assumes a living combatant) ever runs. `damage_structure` logs
+        // and tears down a destroyed structure itself, the same as every
+        // other caller — so a structure destroyed on a battle map is
+        // destroyed the way any other one is. It holds no initiative slot,
+        // so there is nothing to hand a turn on to, but it *is* seated as a
+        // body, so its own cells have to leave with it through
+        // `TacticalBattle::remove`.
+        if self
+            .world
+            .get::<crate::components::Structure>(target)
+            .is_some()
+        {
+            let round_before = self.world.resource::<TacticalBattle>().round;
+            let dmg = self.swing_damage(actor);
+            let label = self.entity_label(target);
+            self.damage_structure(target, dmg, &label, "a siege");
+            // **The entity is gone, not merely its `Durability`.** A
+            // `Durability`-less structure (`raidable: false` — the Home)
+            // makes `damage_structure` return before ever touching that
+            // component, so reading its absence as "destroyed" removes an
+            // intact structure from the board on the very first swing.
+            if self
+                .world
+                .get::<crate::components::Structure>(target)
+                .is_none()
+            {
+                self.world.resource_mut::<TacticalBattle>().remove(target);
+            }
+            self.world.resource_mut::<TacticalBattle>().spend_action();
+            self.hand_on_turn(actor, round_before);
+            return true;
         }
 
         let round_before = self.world.resource::<TacticalBattle>().round;
@@ -1428,10 +1468,119 @@ impl Game {
         };
         if battle.actor() == Some(actor) {
             self.world.resource_mut::<TacticalBattle>().end_turn();
+            self.skip_disengaged_turns();
         }
         if self.world.resource::<TacticalBattle>().round > round_before {
             self.tactical_round_upkeep();
         }
+    }
+
+    /// Advances past every AI-driven body with nothing in reach, so a round
+    /// thins to the bodies actually in contact.
+    ///
+    /// `TacticalBattle`'s own doc holds a fight to thirteen bodies on the
+    /// strength of a linear-scanned `Vec`; a developed base holds a hundred.
+    /// A skipped body is still on the board, can still be attacked, and
+    /// still acts the moment something comes into its reach — it just does
+    /// not spend a turn deciding to stand still. **The accepted
+    /// consequence**: a body four rooms from the fighting does not walk
+    /// toward it. Staff do not reinforce; they defend where they are.
+    ///
+    /// **Never the player or their party** — that turn is theirs to spend
+    /// as they like, engaged or not — only a body this file's AI drives.
+    ///
+    /// **Guarded against emptying the order.** If nothing in the whole
+    /// order is engaged, this skips nobody at all: a siege where the two
+    /// sides have not met yet must still advance its rounds rather than
+    /// spin `end_turn` forever chasing an actor that never arrives. The
+    /// loop below is bounded by the order's own length besides, so even a
+    /// wrong answer from `tactical_body_is_engaged` cannot hang it.
+    pub(crate) fn skip_disengaged_turns(&mut self) {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let order: Vec<Entity> = battle.initiative().to_vec();
+        if order.is_empty() || !order.iter().any(|&e| self.tactical_body_is_engaged(e)) {
+            return;
+        }
+        for _ in 0..order.len() {
+            let Some(current) = self.world.resource::<TacticalBattle>().actor() else {
+                break;
+            };
+            if !self.tactical_skippable(current) || self.tactical_body_is_engaged(current) {
+                break;
+            }
+            // **`age_tamper`, since this ends a turn without going through
+            // `hand_on_turn`.** "A tamper ages on the tampered body's own
+            // hand-on, never in `tick_one_combatant`" holds for every path
+            // that ends a turn — a skipped body's own `end_turn` call right
+            // below is exactly such a path, and without this a `Tampered`
+            // entry landed on a body idle enough to be skipped would never
+            // age at all, freezing rather than expiring.
+            if self.creature_alive(current) {
+                self.age_tamper(current);
+            }
+            self.world.resource_mut::<TacticalBattle>().end_turn();
+        }
+    }
+
+    /// Whether `body` is a bystander this file's AI does not otherwise
+    /// drive at all — never the player or their party (theirs to spend as
+    /// they like), and never a body `tactical_ai_actor` already recognises
+    /// (`Hostile`, `Summoned` or `taken_over`), because every one of those
+    /// already has a driver that closes the distance on its own turn
+    /// however far it starts. Skipping one of them on top of that driver
+    /// would stop it approaching at all — a fork that never closes because
+    /// nothing was ever in its opening reach, a wild pack that stands
+    /// still on a wide board — so this is deliberately narrower than "not
+    /// the player or their party": it is base staff (and any other body a
+    /// fight seats with nothing driving it), the one kind of bystander
+    /// that would otherwise sit forever as `tactical_awaits_input` waits
+    /// on a key nobody can press.
+    pub(crate) fn tactical_skippable(&self, body: Entity) -> bool {
+        body != self.player_entity()
+            && !self.world.resource::<Party>().0.contains(&body)
+            && self.world.get::<Hostile>(body).is_none()
+            && self
+                .world
+                .get::<crate::components::Summoned>(body)
+                .is_none()
+            && !self.taken_over(body)
+    }
+
+    /// Whether anything on the other side is within `body`'s reach this
+    /// turn — any cell of [`reach::movement_field`] plus
+    /// [`Game::swing_range`] of it.
+    ///
+    /// A `Structure` is never counted as the "other side" here: it has no
+    /// `Hostile` marker to read and cannot itself be reinforced against, so
+    /// including one would read a raider stalled beside a machine as
+    /// "engaged" for every other AI-driven body on the board.
+    pub(crate) fn tactical_body_is_engaged(&self, body: Entity) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        if battle.cell_of(body).is_none() {
+            return false;
+        }
+        let field = reach::movement_field(battle, body, self.movement_allowance(body));
+        let range = self.swing_range(body);
+        let side = self.acts_for_hostiles(body);
+        battle
+            .bodies()
+            .filter(|&(other, _)| other != body)
+            .filter(|&(other, _)| {
+                self.world
+                    .get::<crate::components::Structure>(other)
+                    .is_none()
+            })
+            .filter(|&(other, _)| self.acts_for_hostiles(other) != side)
+            .any(|(other, _)| {
+                let other_cells = battle.cells_of(other);
+                field
+                    .keys()
+                    .any(|&cell| reach::gap(&[cell], &other_cells) <= range)
+            })
     }
 
     /// What a round costs, on a battle map exactly as in a group fight:
@@ -1459,7 +1608,12 @@ impl Game {
     ///
     /// The tick is skipped when the reap closed the fight, because
     /// `settle_tactical` spent the round's tick on the way out.
-    fn tactical_round_upkeep(&mut self) {
+    pub(crate) fn tactical_round_upkeep(&mut self) {
+        // A turret is a property of a structure, not a combatant — no
+        // initiative slot, so it fires here, once a round, rather than
+        // taking a turn. Ahead of the reap below, so a besieger a turret
+        // kills is swept the same beat it fell.
+        self.fire_turrets();
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
         self.reap_tactical_dead(None);
@@ -1527,9 +1681,27 @@ impl Game {
             .resource::<TacticalBattle>()
             .bodies()
             .map(|(entity, _)| entity)
+            // **A `Structure` has no `Stats`, so `creature_alive` always
+            // reads it as fallen.** It holds no initiative slot and its
+            // aliveness is `Durability`, not HP — `Game::tactical_attack`'s
+            // structure branch is the one door that removes it, on its own
+            // destruction rather than on the next round's reap.
+            .filter(|&e| self.world.get::<crate::components::Structure>(e).is_none())
             .filter(|&e| !self.creature_alive(e))
             .collect();
         for body in fallen {
+            // **Before the removal**, so `drop_besieger_cargo`'s fallback
+            // search over `TacticalBattle::bodies` still sees this body's
+            // own cell — `crate::components::Besieger`'s own load-bearing
+            // line: a carrier killed short of the door drops what it held
+            // rather than deleting it from the base's stock entirely.
+            if self
+                .world
+                .get::<crate::components::Besieger>(body)
+                .is_some()
+            {
+                crate::game::siege::raiders::drop_besieger_cargo(self, body);
+            }
             self.world.resource_mut::<TacticalBattle>().remove(body);
             // A fallen companion is reaped at teardown, not here — the same
             // deferral the abstract model makes, and `bench_or_dissolve` is
@@ -1539,6 +1711,28 @@ impl Game {
                     Some(members) => self.reap_squad(body, &members, player),
                     None => self.finish_hostile(body, player),
                 }
+            } else if body != player && !self.world.resource::<Party>().0.contains(&body) {
+                // **Base staff, killed on a siege board.** Neither `Hostile`
+                // (that branch above) nor `Party` (`finish_fight`'s own dead
+                // sweep, run at teardown) ever sees this body, so this reap
+                // is the only place its death is seen at all — left alone it
+                // sits in the roster at `hp <= 0` forever, `admit_the_badly_
+                // hurt`'s own reason for skipping one rather than admitting
+                // it to a Bay. Precedent: `Game::run_raid`'s own defender
+                // (`game/base/upkeep.rs`), matched here rather than
+                // restated: the line naming the fallen body, and `Task`
+                // stripped *before* the dissolve rather than by it, so a
+                // posted worker's own detachment line does not land a
+                // second time directly beneath this one.
+                let label = self.creature_label(body);
+                self.log_base_kind(
+                    crate::resources::MessageKind::Raid,
+                    format!("{label} falls in the siege."),
+                );
+                self.world
+                    .entity_mut(body)
+                    .remove::<crate::components::Task>();
+                self.bench_or_dissolve(body);
             }
         }
         self.settle_tactical(wild);
@@ -1574,7 +1768,7 @@ impl Game {
     /// and it is theirs alone to make: a companion can break off and leave
     /// the party fighting on, but the player is the one holding the fight
     /// open, so their leaving closes it exactly as `battle_flee` does.
-    fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
+    pub(crate) fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
         // Every reap and every departure comes through here, including the
         // reap in the round's upkeep that no hand-on follows — so a decoy
         // never outlives the last body it was fooling by a turn.

@@ -1610,6 +1610,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let data = save::SaveData {
         raid_pressure: Default::default(),
+        siege_pressure: Default::default(),
+        siege: None,
         seed: game.world.resource::<WorldMap>().seed(),
         discovered_research: Vec::new(),
         study_progress: 0,
@@ -1726,6 +1728,10 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             off_shift: None,
             staff: false,
             downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
             equipment: Vec::new(),
         }],
         structures: Vec::new(),

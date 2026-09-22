@@ -434,7 +434,7 @@ impl Game {
             .get::<Durability>(target)
             .map(|d| d.hp)
             .unwrap_or(0);
-        self.damage_structure(target, hp, &label);
+        self.damage_structure(target, hp, &label, "a GC Entropy Sweep");
     }
 
     /// Wounds the structure nearest the player without destroying it, which
@@ -457,7 +457,7 @@ impl Game {
             .max(1)
             .min(durability.hp.saturating_sub(1));
         let label = self.entity_label(target);
-        self.damage_structure(target, dmg, &label);
+        self.damage_structure(target, dmg, &label, "a GC Entropy Sweep");
     }
 
     /// The structure a dev trigger acts on: nearest to the player, ties
@@ -643,12 +643,20 @@ impl Game {
     /// the same question `schedule_base_labour`'s `on_shift` filter asks,
     /// and a copy here would be the one that forgets `Grievance` has two
     /// rungs. A `Sulking` program still works and still counts.
-    fn defending_base_staff_count(&self) -> usize {
+    pub(crate) fn defending_base_staff_count(&self) -> usize {
+        self.defending_base_staff().len()
+    }
+
+    /// `defending_base_staff_count`'s own population, as the list rather
+    /// than the count — `Game::resolve_siege_offscreen` needs actual bodies
+    /// to bench, not just how many there are, and a second filter here
+    /// would be the copy that eventually forgets `Grievance` has two rungs.
+    pub(crate) fn defending_base_staff(&self) -> Vec<Entity> {
         self.base_staff()
             .into_iter()
             .filter(|&e| self.world.get::<Downed>(e).is_none())
             .filter(|&e| !self.has_downed_tools(e))
-            .count()
+            .collect()
     }
 
     /// Everything a sweep *is*, once it has been decided that one happens.
@@ -705,7 +713,7 @@ impl Game {
 
         let Some(worker) = defender else {
             if raid_damage > 0 {
-                self.damage_structure(target, raid_damage, &target_label);
+                self.damage_structure(target, raid_damage, &target_label, "a GC Entropy Sweep");
             } else {
                 self.sweep_held(target);
                 self.log_base(format!(
@@ -743,7 +751,7 @@ impl Game {
         let mitigated = (raid_damage as f32 * (1.0 - cut)).round() as u32;
         let worker_label = self.creature_label(worker);
         if mitigated > 0 {
-            self.damage_structure(target, mitigated, &target_label);
+            self.damage_structure(target, mitigated, &target_label, "a GC Entropy Sweep");
         } else {
             self.sweep_held(target);
             self.log_base(format!(
@@ -895,7 +903,22 @@ impl Game {
     /// Applies `dmg` to `structure`'s `Durability`, destroying (despawning)
     /// it and clearing any cronjob assignment pointing at it if that
     /// brings it to 0.
-    pub(crate) fn damage_structure(&mut self, structure: Entity, dmg: u32, label: &str) {
+    ///
+    /// `event` is the log line's noun phrase for what did this — `"a GC
+    /// Entropy Sweep"` for every raid caller, `"a siege"` for
+    /// `Game::resolve_siege_offscreen` and the tactical board's structure
+    /// swing — so a structure destroyed by one event is never reported as
+    /// destroyed by the other. The teardown itself (tasks cleared, the rig's
+    /// tool returned, the pending build cleared, the memory formed) is
+    /// identical either way, which is what "destroyed the way any other one
+    /// is" means.
+    pub(crate) fn damage_structure(
+        &mut self,
+        structure: Entity,
+        dmg: u32,
+        label: &str,
+        event: &str,
+    ) {
         let Some(mut durability) = self.world.get_mut::<Durability>(structure) else {
             return;
         };
@@ -943,7 +966,7 @@ impl Game {
         if destroyed {
             self.log_base_kind(
                 MessageKind::Raid,
-                format!("{label} is destroyed in a GC Entropy Sweep!"),
+                format!("{label} is destroyed in {event}!"),
             );
             for w in workers {
                 // See `remove_structure`: the load has to go with the task,
@@ -971,7 +994,7 @@ impl Game {
         } else {
             self.log_base_kind(
                 MessageKind::Raid,
-                format!("{label} loses {dmg} Durability to a GC Entropy Sweep!"),
+                format!("{label} loses {dmg} Durability to {event}!"),
             );
         }
     }

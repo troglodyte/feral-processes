@@ -12,6 +12,8 @@
 
 use std::collections::{BTreeSet, VecDeque};
 
+use serde::{Deserialize, Serialize};
+
 use crate::derive::{FNV_BASIS, fold, index};
 use crate::tuning::{
     TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
@@ -27,7 +29,7 @@ use crate::world::Biome;
 /// cross; `Cover` is a boulder that stops both. Note this is the same
 /// asymmetry the Stack already establishes, where `walkable()` and
 /// `blocks_sight()` are deliberately not complements.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BattleCell {
     Open,
     Rough,
@@ -66,7 +68,7 @@ impl BattleCell {
 /// `stack::FrameSpec`'s counterpart: a board is a pure function of this and
 /// nothing else, which is what makes it unit-testable without a `Game` and
 /// what makes it safe never to save.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattleSpec {
     pub world_seed: u32,
     /// The world tile the fight opened on.
@@ -185,6 +187,16 @@ pub struct Board {
 }
 
 impl Board {
+    /// A board of every cell `Blocked` — the siege board's starting point
+    /// (`game::siege::board::build`), seeded before the flood fill opens
+    /// whatever of it is actually walkable.
+    pub(crate) fn solid(side: i32) -> Board {
+        Board {
+            side,
+            cells: vec![BattleCell::Blocked; (side * side) as usize],
+        }
+    }
+
     pub fn in_bounds(&self, x: i32, y: i32) -> bool {
         x >= 0 && y >= 0 && x < self.side && y < self.side
     }
@@ -210,7 +222,11 @@ impl Board {
         self.cell(x, y).blocks_sight()
     }
 
-    fn set(&mut self, x: i32, y: i32, kind: BattleCell) {
+    /// Puts `kind` on one cell — a no-op off the board, `cell`'s own
+    /// "seen over, never stepped on" answer read the other way round: a
+    /// write nobody can ever stand at is safe to ignore rather than a panic
+    /// waiting for a flood fill's bounding box to be one cell out.
+    pub(crate) fn set(&mut self, x: i32, y: i32, kind: BattleCell) {
         if self.in_bounds(x, y) {
             let i = (y * self.side + x) as usize;
             self.cells[i] = kind;
@@ -246,6 +262,21 @@ impl Board {
                 })
             })
             .collect();
+        Board { side, cells }
+    }
+
+    /// A board rebuilt from its own saved cells — `game::siege::persist::
+    /// restore`'s door back in, `from_rows`'s shape but for real save data
+    /// rather than a test fixture. `cells` is trusted to be `side * side`
+    /// long and in the row-major order `cells()` itself yields, which is
+    /// exactly what `game::siege::persist::assemble` wrote out; nothing
+    /// else calls this back.
+    pub(crate) fn from_cells(side: i32, cells: Vec<BattleCell>) -> Board {
+        debug_assert_eq!(
+            cells.len(),
+            (side * side) as usize,
+            "a saved siege board's cell count must match its own side"
+        );
         Board { side, cells }
     }
 
@@ -617,6 +648,79 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// `Board::solid` — the siege board's starting point before the flood
+    /// fill opens anything.
+    #[test]
+    fn a_solid_board_is_blocked_everywhere_in_bounds() {
+        let board = Board::solid(4);
+        assert_eq!(board.side, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(board.cell(x, y), BattleCell::Blocked);
+            }
+        }
+        assert!(board.in_bounds(3, 3));
+        assert!(!board.in_bounds(4, 0));
+    }
+
+    #[test]
+    fn set_off_the_board_changes_nothing_and_does_not_panic() {
+        let mut board = Board::solid(3);
+        board.set(-1, 0, BattleCell::Open);
+        board.set(3, 3, BattleCell::Open);
+        board.set(100, -100, BattleCell::Open);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert_eq!(board.cell(x, y), BattleCell::Blocked);
+            }
+        }
+    }
+
+    /// `cells()` walks a hand-built board in the same row-major order
+    /// `solid` and `set` put it together in — the order a save (Task 16)
+    /// must round-trip through.
+    #[test]
+    fn cells_round_trips_through_solid_and_set_in_order() {
+        let mut board = Board::solid(3);
+        let writes = [
+            (0, 0, BattleCell::Open),
+            (1, 0, BattleCell::Rough),
+            (2, 1, BattleCell::Cover),
+        ];
+        for &(x, y, kind) in &writes {
+            board.set(x, y, kind);
+        }
+        let expected: Vec<((i32, i32), BattleCell)> = (0..3)
+            .flat_map(|y| (0..3).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let kind = writes
+                    .iter()
+                    .find(|&&(wx, wy, _)| wx == x && wy == y)
+                    .map(|&(_, _, k)| k)
+                    .unwrap_or(BattleCell::Blocked);
+                ((x, y), kind)
+            })
+            .collect();
+        assert_eq!(board.cells().collect::<Vec<_>>(), expected);
+    }
+
+    /// `BattleCell` round-trips through RON — Task 16 saves a siege's board
+    /// as a plain `Vec<BattleCell>`, and this is the derive that makes that
+    /// legal.
+    #[test]
+    fn battle_cell_round_trips_through_ron() {
+        for kind in [
+            BattleCell::Open,
+            BattleCell::Rough,
+            BattleCell::Cover,
+            BattleCell::Blocked,
+        ] {
+            let text = ron::to_string(&kind).expect("BattleCell must serialise");
+            let back: BattleCell = ron::from_str(&text).expect("BattleCell must deserialise");
+            assert_eq!(kind, back);
         }
     }
 }

@@ -2409,6 +2409,31 @@ pub enum FinishOrder {
     Strip,
 }
 
+/// A wild program besieging the base — `game::siege::raiders`'s marker.
+///
+/// The third kind of body carrying a base-space `Position`, after a posted
+/// program and a `DigSite`. `Game::stands_in_base_space` is the door that
+/// sharpening matters at: without an arm there a besieger's board cell would
+/// be read as a zone-surface tile the way an ordinary wild `Creature`'s is,
+/// and the two coordinate spaces alias onto each other by design.
+///
+/// A unit marker rather than data — a besieger's behaviour lives in
+/// `game::siege::raiders`, keyed off this component and off `components::
+/// Carrying`, not off anything stored here.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Besieger;
+
+/// Which structure a besieger's `Carrying` load came out of.
+///
+/// **Killing a carrier before the door drops the goods back into this
+/// structure, if it still stands** — `game::siege::raiders`'s single most
+/// load-bearing line, and what makes interception the shape of the fight
+/// rather than a race. Written alongside `Carrying` at the moment of the
+/// steal and read once, by `game::siege::raiders::drop_besieger_cargo` on
+/// the reap that follows a kill.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct StolenFrom(pub Entity);
+
 /// The character a pending build site draws.
 ///
 /// **A caret, and orange.** The renderer paints its own dark frame around

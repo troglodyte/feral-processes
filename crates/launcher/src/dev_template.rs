@@ -565,6 +565,37 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `siege` either: a template that merely
+    /// loads next to a base tests nothing about a siege, since every one of
+    /// the three ingredients — being *in* base space, a clock already inside
+    /// its warning band, and a turret actually standing — can each go
+    /// missing on its own and leave the save opening fine.
+    #[test]
+    fn the_siege_template_opens_with_a_siege_forming() {
+        let out = std::env::temp_dir().join("feral_processes_template_siege_forming.bin");
+        generate("siege", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        assert!(
+            game.in_base(),
+            "a siege is fought on the base's own board — a party on the surface \
+             or in the Stack cannot be besieged"
+        );
+        assert!(
+            game.siege_warned(),
+            "the clock has to be inside its own warning band, not merely \
+             ticking somewhere below it"
+        );
+        assert!(
+            game.structure_report()
+                .into_iter()
+                .any(|s| s.kind == "turret"),
+            "a base with no turret cannot demonstrate the one structure this \
+             template exists to open near"
+        );
+    }
+
     #[test]
     fn resolving_an_unknown_template_names_it_and_lists_the_known_ones() {
         let err = resolve("not_a_template").unwrap_err();

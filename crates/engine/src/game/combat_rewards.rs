@@ -1,6 +1,7 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
+use crate::components::{Besieger, StolenFrom};
 use crate::items::DownedProgram;
 use crate::progression::StatRow;
 use crate::tactical::TacticalBattle;
@@ -1247,6 +1248,15 @@ impl Game {
         self.world
             .entity_mut(front)
             .remove::<(Hostile, WanderAi, NestGuardian, TownPatrol, Pursuing)>();
+        // A captured carrier gives its plunder back exactly as a killed one
+        // does, while it is still on the board for the nearest-Depot
+        // fallback to measure from.
+        if self.world.get::<Besieger>(front).is_some() {
+            crate::game::siege::raiders::drop_besieger_cargo(self, front);
+        }
+        self.world
+            .entity_mut(front)
+            .remove::<(Besieger, Carrying, StolenFrom)>();
         // Battle-scoped state has to be cleared here rather than left to
         // `end_battle`/`clear_battle_status_effects`: `front` is about to
         // leave its group below, so if other groups are still standing the

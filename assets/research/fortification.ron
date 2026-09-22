@@ -1,10 +1,10 @@
 (
     id: "fortification",
     name: "Fortification",
-    description: "Base defenses: a Shield that softens GC Entropy Sweeps against your buildings, and a node that slowly repairs damaged buildings.",
+    description: "Base defenses: a Shield that softens GC Entropy Sweeps against your buildings, a node that slowly repairs damaged buildings, and a Turret that fires on besiegers.",
     cost: 18,
     materials: [("bytecode_block", 8), ("power_cell", 8)],
     recommended: true,
     requires: ["power_grid"],
-    unlocks_structures: ["shield", "patch_node"],
+    unlocks_structures: ["shield", "patch_node", "turret"],
 )

@@ -1435,6 +1435,10 @@ mod tests {
             off_shift: None,
             staff: false,
             downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
         };
         // The handle candidate, and its `CustomName` counterpart — a maxed
         // rename replaces the handle outright (`creature_name`), so it is a

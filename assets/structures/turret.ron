@@ -1,0 +1,11 @@
+(
+    id: "turret",
+    name: "Turret",
+    description: "Fires on the nearest besieger in range during a siege. Also soaks 1 damage off every GC Entropy Sweep against every structure you own.",
+    glyph: 'U',
+    color: Red,
+    build_cost: [("core_fragment", 24), ("power_cell", 4)],
+    work: None,
+    raid_defense: 1,
+    turret: Some((damage: 8, range: 5)),
+)

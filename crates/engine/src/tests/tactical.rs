@@ -5835,3 +5835,264 @@ mod teleport {
         }
     }
 }
+
+/// `Game::tactical_body_is_engaged` and the hand-on's skip of a body with
+/// nothing in reach (`crates/engine/src/tactical/turn.rs`).
+///
+/// A hand-built fight rather than `tactical_fight`'s generated board and
+/// bearing-seated pack: these tests need bodies at *exact* distances —
+/// adjacent for an engaged pair, far past `TACTICAL_MOVE_MAX +
+/// TACTICAL_MELEE_RANGE` for a disengaged one — which a generated board's
+/// seeded placement cannot promise. Bodies carry no `Stats` or `Creature`
+/// at all, `tactical::mod`'s own fixture style: `movement_allowance` and
+/// `swing_range` both derive sensible defaults for an entity with neither,
+/// and only `Hostile`'s presence or absence is what this mechanism reads.
+mod engagement {
+    use super::*;
+    use crate::tactical::map::{BattleCell, BattleSpec, Board};
+    use crate::world::Biome;
+
+    /// A battle map wide enough that `TACTICAL_MOVE_MAX + TACTICAL_MELEE_RANGE`
+    /// cannot bridge one side of it to the other, open everywhere so nothing
+    /// about terrain confounds a reach measurement.
+    fn open_fight(game: &mut Game) {
+        let side = 30;
+        let mut board = Board::solid(side);
+        for y in 0..side {
+            for x in 0..side {
+                board.set(x, y, BattleCell::Open);
+            }
+        }
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        game.world
+            .insert_resource(TacticalBattle::open(spec, board));
+    }
+
+    /// A bare body — no `Creature`, so `movement_allowance`/`swing_range`
+    /// both derive their defaults — `Stats` alone so `reap_tactical_dead`
+    /// (which `tactical_round_upkeep` runs on every round boundary) does
+    /// not read it as already dead and remove it the moment a round wraps.
+    /// `Hostile` marks which side it fights for.
+    fn plain(game: &mut Game, hostile: bool) -> Entity {
+        let mut entity = game.world.spawn(Stats {
+            hp: 10,
+            max_hp: 10,
+            atk: 0,
+            mitigation: 0,
+        });
+        if hostile {
+            entity.insert(Hostile);
+        }
+        entity.id()
+    }
+
+    /// Ends `body`'s turn as if it had just spent its one action — the
+    /// `set_actions_left(0)` a real `tactical_attack`/`tactical_defend`
+    /// leaves behind before calling `hand_on_turn` for real.
+    fn end_turn_of(game: &mut Game, body: Entity, round_before: u32) {
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_actions_left(0);
+        game.hand_on_turn(body, round_before);
+    }
+
+    /// A three-body fight: `defender` and `raider` adjacent and on opposing
+    /// sides (engaged with each other), `distant` far from both and on
+    /// nobody's opposing side in particular — the "staff across the base"
+    /// shape, seated in initiative order `[defender, raider, distant]`.
+    fn engaged_pair_and_a_distant_body(game: &mut Game) -> (Entity, Entity, Entity) {
+        open_fight(game);
+        let defender = plain(game, false);
+        let raider = plain(game, true);
+        let distant = plain(game, false);
+        let player = game.player_entity();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(defender, (0, 0));
+            battle.place(raider, (1, 0));
+            battle.place(distant, (25, 25));
+            // Placed but not seated in the order: `settle_tactical` ends a
+            // fight the instant the player is not on the board at all
+            // (`cell_of(player).is_none()`), on every round's reap — so a
+            // fixture with nobody standing in for the player would tear the
+            // fight down the first time a round wraps, well before the
+            // skip logic under test ever runs.
+            battle.place(player, (29, 29));
+            battle.set_initiative(vec![defender, raider, distant]);
+        }
+        (defender, raider, distant)
+    }
+
+    /// A staff body across the base from the fighting is passed over: ending
+    /// the engaged pair's two turns skips `distant` without it ever
+    /// becoming the actor, and the order wraps into a new round on the way
+    /// past it — the concrete, unmissable sign a body was skipped rather
+    /// than merely deferred.
+    #[test]
+    fn a_distant_body_is_skipped_and_the_round_still_advances() {
+        let mut game = game();
+        let (defender, raider, distant) = engaged_pair_and_a_distant_body(&mut game);
+
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(defender)
+        );
+        end_turn_of(&mut game, defender, 1);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(raider),
+            "the engaged raider must not be skipped"
+        );
+        assert_eq!(game.world.resource::<TacticalBattle>().round, 1);
+
+        end_turn_of(&mut game, raider, 1);
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_ne!(
+            battle.actor(),
+            Some(distant),
+            "a disengaged body must not become the actor"
+        );
+        assert_eq!(
+            battle.actor(),
+            Some(defender),
+            "skipping the last body in the order wraps back to the front"
+        );
+        assert_eq!(battle.round, 2, "the round must still have advanced");
+    }
+
+    /// The same body acts on the round a raider comes into its reach —
+    /// engagement is re-evaluated every time the cursor reaches it, never
+    /// cached from the round it was skipped in.
+    #[test]
+    fn a_once_distant_body_acts_once_something_reaches_it() {
+        let mut game = game();
+        let (defender, raider, distant) = engaged_pair_and_a_distant_body(&mut game);
+        end_turn_of(&mut game, defender, 1);
+        end_turn_of(&mut game, raider, 1);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(defender),
+            "the fixture must have skipped `distant` once already"
+        );
+
+        // A second hostile closes on `distant`.
+        let closing = plain(&mut game, true);
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .place(closing, (24, 25));
+
+        end_turn_of(&mut game, defender, 2);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(raider)
+        );
+        end_turn_of(&mut game, raider, 2);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(distant),
+            "now in reach of `closing`, `distant` must get its turn"
+        );
+    }
+
+    /// A board on which nobody is engaged still advances its rounds rather
+    /// than hanging — the guard the skip is built on, and the test that
+    /// would catch it spinning forever if that guard were ever dropped.
+    #[test]
+    fn nobody_engaged_still_advances_the_rounds() {
+        let mut game = game();
+        open_fight(&mut game);
+        let a = plain(&mut game, false);
+        let b = plain(&mut game, false);
+        let c = plain(&mut game, false);
+        // A hostile, far from all three — present so `settle_tactical`'s
+        // "hostiles > 0" keeps the fight open across a round boundary, but
+        // out of everybody's reach so it never makes anyone engaged.
+        let distant_hostile = plain(&mut game, true);
+        let player = game.player_entity();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(a, (0, 0));
+            battle.place(b, (1, 1));
+            battle.place(c, (2, 2));
+            battle.place(distant_hostile, (29, 29));
+            battle.place(player, (29, 0));
+            battle.set_initiative(vec![a, b, c]);
+        }
+
+        end_turn_of(&mut game, a, 1);
+        assert_eq!(game.world.resource::<TacticalBattle>().actor(), Some(b));
+        end_turn_of(&mut game, b, 1);
+        assert_eq!(game.world.resource::<TacticalBattle>().actor(), Some(c));
+        end_turn_of(&mut game, c, 1);
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(battle.actor(), Some(a));
+        assert_eq!(
+            battle.round, 2,
+            "three ordinary hand-ons must reach round 2"
+        );
+    }
+
+    /// The player is never skipped, even disengaged, with an engaged pair
+    /// elsewhere on the board forcing the skip loop to actually run.
+    #[test]
+    fn the_player_is_never_skipped() {
+        let mut game = game();
+        open_fight(&mut game);
+        let player = game.player_entity();
+        let defender = plain(&mut game, false);
+        let raider = plain(&mut game, true);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(defender, (0, 0));
+            battle.place(player, (25, 25));
+            battle.place(raider, (1, 0));
+            battle.set_initiative(vec![defender, player, raider]);
+        }
+
+        end_turn_of(&mut game, defender, 1);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(player),
+            "the player must never be skipped, disengaged or not"
+        );
+    }
+
+    /// Alone on the board with nothing in reach, the player still gets a
+    /// turn rather than being skipped past.
+    #[test]
+    fn the_player_alone_on_the_board_is_never_skipped() {
+        let mut game = game();
+        open_fight(&mut game);
+        let player = game.player_entity();
+        // Present so `settle_tactical`'s "hostiles > 0" keeps the fight
+        // open across the round boundary this test crosses, and far enough
+        // that it never puts the player in reach.
+        let distant_hostile = plain(&mut game, true);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(player, (0, 0));
+            battle.place(distant_hostile, (29, 29));
+            battle.set_initiative(vec![player]);
+        }
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(player)
+        );
+
+        end_turn_of(&mut game, player, 1);
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.actor(),
+            Some(player),
+            "the only body on the board must still be handed the next turn"
+        );
+        assert_eq!(battle.round, 2, "a solitary player still advances rounds");
+    }
+}

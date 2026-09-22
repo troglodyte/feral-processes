@@ -3770,4 +3770,76 @@ mod rereview_findings {
              takes"
         );
     }
+
+    // ---- C3-m: a save missing `player_cell` falls back to the door, not
+    // to board `(0, 0)`.
+
+    #[test]
+    fn c3m_a_save_missing_player_cell_falls_back_to_the_door_not_zero_zero() {
+        let mut game = Game::new(210_005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        // Shift the flood fill's own origin west, so board `(0, 0)` is
+        // neither the door nor anywhere the player stands — `m1`'s own
+        // technique for making the same distinction visible.
+        {
+            let mut grid = game.world.resource_mut::<BaseGrid>();
+            grid.lay_floor(-5, 0);
+        }
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let door = game.world.resource::<TacticalBattle>().siege_door;
+        assert_ne!(
+            door,
+            (0, 0),
+            "the fixture must shift the origin so the door isn't \
+             incidentally board (0, 0)"
+        );
+
+        let scratch = scratch_assets_dir("siege_c3m_missing_player_cell");
+        std::fs::create_dir_all(&*scratch).unwrap();
+        let path = scratch.join("save.bin");
+        game.save(&path).unwrap();
+
+        // Simulates a save written before `player_cell` existed: strips the
+        // field out of the on-disk field-named RON — `#[serde(default)]`'s
+        // own trial, applied through the real load door rather than a
+        // hand-built `SiegeSave`.
+        let text = std::fs::read_to_string(&path).unwrap();
+        let stripped: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("player_cell:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_ne!(
+            stripped, text,
+            "the fixture must actually find and drop the field"
+        );
+        std::fs::write(&path, stripped).unwrap();
+
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        assert!(
+            loaded.in_tactical_battle(),
+            "a save missing player_cell must still resume its siege"
+        );
+        let player = loaded.player_entity();
+        let battle = loaded.world.resource::<TacticalBattle>();
+        let cell = battle
+            .cell_of(player)
+            .expect("the player must still be seated on the board");
+        // Not `Some(door)` outright — the Home always stands on the door
+        // itself, so the nearest the player can land is beside it, the
+        // same `place_nearby` fallback `Game::open_siege` seats them with.
+        assert_ne!(
+            cell,
+            (0, 0),
+            "the player must not be seated at board (0, 0)"
+        );
+        assert!(
+            reach::distance(cell, door) <= 1,
+            "a save missing player_cell must reload the player right at \
+             the siege door, not board (0, 0) — got {cell:?}, door is {door:?}"
+        );
+    }
 }

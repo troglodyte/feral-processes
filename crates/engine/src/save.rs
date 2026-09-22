@@ -380,12 +380,19 @@ pub struct SiegeSave {
     /// "Base-space Position is pinned to the anchor") — and
     /// `game::siege::persist::restore` runs before `Game::restore_locale`
     /// besides, so `Game::base_pos()` has nothing to answer yet either way.
-    /// A save written before this field existed loads the player back at
-    /// the door rather than dropping the siege, `#[serde(default)]`'s
-    /// reason — wrong only for a save that was mid-siege at the moment this
-    /// shipped, and righted the next time that run saves.
+    ///
+    /// **`Option`, not a bare tuple defaulting to `(0, 0)`.** A save written
+    /// before this field existed has no board cell to give back, and `(0,
+    /// 0)` is not a stand-in for "unknown" — it is an ordinary board
+    /// coordinate a real siege can floor, occupy or leave outside its own
+    /// bounding box, so a bare default silently seats the player wherever
+    /// that coordinate happens to fall (or drops the siege outright when it
+    /// falls on nothing `TacticalBattle::place` will take). `None` reads
+    /// honestly instead, and `persist::restore` falls back to `saved.door`
+    /// — the same "reloads at the door" behaviour the field was always
+    /// meant to have for an old save, spelled correctly this time.
     #[serde(default)]
-    pub player_cell: (i32, i32),
+    pub player_cell: Option<(i32, i32)>,
 }
 
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build

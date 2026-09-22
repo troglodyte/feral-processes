@@ -60,7 +60,7 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
     let player_order = member_of(battle, player)
         .map(|(order, _)| order)
         .unwrap_or(0);
-    let player_cell = battle.cell_of(player).unwrap_or(battle.siege_door);
+    let player_cell = Some(battle.cell_of(player).unwrap_or(battle.siege_door));
     Some(SiegeSave {
         spec: battle.spec,
         side: battle.board.side,
@@ -118,12 +118,28 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     // cell (CLAUDE.md, "Base-space Position is pinned to the anchor"), and
     // this runs before `Game::restore_locale` besides, so `Game::base_pos`
     // has nothing to answer yet either way. `player_cell` was read straight
-    // off the board at save time, so it needs no re-derivation at all.
+    // off the board at save time, so it needs no re-derivation at all —
+    // `None` only for a save written before the field existed, and
+    // `saved.door` is what that reload always meant to give back.
     let player = game.player_entity();
-    sorted.push((saved.player_order, player, saved.player_cell));
+    let player_cell = saved.player_cell.unwrap_or(saved.door);
+    sorted.push((saved.player_order, player, player_cell));
     sorted.sort_by_key(|&(order, _, _)| order);
     for &(_, entity, cell) in &sorted {
-        battle.place(entity, cell);
+        if entity == player {
+            // **`place_nearby`, not a bare `place`.** The Home always
+            // stands on the door — `board::seat_structures` just seated it
+            // as a body above — so a `player_cell` fallen back to
+            // `saved.door` (a save written before this field existed) can
+            // never place exactly there; `Game::open_siege`'s own seating
+            // for the player takes the same "or the nearest free cell to
+            // it" fallback for the same reason.
+            if !battle.place(entity, cell) {
+                super::place_nearby(&mut battle, cell, entity);
+            }
+        } else {
+            battle.place(entity, cell);
+        }
     }
     // A siege the player was never seated back into is not one worth
     // resuming — `members.is_empty()`'s own reason, applied to the one

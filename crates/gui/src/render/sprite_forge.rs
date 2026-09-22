@@ -263,9 +263,10 @@ fn editor_geometry(
     // with `canvas.w` about how wide a swatch is allowed to be.
     // `draw_swatch_row`'s own gap is a third of the swatch
     // (`canvas::SWATCH_GAP_RATIO`), so the strip's total width is
-    // `swatch * (n + (n - 1) / 3)`.
+    // `swatch * (n + (n - 1) / 3)`, with `n` counting the transparent
+    // swatch as well as the palette.
     let target_w = canvas.w - m.inset * 2.0;
-    let n = palette_len.max(1) as f32;
+    let n = canvas::swatch_count(palette_len) as f32;
     let swatch = target_w / (n + (n - 1.0) / 3.0);
     let swatch_gap = swatch / 3.0;
     let palette_w = swatch * n + swatch_gap * (n - 1.0) + m.inset * 2.0;
@@ -493,8 +494,9 @@ pub(crate) fn cell_at(pos: (f32, f32), rect: Rect, edge: u8) -> Option<(u8, u8)>
 }
 
 /// Resolves a pointer position to a swatch index — `draw_swatch_row`'s own
-/// 0-based loop index (`PointerHit::Swatch`'s convention, not
-/// `CanvasView::selected`'s 1-based one). `rect` is the exact strip
+/// 0-based drawn position, which is also the palette index
+/// (`canvas::swatch_count`). `count` is swatches drawn, not palette
+/// colours. `rect` is the exact strip
 /// `draw_swatch_row` fills, and `canvas::SWATCH_GAP_RATIO` is the same gap
 /// it draws with — a pointer landing in that gap between two swatches
 /// resolves to no hit rather than snapping to whichever is nearer, so an
@@ -525,7 +527,7 @@ pub(crate) struct HitRects {
     canvas: Rect,
     edge: u8,
     palette: Rect,
-    palette_len: u8,
+    swatches: u8,
 }
 
 impl HitRects {
@@ -536,7 +538,7 @@ impl HitRects {
         if let Some((x, y)) = cell_at(pos, self.canvas, self.edge) {
             return Some(PointerHit::Cell(x, y));
         }
-        swatch_at(pos, self.palette, self.palette_len).map(PointerHit::Swatch)
+        swatch_at(pos, self.palette, self.swatches).map(PointerHit::Swatch)
     }
 }
 
@@ -565,7 +567,7 @@ pub(crate) fn hit_rects(
         canvas,
         edge: view.canvas.edge,
         palette,
-        palette_len: view.palette.len() as u8,
+        swatches: canvas::swatch_count(view.palette.len()) as u8,
     }
 }
 
@@ -1107,10 +1109,10 @@ mod tests {
     /// drawn positions, `pick_swatch` writes `CanvasView::selected`, and
     /// `draw_swatch_row` reads that back to outline exactly one swatch — so
     /// the only honest question is whether the outline lands on the swatch
-    /// the pointer was actually over. Asked of the first, a middle and the
-    /// **last** entry of `SPRITE_PALETTE`; the last is the one an off-by-one
-    /// in either direction cannot reach at all, and the first is the one it
-    /// gets right by accident (`pick_swatch`'s clamp floors it).
+    /// the pointer was actually over. Asked of the first drawn position (the
+    /// transparent swatch), a middle one and the **last**, `SPRITE_PALETTE`'s
+    /// final entry — the one an off-by-one in either direction cannot reach
+    /// at all.
     #[test]
     fn a_click_outlines_the_swatch_under_the_pointer() {
         let mut app = sprite_forge_app();
@@ -1122,7 +1124,8 @@ mod tests {
         let swatch = palette.h;
         let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
 
-        for i in [0usize, SPRITE_PALETTE.len() / 2, SPRITE_PALETTE.len() - 1] {
+        let positions = canvas::swatch_count(SPRITE_PALETTE.len());
+        for i in [0usize, positions / 2, positions - 1] {
             let left = palette.x + i as f32 * stride;
             let pos = (left + swatch * 0.5, palette.y + swatch * 0.5);
             let hit = rects.resolve(pos).expect("inside a swatch");

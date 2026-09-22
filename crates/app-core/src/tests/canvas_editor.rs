@@ -228,14 +228,14 @@ fn the_palette_cursor_walks_on_all_four_arrows_and_clamps_at_both_ends() {
     editor.handle_key(GameKey::Tab);
 
     editor.handle_key(GameKey::Left);
-    assert_eq!(editor.view().selected, 1, "index 0 is not a swatch");
+    assert_eq!(editor.view().selected, 0, "the transparent swatch");
     editor.handle_key(GameKey::Up);
-    assert_eq!(editor.view().selected, 1, "already at the floor");
+    assert_eq!(editor.view().selected, 0, "already at the floor");
 
     editor.handle_key(GameKey::Right);
-    assert_eq!(editor.view().selected, 2);
+    assert_eq!(editor.view().selected, 1);
     editor.handle_key(GameKey::Down);
-    assert_eq!(editor.view().selected, 3);
+    assert_eq!(editor.view().selected, 2);
 
     for _ in 0..40 {
         editor.handle_key(GameKey::Right);
@@ -299,7 +299,7 @@ fn set_brush_ignores_anything_but_one_or_two() {
 fn pick_swatch_clamps_to_the_palette() {
     let mut editor = editor();
     editor.pick_swatch(0);
-    assert_eq!(editor.view().selected, 1);
+    assert_eq!(editor.view().selected, 0, "the transparent swatch");
     editor.pick_swatch(200);
     assert_eq!(editor.view().selected, PALETTE_LEN);
     editor.pick_swatch(7);

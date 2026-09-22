@@ -363,6 +363,26 @@ break. It is the fourth standing exception to the invariant at the top.
 | --- | --- | --- |
 | `2026-09-21-program-attributes-design` | A second, non-combat stat block — five attributes authored in `assets/attributes/` — carried by every creature and the player, minted from a deterministic fold rather than an RNG draw, stored in the save, and read on a new no-scroll page reached with `[D]` from the manifest | `attributes::AttributeDb`/`mint`/`body_seed`/`revision`/`checksum`, `components::Attributes`, `derive::fold_bytes`, `SpeciesDef::attributes`, `ClassDef::attributes`, `CreatureSave::attributes`, `PlayerSave::attributes`, `Game::dossier_report`, `views::DossierReport` and `tuning::MAX_ATTRIBUTE_ROWS` all resolve in `crates/engine`; `Mode::Dossier` in `crates/app-core`; `render/dossier.rs` in `crates/gui`; `assets/attributes/` (five defs), `assets/descriptions/program_dossier.ron`, `assets/help/47-attributes.md`. No save-format bump — both fields are `#[serde(default)]` and an older file mints on load. Nothing reads an attribute for a mechanic, which is decision 1 of the spec and what `components::Attributes` being its own component keeps true. Not yet played at the keyboard |
 
+## The spec archived on 2026-09-22
+
+Archived on landing, unlike the two entries above it: `crates/engine/src/
+game/siege/mod.rs`'s module doc **does** cite the spec's path, so the
+citation was repointed at the archived location in the same change that
+moved the file, rather than the file moving on its own — a comment-only
+edit, not a logic change, and the deploy skill's own reasoning for
+preferring "move and repoint" over "leave it in `specs/` as a fifth
+exception" when the citing line is documentation rather than code. The nine
+seam arguments are in the memory graph as `seam:the-siege-board-is-built-
+not-generated` and its eight siblings (search `subsystem: "seams"`), which
+is where a reader should be sent — including the one recorded as an
+explicit, user-accepted deviation from the spec's own requirement: an
+off-screen siege can cost a well-staffed base nothing, contrary to §3's "not
+cheaper than defending."
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-22-siege-design` | An event on the base's own board: the sector's wild programs walk in through the one door, steal what they can carry, wreck what they cannot, and withdraw on a morale break — fought tactically regardless of the battle-map profile toggle, and saveable without `TacticalBattle` gaining `Serialize` | `game/siege/{mod,board,clock,offscreen,persist,raiders,turrets}.rs`, `resources::SiegePressure`, `components::{Besieger, StolenFrom}`, `save::SiegeSave` and `CreatureSave`'s `siege_cell`/`siege_order`/`besieger`/`stolen_from` fields, `structures::TurretDef`, `tuning.rs`'s Sieges section all in `crates/engine`. A save change behind `#[serde(default)]`, no `SAVE_FORMAT_VERSION` bump. The off-screen shortfall formula can land at zero for a well-staffed base — left as shipped for playtesting rather than retuned blind, since `balance_sim` has no siege term. Not yet played at the keyboard |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

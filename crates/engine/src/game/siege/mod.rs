@@ -8,7 +8,7 @@
 //! `resources::SiegePressure` rather than that resource — and the
 //! `StructureDef::raid_defense` a turret keeps paying into.
 //!
-//! `docs/superpowers/specs/2026-09-22-siege-design.md` is the design
+//! `docs/superpowers/archive/specs/2026-09-22-siege-design.md` is the design
 //! record; `docs/superpowers/plans/2026-09-22-siege.md` is the task
 //! breakdown this module is built against.
 

@@ -1,6 +1,6 @@
 # Siege — design
 
-**Status:** design approved in dialog 2026-09-22; not implemented.
+**Status:** implemented, feat/siege, 2026-09-22.
 
 A siege is a new event: a pack of the sector's wild programs walks in
 through the base's one door, steals what it can carry, wrecks what it

@@ -12,6 +12,7 @@
 //! record; `docs/superpowers/plans/2026-09-22-siege.md` is the task
 //! breakdown this module is built against.
 
+pub(crate) mod board;
 pub(crate) mod clock;
 pub(crate) mod offscreen;
 pub(crate) mod turrets;

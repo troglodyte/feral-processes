@@ -467,6 +467,135 @@ fn an_approaching_siege_asks_for_the_players_attention() {
     );
 }
 
+#[cfg(test)]
+mod board {
+    use super::*;
+    use crate::base_grid::BaseGrid;
+    use crate::game::base_space::BASE_EXIT_CELL;
+    use crate::game::siege::board::build;
+    use crate::tactical::map::BattleCell;
+
+    /// Cuts `cells` into an otherwise solid `BaseGrid`, floored — a base
+    /// with a known, deliberate shape for the flood fill to walk.
+    fn dig(game: &mut Game, cells: &[(i32, i32)]) {
+        let mut grid = game.world.resource_mut::<BaseGrid>();
+        for &(x, y) in cells {
+            grid.lay_floor(x, y);
+        }
+    }
+
+    #[test]
+    fn no_base_at_all_yields_no_board() {
+        let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(build(&mut game).is_none());
+    }
+
+    /// Rock reads `Blocked` and laid floor `Open`, on a base with a known
+    /// cut.
+    #[test]
+    fn rock_is_blocked_and_laid_floor_is_open() {
+        let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        dig(&mut game, &[(0, 0), (1, 0), (2, 0)]);
+
+        let siege_board = build(&mut game).expect("the door is walkable");
+
+        let door = siege_board.to_board(BASE_EXIT_CELL).unwrap();
+        assert_eq!(siege_board.board.cell(door.0, door.1), BattleCell::Open);
+        let dug = siege_board.to_board((1, 0)).unwrap();
+        assert_eq!(siege_board.board.cell(dug.0, dug.1), BattleCell::Open);
+
+        // A cell just off the cut corridor was never dug, so it is not in
+        // the fill and reads `Blocked` — whether or not it lies inside the
+        // board's own bounding box.
+        if let Some(off) = siege_board.to_board((1, 1)) {
+            assert_eq!(siege_board.board.cell(off.0, off.1), BattleCell::Blocked);
+        }
+    }
+
+    /// A pocket of floor with no walkable path to the door is absent from
+    /// the board by construction — never visited by the fill, never opened.
+    #[test]
+    fn a_sealed_pocket_is_excluded_from_the_board() {
+        let mut game = Game::new(942, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // A corridor out from the door, and a pocket at (5, 0) with no
+        // walkable neighbour connecting it back — solid rock all around it.
+        dig(&mut game, &[(0, 0), (1, 0), (2, 0)]);
+        dig(&mut game, &[(5, 0)]);
+
+        let siege_board = build(&mut game).expect("the door is walkable");
+
+        // The pocket may or may not fall inside the bounding box the
+        // connected corridor produced; either way it must never read
+        // `Open`, since the fill never reached it.
+        if let Some(pocket) = siege_board.to_board((5, 0)) {
+            assert_eq!(
+                siege_board.board.cell(pocket.0, pocket.1),
+                BattleCell::Blocked,
+                "a sealed pocket must not be reachable on the board"
+            );
+        }
+    }
+
+    /// `to_board`/`to_base` round-trip for every cell of a fill, and
+    /// `to_board` answers `None` outside the box.
+    #[test]
+    fn to_board_and_to_base_round_trip() {
+        let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        dig(&mut game, &[(0, 0), (1, 0), (0, 1), (-1, 0)]);
+
+        let siege_board = build(&mut game).expect("the door is walkable");
+
+        for base_cell in [(0, 0), (1, 0), (0, 1), (-1, 0)] {
+            let cell = siege_board
+                .to_board(base_cell)
+                .expect("a dug cell must be on the board");
+            assert_eq!(siege_board.to_base(cell), base_cell);
+        }
+
+        assert_eq!(siege_board.to_board((1000, 1000)), None);
+    }
+
+    /// The door is in bounds and `Open`.
+    #[test]
+    fn the_door_is_in_bounds_and_open() {
+        let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.lay_starting_pocket();
+        let siege_board = build(&mut game).expect("the starting pocket floors the door");
+        assert!(
+            siege_board
+                .board
+                .in_bounds(siege_board.door.0, siege_board.door.1)
+        );
+        assert_eq!(
+            siege_board
+                .board
+                .cell(siege_board.door.0, siege_board.door.1),
+            BattleCell::Open
+        );
+        assert_eq!(siege_board.to_board(BASE_EXIT_CELL), Some(siege_board.door));
+    }
+
+    /// A single-cell base yields a 1x1 board rather than `None` or a panic.
+    #[test]
+    fn a_single_cell_base_yields_a_1x1_board() {
+        let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // A brand-new base already floors `BASE_EXIT_CELL` — see
+        // `Game::lay_starting_pocket` — so an entirely rock-walled cell
+        // does not occur in play. This pins the fill's own behaviour when
+        // it genuinely finds nothing beyond the door: a 1x1 board, not a
+        // crash or a `None`.
+        let mut grid = crate::base_grid::BaseGrid::default();
+        grid.set_seed(1);
+        grid.lay_floor(BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+        game.world.insert_resource(grid);
+
+        let siege_board = build(&mut game).expect("the door alone is still walkable");
+        assert_eq!(siege_board.board.side, 1);
+        assert_eq!(siege_board.origin, BASE_EXIT_CELL);
+        assert_eq!(siege_board.door, (0, 0));
+    }
+}
+
 mod turrets {
     use super::*;
     use crate::game::siege::turrets::turret_defense;

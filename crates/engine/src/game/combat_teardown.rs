@@ -5,7 +5,7 @@
 //! exists at all: `BattleState::planned` indexes `Party` positionally, so a
 //! member killed mid-fight cannot leave the roster until the fight does.
 
-use crate::components::Summoned;
+use crate::components::{Besieger, Summoned};
 use crate::resources::LairFight;
 use crate::tactical::TacticalBattle;
 use crate::tactical::view::TacticalView;
@@ -450,6 +450,33 @@ impl Game {
         };
         for stray in strays {
             self.world.despawn(stray);
+        }
+        // Beside the stray sweep and for the same reason a besieger has no
+        // other ending: nothing outside `TacticalBattle` manages one, so a
+        // fight that ends any way but a clean withdrawal (a jack-out, a
+        // Forgiving death, a dropped save restore) leaves it standing with
+        // `Hostile` and `WanderAi` and no fight left to drive it — wandering
+        // the base forever, uncounted by every wild-population census and
+        // saved `besieger: true` on every reload after. All five ways a
+        // fight can end come through here, which is what makes one sweep
+        // enough — a besieger that left through the door is already gone
+        // before this runs, `siege::raiders::besieger_leaves`'s own despawn.
+        // Beside the stray sweep and for the same reason a besieger has no
+        // other ending: nothing outside `TacticalBattle` manages one, so a
+        // fight that ends any way but a clean withdrawal (a jack-out, a
+        // Forgiving death, a dropped save restore) leaves it standing with
+        // `Hostile` and `WanderAi` and no fight left to drive it — wandering
+        // the base forever, uncounted by every wild-population census and
+        // saved `besieger: true` on every reload after. All five ways a
+        // fight can end come through here, which is what makes one sweep
+        // enough — a besieger that left through the door is already gone
+        // before this runs, `siege::raiders::besieger_leaves`'s own despawn.
+        let besiegers: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Besieger>>();
+            query.iter(&self.world).collect()
+        };
+        for besieger in besiegers {
+            self.world.despawn(besieger);
         }
         // Beside the stray sweep and unconditional where that one is
         // filtered: `resolve_sortie_battle`'s rule that nothing of a fight's

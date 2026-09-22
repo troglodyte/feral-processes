@@ -60,7 +60,7 @@ Three tiers, and which one you want depends on what you are doing:
 | help pages and documentation | `references/help.md` | 3 |
 | the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 23 |
 | traps (honeypots: placing, the tick, what a catch is worth) | `references/traps.md` | 4 |
-| sieges (the board, besiegers, turrets, the siege save) | `references/sieges.md` | 9 |
+| sieges (the board, besiegers, turrets, the siege save) | `references/sieges.md` | 10 |
 
 ## Adding a seam
 

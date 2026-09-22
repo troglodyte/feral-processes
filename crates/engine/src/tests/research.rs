@@ -469,6 +469,9 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "repair_bay".to_string(),
             "research_node".to_string(),
             "sandbox".to_string(),
+            // Ungated on purpose: shaping the base against a siege is not
+            // something to earn.
+            "wall".to_string(),
             "winding_node".to_string(),
         ],
         "exactly the structures named by no research file start available"

@@ -184,6 +184,12 @@ fn kind_at(spec: BattleSpec, x: i32, y: i32) -> BattleCell {
 pub struct Board {
     pub side: i32,
     cells: Vec<BattleCell>,
+    /// Cells a standing body blocks sight through — a barrier structure on
+    /// a siege board. An overlay rather than a `Cover` cell because the
+    /// cells are what `SiegeSave` stores, and a body cannot be seated back
+    /// onto a cell that reads as unwalkable; the overlay is never saved,
+    /// and `siege::board::seat_structures` derives it again on load.
+    screens: BTreeSet<(i32, i32)>,
 }
 
 impl Board {
@@ -194,6 +200,7 @@ impl Board {
         Board {
             side,
             cells: vec![BattleCell::Blocked; (side * side) as usize],
+            screens: BTreeSet::new(),
         }
     }
 
@@ -219,7 +226,17 @@ impl Board {
     }
 
     pub fn blocks_sight(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).blocks_sight()
+        self.cell(x, y).blocks_sight() || self.screens.contains(&(x, y))
+    }
+
+    /// Screens `cell` from sight, or stops screening it — `TacticalBattle::
+    /// screen` and `TacticalBattle::remove` are the two writers.
+    pub(crate) fn set_screen(&mut self, cell: (i32, i32), screened: bool) {
+        if screened {
+            self.screens.insert(cell);
+        } else {
+            self.screens.remove(&cell);
+        }
     }
 
     /// Puts `kind` on one cell — a no-op off the board, `cell`'s own
@@ -262,7 +279,11 @@ impl Board {
                 })
             })
             .collect();
-        Board { side, cells }
+        Board {
+            side,
+            cells,
+            screens: BTreeSet::new(),
+        }
     }
 
     /// A board rebuilt from its own saved cells — `game::siege::persist::
@@ -277,7 +298,11 @@ impl Board {
             (side * side) as usize,
             "a saved siege board's cell count must match its own side"
         );
-        Board { side, cells }
+        Board {
+            side,
+            cells,
+            screens: BTreeSet::new(),
+        }
     }
 
     pub fn cells(&self) -> impl Iterator<Item = ((i32, i32), BattleCell)> + '_ {
@@ -393,7 +418,11 @@ pub fn generate(spec: BattleSpec) -> Board {
     let cells = (0..side * side)
         .map(|i| kind_at(spec, i % side, i / side))
         .collect();
-    let mut board = Board { side, cells };
+    let mut board = Board {
+        side,
+        cells,
+        screens: BTreeSet::new(),
+    };
     carve_to_connect(&mut board);
     board
 }
@@ -575,6 +604,7 @@ mod tests {
         let mut board = Board {
             side: 7,
             cells: vec![BattleCell::Open; 49],
+            screens: BTreeSet::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);
@@ -600,6 +630,7 @@ mod tests {
         let mut board = Board {
             side: 7,
             cells: vec![BattleCell::Open; 49],
+            screens: BTreeSet::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);

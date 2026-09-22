@@ -110,3 +110,15 @@
   number nothing in this repo can measure without play. Don't "fix" this
   quietly by retuning `SIEGE_STAFF_DEFENSE` or the pack cap; it is an open
   question for the user, not a bug.
+- **A barrier's sight screen is a `Board` overlay, never a `Cover` cell.**
+  `SiegeSave` stores the board's *cells*, and `persist::restore` reseats
+  every structure through `TacticalBattle::place`, which refuses a cell that
+  is not walkable — so a wall written into the cells as `Cover` would drop
+  off the board on the first load, silently, and grant `cover_between`'s
+  evasion besides. `Board::screens` is never saved; `seat_structures` is the
+  one writer (both `open_siege` and `restore` call it, which is how a load
+  gets it back), and `TacticalBattle::remove` lifts it with the body, which
+  is why neither of the two sites that destroy a structure on the board
+  mentions sight at all. `StructureDef::swept` is the companion flag: it
+  narrows the sweep's pool *without* taking `Durability` away, because
+  `raidable: false` does that and would make a wall unbreakable in a siege.

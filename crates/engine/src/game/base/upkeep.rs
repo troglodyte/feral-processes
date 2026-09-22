@@ -682,11 +682,19 @@ impl Game {
     }
 
     fn run_raid(&mut self) -> bool {
+        // `StructureDef::swept` narrows the pool, never widens it: the
+        // `Durability` filter still says what can be damaged at all, and
+        // an unswept structure keeps its pool for a siege to spend.
         let targets: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, (With<Durability>, With<Structure>)>();
-            query.iter(&self.world).collect()
+                .query_filtered::<(Entity, &Structure), With<Durability>>();
+            let db = self.world.resource::<StructureDb>();
+            query
+                .iter(&self.world)
+                .filter(|(_, s)| db.get(s.kind.as_str()).is_none_or(|def| def.swept))
+                .map(|(e, _)| e)
+                .collect()
         };
         if targets.is_empty() {
             return false;

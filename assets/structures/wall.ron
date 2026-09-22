@@ -1,0 +1,11 @@
+(
+    id: "wall",
+    name: "Wall",
+    description: "A slab of hardened entropy. Nothing walks through it and nothing sees past it; a siege has to break it down. GC Entropy Sweeps pass it by.",
+    glyph: '#',
+    color: White,
+    build_cost: [("core_fragment", 5)],
+    work: None,
+    swept: false,
+    barrier: true,
+)

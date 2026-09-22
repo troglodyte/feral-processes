@@ -1053,6 +1053,14 @@ impl Game {
         if !self.world.resource::<BaseGrid>().walkable(nx, ny) {
             return;
         }
+        // A barrier refuses the step as rock does with mining off — free,
+        // no tick — but there is nothing to cut: a Wall comes down by
+        // demolition, not by a shoulder.
+        if let Some(wall) = self.barrier_at(nx, ny) {
+            let name = self.entity_label(wall);
+            self.log(format!("The {name} stops you."));
+            return;
+        }
         // The one structure a step in here does anything with. A Portal is a
         // `Structure` and so stands in base space with the rest of them, and
         // walking onto it is how a run breaches — the surface branch of

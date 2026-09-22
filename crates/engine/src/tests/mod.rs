@@ -101,6 +101,7 @@ mod trade;
 mod transfer;
 mod traps;
 mod turn;
+mod walls;
 mod watch;
 mod weapon_reach;
 mod wielded;

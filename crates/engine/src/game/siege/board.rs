@@ -114,12 +114,17 @@ impl SiegeBoard {
 /// Left out of initiative, `open_siege`'s own reason: a structure is an
 /// obstacle a swing can be aimed at (Task 10), not a combatant.
 ///
+/// A structure `is_barrier` answers yes for screens its cells from sight
+/// once seated (`StructureDef::barrier`). Derived here on every seating
+/// rather than saved, which is what lets `persist::restore` get it back.
+///
 /// Returns which structures actually seated, so a caller building
 /// initiative from every other body on the board can exclude them.
 pub(crate) fn seat_structures(
     battle: &mut TacticalBattle,
     siege_board: &SiegeBoard,
     structures: Vec<(Entity, Position, u8)>,
+    is_barrier: impl Fn(Entity) -> bool,
 ) -> HashSet<Entity> {
     let mut seated = HashSet::new();
     for (entity, pos, side) in structures {
@@ -130,6 +135,9 @@ pub(crate) fn seat_structures(
             battle.set_shape(entity, side, 0);
         }
         if battle.place(entity, cell) {
+            if is_barrier(entity) {
+                battle.screen(entity);
+            }
             seated.insert(entity);
         }
     }

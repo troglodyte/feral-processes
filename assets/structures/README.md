@@ -509,6 +509,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // player rather than cost them something.
     raidable: false,
 
+    // Optional; can be left out entirely (defaults to true). Set to false
+    // to keep GC Entropy Sweeps off this structure while leaving it its
+    // durability pool — narrower than `raidable: false`, which removes the
+    // pool and so makes a structure unbreakable in a siege as well. An
+    // unswept structure is still damaged by a siege, on the board and off
+    // it. This is how the Wall works: without it, a run of cheap walls
+    // would soak up sweeps meant for the base's machines.
+    swept: false,
+
+    // Optional; can be left out entirely (defaults to false). A barrier
+    // refuses the player's step in base space (a free bump, no turn spent)
+    // and, during a siege, blocks line of sight through its cells for as
+    // long as it stands — a broken one stops blocking at once. Every
+    // structure's cell already refuses every other body's walk, so this is
+    // the half that is new. This is how the Wall works.
+    barrier: true,
+
     // Optional; can be left out entirely (defaults to 0). Flat raid-damage
     // reduction this structure contributes to *every* raid, against *any*
     // deployed structure, for as long as it's standing — not just itself,

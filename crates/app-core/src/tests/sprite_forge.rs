@@ -90,7 +90,7 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
 
     assert_eq!(
         subjects.len(),
-        56,
+        57,
         "every species + every structure + player + anchor (minus one \
          shipped overlap de-duplicated away — the Home's `sprite:` names \
          \"anchor\", see `assets/structures/home.ron`) + the three shipped \

@@ -108,7 +108,9 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
         door: saved.door,
     };
     let structures = game.structure_footprints();
-    board::seat_structures(&mut battle, &siege_board, structures);
+    board::seat_structures(&mut battle, &siege_board, structures, |e| {
+        game.is_barrier(e)
+    });
 
     let mut sorted: Vec<(u32, Entity, (i32, i32))> = members.to_vec();
     // The player rides `SiegeSave::player_order`/`player_cell` rather than

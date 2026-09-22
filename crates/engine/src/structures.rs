@@ -509,6 +509,21 @@ pub struct StructureDef {
     /// (including mods) stay raidable, exactly as before this field existed.
     #[serde(default = "default_raidable")]
     pub raidable: bool,
+    /// Whether the GC Entropy Sweep may pick this structure. Narrower than
+    /// `raidable`, which takes the `Durability` pool away altogether: an
+    /// unswept structure still has one, so a besieger on a siege board can
+    /// still break it. `false` is what keeps a run of cheap Walls from
+    /// soaking up sweeps meant for machines. `#[serde(default =
+    /// "default_raidable")]` — true, as every structure was before it.
+    #[serde(default = "default_raidable")]
+    pub swept: bool,
+    /// A barrier refuses the player's step in base space, as solid rock
+    /// does, and blocks line of sight on a siege board while it stands —
+    /// `Game::move_in_base` and `siege::board::seat_structures` are its
+    /// two readers. Its cells already refuse every other body's walk,
+    /// because every structure's anchor does. `#[serde(default)]`.
+    #[serde(default)]
+    pub barrier: bool,
     /// How much this structure reduces raid damage by, for *every* raid
     /// against *any* deployed structure — not just itself — while it's
     /// standing (see `Game::raid_check`). Stacks additively across every

@@ -1095,6 +1095,9 @@ relying on one, and correct all three places if it has moved.
 - **`TacticalBattle::siege_pack`, the count actually seated, is both the
   morale-break denominator and the "is this a siege" signal** — `0` reads as
   an ordinary tactical fight everywhere that checks it.
+- **A barrier's sight screen is a `Board` overlay, never a `Cover` cell** —
+  `Board::screens`, unsaved, set by `seat_structures` and lifted by
+  `TacticalBattle::remove`.
 - **`SIEGE_WARN_FLOOR_TICKS` is unvalidated** — 8 minutes, picked as a
   defensible number, not a measured one; nothing in this repo models the
   walk home from a deep Stack frame.

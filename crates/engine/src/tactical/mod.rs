@@ -176,6 +176,11 @@ pub struct TacticalBattle {
     /// parallel `Vec`, for `decompile_attempts`' reason: both are keyed
     /// lookups a body's own turn reads, never walked in fight order.
     shapes: HashMap<Entity, BodyShape>,
+    /// Bodies whose cells `board` screens from sight — a siege's barrier
+    /// structures. Held here so `remove` can lift the screen with the body:
+    /// a structure broken on the board leaves by that one door, whichever
+    /// swing broke it.
+    screening: Vec<Entity>,
     /// How many `components::Besieger` bodies a siege's pack opened
     /// with — `0` for every fight that is not one, `Game::open_siege`'s own
     /// count of what it actually seated rather than `siege::pack_size(zone)`
@@ -227,6 +232,7 @@ impl TacticalBattle {
             decoys: Vec::new(),
             reacted: Vec::new(),
             shapes: HashMap::new(),
+            screening: Vec::new(),
             siege_pack: 0,
             siege_origin: (0, 0),
             siege_door: (0, 0),
@@ -267,6 +273,19 @@ impl TacticalBattle {
         }
         self.bodies.push((body, cell));
         true
+    }
+
+    /// Screens every cell `body` stands on from sight until it leaves the
+    /// board. A no-op for a body that is not seated.
+    pub(crate) fn screen(&mut self, body: Entity) {
+        let cells = self.cells_of(body);
+        if cells.is_empty() || self.screening.contains(&body) {
+            return;
+        }
+        for cell in cells {
+            self.board.set_screen(cell, true);
+        }
+        self.screening.push(body);
     }
 
     pub fn cell_of(&self, body: Entity) -> Option<(i32, i32)> {
@@ -387,6 +406,12 @@ impl TacticalBattle {
     /// whoever stood behind it, which is a fresh turn and is reset as one.
     /// A body that dies on somebody else's turn costs the order nothing.
     pub fn remove(&mut self, body: Entity) {
+        if let Some(idx) = self.screening.iter().position(|&e| e == body) {
+            self.screening.remove(idx);
+            for cell in self.cells_of(body) {
+                self.board.set_screen(cell, false);
+            }
+        }
         self.bodies.retain(|(e, _)| *e != body);
         self.reacted.retain(|e| *e != body);
         // `shapes` goes with the body, like every other per-body record

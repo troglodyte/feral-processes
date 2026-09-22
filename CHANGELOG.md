@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.221
+
+**The pen a program under study stands in is drawn with four small red
+squares now, one in each corner, instead of four red brackets.** The
+brackets were right-angle outlines opening toward the middle of the tile,
+and at the tighter zoom levels they read as apparatus around the body
+rather than as a mark on the cell. The squares sit in exactly the same
+four places, carry the same amount of red, and the body still rattles
+inside them while a project is spending it.
+
 ## 0.13.220
 
 **The key that opens your downed programs is named on the control bar now.**

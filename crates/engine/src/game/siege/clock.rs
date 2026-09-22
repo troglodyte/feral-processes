@@ -83,10 +83,15 @@ impl Game {
 
         // **Fire, then reset — and only if the fire reported a siege
         // actually happened.** `raid_check`'s `if !self.run_raid() { return; }`
-        // pattern. Every siege resolves off-screen for now, including one
-        // the player is home for — Task 8 puts the home/away branch here,
-        // choosing between this and `Game::open_siege`.
-        if !self.resolve_siege_offscreen() {
+        // pattern. Home or away: `Game::open_siege` when the player is
+        // standing in base space, `Game::resolve_siege_offscreen`
+        // everywhere else — the one departure from `raid_check`'s single
+        // fire, since a sweep has no on-screen half.
+        let fired = match self.base_pos() {
+            Some(_) => self.open_siege(),
+            None => self.resolve_siege_offscreen(),
+        };
+        if !fired {
             return;
         }
         let mut pressure = self.world.resource_mut::<crate::resources::SiegePressure>();
@@ -116,14 +121,21 @@ impl Game {
     }
 
     /// Fires a siege now, without waiting on the clock — the dev console's
-    /// trigger. `dev_force_raid`'s shape exactly: calls the fire
-    /// (`Game::resolve_siege_offscreen`, until Task 8's home/away branch
-    /// lands here too) rather than a copy of it and leaves the clock alone,
-    /// so what the console puts on screen is evidence about the siege a
-    /// player actually meets.
+    /// trigger. `dev_force_raid`'s shape exactly: calls `siege_check`'s own
+    /// home/away branch rather than a copy of it and leaves the clock
+    /// alone, so what the console puts on screen — a fought siege at home,
+    /// an off-screen one away — is evidence about the siege a player
+    /// actually meets.
     #[doc(hidden)]
     pub fn dev_force_siege(&mut self) {
-        self.resolve_siege_offscreen();
+        match self.base_pos() {
+            Some(_) => {
+                self.open_siege();
+            }
+            None => {
+                self.resolve_siege_offscreen();
+            }
+        }
     }
 
     /// Winds the clock to its own approach warning without firing a siege —

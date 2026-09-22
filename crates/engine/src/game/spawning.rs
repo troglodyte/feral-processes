@@ -1927,7 +1927,11 @@ impl Game {
 
     /// Places `size` members of one species around `(x, y)`: the first on
     /// the tile itself, the rest scattered within `swarm_radius` of it.
-    fn spawn_group(
+    /// `pub(crate)` so `Game::open_siege` (`game/siege/mod.rs`) can field a
+    /// siege's pack at the exact count `siege::pack_size` prices — the one
+    /// thing `spawn_pack` cannot do, since it rolls its own size through
+    /// `roll_group_size` rather than taking one.
+    pub(crate) fn spawn_group(
         &mut self,
         species_id: &str,
         size: u32,

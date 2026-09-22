@@ -596,6 +596,182 @@ mod board {
     }
 }
 
+mod opening {
+    use super::*;
+    use crate::components::Hostile;
+    use crate::game::siege::board;
+    use crate::game::siege::offscreen::pack_size;
+    use crate::resources::Party;
+    use crate::tactical::TacticalBattle;
+
+    /// A floored pocket and the party standing in it — the minimum a siege
+    /// can open on.
+    fn ready_base(game: &mut Game) {
+        game.lay_starting_pocket();
+        stand_in_base_at(game, 0, 0);
+    }
+
+    /// With `Profile::tactical_battles` **off**, a siege still opens a
+    /// `TacticalBattle` — §5 of the design: a player who has turned battle
+    /// maps off still fights this one on a map, and `fights_tactically` is
+    /// never consulted to get there.
+    #[test]
+    fn a_siege_opens_a_tactical_board_even_with_the_toggle_off() {
+        let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        let mut profile = game.profile().clone();
+        profile.tactical_battles = false;
+        game.install_profile(profile);
+
+        assert!(game.open_siege());
+        assert!(game.in_tactical_battle());
+    }
+
+    /// A posted program standing at its machine is on the board at that
+    /// cell — nobody is deployed, the base's own arrangement is the opening
+    /// position.
+    #[test]
+    fn a_posted_program_is_seated_at_the_cell_it_already_stands_on() {
+        let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        let worker = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        let expected = board::build(&mut game)
+            .unwrap()
+            .to_board((2, 0))
+            .expect("(2, 0) must be inside the starting pocket");
+
+        assert!(game.open_siege());
+
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.cell_of(worker),
+            Some(expected),
+            "the worker must be seated exactly where it already stood"
+        );
+    }
+
+    /// The player is on the board and their party with them.
+    #[test]
+    fn the_player_and_their_party_are_seated() {
+        let mut game = Game::new(952, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.world.resource_mut::<Party>().0.push(companion);
+
+        assert!(game.open_siege());
+
+        let player = game.player_entity();
+        let battle = game.world.resource::<TacticalBattle>();
+        assert!(
+            battle.cell_of(player).is_some(),
+            "the player must be seated"
+        );
+        assert!(
+            battle.cell_of(companion).is_some(),
+            "the party must be seated with the player"
+        );
+    }
+
+    /// Raiders are all at or adjacent to the door at round 1, and their
+    /// count is exactly `siege::pack_size(zone)` — the same call the
+    /// off-screen resolution prices a shortfall with, so the siege you
+    /// fight and the siege you miss field the same pack.
+    #[test]
+    fn raiders_are_seated_at_the_door_and_number_pack_size() {
+        let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        let door = board::build(&mut game).unwrap().door;
+
+        assert!(game.open_siege());
+
+        let bodies: Vec<(Entity, (i32, i32))> =
+            game.world.resource::<TacticalBattle>().bodies().collect();
+        let raiders: Vec<(Entity, (i32, i32))> = bodies
+            .into_iter()
+            .filter(|&(e, _)| game.world.get::<Hostile>(e).is_some())
+            .collect();
+
+        assert_eq!(
+            raiders.len() as u32,
+            pack_size(2),
+            "the seated pack must be exactly what pack_size(zone) prices"
+        );
+        for &(_, cell) in &raiders {
+            let dist = (cell.0 - door.0).abs().max((cell.1 - door.1).abs());
+            assert!(
+                dist <= 2,
+                "a raider at {cell:?} strayed far from the door at {door:?}"
+            );
+        }
+    }
+
+    /// A siege does not open while another fight is running — the hold,
+    /// asserted through `siege_check` rather than `open_siege` directly,
+    /// with the player standing in base space so the fire would otherwise
+    /// take the home branch.
+    #[test]
+    fn a_siege_does_not_open_on_top_of_another_fight() {
+        let mut game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        // `siege_check`'s own "no base" and "nothing to besiege" holds sit
+        // above the one this test targets — establishing the base for real
+        // is what isolates the "another fight is running" hold alone.
+        establish_base(&mut game, true);
+
+        let player = game.player_entity();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species");
+        let wild = game
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Hostile,
+                Position { x: 3, y: 3 },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 0,
+                    mitigation: 1,
+                },
+            ))
+            .id();
+        insert_battle(&mut game, player, vec![wild]);
+
+        game.dev_wind_siege_clock();
+        game.world
+            .resource_mut::<crate::resources::SiegePressure>()
+            .level = crate::tuning::SIEGE_PRESSURE_THRESHOLD * 2;
+        game.siege_check();
+
+        assert!(
+            !game.in_tactical_battle(),
+            "a siege must not open on top of another fight"
+        );
+
+        game.world.remove_resource::<BattleState>();
+        game.siege_check();
+        assert!(
+            game.in_tactical_battle(),
+            "the tick the other fight ends is the tick the held siege opens"
+        );
+    }
+}
+
 mod turrets {
     use super::*;
     use crate::game::siege::turrets::turret_defense;

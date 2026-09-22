@@ -184,7 +184,10 @@ impl Game {
     /// a seeded run always produces the same order. `roll_initiative`'s
     /// rule, and the roll itself is that function's roll: both go through
     /// `Game::initiative_roll`.
-    fn roll_turn_order(&mut self, standing: &[Entity]) -> Vec<Entity> {
+    ///
+    /// `pub(crate)` so `Game::open_siege` (`game/siege/mod.rs`) can seat a
+    /// siege's order the same way rather than restating the roll.
+    pub(crate) fn roll_turn_order(&mut self, standing: &[Entity]) -> Vec<Entity> {
         let mut rolled: Vec<(i32, Entity)> = standing
             .iter()
             .map(|&entity| (self.initiative_roll(entity), entity))

@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.224
+
+**You can now build a Wall: five Core Fragments, no research needed.** You
+can't walk through one, and during a siege nothing can see past it, so a wall
+is how you shape your base against raiders. Besiegers can still break a
+wall down, and once it breaks it stops blocking sight. GC Entropy Sweeps
+never target a wall, so a row of cheap walls can't soak up damage meant
+for your machines. A siege that resolves while you are away still damages
+walls, the way the raiders would have broken through them.
+
 ## 0.13.223
 
 **From sector 2 on, the sector's wild programs besiege your base — they walk

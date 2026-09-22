@@ -2618,6 +2618,13 @@ pub(super) fn find_home(game: &mut Game) -> Option<Entity> {
 /// shifting RNG consumption between runs. Seven attempts takes that to
 /// ~1e-11. Every sweep returns on the first fire, so no target ever takes
 /// a second hit.
+/// How many forced sweeps a per-seed raid fixture takes.
+///
+/// It used to be how many *rolls* a fixture spent waiting for a 1.2% chance
+/// to land. `Game::raid_check` is a clock now, so `sweep_now` forces each
+/// one and the first attempt always lands — the count is kept because these
+/// tests vary which structure and which defender a sweep picks, and several
+/// of them assert across repeats rather than on one.
 pub(super) const RAID_ATTEMPTS_PER_SEED: u32 = 7;
 
 /// Spawns just enough undowned base staff (`spawn_tamed`, left unposted so
@@ -2625,6 +2632,21 @@ pub(super) const RAID_ATTEMPTS_PER_SEED: u32 = 7;
 /// `RAID_MIN_BASE_STAFF` — the floor a fixture testing raid *mechanics*
 /// must clear so `Game::raid_check`'s new staff gate never masks the roll
 /// it exists to protect.
+/// Winds the raid clock past any interval its jitter can draw and ticks it
+/// once, so a test about what a sweep *does* gets exactly one without also
+/// standing in for the clock's own tests.
+///
+/// Goes through `Game::raid_check` rather than around it, so every gate a
+/// real sweep passes — the sector floor, the staff floor, having anything to
+/// sweep at all — is still in force. A test that wants no sweep must still
+/// not call this.
+pub(super) fn sweep_now(game: &mut Game) {
+    game.world
+        .resource_mut::<crate::resources::RaidPressure>()
+        .level = crate::tuning::RAID_PRESSURE_THRESHOLD * 2;
+    game.raid_check();
+}
+
 pub(super) fn spawn_min_raid_staff(game: &mut Game) {
     for _ in 0..crate::tuning::RAID_MIN_BASE_STAFF {
         spawn_tamed(game, 10, 3);

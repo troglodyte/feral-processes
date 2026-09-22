@@ -275,7 +275,7 @@ fn raid_check_can_damage_an_undefended_structure() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let Some(durability) = game.world.get::<Durability>(structure) else {
                 // Destroyed outright — tolerate rather than assume it can't happen.
@@ -286,7 +286,9 @@ fn raid_check_can_damage_an_undefended_structure() {
             }
         }
     }
-    panic!("raid_check never damaged the structure across 300 seeds — the raid roll may be broken");
+    panic!(
+        "a forced sweep never damaged the structure across 300 seeds — `run_raid` may be broken"
+    );
 }
 
 #[test]
@@ -304,7 +306,7 @@ fn raid_damage_message_is_tagged_message_kind_raid() {
         ));
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let tagged = game
                 .message_log(10)
@@ -315,9 +317,7 @@ fn raid_damage_message_is_tagged_message_kind_raid() {
             }
         }
     }
-    panic!(
-        "raid_check never logged a MessageKind::Raid line across 300 seeds — the raid roll may be broken"
-    );
+    panic!("a forced sweep never logged a MessageKind::Raid line across 300 seeds");
 }
 
 /// `RAID_MIN_BASE_STAFF`'s floor: an opening base with too few bodies to
@@ -344,7 +344,7 @@ fn a_base_below_the_raid_staff_minimum_takes_no_raid() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
         }
 
         assert_eq!(
@@ -388,7 +388,7 @@ fn four_undowned_staff_is_still_below_the_raid_floor() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
         }
 
         assert_eq!(
@@ -421,7 +421,7 @@ fn a_base_at_the_raid_staff_minimum_can_still_be_raided() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let Some(durability) = game.world.get::<Durability>(structure) else {
                 return;
@@ -470,7 +470,7 @@ fn a_staff_program_that_downed_tools_does_not_count_toward_the_raid_minimum() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
         }
 
         assert_eq!(
@@ -509,7 +509,7 @@ fn a_sulking_staff_program_still_counts_toward_the_raid_minimum() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
             let Some(durability) = game.world.get::<Durability>(structure) else {
                 return;
             };
@@ -547,7 +547,7 @@ fn a_downed_staff_program_does_not_count_toward_the_raid_staff_minimum() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
         }
 
         assert_eq!(
@@ -606,7 +606,7 @@ fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let Some(durability) = game.world.get::<Durability>(structure) else {
                 return;
@@ -621,7 +621,9 @@ fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
             }
         }
     }
-    panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    panic!(
+        "a forced sweep never landed across 300 seeds — `sweep_now` or `run_raid` may be broken"
+    );
 }
 
 #[test]
@@ -904,7 +906,7 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let effects = game.take_effects();
             if effects.is_empty() {
@@ -927,7 +929,9 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
             return;
         }
     }
-    panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    panic!(
+        "a forced sweep never landed across 300 seeds — `sweep_now` or `run_raid` may be broken"
+    );
 }
 
 #[test]
@@ -964,7 +968,7 @@ fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
         ));
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let effects = game.take_effects();
             if effects.is_empty() {
@@ -980,7 +984,9 @@ fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
             return;
         }
     }
-    panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    panic!(
+        "a forced sweep never landed across 300 seeds — `sweep_now` or `run_raid` may be broken"
+    );
 }
 
 #[test]
@@ -1266,7 +1272,7 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
         });
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let worker_hp = game.world.get::<Stats>(worker).unwrap().hp;
             if worker_hp < 50 {
@@ -1289,7 +1295,9 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
             }
         }
     }
-    panic!("raid_check never rolled across 300 seeds — the raid roll may be broken");
+    panic!(
+        "a forced sweep never landed across 300 seeds — `sweep_now` or `run_raid` may be broken"
+    );
 }
 
 /// Raids should be survivable attrition, not a countdown. Eight hits to
@@ -1846,12 +1854,10 @@ fn a_defender_raided_to_death(mode: DifficultyMode) -> (Game, Entity) {
         required: 5,
     });
 
-    for _ in 0..2000 {
-        game.raid_check();
-        if !game.creature_alive(worker) || game.world.get::<Downed>(worker).is_some() {
-            break;
-        }
-    }
+    // One forced sweep, because the worker is spawned on exactly one raid's
+    // worth of HP — waiting for the clock would only make the test depend on
+    // which interval the jitter drew.
+    sweep_now(&mut game);
     (game, worker)
 }
 
@@ -1939,7 +1945,7 @@ fn a_base_in_the_opening_sector_takes_no_raid() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
         }
 
         assert_eq!(
@@ -1986,7 +1992,7 @@ fn the_second_sector_is_where_sweeps_begin() {
             .id();
 
         for _ in 0..RAID_ATTEMPTS_PER_SEED {
-            game.raid_check();
+            sweep_now(&mut game);
 
             let Some(durability) = game.world.get::<Durability>(structure) else {
                 return;
@@ -2269,13 +2275,474 @@ fn a_hostile_neighbour_eventually_lands_a_raid() {
     let _key = hostile_neighbour(&mut game, 2);
     let before = stock_the_bank(&mut game, 5_000);
 
-    for _ in 0..5_000 {
+    // Fifty thousand, not five: the rate dropped by a factor of thirty when
+    // it was re-anchored to the raid clock's interval, and five thousand
+    // ticks now expects one raid rather than thirty — a coin flip dressed as
+    // a test.
+    for _ in 0..50_000 {
         game.town_raid_check();
     }
 
     assert!(
         game.banked(&game.currency()) < before,
-        "5000 ticks at {} should land many raids",
+        "50000 ticks at {} should land many raids",
         crate::tuning::SETTLEMENT_RAID_CHANCE_PER_TICK
+    );
+}
+
+/// The clock's first property: a tick adds pressure rather than rolling for
+/// a sweep, and what it adds is the sector's own weight. Deeper sectors are
+/// swept more often, and this is the whole of why.
+#[test]
+fn raid_pressure_accrues_per_tick_and_scales_with_the_sector() {
+    let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+
+    game.raid_check();
+    assert_eq!(
+        game.raid_pressure(),
+        crate::tuning::RAID_PRESSURE_PER_ZONE * 2,
+        "one tick in sector 2 accrues one sector's worth of pressure"
+    );
+
+    game.raid_check();
+    assert_eq!(
+        game.raid_pressure(),
+        crate::tuning::RAID_PRESSURE_PER_ZONE * 4,
+        "accrual is per tick, not a one-off"
+    );
+
+    let mut deeper = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut deeper, 4);
+    spawn_min_raid_staff(&mut deeper);
+    deeper.raid_check();
+    assert_eq!(
+        deeper.raid_pressure(),
+        crate::tuning::RAID_PRESSURE_PER_ZONE * 4,
+        "sector 4 builds pressure twice as fast as sector 2"
+    );
+}
+
+/// The clock's second property: a sweep waits for it. Nothing is swept
+/// before the earliest interval the jitter can draw, and something is swept
+/// by the latest — which pins both jitter bounds without the test having to
+/// know which number was drawn.
+#[test]
+fn a_sweep_waits_for_the_clock_and_lands_inside_its_jitter() {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+    };
+
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let earliest =
+        (RAID_PRESSURE_THRESHOLD * (100 - RAID_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual);
+    let latest =
+        (RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual);
+
+    for _ in 0..earliest - 1 {
+        game.raid_check();
+    }
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        30,
+        "no sweep may land before the earliest interval the jitter can draw"
+    );
+
+    for _ in 0..=(latest - earliest + 1) {
+        game.raid_check();
+    }
+    let swept = game
+        .world
+        .get::<Durability>(structure)
+        .map(|d| d.hp < 30)
+        .unwrap_or(true);
+    assert!(
+        swept,
+        "a sweep must land by the latest interval the jitter can draw"
+    );
+}
+
+/// A sweep spends the whole clock and the next interval is drawn fresh, so
+/// two consecutive sweeps are not the same length apart.
+#[test]
+fn a_sweep_resets_the_clock_and_redraws_its_interval() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    let landed = tick_to_sweep(&mut game, structure);
+    assert!(
+        landed,
+        "the fixture must reach a sweep for this to mean anything"
+    );
+
+    assert_eq!(game.raid_pressure(), 0, "a sweep spends the whole clock");
+    assert!(
+        game.world
+            .resource::<crate::resources::RaidPressure>()
+            .next_at
+            .is_none(),
+        "the next interval is redrawn rather than repeated"
+    );
+}
+
+/// Ticks `Game::raid_check` in sector 2 until `structure` takes a hit or the
+/// widest interval the jitter can draw has certainly elapsed, and says
+/// whether a sweep landed. Stops on the firing tick, so the clock's state is
+/// the one the sweep left behind.
+fn tick_to_sweep(game: &mut Game, structure: Entity) -> bool {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+    };
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let latest =
+        (RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual);
+    for _ in 0..=latest {
+        game.raid_check();
+        if game
+            .world
+            .get::<Durability>(structure)
+            .map(|d| d.hp < 30)
+            .unwrap_or(true)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// A base with nothing standing does not spend its clock. `run_raid` returns
+/// early when there is nothing to sweep, and resetting on that would mean a
+/// base that builds its first machine has a fresh twenty minutes — the clock
+/// would be silently rewound by the one act it is supposed to be measuring.
+#[test]
+fn a_tick_with_nothing_to_sweep_holds_the_clock() {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+    };
+
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let latest =
+        (RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual);
+    for _ in 0..=latest {
+        game.raid_check();
+    }
+
+    assert!(
+        game.raid_pressure() > RAID_PRESSURE_THRESHOLD,
+        "a base with nothing to sweep holds its pressure rather than spending it, \
+         but the clock read {}",
+        game.raid_pressure()
+    );
+
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    game.raid_check();
+    assert!(
+        game.world.get::<Durability>(structure).unwrap().hp < 30,
+        "the held clock fires on the first tick there is something to sweep"
+    );
+}
+
+/// The staff floor gates the sweep and not the clock, which is the one place
+/// this feature changes what the gate *means*.
+///
+/// Under the old roll a base below the floor simply dodged every draw, so
+/// benching your own crew was a way to never be swept at all. Under the
+/// clock the sweep waits instead: the pressure it built is still owed, and
+/// the tick the base can defend itself again is the tick it arrives.
+#[test]
+fn a_base_below_the_staff_floor_holds_its_clock_until_it_can_defend() {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+    };
+
+    let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    for _ in 0..RAID_MIN_BASE_STAFF - 1 {
+        spawn_tamed(&mut game, 10, 3);
+    }
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let latest =
+        (RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual);
+    for _ in 0..=latest {
+        game.raid_check();
+    }
+
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        30,
+        "a base under the staff floor is not swept, however long the clock has run"
+    );
+    assert!(
+        game.raid_pressure() > RAID_PRESSURE_THRESHOLD,
+        "and the pressure it built is held rather than forgiven"
+    );
+
+    spawn_tamed(&mut game, 10, 3);
+    game.raid_check();
+    assert!(
+        game.world.get::<Durability>(structure).unwrap().hp < 30,
+        "the tick the base clears the floor is the tick the held sweep arrives"
+    );
+}
+
+/// The approach warning fires once per interval, not once per tick.
+///
+/// The latch is the whole test: the condition behind the line is an
+/// inequality that stays true for the rest of the interval, so read fresh
+/// every tick it would speak twice a second for four minutes. Counted off
+/// `Game::message_log`, which is the raw log — `message_history` folds
+/// repeats and would report a line said a thousand times as one row.
+///
+/// No structure is spawned, so `run_raid` finds nothing, the clock holds
+/// past its target and the latch is never cleared by a reset. That is what
+/// makes "exactly one" a claim about the latch rather than about the
+/// interval's length.
+#[test]
+fn the_approach_warning_fires_once_an_interval_and_not_once_a_tick() {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+        RAID_PRESSURE_WARN_PERCENT,
+    };
+
+    let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let low = RAID_PRESSURE_THRESHOLD * (100 - RAID_PRESSURE_JITTER_PERCENT) / 100;
+    let high = RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100;
+    let earliest_warn = (low * RAID_PRESSURE_WARN_PERCENT / 100).div_ceil(accrual);
+    let certain_warn = (high * RAID_PRESSURE_WARN_PERCENT / 100).div_ceil(accrual);
+
+    for _ in 0..earliest_warn - 1 {
+        game.raid_check();
+    }
+    assert_eq!(
+        warnings_logged(&game),
+        0,
+        "no warning may fire before the earliest warn point the jitter allows"
+    );
+
+    for _ in 0..=(certain_warn - earliest_warn + 1) {
+        game.raid_check();
+    }
+    assert_eq!(
+        warnings_logged(&game),
+        1,
+        "the warning is latched for the interval, not re-read every tick"
+    );
+}
+
+/// How many approach warnings the raw log holds.
+fn warnings_logged(game: &Game) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.contains("GC Entropy Sweep is forming"))
+        .count()
+}
+
+/// The warning reaches the three surfaces `Game::attention` feeds, not only
+/// the log — a line scrolls away, and the whole point of warning at all is
+/// that it is still visible when the player next looks up.
+///
+/// A threat row, because that is what the hue is for and a sweep is the one
+/// base event that genuinely is one.
+#[test]
+fn an_approaching_sweep_asks_for_the_players_attention() {
+    use crate::tuning::{
+        RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+        RAID_PRESSURE_WARN_PERCENT,
+    };
+
+    let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+
+    assert!(
+        !game
+            .attention()
+            .iter()
+            .any(|row| row.kind == AttentionKind::RaidIncoming),
+        "a quiet clock asks for nothing"
+    );
+
+    let accrual = RAID_PRESSURE_PER_ZONE * 2;
+    let high = RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100;
+    for _ in 0..=(high * RAID_PRESSURE_WARN_PERCENT / 100).div_ceil(accrual) {
+        game.raid_check();
+    }
+
+    let row = game
+        .attention()
+        .into_iter()
+        .find(|row| row.kind == AttentionKind::RaidIncoming)
+        .expect("a warned clock asks for the player");
+    assert!(row.threat, "an approaching sweep reads as a threat");
+}
+
+/// The clock survives a save and a load, all three fields of it.
+///
+/// Without this, saving in front of a warning and reloading is a free reset
+/// — `resources::Trace`'s exploit one subsystem over, and a worse one here
+/// because the warning tells the player exactly when to do it. A
+/// serialize-then-deserialize test over `SaveData` cannot catch a field the
+/// write or the read forgot, so this goes all the way through `Game::save`
+/// and `Game::load`.
+#[test]
+fn the_raid_clock_survives_a_save_and_a_load() {
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_raid_clock_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    let mut game = Game::new(707, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+    for _ in 0..2000 {
+        game.raid_check();
+    }
+    let before = *game.world.resource::<crate::resources::RaidPressure>();
+    assert!(before.level > 0, "the fixture must have built pressure");
+    assert!(before.next_at.is_some(), "and drawn an interval");
+    assert!(before.warned, "and warned, or this proves only two thirds");
+
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        *loaded.world.resource::<crate::resources::RaidPressure>(),
+        before,
+        "saving in front of a sweep must not rewind the clock"
+    );
+}
+
+/// The opening sector builds no pressure at all.
+///
+/// The gate moved from firing to accrual when the roll became a clock, and
+/// this is the property that move buys: pressure the opening sector could
+/// build is pressure it could never spend, so a player crossing into sector
+/// 2 would be swept within a tick or two of arriving — punished for the
+/// quiet stretch the exemption had just granted them.
+#[test]
+fn the_opening_sector_builds_no_raid_pressure() {
+    assert_eq!(
+        RAID_MIN_ZONE, 2,
+        "raids are exempt in the opening sector and nowhere else"
+    );
+
+    let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 1);
+    spawn_min_raid_staff(&mut game);
+    for _ in 0..5_000 {
+        game.raid_check();
+    }
+    assert_eq!(
+        game.raid_pressure(),
+        0,
+        "the opening sector's clock never starts"
+    );
+
+    set_zone(&mut game, 2);
+    game.raid_check();
+    assert_eq!(
+        game.raid_pressure(),
+        crate::tuning::RAID_PRESSURE_PER_ZONE * 2,
+        "and it starts from zero on the breach into sector 2"
+    );
+}
+
+/// The dev console's second sweep row winds the clock to the *warning* and
+/// stops there.
+///
+/// `dev_force_raid` fires the event and skips the four minutes of approach a
+/// player actually meets, which is the half of this feature with anything on
+/// screen to look at. Winding to the drawn target's own warn point — rather
+/// than to a fixed number — is what makes the next cycle speak the line
+/// whatever the jitter rolled, and what keeps it from sweeping instead.
+#[test]
+fn winding_the_clock_reaches_the_warning_and_not_the_sweep() {
+    let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    game.dev_wind_raid_clock();
+    let pressure = *game.world.resource::<crate::resources::RaidPressure>();
+    let target = pressure
+        .next_at
+        .expect("winding draws the interval it winds to");
+    assert_eq!(
+        pressure.level,
+        target * crate::tuning::RAID_PRESSURE_WARN_PERCENT / 100,
+        "the clock lands on the drawn interval's own warn point"
+    );
+    assert!(!pressure.warned, "and leaves the line for the next cycle");
+
+    game.raid_check();
+    assert_eq!(warnings_logged(&game), 1, "the next cycle warns");
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        30,
+        "and sweeps nothing, which is the whole point of the row"
     );
 }

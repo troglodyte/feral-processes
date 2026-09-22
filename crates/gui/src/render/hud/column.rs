@@ -100,7 +100,11 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         | AttentionKind::ResearchStalled
         // The contracts screen is a base-menu row, and the chip names the
         // top-level map key that opens it.
-        | AttentionKind::ContractDeliverable => InfoTab::Base,
+        | AttentionKind::ContractDeliverable
+        // An approaching sweep is base news even though nothing on the base
+        // tab answers it: what the player does about one is post staff and
+        // patch machines, which is that tab's whole subject.
+        | AttentionKind::RaidIncoming => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::Unslotted => InfoTab::Crew,
     }
 }

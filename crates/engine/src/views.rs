@@ -1522,6 +1522,15 @@ pub enum AttentionKind {
     /// which is also why it is not a threat: nothing is going wrong, there is
     /// simply a keypress available that is not available anywhere else.
     ContractDeliverable,
+    /// The raid clock has passed `tuning::RAID_PRESSURE_WARN_PERCENT` of its
+    /// drawn interval and a GC Entropy Sweep is coming.
+    ///
+    /// The one attention row that is about something that has **not**
+    /// happened yet, which is the whole of what the raid clock bought: every
+    /// other row here reports a state the base is already in. It is a threat
+    /// for the same reason — nothing on this row can be fixed by opening the
+    /// screen it points at, only prepared for.
+    RaidIncoming,
 }
 
 /// One thing that needs the player right now — see `Game::attention`.

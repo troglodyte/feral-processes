@@ -4,8 +4,9 @@
 use crate::components::{Downed, MemorySubject};
 use crate::species::AffinityClass;
 use crate::tuning::{
-    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, STRUCTURE_REGEN_INTERVAL,
+    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_DAMAGE, RAID_DEFENDER_DAMAGE,
+    RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE,
+    RAID_PRESSURE_THRESHOLD, RAID_PRESSURE_WARN_PERCENT, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -172,7 +173,8 @@ impl Game {
         }
     }
 
-    /// Rolls `RAID_CHANCE_PER_TICK`; on success, picks one deployed
+    /// Accrues `resources::RaidPressure`; on crossing its drawn interval,
+    /// picks one deployed
     /// structure at random and either damages it directly (undefended) or
     /// has its assigned cronjob worker, if any, fight the raid off —
     /// reducing the structure's damage by the worker's Defense, at the
@@ -369,7 +371,7 @@ impl Game {
             .collect()
     }
 
-    /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev
+    /// Fires a GC Entropy Sweep now, without waiting on the clock — the dev
     /// console's trigger.
     ///
     /// Calls `run_raid` rather than carrying its own copy of the body, so
@@ -379,6 +381,40 @@ impl Game {
     #[doc(hidden)]
     pub fn dev_force_raid(&mut self) {
         self.run_raid();
+    }
+
+    /// Winds the clock to its own approach warning without firing a sweep,
+    /// so the console can watch the half `dev_force_raid` skips past.
+    ///
+    /// **Winds to the drawn interval's warn point, not to a fixed number**,
+    /// which is the only way one press works whatever the jitter rolled: a
+    /// literal high enough to guarantee a warning on the shortest interval
+    /// is past the *target* on it, and the row would sweep rather than warn.
+    /// So the interval is drawn here if it has not been drawn yet, and the
+    /// level is set as a share of it.
+    ///
+    /// Sets the level rather than ticking in a loop, because the loop would
+    /// be two thousand ticks of every other base pass and what the console
+    /// is asking for is the clock, not the base.
+    #[doc(hidden)]
+    pub fn dev_wind_raid_clock(&mut self) {
+        let target = match self
+            .world
+            .resource::<crate::resources::RaidPressure>()
+            .next_at
+        {
+            Some(target) => target,
+            None => {
+                let target = self.draw_raid_interval();
+                self.world
+                    .resource_mut::<crate::resources::RaidPressure>()
+                    .next_at = Some(target);
+                target
+            }
+        };
+        let mut pressure = self.world.resource_mut::<crate::resources::RaidPressure>();
+        pressure.level = target * RAID_PRESSURE_WARN_PERCENT / 100;
+        pressure.warned = false;
     }
 
     /// Destroys the structure nearest the player outright, through the same
@@ -449,25 +485,103 @@ impl Game {
         targets.first().map(|(e, _)| *e)
     }
 
+    /// How close the base is to its next sweep, in `resources::RaidPressure`'s
+    /// own units. The dev console's reading and every test's.
+    pub fn raid_pressure(&self) -> u32 {
+        self.world
+            .resource::<crate::resources::RaidPressure>()
+            .level
+    }
+
     pub(crate) fn raid_check(&mut self) {
-        let roll = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(RAID_CHANCE_PER_TICK)
+        let zone = self.world.resource::<ZoneLevel>().0;
+        // **The sector gate is on accrual and not on firing**, which is where
+        // it sat when this was a roll. Pressure the opening sector could
+        // build would be pressure it could never spend, so a player crossing
+        // into sector 2 would be swept within a tick of arriving for a
+        // quietness they had already served.
+        if zone < RAID_MIN_ZONE {
+            return;
+        }
+
+        let target = match self
+            .world
+            .resource::<crate::resources::RaidPressure>()
+            .next_at
+        {
+            Some(target) => target,
+            None => {
+                let target = self.draw_raid_interval();
+                self.world
+                    .resource_mut::<crate::resources::RaidPressure>()
+                    .next_at = Some(target);
+                target
+            }
         };
-        if !roll {
+
+        let level = {
+            let mut pressure = self.world.resource_mut::<crate::resources::RaidPressure>();
+            pressure.level += RAID_PRESSURE_PER_ZONE * zone;
+            pressure.level
+        };
+
+        // Latched on the resource rather than re-read, because the
+        // condition stays true for the rest of the interval: as a bare
+        // inequality this line is said twice a second for the whole warning
+        // window. Cleared by the reset a sweep does, so each interval warns
+        // once.
+        if level >= target * RAID_PRESSURE_WARN_PERCENT / 100
+            && !self
+                .world
+                .resource::<crate::resources::RaidPressure>()
+                .warned
+        {
+            self.world
+                .resource_mut::<crate::resources::RaidPressure>()
+                .warned = true;
+            self.log_base_kind(
+                MessageKind::Raid,
+                "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
+                    .to_string(),
+            );
+        }
+
+        if level < target {
             return;
         }
-        // Both gates sit after the roll, `maybe_spawn_wild_creature`'s
-        // reason: a miss must leave the RNG stream untouched by either, so
-        // an exempt sector and a base too thin to survive attrition each
-        // cost nothing but the draw already taken.
-        if self.world.resource::<ZoneLevel>().0 < RAID_MIN_ZONE {
-            return;
-        }
+        // **The staff floor gates the sweep and the clock keeps its
+        // pressure.** As a gate on accrual it would be the old roll's
+        // behaviour — a base that benches its crew is never swept — and as a
+        // reset it would forgive the whole interval. Held, the sweep simply
+        // waits for a base that can absorb it, which is what the floor was
+        // always for.
         if self.defending_base_staff_count() < RAID_MIN_BASE_STAFF {
             return;
         }
-        self.run_raid();
+        // **The clock is spent by a sweep, not by reaching the threshold.**
+        // `run_raid` answers `false` when there is nothing standing to
+        // sweep, and resetting on that would rewind the meter every tick a
+        // base is bare — so the first machine a player raises would buy them
+        // a fresh interval they had not served.
+        if !self.run_raid() {
+            return;
+        }
+        let mut pressure = self.world.resource_mut::<crate::resources::RaidPressure>();
+        pressure.level = 0;
+        pressure.warned = false;
+        pressure.next_at = None;
+    }
+
+    /// One interval, jittered, in `resources::RaidPressure`'s units.
+    ///
+    /// The run's only `GameRng` draw on this meter, and it costs one per
+    /// *sweep* rather than one per tick — see `RAID_PRESSURE_JITTER_PERCENT`
+    /// for why jittering the target beats jittering the accrual.
+    fn draw_raid_interval(&mut self) -> u32 {
+        let low = RAID_PRESSURE_THRESHOLD * (100 - RAID_PRESSURE_JITTER_PERCENT) / 100;
+        let high = RAID_PRESSURE_THRESHOLD * (100 + RAID_PRESSURE_JITTER_PERCENT) / 100;
+        let mut rng = self.world.resource_mut::<GameRng>();
+        rng.0.random_range(low..=high)
     }
 
     /// The roll for a town-sourced raid, and the one caller that decides one
@@ -559,7 +673,7 @@ impl Game {
         self.note_deed(crate::contracts::Deed::RepelledRaid);
     }
 
-    fn run_raid(&mut self) {
+    fn run_raid(&mut self) -> bool {
         let targets: Vec<Entity> = {
             let mut query = self
                 .world
@@ -567,7 +681,7 @@ impl Game {
             query.iter(&self.world).collect()
         };
         if targets.is_empty() {
-            return;
+            return false;
         }
         // Here rather than in `raid_check`, which can decide a sweep happens
         // and then find nothing standing to sweep. This is the first line
@@ -598,7 +712,7 @@ impl Game {
                     "Your shield network fends off a GC Entropy Sweep on {target_label} without a scratch!"
                 ));
             }
-            return;
+            return true;
         };
 
         let worker_mitigation = self
@@ -650,6 +764,7 @@ impl Game {
             self.world.entity_mut(worker).remove::<Task>();
             self.bench_or_dissolve(worker);
         }
+        true
     }
 
     /// Everything a town raid *is*, once it has been decided one happens.

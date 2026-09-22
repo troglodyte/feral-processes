@@ -54,11 +54,13 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
         .map(|(order, _)| order)
         .unwrap_or(0);
     // The player is never one of `SaveData::creatures` — see `save::
-    // SiegeSave::player_order`'s doc for why its cell needs no field here
-    // but its order does.
-    let player_order = member_of(battle, game.player_entity())
+    // SiegeSave::player_order`'s doc for why its order needs a field here
+    // of its own; `player_cell` beside it for the same reason.
+    let player = game.player_entity();
+    let player_order = member_of(battle, player)
         .map(|(order, _)| order)
         .unwrap_or(0);
+    let player_cell = battle.cell_of(player).unwrap_or(battle.siege_door);
     Some(SiegeSave {
         spec: battle.spec,
         side: battle.board.side,
@@ -70,6 +72,7 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
         actions_left: battle.actions_left(),
         siege_pack: battle.siege_pack,
         player_order,
+        player_cell,
     })
 }
 
@@ -108,26 +111,32 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     board::seat_structures(&mut battle, &siege_board, structures);
 
     let mut sorted: Vec<(u32, Entity, (i32, i32))> = members.to_vec();
-    // The player rides `SiegeSave::player_order` rather than `members`,
-    // that field's own reason: it is never one of `SaveData::creatures`.
-    // Its cell is re-derived from `PlayerSave::position` exactly as
-    // `Game::open_siege` derives it the first time — the player never
-    // moves on the world map while a battle is open, so that position is
-    // still the cell the fight opened on.
+    // The player rides `SiegeSave::player_order`/`player_cell` rather than
+    // `members`, that field's own reason: the player is never one of
+    // `SaveData::creatures`. **Not `Position`** — in base space that field
+    // is pinned to the surface anchor tile rather than the party's board
+    // cell (CLAUDE.md, "Base-space Position is pinned to the anchor"), and
+    // this runs before `Game::restore_locale` besides, so `Game::base_pos`
+    // has nothing to answer yet either way. `player_cell` was read straight
+    // off the board at save time, so it needs no re-derivation at all.
     let player = game.player_entity();
-    if let Some(pos) = game.world.get::<crate::components::Position>(player)
-        && let Some(cell) = siege_board.to_board((pos.x, pos.y))
-    {
-        sorted.push((saved.player_order, player, cell));
-    }
+    sorted.push((saved.player_order, player, saved.player_cell));
     sorted.sort_by_key(|&(order, _, _)| order);
     for &(_, entity, cell) in &sorted {
         battle.place(entity, cell);
     }
     // A siege the player was never seated back into is not one worth
     // resuming — `members.is_empty()`'s own reason, applied to the one
-    // member that check cannot see.
+    // member that check cannot see. The besiegers among `members` already
+    // exist in the world by this point — the per-creature load loop that
+    // built this list is what inserted `Besieger` on them — and a dropped
+    // restore leaves no fight behind to sweep them, `combat_teardown`'s
+    // stray sweep being a fight's own teardown and this siege never having
+    // one. Left alive they are ordinary `Hostile` bodies wandering the base
+    // forever, `Game::open_siege`'s own reason for despawning an unseated
+    // raider.
     if battle.cell_of(player).is_none() {
+        despawn_stranded_besiegers(game, members);
         return;
     }
     let initiative: Vec<Entity> = sorted.iter().map(|&(_, e, _)| e).collect();
@@ -148,4 +157,20 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     game.world
         .resource_mut::<crate::resources::MessageLog>()
         .open_battle();
+}
+
+/// Despawns every `Besieger` among `members` — `restore`'s own cleanup for
+/// a save it is about to drop rather than resume, so a raider that already
+/// reloaded as an ordinary creature does not outlive the fight it was only
+/// ever a member of.
+fn despawn_stranded_besiegers(game: &mut Game, members: &[(u32, Entity, (i32, i32))]) {
+    for &(_, entity, _) in members {
+        if game
+            .world
+            .get::<crate::components::Besieger>(entity)
+            .is_some()
+        {
+            game.world.despawn(entity);
+        }
+    }
 }

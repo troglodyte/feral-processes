@@ -369,12 +369,23 @@ pub struct SiegeSave {
     /// `turn`'s reason, and the one member `CreatureSave` cannot carry it
     /// for: the player is never one of `SaveData::creatures`, it is
     /// `SaveData::player`, a singleton restored before the creature array
-    /// even runs. Its board *cell* needs no field of its own — the player
-    /// never moves on the world map while a battle is open (this module's
-    /// own doc), so `PlayerSave::position` already carries it, and
-    /// `persist::restore` re-derives the cell from that the same way
-    /// `Game::open_siege` derives it the first time.
+    /// even runs.
     pub player_order: u32,
+    /// The player's own board cell at save time, read straight off
+    /// `TacticalBattle::cell_of` the way every other body's is.
+    ///
+    /// **Not re-derived from `PlayerSave::position`.** In base space that
+    /// field stays pinned to the surface anchor tile — `Position` is not
+    /// the party's base-space coordinate, `Locale::Base` is (see CLAUDE.md,
+    /// "Base-space Position is pinned to the anchor") — and
+    /// `game::siege::persist::restore` runs before `Game::restore_locale`
+    /// besides, so `Game::base_pos()` has nothing to answer yet either way.
+    /// A save written before this field existed loads the player back at
+    /// the door rather than dropping the siege, `#[serde(default)]`'s
+    /// reason — wrong only for a save that was mid-siege at the moment this
+    /// shipped, and righted the next time that run saves.
+    #[serde(default)]
+    pub player_cell: (i32, i32),
 }
 
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build

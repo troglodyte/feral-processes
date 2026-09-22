@@ -42,6 +42,34 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.222
+
+**A GC Entropy Sweep is a rare event you can hear coming now, instead of
+something that happened every forty-odd seconds whether you noticed or
+not.** A sweep used to be a 1.2% roll on every cycle, which meant one landed
+about every 42 seconds of play — too often for any single one to matter, and
+spread so evenly that no stretch of a run could feel safe or feel
+threatened. Pressure builds toward one instead: in sector 2 a sweep comes
+every fifteen to twenty-five minutes, and sooner the deeper you are.
+
+**The base tells you one is forming, about four minutes out.** Sweep
+telemetry thickens around the anchor, the line goes in the log, and the
+alert stays up in the info column until the sweep arrives — long enough to
+post staff at the machines you care about, patch what is already damaged, or
+walk home from a shallow dive. That warning window shrinks with depth along
+with the interval.
+
+**Benching your crew no longer makes you un-raidable.** A base under the
+defender floor was previously skipping the roll outright, so a base with
+nobody on shift was never swept at all. The sweep now waits instead: the
+pressure it built is still owed, and it arrives on the first cycle the base
+can answer for itself.
+
+**Raiders from a settlement you have wronged come far less often.** Their
+rate was set at half the old ambient sweep's, and with sweeps now twenty
+minutes apart it had quietly become fourteen times more frequent than the
+event it was meant to be rarer than. It is half the sweep rate again.
+
 ## 0.13.221
 
 **The pen a program under study stands in is drawn with four small red

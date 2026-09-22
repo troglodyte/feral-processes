@@ -3382,7 +3382,7 @@ mod review_findings {
 /// `game.save()`/`Game::load()` round trip where a save is involved.
 mod rereview_findings {
     use super::*;
-    use crate::components::{Besieger, Carrying};
+    use crate::components::{Besieger, Carrying, StolenFrom, Tamed};
     use crate::items::ids;
     use crate::tactical::TacticalBattle;
     use crate::tuning::HAUL_CARRY_CAPACITY;
@@ -3464,6 +3464,219 @@ mod rereview_findings {
             durability_after, durability_before,
             "a carrier making for the door must not wreck the shelf it just \
              stole from"
+        );
+    }
+
+    // ---- NEW-2: a besieger captured mid-siege survives the fight's end,
+    // and a reload.
+
+    #[test]
+    fn new2_a_besieger_captured_mid_siege_survives_the_fights_end_and_a_reload() {
+        let mut game = Game::new(210_002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let besieger = any_besieger(&game);
+        game.world.get_mut::<Stats>(besieger).unwrap().hp = 1;
+        // A besieger mid-haul when it is captured — `decompile_body` must
+        // strip this too, not just `Besieger` itself, or a captured
+        // companion keeps hauling a shelf's stolen goods around forever.
+        let stale_source = game.world.spawn_empty().id();
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(stale_source),
+        ));
+
+        let player = game.player_entity();
+        crate::tests::tactical::only_routine(&mut game, player, "decompile");
+        game.world
+            .get_mut::<crate::components::Decompiler>(player)
+            .unwrap()
+            .skill = 50;
+        set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+        fn tamed_count(game: &mut Game) -> usize {
+            let mut q = game.world.query_filtered::<Entity, With<Tamed>>();
+            q.iter(&game.world).count()
+        }
+        let tamed_before = tamed_count(&mut game);
+
+        // `a_capture_on_a_battle_map_turns_the_program_it_was_aimed_at`'s
+        // own loop (`tests::tactical`): close the gap on the player's own
+        // turn and retry the roll, letting every other turn pass idly
+        // through `wait_for_turn` — the besieger's own AI hook is never
+        // invoked, so it neither walks nor steals in the meantime.
+        let mut captured = false;
+        for _ in 0..50 {
+            if game.world.get::<Tamed>(besieger).is_some() {
+                captured = true;
+                break;
+            }
+            if !crate::tests::tactical::wait_for_turn(&mut game, player) {
+                break;
+            }
+            let at = game
+                .world
+                .resource::<TacticalBattle>()
+                .cell_of(besieger)
+                .expect("the target left the board");
+            while game
+                .world
+                .resource::<TacticalBattle>()
+                .cell_of(player)
+                .is_some_and(|from| crate::tactical::reach::distance(from, at) > 1)
+            {
+                let from = game
+                    .world
+                    .resource::<TacticalBattle>()
+                    .cell_of(player)
+                    .unwrap();
+                let dir = ((at.0 - from.0).signum(), (at.1 - from.1).signum());
+                if game.tactical_step(dir) != crate::tactical::turn::StepOutcome::Moved {
+                    break;
+                }
+            }
+            if !game.tactical_use_routine(0, at) {
+                game.tactical_end_turn();
+            }
+        }
+        assert!(captured, "the besieger was never captured");
+        assert!(
+            game.world.get::<Besieger>(besieger).is_none(),
+            "decompile_body must strip Besieger on capture"
+        );
+        assert!(
+            game.world.get::<Carrying>(besieger).is_none(),
+            "decompile_body must strip Carrying on capture"
+        );
+        assert!(
+            game.world.get::<StolenFrom>(besieger).is_none(),
+            "decompile_body must strip StolenFrom on capture"
+        );
+
+        let tamed_after_capture = tamed_count(&mut game);
+        assert_eq!(
+            tamed_after_capture,
+            tamed_before + 1,
+            "the fixture must have actually gained a companion"
+        );
+
+        // A real save/load round trip with the siege still in progress.
+        let scratch = scratch_assets_dir("siege_new2_captured_besieger");
+        std::fs::create_dir_all(&*scratch).unwrap();
+        let path = scratch.join("save.bin");
+        game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        assert!(
+            loaded.in_tactical_battle(),
+            "the siege must survive the round trip"
+        );
+        assert_eq!(
+            tamed_count(&mut loaded),
+            tamed_after_capture,
+            "the captured companion must survive a reload"
+        );
+
+        // End the siege in the loaded game — kill every remaining besieger
+        // and cycle turns until the round wrap's reap closes the fight —
+        // and confirm the captured companion is still standing afterward:
+        // `Game::finish_fight`'s stray sweep is a world-wide query, so it
+        // would catch this companion at the end of *any* fight, siege or
+        // not, if the `Besieger` marker were still on it.
+        let remaining: Vec<Entity> = {
+            let battle = loaded.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| loaded.world.get::<Besieger>(e).is_some())
+                .collect()
+        };
+        assert!(
+            !remaining.is_empty(),
+            "the fixture must leave other besiegers to clear"
+        );
+        for e in remaining {
+            if let Some(mut stats) = loaded.world.get_mut::<Stats>(e) {
+                stats.hp = 0;
+            }
+        }
+        for _ in 0..40 {
+            if !loaded.in_tactical_battle() {
+                break;
+            }
+            loaded.tactical_end_turn();
+        }
+        assert!(
+            !loaded.in_tactical_battle(),
+            "the fixture must actually end the fight"
+        );
+
+        assert_eq!(
+            tamed_count(&mut loaded),
+            tamed_after_capture,
+            "the captured companion must survive the siege's own end, not \
+             be swept as a stray besieger"
+        );
+    }
+
+    /// NEW-2's second half in isolation: `Game::finish_fight`'s stray sweep
+    /// is a world-wide query and must never touch a `Tamed` program, even
+    /// one that (through some path other than `decompile_body` — a stale
+    /// save, a future writer of `Besieger` that forgets the strip)
+    /// still carries the `Besieger` marker. `decompile_body`'s own cleanup
+    /// (asserted above) already keeps this unreachable in practice; this
+    /// pins the sweep's own guard directly, defense in depth for the same
+    /// reason the stray-`StackSpawn` sweep beside it already carries one.
+    #[test]
+    fn new2b_the_besieger_sweep_never_despawns_a_tamed_program() {
+        let mut game = Game::new(210_003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let owner = game.player_entity();
+        let mislabelled = any_besieger(&game);
+        // The state the guard exists for, built directly rather than
+        // through `decompile_body` — `Tamed` and `Besieger` co-existing on
+        // one body, which nothing today produces but the sweep must still
+        // survive.
+        game.world.entity_mut(mislabelled).remove::<Hostile>();
+        game.world.entity_mut(mislabelled).insert(Tamed { owner });
+
+        let remaining: Vec<Entity> = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| e != mislabelled && game.world.get::<Besieger>(e).is_some())
+                .collect()
+        };
+        for e in remaining {
+            if let Some(mut stats) = game.world.get_mut::<Stats>(e) {
+                stats.hp = 0;
+            }
+        }
+        for _ in 0..40 {
+            if !game.in_tactical_battle() {
+                break;
+            }
+            game.tactical_end_turn();
+        }
+        assert!(
+            !game.in_tactical_battle(),
+            "the fixture must actually end the fight"
+        );
+
+        assert!(
+            game.world.get::<Tamed>(mislabelled).is_some(),
+            "the stray-besieger sweep must never touch a Tamed program, \
+             whatever else is still marked Besieger on it"
         );
     }
 }

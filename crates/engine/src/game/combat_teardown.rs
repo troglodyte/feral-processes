@@ -461,18 +461,19 @@ impl Game {
         // fight can end come through here, which is what makes one sweep
         // enough — a besieger that left through the door is already gone
         // before this runs, `siege::raiders::besieger_leaves`'s own despawn.
-        // Beside the stray sweep and for the same reason a besieger has no
-        // other ending: nothing outside `TacticalBattle` manages one, so a
-        // fight that ends any way but a clean withdrawal (a jack-out, a
-        // Forgiving death, a dropped save restore) leaves it standing with
-        // `Hostile` and `WanderAi` and no fight left to drive it — wandering
-        // the base forever, uncounted by every wild-population census and
-        // saved `besieger: true` on every reload after. All five ways a
-        // fight can end come through here, which is what makes one sweep
-        // enough — a besieger that left through the door is already gone
-        // before this runs, `siege::raiders::besieger_leaves`'s own despawn.
+        //
+        // **`Without<Tamed>` for the same reason the stray sweep above
+        // carries it.** `Game::decompile_body` converts a besieger in place
+        // rather than despawning and respawning it, so a besieger captured
+        // mid-fight is still `With<Besieger>` the instant this runs —
+        // `decompile_body` strips the marker itself, but a query here that
+        // did not carry the same guard would still catch a save loaded
+        // between the capture and this sweep, or any future writer of
+        // `Besieger` that forgets to.
         let besiegers: Vec<Entity> = {
-            let mut query = self.world.query_filtered::<Entity, With<Besieger>>();
+            let mut query = self
+                .world
+                .query_filtered::<Entity, (With<Besieger>, Without<Tamed>)>();
             query.iter(&self.world).collect()
         };
         for besieger in besiegers {

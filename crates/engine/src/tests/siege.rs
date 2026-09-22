@@ -714,6 +714,39 @@ mod opening {
         }
     }
 
+    /// Every raider `open_siege` seats is a `Besieger` — the marker steal,
+    /// wreck, withdraw and the morale count all gate on. The behaviour
+    /// tests hand-insert it, so only a pack spawned through the real door
+    /// can catch it missing, and a pack without it reads as already
+    /// broken from the first turn.
+    #[test]
+    fn the_pack_open_siege_seats_is_marked_besieger() {
+        let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+
+        assert!(game.open_siege());
+
+        let raiders: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .filter(|&e| game.world.get::<Hostile>(e).is_some())
+            .collect();
+        assert!(!raiders.is_empty());
+        for e in raiders {
+            assert!(
+                game.world.get::<crate::components::Besieger>(e).is_some(),
+                "a seated raider must carry Besieger"
+            );
+        }
+        assert!(
+            !game.siege_morale_broken(),
+            "a fresh pack must not read as broken"
+        );
+    }
+
     /// A siege does not open while another fight is running — the hold,
     /// asserted through `siege_check` rather than `open_siege` directly,
     /// with the player standing in base space so the fire would otherwise

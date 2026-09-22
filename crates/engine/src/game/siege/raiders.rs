@@ -91,7 +91,7 @@ impl Game {
     /// board's, which is what keeps every non-siege tactical fixture (and
     /// every siege one that only ever seats a handful of bodies to test one
     /// besieger's own behaviour) from reading itself as already broken.
-    fn siege_morale_broken(&self) -> bool {
+    pub(crate) fn siege_morale_broken(&self) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
         };

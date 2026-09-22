@@ -176,14 +176,20 @@ impl Game {
             let idx = rng.0.random_range(0..candidates.len());
             candidates[idx].clone()
         };
-        self.spawn_group(
+        let pack = self.spawn_group(
             &species_id,
             pack_size(zone),
             site.0,
             site.1,
             SpawnEscalation::surface(),
             false,
-        )
+        );
+        for &raider in &pack {
+            self.world
+                .entity_mut(raider)
+                .insert(crate::components::Besieger);
+        }
+        pack
     }
 }
 

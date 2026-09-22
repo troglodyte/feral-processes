@@ -532,6 +532,16 @@ impl Game {
             .collect()
     }
 
+    /// Whether `entity` is a structure whose def is a barrier
+    /// (`StructureDef::barrier`) — false for anything else, a def that no
+    /// longer resolves included.
+    pub(crate) fn is_barrier(&self, entity: Entity) -> bool {
+        self.world
+            .get::<Structure>(entity)
+            .and_then(|s| self.world.resource::<StructureDb>().get(s.kind.as_str()))
+            .is_some_and(|def| def.barrier)
+    }
+
     /// The Home structure's position, if one is deployed anywhere right
     /// now — the anchor `place_structure` measures the build radius from.
     pub(crate) fn home_position(&mut self) -> Option<Position> {
@@ -565,6 +575,21 @@ impl Game {
             .get(&kind)
             .is_some_and(|d| d.zone_portal)
             .then_some(entity)
+    }
+
+    /// A barrier structure (`StructureDef::barrier`) standing on base-space
+    /// `(x, y)`, if any — `find_zone_portal_at`'s shape, asked by
+    /// `Game::move_in_base` before the step.
+    pub(crate) fn barrier_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Structure>>();
+        let at: Vec<Entity> = query
+            .iter(&self.world)
+            .filter(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+            .collect();
+        at.into_iter().find(|&e| self.is_barrier(e))
     }
 
     /// This run's enemy-strength band — `resources::EnemyStrength`.

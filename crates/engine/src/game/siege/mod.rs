@@ -92,7 +92,10 @@ impl Game {
         // ordering rule. `board::seat_structures` is this loop, shared with
         // `siege::persist::restore`, which needs it again once a save/load
         // round trip has rebuilt the structures fresh.
-        let structure_entities = board::seat_structures(&mut battle, &siege_board, structures);
+        let structure_entities =
+            board::seat_structures(&mut battle, &siege_board, structures, |e| {
+                self.is_barrier(e)
+            });
 
         // **Every body in base space is seated where it already stands.**
         // Nobody is deployed; a body whose own cell fell outside the fill

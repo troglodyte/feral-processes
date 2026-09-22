@@ -1411,9 +1411,14 @@ impl Game {
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
         loop {
             let hostiles: Vec<(Entity, (i32, i32))> = {
-                let mut query = self
-                    .world
-                    .query_filtered::<(Entity, &Position), With<Hostile>>();
+                // `Without<Besieger>` — a besieger's `Position` is a base-space
+                // cell for the length of the siege, not a zone-surface one,
+                // and it is neither ambient population nor culled the way a
+                // wild pack is.
+                let mut query = self.world.query_filtered::<
+                    (Entity, &Position),
+                    (With<Hostile>, Without<crate::components::Besieger>),
+                >();
                 query
                     .iter(&self.world)
                     .map(|(e, p)| (e, (p.x.div_euclid(CHUNK_SIZE), p.y.div_euclid(CHUNK_SIZE))))
@@ -1464,7 +1469,13 @@ impl Game {
     /// are `Hostile` and so do count, which is right: they are a real part of
     /// why the ground around a besieged nest is crowded.
     pub(crate) fn local_hostile_count(&mut self, x: i32, y: i32) -> usize {
-        let mut query = self.world.query_filtered::<&Position, With<Hostile>>();
+        // `Without<Besieger>` for `components::Besieger`'s own reason: its
+        // `Position` aliases a base-space cell onto whatever zone-surface
+        // tile shares its coordinates, so counting it here would let a siege
+        // silently choke off ordinary wild spawns near the base.
+        let mut query = self
+            .world
+            .query_filtered::<&Position, (With<Hostile>, Without<crate::components::Besieger>)>();
         query
             .iter(&self.world)
             .filter(|p| (p.x - x).abs().max((p.y - y).abs()) <= WILD_SPAWN_RADIUS_TILES)

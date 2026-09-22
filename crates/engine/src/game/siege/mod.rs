@@ -15,6 +15,7 @@
 pub(crate) mod board;
 pub(crate) mod clock;
 pub(crate) mod offscreen;
+pub(crate) mod raiders;
 pub(crate) mod turrets;
 
 use std::collections::{HashSet, VecDeque};

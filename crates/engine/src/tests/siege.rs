@@ -1288,3 +1288,105 @@ mod offscreen {
         );
     }
 }
+
+/// `components::Besieger`'s citizenship — the third kind of body carrying a
+/// base-space `Position`, after a posted program and a `DigSite` (Task 11).
+mod raiders_citizenship {
+    use super::*;
+    use crate::components::{Besieger, Glyph, GlyphColor};
+
+    fn spawn_besieger_at(game: &mut Game, x: i32, y: i32) -> Entity {
+        game.world
+            .spawn((
+                Position { x, y },
+                Glyph {
+                    ch: 'r',
+                    color: GlyphColor::Red,
+                },
+                Stats {
+                    hp: 5,
+                    max_hp: 5,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                Hostile,
+                Besieger,
+            ))
+            .id()
+    }
+
+    /// A besieger's `Position` is a base-space cell, and the two coordinate
+    /// spaces alias onto each other by design — `components::Besieger`'s own
+    /// doc. Without `Game::stands_in_base_space`'s arm this reads as a wild
+    /// `Creature` standing on the zone surface at the same numbers.
+    #[test]
+    fn a_besieger_draws_on_the_base_map_and_not_the_surface() {
+        let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.lay_starting_pocket();
+        let besieger = spawn_besieger_at(&mut game, 2, 0);
+
+        let surface: Vec<Entity> = game
+            .view_entities(20, 20)
+            .into_iter()
+            .map(|v| v.entity)
+            .collect();
+        assert!(
+            !surface.contains(&besieger),
+            "a besieger must not draw on the zone surface"
+        );
+
+        stand_in_base_at(&mut game, 0, 0);
+        let base: Vec<Entity> = game
+            .view_entities(20, 20)
+            .into_iter()
+            .map(|v| v.entity)
+            .collect();
+        assert!(
+            base.contains(&besieger),
+            "a besieger must draw on the base map"
+        );
+    }
+
+    /// The wild-population systems must not count or cull a besieger —
+    /// `local_hostile_count` (read by both `maybe_spawn_wild_creature` and
+    /// `populate_chunk`/`ensure_local_population`) and `cull_to_cap`.
+    #[test]
+    fn a_besieger_does_not_count_toward_local_wild_population() {
+        let mut game = Game::new(971, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let (px, py) = {
+            let pos = game.world.get::<Position>(game.player_entity()).unwrap();
+            (pos.x, pos.y)
+        };
+        // The ambient wild spawn around a fresh game is not this test's
+        // concern — only the *delta* a siege's pack makes to it is.
+        game.clear_local_wild();
+        let before = game.local_hostile_count(px, py);
+        for _ in 0..3 {
+            spawn_besieger_at(&mut game, px, py);
+        }
+        assert_eq!(
+            game.local_hostile_count(px, py),
+            before,
+            "a besieger must not be counted as local wild population"
+        );
+
+        game.cull_to_cap(0);
+        assert_eq!(
+            game.world
+                .query_filtered::<Entity, With<Besieger>>()
+                .iter(&game.world)
+                .count(),
+            3,
+            "cull_to_cap must never evict a besieger"
+        );
+    }
+
+    /// `position_is_honest` reads `true` for anything that isn't `Tamed`,
+    /// which a besieger never is — still passing is the whole assertion.
+    #[test]
+    fn a_besiegers_position_is_still_honest() {
+        let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let besieger = spawn_besieger_at(&mut game, 5, 5);
+        assert!(game.position_is_honest(besieger));
+    }
+}

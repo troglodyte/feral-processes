@@ -579,9 +579,14 @@ impl Game {
             let dmg = self.swing_damage(actor);
             let label = self.entity_label(target);
             self.damage_structure(target, dmg, &label, "a siege");
+            // **The entity is gone, not merely its `Durability`.** A
+            // `Durability`-less structure (`raidable: false` — the Home)
+            // makes `damage_structure` return before ever touching that
+            // component, so reading its absence as "destroyed" removes an
+            // intact structure from the board on the very first swing.
             if self
                 .world
-                .get::<crate::components::Durability>(target)
+                .get::<crate::components::Structure>(target)
                 .is_none()
             {
                 self.world.resource_mut::<TacticalBattle>().remove(target);
@@ -1490,7 +1495,7 @@ impl Game {
     /// spin `end_turn` forever chasing an actor that never arrives. The
     /// loop below is bounded by the order's own length besides, so even a
     /// wrong answer from `tactical_body_is_engaged` cannot hang it.
-    fn skip_disengaged_turns(&mut self) {
+    pub(crate) fn skip_disengaged_turns(&mut self) {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
         };
@@ -1522,7 +1527,7 @@ impl Game {
     /// fight seats with nothing driving it), the one kind of bystander
     /// that would otherwise sit forever as `tactical_awaits_input` waits
     /// on a key nobody can press.
-    fn tactical_skippable(&self, body: Entity) -> bool {
+    pub(crate) fn tactical_skippable(&self, body: Entity) -> bool {
         body != self.player_entity()
             && !self.world.resource::<Party>().0.contains(&body)
             && self.world.get::<Hostile>(body).is_none()
@@ -1593,7 +1598,7 @@ impl Game {
     ///
     /// The tick is skipped when the reap closed the fight, because
     /// `settle_tactical` spent the round's tick on the way out.
-    fn tactical_round_upkeep(&mut self) {
+    pub(crate) fn tactical_round_upkeep(&mut self) {
         // A turret is a property of a structure, not a combatant — no
         // initiative slot, so it fires here, once a round, rather than
         // taking a turn. Ahead of the reap below, so a besieger a turret
@@ -1696,6 +1701,15 @@ impl Game {
                     Some(members) => self.reap_squad(body, &members, player),
                     None => self.finish_hostile(body, player),
                 }
+            } else if body != player && !self.world.resource::<Party>().0.contains(&body) {
+                // **Base staff, killed on a siege board.** Neither `Hostile`
+                // (that branch above) nor `Party` (`finish_fight`'s own dead
+                // sweep, run at teardown) ever sees this body, so this reap
+                // is the only place its death is seen at all — left alone it
+                // sits in the roster at `hp <= 0` forever, `admit_the_badly_
+                // hurt`'s own reason for skipping one rather than admitting
+                // it to a Bay. Precedent: `Game::run_raid`'s own defender.
+                self.bench_or_dissolve(body);
             }
         }
         self.settle_tactical(wild);

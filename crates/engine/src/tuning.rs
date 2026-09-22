@@ -3121,6 +3121,13 @@ pub const SIEGE_DAMAGE_PER_POINT: u32 = 3;
 /// (`Game::bench_or_dissolve`).
 pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
 
+/// How much of the besieging pack has to be down — killed or gone through
+/// the door with its plunder, `Game::besieger_turn`'s own reading of "down"
+/// — before the rest withdraw unconditionally. Half the pack breaking a
+/// siege is the spec's own figure; there is no quota and no round limit
+/// besides it.
+pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────

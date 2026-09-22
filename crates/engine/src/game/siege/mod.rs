@@ -125,10 +125,16 @@ impl Game {
         }
 
         // **Raiders enter at the door.** One body to a cell means they file
-        // in at and behind it.
-        for entity in &raiders {
-            place_nearby(&mut battle, siege_board.door, *entity);
-        }
+        // in at and behind it. Counted by what actually seated, not by
+        // `raiders.len()` — `TacticalBattle::siege_pack` is
+        // `siege::raiders::siege_morale_broken`'s reading of "the pack this
+        // fight opened with," and a raider turned away for want of a free
+        // cell near the door never joined it.
+        let seated_raiders = raiders
+            .iter()
+            .filter(|&&entity| place_nearby(&mut battle, siege_board.door, entity))
+            .count() as u32;
+        battle.siege_pack = seated_raiders;
 
         let standing: Vec<Entity> = battle
             .bodies()

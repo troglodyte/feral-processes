@@ -12,8 +12,8 @@
 //! under a full-turn test resolution. `Game::besieger_turn` is still exactly
 //! the interface the plan specifies — `true` when it spent the beat on siege
 //! behaviour, `false` to fall through to the generic AI (which is how a
-//! besieger with nothing to take in reach still fights back, Task 12; a
-//! wreck arm and a morale-break withdrawal join it in Tasks 13 and 14).
+//! besieger with nothing to take, wreck or withdraw toward still fights
+//! back).
 
 use bevy_ecs::prelude::Entity;
 
@@ -24,20 +24,24 @@ use crate::resources::MessageKind;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach;
 use crate::tactical::turn::StepOutcome;
-use crate::tuning::{HAUL_CARRY_CAPACITY, TACTICAL_MELEE_RANGE};
+use crate::tuning::{HAUL_CARRY_CAPACITY, SIEGE_MORALE_BREAK_PERCENT, TACTICAL_MELEE_RANGE};
 
 impl Game {
     /// `body`'s whole beat, when it is a besieger — the hook
     /// `tactical::turn::run_tactical_beat` calls before falling through to
     /// the generic tactical AI.
     ///
-    /// Steal, then wreck, for Tasks 12 and 13: adjacent to a stocked
-    /// structure, take what it holds and make for the door; adjacent to a
-    /// structure with nothing to take, swing at it instead — **steal before
-    /// wreck**, because a raider that wrecks the shelf it could have
-    /// emptied makes interception pointless. Carrying already, walk toward
-    /// the door; at the door carrying, leave. Task 14 makes the door arm
-    /// unconditional on a morale break.
+    /// Steal, then wreck: adjacent to a stocked structure, take what it
+    /// holds and make for the door; adjacent to a structure with nothing to
+    /// take, swing at it instead — **steal before wreck**, because a raider
+    /// that wrecks the shelf it could have emptied makes interception
+    /// pointless. Carrying already, walk toward the door; at the door
+    /// carrying, leave.
+    ///
+    /// **A morale break makes the door arm unconditional** (Task 14): once
+    /// `siege_morale_broken` answers `true`, steal and wreck are skipped
+    /// entirely and every besieger, carrying or not, makes for the door —
+    /// no quota and no round limit, a withdrawal is not a rout to chase.
     pub(crate) fn besieger_turn(&mut self, body: Entity) -> bool {
         if self.world.get::<Besieger>(body).is_none() {
             return false;
@@ -54,25 +58,53 @@ impl Game {
             return false;
         };
 
+        let withdrawing = self.siege_morale_broken();
         let carrying = self.world.get::<Carrying>(body).is_some();
 
-        if from == door && carrying {
+        if from == door && (carrying || withdrawing) {
             return self.besieger_leaves(body, carrying);
         }
 
-        if !carrying {
+        if !withdrawing {
             if let Some(structure) = self.adjacent_stocked_structure(body) {
                 return self.besieger_steal(body, structure);
             }
             if let Some(structure) = self.adjacent_wreckable_structure(body) {
                 return self.besieger_wreck(body, structure);
             }
-            // Nothing to take or wreck in reach, and no reason yet to make
-            // for the door — the generic AI's to fight, opportunist or not.
-            return false;
+            if !carrying {
+                // Nothing to take or wreck in reach, and no reason yet to
+                // make for the door — the generic AI's to fight, opportunist
+                // or not.
+                return false;
+            }
         }
 
         self.besieger_walk_toward(body, door)
+    }
+
+    /// `SIEGE_MORALE_BREAK_PERCENT` of the besieging pack down — killed, or
+    /// gone through the door with its plunder, both counting the same way
+    /// as "no longer fighting." The original pack size is
+    /// `TacticalBattle::siege_pack`, set once by `Game::open_siege` at the
+    /// count it actually seated — `0` for a fight this is not a siege
+    /// board's, which is what keeps every non-siege tactical fixture (and
+    /// every siege one that only ever seats a handful of bodies to test one
+    /// besieger's own behaviour) from reading itself as already broken.
+    fn siege_morale_broken(&self) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let original = battle.siege_pack;
+        if original == 0 {
+            return false;
+        }
+        let remaining = battle
+            .bodies()
+            .filter(|&(e, _)| self.world.get::<Besieger>(e).is_some())
+            .count() as u32;
+        let down = original.saturating_sub(remaining);
+        down * 100 >= original * SIEGE_MORALE_BREAK_PERCENT
     }
 
     /// A structure in melee reach of `body` with something in its output —

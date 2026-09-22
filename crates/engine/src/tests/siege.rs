@@ -1767,3 +1767,217 @@ mod raiders_wreck {
         );
     }
 }
+
+/// The morale break: `SIEGE_MORALE_BREAK_PERCENT` of the pack down sends
+/// the rest to the door unconditionally (Task 14).
+mod raiders_withdraw {
+    use super::*;
+    use crate::components::{Besieger, Carrying, Glyph, GlyphColor, StolenFrom, Structure};
+    use crate::game::siege::board;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::BattleSpec;
+    use crate::world::Biome;
+
+    /// A real base pocket, opened as a `TacticalBattle` through the exact
+    /// board a siege would build, with `TacticalBattle::siege_pack` set to
+    /// `pack` — `Game::open_siege`'s own write, done by hand here so a
+    /// fixture can pick a pack size independent of how many bodies it
+    /// actually seats.
+    fn open_pocket_battle(game: &mut Game, pack: u32) -> (i32, i32) {
+        game.lay_starting_pocket();
+        let siege_board = board::build(game).unwrap();
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        let mut battle = TacticalBattle::open(spec, siege_board.board.clone());
+        battle.siege_pack = pack;
+        game.world.insert_resource(battle);
+        siege_board.door
+    }
+
+    fn spawn_besieger(game: &mut Game) -> Entity {
+        game.world
+            .spawn((
+                Glyph {
+                    ch: 'r',
+                    color: GlyphColor::Red,
+                },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                Hostile,
+                Besieger,
+            ))
+            .id()
+    }
+
+    fn chebyshev(a: (i32, i32), b: (i32, i32)) -> i32 {
+        (a.0 - b.0).abs().max((a.1 - b.1).abs())
+    }
+
+    /// Downing half the pack sends the rest to the door — asserted on a
+    /// survivor's cell moving doorward.
+    #[test]
+    fn downing_half_the_pack_sends_survivors_doorward() {
+        let mut game = Game::new(993, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pack: u32 = 5;
+        let door = open_pocket_battle(&mut game, pack);
+        let besiegers: Vec<Entity> = (0..pack).map(|_| spawn_besieger(&mut game)).collect();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            for (i, &b) in besiegers.iter().enumerate() {
+                battle.place(b, (3, i as i32));
+            }
+            battle.set_initiative(besiegers.clone());
+        }
+        let down = pack.div_ceil(2);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            for &b in besiegers.iter().take(down as usize) {
+                battle.remove(b);
+            }
+        }
+        let survivor = besiegers[down as usize];
+        let before = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(survivor)
+            .unwrap();
+
+        assert!(
+            game.besieger_turn(survivor),
+            "a broken pack's door arm must be unconditional"
+        );
+
+        let after = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(survivor)
+            .unwrap();
+        assert!(
+            chebyshev(after, door) < chebyshev(before, door),
+            "a withdrawing survivor must move doorward: {before:?} -> {after:?}, door {door:?}"
+        );
+    }
+
+    /// Below the threshold, nobody withdraws — a survivor with nothing in
+    /// reach to take or wreck falls through instead of heading for the
+    /// door.
+    #[test]
+    fn below_the_threshold_nobody_withdraws() {
+        let mut game = Game::new(994, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pack: u32 = 5;
+        let door = open_pocket_battle(&mut game, pack);
+        let besiegers: Vec<Entity> = (0..pack).map(|_| spawn_besieger(&mut game)).collect();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            for (i, &b) in besiegers.iter().enumerate() {
+                // Spread along a line inside the starting pocket, away from
+                // the door and with nothing else adjacent to any of them.
+                battle.place(b, (2, i as i32));
+            }
+            battle.set_initiative(besiegers.clone());
+        }
+        // Down exactly one — under half of any pack of at least 4.
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.remove(besiegers[0]);
+        }
+        let survivor = besiegers[1];
+        let before = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(survivor)
+            .unwrap();
+        assert!(
+            chebyshev(before, door) > 1,
+            "the fixture must place the survivor away from the door"
+        );
+
+        assert!(
+            !game.besieger_turn(survivor),
+            "below the morale-break threshold a besieger with nothing to \
+             take must fall through rather than make for the door"
+        );
+    }
+
+    /// A pack that fully withdraws ends the fight as a win, through the
+    /// same verdict a wipe produces — and the withdrawn raiders' cargo is
+    /// gone from the base.
+    #[test]
+    fn a_fully_withdrawn_pack_ends_the_fight_as_a_win_and_keeps_its_plunder() {
+        let mut game = Game::new(995, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = {
+            let mut stock = Stock::new(1000);
+            // Represents what is left on the shelf after the carrier's own
+            // steal already happened — this fixture attaches `Carrying`
+            // directly rather than replaying `besieger_steal`, so the 5
+            // units it holds are not double-counted here.
+            stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+            game.world
+                .spawn((
+                    Structure {
+                        kind: "test_structure".to_string(),
+                    },
+                    stock,
+                ))
+                .id()
+        };
+        // A pack of 5 with only two seated on this board — `siege_pack` is
+        // set by hand precisely so a fixture can pick a size independent of
+        // what it seats, and 2 is already under half of 5, so both
+        // survivors read the pack as broken from their very first beat.
+        let door = open_pocket_battle(&mut game, 5);
+        let carrier = spawn_besieger(&mut game);
+        let bare = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (5, 5));
+            battle.place(carrier, (door.0 + 1, door.1));
+            battle.place(bare, (door.0 + 2, door.1));
+            battle.set_initiative(vec![carrier, bare]);
+        }
+        game.world.entity_mut(carrier).insert((
+            Carrying {
+                item: ItemId::from(ids::CORE_FRAGMENT),
+                qty: 5,
+            },
+            StolenFrom(structure),
+        ));
+
+        for _ in 0..20 {
+            if game.world.get_resource::<TacticalBattle>().is_none() {
+                break;
+            }
+            game.besieger_turn(carrier);
+            if game.world.get_resource::<TacticalBattle>().is_some() {
+                game.besieger_turn(bare);
+            }
+        }
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "a fully withdrawn pack empties the roster, the same verdict a wipe gives"
+        );
+        let remaining = game
+            .world
+            .get::<Stock>(structure)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            remaining, 5,
+            "the carrier's plunder must stay gone — it escaped, it was not killed"
+        );
+    }
+}

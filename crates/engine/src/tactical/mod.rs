@@ -176,6 +176,20 @@ pub struct TacticalBattle {
     /// parallel `Vec`, for `decompile_attempts`' reason: both are keyed
     /// lookups a body's own turn reads, never walked in fight order.
     shapes: HashMap<Entity, BodyShape>,
+    /// How many `components::Besieger` bodies a siege's pack opened
+    /// with — `0` for every fight that is not one, `Game::open_siege`'s own
+    /// count of what it actually seated rather than `siege::pack_size(zone)`
+    /// restated, since a raider that could not be seated at all (no free
+    /// cell near the door) must not count toward a morale break it never
+    /// joined.
+    ///
+    /// `game::siege::raiders::siege_morale_broken`'s one reader: deriving
+    /// this from `pack_size(zone)` instead would read any battle fixture
+    /// seating fewer than half a real pack as already broken, which is
+    /// every hand-built unit test in this file's siege coverage — a field
+    /// set once, at seat time, is what keeps "a siege's own pack" and "a
+    /// test's one besieger" from being the same question.
+    pub(crate) siege_pack: u32,
 }
 
 /// One entry of `TacticalBattle::shapes` — see that field's doc.
@@ -203,6 +217,7 @@ impl TacticalBattle {
             decoys: Vec::new(),
             reacted: Vec::new(),
             shapes: HashMap::new(),
+            siege_pack: 0,
         }
     }
 

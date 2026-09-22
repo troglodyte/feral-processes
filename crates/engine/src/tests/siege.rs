@@ -3383,7 +3383,7 @@ mod review_findings {
 mod rereview_findings {
     use super::*;
     use crate::base_grid::BaseGrid;
-    use crate::components::{Besieger, Carrying, StolenFrom, Tamed};
+    use crate::components::{Besieger, Carrying, StolenFrom, Tamed, Task, TaskKind};
     use crate::game::siege::board;
     use crate::items::ids;
     use crate::tactical::TacticalBattle;
@@ -3840,6 +3840,63 @@ mod rereview_findings {
             reach::distance(cell, door) <= 1,
             "a save missing player_cell must reload the player right at \
              the siege door, not board (0, 0) — got {cell:?}, door is {door:?}"
+        );
+    }
+
+    // ---- C4-m: the reap's bench/dissolve matches `Game::run_raid`'s
+    // defender precedent — a log line, and `Task` stripped before it.
+
+    #[test]
+    fn c4m_a_staff_death_on_the_board_logs_and_strips_task_like_the_raid_precedent() {
+        let mut game = Game::new(210_006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let staff = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(staff).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        // A `Task` to strip — anything but `Guard`, which
+        // `party::walks_the_base` excludes from `base_bodies()` and so
+        // from the siege board entirely.
+        let dummy_target = game.world.spawn_empty().id();
+        game.world.entity_mut(staff).insert(Task {
+            kind: TaskKind::Excavate,
+            target: dummy_target,
+            progress: 0,
+            required: 1,
+        });
+        stand_in_base_at(&mut game, 3, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+        assert!(
+            game.world
+                .resource::<TacticalBattle>()
+                .cell_of(staff)
+                .is_some(),
+            "the staff body must have seated on the real board"
+        );
+
+        game.world.get_mut::<Stats>(staff).unwrap().hp = 0;
+        let player = game.player_entity();
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player]);
+        game.tactical_end_turn();
+
+        assert!(
+            game.world.get::<Task>(staff).is_none(),
+            "the raid precedent strips Task before the dissolve, not by \
+             it, or a posted worker's own detachment line lands twice"
+        );
+        let logged = game
+            .message_history(20)
+            .iter()
+            .any(|entry| entry.text.contains("falls in the siege"));
+        assert!(
+            logged,
+            "a staff body lost on the board must log a line naming it, \
+             the raid precedent's own rule"
         );
     }
 }

@@ -1708,7 +1708,20 @@ impl Game {
                 // is the only place its death is seen at all — left alone it
                 // sits in the roster at `hp <= 0` forever, `admit_the_badly_
                 // hurt`'s own reason for skipping one rather than admitting
-                // it to a Bay. Precedent: `Game::run_raid`'s own defender.
+                // it to a Bay. Precedent: `Game::run_raid`'s own defender
+                // (`game/base/upkeep.rs`), matched here rather than
+                // restated: the line naming the fallen body, and `Task`
+                // stripped *before* the dissolve rather than by it, so a
+                // posted worker's own detachment line does not land a
+                // second time directly beneath this one.
+                let label = self.creature_label(body);
+                self.log_base_kind(
+                    crate::resources::MessageKind::Raid,
+                    format!("{label} falls in the siege."),
+                );
+                self.world
+                    .entity_mut(body)
+                    .remove::<crate::components::Task>();
                 self.bench_or_dissolve(body);
             }
         }

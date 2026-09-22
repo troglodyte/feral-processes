@@ -42,6 +42,31 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.223
+
+**From sector 2 on, the sector's wild programs besiege your base — they walk
+in through the door, steal what they can carry, wreck what they cannot, and
+leave when half of them are down.** Until now the only threat to the base
+was the GC Entropy Sweep, which damages structures and never comes inside.
+A siege builds on its own clock, roughly once an hour of play in sector 2
+and sooner the deeper you are, and the log warns you when one is gathering
+at the perimeter — about twelve minutes out in sector 2, and never less than
+eight however deep you go.
+
+**If you are home, you fight it on a battle map drawn from your base
+itself.** The rooms and corridors you dug are the board, your machines are
+obstacles the raiders can smash, and your staff defend where they stand
+under their own control. A raider killed while carrying loot drops it back,
+so the fight is about catching them before the door. It is always a battle
+map, even with battle maps turned off. A siege in progress is kept in your
+save.
+
+**If you are away, it resolves without you**, set against your staff, your
+defences and your turrets. A Turret is a new structure that fires on the
+nearest besieger in range every round, and also soaks damage from a sweep.
+The off-screen numbers are unmeasured: a well-staffed base can currently
+beat a siege it never saw at no cost.
+
 ## 0.13.222
 
 **A GC Entropy Sweep is a rare event you can hear coming now, instead of

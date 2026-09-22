@@ -23,7 +23,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::abilities::{AbilityDef, AbilityId, AbilityRange, AbilityTarget, TamperSlot};
-use crate::components::{Hostile, Stats, Tampered};
+use crate::components::{Durability, Hostile, Stats, Structure, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
@@ -349,14 +349,28 @@ impl Game {
     /// see `taken_over`'s doc. Sidedness needs nothing — `tactical_sides` is
     /// already relative to the actor, which is why `tactical_drive_turn`
     /// works at all.
+    ///
+    /// **A fourth arm, gated on a siege being open.** Spec §5: base staff
+    /// act under the AI that already drives a side, and there is no
+    /// defence-roster screen for the player to command them from —
+    /// `tactical_skippable`'s own predicate for "a bystander nobody else
+    /// drives," reused rather than restated, since a staff body seated on a
+    /// siege board and one `skip_disengaged_turns` passes over mid-round are
+    /// the same body asked about at two different moments. Without this arm
+    /// `tactical_awaits_input` reads `true` for a posted program the instant
+    /// something comes into its reach, and the player finds themselves
+    /// holding its turn.
     fn tactical_ai_actor(&self) -> Option<Entity> {
-        let actor = self.world.get_resource::<TacticalBattle>()?.actor()?;
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let actor = battle.actor()?;
+        let siege = battle.siege_pack > 0;
         (self.world.get::<Hostile>(actor).is_some()
             || self
                 .world
                 .get::<crate::components::Summoned>(actor)
                 .is_some()
-            || self.taken_over(actor))
+            || self.taken_over(actor)
+            || (siege && self.tactical_skippable(actor)))
         .then_some(actor)
     }
 
@@ -778,6 +792,18 @@ impl Game {
         let mut hidden: Vec<(i32, i32)> = Vec::new();
         for (body, cell) in battle.bodies() {
             if body == actor {
+                continue;
+            }
+            // A structure with no `Durability` (the Home, `raidable:
+            // false`) cannot be damaged at all — `Game::damage_structure`
+            // returns before touching a component it does not have — so
+            // naming it a target sends a hostile to swing at something that
+            // can never register the hit, and the swing's own structure
+            // branch used to misread that refusal as the structure having
+            // just been destroyed.
+            if self.world.get::<Structure>(body).is_some()
+                && self.world.get::<Durability>(body).is_none()
+            {
                 continue;
             }
             if (self.world.get::<Hostile>(body).is_some()) == acting_side {

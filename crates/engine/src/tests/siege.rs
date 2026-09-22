@@ -340,6 +340,7 @@ fn forcing_a_siege_stages_one_without_touching_the_clock() {
 #[test]
 fn winding_the_siege_clock_reaches_the_warn_point() {
     let mut game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
 
     game.dev_wind_siege_clock();
 
@@ -353,6 +354,9 @@ fn winding_the_siege_clock_reaches_the_warn_point() {
         "the clock must land on the drawn interval's own warn point"
     );
     assert!(!pressure.warned, "and leave the line for the next cycle");
+
+    game.siege_check();
+    assert!(game.siege_warned(), "the very next tick must warn");
 }
 
 /// At sector 2, `SIEGE_PRESSURE_WARN_PERCENT`'s share of the interval is

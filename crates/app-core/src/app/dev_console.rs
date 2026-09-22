@@ -32,6 +32,12 @@ pub enum DevAction {
     Sweep,
     /// Winds the raid clock to its approach warning without firing a sweep.
     WindSweepClock,
+    /// The siege clock's own pair, directly beneath the sweep's — the same
+    /// event seen from a second clock, and the row above skips the
+    /// approach the same way `Sweep` does.
+    Siege,
+    /// Winds the siege clock to its approach warning without firing one.
+    WindSiegeClock,
     DamageStructure,
     DestroyStructure,
     Encounter,
@@ -69,6 +75,17 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Wind sweep clock to warning",
         action: DevAction::WindSweepClock,
+    },
+    // A siege's own pair, directly beneath the sweep's for the same reason
+    // that pair is ordered: the same event seen from further out, an hour
+    // rather than four minutes.
+    DevConsoleRow {
+        label: "Trigger siege",
+        action: DevAction::Siege,
+    },
+    DevConsoleRow {
+        label: "Wind siege clock to warning",
+        action: DevAction::WindSiegeClock,
     },
     // Above its destroying sibling because it is the one that can be held
     // down: a structure survives every press, so this is the row for
@@ -225,6 +242,8 @@ impl App {
         match action {
             DevAction::Sweep => game.dev_force_raid(),
             DevAction::WindSweepClock => game.dev_wind_raid_clock(),
+            DevAction::Siege => game.dev_force_siege(),
+            DevAction::WindSiegeClock => game.dev_wind_siege_clock(),
             DevAction::DamageStructure => game.dev_damage_structure(),
             DevAction::DestroyStructure => game.dev_destroy_structure(),
             DevAction::Encounter => game.dev_force_encounter(),

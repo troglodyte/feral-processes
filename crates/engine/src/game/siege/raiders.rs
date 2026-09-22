@@ -19,7 +19,6 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::components::{Besieger, Carrying, Durability, Stock, StolenFrom, Structure};
-use crate::game::siege::board;
 use crate::resources::MessageKind;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach;
@@ -46,27 +45,42 @@ impl Game {
         if self.world.get::<Besieger>(body).is_none() {
             return false;
         }
-        let Some(siege_board) = board::build(self) else {
+        // `battle.siege_door`, set once by `Game::open_siege`, and not a
+        // fresh `board::build` every beat — the board it would rebuild
+        // reads the *current* `BaseGrid`, and `Game::tick` (run from the
+        // round upkeep this same fight owns) runs the base's own systems,
+        // so a dig finishing mid-siege could move where this door is read
+        // as standing without moving where it actually is.
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
         };
-        let door = siege_board.door;
-        let Some(from) = self
-            .world
-            .get_resource::<TacticalBattle>()
-            .and_then(|b| b.cell_of(body))
-        else {
+        let door = battle.siege_door;
+        let Some(from) = battle.cell_of(body) else {
             return false;
         };
 
         let withdrawing = self.siege_morale_broken();
         let carrying = self.world.get::<Carrying>(body).is_some();
 
-        if from == door && (carrying || withdrawing) {
+        // **Adjacent, not exactly on it.** The Home always stands on the
+        // door (`board::seat_structures` seats it as a body there, and one
+        // body to a cell keeps every other body off that exact cell), so
+        // `from == door` can never hold in real play — a carrier or a
+        // withdrawing besieger would fall through to the generic AI and
+        // fight forever short of the threshold this checks against.
+        if reach::gap(&[from], &[door]) <= TACTICAL_MELEE_RANGE && (carrying || withdrawing) {
             return self.besieger_leaves(body, carrying);
         }
 
         if !withdrawing {
-            if let Some(structure) = self.adjacent_stocked_structure(body) {
+            // **Gated on `!carrying`.** Without this, a carrier that is
+            // still adjacent to the shelf it just emptied on its next beat
+            // (the walk toward the door has not moved it off that cell yet)
+            // steals again — `Carrying`/`StolenFrom` are a single pair, so
+            // the second `insert` silently replaces the first load rather
+            // than adding to it, and the units already lifted are gone for
+            // good.
+            if !carrying && let Some(structure) = self.adjacent_stocked_structure(body) {
                 return self.besieger_steal(body, structure);
             }
             if let Some(structure) = self.adjacent_wreckable_structure(body) {
@@ -193,7 +207,13 @@ impl Game {
         let dmg = self.swing_damage(body);
         let label = self.entity_label(structure);
         self.damage_structure(structure, dmg, &label, "a siege");
-        if self.world.get::<Durability>(structure).is_none() {
+        // **The entity is gone, not merely its `Durability`.** A
+        // `Durability`-less structure (the Home, `raidable: false`) makes
+        // `damage_structure` return before ever touching that component, so
+        // reading its absence as "destroyed" removes an intact structure
+        // from the board on the very first swing — `Game::tactical_attack`'s
+        // own copy of this check, and the same fix.
+        if self.world.get::<Structure>(structure).is_none() {
             self.world
                 .resource_mut::<TacticalBattle>()
                 .remove(structure);
@@ -208,6 +228,17 @@ impl Game {
     /// same door the generic AI's own walk goes through. `false` when no
     /// path exists at all, which falls through to the generic AI rather
     /// than standing still.
+    ///
+    /// **`target` is never itself in the field.** The Home always stands on
+    /// the door — `besieger_turn`'s own reason for testing melee range
+    /// rather than equality — and one body to a cell excludes an occupied
+    /// cell from `reach::movement_field` entirely, so `reach::path_to`
+    /// aimed at the door directly always answers empty. This walks toward
+    /// whichever reachable cell this turn is strictly closer to the door
+    /// than the cell already stood on — `tactical::ai::scored_cells`'
+    /// closing approximation for a target too far to path to exactly,
+    /// applied to a single point instead of a band — and falls through to
+    /// the generic AI when nothing reachable this turn is any closer.
     fn besieger_walk_toward(&mut self, body: Entity, target: (i32, i32)) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -215,14 +246,20 @@ impl Game {
         let Some(from) = battle.cell_of(body) else {
             return false;
         };
-        if from == target {
-            return false;
-        }
         if !battle.walk_planned() {
             let allowance = self.movement_allowance(body);
             let battle = self.world.resource::<TacticalBattle>();
             let field = reach::movement_field(battle, body, allowance);
-            let path = reach::path_to(&battle.board, &field, from, target);
+            let standing = reach::distance(from, target);
+            let approach = field
+                .keys()
+                .copied()
+                .filter(|&cell| reach::distance(cell, target) < standing)
+                .min_by_key(|&cell| (reach::distance(cell, target), cell.1, cell.0));
+            let Some(approach) = approach else {
+                return false;
+            };
+            let path = reach::path_to(&battle.board, &field, from, approach);
             if path.is_empty() {
                 return false;
             }
@@ -265,24 +302,44 @@ impl Game {
             format!("{label} withdraws.")
         };
         self.log_base_kind(MessageKind::Raid, line);
+        // **`round_before` read ahead of `remove`, not through `hand_on_
+        // turn`.** `body` is the acting besieger, so `TacticalBattle::
+        // remove` wraps the round itself when `body` held the last rung —
+        // its own doc — and nothing else on this path would otherwise ask
+        // whether that happened. Skipped, a besieger leaving on the last
+        // rung of a round costs that round's turret fire and its upkeep
+        // entirely, with no `end_turn` anyone can see having been reached.
+        let round_before = self.world.resource::<TacticalBattle>().round;
         self.world.resource_mut::<TacticalBattle>().remove(body);
         self.world.despawn(body);
         self.settle_tactical(None);
+        if let Some(battle) = self.world.get_resource::<TacticalBattle>()
+            && battle.round > round_before
+        {
+            self.skip_disengaged_turns();
+            self.tactical_round_upkeep();
+        }
         true
     }
 }
 
 /// The goods a besieger was carrying when it died, put back — into the
-/// structure they came from if that still stands, else the nearest
-/// standing structure with a `Stock` to take them. Called from
-/// `tactical::turn::reap_tactical_dead`, gated on `Besieger`, before the
-/// body is swept off the board.
+/// structure they came from if that still stands, else the nearest standing
+/// Depot to take them. Called from `tactical::turn::reap_tactical_dead`,
+/// gated on `Besieger`, before the body is swept off the board.
 ///
 /// **No ground-item mechanic exists in this codebase to drop the goods "on
 /// the floor" the literal way the design phrase reads**, so the fallback
-/// (source destroyed) reads them into whatever `Stock` is nearest rather
-/// than losing them — conservation of the base's total stock is the
-/// property the design's own test asks for, not the exact shelf.
+/// (source destroyed) reads them into the nearest Depot rather than losing
+/// them — conservation of the base's total stock is the property the
+/// design's own test asks for, not the exact shelf. **Restricted to a
+/// Depot and not any `Stock`-bearing structure**: every structure carries
+/// one (`Game::spawn_structure` inserts it unconditionally), so a fallback
+/// keyed only on its presence could hand a raider's plunder to the Home or
+/// a turret — `Game::is_depot`, `StructureDef::stores`'s own door, is the
+/// line between a shelf and a machine's working buffer. The *source* check
+/// above needs no such restriction: it puts the exact units back exactly
+/// where they were taken from, a shelf or not.
 pub(crate) fn drop_besieger_cargo(game: &mut Game, body: Entity) {
     let Some(carrying) = game.world.get::<Carrying>(body).cloned() else {
         return;
@@ -300,14 +357,15 @@ pub(crate) fn drop_besieger_cargo(game: &mut Game, body: Entity) {
     game.log_base_kind(MessageKind::Raid, format!("{label} drops what it stole."));
 }
 
-/// Any structure still on the board with a `Stock` — the fallback
-/// `drop_besieger_cargo` reaches for once the source structure is gone.
+/// The nearest standing Depot — the fallback `drop_besieger_cargo` reaches
+/// for once the source structure is gone, or was never a storage structure
+/// to begin with.
 fn nearest_stock_structure(game: &Game, body: Entity) -> Option<Entity> {
     let battle = game.world.get_resource::<TacticalBattle>()?;
     let cells = battle.cells_of(body);
     battle
         .bodies()
-        .filter(|&(e, _)| game.world.get::<Stock>(e).is_some())
+        .filter(|&(e, _)| game.is_depot(e))
         .min_by_key(|&(e, _)| {
             let scells = battle.cells_of(e);
             reach::gap(&cells, &scells)

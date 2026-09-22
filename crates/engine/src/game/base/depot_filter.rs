@@ -108,7 +108,7 @@ impl Game {
             .collect()
     }
 
-    fn is_depot(&self, entity: Entity) -> bool {
+    pub(crate) fn is_depot(&self, entity: Entity) -> bool {
         let Some(structure) = self.world.get::<Structure>(entity) else {
             return false;
         };

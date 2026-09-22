@@ -1,5 +1,6 @@
-//! The siege clock — `resources::SiegePressure`'s accrual, its three holds
-//! and (Task 5) the dev console's two rows.
+//! The siege clock — `resources::SiegePressure`'s accrual, its three holds,
+//! the approach warning and its wall-clock floor, and (Task 5) the dev
+//! console's two rows.
 //!
 //! `raids.rs`'s clock tests are the model throughout: a siege's meter is
 //! `RaidPressure`'s shape, built the same way, for the reasons recorded
@@ -9,7 +10,7 @@ use super::support::*;
 use crate::tuning::{
     BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, SIEGE_MIN_ZONE,
     SIEGE_PRESSURE_JITTER_PERCENT, SIEGE_PRESSURE_PER_ZONE, SIEGE_PRESSURE_THRESHOLD,
-    SIEGE_PRESSURE_WARN_PERCENT,
+    SIEGE_PRESSURE_WARN_PERCENT, SIEGE_WARN_FLOOR_TICKS,
 };
 use crate::*;
 
@@ -56,6 +57,24 @@ fn ticks_to_fire(game: &mut Game, max: u32) -> Option<u32> {
 fn latest_possible_tick(zone: u32) -> u32 {
     let accrual = SIEGE_PRESSURE_PER_ZONE * zone;
     (SIEGE_PRESSURE_THRESHOLD * (100 + SIEGE_PRESSURE_JITTER_PERCENT) / 100).div_ceil(accrual)
+}
+
+/// Ticks `game` until it has both warned and fired, and says the tick each
+/// happened on — the raw material for measuring the warning window in
+/// ticks rather than in pressure. Requires an established, raidable,
+/// fight-free base, or the fire never comes and this panics.
+fn warn_and_fire_ticks(game: &mut Game, max: u32) -> (u32, u32) {
+    let mut warned_at = None;
+    for t in 1..=max {
+        game.siege_check();
+        if warned_at.is_none() && game.siege_warned() {
+            warned_at = Some(t);
+        }
+        if game.siege_pressure() == 0 {
+            return (warned_at.expect("a siege must warn before it fires"), t);
+        }
+    }
+    panic!("siege did not fire within {max} ticks");
 }
 
 /// The opening sector's clock never starts, and it starts from zero on the
@@ -299,7 +318,7 @@ fn forcing_a_siege_stages_one_without_touching_the_clock() {
     let entry = game
         .message_log(20)
         .into_iter()
-        .find(|e| e.text.contains("siege is forming"));
+        .find(|e| e.text.contains("siege begins"));
     assert!(entry.is_some(), "the forced fire must be the real one");
 }
 
@@ -322,4 +341,112 @@ fn winding_the_siege_clock_reaches_the_warn_point() {
         "the clock must land on the drawn interval's own warn point"
     );
     assert!(!pressure.warned, "and leave the line for the next cycle");
+}
+
+/// At sector 2, `SIEGE_PRESSURE_WARN_PERCENT`'s share of the interval is
+/// smaller than the wall-clock floor's converted pressure across the whole
+/// jitter range, so the share governs — and the window it buys is longer
+/// than the floor.
+#[test]
+fn a_shallow_sector_warns_by_share_and_its_window_beats_the_floor() {
+    let mut game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, true);
+
+    let (warned_at, fired_at) = warn_and_fire_ticks(&mut game, latest_possible_tick(2) + 1);
+    let window = fired_at - warned_at;
+
+    assert!(
+        window > SIEGE_WARN_FLOOR_TICKS,
+        "sector 2's share-governed window ({window} ticks) must beat the floor \
+         ({SIEGE_WARN_FLOOR_TICKS} ticks)"
+    );
+}
+
+/// At sector 6, the wall-clock floor governs across the whole jitter range,
+/// and it converts to *exactly* `SIEGE_WARN_FLOOR_TICKS` ticks of notice —
+/// `by_floor = target - SIEGE_WARN_FLOOR_TICKS * accrual` cancels cleanly
+/// against `accrual` on the way back through ticks, for any drawn target.
+#[test]
+fn a_deep_sector_warns_by_the_floor_at_exactly_its_own_value() {
+    let mut game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 6);
+    establish_base(&mut game, true);
+
+    let (warned_at, fired_at) = warn_and_fire_ticks(&mut game, latest_possible_tick(6) + 1);
+    let window = fired_at - warned_at;
+
+    assert_eq!(
+        window, SIEGE_WARN_FLOOR_TICKS,
+        "sector 6's floor-governed window must be exactly the floor's own value"
+    );
+}
+
+/// The warning fires once an interval, not once a tick — `raids.rs`'s
+/// `the_approach_warning_fires_once_an_interval_and_not_once_a_tick` shape.
+/// No structure is spawned raidable, so the clock holds past its target and
+/// the latch is never cleared by a reset, which is what makes "exactly one"
+/// a claim about the latch and not about the interval's length. Counted off
+/// the raw log (`message_log`), which does not condense, unlike
+/// `message_history` — a line said many times would inflate this count if
+/// the latch were broken.
+#[test]
+fn the_approach_warning_fires_once_an_interval_and_not_once_a_tick() {
+    let mut game = Game::new(910, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, false);
+
+    for _ in 0..=latest_possible_tick(2) {
+        game.siege_check();
+    }
+
+    let warnings = game
+        .message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.contains("siege is forming"))
+        .count();
+    assert_eq!(
+        warnings, 1,
+        "the warning must latch for the whole interval, not repeat every tick"
+    );
+}
+
+/// The warning reaches `Game::attention`, present from the warning until the
+/// siege lands and absent both before and after.
+#[test]
+fn an_approaching_siege_asks_for_the_players_attention() {
+    let mut game = Game::new(911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, true);
+
+    fn row_present(game: &mut Game) -> bool {
+        game.attention()
+            .iter()
+            .any(|row| row.kind == AttentionKind::SiegeIncoming)
+    }
+
+    assert!(!row_present(&mut game), "a quiet clock asks for nothing");
+
+    let max = latest_possible_tick(2) + 1;
+    let mut warned = false;
+    for _ in 1..=max {
+        game.siege_check();
+        if !warned && row_present(&mut game) {
+            warned = true;
+            let row = game
+                .attention()
+                .into_iter()
+                .find(|row| row.kind == AttentionKind::SiegeIncoming)
+                .expect("just confirmed present");
+            assert!(row.threat, "an approaching siege reads as a threat");
+        }
+        if game.siege_pressure() == 0 {
+            break;
+        }
+    }
+    assert!(warned, "the fixture must warn before firing");
+    assert!(
+        !row_present(&mut game),
+        "the row must clear once the siege has landed"
+    );
 }

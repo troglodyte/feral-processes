@@ -1,5 +1,5 @@
-//! The siege clock: accrual, its three holds, and (Task 2) the approach
-//! warning and its wall-clock floor.
+//! The siege clock: accrual, its three holds, the approach warning and its
+//! wall-clock floor.
 //!
 //! Built to `Game::raid_check`'s pattern (`game/base/upkeep.rs`) and
 //! departs from it in exactly the places noted below — see
@@ -8,7 +8,7 @@
 
 use crate::tuning::{
     SIEGE_MIN_ZONE, SIEGE_PRESSURE_JITTER_PERCENT, SIEGE_PRESSURE_PER_ZONE,
-    SIEGE_PRESSURE_THRESHOLD, SIEGE_PRESSURE_WARN_PERCENT,
+    SIEGE_PRESSURE_THRESHOLD, SIEGE_PRESSURE_WARN_PERCENT, SIEGE_WARN_FLOOR_TICKS,
 };
 use crate::*;
 
@@ -54,7 +54,6 @@ impl Game {
             pressure.level
         };
 
-        // Task 2.
         self.warn_of_approaching_siege(zone, target, level);
 
         if level < target {
@@ -104,7 +103,7 @@ impl Game {
     /// puts the home/away branch in its place. It is never left as a stub
     /// past that.
     fn stage_siege(&mut self) -> bool {
-        self.log_base_kind(MessageKind::Raid, "A siege is forming.".to_string());
+        self.log_base_kind(MessageKind::Raid, "A siege begins.".to_string());
         true
     }
 
@@ -163,7 +162,45 @@ impl Game {
         pressure.warned = false;
     }
 
-    /// Task 2 fills this in: the approach warning and its wall-clock floor.
-    /// A no-op today so `siege_check`'s call site does not move.
-    fn warn_of_approaching_siege(&mut self, _zone: u32, _target: u32, _level: u32) {}
+    /// The approach warning and its wall-clock floor.
+    ///
+    /// `raid_check`'s latch (`upkeep.rs:534-550`) exactly, with one
+    /// difference in *when* it fires: the sweep warns at a share of its
+    /// drawn interval, the siege warns at **whichever is earlier**, that
+    /// same share or a fixed number of ticks out. `by_floor` is stated in
+    /// *pressure*, not ticks — the floor is a wall-clock promise and the
+    /// meter is not a clock, so it converts through the sector's own
+    /// accrual rate before it can be compared against `by_share`.
+    fn warn_of_approaching_siege(&mut self, zone: u32, target: u32, level: u32) {
+        let accrual = SIEGE_PRESSURE_PER_ZONE * zone; // never zero: the gate above
+        let by_share = target * SIEGE_PRESSURE_WARN_PERCENT / 100;
+        let by_floor = target.saturating_sub(SIEGE_WARN_FLOOR_TICKS * accrual);
+        let warn_at = by_share.min(by_floor);
+
+        // Latched on the resource rather than re-read, `raid_check`'s
+        // reason: as a bare inequality this line would be said twice a
+        // second for the whole warning window.
+        if level >= warn_at
+            && !self
+                .world
+                .resource::<crate::resources::SiegePressure>()
+                .warned
+        {
+            self.world
+                .resource_mut::<crate::resources::SiegePressure>()
+                .warned = true;
+            self.log_base_kind(
+                MessageKind::Raid,
+                "Movement gathers at the perimeter. A siege is forming.".to_string(),
+            );
+        }
+    }
+
+    /// Whether the siege clock has warned for the interval it is in — the
+    /// attention row's own read, and every test's.
+    pub fn siege_warned(&self) -> bool {
+        self.world
+            .resource::<crate::resources::SiegePressure>()
+            .warned
+    }
 }

@@ -3062,6 +3062,24 @@ pub const SIEGE_PRESSURE_JITTER_PERCENT: u32 = 25;
 /// follows in Task 2.
 pub const SIEGE_PRESSURE_WARN_PERCENT: u32 = 80;
 
+/// The wall-clock floor under the approach warning, in ticks — the fewest
+/// ticks of notice a siege gives however deep the drawn interval is.
+///
+/// A sweep's answer to its own warning is "post someone at the machine you
+/// care about", so a percentage share of the interval is right for it: the
+/// window shrinks with depth exactly as the interval does, and the answer
+/// takes no longer in a deep sector than a shallow one. A siege's answer is
+/// "get home", and the trip is longest in exactly the sectors where
+/// `SIEGE_PRESSURE_WARN_PERCENT`'s share is shortest — so the siege warns at
+/// whichever is earlier, the share or this floor, converted through the
+/// sector's own accrual rate since the floor is stated in ticks and the
+/// meter is not a clock.
+///
+/// **Unvalidated.** `960` is 8 minutes, picked as a defensible number and
+/// not a measured one — nothing in this repo models the walk home from a
+/// deep Stack frame. Play it before trusting it.
+pub const SIEGE_WARN_FLOOR_TICKS: u32 = 960;
+
 /// The first sector a siege may reach. `RAID_MIN_ZONE`'s twin, gating
 /// **accrual** and never firing — see `Game::siege_check`'s first line for
 /// why gating firing instead would ambush a player the instant they cross

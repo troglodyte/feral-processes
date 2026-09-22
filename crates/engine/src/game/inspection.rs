@@ -1695,6 +1695,17 @@ impl Game {
             });
         }
 
+        // Beside the sweep's own row, for the same reason: a siege that has
+        // announced itself outranks a node standing idle.
+        if self.siege_warned() {
+            rows.push(AttentionRow {
+                kind: AttentionKind::SiegeIncoming,
+                text: "Siege forming".to_string(),
+                key: 'b',
+                threat: true,
+            });
+        }
+
         // Standing at a counter with cargo a held job wants. Read before the
         // base rows because it is the only row here that can be acted on from
         // exactly one tile, and it stops being available the moment the player

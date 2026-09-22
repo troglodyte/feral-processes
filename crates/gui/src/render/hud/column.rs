@@ -104,7 +104,9 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         // An approaching sweep is base news even though nothing on the base
         // tab answers it: what the player does about one is post staff and
         // patch machines, which is that tab's whole subject.
-        | AttentionKind::RaidIncoming => InfoTab::Base,
+        | AttentionKind::RaidIncoming
+        // A siege's own approach, `RaidIncoming`'s reason exactly.
+        | AttentionKind::SiegeIncoming => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::Unslotted => InfoTab::Crew,
     }
 }

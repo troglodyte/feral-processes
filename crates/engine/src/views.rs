@@ -1531,6 +1531,9 @@ pub enum AttentionKind {
     /// for the same reason — nothing on this row can be fixed by opening the
     /// screen it points at, only prepared for.
     RaidIncoming,
+    /// `RaidIncoming`'s twin on `resources::SiegePressure`'s clock — see
+    /// `Game::siege_warned`.
+    SiegeIncoming,
 }
 
 /// One thing that needs the player right now — see `Game::attention`.

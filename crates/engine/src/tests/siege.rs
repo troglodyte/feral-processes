@@ -3382,9 +3382,12 @@ mod review_findings {
 /// `game.save()`/`Game::load()` round trip where a save is involved.
 mod rereview_findings {
     use super::*;
+    use crate::base_grid::BaseGrid;
     use crate::components::{Besieger, Carrying, StolenFrom, Tamed};
+    use crate::game::siege::board;
     use crate::items::ids;
     use crate::tactical::TacticalBattle;
+    use crate::tactical::reach;
     use crate::tuning::HAUL_CARRY_CAPACITY;
 
     fn core_fragment() -> ItemId {
@@ -3677,6 +3680,94 @@ mod rereview_findings {
             game.world.get::<Tamed>(mislabelled).is_some(),
             "the stray-besieger sweep must never touch a Tamed program, \
              whatever else is still marked Besieger on it"
+        );
+    }
+
+    // ---- C1 (walk stalls): a carrier reaches the door across an L-shaped
+    // corridor whose north leg holds a near-constant Chebyshev distance to
+    // the door for its whole length.
+
+    #[test]
+    fn c1_a_carrier_at_the_far_end_of_an_l_corridor_still_reaches_the_door() {
+        let mut game = Game::new(210_004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        // A single-file corridor grafted onto the starting pocket's own
+        // edge — `lay_starting_pocket`'s loop bounds `dx`/`dy` to
+        // `STARTING_POCKET_RADIUS` (4) before the diamond formula ever
+        // applies, so `(4, 0)` is the pocket's own last floored cell along
+        // this row. East along `y == 0` to `x == 12`, then north up the
+        // fixed `x == 12` column: every cell on that north leg is
+        // Chebyshev distance exactly 12 from the door at every `y`, which
+        // is the shape that stalled the old closing-distance walk.
+        {
+            let mut grid = game.world.resource_mut::<BaseGrid>();
+            for x in 5..=12 {
+                grid.lay_floor(x, 0);
+            }
+            for y in -10..=-1 {
+                grid.lay_floor(12, y);
+            }
+        }
+        // `move_to` and `siege_door` both take *board* coordinates, not the
+        // base-space ones the fixture just dug — resolved through the same
+        // `board::build` a real `Game::open_siege` calls, rather than
+        // hand-computing the flood fill's own bounding box corner.
+        let far_end = board::build(&mut game)
+            .unwrap()
+            .to_board((12, -10))
+            .expect("the corridor's far end must be inside the flood fill");
+        stand_in_base_at(&mut game, 2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let besieger = any_besieger(&game);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(besieger, far_end),
+            "the fixture must actually seat the carrier at the corridor's \
+             own far end"
+        );
+        let door = game.world.resource::<TacticalBattle>().siege_door;
+        assert!(
+            reach::distance(far_end, door) > game.movement_allowance(besieger),
+            "the fixture must need more than one turn's movement to close, \
+             or this proves nothing about the walk stalling across rounds"
+        );
+        // A source to steal from is not this test's concern; `Carrying`
+        // alone is what `besieger_turn` reads to make for the door.
+        game.world.entity_mut(besieger).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(besieger),
+        ));
+        // Unkillable, and the only body with a turn — `c1_home_stands_on_
+        // the_door...`'s own fixture shape, so the only way this entity can
+        // vanish is `besieger_leaves`'s own despawn.
+        game.world.get_mut::<Stats>(besieger).unwrap().hp = 1_000_000;
+        game.world.get_mut::<Stats>(besieger).unwrap().max_hp = 1_000_000;
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().hp = 1_000_000;
+        game.world.get_mut::<Stats>(player).unwrap().max_hp = 1_000_000;
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        let mut left = false;
+        for _ in 0..500 {
+            if game.world.get::<Besieger>(besieger).is_none() {
+                left = true;
+                break;
+            }
+            game.tactical_ai_beat();
+        }
+        assert!(
+            left,
+            "a carrier at the far end of a long L-corridor must eventually \
+             reach and leave through the door, across as many rounds as it \
+             takes"
         );
     }
 }

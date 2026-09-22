@@ -19,6 +19,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::components::{Besieger, Carrying, Durability, Stock, StolenFrom, Structure};
+use crate::game::pursuit::walk_field;
 use crate::resources::MessageKind;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach;
@@ -237,10 +238,27 @@ impl Game {
     /// cell from `reach::movement_field` entirely, so `reach::path_to`
     /// aimed at the door directly always answers empty. This walks toward
     /// whichever reachable cell this turn is strictly closer to the door
-    /// than the cell already stood on — `tactical::ai::scored_cells`'
-    /// closing approximation for a target too far to path to exactly,
-    /// applied to a single point instead of a band — and falls through to
-    /// the generic AI when nothing reachable this turn is any closer.
+    /// **by the walking distance a corridor actually costs**, not by raw
+    /// Chebyshev distance to it.
+    ///
+    /// **Chebyshev distance to the door was tried and stalls in an
+    /// L-corridor.** A leg that runs perpendicular to the door's own axis
+    /// holds a near-constant Chebyshev distance for its whole length — every
+    /// cell on it reads about as "close" to the door as every other, so
+    /// `min_by_key` on that alone often finds no cell reachable this turn
+    /// that is *strictly* closer, and the besieger reads itself as stuck and
+    /// falls through to the generic AI, which fights rather than walks the
+    /// rest of the corridor. A defended choke could stall every carrier in
+    /// it forever.
+    ///
+    /// The fix is a real cost field grown **from the door**, through
+    /// `game::pursuit::walk_field` — terrain only, not bodies-as-walls, or a
+    /// crowd of besiegers queued at their own threshold would wall each
+    /// other out of the field they are all reading. `target` (the door) is
+    /// the field's own origin at cost zero, so the Home standing on it is
+    /// never a problem the way it is for a *destination* field. Ties break
+    /// on the walk's own cost, then the board's reading order, matching
+    /// `reach::path_to`'s own tie-break.
     fn besieger_walk_toward(&mut self, body: Entity, target: (i32, i32)) -> bool {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;
@@ -252,12 +270,19 @@ impl Game {
             let allowance = self.movement_allowance(body);
             let battle = self.world.resource::<TacticalBattle>();
             let field = reach::movement_field(battle, body, allowance);
-            let standing = reach::distance(from, target);
+            let door_field = walk_field(target, battle.board.side, |cell| {
+                battle.board.cell(cell.0, cell.1).movement_cost()
+            });
+            let Some(&standing) = door_field.get(&from) else {
+                return false;
+            };
             let approach = field
                 .keys()
                 .copied()
-                .filter(|&cell| reach::distance(cell, target) < standing)
-                .min_by_key(|&cell| (reach::distance(cell, target), cell.1, cell.0));
+                .filter_map(|cell| door_field.get(&cell).map(|&door_d| (cell, door_d)))
+                .filter(|&(_, door_d)| door_d < standing)
+                .min_by_key(|&(cell, door_d)| (door_d, field[&cell], cell.1, cell.0))
+                .map(|(cell, _)| cell);
             let Some(approach) = approach else {
                 return false;
             };

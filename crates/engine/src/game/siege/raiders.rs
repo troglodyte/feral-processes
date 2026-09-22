@@ -340,11 +340,22 @@ impl Game {
         self.world.resource_mut::<TacticalBattle>().remove(body);
         self.world.despawn(body);
         self.settle_tactical(None);
-        if let Some(battle) = self.world.get_resource::<TacticalBattle>()
-            && battle.round > round_before
-        {
+        // **`skip_disengaged_turns` whenever the battle survives; the
+        // upkeep only on a wrap.** `TacticalBattle::remove`'s own
+        // `begin_turn` hands the cursor straight to whoever now sits where
+        // `body` was without going through `end_turn`, so when that is not
+        // the round's own wrap (`body` did not hold the last rung), nothing
+        // else on this path ever calls `skip_disengaged_turns` — a
+        // disengaged staff body landing on the cursor this way would sit
+        // as the current actor, driven through a real AI turn on the very
+        // next beat and walking toward the fight, exactly the "accepted
+        // consequence" §5 rules out for a body with nothing in reach.
+        if let Some(battle) = self.world.get_resource::<TacticalBattle>() {
+            let wrapped = battle.round > round_before;
             self.skip_disengaged_turns();
-            self.tactical_round_upkeep();
+            if wrapped {
+                self.tactical_round_upkeep();
+            }
         }
         true
     }

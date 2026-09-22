@@ -1510,6 +1510,16 @@ impl Game {
             if !self.tactical_skippable(current) || self.tactical_body_is_engaged(current) {
                 break;
             }
+            // **`age_tamper`, since this ends a turn without going through
+            // `hand_on_turn`.** "A tamper ages on the tampered body's own
+            // hand-on, never in `tick_one_combatant`" holds for every path
+            // that ends a turn — a skipped body's own `end_turn` call right
+            // below is exactly such a path, and without this a `Tampered`
+            // entry landed on a body idle enough to be skipped would never
+            // age at all, freezing rather than expiring.
+            if self.creature_alive(current) {
+                self.age_tamper(current);
+            }
             self.world.resource_mut::<TacticalBattle>().end_turn();
         }
     }

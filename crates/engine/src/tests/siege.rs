@@ -3387,8 +3387,11 @@ mod rereview_findings {
     use crate::game::siege::board;
     use crate::items::ids;
     use crate::tactical::TacticalBattle;
+    use crate::tactical::ai::AiBeat;
+    use crate::tactical::map::{BattleSpec, Board};
     use crate::tactical::reach;
     use crate::tuning::HAUL_CARRY_CAPACITY;
+    use crate::world::Biome;
 
     fn core_fragment() -> ItemId {
         ItemId::from(ids::CORE_FRAGMENT)
@@ -3951,6 +3954,149 @@ mod rereview_findings {
             game.world.get_resource::<TacticalBattle>().is_none(),
             "nothing could seat, so the on-screen board must never have \
              opened"
+        );
+    }
+
+    // ---- M4-m / M5: a besieger leaving mid-round (not on the last rung)
+    // still skips a disengaged staff body onto the cursor, and ages that
+    // body's own tamper on the way past it.
+
+    /// A hand-built board — `m4_a_besieger_leaving_on_the_last_rung_...`'s
+    /// own shape — with `leaving` first in the order, `staff` disengaged
+    /// far from everything, and `raider2` engaged with the player. Removing
+    /// `leaving` (first in a three-body order) does not wrap the round, so
+    /// nothing but `besieger_leaves` itself ever calls
+    /// `skip_disengaged_turns` on this path.
+    fn m4_fixture(seed: u32) -> (Game, Entity, Entity, Entity) {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let side = 20;
+        let mut board = Board::solid(side);
+        for y in 0..side {
+            for x in 0..side {
+                board.set(x, y, crate::tactical::map::BattleCell::Open);
+            }
+        }
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 4,
+        };
+        let mut battle = TacticalBattle::open(spec, board);
+        let door = (0, 0);
+        battle.siege_door = door;
+        battle.siege_pack = 3;
+
+        let player = game.player_entity();
+        let leaving = game
+            .world
+            .spawn((
+                Hostile,
+                Besieger,
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 0,
+                },
+            ))
+            .id();
+        let raider2 = game
+            .world
+            .spawn((
+                Hostile,
+                Besieger,
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    mitigation: 0,
+                },
+            ))
+            .id();
+        let staff = game
+            .world
+            .spawn(Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                mitigation: 0,
+            })
+            .id();
+
+        battle.place(player, (9, 9));
+        battle.place(raider2, (9, 8));
+        battle.place(staff, (19, 19));
+        battle.place(leaving, (1, 0));
+        battle.set_initiative(vec![leaving, staff, raider2]);
+
+        game.world.insert_resource(battle);
+        game.world.entity_mut(leaving).insert((
+            Carrying {
+                item: core_fragment(),
+                qty: 1,
+            },
+            StolenFrom(leaving),
+        ));
+
+        (game, leaving, staff, raider2)
+    }
+
+    #[test]
+    fn m4m_a_besieger_leaving_mid_round_still_skips_a_disengaged_staff_body() {
+        let (mut game, leaving, staff, raider2) = m4_fixture(210_008);
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(leaving),
+            "the fixture must put the leaving besieger first in the order"
+        );
+
+        assert_ne!(
+            game.tactical_ai_beat(),
+            AiBeat::Idle,
+            "the leaving besieger must actually get a beat"
+        );
+        assert!(
+            game.world.get::<Besieger>(leaving).is_none(),
+            "the fixture must actually leave through the door for this \
+             test to be about the mid-round case at all"
+        );
+
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().round,
+            1,
+            "leaving first in a three-body order must not wrap the round \
+             — the fixture the M4-m finding is about"
+        );
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(raider2),
+            "a disengaged staff body handed the cursor by the besieger's \
+             own departure must be skipped immediately, not left as the \
+             current actor for the next AI beat to drive toward the fight"
+        );
+        let _ = staff;
+    }
+
+    #[test]
+    fn m5_a_skipped_bodys_own_tamper_ages_past_it() {
+        use crate::abilities::TamperKind;
+        use crate::components::Tampered;
+
+        let (mut game, _leaving, staff, _raider2) = m4_fixture(210_009);
+        let mut tampered = Tampered::default();
+        tampered.apply(TamperKind::Profiled, 1, false);
+        game.world.entity_mut(staff).insert(tampered);
+
+        game.tactical_ai_beat();
+
+        assert!(
+            game.world.get::<Tampered>(staff).is_none(),
+            "a one-turn tamper on a body `skip_disengaged_turns` passes \
+             over must still age and expire, not freeze for skipping \
+             never running it through `hand_on_turn`"
         );
     }
 }

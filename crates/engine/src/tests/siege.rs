@@ -4080,6 +4080,41 @@ mod rereview_findings {
         let _ = staff;
     }
 
+    /// The skip `besieger_leaves` runs can itself wrap the round — here the
+    /// only body after the departing besieger is a disengaged staff body,
+    /// so skipping it wraps — and that wrap still owes the round's upkeep.
+    /// Read before the skip, the wrap went unseen and the round's tick
+    /// (and turret fire) was lost.
+    #[test]
+    fn a_wrap_made_by_the_skip_after_a_departure_still_runs_the_upkeep() {
+        let (mut game, leaving, staff, raider2) = m4_fixture(210_010);
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![raider2, leaving, staff]);
+        game.world.resource_mut::<TacticalBattle>().end_turn();
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(leaving)
+        );
+        let tick_before = game.world.resource::<GameClock>().tick;
+
+        assert_ne!(game.tactical_ai_beat(), AiBeat::Idle);
+        assert!(
+            game.world.get::<Besieger>(leaving).is_none(),
+            "the besieger must have left through the door"
+        );
+
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().round,
+            2,
+            "skipping the disengaged staff body must wrap the round"
+        );
+        assert!(
+            game.world.resource::<GameClock>().tick > tick_before,
+            "the wrap the skip made must still run the round's upkeep"
+        );
+    }
+
     #[test]
     fn m5_a_skipped_bodys_own_tamper_ages_past_it() {
         use crate::abilities::TamperKind;

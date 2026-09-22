@@ -350,10 +350,11 @@ impl Game {
         // as the current actor, driven through a real AI turn on the very
         // next beat and walking toward the fight, exactly the "accepted
         // consequence" §5 rules out for a body with nothing in reach.
-        if let Some(battle) = self.world.get_resource::<TacticalBattle>() {
-            let wrapped = battle.round > round_before;
+        // The round is compared *after* the skip, `hand_on_turn`'s order:
+        // skipping calls `end_turn`, which can make the wrap itself.
+        if self.world.get_resource::<TacticalBattle>().is_some() {
             self.skip_disengaged_turns();
-            if wrapped {
+            if self.world.resource::<TacticalBattle>().round > round_before {
                 self.tactical_round_upkeep();
             }
         }

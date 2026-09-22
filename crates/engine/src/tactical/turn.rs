@@ -559,6 +559,38 @@ impl Game {
             return false;
         }
 
+        // **A structure has no `Stats`, so it cannot go through
+        // `Game::apply_damage` — the only door that damages a *creature*.**
+        // A swing at one routes to `Game::damage_structure` instead and
+        // returns here, before any of the per-body machinery below (which
+        // assumes a living combatant) ever runs. `damage_structure` logs
+        // and tears down a destroyed structure itself, the same as every
+        // other caller — so a structure destroyed on a battle map is
+        // destroyed the way any other one is. It holds no initiative slot,
+        // so there is nothing to hand a turn on to, but it *is* seated as a
+        // body, so its own cells have to leave with it through
+        // `TacticalBattle::remove`.
+        if self
+            .world
+            .get::<crate::components::Structure>(target)
+            .is_some()
+        {
+            let round_before = self.world.resource::<TacticalBattle>().round;
+            let dmg = self.swing_damage(actor);
+            let label = self.entity_label(target);
+            self.damage_structure(target, dmg, &label, "a siege");
+            if self
+                .world
+                .get::<crate::components::Durability>(target)
+                .is_none()
+            {
+                self.world.resource_mut::<TacticalBattle>().remove(target);
+            }
+            self.world.resource_mut::<TacticalBattle>().spend_action();
+            self.hand_on_turn(actor, round_before);
+            return true;
+        }
+
         let round_before = self.world.resource::<TacticalBattle>().round;
         let (move_name, natural) = self.swing_move_at(actor, Some(reach::distance(from, at)));
         let range = self.attack_range(actor, natural);
@@ -1629,6 +1661,12 @@ impl Game {
             .resource::<TacticalBattle>()
             .bodies()
             .map(|(entity, _)| entity)
+            // **A `Structure` has no `Stats`, so `creature_alive` always
+            // reads it as fallen.** It holds no initiative slot and its
+            // aliveness is `Durability`, not HP — `Game::tactical_attack`'s
+            // structure branch is the one door that removes it, on its own
+            // destruction rather than on the next round's reap.
+            .filter(|&e| self.world.get::<crate::components::Structure>(e).is_none())
             .filter(|&e| !self.creature_alive(e))
             .collect();
         for body in fallen {

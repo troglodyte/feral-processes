@@ -772,6 +772,166 @@ mod opening {
     }
 }
 
+/// Structures seated as bodies on a siege board — `Game::tactical_attack`'s
+/// structure branch (Task 10).
+mod board_combat {
+    use super::*;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::{BattleCell, BattleSpec, Board};
+    use crate::world::Biome;
+
+    /// A wide-open board, `player` at `(0, 0)`, `structure` at `(1, 0)` —
+    /// adjacent, melee range — and a hostile far off so `settle_tactical`'s
+    /// "hostiles > 0" does not end the fight the moment a round boundary
+    /// (which a single-body initiative order crosses on its very first
+    /// hand-on) is crossed.
+    fn structure_within_reach(game: &mut Game, hp: u32) -> Entity {
+        let side = 10;
+        let mut board = Board::solid(side);
+        for y in 0..side {
+            for x in 0..side {
+                board.set(x, y, BattleCell::Open);
+            }
+        }
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        game.world
+            .insert_resource(TacticalBattle::open(spec, board));
+
+        let player = game.player_entity();
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Durability { hp, max_hp: hp },
+            ))
+            .id();
+        let distant_hostile = game
+            .world
+            .spawn((
+                Hostile,
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 0,
+                    mitigation: 0,
+                },
+            ))
+            .id();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(player, (0, 0));
+            battle.place(structure, (1, 0));
+            battle.place(distant_hostile, (9, 9));
+            battle.set_initiative(vec![player]);
+        }
+        structure
+    }
+
+    /// A swing at a machine lowers its `Durability` and does not panic on
+    /// the missing `Stats` — the structure survives the one swing, so it
+    /// is still seated and still holds its cell.
+    #[test]
+    fn a_swing_lowers_durability_and_the_structure_stays_seated() {
+        let mut game = Game::new(960, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = structure_within_reach(&mut game, 10_000);
+
+        assert!(game.tactical_attack(structure));
+
+        let hp = game.world.get::<Durability>(structure).unwrap().hp;
+        assert!(hp < 10_000, "an unhit structure has taken no damage");
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.cell_of(structure),
+            Some((1, 0)),
+            "a structure that survived the swing must still be seated"
+        );
+    }
+
+    /// A machine destroyed on the board is destroyed the way any other one
+    /// is — the same log line and the same teardown `damage_structure`'s
+    /// other callers get — and its cells become walkable, the fight
+    /// continuing around it.
+    #[test]
+    fn a_destroyed_structure_is_torn_down_and_its_cell_frees() {
+        let mut game = Game::new(961, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = structure_within_reach(&mut game, 1);
+
+        assert!(game.tactical_attack(structure));
+
+        assert!(
+            game.world.get::<Structure>(structure).is_none(),
+            "a destroyed structure is despawned, damage_structure's own teardown"
+        );
+        let destroyed = game
+            .message_log(usize::MAX)
+            .into_iter()
+            .any(|e| e.text.contains("destroyed in a siege!"));
+        assert!(destroyed, "the destruction must log the same as any other");
+
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.cell_of(structure),
+            None,
+            "a destroyed structure must leave the board"
+        );
+        assert_eq!(
+            battle.occupant((1, 0)),
+            None,
+            "its cell must be free for anyone to stand on"
+        );
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_some(),
+            "the fight must continue after the structure falls"
+        );
+    }
+
+    /// Nothing about the initiative order moved when a non-combatant
+    /// structure died — it held no slot to begin with.
+    #[test]
+    fn destroying_a_structure_does_not_touch_initiative() {
+        let mut game = Game::new(962, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let structure = structure_within_reach(&mut game, 1);
+        let companion = game
+            .world
+            .spawn(Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 0,
+                mitigation: 0,
+            })
+            .id();
+        let player = game.player_entity();
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(companion, (5, 5));
+            battle.set_initiative(vec![player, companion]);
+        }
+        let before: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+
+        assert!(game.tactical_attack(structure));
+
+        let after: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+        assert_eq!(before, after, "a structure's death must not move the order");
+    }
+}
+
 mod turrets {
     use super::*;
     use crate::game::siege::turrets::turret_defense;

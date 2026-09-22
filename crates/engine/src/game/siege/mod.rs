@@ -125,11 +125,42 @@ impl Game {
         // `siege::raiders::siege_morale_broken`'s reading of "the pack this
         // fight opened with," and a raider turned away for want of a free
         // cell near the door never joined it.
-        let seated_raiders = raiders
+        let seated: HashSet<Entity> = raiders
             .iter()
-            .filter(|&&entity| place_nearby(&mut battle, siege_board.door, entity))
-            .count() as u32;
-        battle.siege_pack = seated_raiders;
+            .copied()
+            .filter(|&entity| place_nearby(&mut battle, siege_board.door, entity))
+            .collect();
+        // **Nothing seated is not a siege.** An empty habitat pool
+        // (`spawn_siege_pack`'s own doc) or a door with no free cell near it
+        // both leave `raiders` with nobody actually on the board — opening
+        // one anyway would seat the player and every staff body in a fight
+        // with no hostiles in it, `TacticalBattle::siege_pack == 0` reading
+        // as "not a siege" to `siege::raiders::siege_morale_broken` and
+        // `siege::persist::assemble` alike, so it would neither ever end on
+        // a morale break nor ever save. Reported exactly as `board::build`
+        // and an absent `base_pos` already are: `false`, which
+        // `Game::siege_check` reads as the pressure still being owed rather
+        // than spent on a fight that never opened.
+        if seated.is_empty() {
+            for &raider in &raiders {
+                self.world.despawn(raider);
+            }
+            return false;
+        }
+        // A raider spawned but turned away for want of a free cell has
+        // nowhere to stand and no fight driving it — left alive it wanders
+        // as an ordinary `Hostile` carrying a `Besieger` marker nothing
+        // reads, uncounted by every wild-population census and invisible on
+        // the surface map (`Game::stands_in_base_space`'s "every other
+        // glyph is a zone-map fixture" not being true of a body inside the
+        // base). Despawned here rather than left for a sweep that only runs
+        // when a fight ends, since this one never opened for it to be in.
+        for &raider in &raiders {
+            if !seated.contains(&raider) {
+                self.world.despawn(raider);
+            }
+        }
+        battle.siege_pack = seated.len() as u32;
 
         let standing: Vec<Entity> = battle
             .bodies()
@@ -142,6 +173,14 @@ impl Game {
             .resource_mut::<crate::resources::MessageLog>()
             .open_battle();
         self.world.insert_resource(battle);
+        // **The very first actor needs the same check every later one gets
+        // from inside `hand_on_turn`.** Nothing else ever calls
+        // `skip_disengaged_turns` before a turn has actually been handed on,
+        // so a disengaged staff body that won initiative outright would
+        // otherwise be driven through a full AI turn on round one — walking
+        // toward the fight, the "accepted consequence" §5 rules out — before
+        // anything here ever ends a turn for the wrap to catch.
+        self.skip_disengaged_turns();
         self.log_base_kind(
             crate::resources::MessageKind::Raid,
             "Besiegers pour in through the door!".to_string(),

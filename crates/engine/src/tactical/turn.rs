@@ -1431,10 +1431,109 @@ impl Game {
         };
         if battle.actor() == Some(actor) {
             self.world.resource_mut::<TacticalBattle>().end_turn();
+            self.skip_disengaged_turns();
         }
         if self.world.resource::<TacticalBattle>().round > round_before {
             self.tactical_round_upkeep();
         }
+    }
+
+    /// Advances past every AI-driven body with nothing in reach, so a round
+    /// thins to the bodies actually in contact.
+    ///
+    /// `TacticalBattle`'s own doc holds a fight to thirteen bodies on the
+    /// strength of a linear-scanned `Vec`; a developed base holds a hundred.
+    /// A skipped body is still on the board, can still be attacked, and
+    /// still acts the moment something comes into its reach — it just does
+    /// not spend a turn deciding to stand still. **The accepted
+    /// consequence**: a body four rooms from the fighting does not walk
+    /// toward it. Staff do not reinforce; they defend where they are.
+    ///
+    /// **Never the player or their party** — that turn is theirs to spend
+    /// as they like, engaged or not — only a body this file's AI drives.
+    ///
+    /// **Guarded against emptying the order.** If nothing in the whole
+    /// order is engaged, this skips nobody at all: a siege where the two
+    /// sides have not met yet must still advance its rounds rather than
+    /// spin `end_turn` forever chasing an actor that never arrives. The
+    /// loop below is bounded by the order's own length besides, so even a
+    /// wrong answer from `tactical_body_is_engaged` cannot hang it.
+    fn skip_disengaged_turns(&mut self) {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let order: Vec<Entity> = battle.initiative().to_vec();
+        if order.is_empty() || !order.iter().any(|&e| self.tactical_body_is_engaged(e)) {
+            return;
+        }
+        for _ in 0..order.len() {
+            let Some(current) = self.world.resource::<TacticalBattle>().actor() else {
+                break;
+            };
+            if !self.tactical_skippable(current) || self.tactical_body_is_engaged(current) {
+                break;
+            }
+            self.world.resource_mut::<TacticalBattle>().end_turn();
+        }
+    }
+
+    /// Whether `body` is a bystander this file's AI does not otherwise
+    /// drive at all — never the player or their party (theirs to spend as
+    /// they like), and never a body `tactical_ai_actor` already recognises
+    /// (`Hostile`, `Summoned` or `taken_over`), because every one of those
+    /// already has a driver that closes the distance on its own turn
+    /// however far it starts. Skipping one of them on top of that driver
+    /// would stop it approaching at all — a fork that never closes because
+    /// nothing was ever in its opening reach, a wild pack that stands
+    /// still on a wide board — so this is deliberately narrower than "not
+    /// the player or their party": it is base staff (and any other body a
+    /// fight seats with nothing driving it), the one kind of bystander
+    /// that would otherwise sit forever as `tactical_awaits_input` waits
+    /// on a key nobody can press.
+    fn tactical_skippable(&self, body: Entity) -> bool {
+        body != self.player_entity()
+            && !self.world.resource::<Party>().0.contains(&body)
+            && self.world.get::<Hostile>(body).is_none()
+            && self
+                .world
+                .get::<crate::components::Summoned>(body)
+                .is_none()
+            && !self.taken_over(body)
+    }
+
+    /// Whether anything on the other side is within `body`'s reach this
+    /// turn — any cell of [`reach::movement_field`] plus
+    /// [`Game::swing_range`] of it.
+    ///
+    /// A `Structure` is never counted as the "other side" here: it has no
+    /// `Hostile` marker to read and cannot itself be reinforced against, so
+    /// including one would read a raider stalled beside a machine as
+    /// "engaged" for every other AI-driven body on the board.
+    pub(crate) fn tactical_body_is_engaged(&self, body: Entity) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        if battle.cell_of(body).is_none() {
+            return false;
+        }
+        let field = reach::movement_field(battle, body, self.movement_allowance(body));
+        let range = self.swing_range(body);
+        let side = self.acts_for_hostiles(body);
+        battle
+            .bodies()
+            .filter(|&(other, _)| other != body)
+            .filter(|&(other, _)| {
+                self.world
+                    .get::<crate::components::Structure>(other)
+                    .is_none()
+            })
+            .filter(|&(other, _)| self.acts_for_hostiles(other) != side)
+            .any(|(other, _)| {
+                let other_cells = battle.cells_of(other);
+                field
+                    .keys()
+                    .any(|&cell| reach::gap(&[cell], &other_cells) <= range)
+            })
     }
 
     /// What a round costs, on a battle map exactly as in a group fight:

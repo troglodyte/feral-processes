@@ -306,6 +306,16 @@ fn a_deeper_sector_sieges_three_times_as_fast() {
 #[test]
 fn forcing_a_siege_stages_one_without_touching_the_clock() {
     let mut game = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_structure".to_string(),
+            },
+            Position { x: 1, y: 1 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
     let before = *game.world.resource::<crate::resources::SiegePressure>();
 
     game.dev_force_siege();
@@ -315,11 +325,13 @@ fn forcing_a_siege_stages_one_without_touching_the_clock() {
         before,
         "forcing a siege must not touch the clock, matching the sweep's own dev trigger"
     );
-    let entry = game
-        .message_log(20)
-        .into_iter()
-        .find(|e| e.text.contains("siege begins"));
-    assert!(entry.is_some(), "the forced fire must be the real one");
+    assert!(
+        game.world
+            .get::<Durability>(structure)
+            .map(|d| d.hp < 30)
+            .unwrap_or(true),
+        "the forced fire must be the real thing — an undefended structure takes damage"
+    );
 }
 
 /// Winding the clock lands exactly on the drawn interval's own warn point
@@ -527,5 +539,283 @@ mod turrets {
             Position { x: 1, y: 1 },
         ));
         assert_eq!(turret_defense(&game), 0);
+    }
+}
+
+mod offscreen {
+    use super::*;
+    use crate::components::Downed;
+    use crate::game::siege::offscreen::pack_size;
+    use crate::tuning::{SIEGE_PACK_BASE, SIEGE_PACK_MAX, SIEGE_PACK_PER_ZONE};
+
+    /// `pack_size` grows with the sector and stops at `SIEGE_PACK_MAX`.
+    #[test]
+    fn pack_size_grows_with_the_sector_and_caps() {
+        assert_eq!(pack_size(1), SIEGE_PACK_BASE + SIEGE_PACK_PER_ZONE);
+        assert_eq!(pack_size(2), SIEGE_PACK_BASE + SIEGE_PACK_PER_ZONE * 2);
+        assert!(pack_size(2) > pack_size(1), "a deeper sector fields more");
+
+        let uncapped = SIEGE_PACK_BASE + SIEGE_PACK_PER_ZONE * 50;
+        assert!(
+            uncapped > SIEGE_PACK_MAX,
+            "the fixture must actually threaten the cap"
+        );
+        assert_eq!(pack_size(50), SIEGE_PACK_MAX);
+    }
+
+    /// A shortfall of zero costs nothing and logs nothing — an established,
+    /// well-staffed base facing the smallest pack the game fields.
+    #[test]
+    fn a_covered_shortfall_costs_and_logs_nothing() {
+        let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, 1);
+        for _ in 0..10 {
+            spawn_tamed(&mut game, 10, 3);
+        }
+        let mut stock = Stock::new(100);
+        stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 20);
+        game.world.spawn((
+            Structure {
+                kind: "test_structure".to_string(),
+            },
+            Position { x: 1, y: 1 },
+            Durability { hp: 30, max_hp: 30 },
+            stock,
+        ));
+        let before_len = game.message_log(usize::MAX).len();
+
+        let fired = game.resolve_siege_offscreen();
+
+        assert!(fired, "resolving an off-screen siege always reports true");
+        assert_eq!(
+            game.message_log(usize::MAX).len(),
+            before_len,
+            "a fully-covered pack must log nothing"
+        );
+    }
+
+    /// Stores stolen: an undefended, stocked base loses units off its
+    /// shelves.
+    #[test]
+    fn an_undefended_siege_steals_from_the_shelves() {
+        let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, 6);
+        let item = ItemId::from(ids::CORE_FRAGMENT);
+        let mut stock = Stock::new(1000);
+        stock.output.insert(item.clone(), 500);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                stock,
+            ))
+            .id();
+
+        game.resolve_siege_offscreen();
+
+        let remaining = game
+            .world
+            .get::<Stock>(structure)
+            .unwrap()
+            .output
+            .get(&item)
+            .copied()
+            .unwrap_or(0);
+        assert!(remaining < 500, "an undefended shelf must lose units");
+    }
+
+    /// Structures damaged: a machine with more Durability than the pack can
+    /// spend survives, wounded.
+    #[test]
+    fn an_undefended_siege_damages_a_sturdy_machine() {
+        let mut game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, 2);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                Durability {
+                    hp: 10_000,
+                    max_hp: 10_000,
+                },
+            ))
+            .id();
+
+        game.resolve_siege_offscreen();
+
+        let hp = game.world.get::<Durability>(structure).unwrap().hp;
+        assert!(hp < 10_000, "an undefended machine must take damage");
+    }
+
+    /// Structures damaged: a machine with less Durability than the pack can
+    /// spend is destroyed outright, and the remainder spreads to a second
+    /// machine.
+    #[test]
+    fn an_undefended_siege_destroys_a_frail_machine_and_spreads_the_rest() {
+        let mut game = Game::new(933, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, 6);
+        let frail = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure_a".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                Durability { hp: 1, max_hp: 1 },
+            ))
+            .id();
+        let sturdy = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure_b".to_string(),
+                },
+                Position { x: 2, y: 1 },
+                Durability {
+                    hp: 10_000,
+                    max_hp: 10_000,
+                },
+            ))
+            .id();
+
+        game.resolve_siege_offscreen();
+
+        assert!(
+            game.world.get::<Durability>(frail).is_none(),
+            "a machine outmatched by the whole shortfall must be destroyed outright"
+        );
+        assert!(
+            game.world.get::<Durability>(sturdy).unwrap().hp < 10_000,
+            "the shortfall left over from destroying the frail machine must spread to the next one"
+        );
+    }
+
+    /// Staff killed: a big enough shortfall benches a defender.
+    #[test]
+    fn an_undefended_siege_benches_a_staff_body() {
+        let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        // Zone 8: `pack_size` is already at `SIEGE_PACK_MAX` (12), and one
+        // staff body's own defence (2) leaves a shortfall of 10 — exactly
+        // `SIEGE_POINTS_PER_CASUALTY`, so one casualty is guaranteed without
+        // outrunning the pack cap.
+        set_zone(&mut game, 8);
+        let staff = spawn_tamed(&mut game, 10, 3);
+
+        game.resolve_siege_offscreen();
+
+        assert!(
+            game.world.get::<Downed>(staff).is_some(),
+            "a large enough shortfall must bench a defending staff body"
+        );
+    }
+
+    /// A defended base loses strictly less than an undefended one facing the
+    /// same pack — asserted as a comparison between two runs, since a
+    /// constant moves with a retune and the ordering must not.
+    #[test]
+    fn a_defended_base_loses_less_than_an_undefended_one() {
+        let item = ItemId::from(ids::CORE_FRAGMENT);
+
+        let mut undefended = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut undefended, 6);
+        let mut stock = Stock::new(1000);
+        stock.output.insert(item.clone(), 500);
+        let poor_shelf = undefended
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                stock.clone(),
+            ))
+            .id();
+        undefended.resolve_siege_offscreen();
+        let undefended_loss = 500
+            - undefended
+                .world
+                .get::<Stock>(poor_shelf)
+                .unwrap()
+                .output
+                .get(&item)
+                .copied()
+                .unwrap_or(0);
+
+        let mut defended = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut defended, 6);
+        for _ in 0..2 {
+            spawn_tamed(&mut defended, 10, 3);
+        }
+        let rich_shelf = defended
+            .world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                stock,
+            ))
+            .id();
+        defended.resolve_siege_offscreen();
+        let defended_loss = 500
+            - defended
+                .world
+                .get::<Stock>(rich_shelf)
+                .unwrap()
+                .output
+                .get(&item)
+                .copied()
+                .unwrap_or(0);
+
+        assert!(
+            defended_loss < undefended_loss,
+            "a defended base ({defended_loss} lost) must lose strictly less than an \
+             undefended one ({undefended_loss} lost) facing the same pack"
+        );
+    }
+
+    /// The whole resolution spends no `GameRng` draw — a deterministic
+    /// payout is what lets Task 8's on-screen fight be the only place a
+    /// siege rolls.
+    #[test]
+    fn resolving_offscreen_spends_no_rng_draw() {
+        let seed = 936;
+        let mut touched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let mut untouched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut touched, 6);
+        set_zone(&mut untouched, 6);
+        for game in [&mut touched, &mut untouched] {
+            let item = ItemId::from(ids::CORE_FRAGMENT);
+            let mut stock = Stock::new(1000);
+            stock.output.insert(item, 500);
+            game.world.spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                Durability {
+                    hp: 10_000,
+                    max_hp: 10_000,
+                },
+                stock,
+            ));
+        }
+        spawn_tamed(&mut touched, 10, 3);
+        spawn_tamed(&mut untouched, 10, 3);
+
+        touched.resolve_siege_offscreen();
+
+        let after_touched: u64 = touched.world.resource_mut::<GameRng>().0.random();
+        let after_untouched: u64 = untouched.world.resource_mut::<GameRng>().0.random();
+        assert_eq!(
+            after_touched, after_untouched,
+            "an off-screen siege must draw nothing from GameRng"
+        );
     }
 }

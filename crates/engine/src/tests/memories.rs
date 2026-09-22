@@ -2587,7 +2587,7 @@ fn a_sweep_that_spares_the_machine_is_still_remembered_by_the_worker_on_it() {
         required: 5,
     });
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Structure>(structure).is_some(),
@@ -2631,7 +2631,7 @@ fn a_sweep_that_destroys_the_machine_is_remembered_after_it_is_gone() {
         required: 5,
     });
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Structure>(structure).is_none(),
@@ -2662,7 +2662,7 @@ fn a_sweep_on_an_unstaffed_machine_is_remembered_by_nobody() {
         .id();
     let bystander = spawn_tamed(&mut game, 10, 3);
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         memories_of(&game, bystander).is_empty(),

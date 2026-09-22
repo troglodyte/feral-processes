@@ -389,7 +389,7 @@ fn destroying_the_rig_by_damage_returns_the_carrier() {
         .entity_mut(rig)
         .insert(crate::components::Durability { hp: 10, max_hp: 10 });
 
-    game.damage_structure(rig, 100_000, "The Teardown Rig");
+    game.damage_structure(rig, 100_000, "The Teardown Rig", "a GC Entropy Sweep");
     assert!(game.world.get::<CarryingProgram>(worker).is_none());
     assert_eq!(shelf_of(&game, rack), vec![201]);
 }

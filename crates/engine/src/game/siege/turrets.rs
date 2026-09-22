@@ -12,11 +12,6 @@ use crate::*;
 /// turret — `Game::total_raid_defense`'s shape, and a free function rather
 /// than a `Game` method because Task 4's shortfall formula and Task 15's
 /// fire both read it as one term among several, not as a verb on `Game`.
-///
-/// `#[allow(dead_code)]`: only the test suite calls this between this task
-/// and Task 4, which wires it into `Game::resolve_siege_offscreen`'s
-/// shortfall — the allow is removed in that commit.
-#[allow(dead_code)]
 pub(crate) fn turret_defense(game: &Game) -> u32 {
     let structure_db = game.world.resource::<StructureDb>();
     game.world

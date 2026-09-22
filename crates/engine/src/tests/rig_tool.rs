@@ -339,7 +339,7 @@ fn a_rig_destroyed_by_a_raid_hands_its_tool_back() {
         .entity_mut(rig)
         .insert(crate::components::Durability { hp: 1, max_hp: 1 });
 
-    game.damage_structure(rig, 9_999, "The Teardown Rig");
+    game.damage_structure(rig, 9_999, "The Teardown Rig", "a GC Entropy Sweep");
 
     assert_eq!(
         carriers(&game, "salvage_clamp"),

@@ -836,7 +836,7 @@ fn losing_a_trader_that_holds_stock_says_so() {
         .insert(Durability { hp: 1, max_hp: 1 });
 
     let before = game.world.resource::<MessageLog>().lines.len();
-    game.damage_structure(market, u32::MAX, "iso Market");
+    game.damage_structure(market, u32::MAX, "iso Market", "a GC Entropy Sweep");
     let said: Vec<String> = game.world.resource::<MessageLog>().lines[before..]
         .iter()
         .map(|e| e.text.clone())
@@ -862,7 +862,7 @@ fn losing_an_empty_trader_is_silent_about_the_shelf() {
         .insert(Durability { hp: 1, max_hp: 1 });
 
     let before = game.world.resource::<MessageLog>().lines.len();
-    game.damage_structure(market, u32::MAX, "iso Market");
+    game.damage_structure(market, u32::MAX, "iso Market", "a GC Entropy Sweep");
 
     assert!(
         !game.world.resource::<MessageLog>().lines[before..]

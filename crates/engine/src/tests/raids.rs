@@ -28,7 +28,7 @@ fn a_structure_lost_to_a_raid_is_base_news_without_losing_its_kind() {
         ))
         .id();
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     let entry = game
         .message_log(20)
@@ -102,7 +102,7 @@ fn damage_structure_destroys_it_and_clears_its_cronjob_at_zero_durability() {
         required: 5,
     });
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Structure>(structure).is_none(),
@@ -128,7 +128,7 @@ fn damage_structure_just_reduces_durability_when_it_survives() {
         ))
         .id();
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     assert_eq!(game.world.get::<Durability>(structure).unwrap().hp, 10);
     assert!(
@@ -640,7 +640,7 @@ fn damaging_a_structure_queues_a_hit_effect_at_its_position() {
         ))
         .id();
 
-    game.damage_structure(structure, 5, "Mining Node");
+    game.damage_structure(structure, 5, "Mining Node", "a GC Entropy Sweep");
 
     let effects = game.take_effects();
     assert_eq!(effects.len(), 1, "one hit should queue one effect");
@@ -838,7 +838,7 @@ fn destroying_a_structure_queues_a_destroyed_effect() {
         ))
         .id();
 
-    game.damage_structure(structure, 10, "Mining Node");
+    game.damage_structure(structure, 10, "Mining Node", "a GC Entropy Sweep");
 
     let effects = game.take_effects();
     assert_eq!(effects.len(), 1);
@@ -863,7 +863,7 @@ fn damaging_a_structure_with_no_position_queues_nothing() {
         ))
         .id();
 
-    game.damage_structure(structure, 5, "Mining Node");
+    game.damage_structure(structure, 5, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.take_effects().is_empty(),
@@ -1003,7 +1003,7 @@ fn take_effects_drains_the_queue() {
         ))
         .id();
 
-    game.damage_structure(structure, 1, "Mining Node");
+    game.damage_structure(structure, 1, "Mining Node", "a GC Entropy Sweep");
 
     assert_eq!(game.take_effects().len(), 1);
     assert!(
@@ -1030,7 +1030,7 @@ fn the_effect_queue_drops_the_oldest_effects_past_its_cap() {
         .id();
 
     for _ in 0..(resources::EFFECT_QUEUE_CAP + 10) {
-        game.damage_structure(structure, 1, "Mining Node");
+        game.damage_structure(structure, 1, "Mining Node", "a GC Entropy Sweep");
     }
 
     assert_eq!(
@@ -1327,7 +1327,7 @@ fn a_structure_survives_seven_raids_worth_of_damage() {
         .id();
 
     for _ in 0..7 {
-        game.damage_structure(structure, RAID_DAMAGE, "Mining Node");
+        game.damage_structure(structure, RAID_DAMAGE, "Mining Node", "a GC Entropy Sweep");
     }
 
     assert!(
@@ -1354,7 +1354,7 @@ fn raid_damage_is_permanent_without_a_repairer() {
         ))
         .id();
 
-    game.damage_structure(structure, RAID_DAMAGE, "Mining Node");
+    game.damage_structure(structure, RAID_DAMAGE, "Mining Node", "a GC Entropy Sweep");
     let damaged = game.world.get::<Durability>(structure).unwrap().hp;
     assert_eq!(
         damaged,

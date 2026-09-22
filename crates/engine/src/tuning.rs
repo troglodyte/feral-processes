@@ -3086,6 +3086,41 @@ pub const SIEGE_WARN_FLOOR_TICKS: u32 = 960;
 /// into the sector that can spend the pressure the opening sector banked.
 pub const SIEGE_MIN_ZONE: u32 = 2;
 
+/// The base size of a besieging pack, before `SIEGE_PACK_PER_ZONE` scales it
+/// with sector — see `siege::offscreen::pack_size`. The off-screen
+/// resolution and the fought fight must field the same pack, so this is
+/// read through that one function rather than restated at either call site.
+pub const SIEGE_PACK_BASE: u32 = 4;
+
+/// How much a besieging pack grows per sector, added to `SIEGE_PACK_BASE`
+/// and capped at `SIEGE_PACK_MAX`.
+pub const SIEGE_PACK_PER_ZONE: u32 = 1;
+
+/// The largest a besieging pack may grow, whatever the sector.
+pub const SIEGE_PACK_MAX: u32 = 12;
+
+/// Each on-shift staff body's contribution to the off-screen defence a
+/// siege is priced against, in `Game::resolve_siege_offscreen`'s shortfall
+/// formula. A body actually fought beside in the tactical fight is worth
+/// far more than this — the figure only prices the base's *passive*
+/// resistance while its owner is away, `defending_base_staff_count`'s own
+/// pool, counted regardless of what job each body happens to be posted to.
+pub const SIEGE_STAFF_DEFENSE: u32 = 2;
+
+/// Units lifted from base shelves per unanswered point of an off-screen
+/// siege's shortfall.
+pub const SIEGE_STEAL_PER_POINT: u32 = 4;
+
+/// Structure `Durability` lost per unanswered point of an off-screen
+/// siege's shortfall.
+pub const SIEGE_DAMAGE_PER_POINT: u32 = 3;
+
+/// How much unanswered shortfall it takes to bench one staff body in an
+/// off-screen siege — `shortfall / SIEGE_POINTS_PER_CASUALTY` bodies,
+/// through the same door a Forgiving death already uses
+/// (`Game::bench_or_dissolve`).
+pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────

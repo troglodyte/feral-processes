@@ -528,7 +528,7 @@ fn a_sweep_that_destroys_a_machine_takes_its_workers_load_too() {
     assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
 
     let hp = game.world.get::<Durability>(node).unwrap().hp;
-    game.damage_structure(node, hp, "Mining Node");
+    game.damage_structure(node, hp, "Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.world.get::<Carrying>(worker).is_none(),

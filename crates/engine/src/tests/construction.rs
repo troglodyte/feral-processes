@@ -1193,7 +1193,7 @@ fn a_swept_machine_refunds_its_pending_upgrade() {
         .values()
         .sum();
 
-    game.damage_structure(node, 100_000, "The Mining Node");
+    game.damage_structure(node, 100_000, "The Mining Node", "a GC Entropy Sweep");
 
     assert!(
         game.build_site_at(node_pos.x, node_pos.y).is_none(),

@@ -3373,3 +3373,97 @@ mod review_findings {
         );
     }
 }
+
+/// The 2026-09-22 re-review's own findings, fixed the same way
+/// `review_findings` above was: through the real doors —
+/// `Game::open_siege` on a base with a real Home, `Game::besieger_turn` /
+/// `Game::tactical_ai_beat` for AI turns, the real capture door
+/// (`Game::tactical_use_routine` with Decompile), and a real
+/// `game.save()`/`Game::load()` round trip where a save is involved.
+mod rereview_findings {
+    use super::*;
+    use crate::components::{Besieger, Carrying};
+    use crate::items::ids;
+    use crate::tactical::TacticalBattle;
+    use crate::tuning::HAUL_CARRY_CAPACITY;
+
+    fn core_fragment() -> ItemId {
+        ItemId::from(ids::CORE_FRAGMENT)
+    }
+
+    fn any_besieger(game: &Game) -> Entity {
+        game.world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Besieger>(e).is_some())
+            .expect("a real siege must seat at least one besieger")
+    }
+
+    // ---- NEW-1: a carrier does not wreck the shelf it just stole from.
+
+    #[test]
+    fn new1_a_carrier_does_not_wreck_the_shelf_it_just_stole_from() {
+        let mut game = Game::new(210_001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let depot_def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "depot")
+            .expect("the shipped catalogue has a Depot");
+        let depot = game.spawn_structure(&depot_def, 2, 2, None);
+        let hoard = 2 * HAUL_CARRY_CAPACITY + 1;
+        game.world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(core_fragment(), hoard);
+        stand_in_base_at(&mut game, -2, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+
+        let besieger = any_besieger(&game);
+        let depot_cell = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(depot)
+            .expect("the Depot must have seated as a body");
+        let beside = (depot_cell.0 - 1, depot_cell.1);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(besieger, beside),
+            "the fixture must actually free the cell it seats the besieger on"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![besieger]);
+
+        let durability_before = game
+            .world
+            .get::<Durability>(depot)
+            .expect("the shipped Depot must carry Durability")
+            .hp;
+
+        assert!(
+            game.besieger_turn(besieger),
+            "adjacent to a stocked Depot, it must steal"
+        );
+        assert!(
+            game.world.get::<Carrying>(besieger).is_some(),
+            "the fixture must actually leave the besieger carrying something"
+        );
+
+        // Second beat: still carrying, still standing beside the same
+        // Depot, which still has plenty left on the shelf — this must
+        // neither steal again (C2) nor wreck it (NEW-1's own bug).
+        game.besieger_turn(besieger);
+
+        let durability_after = game.world.get::<Durability>(depot).unwrap().hp;
+        assert_eq!(
+            durability_after, durability_before,
+            "a carrier making for the door must not wreck the shelf it just \
+             stole from"
+        );
+    }
+}

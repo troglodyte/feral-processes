@@ -72,26 +72,28 @@ impl Game {
             return self.besieger_leaves(body, carrying);
         }
 
-        if !withdrawing {
-            // **Gated on `!carrying`.** Without this, a carrier that is
-            // still adjacent to the shelf it just emptied on its next beat
-            // (the walk toward the door has not moved it off that cell yet)
-            // steals again — `Carrying`/`StolenFrom` are a single pair, so
-            // the second `insert` silently replaces the first load rather
-            // than adding to it, and the units already lifted are gone for
-            // good.
-            if !carrying && let Some(structure) = self.adjacent_stocked_structure(body) {
+        // **Both arms gated on `!carrying`, together.** A carrier still
+        // adjacent to the shelf it just emptied on its next beat (the walk
+        // toward the door has not moved it off that cell yet) must neither
+        // steal again — `Carrying`/`StolenFrom` are a single pair, so a
+        // second `insert` would silently replace the first load rather than
+        // adding to it — nor wreck that same shelf: spec §6 wrecks only "a
+        // machine with nothing to take," and a carrier making for the door
+        // is not that. Gating only the steal arm left the wreck arm to fire
+        // on a carrier still standing beside a Depot with plenty left on it,
+        // hitting its `Durability` every beat until it broke — the very
+        // shelf interception was supposed to be worth emptying rather than
+        // destroying.
+        if !withdrawing && !carrying {
+            if let Some(structure) = self.adjacent_stocked_structure(body) {
                 return self.besieger_steal(body, structure);
             }
             if let Some(structure) = self.adjacent_wreckable_structure(body) {
                 return self.besieger_wreck(body, structure);
             }
-            if !carrying {
-                // Nothing to take or wreck in reach, and no reason yet to
-                // make for the door — the generic AI's to fight, opportunist
-                // or not.
-                return false;
-            }
+            // Nothing to take or wreck in reach, and no reason yet to make
+            // for the door — the generic AI's to fight, opportunist or not.
+            return false;
         }
 
         self.besieger_walk_toward(body, door)

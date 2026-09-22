@@ -15,6 +15,7 @@
 pub(crate) mod board;
 pub(crate) mod clock;
 pub(crate) mod offscreen;
+pub(crate) mod persist;
 pub(crate) mod raiders;
 pub(crate) mod turrets;
 
@@ -83,22 +84,16 @@ impl Game {
             siege_board.board.clone(),
         );
 
+        battle.siege_origin = siege_board.origin;
+        battle.siege_door = siege_board.door;
+
         // **Structures are seated as bodies, and left out of initiative.**
         // They are obstacles a swing can be aimed at (Task 10), not
         // combatants — shaped before they are seated, `set_shape`'s own
-        // ordering rule.
-        let mut structure_entities: HashSet<Entity> = HashSet::new();
-        for (entity, pos, side) in structures {
-            let Some(cell) = siege_board.to_board((pos.x, pos.y)) else {
-                continue;
-            };
-            if side > 1 {
-                battle.set_shape(entity, side, 0);
-            }
-            if battle.place(entity, cell) {
-                structure_entities.insert(entity);
-            }
-        }
+        // ordering rule. `board::seat_structures` is this loop, shared with
+        // `siege::persist::restore`, which needs it again once a save/load
+        // round trip has rebuilt the structures fresh.
+        let structure_entities = board::seat_structures(&mut battle, &siege_board, structures);
 
         // **Every body in base space is seated where it already stands.**
         // Nobody is deployed; a body whose own cell fell outside the fill

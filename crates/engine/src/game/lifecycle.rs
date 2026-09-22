@@ -215,6 +215,15 @@ pub(crate) struct CreatureRestore {
     /// array rebuilds, so a study tether can be no sooner than a cronjob's
     /// target is.
     pub(crate) pending_study: Vec<(Entity, (i32, i32))>,
+    /// `(siege_order, member, siege_cell)` — `sortie_members`' shape,
+    /// applied to `game::siege::persist::restore` rather than
+    /// `restore_sorties`: entity ids aren't stable across a save/load round
+    /// trip, so a siege's own membership rides the creature side too.
+    pub(crate) pending_siege_members: Vec<(u32, Entity, (i32, i32))>,
+    /// `(besieger, source structure's tile)` — `pending_cronjobs`'
+    /// deferral: `components::StolenFrom` names a structure entity, and the
+    /// structures a tile has to name are rebuilt after the creature array.
+    pub(crate) pending_stolen_from: Vec<(Entity, (i32, i32))>,
 }
 
 impl CreatureRestore {
@@ -240,6 +249,8 @@ impl CreatureRestore {
             pending_cronjobs: Vec::new(),
             pending_patrols: Vec::new(),
             pending_study: Vec::new(),
+            pending_siege_members: Vec::new(),
+            pending_stolen_from: Vec::new(),
         }
     }
 }
@@ -1123,6 +1134,26 @@ impl Game {
         }
     }
 
+    /// Reconnects a besieger's `components::StolenFrom` to its source
+    /// structure now that both sides exist — `attach_cronjobs`'s shape and
+    /// leniency: a tile naming no structure (it was destroyed before the
+    /// save, or the save predates this field) drops the tether silently,
+    /// which is exactly what `game::siege::raiders::drop_besieger_cargo`
+    /// already does for a source that no longer stands.
+    fn attach_stolen_from(
+        &mut self,
+        pending: Vec<(Entity, (i32, i32))>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        for (body, tile) in pending {
+            if let Some(&structure) = structure_positions.get(&tile) {
+                self.world
+                    .entity_mut(body)
+                    .insert(crate::components::StolenFrom(structure));
+            }
+        }
+    }
+
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let mut data = save::load_from_file(path)?;
         // Permadeath's one guarantee, and it is enforced here rather than in
@@ -1500,6 +1531,8 @@ impl Game {
             pending_cronjobs,
             pending_patrols,
             pending_study,
+            pending_siege_members,
+            pending_stolen_from,
             ..
         } = restore;
         game.world
@@ -1518,6 +1551,13 @@ impl Game {
 
         game.attach_cronjobs(pending_cronjobs, &structure_positions);
         game.attach_pinned_subjects(pending_study, &structure_positions);
+        game.attach_stolen_from(pending_stolen_from, &structure_positions);
+        // After structures load, `attach_stolen_from`'s own reason: a
+        // siege re-seats every structure still standing as a body on the
+        // reconstructed board, `Game::open_siege`'s own placement.
+        if let Some(siege_save) = data.siege.take() {
+            crate::game::siege::persist::restore(&mut game, siege_save, &pending_siege_members);
+        }
 
         game.restore_surface_links(data.link_sites);
         // Before `restore_locale`, which records what the party can see from
@@ -1915,6 +1955,9 @@ impl Game {
             if let Some(index) = sortie_index {
                 ctx.sortie_members.push((index, creature_id));
             }
+            if let (Some(order), Some(cell)) = (c.siege_order, c.siege_cell) {
+                ctx.pending_siege_members.push((order, creature_id, cell));
+            }
             if let Some(slot) = party_slot {
                 ctx.party_slots.push((slot, creature_id));
             } else if let Some(tile) = c.study_station {
@@ -1943,6 +1986,23 @@ impl Game {
             // never read back, and so **no `SAVE_FORMAT_VERSION` bump**.
         } else {
             entity.insert((Hostile, WanderAi::default()));
+            // `carrying`'s own restore, missing here until now — written
+            // unconditionally above for any creature holding `Carrying`,
+            // tamed or not, but only ever read back on the tamed branch.
+            // A besieger killed after a reload has to still drop what it
+            // was holding, so a wild body needs this too.
+            if let Some((item, qty)) = c.carrying.clone() {
+                entity.insert(Carrying { item, qty });
+            }
+            if c.besieger {
+                entity.insert(crate::components::Besieger);
+            }
+            if let Some(tile) = c.stolen_from {
+                ctx.pending_stolen_from.push((entity.id(), tile));
+            }
+            if let (Some(order), Some(cell)) = (c.siege_order, c.siege_cell) {
+                ctx.pending_siege_members.push((order, entity.id(), cell));
+            }
             // A nest_position resolving to nothing (the nest's species
             // is gone, or the save predates nests) is dropped silently
             // rather than failing the load — the creature just comes
@@ -2060,6 +2120,16 @@ impl Game {
             .map(|u| u.station)
             .and_then(|station| self.world.get::<Position>(station))
             .map(|station_pos| (station_pos.x, station_pos.y));
+        // `(order, cell)` in an in-progress siege — `None` whenever there is
+        // no open `TacticalBattle`, the one open is not a siege
+        // (`siege_pack == 0`, that field's own "not a siege" answer), or `e`
+        // was never seated in it. Computed once rather than at each of the
+        // two fields below, since both read the same lookup.
+        let siege_membership = self
+            .world
+            .get_resource::<crate::tactical::TacticalBattle>()
+            .filter(|b| b.siege_pack > 0)
+            .and_then(|b| crate::game::siege::persist::member_of(b, e));
         Some(save::CreatureSave {
             species,
             position: (pos.x, pos.y),
@@ -2209,6 +2279,14 @@ impl Game {
                 })
                 .unwrap_or_default(),
             staff: self.program_role(e) == Some(ProgramRole::Staff),
+            siege_cell: siege_membership.map(|(_, cell)| cell),
+            siege_order: siege_membership.map(|(order, _)| order),
+            besieger: self.world.get::<crate::components::Besieger>(e).is_some(),
+            stolen_from: self
+                .world
+                .get::<crate::components::StolenFrom>(e)
+                .and_then(|s| self.world.get::<Position>(s.0))
+                .map(|p| (p.x, p.y)),
         })
     }
 
@@ -2739,6 +2817,7 @@ impl Game {
             trace: self.trace(),
             raid_pressure: *self.world.resource::<crate::resources::RaidPressure>(),
             siege_pressure: *self.world.resource::<crate::resources::SiegePressure>(),
+            siege: crate::game::siege::persist::assemble(self),
             contracts: self
                 .world
                 .resource::<crate::resources::ActiveContracts>()

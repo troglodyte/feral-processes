@@ -11,11 +11,15 @@
 //! off their far works has genuinely protected them, with nothing here
 //! having to check for the case.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, HashSet, VecDeque};
+
+use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
+use crate::components::Position;
 use crate::game::base_space::BASE_EXIT_CELL;
+use crate::tactical::TacticalBattle;
 use crate::tactical::map::{BattleCell, Board};
 
 /// Four-way — rock is never breached, so a diagonal fill would let the
@@ -101,4 +105,33 @@ impl SiegeBoard {
     pub(crate) fn to_base(&self, cell: (i32, i32)) -> (i32, i32) {
         (cell.0 + self.origin.0, cell.1 + self.origin.1)
     }
+}
+
+/// Seats every structure of `structures` (`Game::structure_footprints`'s own
+/// shape) onto `battle` as a body — `Game::open_siege`'s placement loop,
+/// lifted out so `game::siege::persist::restore` can seat the same
+/// structures again once a save/load round trip has rebuilt them fresh.
+/// Left out of initiative, `open_siege`'s own reason: a structure is an
+/// obstacle a swing can be aimed at (Task 10), not a combatant.
+///
+/// Returns which structures actually seated, so a caller building
+/// initiative from every other body on the board can exclude them.
+pub(crate) fn seat_structures(
+    battle: &mut TacticalBattle,
+    siege_board: &SiegeBoard,
+    structures: Vec<(Entity, Position, u8)>,
+) -> HashSet<Entity> {
+    let mut seated = HashSet::new();
+    for (entity, pos, side) in structures {
+        let Some(cell) = siege_board.to_board((pos.x, pos.y)) else {
+            continue;
+        };
+        if side > 1 {
+            battle.set_shape(entity, side, 0);
+        }
+        if battle.place(entity, cell) {
+            seated.insert(entity);
+        }
+    }
+    seated
 }

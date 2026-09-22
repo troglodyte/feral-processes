@@ -68,7 +68,7 @@ impl BattleCell {
 /// `stack::FrameSpec`'s counterpart: a board is a pure function of this and
 /// nothing else, which is what makes it unit-testable without a `Game` and
 /// what makes it safe never to save.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattleSpec {
     pub world_seed: u32,
     /// The world tile the fight opened on.
@@ -262,6 +262,21 @@ impl Board {
                 })
             })
             .collect();
+        Board { side, cells }
+    }
+
+    /// A board rebuilt from its own saved cells — `game::siege::persist::
+    /// restore`'s door back in, `from_rows`'s shape but for real save data
+    /// rather than a test fixture. `cells` is trusted to be `side * side`
+    /// long and in the row-major order `cells()` itself yields, which is
+    /// exactly what `game::siege::persist::assemble` wrote out; nothing
+    /// else calls this back.
+    pub(crate) fn from_cells(side: i32, cells: Vec<BattleCell>) -> Board {
+        debug_assert_eq!(
+            cells.len(),
+            (side * side) as usize,
+            "a saved siege board's cell count must match its own side"
+        );
         Board { side, cells }
     }
 

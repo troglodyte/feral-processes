@@ -358,6 +358,10 @@ fn a_rich_program_writes_every_field_it_was_given() {
         downed: _,
         disgruntled_stranded: _,
         attributes: _,
+        siege_cell: _,
+        siege_order: _,
+        besieger: _,
+        stolen_from: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");
@@ -454,6 +458,10 @@ fn a_rich_program_writes_every_field_it_was_given() {
     // from — an empty map here would load as a body the mint has to repair,
     // which is the old-save arm and not what a save written today means.
     assert_eq!(saved.attributes.len(), 5, "attributes");
+    assert!(saved.siege_cell.is_none(), "siege_cell");
+    assert!(saved.siege_order.is_none(), "siege_order");
+    assert!(!saved.besieger, "besieger");
+    assert!(saved.stolen_from.is_none(), "stolen_from");
 }
 
 /// The other half of the census: the fields no party member can carry.

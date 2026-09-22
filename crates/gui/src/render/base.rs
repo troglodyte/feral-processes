@@ -5506,6 +5506,10 @@ mod tests {
                 off_shift: None,
                 staff: false,
                 downed: false,
+                siege_cell: None,
+                siege_order: None,
+                besieger: false,
+                stolen_from: None,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         let mut game = Game::load(&path, &test_assets()).unwrap();

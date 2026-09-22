@@ -2,8 +2,8 @@
 //!
 //! It exists because a visual feature cannot be verified by a test suite,
 //! and provoking the state one draws in can cost an hour of play — a GC
-//! Entropy Sweep is 1.2% per tick, and wearing a single structure down to
-//! nothing takes hundreds of them. That cost is why things in this repo
+//! Entropy Sweep is twenty minutes of sector 2 apart, and wearing a single
+//! structure down to nothing takes several of them. That cost is why things in this repo
 //! ship unplayed.
 //!
 //! Deliberately not a text console: no parser, no history, no text-entry
@@ -30,6 +30,8 @@ pub const DEV_CONSOLE_TICKS: u32 = 25;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DevAction {
     Sweep,
+    /// Winds the raid clock to its approach warning without firing a sweep.
+    WindSweepClock,
     DamageStructure,
     DestroyStructure,
     Encounter,
@@ -60,6 +62,13 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Trigger GC Entropy Sweep",
         action: DevAction::Sweep,
+    },
+    // Directly beneath the row that fires one, because it is the same event
+    // seen from four minutes earlier: the sweep clock's warning is the only
+    // part of a raid a player can act on, and the row above skips it.
+    DevConsoleRow {
+        label: "Wind sweep clock to warning",
+        action: DevAction::WindSweepClock,
     },
     // Above its destroying sibling because it is the one that can be held
     // down: a structure survives every press, so this is the row for
@@ -215,6 +224,7 @@ impl App {
         let mut said: Option<Result<String, String>> = None;
         match action {
             DevAction::Sweep => game.dev_force_raid(),
+            DevAction::WindSweepClock => game.dev_wind_raid_clock(),
             DevAction::DamageStructure => game.dev_damage_structure(),
             DevAction::DestroyStructure => game.dev_destroy_structure(),
             DevAction::Encounter => game.dev_force_encounter(),

@@ -1474,6 +1474,19 @@ pub struct SaveData {
     /// parsing instead of needing re-capture.
     #[serde(default)]
     pub trace: u32,
+    /// How close the base is to its next GC Entropy Sweep — see
+    /// `resources::RaidPressure`.
+    ///
+    /// Persisted for `trace`'s reason and a sharper version of it: the
+    /// approach warning tells the player exactly when saving would be worth
+    /// a free reset, so a clock that did not survive a load would be an
+    /// exploit the game announces.
+    ///
+    /// `#[serde(default)]` is the whole compatibility story — the payload is
+    /// field-named RON, so a save written before this field existed loads
+    /// with a fresh clock and costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub raid_pressure: crate::resources::RaidPressure,
     /// Contracts the run is holding, with their progress — see
     /// `resources::ActiveContracts`. Each carries the whole resolved
     /// `ContractDef`, so a contract whose asset file has since been edited or
@@ -1945,6 +1958,7 @@ mod tests {
             standings: crate::resources::Standings::default(),
             compass: crate::resources::CompassBearing::default(),
             trace: 0,
+            raid_pressure: crate::resources::RaidPressure::default(),
             contracts: Vec::new(),
             contracts_done: Vec::new(),
             work_orders: Vec::new(),

@@ -391,7 +391,10 @@ impl NotificationKind {
                 body: "The first sector was beneath the garbage collector's notice. This one is \
                        not. From here a sweep comes for your base as stray data — it damages \
                        whatever it lands on, and staff posted at a machine defend it and are hurt \
-                       doing so.\n\nA Shield soaks damage off every sweep against every structure \
+                       doing so.\n\nYou will hear one coming. Sweep telemetry thickens around \
+                       the anchor well before it lands, and that is the time to post staff and \
+                       patch what is damaged.\n\nA Shield soaks damage off every sweep against \
+                       every structure \
                        you own, and a second one stacks with the first. A Patch Node writes \
                        damaged structures back up across the whole base on its own, while you are \
                        somewhere else.\n\n[b] for the base menu, then Deploy a structure.",

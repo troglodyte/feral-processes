@@ -169,7 +169,12 @@ fn surviving_five_hundred_cycles_earns_uptime() {
 
 #[test]
 fn killing_a_boss_earns_both_the_generic_and_the_species_rung_in_one_tick() {
-    let mut game = Game::new(25, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Seed 26, not 25: the fight is a real one and seed 25 is a stream on
+    // which the player does not finish the Overseer. Rebaselined when the
+    // raid clock replaced `raid_check`'s per-tick draw and moved the stream
+    // under every seeded test that ticks — the achievement path was verified
+    // intact first, by observing that the boss simply survived.
+    let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let boss = spawn_boss_on_player_tile(&mut game, "overseer", 1);
     game.start_battle(vec![boss]);
     fight_to_the_end(&mut game);

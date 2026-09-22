@@ -1780,6 +1780,33 @@ pub enum Locale {
 #[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trace(pub u32);
 
+/// How close the base is to its next GC Entropy Sweep.
+///
+/// **A clock and not a coin.** The sweep this meter fires used to be a
+/// `random_bool` every tick, which made raids frequent, evenly distributed
+/// and completely unanticipatable — the player could neither prepare for one
+/// nor tell a quiet stretch from a lucky one. Pressure accrues instead, so a
+/// sweep can be *seen coming*, and preparing for it is the whole feature.
+///
+/// `next_at` is an `Option` rather than a `u32` with a zero sentinel, for
+/// `BattleCell::movement_cost`'s reason: `None` is "no threshold has been
+/// drawn yet" and is a different state from any number. It is drawn lazily,
+/// on the first tick that accrues, so `Game::new` spends no `GameRng` draw
+/// on a meter most of whose runs never reach sector 2 — and cleared on every
+/// sweep, so each interval is jittered independently.
+///
+/// `warned` latches the approach line for one cycle. Without it the warning
+/// is a per-tick read of the same inequality and fires twice a second.
+///
+/// Saved. Without persistence, saving before a sweep and reloading would be
+/// a free reset — `Trace`'s exploit one subsystem over.
+#[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidPressure {
+    pub level: u32,
+    pub next_at: Option<u32>,
+    pub warned: bool,
+}
+
 /// The next `components::ProgramId` to hand out. Advanced by
 /// `Game::roster_parts`, which is the only thing that mints one.
 ///

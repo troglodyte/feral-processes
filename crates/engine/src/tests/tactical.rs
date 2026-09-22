@@ -5150,8 +5150,12 @@ mod squad_capture {
         let squad = squad_ready_to_capture(&mut game);
         let lead = game.world.get::<Squad>(squad).unwrap().members[0];
 
-        let landed = (0..10).any(|_| attempt(&mut game, squad));
-        assert!(landed, "the capture never landed in 10 attempts");
+        // Forty attempts, matching the sibling test above, because the
+        // fixture deliberately rolls the real ~0.19 capture chance: ten was
+        // a one-in-eight failure on any stream, and the raid clock's removal
+        // of `raid_check`'s per-tick draw is simply the stream that found it.
+        let landed = (0..40).any(|_| attempt(&mut game, squad));
+        assert!(landed, "the capture never landed in 40 attempts");
 
         assert!(
             game.world.get::<Hostile>(lead).is_none(),

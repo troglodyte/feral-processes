@@ -1679,6 +1679,22 @@ impl Game {
             });
         }
 
+        // Above every base row and below a structure already taking damage:
+        // a sweep that has arrived outranks one that is coming, and both
+        // outrank a node standing idle.
+        if self
+            .world
+            .resource::<crate::resources::RaidPressure>()
+            .warned
+        {
+            rows.push(AttentionRow {
+                kind: AttentionKind::RaidIncoming,
+                text: "GC Entropy Sweep forming".to_string(),
+                key: 'b',
+                threat: true,
+            });
+        }
+
         // Standing at a counter with cargo a held job wants. Read before the
         // base rows because it is the only row here that can be acted on from
         // exactly one tile, and it stops being available the moment the player

@@ -2714,9 +2714,61 @@ pub const BASE_PET_CAPACITY: usize = 3;
 /// It exists to bound the per-tick cost of a base, not to shape play.
 pub const ROSTER_HARD_CAP: usize = 200;
 
-/// Chance per tick (see `Game::raid_check`) that a random deployed
-/// structure comes under raid, if any exist.
-pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
+/// How much pressure one tick of a sector adds to `resources::RaidPressure`,
+/// per sector level — `Game::raid_check` accrues `RAID_PRESSURE_PER_ZONE *
+/// zone` every tick and sweeps when the total crosses its threshold.
+///
+/// **Scaling the accrual rather than the threshold is what makes a deeper
+/// sector more dangerous on one axis instead of two.** The threshold is a
+/// fixed budget plus jitter; how fast you spend it is the only thing depth
+/// changes, so the warning window shortens by exactly the same factor the
+/// interval does and there is one number to reason about rather than two.
+///
+/// `1` because the threshold is authored in these units: see
+/// `RAID_PRESSURE_THRESHOLD` for the arithmetic that turns the pair into
+/// minutes of play.
+pub const RAID_PRESSURE_PER_ZONE: u32 = 1;
+
+/// The pressure a base spends between sweeps, before jitter.
+///
+/// **Authored in minutes of play and written here in ticks.** The world runs
+/// at `app_core::WORLD_SPEED_MULTIPLIER` = 2 ticks a second, and
+/// `RAID_PRESSURE_PER_ZONE * zone` accrues per tick, so the interval in
+/// minutes is `RAID_PRESSURE_THRESHOLD / (RAID_PRESSURE_PER_ZONE * zone) /
+/// 2 / 60`. At `4800` that is **20 minutes in sector 2**, 13 in sector 3, 10
+/// in sector 4 and under 7 by sector 6.
+///
+/// The figure it replaced was a `0.012` chance per tick, which is a sweep
+/// every **42 seconds** — frequent enough that no single one could carry any
+/// weight, and evenly enough distributed that no stretch of play could feel
+/// safe or threatened. Nearly all of this feature is that one ~28x cut; the
+/// warning and the jitter only make the new spacing legible.
+pub const RAID_PRESSURE_THRESHOLD: u32 = 4800;
+
+/// How far either side of `RAID_PRESSURE_THRESHOLD` a drawn interval may
+/// land, in percent — so sector 2 sweeps every 15 to 25 minutes rather than
+/// every 20 exactly.
+///
+/// **Drawn once per interval, never per tick.** A per-tick jitter is
+/// invisible: summed over the two thousand-odd ticks an interval takes, the
+/// law of large numbers flattens it to within a percent of its own mean, and
+/// the clock is a metronome again. Jittering the target instead is one draw
+/// and the only one that moves anything a player could feel.
+pub const RAID_PRESSURE_JITTER_PERCENT: u32 = 25;
+
+/// How far through an interval the approach warning fires, in percent of
+/// the drawn target.
+///
+/// A percentage of the *drawn* target rather than a fixed pressure, so the
+/// warning window is the same share of every interval however the jitter
+/// fell — a warning that arrived a fixed distance out would be most of a
+/// short interval and a sliver of a long one.
+///
+/// `80` buys about four minutes in sector 2 and shortens with depth exactly
+/// as the interval does. That is enough to walk home from a shallow dive,
+/// post a guard or run a repair, and not enough to treat the warning as the
+/// real start of the clock.
+pub const RAID_PRESSURE_WARN_PERCENT: u32 = 80;
 
 /// The fewest base-staff programs that could actually *defend*
 /// (`Game::defending_base_staff_count` — `Game::base_staff`, minus
@@ -3861,11 +3913,24 @@ pub const SETTLEMENT_GARRISON_RADIUS: i32 = crate::settlements::placement::REGIO
 
 /// How often a Hostile neighbour tries the party's stores — `Game::town_raid_check`.
 ///
-/// **Half `RAID_CHANCE_PER_TICK`**, so an angry neighbour raises total raid
-/// pressure by half again rather than doubling it. The ambient sweep is
-/// weather; this is somebody's decision, and it should be the rarer of the
-/// two.
-pub const SETTLEMENT_RAID_CHANCE_PER_TICK: f64 = 0.006;
+/// **Half the ambient sweep's rate, which is the invariant and not the
+/// number.** The ambient sweep is weather; this is somebody's decision, and
+/// it must stay the rarer of the two.
+///
+/// It used to read "half `RAID_CHANCE_PER_TICK`" at `0.006` against that
+/// constant's `0.012`. `RAID_CHANCE_PER_TICK` is gone — the ambient sweep is
+/// `resources::RaidPressure`'s clock now — so the rate it was half *of* has
+/// to be derived rather than named: `RAID_PRESSURE_THRESHOLD /
+/// (RAID_PRESSURE_PER_ZONE * 2)` is 2400 ticks between sweeps in sector 2,
+/// a rate of about `0.00042`, and half of that rounds to the figure below.
+/// Left at `0.006` the relationship inverts to fourteen times *more* often
+/// than the thing it is supposed to be rarer than, which is why this moved
+/// in the same change.
+///
+/// Anchored to sector 2 because this roll has no depth term of its own,
+/// where the clock accrues faster the deeper you are: a town's grudge is
+/// not a property of the sector it is in.
+pub const SETTLEMENT_RAID_CHANCE_PER_TICK: f64 = 0.0002;
 
 /// How close a Hostile town has to be to the anchor to bother, in Chebyshev
 /// tiles.

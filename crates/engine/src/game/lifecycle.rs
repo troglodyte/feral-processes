@@ -549,6 +549,7 @@ impl Game {
         // no creature to have spawned first — see `save::RouteSave`.
         world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
+        world.init_resource::<crate::resources::RaidPressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -1299,6 +1300,7 @@ impl Game {
         // no creature to have spawned first — see `save::RouteSave`.
         world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
+        world.init_resource::<crate::resources::RaidPressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -1563,6 +1565,7 @@ impl Game {
         game.world.insert_resource(data.compass);
         game.world
             .insert_resource(crate::resources::Trace(data.trace));
+        game.world.insert_resource(data.raid_pressure);
         // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
@@ -2731,6 +2734,7 @@ impl Game {
                 .resource::<crate::resources::PopulatedChunks>()
                 .clone(),
             trace: self.trace(),
+            raid_pressure: *self.world.resource::<crate::resources::RaidPressure>(),
             contracts: self
                 .world
                 .resource::<crate::resources::ActiveContracts>()

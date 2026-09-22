@@ -519,6 +519,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Shield halves an ordinary raid, two absorb it entirely.
     raid_defense: 2,
 
+    // Optional; can be left out entirely (defaults to None). Marks this
+    // structure as a siege turret: during a siege it fires once a round at
+    // the nearest besieger in range with line of sight, for `damage`, out
+    // to `range` tiles of the tactical board. It has no Stats, no
+    // initiative slot and no body — it is a property of the structure.
+    // Outside a siege it is an ordinary structure and keeps contributing
+    // `raid_defense` above to the GC Entropy Sweep as normal, which is the
+    // only place the two events touch — a fortified base is better against
+    // both. Whether it needs power, staffing or ammunition is entirely up
+    // to what else you set on this file; the engine names no turret id, so
+    // a second one is just another structure file with this set.
+    turret: Some((damage: 8, range: 5)),
+
     // Optional; can be left out entirely (defaults to 0). How many extra
     // tamed-program (pet) slots this structure grants while it's deployed.
     // The total pet limit is `3 + the sum of this across every deployed

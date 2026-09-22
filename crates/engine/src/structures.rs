@@ -184,6 +184,20 @@ impl RecoveryDef {
     }
 }
 
+/// Marks a structure as a siege turret — see `StructureDef::turret` and
+/// `game::siege::turrets`. No `Stats`, no initiative slot and no body: a
+/// turret is a property of the structure, resolved once a round by
+/// `Game::fire_turrets` against the nearest hostile in range with line of
+/// sight.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct TurretDef {
+    /// Damage dealt to the target it fires at.
+    pub damage: u32,
+    /// How far the turret can fire, in the tactical board's own distance —
+    /// `reach::line_of_sight`'s unit, never a second one.
+    pub range: u32,
+}
+
 impl ServiceDef {
     /// What this actually refills per tick.
     ///
@@ -504,6 +518,17 @@ pub struct StructureDef {
     /// nothing, same as before it existed.
     #[serde(default)]
     pub raid_defense: u32,
+    /// If set, this structure is a siege turret — see
+    /// `game::siege::turrets::turret_defense` and `Game::fire_turrets`. Only
+    /// meaningful during a siege; outside one it is an ordinary structure
+    /// and keeps contributing `raid_defense` to the sweep as normal, which
+    /// is the only place the two events touch. `#[serde(default)]` so
+    /// existing structure files (including mods) stay ordinary structures,
+    /// exactly as before this field existed. Whether a turret needs power,
+    /// staffing or ammunition is a content question for the def that
+    /// declares it, not a rule in Rust.
+    #[serde(default)]
+    pub turret: Option<TurretDef>,
     /// How many extra tamed-program (pet) slots this structure grants while
     /// it's deployed (see `Game::pet_capacity`). Stacks additively across
     /// every deployed structure that sets it, so several Data Caches each add
@@ -679,7 +704,7 @@ impl StructureDef {
         if self.trade.is_some() {
             return StructureCategory::Trade;
         }
-        if self.raid_defense > 0 || self.repair.is_some() {
+        if self.raid_defense > 0 || self.repair.is_some() || self.turret.is_some() {
             return StructureCategory::Defence;
         }
         StructureCategory::Utility

@@ -13,3 +13,4 @@
 //! breakdown this module is built against.
 
 pub(crate) mod clock;
+pub(crate) mod turrets;

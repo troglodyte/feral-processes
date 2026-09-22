@@ -450,3 +450,82 @@ fn an_approaching_siege_asks_for_the_players_attention() {
         "the row must clear once the siege has landed"
     );
 }
+
+mod turrets {
+    use super::*;
+    use crate::game::siege::turrets::turret_defense;
+
+    /// A base with no turret contributes nothing.
+    #[test]
+    fn a_base_with_no_turret_contributes_no_turret_defense() {
+        let game = Game::new(920, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert_eq!(turret_defense(&game), 0);
+    }
+
+    /// A deployed turret contributes exactly its def's `damage` — matching
+    /// `shield_structure_loads_with_no_work_and_a_raid_defense_bonus`'s
+    /// read-the-def-rather-than-assume-a-literal style, so a retune of
+    /// `turret.ron` cannot silently desync this test from the content.
+    #[test]
+    fn a_deployed_turret_contributes_its_defs_damage() {
+        let mut game = Game::new(921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let damage = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "turret")
+            .expect("turret.ron should load as a structure")
+            .turret
+            .expect("turret.ron should declare a turret")
+            .damage;
+
+        game.world.spawn((
+            Structure {
+                kind: "turret".to_string(),
+            },
+            Position { x: 1, y: 1 },
+        ));
+
+        assert_eq!(turret_defense(&game), damage);
+    }
+
+    /// Two turrets stack, `total_raid_defense`'s own additive rule applied
+    /// to the same structure list.
+    #[test]
+    fn two_deployed_turrets_sum_their_damage() {
+        let mut game = Game::new(922, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let damage = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == "turret")
+            .expect("turret.ron should load as a structure")
+            .turret
+            .expect("turret.ron should declare a turret")
+            .damage;
+
+        for i in 0..2 {
+            game.world.spawn((
+                Structure {
+                    kind: "turret".to_string(),
+                },
+                Position { x: i, y: 1 },
+            ));
+        }
+
+        assert_eq!(turret_defense(&game), damage * 2);
+    }
+
+    /// An ordinary structure with no `turret:` field contributes nothing,
+    /// even though it may still contribute `raid_defense` — the two are
+    /// independent fields on the same def.
+    #[test]
+    fn a_non_turret_structure_contributes_no_turret_defense() {
+        let mut game = Game::new(923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "shield".to_string(),
+            },
+            Position { x: 1, y: 1 },
+        ));
+        assert_eq!(turret_defense(&game), 0);
+    }
+}

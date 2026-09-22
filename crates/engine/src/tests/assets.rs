@@ -126,6 +126,79 @@ fn a_structure_file_without_the_power_fields_still_parses() {
     );
 }
 
+/// The moddability guarantee for `StructureDef::turret`: a structure file
+/// written before it existed — the common case, since every shipped file
+/// but `turret.ron` predates it — must still parse, reading it as `None`
+/// rather than failing to load.
+#[test]
+fn a_structure_file_without_a_turret_still_parses() {
+    const NO_TURRET_STRUCTURE: &str = r#"(
+        id: "no_turret_structure",
+        name: "No Turret Structure",
+        glyph: '?',
+        color: White,
+        build_cost: [],
+        work: None,
+    )"#;
+    let dir = assets_dir_with_extra_structure(
+        "no_turret_structure",
+        "no_turret_structure.ron",
+        NO_TURRET_STRUCTURE,
+    );
+    let game = Game::new(906, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let def = db
+        .get("no_turret_structure")
+        .expect("the fixture structure loaded");
+
+    assert!(
+        def.turret.is_none(),
+        "an old-format file should declare no turret"
+    );
+}
+
+/// Every shipped file that declares `turret:` declares a legal one — the
+/// `checked > 0` guard `no_shipped_structure_declares_a_retired_platform_field`
+/// uses, so the census cannot pass by finding nothing.
+#[test]
+fn every_shipped_turret_declares_positive_damage_and_range() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/structures");
+    let mut checked = 0;
+    let mut turrets = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        checked += 1;
+        let def: crate::structures::StructureDef =
+            ron::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        if let Some(turret) = def.turret {
+            turrets += 1;
+            assert!(
+                turret.damage > 0,
+                "{} declares a turret with no damage",
+                path.display()
+            );
+            assert!(
+                turret.range > 0,
+                "{} declares a turret with no range",
+                path.display()
+            );
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census must actually walk assets/structures, or this passes vacuously"
+    );
+    assert!(
+        turrets > 0,
+        "the census must find at least one shipped turret, or this passes vacuously"
+    );
+}
+
 #[test]
 fn every_shipped_asset_file_loads_without_a_warning() {
     // A malformed shipped asset is warn-and-skipped like a mod's would

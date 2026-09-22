@@ -1630,3 +1630,140 @@ mod raiders_steal {
         assert_eq!(remaining, plenty - HAUL_CARRY_CAPACITY);
     }
 }
+
+/// `Game::besieger_turn`'s wreck arm, below the steal arm (Task 13).
+mod raiders_wreck {
+    use super::*;
+    use crate::components::{Besieger, Carrying, Durability, Glyph, GlyphColor, Structure};
+    use crate::game::siege::board;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::BattleSpec;
+    use crate::world::Biome;
+
+    fn open_pocket_battle(game: &mut Game) -> (i32, i32) {
+        game.lay_starting_pocket();
+        let siege_board = board::build(game).unwrap();
+        let spec = BattleSpec {
+            world_seed: 1,
+            site: (0, 0),
+            tick: 0,
+            zone: 1,
+            biome: Biome::OpenGrid,
+            bodies: 1,
+        };
+        game.world
+            .insert_resource(TacticalBattle::open(spec, siege_board.board.clone()));
+        siege_board.door
+    }
+
+    fn spawn_besieger(game: &mut Game) -> Entity {
+        game.world
+            .spawn((
+                Glyph {
+                    ch: 'r',
+                    color: GlyphColor::Red,
+                },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 5,
+                    mitigation: 0,
+                },
+                Hostile,
+                Besieger,
+            ))
+            .id()
+    }
+
+    fn spawn_structure(game: &mut Game, hp: u32, stocked: u32) -> Entity {
+        let mut stock = Stock::new(1000);
+        if stocked > 0 {
+            stock
+                .output
+                .insert(ItemId::from(ids::CORE_FRAGMENT), stocked);
+        }
+        game.world
+            .spawn((
+                Structure {
+                    kind: "test_structure".to_string(),
+                },
+                Durability { hp, max_hp: hp },
+                stock,
+            ))
+            .id()
+    }
+
+    /// A raider beside an empty machine attacks it.
+    #[test]
+    fn a_raider_beside_an_empty_machine_wrecks_it() {
+        let mut game = Game::new(990, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let structure = spawn_structure(&mut game, 10_000, 0);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(
+            game.besieger_turn(besieger),
+            "beside an empty machine, a besieger must wreck it"
+        );
+        let hp = game.world.get::<Durability>(structure).unwrap().hp;
+        assert!(hp < 10_000, "wrecking must lower the machine's Durability");
+        assert!(
+            game.world.get::<Carrying>(besieger).is_none(),
+            "wrecking is not stealing"
+        );
+    }
+
+    /// A raider beside a stocked one steals instead — steal before wreck.
+    #[test]
+    fn a_raider_beside_a_stocked_machine_steals_instead() {
+        let mut game = Game::new(991, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let structure = spawn_structure(&mut game, 10_000, 3);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(game.besieger_turn(besieger));
+        assert!(
+            game.world.get::<Carrying>(besieger).is_some(),
+            "a stocked machine must be stolen from rather than wrecked"
+        );
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            10_000,
+            "a machine that was stolen from rather than wrecked keeps its Durability"
+        );
+    }
+
+    /// A base with nothing worth taking anywhere is still wrecked rather
+    /// than stood in.
+    #[test]
+    fn a_base_with_nothing_worth_taking_is_still_wrecked_rather_than_stood_in() {
+        let mut game = Game::new(992, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let structure = spawn_structure(&mut game, 10_000, 0);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        let acted = game.besieger_turn(besieger);
+        assert!(
+            acted,
+            "with nothing to take anywhere in reach, a besieger must still act"
+        );
+    }
+}

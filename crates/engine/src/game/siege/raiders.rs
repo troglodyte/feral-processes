@@ -18,7 +18,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::components::{Besieger, Carrying, Stock, StolenFrom, Structure};
+use crate::components::{Besieger, Carrying, Durability, Stock, StolenFrom, Structure};
 use crate::game::siege::board;
 use crate::resources::MessageKind;
 use crate::tactical::TacticalBattle;
@@ -31,11 +31,13 @@ impl Game {
     /// `tactical::turn::run_tactical_beat` calls before falling through to
     /// the generic tactical AI.
     ///
-    /// Steal only, for Task 12: adjacent to a stocked structure, take what
-    /// it holds and make for the door; carrying already, walk toward the
-    /// door; at the door carrying, leave. Task 13 adds a wreck arm below the
-    /// steal check and Task 14 makes the door arm unconditional on a morale
-    /// break.
+    /// Steal, then wreck, for Tasks 12 and 13: adjacent to a stocked
+    /// structure, take what it holds and make for the door; adjacent to a
+    /// structure with nothing to take, swing at it instead — **steal before
+    /// wreck**, because a raider that wrecks the shelf it could have
+    /// emptied makes interception pointless. Carrying already, walk toward
+    /// the door; at the door carrying, leave. Task 14 makes the door arm
+    /// unconditional on a morale break.
     pub(crate) fn besieger_turn(&mut self, body: Entity) -> bool {
         if self.world.get::<Besieger>(body).is_none() {
             return false;
@@ -62,8 +64,11 @@ impl Game {
             if let Some(structure) = self.adjacent_stocked_structure(body) {
                 return self.besieger_steal(body, structure);
             }
-            // Nothing to take in reach, and no reason yet to make for the
-            // door — the generic AI's to fight, opportunist or not.
+            if let Some(structure) = self.adjacent_wreckable_structure(body) {
+                return self.besieger_wreck(body, structure);
+            }
+            // Nothing to take or wreck in reach, and no reason yet to make
+            // for the door — the generic AI's to fight, opportunist or not.
             return false;
         }
 
@@ -123,6 +128,44 @@ impl Game {
         self.world
             .entity_mut(body)
             .insert((Carrying { item, qty: take }, StolenFrom(structure)));
+        self.world.resource_mut::<TacticalBattle>().spend_action();
+        self.hand_on_turn(body, round_before);
+        true
+    }
+
+    /// A structure in melee reach of `body` with `Durability` and nothing
+    /// worth taking — asked only once `adjacent_stocked_structure` has
+    /// already come up empty, which is the whole of "steal before wreck."
+    fn adjacent_wreckable_structure(&self, body: Entity) -> Option<Entity> {
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let cells = battle.cells_of(body);
+        battle
+            .bodies()
+            .filter(|&(e, _)| e != body)
+            .filter(|&(e, _)| self.world.get::<Durability>(e).is_some())
+            .find(|&(e, _)| {
+                let scells = battle.cells_of(e);
+                reach::gap(&cells, &scells) <= TACTICAL_MELEE_RANGE
+            })
+            .map(|(e, _)| e)
+    }
+
+    /// Swings at `structure` — Task 10's own structure branch, reused
+    /// rather than restated. Nothing new about the damage; the whole of
+    /// this task is the priority order above it.
+    fn besieger_wreck(&mut self, body: Entity, structure: Entity) -> bool {
+        let Some(round_before) = self.world.get_resource::<TacticalBattle>().map(|b| b.round)
+        else {
+            return false;
+        };
+        let dmg = self.swing_damage(body);
+        let label = self.entity_label(structure);
+        self.damage_structure(structure, dmg, &label, "a siege");
+        if self.world.get::<Durability>(structure).is_none() {
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .remove(structure);
+        }
         self.world.resource_mut::<TacticalBattle>().spend_action();
         self.hand_on_turn(body, round_before);
         true

@@ -1766,6 +1766,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         contracts: Vec::new(),
         contracts_done: Vec::new(),
         work_orders: Vec::new(),
+        alerts: Vec::new(),
         next_program_id: 0,
     };
     let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));

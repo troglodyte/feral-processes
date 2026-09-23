@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.227
+
+**A Recharger Node that runs out of Power Cells now has one fetched from
+any machine holding them, not only from a Depot.** Before, cells sitting in
+a Power Conduit out of the Recharger's reach could never get to it once
+every Depot was full: the Conduit's worker had nowhere to shelve them, and a
+full Conduit makes nothing, so the grid stayed dark for good. Now a worker
+walks to the Conduit and carries a cell straight across.
+
 ## 0.13.226
 
 **Staff carrying goods to a Depot no longer get stuck at one they can't

@@ -1343,6 +1343,9 @@ relying on one, and correct all three places if it has moved.
   *panel* through the renderer's own `block_height`
   (`the_tallest_shipped_notification_fits_its_screen`, verified by mutation)
   and it belongs in `needs_status_banner` and `ALL_MODES`.
+- **`alerts::post` is the one door onto the alert board, a free function
+  because `set_machine_status` has no `Game`, and collapse identity is kind
+  plus subject.**
 
 ### Species and data
 

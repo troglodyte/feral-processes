@@ -25,6 +25,7 @@ use bevy_ecs::prelude::Entity;
 use rand::RngExt;
 
 use crate::Game;
+use crate::alerts::AlertKind;
 use crate::game::spawning::SpawnEscalation;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::TacticalBattle;
@@ -182,10 +183,9 @@ impl Game {
         // toward the fight, the "accepted consequence" §5 rules out — before
         // anything here ever ends a turn for the wrap to catch.
         self.skip_disengaged_turns();
-        self.log_base_kind(
-            crate::resources::MessageKind::Raid,
-            "Besiegers pour in through the door!".to_string(),
-        );
+        let text = "Besiegers pour in through the door!".to_string();
+        self.log_base_kind(crate::resources::MessageKind::Raid, text.clone());
+        self.post_alert(AlertKind::SiegeBegun, "siege", text);
         true
     }
 

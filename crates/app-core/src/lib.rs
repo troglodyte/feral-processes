@@ -1872,6 +1872,18 @@ pub enum Mode {
     /// `None` underground of its own accord — and reading what you have
     /// taken four frames down is exactly when you want to.
     Contracts,
+    /// The alert board (`Game::alerts`), opened with `N` — a capped, saved,
+    /// player-dismissed list of production blockers and program events,
+    /// distinct from a one-shot `Mode::Notification` popup and from the
+    /// unsaved log `Mode::History` scrolls.
+    ///
+    /// Opening it calls `Game::mark_alerts_read`, so the status bar's badge
+    /// clears the instant the screen is seen rather than waiting on a
+    /// dismiss. `x`/`d` dismiss the highlighted row, matched **before**
+    /// `App::selected_index` — lowercase letters are row selectors on every
+    /// other list, and an alert's own text must not double as a shortcut for
+    /// it.
+    Alerts,
     /// The message log in full, scrolled with Up/Down — the map's pane shows
     /// only its last few lines. Read-only, and bounded by what the engine
     /// keeps: `MESSAGE_LOG_CAP` lines, minus the blow-by-blow that
@@ -2150,6 +2162,9 @@ impl Mode {
             | Mode::Research
             | Mode::RoutineResearch
             | Mode::Contracts
+            // Opened from the map with `N`, so it never layers over a
+            // fight — `Mode::History`'s reason exactly.
+            | Mode::Alerts
             | Mode::History
             | Mode::Compass
             | Mode::Structures

@@ -5,6 +5,7 @@
 //! that is what keeps the renderer from reaching into the `World`.
 
 use crate::abilities::AffinityKind;
+use crate::alerts::AlertKind;
 use crate::battle::ActionOption;
 use crate::classes::PlayerClass;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
@@ -3308,4 +3309,17 @@ pub struct FinishView {
     pub shade: crate::floors::FloorShade,
     pub sprite: String,
     pub name: String,
+}
+
+/// One row of the alert board as gui draws it — `Game::alerts`.
+///
+/// No `subject`: the collapse key is engine bookkeeping (`alerts::Alert`'s
+/// own field), and gui never reads it — it only draws `text` and, when
+/// `count > 1`, a trailing `×N`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlertView {
+    pub kind: AlertKind,
+    pub text: String,
+    pub count: u32,
+    pub unread: bool,
 }

@@ -484,6 +484,7 @@ impl Game {
         world.insert_resource(need_db);
         world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
+        world.insert_resource(crate::alerts::AlertBoard::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
@@ -1352,6 +1353,17 @@ impl Game {
             done: data.contracts_done,
         });
         world.insert_resource(crate::resources::WorkOrders(data.work_orders));
+        world.insert_resource({
+            // The latch starts false on every load, `AlertBoard`'s own
+            // doc: at worst a reload re-posts one alert the latch would
+            // otherwise have suppressed, collapsed into the existing entry.
+            let mut board = crate::alerts::AlertBoard {
+                alerts: data.alerts.into_iter().collect(),
+                depots_full: false,
+            };
+            crate::alerts::cap(&mut board);
+            board
+        });
         // See `Game::new`'s copy: both doors, and nothing restores it.
         world.insert_resource(crate::resources::LabourDemand::default());
         // Empty on purpose in *both* constructors. What has actually been
@@ -2829,6 +2841,13 @@ impl Game {
                 .done
                 .clone(),
             work_orders: self.work_orders().to_vec(),
+            alerts: self
+                .world
+                .resource::<crate::alerts::AlertBoard>()
+                .alerts
+                .iter()
+                .cloned()
+                .collect(),
             next_program_id: self.world.resource::<crate::resources::NextProgramId>().0,
             base_ledger: self
                 .world

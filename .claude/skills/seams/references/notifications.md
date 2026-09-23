@@ -72,3 +72,14 @@
   `"repair_bay"` (`dispatches_sorties`' rule), and its copy has to keep step
   with `Game::add_to_party`'s refusal, the other place the game says a downed
   program needs a Bay.
+- **`alerts::post` is the one door onto the alert board, and collapse
+  identity is kind plus subject.** It is a free function because
+  `set_machine_status` has no `Game`, and it posts only on entering a stall
+  because that function already speaks only on transition. The trap is
+  posting a program's downing at a caller: two of `bench_or_dissolve`'s five
+  callers log no downed line where they call it, and the Permadeath arm
+  despawns the entity, so the post sits inside `bench_or_dissolve` and reads
+  the `ProgramId` at the top. The depots-full latch is `AlertBoard::
+  depots_full` rather than a second `Resource`, because a new resource shifts
+  query iteration order, and it is not saved, so it resets on load.
+  Resolving a condition never removes its alert. Only the player dismisses.

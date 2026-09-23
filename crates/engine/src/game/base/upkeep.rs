@@ -1,6 +1,7 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
+use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -539,11 +540,10 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::RaidPressure>()
                 .warned = true;
-            self.log_base_kind(
-                MessageKind::Raid,
-                "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
-                    .to_string(),
-            );
+            let text = "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
+                .to_string();
+            self.log_base_kind(MessageKind::Raid, text.clone());
+            self.post_alert(AlertKind::SweepIncoming, "sweep", text);
         }
 
         if level < target {
@@ -699,6 +699,15 @@ impl Game {
         if targets.is_empty() {
             return false;
         }
+        // After the empty-targets return, or a base with nothing raidable
+        // (only a Home, `raidable: false`) gets a fresh alert on every
+        // `raid_check` past the threshold — the pressure never resets when
+        // nothing is swept, so every later check would re-post.
+        self.post_alert(
+            AlertKind::SweepHit,
+            "sweep",
+            "A GC Entropy Sweep hits the base.",
+        );
         // Here rather than in `raid_check`, which can decide a sweep happens
         // and then find nothing standing to sweep. This is the first line
         // after a sweep is real.

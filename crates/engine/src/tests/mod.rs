@@ -7,6 +7,7 @@ pub(crate) mod support;
 
 mod achievements;
 mod affixes;
+mod alerts;
 mod assets;
 mod attention;
 mod attributes;

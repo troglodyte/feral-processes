@@ -53,6 +53,8 @@ Reading and housekeeping:
   are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
   needs you.
 - L — history
+- N — the alert board: production blockers and program events, capped and dismissed with x or d.
+  Opening it marks everything read.
 - f — filter the log: all, field, or base
 - space — double the log pane's height, and back
 - s — save

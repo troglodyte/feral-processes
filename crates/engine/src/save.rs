@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::affixes::AffixId;
+use crate::alerts::Alert;
 use crate::classes::PlayerClass;
 use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::{DownedProgram, EquipmentSlot, ItemId};
@@ -1649,6 +1650,15 @@ pub struct SaveData {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub work_orders: Vec<crate::game::base::work_orders::WorkOrder>,
+    /// The alert board — see `alerts::AlertBoard`. Newest first, order,
+    /// `count` and `unread` all preserved.
+    ///
+    /// `#[serde(default)]` is the whole compatibility story since v29: a
+    /// file written before this field existed loads it as empty and costs
+    /// no `SAVE_FORMAT_VERSION` bump. `Game::load` re-applies
+    /// `alerts::cap`, so a hand-edited save cannot exceed it either.
+    #[serde(default)]
+    pub alerts: Vec<Alert>,
     /// The next `components::ProgramId` to hand out — see
     /// `resources::NextProgramId`. Without it a reload would reissue ids
     /// already spent, and two programs would answer to one name.
@@ -2098,6 +2108,7 @@ mod tests {
             contracts: Vec::new(),
             contracts_done: Vec::new(),
             work_orders: Vec::new(),
+            alerts: Vec::new(),
             next_program_id: crate::resources::NextProgramId::START.0,
         }
     }

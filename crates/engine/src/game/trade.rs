@@ -1,6 +1,7 @@
 //! Buying and selling at a trader structure, including selling programs
 //! off the roster.
 
+use crate::alerts::AlertKind;
 use crate::components::Downed;
 use crate::*;
 
@@ -638,8 +639,20 @@ impl Game {
     /// the difficulty branch here is about, and is not the one door onto
     /// `Downed`.
     pub(crate) fn bench_or_dissolve(&mut self, creature: Entity) -> String {
+        // Read before either arm despawns or detaches the entity — the
+        // Permadeath arm despawns it outright, so this is the only point
+        // both arms still have it to read.
+        let program_id = self.world.get::<ProgramId>(creature).copied();
         if *self.world.resource::<DifficultyMode>() == DifficultyMode::Permadeath {
-            return self.dissolve_tamed_program(creature);
+            let name = self.dissolve_tamed_program(creature);
+            if let Some(id) = program_id {
+                self.post_alert(
+                    AlertKind::ProgramDowned,
+                    format!("program-{}", id.0),
+                    format!("{name} was lost."),
+                );
+            }
+            return name;
         }
         let name = self.detach_from_play(creature);
         if let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
@@ -653,6 +666,13 @@ impl Game {
         // mod's own recovery structure answers it too.
         if self.repair_bays().is_empty() {
             self.notify(crate::notifications::NotificationKind::DownedProgram);
+        }
+        if let Some(id) = program_id {
+            self.post_alert(
+                AlertKind::ProgramDowned,
+                format!("program-{}", id.0),
+                format!("{name} is down."),
+            );
         }
         name
     }

@@ -6,6 +6,7 @@
 //! `resources::SiegePressure` for why it is a second meter rather than a
 //! second use of `resources::RaidPressure`.
 
+use crate::alerts::AlertKind;
 use crate::tuning::{
     SIEGE_MIN_ZONE, SIEGE_PRESSURE_JITTER_PERCENT, SIEGE_PRESSURE_PER_ZONE,
     SIEGE_PRESSURE_THRESHOLD, SIEGE_PRESSURE_WARN_PERCENT, SIEGE_WARN_FLOOR_TICKS,
@@ -200,10 +201,9 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::SiegePressure>()
                 .warned = true;
-            self.log_base_kind(
-                MessageKind::Raid,
-                "Movement gathers at the perimeter. A siege is forming.".to_string(),
-            );
+            let text = "Movement gathers at the perimeter. A siege is forming.".to_string();
+            self.log_base_kind(MessageKind::Raid, text.clone());
+            self.post_alert(AlertKind::SiegeIncoming, "siege", text);
         }
     }
 

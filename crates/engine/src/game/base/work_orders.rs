@@ -23,6 +23,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
@@ -1443,10 +1444,16 @@ impl Game {
         }
         let at = self.world.get::<Position>(site).copied();
         if let Some(at) = at {
-            self.log_base(format!(
+            let text = format!(
                 "The marked cell at {}, {} is cut off — no program can find a way to it.",
                 at.x, at.y
-            ));
+            );
+            self.log_base(text.clone());
+            self.post_alert(
+                AlertKind::SiteCutOff,
+                format!("dig@{},{}", at.x, at.y),
+                text,
+            );
         }
     }
 
@@ -1758,10 +1765,16 @@ impl Game {
             .map(|b| b.structure.clone());
         if let (Some(at), Some(kind)) = (at, kind) {
             let name = self.structure_name(&kind);
-            self.log_base(format!(
+            let text = format!(
                 "The {name} on order at {}, {} is cut off — no program can find a way to it.",
                 at.x, at.y
-            ));
+            );
+            self.log_base(text.clone());
+            self.post_alert(
+                AlertKind::SiteCutOff,
+                format!("build@{},{}", at.x, at.y),
+                text,
+            );
         }
     }
 

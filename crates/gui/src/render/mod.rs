@@ -28,6 +28,7 @@ use feral_processes_engine::{
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
+mod alerts;
 mod arena;
 mod bars;
 mod base;
@@ -1431,6 +1432,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::Alerts => alerts::draw_alerts(game, selected, refusal, painter, m),
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::Structures => draw_structures(game, selected, refusal, painter, m),
@@ -1510,7 +1512,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 115] = [
+    const ALL_MODES: [Mode; 116] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1605,6 +1607,7 @@ mod tests {
         Mode::Research,
         Mode::RoutineResearch,
         Mode::Contracts,
+        Mode::Alerts,
         Mode::History,
         Mode::Compass,
         Mode::Structures,

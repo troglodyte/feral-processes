@@ -36,6 +36,14 @@ impl Game {
     /// standing, so there is always something for a shortfall to spend
     /// itself against, even if the shortfall itself turns out to be zero.
     pub(crate) fn resolve_siege_offscreen(&mut self) -> bool {
+        // Posted unconditionally, even when the shortfall below turns out to
+        // be zero: a siege fully held off while the player was away is still
+        // worth seeing on the board (correction 2).
+        self.post_alert(
+            crate::alerts::AlertKind::SiegeBegun,
+            "siege",
+            "A siege hits the base while you're away.",
+        );
         let zone = self.world.resource::<ZoneLevel>().0;
         let strength = pack_size(zone);
         let staff = self.defending_base_staff();

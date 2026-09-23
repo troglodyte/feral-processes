@@ -542,6 +542,7 @@ pub(super) fn draw_playing_base(
             tick: game.current_tick(),
             power: game.base_power(),
             attention: &attention,
+            unread_alerts: game.unread_alerts(),
         },
         painter,
         m,

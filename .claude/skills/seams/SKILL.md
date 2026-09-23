@@ -55,7 +55,7 @@ Three tiers, and which one you want depends on what you are doing:
 | what a program remembers (memories, morale, opinion) | `references/memories.md` | 12 |
 | the HUD (attention, panes, the palette, glyph colour) | `references/hud.md` | 14 |
 | sorties | `references/sorties.md` | 10 |
-| notifications | `references/notifications.md` | 5 |
+| notifications | `references/notifications.md` | 6 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |
 | the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 23 |

@@ -398,3 +398,79 @@ fn a_resolved_stall_leaves_its_alert_on_the_board() {
         "resuming does not touch the existing alert's count"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Task 4: program downed (`Game::bench_or_dissolve`).
+// ---------------------------------------------------------------------------
+
+/// Stands a companion in a fight and kills it, mirroring
+/// `combat_rewards.rs`'s `a_companion_killed_in_battle`: teardown is what is
+/// under test, not `resolve_attack`, so the kill is a direct HP write.
+fn alert_companion_killed_in_battle(game: &mut Game) -> Entity {
+    let player = game.player_entity();
+    let companion = spawn_tamed(game, 10, 3);
+    enlist(game, companion);
+    let enemy = spawn_wild_on_player_tile(game);
+    insert_battle(game, player, vec![enemy]);
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
+    companion
+}
+
+/// A Forgiving bench, driven end to end through `end_battle` rather than
+/// calling `bench_or_dissolve` directly — the site asking the door is the
+/// point (correction 1: every caller of it agrees on the alert, not just
+/// the door in isolation).
+#[test]
+fn a_forgiving_bench_posts_a_downed_alert() {
+    let mut game = Game::new(19201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = alert_companion_killed_in_battle(&mut game);
+
+    game.end_battle(player, None);
+
+    assert!(
+        game.world.get::<components::Downed>(companion).is_some(),
+        "the fixture has to actually bench it, or this proves nothing"
+    );
+    let alerts = game.alerts();
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0].kind, AlertKind::ProgramDowned);
+    assert!(alerts[0].text.ends_with("is down."), "{}", alerts[0].text);
+}
+
+/// A Permadeath dissolve, same end-to-end shape, worded as a loss rather
+/// than a bench.
+#[test]
+fn a_permadeath_dissolve_posts_a_downed_alert() {
+    let mut game = Game::new(19202, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = alert_companion_killed_in_battle(&mut game);
+
+    game.end_battle(player, None);
+
+    assert!(
+        game.world.get::<Stats>(companion).is_none(),
+        "the fixture has to actually destroy it, or this proves nothing"
+    );
+    let alerts = game.alerts();
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0].kind, AlertKind::ProgramDowned);
+    assert!(alerts[0].text.ends_with("was lost."), "{}", alerts[0].text);
+}
+
+/// Downing the same program twice collapses into one row with `count: 2` —
+/// `bench_or_dissolve` called directly (it is `pub(crate)`) since the point
+/// under test is the alert board's collapse, not a second teardown site.
+#[test]
+fn downing_the_same_program_twice_collapses() {
+    let mut game = Game::new(19203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+
+    game.bench_or_dissolve(companion);
+    game.bench_or_dissolve(companion);
+
+    let alerts = game.alerts();
+    assert_eq!(alerts.len(), 1, "same program, same subject, one row");
+    assert_eq!(alerts[0].count, 2);
+}

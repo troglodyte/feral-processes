@@ -47,10 +47,6 @@ impl Game {
     /// A one-line wrapper over `alerts::post`, for the `Game`-method sources
     /// (bevy systems with no `Game` call `alerts::post` directly against a
     /// `ResMut<AlertBoard>` instead).
-    ///
-    /// `#[allow(dead_code)]` until Task 4 (`bench_or_dissolve`) becomes its
-    /// first production caller.
-    #[allow(dead_code)]
     pub(crate) fn post_alert(
         &mut self,
         kind: AlertKind,

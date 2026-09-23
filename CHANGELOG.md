@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.226
+
+**Staff carrying goods to a Depot no longer get stuck at one they can't
+stand next to when another Depot is free.** Before, a worker always picked
+the nearest Depot, so one with its only open side blocked — often by an idle
+program that couldn't move either — left the machine reading "cut off"
+while a second Depot stood open nearby. Now the worker goes to the nearest
+Depot it can actually walk to. A base whose only Depot is blocked still
+reports the stall.
+
 ## 0.13.225
 
 **The icon designer's palette now has a transparent swatch, first in the

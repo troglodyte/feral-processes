@@ -1244,6 +1244,64 @@ fn a_base_with_no_cell_anywhere_relights_its_own_recharger() {
     );
 }
 
+/// The deadlock a real save reached: a Power Conduit well out of the
+/// Recharger's reach sitting on a full buffer of cells, and the only Depot
+/// full of something else. The cells can never reach a shelf, so a fetch
+/// that reads shelves alone never fires, and the make half names nothing
+/// because a full Conduit cannot progress.
+fn cells_stranded_in_a_distant_conduit(game: &mut Game) -> (Entity, Entity) {
+    let recharger = deploy(game, "recharger_node", 1, 0);
+    let conduit = deploy(game, "power_conduit", -3, 0);
+    fill_output(game, conduit, ids::POWER_CELL, 20);
+    let depot = deploy(game, "depot", 4, 0);
+    fill_output(game, depot, ids::CORE_FRAGMENT, 50);
+    game.world
+        .get_mut::<components::PowerFuel>(recharger)
+        .unwrap()
+        .ticks_left = 0;
+    (recharger, conduit)
+}
+
+#[test]
+fn a_burner_fetches_its_fuel_off_a_machine_when_no_shelf_holds_any() {
+    let mut game = base_with_conduits(9113);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let (recharger, _) = cells_stranded_in_a_distant_conduit(&mut game);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, node);
+
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(recharger),
+        "cells in a machine's output are fuel in store, so the burner is a \
+         fetch want"
+    );
+}
+
+#[test]
+fn a_full_depot_does_not_strand_a_recharger_beside_a_full_conduit() {
+    let mut game = base_with_conduits(9114);
+    let (recharger, conduit) = cells_stranded_in_a_distant_conduit(&mut game);
+    hauler(&mut game);
+
+    tick_until(&mut game, 200, |g| {
+        hopper(g, recharger, ids::POWER_CELL) > 0
+    });
+
+    assert!(
+        hopper(&game, recharger, ids::POWER_CELL) > 0,
+        "a cell sitting in the Conduit's output must be carried to the \
+         Recharger even with nowhere to shelve it"
+    );
+    assert!(
+        node_output(&game, conduit, ids::POWER_CELL) < 20,
+        "and taken off the Conduit on the way"
+    );
+}
+
 #[test]
 fn a_dark_fuel_maker_is_not_handed_a_body() {
     // A body posted to a Conduit the grid cannot run stands there making

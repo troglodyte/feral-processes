@@ -1468,7 +1468,12 @@ impl Game {
     /// for the length of a walk to the depot every window, forever.
     ///
     /// **Gated on the base actually holding the fuel**, which is
-    /// `hauling::nearest_store_holding`'s question asked without the walk.
+    /// `hauling::nearest_store_holding`'s question asked without the walk —
+    /// on a shelf *or in any other structure's output*. Shelves alone
+    /// deadlocked a real base: a Conduit out of the Recharger's reach sat on
+    /// a full buffer of cells, every Depot was full of fragments so its
+    /// worker could never shelve them, and a full Conduit cannot progress so
+    /// the make half named nothing either.
     /// This is `build_wants`' stock gate and it is here for that reason: a
     /// want nothing can supply still costs a body out of the truncation
     /// below, and on a one-program base that body is the one producing the
@@ -1497,7 +1502,7 @@ impl Game {
     fn fuel_wants(&self) -> Vec<(Entity, TaskKind)> {
         // Every deployed structure carrying a buffer, which is every one of
         // them — collected once because this asks three questions of the
-        // same list: which are burners, which are shelves, and what is on
+        // same list: which are burners, what each holds, and what is on
         // each of a burner's four neighbours.
         let cells: Vec<(Entity, (i32, i32), String)> = self
             .world
@@ -1512,15 +1517,11 @@ impl Game {
         let by_tile: std::collections::HashMap<(i32, i32), Entity> =
             cells.iter().map(|&(e, tile, _)| (tile, e)).collect();
         let db = self.world.resource::<StructureDb>();
-        let shelves: Vec<Entity> = cells
-            .iter()
-            .filter(|(_, _, kind)| db.get(kind).is_some_and(|d| d.stores))
-            .map(|(e, ..)| *e)
-            .collect();
-        let shelved = |item: &ItemId| -> u32 {
-            shelves
+        let in_store = |item: &ItemId, burner: Entity| -> u32 {
+            cells
                 .iter()
-                .filter_map(|&shelf| self.world.get::<Stock>(shelf))
+                .filter(|(e, ..)| *e != burner)
+                .filter_map(|(e, ..)| self.world.get::<Stock>(*e))
                 .map(|stock| stock.output.get(item).copied().unwrap_or(0))
                 .sum()
         };
@@ -1546,7 +1547,7 @@ impl Game {
             if batch_within_reach(held, beside, 0, per_window) {
                 continue;
             }
-            if shelved(&fuel) < per_window {
+            if in_store(&fuel, *burner) < per_window {
                 if !unstocked.contains(&fuel) {
                     unstocked.push(fuel);
                 }

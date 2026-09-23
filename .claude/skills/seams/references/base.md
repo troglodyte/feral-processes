@@ -244,13 +244,17 @@
   flag**: as one tier, four Mining Nodes west of every Conduit take the whole
   4 and the fuel maker is dark, and a Mining Node's fragments become a cell
   only through the player's hands. The labour half lives in `fuel_wants`:
-  fuel on a shelf is *fetched*, fuel on no shelf is *made* — `wants` asked
+  fuel in store is *fetched*, fuel nowhere is *made* — `wants` asked
   of a one-window `WorkOrder::batch` for it — filed after every fetch and
   **never naming a dark machine**. **The dark set is asked of `ledger`
   fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
   runs ahead of `power_grid_system`, so the cache is last tick's and empty
   on the first tick after a load — exactly when a base arrives dark.
-  **Charge Coil is not fuel**; the Winding Node *burns* three Power Cells
+  **"In store" is any structure's output, not the shelves alone**, and
+  `haul_step_system` widens a burner's collect list to match: shelves-only
+  deadlocked a real base, a Conduit out of reach sitting on a full buffer
+  beside full Depots, where the make half names nothing because a full
+  Conduit cannot progress. **Charge Coil is not fuel**; the Winding Node *burns* three Power Cells
   per coil, and protecting it would deepen a blackout. And a probe that
   samples `PowerFuel::ticks_left` every 100 ticks aliases against
   `POWER_UPKEEP_TICKS` and reads a healthy burner as frozen.

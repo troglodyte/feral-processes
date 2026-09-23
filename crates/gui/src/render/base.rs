@@ -1,6 +1,7 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
 use super::marks::*;
+use super::outposts::draw_outpost_marks;
 use super::stack::draw_stack;
 use super::terrain::*;
 use super::*;
@@ -678,6 +679,15 @@ fn draw_surface_map(
     // `render/stack.rs` and never reaches here at all — so this one flag is
     // the whole of the gate: it is a property of the locale, not of a tile.
     let outdoors = base_pos.is_none();
+    // Outposts are zone-surface fixtures and never stand in base space or
+    // the Stack (which draws through `render/stack.rs` and never reaches
+    // this function at all) — `outdoors`'s own gate, `marked`'s mirror one
+    // locale over.
+    let outpost_marks = if outdoors {
+        game.outpost_marks()
+    } else {
+        Vec::new()
+    };
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
     painter.rect(
@@ -1389,6 +1399,28 @@ fn draw_surface_map(
                 )
             },
             tile_px,
+            pane,
+        );
+    }
+    // The surface's own mirror of the plan pass above: a record with no
+    // entity has no other way onto the map, `render/outposts.rs::
+    // draw_outpost_marks`'s own doc.
+    if outdoors {
+        draw_outpost_marks(
+            painter,
+            &outpost_marks,
+            |world| {
+                tile_origin_px(
+                    world,
+                    center,
+                    (half_w, half_h),
+                    (off_x, off_y),
+                    tile_px,
+                    pane,
+                )
+            },
+            tile_px,
+            glyph_px,
             pane,
         );
     }

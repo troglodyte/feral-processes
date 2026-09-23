@@ -18,6 +18,7 @@ pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevCon
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
+pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::sprite_forge::{
     PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
@@ -63,6 +64,21 @@ impl TransferEntry {
     }
 }
 
+/// Which buffer `Mode::Transfer`'s commit moves against — the depots beside
+/// the player, or the outpost whose screen opened the picker.
+///
+/// Set by whichever opener called `App::open_transfer` and read only by
+/// `App::commit_transfer`, so the one basket and one commit stay shared
+/// while the door they spend through differs underneath —
+/// `Game::transfer_items` against `Game::take_from_outpost`. An outpost's
+/// rows carry `can_put: 0` (`Game::outpost_transfer_offer`), so a basket
+/// built against one never has anything in `TransferBasket::give`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferSource {
+    Base,
+    Outpost((i32, i32)),
+}
+
 use app::arena::{ArenaPickKind, ArenaSession};
 
 use std::collections::HashMap;
@@ -89,9 +105,10 @@ use feral_processes_engine::{
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
     DispatchReach, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal, RouteReport,
-    SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
-    TransferCarrier, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    MessageSource, OutpostReport, ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal,
+    RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome,
+    TransferBasket, TransferCarrier, TransferRow, Visit, WorkOrder, WorkOrderReport, WorkProfile,
+    condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1586,7 +1603,7 @@ pub enum Mode {
     /// A settlement's identity page — name, kind, specialty, temperament,
     /// blurb — the whole of `Game::settlement_report`. Reached two ways that
     /// land on the same screen and the same `App::pending_settlement`:
-    /// walking into the tile drains `Game::take_settlement_visit` in
+    /// walking into the tile drains `Game::take_visit` in
     /// `App::after_world_action`, and `x` toward one resolves
     /// `InspectTarget::Settlement` through `Game::settlement_key`. A plain
     /// popup like `Mode::StructureManifest` beside it — identity first, and
@@ -1625,6 +1642,24 @@ pub enum Mode {
     /// **this town's jobs alone**, because a contract is delivered where it
     /// was signed and a row that could not act reads as a broken key.
     SettlementBoard,
+    /// An outpost's own page, opened from `App::pending_outpost` — the
+    /// bump cue's `Visit::Outpost` arm, drained in `after_world_action`
+    /// exactly like `Mode::Settlement`'s own settlement key. Every figure
+    /// comes from one derivation, `Game::outpost_report`.
+    ///
+    /// `[P]` opens `Mode::OutpostPost` to post a staff program; `[U]`
+    /// recalls the crew row the cursor is on; `[R]` repairs (a refusal
+    /// until Phase 5 wires `Game::repair_outpost` — bound now so the key
+    /// table does not change later); `c` opens `Mode::Transfer` with
+    /// `TransferSource::Outpost`, the take side of the one basket outposts
+    /// share with a Depot.
+    OutpostVisit,
+    /// The staff picker `[P]` opens from `Mode::OutpostVisit` — every
+    /// base-staff program, a letter posts one and returns to
+    /// `Mode::OutpostVisit`. `Mode::SortieSquad`'s candidate list
+    /// (`Game::base_staff`) with no basket to build: posting is one action,
+    /// not a set committed later.
+    OutpostPost,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -2114,6 +2149,11 @@ impl Mode {
             | Mode::SettlementMarket
             // `Mode::SettlementMarket`'s reason exactly.
             | Mode::SettlementBoard
+            // `Mode::Settlement`'s own reason: a bump that lands mid-battle
+            // never reaches here either, `after_world_action`'s same guard.
+            | Mode::OutpostVisit
+            // Reached only by a key press from `Mode::OutpostVisit` itself.
+            | Mode::OutpostPost
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction
@@ -2571,13 +2611,19 @@ pub struct App {
     /// set by different keys and cleared at different times.
     pub pending_memory_program: Option<Entity>,
     /// The settlement `Mode::Settlement` is showing, set from either of the
-    /// two doors onto it: `Game::take_settlement_visit`, drained in
+    /// two doors onto it: `Game::take_visit`, drained in
     /// `after_world_action` the tick a bump lands on the tile, or
     /// `Game::settlement_key` off the `Entity` an `x` toward one resolves
     /// to. A key rather than an `Entity` because the bump cue already hands
     /// back one — `Game::settlement_report`'s own reason for taking the
     /// same type.
     pub pending_settlement: Option<SettlementKey>,
+    /// The outpost tile `Mode::OutpostVisit` is showing, set from
+    /// `Game::take_visit`'s `Visit::Outpost` arm the tick a bump lands on
+    /// it — `pending_settlement`'s own shape, one tile of content over. A
+    /// tile rather than an `Entity` because an outpost is a record with no
+    /// entity at all (design spec §2), so there is nothing else to hold.
+    pub pending_outpost: Option<(i32, i32)>,
     /// The program `Mode::CompanionEquip` is showing the slots of, picked
     /// with `E` on the roster.
     pub pending_equip_program: Option<Entity>,
@@ -2622,6 +2668,10 @@ pub struct App {
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,
+    /// Which door `App::commit_transfer` spends the basket through — see
+    /// `TransferSource`. Set by whichever opener called `App::open_transfer`
+    /// and read only at the commit.
+    pub transfer_source: TransferSource,
     /// Free slots across the adjacent Quarantine Racks — `basket_room`'s
     /// counterpart on the carrier axis, and the ceiling every carrier *put*
     /// is clamped against.

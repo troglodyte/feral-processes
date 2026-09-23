@@ -533,7 +533,13 @@ impl App {
             self.refuse(reason);
         }
         if let Some(o) = opening {
-            self.open_transfer(o.rows, o.carriers, o.room, o.rack_room);
+            self.open_transfer(
+                o.rows,
+                o.carriers,
+                o.room,
+                o.rack_room,
+                TransferSource::Base,
+            );
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }
@@ -696,13 +702,21 @@ impl App {
         // battle *inside that same tick*. The battle wins the mode, but the
         // cue must still be drained: left in `PendingVisit` it would reopen
         // `Mode::Settlement` on some later, unrelated action once the fight
-        // is over, so this always calls `take_settlement_visit` and only
+        // is over, so this always calls `take_visit` and only
         // assigns the mode when no battle started.
-        if let Some(key) = self.game.as_mut().and_then(|g| g.take_settlement_visit())
+        if let Some(visit) = self.game.as_mut().and_then(|g| g.take_visit())
             && !entered_battle
         {
-            self.pending_settlement = Some(key);
-            self.mode = Mode::Settlement;
+            match visit {
+                Visit::Settlement(key) => {
+                    self.pending_settlement = Some(key);
+                    self.mode = Mode::Settlement;
+                }
+                Visit::Outpost(tile) => {
+                    self.pending_outpost = Some(tile);
+                    self.mode = Mode::OutpostVisit;
+                }
+            }
         }
         if is_move_key {
             self.pending_sounds.push(if entered_battle {

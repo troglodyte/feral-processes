@@ -43,7 +43,7 @@ fn esc_returns_to_playing_and_clears_the_pending_settlement() {
     assert_eq!(app.pending_settlement, None);
 }
 
-/// The drain, asserted from the app's side. `Game::take_settlement_visit`
+/// The drain, asserted from the app's side. `Game::take_visit`
 /// only ever answers `Some` once — `after_world_action` calls it on *every*
 /// action that advanced the world, not only a bump — so a keypress spent on
 /// something else entirely, after Esc already backed out of the page once,

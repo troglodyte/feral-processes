@@ -105,7 +105,7 @@ impl App {
         });
         match offer {
             Some((rows, carriers, room, rack_room)) => {
-                self.open_transfer(rows, carriers, room, rack_room)
+                self.open_transfer(rows, carriers, room, rack_room, TransferSource::Base)
             }
             None => self.leave_basket(),
         }

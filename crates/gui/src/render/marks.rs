@@ -553,6 +553,29 @@ pub(super) fn draw_pin_marks(
     }
 }
 
+/// Tier pips for an outpost's tile mark — 1..=3 small squares in the
+/// top-right corner, `nemesis_mark_rect`'s own corner and vertical
+/// placement (dropped below `RARITY_BAR_PX`, inset from the right edge).
+/// Laid out right to left, so a third pip pushes further left rather than
+/// the whole group re-centring.
+///
+/// **No collision to guard against.** An outpost's tile is a record with
+/// no `EntityView` standing on it (`render/outposts.rs`'s own doc), so it
+/// never also wears a nemesis or a patrol mark — the one corner nothing
+/// else claims, the way `patrol_mark_rect`'s own doc reasons about the
+/// bottom-right.
+pub(super) fn outpost_pip_rects(px: f32, py: f32, tile_px: f32, count: usize) -> Vec<Rect> {
+    let size = (tile_px - 1.0) * IDENTITY_MARK * 0.6;
+    let gap = 2.0;
+    let y = py + RARITY_BAR_PX + IDENTITY_MARK_INSET;
+    (0..count.min(3))
+        .map(|i| {
+            let right = px + tile_px - 1.0 - IDENTITY_MARK_INSET - (size + gap) * i as f32 - size;
+            Rect::new(right, y, size, size)
+        })
+        .collect()
+}
+
 /// A machine's state colour, worn by both its glyph and its outline. The
 /// six are ordered by what the player should do about them: green needs
 /// nothing, grey needs a program, yellow needs a feeder or is waiting on one
@@ -638,6 +661,37 @@ mod tests {
             rects[3].x > mid_x && rects[3].y > mid_y,
             "3 should be bottom-right"
         );
+    }
+
+    /// The rarity bar's own reason: nothing in this file may share its row.
+    #[test]
+    fn outpost_pip_rects_clear_the_rarity_bar() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (100.0, 200.0);
+            for rect in outpost_pip_rects(px, py, tile_px, 3) {
+                assert!(
+                    rect.y >= py + RARITY_BAR_PX,
+                    "tile_px={tile_px}: y={} starts above the rarity bar",
+                    rect.y
+                );
+            }
+        }
+    }
+
+    /// Right to left, so a third pip does not re-centre the group — the
+    /// tier count only ever grows toward 3, and a pip that was already on
+    /// screen must not move when a fourth is never authored.
+    #[test]
+    fn outpost_pip_rects_are_ordered_right_to_left() {
+        let rects = outpost_pip_rects(0.0, 0.0, 32.0, 3);
+        assert_eq!(rects.len(), 3);
+        assert!(rects[0].x > rects[1].x);
+        assert!(rects[1].x > rects[2].x);
+    }
+
+    #[test]
+    fn outpost_pip_rects_caps_at_three() {
+        assert_eq!(outpost_pip_rects(0.0, 0.0, 32.0, 5).len(), 3);
     }
 
     /// Flush against the tile-edge ring, unlike every other mark in this

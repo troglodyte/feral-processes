@@ -269,12 +269,21 @@ impl App {
         basket
     }
 
-    /// The one teardown every exit uses. Clearing the three fields is what
-    /// stops a reopened screen showing a stale shelf or a stale pack.
+    /// The one teardown every exit uses. Clearing the fields is what stops a
+    /// reopened screen showing a stale shelf or a stale pack.
+    ///
+    /// **Where it lands reads `self.transfer_source`, set by whichever
+    /// opener called `App::open_transfer`.** The base's own transfer is
+    /// opened from the map, so it closes onto the map; an outpost's is
+    /// opened from `Mode::OutpostVisit`, so it closes back onto that screen
+    /// rather than dropping the player onto the raw map underneath it.
     pub(crate) fn leave_basket(&mut self) {
         self.basket_rows.clear();
         self.basket_amounts.clear();
         self.basket_room = None;
-        self.mode = Mode::Playing;
+        self.mode = match self.transfer_source {
+            TransferSource::Base => Mode::Playing,
+            TransferSource::Outpost(_) => Mode::OutpostVisit,
+        };
     }
 }

@@ -213,7 +213,7 @@ fn t_on_a_destination_row_travels_and_leaves_no_cue_dangling() {
     let landed = app.game.as_ref().unwrap().player_status().position;
     assert_ne!(landed, town, "the party landed on the settlement tile");
     assert!(
-        app.game.as_mut().unwrap().take_settlement_visit().is_none(),
+        app.game.as_mut().unwrap().take_visit().is_none(),
         "an arrival cue was left queued for a later, unrelated action to open"
     );
     assert_ne!(

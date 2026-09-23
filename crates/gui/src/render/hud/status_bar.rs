@@ -45,6 +45,10 @@ pub(in crate::render) struct StatusBarState<'a> {
     /// `Game::attention`, called once by the caller and shared with the
     /// info column. This never derives its own.
     pub attention: &'a [AttentionRow],
+    /// `Game::unread_alerts`. Drawn as a second badge beside the attention
+    /// one, and only when it is nonzero — a `N 0` reads as noise beside
+    /// `ALL NOMINAL`, which already says nothing is holding.
+    pub unread_alerts: usize,
 }
 
 /// The identity block, as coloured runs. Pure, so the census can measure
@@ -151,19 +155,60 @@ pub(in crate::render) fn draw_status_bar(
         .collect();
     painter.ui_runs(&runs, at.x + m.inset, baseline, m.font_size);
 
-    draw_badge(at, state.attention, baseline, painter, m);
+    let right_edge = at.x + at.w - m.inset;
+    let avail = at.w * BADGE_FRAC - m.inset;
+    let attention_left = draw_badge(
+        right_edge,
+        avail,
+        badge_pieces(state.attention),
+        baseline,
+        painter,
+        m,
+    );
+    if state.unread_alerts > 0 {
+        // Drawn immediately to the left of the attention badge, through the
+        // same fitting-and-anchoring logic rather than a second copy of it —
+        // `draw_badge` takes an explicit right edge and budget for exactly
+        // this, so a caller with more than one badge is not a special case.
+        draw_badge(
+            attention_left - m.inset,
+            avail,
+            vec![(
+                format!("N {}", state.unread_alerts),
+                palette::ATTENTION,
+                true,
+            )],
+            baseline,
+            painter,
+            m,
+        );
+    }
 }
 
 /// Right-aligns the badge inside its reserved zone. What does not fit is
 /// dropped from the end, never clipped — the row's rule.
-fn draw_badge(at: Rect, attention: &[AttentionRow], baseline: f32, painter: &Painter, m: &Metrics) {
+/// Right-anchors `pieces` at `right_edge`, fitting as many as `avail` holds,
+/// and returns the x it drew the leftmost one at — `right_edge` itself if
+/// none fit — so a second badge can anchor just to the left of the first.
+///
+/// Generic over `pieces` rather than over `AttentionRow` so the status bar's
+/// two badges (attention, and the alert count beside it) share this fitting
+/// and drawing logic instead of one being a copy of the other with a
+/// different source type.
+fn draw_badge(
+    right_edge: f32,
+    avail: f32,
+    pieces: Vec<strip::Piece>,
+    baseline: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> f32 {
     // Piece by piece rather than all or nothing, so a long condition sheds
     // its `+N` and then its keycap rather than vanishing entirely. Not
     // `strip::fitting`, which joins its segments with ` · ` — a badge is one
     // phrase, not a list of them.
-    let avail = at.w * BADGE_FRAC - m.inset;
     let mut taken: Vec<strip::Piece> = Vec::new();
-    for piece in badge_pieces(attention) {
+    for piece in pieces {
         let mut next = taken.clone();
         next.push(piece);
         let text: String = next.iter().map(|(t, _, _)| t.as_str()).collect();
@@ -173,7 +218,7 @@ fn draw_badge(at: Rect, attention: &[AttentionRow], baseline: f32, painter: &Pai
         taken = next;
     }
     if taken.is_empty() {
-        return;
+        return right_edge;
     }
     let text: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
     let w = painter.measure_ui_advance(&text, m.font_size);
@@ -185,7 +230,9 @@ fn draw_badge(at: Rect, attention: &[AttentionRow], baseline: f32, painter: &Pai
             color: *color,
         })
         .collect();
-    painter.ui_runs(&runs, at.x + at.w - m.inset - w, baseline, m.font_size);
+    let x = right_edge - w;
+    painter.ui_runs(&runs, x, baseline, m.font_size);
+    x
 }
 
 #[cfg(test)]
@@ -223,6 +270,7 @@ mod tests {
             tick: 9_999_999,
             power: (188, 188),
             attention: &[],
+            unread_alerts: 0,
         }
     }
 
@@ -234,6 +282,7 @@ mod tests {
             tick: 4210,
             power,
             attention: &[],
+            unread_alerts: 0,
         }
     }
 
@@ -433,7 +482,14 @@ mod tests {
                 p.measure_ui_advance(&whole, m.font_size) > avail,
                 "the fixture must overflow the badge zone or it proves nothing"
             );
-            draw_badge(at, state.attention, baseline, p, &m);
+            draw_badge(
+                at.x + at.w - m.inset,
+                avail,
+                badge_pieces(state.attention),
+                baseline,
+                p,
+                &m,
+            );
         });
         // Nothing else was drawn into this painter, so every glyph is the
         // badge's.
@@ -445,5 +501,35 @@ mod tests {
                 p.measure_ui_advance(&drawn, m.font_size)
             );
         });
+    }
+
+    /// Both halves in one test, `a_threat_badge_is_red`'s shape: either
+    /// alone passes against a badge always drawing (or never drawing).
+    #[test]
+    fn the_alert_badge_draws_only_when_there_is_something_unread() {
+        let m = ui_metrics(720.0);
+        let at = Rect::new(0.0, 0.0, 1280.0, m.line_height + m.inset);
+
+        let calm = StatusBarState {
+            unread_alerts: 0,
+            ..wide_state()
+        };
+        let (_, shapes) = with_painter(|p| draw_status_bar(at, &calm, p, &m));
+        let drawn = painted_text(&shapes).join("");
+        assert!(
+            !drawn.contains("N 0"),
+            "zero unread alerts must draw no badge for them: {drawn:?}"
+        );
+
+        let noisy = StatusBarState {
+            unread_alerts: 3,
+            ..wide_state()
+        };
+        let (_, shapes) = with_painter(|p| draw_status_bar(at, &noisy, p, &m));
+        let drawn = painted_text(&shapes).join("");
+        assert!(
+            drawn.contains("N 3"),
+            "3 unread alerts should draw their own badge: {drawn:?}"
+        );
     }
 }

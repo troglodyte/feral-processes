@@ -474,3 +474,131 @@ fn downing_the_same_program_twice_collapses() {
     assert_eq!(alerts.len(), 1, "same program, same subject, one row");
     assert_eq!(alerts[0].count, 2);
 }
+
+// ---------------------------------------------------------------------------
+// Task 5: sweep and siege.
+// ---------------------------------------------------------------------------
+
+fn alert_kind_count(game: &Game, kind: &AlertKind) -> usize {
+    game.alerts().iter().filter(|a| &a.kind == kind).count()
+}
+
+/// The sweep's approach warning latches — `raid_check`'s own `warned` flag —
+/// so posting it across repeated checks still leaves one row.
+#[test]
+fn sweep_incoming_warns_once_across_repeated_checks() {
+    let mut game = Game::new(19301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+
+    game.dev_wind_raid_clock();
+    game.raid_check();
+    assert!(
+        game.world
+            .resource::<crate::resources::RaidPressure>()
+            .warned,
+        "the fixture has to actually warn, or this proves nothing"
+    );
+    game.raid_check();
+
+    assert_eq!(alert_kind_count(&game, &AlertKind::SweepIncoming), 1);
+    let alert = game
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == AlertKind::SweepIncoming)
+        .unwrap();
+    assert_eq!(
+        alert.count, 1,
+        "the latch means a second check posts nothing more"
+    );
+}
+
+/// `run_raid` posts once per sweep, whichever branch it lands in.
+#[test]
+fn a_sweep_posts_one_sweep_hit_alert() {
+    let mut game = Game::new(19302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_structure".to_string(),
+            },
+            Position { x: 1, y: 1 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+
+    game.dev_force_raid();
+
+    assert!(
+        game.world
+            .get::<Durability>(structure)
+            .is_some_and(|d| d.hp < 30),
+        "the fixture has to actually sweep, or this proves nothing"
+    );
+    assert_eq!(alert_kind_count(&game, &AlertKind::SweepHit), 1);
+}
+
+/// The siege's approach warning, `SiegePressure`'s own latch — `raid_check`'s
+/// pattern exactly.
+#[test]
+fn siege_incoming_warns_once_across_repeated_checks() {
+    let mut game = Game::new(19303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+
+    game.dev_wind_siege_clock();
+    game.siege_check();
+    assert!(
+        game.siege_warned(),
+        "the fixture has to actually warn, or this proves nothing"
+    );
+    game.siege_check();
+
+    assert_eq!(alert_kind_count(&game, &AlertKind::SiegeIncoming), 1);
+}
+
+/// A staged siege posts `SiegeBegun` — `open_siege`'s own line, next to the
+/// "Besiegers pour in" text it reuses as the alert's own.
+#[test]
+fn opening_a_siege_posts_a_siege_begun_alert() {
+    let mut game = Game::new(19304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.lay_starting_pocket();
+    stand_in_base_at(&mut game, 0, 0);
+    set_zone(&mut game, 2);
+
+    assert!(
+        game.open_siege(),
+        "the fixture has to actually open one, or this proves nothing"
+    );
+    assert_eq!(alert_kind_count(&game, &AlertKind::SiegeBegun), 1);
+}
+
+/// An off-screen siege posts `SiegeBegun` even when the shortfall comes out
+/// to zero — correction 2's rule, that a siege fully held off while the
+/// player was away is still worth seeing on the board.
+#[test]
+fn an_off_screen_siege_with_no_shortfall_still_posts_siege_begun() {
+    let mut game = Game::new(19305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // `SIEGE_PACK_BASE` (4) + one sector's worth at zone 1 is 5; three idle
+    // staff at `SIEGE_STAFF_DEFENSE` (2) each covers it with room to spare.
+    for _ in 0..3 {
+        spawn_tamed(&mut game, 10, 3);
+    }
+    assert_eq!(
+        game.base_staff().len(),
+        3,
+        "the fixture has to actually stand as staff, or the shortfall math proves nothing"
+    );
+
+    let fired = game.resolve_siege_offscreen();
+
+    assert!(fired);
+    assert!(
+        !game
+            .base_staff()
+            .iter()
+            .any(|&e| game.world.get::<crate::components::Downed>(e).is_some()),
+        "a zero shortfall must take no casualty, or this wasn't the zero-shortfall case"
+    );
+    assert_eq!(alert_kind_count(&game, &AlertKind::SiegeBegun), 1);
+}

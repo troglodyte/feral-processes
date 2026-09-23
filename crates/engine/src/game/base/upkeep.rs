@@ -1,6 +1,7 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
+use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -539,11 +540,10 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::RaidPressure>()
                 .warned = true;
-            self.log_base_kind(
-                MessageKind::Raid,
-                "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
-                    .to_string(),
-            );
+            let text = "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
+                .to_string();
+            self.log_base_kind(MessageKind::Raid, text.clone());
+            self.post_alert(AlertKind::SweepIncoming, "sweep", text);
         }
 
         if level < target {
@@ -682,6 +682,11 @@ impl Game {
     }
 
     fn run_raid(&mut self) -> bool {
+        self.post_alert(
+            AlertKind::SweepHit,
+            "sweep",
+            "A GC Entropy Sweep hits the base.",
+        );
         // `StructureDef::swept` narrows the pool, never widens it: the
         // `Durability` filter still says what can be damaged at all, and
         // an unswept structure keeps its pool for a siege to spend.

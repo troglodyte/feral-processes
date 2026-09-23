@@ -1,13 +1,13 @@
 # Design specs: what shipped, and where its argument is
 
-**Audited 2026-09-02, re-audited 2026-09-06** against the source tree and
+**Audited 2026-09-02, re-audited 2026-09-06 and 2026-09-23** against the source tree and
 the release tags — not against the specs' own headers, which had lied for
 weeks and had rotted again by the second pass. This file is the one-read
 answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not — with three named
+**`archive/specs/` is implemented. `specs/` is not — with four named
 exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
@@ -47,8 +47,11 @@ spec resolves to a release tag.
 | --- | --- | --- |
 | `2026-09-04-program-extraction-design` | **built**, unplayed; path-pinned | all five phases, 4 (§10) in `v0.13.114`; `StructureDef::strips` and `Game::run_teardown_rigs` resolve in `crates/engine` |
 | `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
-| `2026-09-16-player-emulation-design` | **built**, unplayed; on `feat/player-emulation`, not yet merged | `Game::kit_of`, `components::Emulation`, `Kit::Emulated`, `progression::emulated_stats`, `resources::EmulationImages` and `ToolCategory::Image` all resolve in `crates/engine`; `dev-arenas/emulation.ron` and `dev-saves/emulation.ron` are the instruments |
 | `2026-09-16-routine-research-tree-design` | **built**; path-pinned | `v0.13.196`; `ResearchTree`, `DiscoveredRoutines` and `crates/engine/src/routine_tree.rs` resolve in `crates/engine` |
+| `2026-09-21-program-attributes-design` | **built**, unplayed; path-pinned | `v0.13.218`; see its own section below |
+| `2026-09-16-base-social-roadmap` | roadmap, **unbuilt** | each sub-project is to get its own spec; none has one yet |
+| `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
+| `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
@@ -81,16 +84,16 @@ historical, and git history is where its 62 lines live.
 
 ## Do not move these
 
-Cited from source doc comments, so their paths are load-bearing. Two live in
-`specs/` despite being built — `2026-09-04-program-extraction-design` and
-`2026-09-04-dev-sprite-editor-design`, the invariant's two exceptions above.
-The other eleven are already in `archive/specs/`:
+Cited from source doc comments, so their paths are load-bearing. Four live in
+`specs/` despite being built — the invariant's four exceptions above.
+The other twelve are already in `archive/specs/`:
 `2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
 `2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
 `2026-08-09-battle-telemetry`, `2026-08-17-base-power-grid`,
 `2026-08-19-base-out-of-phase`, `2026-08-27-paned-command-hud`,
-`2026-09-01-character-creation`, `2026-09-06-settlement-growth-design` and
-`2026-09-09-tactical-surface-battles-design`. Four more are cited from
+`2026-09-01-character-creation`, `2026-09-06-settlement-growth-design`,
+`2026-09-09-tactical-surface-battles-design` and
+`2026-09-23-alert-board-design`. Four more are cited from
 `CHANGELOG.md`, a seam argument in the memory graph, or
 `assets/nemesis/README.md`:
 `2026-08-17-nemesis`,
@@ -382,6 +385,21 @@ cheaper than defending."
 | Spec | What it designed | Evidence |
 | --- | --- | --- |
 | `2026-09-22-siege-design` | An event on the base's own board: the sector's wild programs walk in through the one door, steal what they can carry, wreck what they cannot, and withdraw on a morale break — fought tactically regardless of the battle-map profile toggle, and saveable without `TacticalBattle` gaining `Serialize` | `game/siege/{mod,board,clock,offscreen,persist,raiders,turrets}.rs`, `resources::SiegePressure`, `components::{Besieger, StolenFrom}`, `save::SiegeSave` and `CreatureSave`'s `siege_cell`/`siege_order`/`besieger`/`stolen_from` fields, `structures::TurretDef`, `tuning.rs`'s Sieges section all in `crates/engine`. A save change behind `#[serde(default)]`, no `SAVE_FORMAT_VERSION` bump. The off-screen shortfall formula can land at zero for a well-staffed base — left as shipped for playtesting rather than retuned blind, since `balance_sim` has no siege term. Not yet played at the keyboard |
+
+## The specs archived on 2026-09-23
+
+Three specs that had shipped without moving — the pattern the 2026-09-06
+pass warned about. Their headers still said "not implemented" and
+player emulation's row in the open table still said "not yet merged", all
+three weeks-to-days after their releases. `crates/engine/src/alerts.rs`'s
+module doc cited the alert board's path and was repointed in the same change;
+the other two had no source citation.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-16-player-emulation-design` | The player fights as a species they have learned: one answer to where a body's kit comes from, and an emulated kit and stat block that replace the player's own | `v0.13.204` (Part A) and `v0.13.205` (Part B). `Game::kit_of`, `components::Emulation`, `Kit::Emulated`, `progression::emulated_stats`, `resources::EmulationImages` and `ToolCategory::Image` resolve in `crates/engine`; `dev-arenas/emulation.ron` and `dev-saves/emulation.ron` are the instruments. Not yet played at the keyboard |
+| `2026-09-21-research-discovery-design` | A discoverable research node is hidden until the base finds it by study | `v0.13.213`. Not yet played at the keyboard |
+| `2026-09-23-alert-board-design` | An alert board listing what is blocking the base, opened with `N` | `v0.13.228`; `crates/engine/src/alerts.rs`. Not yet played at the keyboard |
 
 ## Four rows that need a footnote
 

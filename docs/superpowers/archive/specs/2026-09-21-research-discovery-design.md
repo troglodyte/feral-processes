@@ -1,7 +1,7 @@
 # Discovering research by study
 
 **Date:** 2026-09-21
-**Status:** designed, not implemented.
+**Status:** implemented, `v0.13.213`.
 **Todo:** no number; raised in conversation.
 **Predecessor:** `archive/specs/2026-09-20-research-station-study-design.md`,
 which built the Research Station, its pen, `requires_subject` and the spend.

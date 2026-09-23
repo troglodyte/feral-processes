@@ -1,5 +1,5 @@
 //! The alert board — a capped, saved, player-dismissed list of production
-//! blockers and program events. See `docs/superpowers/specs/2026-09-23-alert-board-design.md`.
+//! blockers and program events. See `docs/superpowers/archive/specs/2026-09-23-alert-board-design.md`.
 //!
 //! `post` is the **one door** onto the board. It is a free function rather
 //! than a `Game` method because several sources (`systems::set_machine_status`

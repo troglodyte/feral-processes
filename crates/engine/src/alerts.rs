@@ -56,11 +56,12 @@ pub struct Alert {
 #[derive(Resource, Default)]
 pub struct AlertBoard {
     pub(crate) alerts: VecDeque<Alert>,
-    /// `#[allow(dead_code)]` until Phase 2's `hauling.rs` becomes its first
-    /// reader and writer, on the false→true edge of every depot being
-    /// full and the successful deposit that clears it — `siege::board::
-    /// to_base`'s own precedent for a door landing before the task that
-    /// walks through it.
+    /// Set on the false→true edge of every depot being full
+    /// (`game::base::hauling::haul_step_system`) and cleared by the next
+    /// successful deposit into any depot.
+    ///
+    /// `#[allow(dead_code)]` until Task 6 wires up its first reader and
+    /// writer.
     #[allow(dead_code)]
     pub(crate) depots_full: bool,
 }

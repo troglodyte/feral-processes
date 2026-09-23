@@ -2,6 +2,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
+use crate::alerts::{self, AlertBoard, AlertKind};
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
     Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerFuel,
@@ -704,6 +705,7 @@ pub(crate) fn set_machine_status(
     next: MachineStatus,
     name: &str,
     log: &mut MessageLog,
+    board: &mut AlertBoard,
     site: StallSite<'_>,
 ) {
     if *status == next {
@@ -722,7 +724,9 @@ pub(crate) fn set_machine_status(
             status: next.as_str().to_string(),
         }
     });
-    log.push_base(match next {
+    // Built once and passed to both the log and the board, so the two never
+    // word the same transition differently.
+    let text = match next {
         MachineStatus::Running => format!("The {name} resumes."),
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
         MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
@@ -748,7 +752,23 @@ pub(crate) fn set_machine_status(
         MachineStatus::Dry => {
             format!("The {name} is out of fuel — no Power Cells beside it.")
         }
-    });
+    };
+    log.push_base(text.clone());
+    // Only the six stall states reach the board — `Running` and `Idle` are
+    // not blockers, and posting them would put a resolved-machine entry on
+    // a list that a stall's own resolution never removes.
+    if matches!(
+        next,
+        MachineStatus::Starved
+            | MachineStatus::Clogged
+            | MachineStatus::Unstaffed
+            | MachineStatus::Stranded
+            | MachineStatus::Unpowered
+            | MachineStatus::Dry
+    ) {
+        let subject = format!("{}@{},{}", site.kind, site.machine.0, site.machine.1);
+        alerts::post(board, AlertKind::MachineStalled(next), subject, text);
+    }
 }
 
 /// Recomputes the base's power ledger and parks it in `resources::PowerGrid`
@@ -980,19 +1000,22 @@ fn burn_grid_upkeep(world: &mut World) {
         // the telemetry buffer are both resources and an exclusive system
         // cannot hold two mutable borrows of the world at once.
         world.resource_scope::<MessageLog, _>(|world, mut log| {
-            let mut telemetry = world.resource_mut::<BattleTelemetry>();
-            set_machine_status(
-                &mut status,
-                next,
-                &name,
-                &mut log,
-                StallSite {
-                    telemetry: &mut telemetry,
-                    tick: tick_now,
-                    machine: tile,
-                    kind: &kind,
-                },
-            );
+            world.resource_scope::<AlertBoard, _>(|world, mut board| {
+                let mut telemetry = world.resource_mut::<BattleTelemetry>();
+                set_machine_status(
+                    &mut status,
+                    next,
+                    &name,
+                    &mut log,
+                    &mut board,
+                    StallSite {
+                        telemetry: &mut telemetry,
+                        tick: tick_now,
+                        machine: tile,
+                        kind: &kind,
+                    },
+                );
+            });
         });
         if let Some(mut current) = world.get_mut::<MachineStatus>(burner) {
             *current = status;
@@ -1034,6 +1057,7 @@ fn burn_grid_upkeep(world: &mut World) {
 /// one of the wasted moves the status exists to tell the player about, and an
 /// early `continue` on `worked` would leave it reporting whatever it held
 /// before the base went short.
+#[allow(clippy::too_many_arguments)]
 pub fn idle_machine_system(
     mut machines: Query<(Entity, &Structure, &Position, &mut MachineStatus)>,
     tasks: Query<&Task>,
@@ -1042,6 +1066,7 @@ pub fn idle_machine_system(
     clock: Res<GameClock>,
     mut log: ResMut<MessageLog>,
     mut telemetry: ResMut<BattleTelemetry>,
+    mut board: ResMut<AlertBoard>,
 ) {
     for (machine, structure, pos, mut status) in &mut machines {
         let def = structure_db.get(&structure.kind);
@@ -1055,6 +1080,7 @@ pub fn idle_machine_system(
                 MachineStatus::Unpowered,
                 name,
                 &mut log,
+                &mut board,
                 StallSite {
                     telemetry: &mut telemetry,
                     tick: clock.tick,
@@ -1082,6 +1108,7 @@ pub fn idle_machine_system(
             MachineStatus::Idle,
             name,
             &mut log,
+            &mut board,
             StallSite {
                 telemetry: &mut telemetry,
                 tick: clock.tick,
@@ -1157,6 +1184,10 @@ pub struct CronjobLookups<'w> {
     /// parameter list is already at clippy's threshold.
     research: ResMut<'w, crate::resources::ActiveResearch>,
     research_defs: Res<'w, crate::research::ResearchDb>,
+    /// The alert board, bundled here rather than as a direct system
+    /// parameter for the same reason as the rest: `task_progress_system` is
+    /// already at clippy's argument-count threshold.
+    board: ResMut<'w, AlertBoard>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -1204,6 +1235,7 @@ pub fn task_progress_system(
         needs: need_db,
         research: mut active_research,
         research_defs: research_db,
+        mut board,
     } = db;
     // Copied out rather than captured: the record closures are `move`, and
     // capturing the `Res` handles themselves would move them out of the
@@ -1287,6 +1319,7 @@ pub fn task_progress_system(
                 away,
                 machine_name,
                 &mut log,
+                &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
                     tick: tick_now,
@@ -1309,6 +1342,7 @@ pub fn task_progress_system(
                 MachineStatus::Running,
                 machine_name,
                 &mut log,
+                &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
                     tick: tick_now,
@@ -1328,6 +1362,7 @@ pub fn task_progress_system(
                 MachineStatus::Clogged,
                 machine_name,
                 &mut log,
+                &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
                     tick: tick_now,
@@ -1447,6 +1482,7 @@ pub fn task_progress_system(
             MachineStatus::Running,
             machine_name,
             &mut log,
+            &mut board,
             StallSite {
                 telemetry: &mut instruments.telemetry,
                 tick: tick_now,
@@ -1554,6 +1590,7 @@ pub fn player_gather_system(
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
     mut instruments: crate::base_ledger::Instruments,
+    mut board: ResMut<AlertBoard>,
 ) {
     let PlayerGatherLookups {
         clock,
@@ -1620,6 +1657,7 @@ pub fn player_gather_system(
                 MachineStatus::Clogged,
                 machine_name,
                 &mut log,
+                &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
                     tick: tick_now,
@@ -1711,6 +1749,7 @@ pub fn player_gather_system(
             MachineStatus::Running,
             machine_name,
             &mut log,
+            &mut board,
             StallSite {
                 telemetry: &mut instruments.telemetry,
                 tick: tick_now,
@@ -1737,6 +1776,9 @@ pub struct AssemblerLookups<'w> {
     power: Res<'w, PowerGrid>,
     zone: Res<'w, ZoneLevel>,
     clock: Res<'w, GameClock>,
+    /// Bundled for the same reason as the rest: `assembler_system` is
+    /// already at clippy's argument-count threshold.
+    board: ResMut<'w, AlertBoard>,
 }
 
 /// One tick of every assembler, in two phases: pull ingredients out of the
@@ -1771,6 +1813,7 @@ pub fn assembler_system(
         power: grid,
         zone,
         clock,
+        mut board,
     } = db;
     let tick_now = clock.tick;
     let zone_now = zone.0;
@@ -1805,6 +1848,7 @@ pub fn assembler_system(
         let announce = |statuses: &mut Query<&mut MachineStatus>,
                         log: &mut MessageLog,
                         telemetry: &mut BattleTelemetry,
+                        board: &mut AlertBoard,
                         next: MachineStatus| {
             if let Ok(mut status) = statuses.get_mut(machine) {
                 set_machine_status(
@@ -1812,6 +1856,7 @@ pub fn assembler_system(
                     next,
                     &def.name,
                     log,
+                    board,
                     StallSite {
                         telemetry,
                         tick: tick_now,
@@ -1911,6 +1956,7 @@ pub fn assembler_system(
                 &mut statuses,
                 &mut log,
                 &mut instruments.telemetry,
+                &mut board,
                 MachineStatus::Starved,
             );
             continue;
@@ -1920,6 +1966,7 @@ pub fn assembler_system(
                 &mut statuses,
                 &mut log,
                 &mut instruments.telemetry,
+                &mut board,
                 MachineStatus::Clogged,
             );
             continue;
@@ -1928,6 +1975,7 @@ pub fn assembler_system(
             &mut statuses,
             &mut log,
             &mut instruments.telemetry,
+            &mut board,
             MachineStatus::Running,
         );
 

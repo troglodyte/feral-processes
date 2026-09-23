@@ -48,10 +48,8 @@ impl Game {
     /// (bevy systems with no `Game` call `alerts::post` directly against a
     /// `ResMut<AlertBoard>` instead).
     ///
-    /// `#[allow(dead_code)]` until Phase 2's sources (`bench_or_dissolve`
-    /// and friends) become its first production callers — `siege::board::
-    /// to_base`'s precedent for a door landing before the task that walks
-    /// through it. Exercised by `tests::alerts` in the meantime.
+    /// `#[allow(dead_code)]` until Task 4 (`bench_or_dissolve`) becomes its
+    /// first production caller.
     #[allow(dead_code)]
     pub(crate) fn post_alert(
         &mut self,

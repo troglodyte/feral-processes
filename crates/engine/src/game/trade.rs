@@ -594,7 +594,9 @@ impl Game {
 
     /// Everything a program leaving play does *before* the world decides
     /// whether it comes back: gear returned, detachments announced, out of
-    /// the party, off its post.
+    /// the party, off its post — a base job's `Task` and an outpost's
+    /// `components::PostedAt` alike, since a raid can bench a crew member
+    /// through `bench_or_dissolve` exactly as it can a posted worker.
     ///
     /// Extracted rather than copied into `bench_or_dissolve`'s Forgiving arm
     /// for `dissolve_tamed_program`'s own reason one level up — a comment
@@ -614,7 +616,10 @@ impl Game {
             .resource_mut::<Party>()
             .0
             .retain(|&e| e != creature);
-        self.world.entity_mut(creature).remove::<Task>();
+        self.world
+            .entity_mut(creature)
+            .remove::<Task>()
+            .remove::<crate::components::PostedAt>();
         name
     }
 

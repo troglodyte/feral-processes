@@ -215,6 +215,11 @@ pub(crate) struct CreatureRestore {
     /// array rebuilds, so a study tether can be no sooner than a cronjob's
     /// target is.
     pub(crate) pending_study: Vec<(Entity, (i32, i32))>,
+    /// `(program, outpost tile)` — resolved right after `restore_outposts`,
+    /// which needs no structure array rebuilt first: an outpost is a record
+    /// in `resources::Outposts` keyed by tile, not an entity, so unlike
+    /// `pending_study` there is nothing else to wait on.
+    pub(crate) pending_outpost_crew: Vec<(Entity, (i32, i32))>,
     /// `(siege_order, member, siege_cell)` — `sortie_members`' shape,
     /// applied to `game::siege::persist::restore` rather than
     /// `restore_sorties`: entity ids aren't stable across a save/load round
@@ -249,6 +254,7 @@ impl CreatureRestore {
             pending_cronjobs: Vec::new(),
             pending_patrols: Vec::new(),
             pending_study: Vec::new(),
+            pending_outpost_crew: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_stolen_from: Vec::new(),
         }
@@ -1163,6 +1169,39 @@ impl Game {
         }
     }
 
+    /// Reattaches `components::PostedAt` now that `resources::Outposts` is
+    /// restored — `attach_pinned_subjects`' shape, but with nothing to wait
+    /// on: an outpost is a record keyed by tile, not a structure entity, so
+    /// this can resolve as soon as `restore_outposts` has run rather than
+    /// after the structures array further down.
+    ///
+    /// **A tile naming no outpost drops the membership** — `nest_position`'s
+    /// leniency: the record was edited away or lost between sessions, so the
+    /// program comes back as ordinary `Staff` instead of refusing the whole
+    /// load. Unlike `attach_pinned_subjects` this logs the drop, since a
+    /// player watching their staff count is the one who would otherwise
+    /// wonder where a body went.
+    fn attach_outpost_crew(&mut self, pending: Vec<(Entity, (i32, i32))>) {
+        for (program, tile) in pending {
+            if !self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .contains_key(&tile)
+            {
+                let name = self.creature_label(program);
+                self.log(format!(
+                    "{name} was posted at an outpost that's no longer there, \
+                     and rejoins the base staff."
+                ));
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::PostedAt(tile));
+        }
+    }
+
     /// Reconnects a besieger's `components::StolenFrom` to its source
     /// structure now that both sides exist — `attach_cronjobs`'s shape and
     /// leniency: a tile naming no structure (it was destroyed before the
@@ -1574,6 +1613,7 @@ impl Game {
             pending_cronjobs,
             pending_patrols,
             pending_study,
+            pending_outpost_crew,
             pending_siege_members,
             pending_stolen_from,
             ..
@@ -1623,6 +1663,7 @@ impl Game {
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
         game.restore_outposts(data.outposts);
+        game.attach_outpost_crew(pending_outpost_crew);
         // After the towns exist, and the one place a patrol's tether is
         // rebuilt. A tile naming no town — the settlement catalogue was
         // edited between sessions — drops the tether silently rather than
@@ -2016,6 +2057,13 @@ impl Game {
                 // Station is one of the structures rebuilt further down
                 // `Game::load`, so there is nothing yet for a tile to name.
                 ctx.pending_study.push((creature_id, tile));
+            } else if let Some(tile) = c.outpost {
+                // Same precedence argument as `study_station` above, one
+                // role over: `Game::post_to_outpost` frees a program's stale
+                // `Task` the moment it is posted, so this and `cronjob`
+                // shouldn't co-occur in a save this build writes, but an
+                // older or hand-edited one could carry both.
+                ctx.pending_outpost_crew.push((creature_id, tile));
             } else if let Some(cronjob) = c.cronjob.clone() {
                 ctx.pending_cronjobs.push((creature_id, cronjob));
             }
@@ -2253,6 +2301,10 @@ impl Game {
             nest_position,
             patrol_position,
             study_station,
+            outpost: self
+                .world
+                .get::<crate::components::PostedAt>(e)
+                .map(|p| p.0),
             pursuing: self.world.get::<Pursuing>(e).is_some(),
             boss: self.world.get::<Boss>(e).is_some(),
             carrying: self

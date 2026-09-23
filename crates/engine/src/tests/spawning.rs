@@ -1712,6 +1712,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             nest_position: Some((999, 999)),
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: true,
             carrying: None,
             carrying_program: None,

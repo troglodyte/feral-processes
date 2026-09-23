@@ -5695,6 +5695,64 @@ pub const OUTPOST_MIN_SPACING: i32 = crate::settlements::placement::REGION_TILES
 /// spec §11.
 pub const OUTPOST_MAX_INTEGRITY: u32 = 100;
 
+/// How many programs may be posted at one outpost at once.
+///
+/// `OUTPOST_TIER_CREW`'s own ceiling, so the top tier's crew requirement
+/// must never exceed this — asserted by a test, `a-gated-consequence-can-
+/// be-green-and-unreachable`'s rule. Unmeasured — see design spec §11.
+pub const OUTPOST_CREW_CAP: usize = 6;
+
+/// The stored `growth` an outpost needs to *hold* each tier, index 0 being
+/// tier 1 (raw) — `outposts::OutpostTierDef`'s own indexing.
+///
+/// **Growth is never reset by a crew shortfall.** `outposts::tier` reads
+/// this against the crew ladder below and takes the lower of the two, so an
+/// outpost that grew to tier 3 and then lost crew reports a lower tier
+/// without losing the banked number — re-crewing it recovers instantly
+/// rather than re-growing from zero. Unmeasured — see design spec §11.
+pub const OUTPOST_TIER_GROWTH: [u32; 3] = [0, 200, 500];
+
+/// The crew an outpost needs *posted* to hold each tier, `OUTPOST_TIER_GROWTH`'s
+/// index for index. The top entry must stay at or below `OUTPOST_CREW_CAP`,
+/// or tier 3 is a gated consequence nobody can ever reach — asserted by a
+/// test. Unmeasured — see design spec §11.
+pub const OUTPOST_TIER_CREW: [usize; 3] = [1, 3, 5];
+
+/// How much stored `growth` one `OUTPOST_CYCLE_TICKS` period of `Trend::Growing`
+/// adds, per crew member counted from the tier-1 floor (`OUTPOST_TIER_CREW[0]`)
+/// upward — so the minimum crew that avoids `Trend::Declining` still grows at
+/// this base rate, and every program posted past it scales that rate up
+/// rather than the floor crew growing nothing at all. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_GROWTH_PER_CREW: u32 = 2;
+
+/// How much stored `growth` one tick of `Trend::Declining` costs. Unmeasured
+/// — see design spec §11.
+pub const OUTPOST_DECAY_PER_TICK: u32 = 1;
+
+/// Ticks an outpost's stock may sit at `OUTPOST_STOCK_CAP` before
+/// `Trend::Stale` degrades into `Trend::Declining`. Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_STALE_GRACE_TICKS: u32 = 200;
+
+/// The total units an outpost's `stock` may hold across every item at once
+/// — one combined figure, `Stock`'s per-item capacity deliberately not
+/// reused here since an outpost's yield union can name several items at
+/// once and the screen shows one "Stock N/cap" figure for all of them.
+/// Unmeasured — see design spec §11.
+pub const OUTPOST_STOCK_CAP: u32 = 60;
+
+/// Integrity below this fraction of `OUTPOST_MAX_INTEGRITY` is `Trend::Declining`
+/// regardless of crew or stock — a damaged outpost falls even at full
+/// staffing, which is what makes `repair_outpost` (Phase 5) necessary rather
+/// than optional. Unmeasured — see design spec §11.
+pub const OUTPOST_DAMAGED_FRACTION: f32 = 0.5;
+
+/// Ticks between production cycles — `Game::run_outposts` advances
+/// `Outpost::cycle_progress` every tick and rolls the crew once it reaches
+/// this. Unmeasured — see design spec §11.
+pub const OUTPOST_CYCLE_TICKS: u32 = 50;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5824,5 +5882,18 @@ mod tests {
             .find(|z| 1 + ZONE_GROUP_STEP * (z - 1) >= MAX_GROUP_SIZE)
             .expect("group growth should reach MAX_GROUP_SIZE within twenty zones");
         assert_eq!(zones_to_saturate, 12);
+    }
+
+    /// `a-gated-consequence-can-be-green-and-unreachable`'s rule: a top tier
+    /// whose crew requirement exceeds the cap on how many programs may ever
+    /// be posted would be a tier 3 nothing can reach, which is green right
+    /// up until someone tries to staff it.
+    #[test]
+    fn the_top_outposts_tier_is_reachable_under_the_crew_cap() {
+        assert!(
+            *OUTPOST_TIER_CREW.last().unwrap() <= OUTPOST_CREW_CAP,
+            "OUTPOST_TIER_CREW's top entry ({}) exceeds OUTPOST_CREW_CAP ({OUTPOST_CREW_CAP})",
+            OUTPOST_TIER_CREW.last().unwrap(),
+        );
     }
 }

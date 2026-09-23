@@ -635,6 +635,28 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
     );
 }
 
+/// `extract_routine` despawns the program it draws from
+/// (`dissolve_tamed_program`), and a posted crew member despawned mid-shift
+/// would strand its outpost counting a body that no longer exists — one of
+/// the outposts plan's four explicit new refusals, since nothing else here
+/// checked either role before it.
+#[test]
+fn extract_routine_refuses_a_posted_program() {
+    let mut game = Game::new(20260925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(components::PostedAt((7, 7)));
+
+    let err = game.extract_routine(pet, 0).unwrap_err();
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+    assert!(
+        game.world.get_entity(pet).is_ok(),
+        "a refused extraction must not despawn the program"
+    );
+}
+
 #[test]
 fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();

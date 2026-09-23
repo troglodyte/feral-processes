@@ -295,6 +295,14 @@ impl Game {
         // same reason — a route dispatched this tick does not complete a
         // leg before the base has finished its own beat.
         self.run_routes();
+        // Beside `run_routes` for its own reason and place: an outpost's
+        // production cycle is `&mut Game` work no bevy system can express
+        // (it names programs through `creature_label`-style lookups the
+        // crew roll reads, and reports through `Game::report_base`), and it
+        // sits after the crews and the Bays for the reason every base seam
+        // above it does — a program posted this tick does not roll before
+        // the base has finished its own beat.
+        self.run_outposts();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an
@@ -1403,21 +1411,28 @@ impl Game {
         for (creature, role) in owned {
             // Exhaustive rather than a `!=`, `cell_mark`'s rule: the question
             // is whether this program is standing *with* the player, the
-            // five roles answer it two and three, and there is no safe side
-            // to default a sixth one to. `UnderStudy` falls on the `false`
-            // side with `Sortie` and `Staff` — a pinned program is not
-            // beside you either, and this is the one reader of the enum a
-            // fifth role could not leave silently wrong: decision 2 in
+            // six roles answer it two and four, and there is no safe side
+            // to default a seventh one to. `UnderStudy` falls on the `false`
+            // side with `Sortie`, `Outpost` and `Staff` — a pinned program is
+            // not beside you either, and this is the one reader of the enum
+            // a fifth role could not leave silently wrong: decision 2 in
             // `docs/superpowers/plans/2026-09-20-research-station-study.md`
             // found this the only one of the role's five intended omissions
-            // that is an exhaustive match rather than a comparison. `None`
-            // is unreachable — `owned` is already filtered to programs this
-            // player owns — and is spelled out rather than folded into a
-            // catch-all so it cannot become the arm a new role quietly lands
-            // in.
+            // that is an exhaustive match rather than a comparison. `Outpost`
+            // widened it the same way, a `false` arm for the same reason —
+            // an away crew member is no more beside you than a pinned one.
+            // `None` is unreachable — `owned` is already filtered to
+            // programs this player owns — and is spelled out rather than
+            // folded into a catch-all so it cannot become the arm a new role
+            // quietly lands in.
             let repaired = match role {
                 Some(ProgramRole::InParty | ProgramRole::Wielded) => true,
-                Some(ProgramRole::Sortie | ProgramRole::Staff | ProgramRole::UnderStudy) => false,
+                Some(
+                    ProgramRole::Sortie
+                    | ProgramRole::Outpost
+                    | ProgramRole::Staff
+                    | ProgramRole::UnderStudy,
+                ) => false,
                 None => false,
             };
             if repaired && let Some(mut stats) = self.world.get_mut::<Stats>(creature) {

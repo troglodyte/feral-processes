@@ -620,6 +620,24 @@ pub struct CreatureSave {
     /// what it had.
     #[serde(default)]
     pub study_station: Option<(i32, i32)>,
+    /// The outpost tile this program is posted at, if it is
+    /// `ProgramRole::Outpost` — `components::PostedAt`'s tile. `None` for a
+    /// program that isn't posted.
+    ///
+    /// Resolved directly against `resources::Outposts`, already restored by
+    /// the time creatures resolve their deferred state (`Game::restore_outposts`
+    /// runs right after `restore_settlements`, before creatures resolve at
+    /// all) — unlike `study_station` this names no entity to rebuild first.
+    /// A tile naming no outpost (the record was lost or edited away between
+    /// sessions) **drops the membership silently**, `nest_position`'s
+    /// leniency: the program comes back as ordinary `Staff`, which is what
+    /// standing the outpost down would have left it as.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** — an older save simply carries no posted crew, which is what
+    /// it had.
+    #[serde(default)]
+    pub outpost: Option<(i32, i32)>,
     /// Whether this creature is currently `Pursuing` the player — see that
     /// component's docs. Meaningless unless one of the two tethers above is
     /// also `Some`.
@@ -2182,6 +2200,7 @@ mod tests {
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

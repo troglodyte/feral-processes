@@ -593,6 +593,21 @@ fn a_party_member_cannot_be_dispatched() {
     ));
 }
 
+/// Free off `dispatch_sortie`'s own `!= Staff` filter, the outposts plan's
+/// own census of doors that already refuse for free — no code change here,
+/// only the test that proves it.
+#[test]
+fn a_posted_crew_member_cannot_be_dispatched() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4611, 4, 500);
+    game.world
+        .entity_mut(staff[0])
+        .insert(crate::components::PostedAt((9, 9)));
+    assert!(matches!(
+        game.dispatch_sortie(&site, &[staff[0], staff[1]]),
+        Err(SortieRefusal::NotStaff(_))
+    ));
+}
+
 /// A hurt program is refused: sending one on a twenty-fight trip is the
 /// mistake the abort rule cannot save you from, because it fires on the
 /// first battle.

@@ -400,6 +400,29 @@ fn opening_the_first_kernel_ring_costs_one_privilege_ring() {
     );
 }
 
+/// `open_kernel_ring` checked no role at all before the outposts plan —
+/// one of the four explicit new refusals its census added, since nothing
+/// else here would stop a posted crew member spending a Privilege Ring
+/// while away.
+#[test]
+fn opening_a_kernel_ring_refuses_a_posted_program() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, 4);
+    game.world
+        .entity_mut(pet)
+        .insert(components::PostedAt((5, 5)));
+
+    let err = game.open_kernel_ring(pet).unwrap_err();
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+    assert_eq!(
+        game.world.get::<KernelRing>(pet).map(|r| r.0),
+        None,
+        "a refused open must not spend the ring"
+    );
+    assert_eq!(held(&game, RING), 4);
+}
+
 #[test]
 fn opening_a_ring_with_none_held_refuses_and_spends_nothing() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

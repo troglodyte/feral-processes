@@ -2026,6 +2026,17 @@ pub struct UnderStudy {
     pub station: Entity,
 }
 
+/// A tamed program posted at an outpost — `Game::post_to_outpost`'s one
+/// door, and the only fact this feature stores about who is standing there.
+///
+/// The tile, not an `Entity`: `outposts::Outpost` is a record in
+/// `resources::Outposts` keyed by tile rather than a spawned structure, so
+/// there is no station entity to name the way `UnderStudy::station` names
+/// one. `Game::outpost_crew(tile)` is the one door back from a tile to the
+/// programs posted there.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PostedAt(pub (i32, i32));
+
 /// One remembered thing: which kind it is, what it was about, when it was
 /// last reinforced, and how many times.
 ///

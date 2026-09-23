@@ -735,6 +735,17 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
+        // This despawns `creature` below (`dissolve_tamed_program`), and a
+        // posted crew member despawned mid-shift would strand its outpost
+        // counting a body that no longer exists — the outposts plan's own
+        // census, `wield_program`'s reason one door over.
+        if self
+            .world
+            .get::<crate::components::PostedAt>(creature)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost. Recall it first.".into());
+        }
         let ability = self
             .extractable_routines(creature)
             .get(index)

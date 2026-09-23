@@ -15,6 +15,10 @@ use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
 
 use crate::items::ItemId;
+use crate::tuning::{
+    OUTPOST_DAMAGED_FRACTION, OUTPOST_MAX_INTEGRITY, OUTPOST_STALE_GRACE_TICKS, OUTPOST_TIER_CREW,
+    OUTPOST_TIER_GROWTH,
+};
 use crate::world::Biome;
 
 /// One growth tier's yield table, keyed by the biome under the outpost.
@@ -165,6 +169,91 @@ pub enum Trend {
     Declining,
 }
 
+impl Trend {
+    /// The screen's one-line status and the alert board's own message,
+    /// design spec §4: one function so the bar's colour, the status line
+    /// and the alert cannot disagree about why. The sub-causes under
+    /// `Declining` are checked in the same order `trend` checks them, so a
+    /// call site that reorders one without the other silently starts
+    /// mis-explaining an outpost.
+    pub fn reason(self, outpost: &Outpost, crew: usize, tier: usize) -> String {
+        match self {
+            Trend::Declining => {
+                if crew < OUTPOST_TIER_CREW[0] {
+                    format!("Declining: needs {} crew", OUTPOST_TIER_CREW[0])
+                } else if (outpost.integrity as f32)
+                    < OUTPOST_MAX_INTEGRITY as f32 * OUTPOST_DAMAGED_FRACTION
+                {
+                    "Declining: damaged".to_string()
+                } else {
+                    "Declining: stock sat full too long".to_string()
+                }
+            }
+            Trend::Stale => "Stale: stock full".to_string(),
+            Trend::Stable => {
+                if tier + 1 < OUTPOST_TIER_CREW.len() {
+                    let need = OUTPOST_TIER_CREW[tier + 1].saturating_sub(crew);
+                    format!("Stable: post {need} more for tier {}", tier + 2)
+                } else {
+                    "Stable: max tier reached".to_string()
+                }
+            }
+            Trend::Growing => format!("Growing (+ with {crew} crew)"),
+        }
+    }
+}
+
+/// The highest tier this outpost's stored `growth` **and** its current
+/// `crew` both support — design spec §4's ladder, first match from the top
+/// down.
+///
+/// **`growth` is never reset by a crew shortfall.** This can report a lower
+/// tier than the record has actually grown to without touching the stored
+/// number, so an outpost that loses crew and gets it back recovers its tier
+/// instantly rather than re-growing from zero — `Outpost::growth`'s own doc.
+pub fn tier(outpost: &Outpost, crew: usize) -> usize {
+    (0..OUTPOST_TIER_GROWTH.len())
+        .rev()
+        .find(|&t| outpost.growth >= OUTPOST_TIER_GROWTH[t] && crew >= OUTPOST_TIER_CREW[t])
+        .unwrap_or(0)
+}
+
+/// The tier `crew` alone would support, ignoring `growth` entirely —
+/// `trend`'s reading of "the ceiling this crew can reach." `tier` above can
+/// never exceed this for the same `crew`, since it additionally requires
+/// `growth` to clear the same thresholds.
+fn crew_ceiling(crew: usize) -> usize {
+    (0..OUTPOST_TIER_CREW.len())
+        .rev()
+        .find(|&t| crew >= OUTPOST_TIER_CREW[t])
+        .unwrap_or(0)
+}
+
+/// How an outpost is doing right now — derived on every read and never
+/// stored, design spec §4. **The first match wins**: a call site that
+/// checks these in a different order would judge an outpost meeting more
+/// than one condition (damaged *and* overstocked, say) by the wrong one.
+///
+/// `tier` is the caller's own `outposts::tier(outpost, crew)` — not
+/// recomputed here, so a caller cannot pass a stale one without every
+/// figure on the screen already having disagreed with it first.
+pub fn trend(outpost: &Outpost, crew: usize, tier: usize, stock_cap: u32) -> Trend {
+    if crew < OUTPOST_TIER_CREW[0]
+        || (outpost.integrity as f32) < OUTPOST_MAX_INTEGRITY as f32 * OUTPOST_DAMAGED_FRACTION
+        || outpost.stale_ticks > OUTPOST_STALE_GRACE_TICKS
+    {
+        return Trend::Declining;
+    }
+    let stock_total: u32 = outpost.stock.values().sum();
+    if stock_total >= stock_cap {
+        return Trend::Stale;
+    }
+    if tier >= crew_ceiling(crew) {
+        return Trend::Stable;
+    }
+    Trend::Growing
+}
+
 /// The items a `tier`-th outpost (0-indexed: tier 0 is raw) can produce in
 /// `biome` — the union of every tier up to and including it, design spec
 /// §4. A tier missing a row for `biome` falls back to that tier's first
@@ -187,6 +276,7 @@ pub fn yields(def: &OutpostDef, tier: usize, biome: Biome) -> Vec<ItemId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tuning::OUTPOST_STOCK_CAP;
 
     fn tier(rows: &[(Biome, &[&str])]) -> OutpostTierDef {
         OutpostTierDef {
@@ -283,5 +373,121 @@ mod tests {
     fn an_empty_db_means_def_is_none() {
         let db = OutpostDb::default();
         assert!(db.def().is_none());
+    }
+
+    fn record(growth: u32, integrity: u32, stale_ticks: u32) -> Outpost {
+        Outpost {
+            growth,
+            stale_ticks,
+            ..Outpost::new(Biome::Deadlock, integrity)
+        }
+    }
+
+    fn full_stock() -> BTreeMap<ItemId, u32> {
+        let mut stock = BTreeMap::new();
+        stock.insert(ItemId("raw_trace".to_string()), OUTPOST_STOCK_CAP);
+        stock
+    }
+
+    #[test]
+    fn a_freshly_founded_outpost_is_tier_zero() {
+        let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
+        assert_eq!(super::tier(&o, OUTPOST_TIER_CREW[0]), 0);
+    }
+
+    #[test]
+    fn tier_is_capped_by_crew_even_when_growth_is_high() {
+        let o = record(OUTPOST_TIER_GROWTH[2], OUTPOST_MAX_INTEGRITY, 0);
+        // Growth alone would qualify for tier 2 (0-indexed), but only one
+        // program is posted — the crew ladder's floor.
+        assert_eq!(super::tier(&o, OUTPOST_TIER_CREW[0]), 0);
+        // Deleted-fix check: without the crew half of the `&&` this reports
+        // 2 here, which is exactly the bug — a solo crew running a
+        // fully-grown outpost at its top tier.
+        //
+        // Posting up to the top tier's crew requirement recovers the tier
+        // *without* touching `growth` — the number banked by the first call
+        // is exactly what makes this immediate rather than a re-grow.
+        assert_eq!(super::tier(&o, OUTPOST_TIER_CREW[2]), 2);
+    }
+
+    #[test]
+    fn tier_is_capped_by_growth_even_when_crew_is_plentiful() {
+        let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
+        assert_eq!(super::tier(&o, OUTPOST_TIER_CREW[2]), 0);
+    }
+
+    #[test]
+    fn trend_declining_beats_stale_when_both_apply() {
+        // Crew and integrity are both fine, but `stale_ticks` has run past
+        // its grace period *and* the stock is sitting full — two conditions
+        // that would each pick a different arm on their own. Declining is
+        // checked first, so it must win.
+        let mut o = record(0, OUTPOST_MAX_INTEGRITY, OUTPOST_STALE_GRACE_TICKS + 1);
+        o.stock = full_stock();
+        let crew = OUTPOST_TIER_CREW[0];
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Declining);
+        // Deleted-fix check: swap the order of the two checks in `trend`
+        // and this reports `Stale` instead.
+    }
+
+    #[test]
+    fn trend_declines_below_the_crew_floor() {
+        let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
+        let crew = OUTPOST_TIER_CREW[0] - 1;
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Declining);
+    }
+
+    #[test]
+    fn trend_declines_while_damaged() {
+        let damaged = (OUTPOST_MAX_INTEGRITY as f32 * OUTPOST_DAMAGED_FRACTION) as u32 - 1;
+        let o = record(0, damaged, 0);
+        let crew = OUTPOST_TIER_CREW[0];
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Declining);
+    }
+
+    #[test]
+    fn trend_is_stale_when_stock_is_full_inside_the_grace_period() {
+        let mut o = record(0, OUTPOST_MAX_INTEGRITY, OUTPOST_STALE_GRACE_TICKS);
+        o.stock = full_stock();
+        let crew = OUTPOST_TIER_CREW[0];
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Stale);
+    }
+
+    #[test]
+    fn trend_is_stable_once_growth_catches_the_crew_ceiling() {
+        let crew = OUTPOST_TIER_CREW[1];
+        let o = record(OUTPOST_TIER_GROWTH[1], OUTPOST_MAX_INTEGRITY, 0);
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Stable);
+    }
+
+    #[test]
+    fn trend_is_growing_when_crew_outpaces_growth() {
+        let crew = OUTPOST_TIER_CREW[2];
+        let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
+        let tier = super::tier(&o, crew);
+        assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Growing);
+    }
+
+    #[test]
+    fn reason_names_the_crew_floor_when_declining_for_lack_of_crew() {
+        let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
+        let msg = Trend::Declining.reason(&o, 0, 0);
+        assert!(msg.contains(&OUTPOST_TIER_CREW[0].to_string()));
+    }
+
+    #[test]
+    fn reason_names_the_next_tiers_shortfall_when_stable() {
+        let crew = OUTPOST_TIER_CREW[1];
+        let o = record(OUTPOST_TIER_GROWTH[1], OUTPOST_MAX_INTEGRITY, 0);
+        let msg = Trend::Stable.reason(&o, crew, 1);
+        let need = OUTPOST_TIER_CREW[2] - crew;
+        assert!(msg.contains(&need.to_string()));
+        assert!(msg.contains('3'));
     }
 }

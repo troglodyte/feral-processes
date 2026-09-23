@@ -30,6 +30,20 @@ pub enum ProgramRole {
     /// `drift_idle_staff`, `base_entropy_system`, `needs_drain_system` and
     /// the surface map in one edit rather than five.
     Sortie,
+    /// Posted at an outpost — `components::PostedAt`. Between `Sortie` and
+    /// `UnderStudy` for `Sortie`'s own reason: this program is away from the
+    /// base too, and its consequences are meant to be the same kind of
+    /// omissions — see `docs/superpowers/specs/2026-09-23-outposts-design.md`
+    /// §6 and correction 1/2 of the outposts plan.
+    ///
+    /// The doors that already filter on `== Staff` (`dispatch_sortie`,
+    /// `pin_subject`, `needs_drain_system`, `base_entropy_system`) refuse an
+    /// outpost crew member for free, the same way they refuse a sortie
+    /// member or a pinned subject. `wield_program`, `add_companion`,
+    /// `extract_routine` and `open_kernel_ring` check neither role and each
+    /// need an explicit refusal — the outposts plan's own census, run the
+    /// way decision 2 above ran `UnderStudy`'s.
+    Outpost,
     /// Pinned in a Research Station's pen — `components::UnderStudy`.
     /// Between `Sortie` and `Staff` for `Sortie`'s own reason: this program
     /// is not available to be handed a job either, and its consequences are
@@ -44,7 +58,8 @@ pub enum ProgramRole {
     /// with `==`/`is_some_and` and compiles whether or not it accounts for
     /// this variant. Those four are held by their own tests and, where
     /// nothing already filtered on `Staff` alone, an explicit refusal —
-    /// not by this enum.
+    /// not by this enum. `Outpost` above widened the same three matches a
+    /// second time.
     UnderStudy,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
@@ -67,10 +82,20 @@ impl ProgramRole {
             ProgramRole::InParty => 0,
             ProgramRole::Wielded => 1,
             ProgramRole::Sortie => 2,
-            ProgramRole::UnderStudy => 3,
-            ProgramRole::Staff => 4,
+            ProgramRole::Outpost => 3,
+            ProgramRole::UnderStudy => 4,
+            ProgramRole::Staff => 5,
         }
     }
+}
+
+/// The two per-entity markers `role_of` cannot read off a resource — bundled
+/// into one parameter rather than two bare `bool`s so the free function
+/// stays under clippy's argument count: `Outpost` widening `UnderStudy`'s
+/// pattern must not itself be the change that trips the lint.
+pub(crate) struct RoleMarkers {
+    pub posted_at_outpost: bool,
+    pub under_study: bool,
 }
 
 /// The role rule itself, over values rather than a `Game`.
@@ -87,7 +112,7 @@ pub(crate) fn role_of(
     party: &Party,
     wielded: Option<Entity>,
     sorties: &crate::resources::Sorties,
-    under_study: bool,
+    markers: RoleMarkers,
 ) -> Option<ProgramRole> {
     if owner != player {
         return None;
@@ -101,7 +126,10 @@ pub(crate) fn role_of(
     if sorties.contains(creature) {
         return Some(ProgramRole::Sortie);
     }
-    if under_study {
+    if markers.posted_at_outpost {
+        return Some(ProgramRole::Outpost);
+    }
+    if markers.under_study {
         return Some(ProgramRole::UnderStudy);
     }
     Some(ProgramRole::Staff)
@@ -152,6 +180,10 @@ pub struct Roles<'w, 's> {
     party: Res<'w, Party>,
     wielded: Res<'w, WieldedProgram>,
     sorties: Res<'w, crate::resources::Sorties>,
+    /// A presence-only query rather than a sixth `Res`, `under_study`'s own
+    /// pattern one row up: whether `creature` is posted at an outpost is
+    /// per-entity state, not a resource.
+    posted: Query<'w, 's, (), With<crate::components::PostedAt>>,
     /// A presence-only query rather than a fifth `Res`: whether `creature`
     /// is pinned is per-entity state, not a resource, and every caller here
     /// already has the entity in hand to look it up against.
@@ -167,7 +199,10 @@ impl Roles<'_, '_> {
             &self.party,
             self.wielded.0,
             &self.sorties,
-            self.under_study.contains(creature),
+            RoleMarkers {
+                posted_at_outpost: self.posted.contains(creature),
+                under_study: self.under_study.contains(creature),
+            },
         )
     }
 }
@@ -766,6 +801,11 @@ impl Game {
                     .get::<crate::components::UnderStudy>(p.entity)
                     .is_none()
             })
+            .filter(|p| {
+                self.world
+                    .get::<crate::components::PostedAt>(p.entity)
+                    .is_none()
+            })
             .collect()
     }
 
@@ -918,6 +958,19 @@ impl Game {
                 "That program is pinned in a Research Station's pen. Unpin it first.".into(),
             );
         }
+        // Same shape, one role over: `role_of` would answer `Staff` were
+        // this check skipped, since `PostedAt` is checked *before* it in
+        // `role_of`'s chain, and the party push would leave the marker on a
+        // body that just became `InParty` — a door `add_companion` never
+        // checked before this plan's census (`extract_routine`,
+        // `wield_program` and `open_kernel_ring` are the other three).
+        if self
+            .world
+            .get::<crate::components::PostedAt>(creature)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost. Recall it first.".into());
+        }
         // The other door of the wield/party exclusion — see
         // `wield_program`, which stands a member down for the same reason.
         // Last, after every refusal above, so a party that turns out to be
@@ -963,9 +1016,16 @@ impl Game {
             self.world.resource::<Party>(),
             self.wielded_program(),
             self.world.resource::<crate::resources::Sorties>(),
-            self.world
-                .get::<crate::components::UnderStudy>(creature)
-                .is_some(),
+            RoleMarkers {
+                posted_at_outpost: self
+                    .world
+                    .get::<crate::components::PostedAt>(creature)
+                    .is_some(),
+                under_study: self
+                    .world
+                    .get::<crate::components::UnderStudy>(creature)
+                    .is_some(),
+            },
         )
     }
 
@@ -1018,6 +1078,17 @@ impl Game {
         }
         if self.wielded_program() == Some(creature) {
             return Err("You're already wielding that program.".into());
+        }
+        // `role_of` never sees a `Task` here, so a posted crew member reads
+        // as `Outpost` rather than `Staff` and nothing below would refuse it
+        // on its own — the outposts plan's own census, `add_companion`'s
+        // reason one door over.
+        if self
+            .world
+            .get::<crate::components::PostedAt>(creature)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost. Recall it first.".into());
         }
         // The unequip comes first because it is the last thing here that can
         // still fail — `slot_occupant` refuses a worn item that has
@@ -1281,6 +1352,19 @@ impl Game {
                 let name = self.creature_label(e);
                 return Err(format!(
                     "{name} is pinned in a Research Station's pen and can't be fused."
+                ));
+            }
+        }
+        // Neither half may be posted at an outpost either, `UnderStudy`'s
+        // reason one role over: `fuse_companions` does its own reap rather
+        // than calling `dissolve_tamed_program`, so consuming a crew member
+        // here would strand `components::PostedAt` on a body about to be
+        // despawned with nothing left to recall it.
+        for e in [a, b] {
+            if self.world.get::<crate::components::PostedAt>(e).is_some() {
+                let name = self.creature_label(e);
+                return Err(format!(
+                    "{name} is posted at an outpost and can't be fused. Recall it first."
                 ));
             }
         }
@@ -1573,6 +1657,12 @@ impl Game {
         if self.world.get::<crate::components::UnderStudy>(e).is_some() {
             return None;
         }
+        // Posted at an outpost — `programs_for_build`'s identical exclusion
+        // one role over: a spend here would despawn a body `PostedAt` still
+        // names and that `resources::Outposts` still counts as crew.
+        if self.world.get::<crate::components::PostedAt>(e).is_some() {
+            return None;
+        }
         let snapshot = self.creature_save_for(e)?;
         self.world.resource_mut::<Party>().0.retain(|&x| x != e);
         self.world.despawn(e);
@@ -1646,6 +1736,7 @@ impl Game {
             pending_cronjobs,
             pending_patrols,
             pending_study,
+            pending_outpost_crew,
             pending_siege_members,
             pending_stolen_from,
         } = ctx;
@@ -1692,6 +1783,13 @@ impl Game {
         // cannot speak for — whether the Station is still standing, whether
         // its pen is still floor, whether something else is already in it.
         drop(pending_study);
+        // Dropped for the identical reason, one role over: `commit_program`
+        // already refuses a posted crew member, so a snapshot never carries
+        // `outpost` — but were one built by hand, re-posting it here without
+        // the crew-cap and reachability checks `post_to_outpost` runs would
+        // be the same kind of stale invariant `pending_study` guards
+        // against.
+        drop(pending_outpost_crew);
         // The wield first, and the two arms are exclusive by construction:
         // `wield_program` stands a member down, so a snapshot is never both
         // wielded and holding a slot.

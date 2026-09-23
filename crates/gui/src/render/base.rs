@@ -5524,6 +5524,7 @@ mod tests {
                 nest_position: None,
                 patrol_position: None,
                 study_station: None,
+                outpost: None,
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,

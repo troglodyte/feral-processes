@@ -137,6 +137,27 @@ fn a_party_member_does_not_drain() {
     );
 }
 
+/// `a_party_member_does_not_drain`'s own shape, one role over: a program
+/// posted at an outpost is away exactly the way a party member is, so its
+/// reserve must never even get seeded. Free off `needs_drain_system`'s own
+/// `!= Staff` filter — no code change here, only the test that proves it.
+#[test]
+fn a_posted_crew_member_does_not_drain() {
+    let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let posted = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(posted)
+        .insert(crate::components::PostedAt((7, 7)));
+
+    game.tick();
+
+    assert_eq!(
+        game.world.get::<Needs>(posted).unwrap().iter().count(),
+        0,
+        "a posted crew member is not staff, so the drain never even seeds it"
+    );
+}
+
 /// A field-named RON round trip cannot catch a skipped field, so the reserves
 /// are asserted through a **real** save and load as well.
 #[test]

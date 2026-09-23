@@ -287,6 +287,17 @@ in `Game::attention`. It is announced only when the state changes
 - Whether a Striker's second action or a Leech bonus should apply at an
   outpost. v1 passes `class` through `CycleModifiers` exactly as the base
   does, so whatever the base does, the outpost does.
+- **§8's "flash `THREAT` on the tile if it is drawn" is not built.**
+  `resources::EffectQueue`/`VisualEffect` is base-space by construction —
+  `render/base.rs` and `crates/gui/src/lib.rs`'s `in_base` gate both read a
+  `VisualEffect.pos` as a base-space cell, and an outpost's tile is a
+  zone-surface coordinate in the same `(i32, i32)` shape. Pushing one there
+  would flash the wrong tile (or the base's own tile by numeric accident)
+  whenever the player happens to be in base space when a raid lands. A
+  correct version needs its own zone-surface effect channel, `TransitCue`'s
+  precedent one space over — not a shared queue disambiguated by a flag.
+  Left undone; `raid_one_outpost` still logs and posts the alert, so the
+  raid itself is fully reported, just not flashed on the map.
 
 ## 12. Save
 

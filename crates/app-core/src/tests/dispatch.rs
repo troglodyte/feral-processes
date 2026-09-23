@@ -113,6 +113,31 @@ pub(super) fn register_a_known_settlement(app: &mut App, key: SettlementKey, til
     let _ = std::fs::remove_file(&path);
 }
 
+/// A founded outpost, standing with no player-visited history —
+/// `register_a_known_settlement`'s shape one door over.
+/// `support::place_outpost_east_of_player`'s reason for going through the
+/// save rather than `Game::found_outpost` applies here too: a route test
+/// needs the record standing at a chosen tile, not walked to.
+fn register_a_known_outpost(app: &mut App, tile: (i32, i32)) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("dispatch_outpost", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.outposts.push(save::OutpostSave {
+        tile,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        stock: Vec::new(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 /// A relay, a stocked depot, a known destination and one base-staff program
 /// — everything `Mode::Dispatch`'s two pickers need. `app_owning_distant_programs`
 /// already gives a program with no party slot and no wield, which is
@@ -218,7 +243,10 @@ fn c_on_a_highlighted_destination_opens_the_cargo_picker() {
     app.menu_selected = sites.len();
     app.handle_key(GameKey::Char('C'));
     assert_eq!(app.mode, Mode::RouteCargo);
-    assert_eq!(app.pending_dispatch_destination, Some(key));
+    assert_eq!(
+        app.pending_dispatch_destination,
+        Some(RouteDestinationId::Settlement(key))
+    );
 }
 
 /// Toggling a candidate into the squad with `[X]` and dispatching with Enter
@@ -301,7 +329,9 @@ fn right_builds_a_manifest_and_enter_dispatches_the_route() {
     assert!(app.pending_dispatch_destination.is_none());
     let (_, reports) = app.dispatch_trip_reports();
     assert!(
-        reports.iter().any(|r| r.destination == key),
+        reports
+            .iter()
+            .any(|r| r.destination == RouteDestinationId::Settlement(key)),
         "the trip must be recorded in flight"
     );
 }
@@ -357,9 +387,108 @@ fn x_on_the_hub_severs_a_standing_route() {
     app.handle_key(GameKey::Char('X'));
     assert_eq!(app.status_line, None);
     let (_, reports) = app.dispatch_trip_reports();
-    let route = reports.iter().find(|r| r.destination == key).unwrap();
+    let route = reports
+        .iter()
+        .find(|r| r.destination == RouteDestinationId::Settlement(key))
+        .unwrap();
     assert!(
         !route.standing,
         "severing must clear standing and nothing else"
+    );
+}
+
+/// An outpost joins the hub's destination list after every settlement, and
+/// `[C]` on its row opens the cargo picker with no manifest to build —
+/// `RouteCargoBasket::outpost_carry_cap` in place of a settlement's stock
+/// and quote (2026-09-23 outposts plan, Part A's dispatch gap).
+#[test]
+fn c_on_an_outpost_destination_opens_the_cargo_picker_with_no_manifest() {
+    let (mut app, _, _) = a_dispatch_ready_app(2111);
+    let tile = (500, 501);
+    register_a_known_outpost(&mut app, tile);
+    app.mode = Mode::Dispatch;
+    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
+    let idx = destinations
+        .iter()
+        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
+        .expect("the outpost is listed as a destination");
+    app.menu_selected = sites.len() + idx;
+    app.handle_key(GameKey::Char('C'));
+    assert_eq!(app.mode, Mode::RouteCargo);
+    assert_eq!(
+        app.pending_dispatch_destination,
+        Some(RouteDestinationId::Outpost(tile))
+    );
+
+    let basket = app
+        .route_cargo_basket()
+        .expect("the destination is pending");
+    assert!(basket.stock.is_empty(), "an outpost leg carries no cargo");
+    assert_eq!(
+        basket.outpost_carry_cap,
+        Some(feral_processes_engine::tuning::ROUTE_OUTPOST_CARRY)
+    );
+}
+
+/// Enter on the outpost cargo picker reaches `Game::dispatch_outpost_route`
+/// and the trip shows up on the hub's own "in flight" list.
+#[test]
+fn enter_on_the_outpost_cargo_picker_dispatches_the_route() {
+    let (mut app, _, _) = a_dispatch_ready_app(2112);
+    let tile = (500, 502);
+    register_a_known_outpost(&mut app, tile);
+    app.mode = Mode::Dispatch;
+    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
+    let idx = destinations
+        .iter()
+        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
+        .expect("the outpost is listed as a destination");
+    app.menu_selected = sites.len() + idx;
+    app.handle_key(GameKey::Char('C'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Dispatch);
+    assert!(app.pending_dispatch_destination.is_none());
+
+    let (_, reports) = app.dispatch_trip_reports();
+    assert!(
+        reports
+            .iter()
+            .any(|r| r.destination == RouteDestinationId::Outpost(tile)),
+        "the outpost trip must be recorded in flight"
+    );
+}
+
+/// `[T]` (fast travel) and `[X]` (cut a standing route) both refuse on an
+/// outpost row rather than reaching a door built for a `SettlementKey`.
+#[test]
+fn t_and_x_refuse_on_an_outpost_destination_row() {
+    let (mut app, _, _) = a_dispatch_ready_app(2113);
+    let tile = (500, 503);
+    register_a_known_outpost(&mut app, tile);
+    app.mode = Mode::Dispatch;
+    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
+    let idx = destinations
+        .iter()
+        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
+        .expect("the outpost is listed as a destination");
+    app.menu_selected = sites.len() + idx;
+
+    app.handle_key(GameKey::Char('T'));
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|l| l.contains("walk")),
+        "{:?}",
+        app.status_line
+    );
+    app.status_line = None;
+
+    app.handle_key(GameKey::Char('X'));
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|l| l.contains("standing")),
+        "{:?}",
+        app.status_line
     );
 }

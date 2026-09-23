@@ -51,8 +51,21 @@ pub enum RouteRefusal {
     TooMany,
 }
 
-/// One known settlement as a caravan destination — the whole of what
-/// `Mode::Dispatch`'s hub needs before a cargo basket is built.
+/// Which destination a hub row or an in-flight report names — the
+/// lightweight, `Copy` id these two picker-facing shapes key on, as opposed
+/// to `RouteEnd`, which is the whole resolved endpoint a dispatched `Route`
+/// stores. Widening this rather than `RouteEnd` itself is what let outposts
+/// join the hub without touching the dispatch/predation machinery in this
+/// module's lower half.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RouteDestinationId {
+    Settlement(SettlementKey),
+    Outpost((i32, i32)),
+}
+
+/// One known destination — settlement or outpost — as a caravan target: the
+/// whole of what `Mode::Dispatch`'s hub needs before a cargo basket is
+/// built.
 ///
 /// Not a `views::*` type: the row a manifest picker needs is that screen's
 /// own to design (Task 5), and this engine-side shape carries only what a
@@ -60,18 +73,20 @@ pub enum RouteRefusal {
 /// worth is `Game::route_quote`'s, not this row's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RouteDestination {
-    pub destination: SettlementKey,
+    pub destination: RouteDestinationId,
     pub name: String,
-    pub band: Standing,
-    /// The duration `dispatch_route` will actually run — `sortie_duration`'s
-    /// rule that a quoted figure and a run figure are one call.
+    /// `None` for an outpost — it carries no diplomatic standing to show.
+    pub band: Option<Standing>,
+    /// The duration `dispatch_route`/`dispatch_outpost_route` will actually
+    /// run — `sortie_duration`'s rule that a quoted figure and a run figure
+    /// are one call.
     pub ticks: u64,
 }
 
 /// One route in flight, worded for a screen — `Game::sortie_reports`' shape.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RouteReport {
-    pub destination: SettlementKey,
+    pub destination: RouteDestinationId,
     pub destination_name: String,
     pub standing: bool,
     pub stalled: bool,
@@ -130,10 +145,11 @@ impl Game {
         Some(self.route_quote(cargo, temperament))
     }
 
-    /// Every settlement the run has discovered, as a caravan destination —
-    /// three-state exactly as `board_defs`: `None` for no Relay,
-    /// `Some(vec![])` for a Relay with no known settlement reachable yet,
-    /// `Some(rows)` otherwise.
+    /// Every settlement the run has discovered, plus every founded outpost,
+    /// as a caravan destination — three-state exactly as `board_defs`: `None`
+    /// for no Relay, `Some(vec![])` for a Relay with no destination reachable
+    /// yet, `Some(rows)` otherwise. Settlements first, then outposts in
+    /// `resources::Outposts`' own key order — the traps precedent.
     pub fn route_destinations(&mut self) -> Option<Vec<RouteDestination>> {
         if self.dispatch_reach() == DispatchReach::NoRelay {
             return None;
@@ -146,17 +162,29 @@ impl Game {
             .iter()
             .map(|(key, settlement)| (*key, settlement.tile, settlement.def.name.clone()))
             .collect();
-        Some(
-            known
-                .into_iter()
-                .map(|(destination, tile, name)| RouteDestination {
-                    destination,
-                    name,
-                    band: self.standing_band(destination),
-                    ticks: Self::route_duration(anchor, tile),
-                })
-                .collect(),
-        )
+        let mut destinations: Vec<RouteDestination> = known
+            .into_iter()
+            .map(|(destination, tile, name)| RouteDestination {
+                destination: RouteDestinationId::Settlement(destination),
+                name,
+                band: Some(self.standing_band(destination)),
+                ticks: Self::route_duration(anchor, tile),
+            })
+            .collect();
+        let outpost_tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<resources::Outposts>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        destinations.extend(outpost_tiles.into_iter().map(|tile| RouteDestination {
+            destination: RouteDestinationId::Outpost(tile),
+            name: self.outpost_destination_name(tile),
+            band: None,
+            ticks: Self::route_duration(anchor, tile),
+        }));
+        Some(destinations)
     }
 
     /// Sends a caravan out to `destination` carrying `cargo`, standing or
@@ -255,10 +283,9 @@ impl Game {
     /// The one-line sentence `views::OutpostReport::route` shows for the
     /// caravan route bound to `tile`, if one exists — `Trend::reason`'s own
     /// convention that the screen builds no prose of its own. `None` when
-    /// no route runs there, which is also why there is no dispatch-hub row
-    /// for it: `Game::route_destinations` never lists an outpost, so this
-    /// sentence, read from the outpost's own screen, is the only place a
-    /// player checks on one.
+    /// no route runs there. `Game::route_reports` also carries this trip for
+    /// the hub's own "in flight" list — the two surfaces read the same live
+    /// record and cannot disagree.
     pub(crate) fn outpost_route_line(&self, tile: (i32, i32)) -> Option<String> {
         let route = self
             .world
@@ -366,31 +393,39 @@ impl Game {
         cleared
     }
 
-    /// Every settlement trip currently in flight, worded for a screen —
-    /// `Game::sortie_reports`' shape: `&self`, and derives nothing back
-    /// into the world, so a screen that draws it twice cannot move a trip.
+    /// Every trip currently in flight, settlement or outpost, worded for a
+    /// screen — `Game::sortie_reports`' shape: `&self`, and derives nothing
+    /// back into the world, so a screen that draws it twice cannot move a
+    /// trip.
     ///
-    /// **Settlement routes only.** An outpost route's status is read off
-    /// `Game::outpost_report(tile).route` instead — there is no dispatch-hub
-    /// row for an outpost destination to occupy yet, since
-    /// `Game::route_destinations` only ever lists settlements.
+    /// An outpost route's status is *also* read off `Game::outpost_report
+    /// (tile).route` for the outpost's own screen — the two surfaces read
+    /// the same live record and cannot disagree.
     pub fn route_reports(&self) -> Vec<RouteReport> {
         self.world
             .resource::<resources::Routes>()
             .0
             .iter()
-            .filter_map(|r| match &r.destination {
-                RouteEnd::Settlement { key, def, .. } => Some(RouteReport {
-                    destination: *key,
-                    destination_name: def.name.clone(),
+            .map(|r| {
+                let (destination, destination_name) = match &r.destination {
+                    RouteEnd::Settlement { key, def, .. } => {
+                        (RouteDestinationId::Settlement(*key), def.name.clone())
+                    }
+                    RouteEnd::Outpost(tile) => (
+                        RouteDestinationId::Outpost(*tile),
+                        self.outpost_destination_name(*tile),
+                    ),
+                };
+                RouteReport {
+                    destination,
+                    destination_name,
                     standing: r.standing,
                     stalled: r.stalled,
                     leg: r.leg,
                     cargo: r.cargo.clone(),
                     ticks_left: r.ticks_total.saturating_sub(r.ticks_elapsed),
                     proceeds: r.proceeds,
-                }),
-                RouteEnd::Outpost(_) => None,
+                }
             })
             .collect()
     }

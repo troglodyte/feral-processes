@@ -101,7 +101,7 @@ pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRI
 pub use game::environment::TerrainRow;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
-pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
+pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};
 /// Every sentence the town page's aid rows can carry — exported so the
 /// renderer's width and height censuses measure the real strings rather than
 /// a parallel copy of them. See `game::settlement_relations::AID_GARRISON`.

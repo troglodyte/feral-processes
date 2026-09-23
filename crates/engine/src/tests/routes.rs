@@ -7,7 +7,7 @@ use bevy_ecs::prelude::Entity;
 use super::support::{scratch_assets_dir, test_assets_dir};
 use crate::Game;
 use crate::components::{Glyph, GlyphColor, Inventory, Position, Stock, Structure};
-use crate::game::route::RouteRefusal;
+use crate::game::route::{RouteDestinationId, RouteRefusal};
 use crate::items::ItemId;
 use crate::resources::DifficultyMode;
 use crate::routes::{Route, RouteEnd, RouteLeg};
@@ -258,9 +258,9 @@ fn route_destinations_lists_every_known_settlement() {
     let rows = game.route_destinations().expect("a Relay stands");
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
-    assert_eq!(row.destination, key);
+    assert_eq!(row.destination, RouteDestinationId::Settlement(key));
     assert_eq!(row.name, a_destination().name);
-    assert_eq!(row.band, Standing::Neutral);
+    assert_eq!(row.band, Some(Standing::Neutral));
     let (ax, ay) = game.anchor_position().unwrap();
     let d = (ax - 200).abs().max((ay - (-100)).abs()) as u64;
     assert_eq!(
@@ -564,7 +564,7 @@ fn route_reports_reads_the_record_without_changing_it() {
     let reports = game.route_reports();
     assert_eq!(reports.len(), 1);
     let report = &reports[0];
-    assert_eq!(report.destination, key);
+    assert_eq!(report.destination, RouteDestinationId::Settlement(key));
     assert!(report.standing);
     assert!(!report.stalled);
     assert_eq!(report.leg, RouteLeg::Outbound);
@@ -1448,4 +1448,54 @@ fn a_pre_outpost_routes_save_loads_with_none() {
             .is_empty(),
         "a pre-outpost-routes save has no outpost route in flight"
     );
+}
+
+/// The hub's destination list gains a row per founded outpost, after every
+/// known settlement — `route_destinations` widened to list both kinds
+/// (Part A of the 2026-09-23 plan's dispatch gap).
+#[test]
+fn route_destinations_lists_a_founded_outpost_after_settlements() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8900, tile);
+    // `Game::new` already ran `ensure_local_settlements` — clear what world
+    // generation found nearby so only the one town registered below is
+    // counted, `route_destinations_lists_every_known_settlement`'s fixture.
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .clear();
+    let key = SettlementKey { rx: 2, ry: -1 };
+    register_settlement(&mut game, key, a_destination(), (200, -100));
+
+    let rows = game.route_destinations().expect("a Relay stands");
+    assert_eq!(rows.len(), 2, "one settlement plus one outpost");
+    assert_eq!(rows[0].destination, RouteDestinationId::Settlement(key));
+    let outpost_row = &rows[1];
+    assert_eq!(outpost_row.destination, RouteDestinationId::Outpost(tile));
+    assert!(
+        outpost_row.band.is_none(),
+        "an outpost carries no diplomatic standing"
+    );
+    let (ax, ay) = game.anchor_position().unwrap();
+    let d = (ax - tile.0).abs().max((ay - tile.1).abs()) as u64;
+    assert_eq!(
+        outpost_row.ticks,
+        crate::tuning::ROUTE_TICKS_BASE + crate::tuning::ROUTE_TICKS_PER_TILE * d
+    );
+}
+
+/// An outpost route in flight shows up on the hub's own "in flight" list,
+/// not only on the outpost's own screen — the second half of the same gap.
+#[test]
+fn route_reports_includes_an_outpost_route_in_flight() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8901, tile);
+    game.dispatch_outpost_route(tile, true).unwrap();
+
+    let reports = game.route_reports();
+    assert_eq!(reports.len(), 1);
+    let report = &reports[0];
+    assert_eq!(report.destination, RouteDestinationId::Outpost(tile));
+    assert!(report.standing);
+    assert_eq!(report.leg, RouteLeg::Outbound);
 }

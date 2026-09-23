@@ -471,6 +471,22 @@ impl Game {
         }
     }
 
+    /// The name a caravan destination row or an in-flight report uses for
+    /// the outpost standing at `tile` — `def.name` disambiguated by its
+    /// tile, since v1 ships one def for every outpost. Falls back to a
+    /// generic label when no outpost def is installed at all, which a
+    /// caller only reaches for a route already dispatched to a tile whose
+    /// def has since been removed.
+    pub fn outpost_destination_name(&self, tile: (i32, i32)) -> String {
+        let def_name = self
+            .world
+            .resource::<OutpostDb>()
+            .def()
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| "Outpost".to_string());
+        format!("{def_name} ({}, {})", tile.0, tile.1)
+    }
+
     /// `Mode::OutpostVisit`'s one derivation — design spec §9. `None` when
     /// no outpost stands at `tile`, or the def that founded it has since
     /// been removed from `assets/outposts/`.

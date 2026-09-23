@@ -105,10 +105,10 @@ use feral_processes_engine::{
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
     DispatchReach, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, OutpostReport, ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal,
-    RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome,
-    TransferBasket, TransferCarrier, TransferRow, Visit, WorkOrder, WorkOrderReport, WorkProfile,
-    condense,
+    MessageSource, OutpostReport, ProgramSaleOption, RigToolView, RouteDestination,
+    RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport,
+    SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow, Visit,
+    WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2724,9 +2724,9 @@ pub struct App {
     /// no longer looking at.
     pub dispatch_squad: Vec<Entity>,
     /// The destination picked with `[C]` on `Mode::Dispatch`, awaiting a
-    /// cargo basket from `Mode::RouteCargo` before `Game::dispatch_route` is
-    /// called.
-    pub pending_dispatch_destination: Option<SettlementKey>,
+    /// cargo basket from `Mode::RouteCargo` before `Game::dispatch_route` or
+    /// `Game::dispatch_outpost_route` is called.
+    pub pending_dispatch_destination: Option<RouteDestinationId>,
     /// How many of each `Game::base_stock` row the cargo basket is holding —
     /// `settlement_amounts`' shape exactly, index-aligned with that list the
     /// same way.

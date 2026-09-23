@@ -185,8 +185,6 @@ pub(in crate::render) fn draw_status_bar(
     }
 }
 
-/// Right-aligns the badge inside its reserved zone. What does not fit is
-/// dropped from the end, never clipped — the row's rule.
 /// Right-anchors `pieces` at `right_edge`, fitting as many as `avail` holds,
 /// and returns the x it drew the leftmost one at — `right_edge` itself if
 /// none fit — so a second badge can anchor just to the left of the first.

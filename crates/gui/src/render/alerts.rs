@@ -172,8 +172,9 @@ mod tests {
     /// short of that cap and is what the row actually draws past 9). Built
     /// through a real `Game` for the pieces it can supply — the longest
     /// shipped structure name — and the sources' own fixed sentences
-    /// (`systems.rs`, `game/base/upkeep.rs`, `game/siege/*.rs`) copied
-    /// verbatim, since those carry no per-run data at all.
+    /// (`systems.rs`, `game/base/upkeep.rs`, `game/base/work_orders.rs`,
+    /// `game/base/hauling.rs`, `game/siege/*.rs`) copied verbatim, since
+    /// those carry no per-run data at all.
     fn widest_alert_texts() -> Vec<String> {
         let game =
             Game::new(24601, DifficultyMode::Forgiving, &test_assets_dir()).expect("test game");
@@ -185,14 +186,25 @@ mod tests {
             .name;
         vec![
             "A siege hits the base while you're away.".to_string(),
+            // `work_orders.rs::announce_cut_off` — a build site cut off,
+            // naming the structure on order and its cell.
             format!(
                 "The {longest_structure} on order at {}, {} is cut off — no program can find a way to it.",
                 -9999, -9999
             ),
+            // `work_orders.rs::announce_dig_cut_off` — a dig site cut off,
+            // naming only the cell: there is no structure to name.
+            format!(
+                "The marked cell at {}, {} is cut off — no program can find a way to it.",
+                -9999, -9999
+            ),
+            // `systems.rs::set_machine_status`, `MachineStatus::Stranded` —
+            // a built machine cut off from its own posted program, not a
+            // site.
             format!("The {longest_structure} is cut off — its program can't find a way to it."),
             "Sweep telemetry thickens around the anchor. A GC Entropy Sweep is forming."
                 .to_string(),
-            "Every Depot is full — nowhere to put anything down.".to_string(),
+            "A hauled load has nowhere to go — no Depot will take it.".to_string(),
         ]
     }
 

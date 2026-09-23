@@ -1018,7 +1018,7 @@ pub(crate) fn haul_step_system(
                                             &mut board,
                                             AlertKind::DepotsFull,
                                             "depots",
-                                            "Every Depot is full — nowhere to put anything down."
+                                            "A hauled load has nowhere to go — no Depot will take it."
                                                 .to_string(),
                                         );
                                     }
@@ -1059,6 +1059,11 @@ pub(crate) fn haul_step_system(
             .get(&dest_structure.kind)
             .map(|d| d.footprint)
             .unwrap_or(1);
+        // Whether this errand's destination is a real Depot rather than the
+        // fallback `Errand::Deposit(machine)` bouncing a load back into its
+        // own machine — read here, off `dest_structure`, before it goes out
+        // of scope, since the latch below must clear only on the former.
+        let dest_is_depot = db.get(&dest_structure.kind).is_some_and(|d| d.stores);
         // Read before the arms, which take `structures` mutably. The post
         // and not the worker's own tile: by the time an errand acts the two
         // are the same place, and what the analysis groups by is the
@@ -1085,10 +1090,15 @@ pub(crate) fn haul_step_system(
                         continue;
                     };
                     let moved = deposit(&mut stock, &load);
-                    // Cleared by *any* successful deposit, not only one into
-                    // the depot that was full — a base with several Depots
-                    // is unstuck the moment any of them has room again.
-                    if moved > 0 {
+                    // Cleared by *any* successful deposit into a real
+                    // Depot, not only one into the depot that was full — a
+                    // base with several Depots is unstuck the moment any of
+                    // them has room again. **Not** by the fallback bounce
+                    // into the worker's own machine (`dest_is_depot` is
+                    // false there): that only puts the goods back where they
+                    // came from, so clearing on it let every bounced load
+                    // re-arm the latch and repost.
+                    if moved > 0 && dest_is_depot {
                         board.depots_full = false;
                     }
                     note_haul(

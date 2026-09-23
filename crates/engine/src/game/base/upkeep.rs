@@ -682,11 +682,6 @@ impl Game {
     }
 
     fn run_raid(&mut self) -> bool {
-        self.post_alert(
-            AlertKind::SweepHit,
-            "sweep",
-            "A GC Entropy Sweep hits the base.",
-        );
         // `StructureDef::swept` narrows the pool, never widens it: the
         // `Durability` filter still says what can be damaged at all, and
         // an unswept structure keeps its pool for a siege to spend.
@@ -704,6 +699,15 @@ impl Game {
         if targets.is_empty() {
             return false;
         }
+        // After the empty-targets return, or a base with nothing raidable
+        // (only a Home, `raidable: false`) gets a fresh alert on every
+        // `raid_check` past the threshold — the pressure never resets when
+        // nothing is swept, so every later check would re-post.
+        self.post_alert(
+            AlertKind::SweepHit,
+            "sweep",
+            "A GC Entropy Sweep hits the base.",
+        );
         // Here rather than in `raid_check`, which can decide a sweep happens
         // and then find nothing standing to sweep. This is the first line
         // after a sweep is real.

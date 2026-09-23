@@ -539,6 +539,41 @@ fn a_sweep_posts_one_sweep_hit_alert() {
     assert_eq!(alert_kind_count(&game, &AlertKind::SweepHit), 1);
 }
 
+/// CRITICAL fix: `run_raid` used to post `SweepHit` before its
+/// `targets.is_empty()` early return, so a base with nothing raidable (only
+/// a Home, which is `raidable: false`) got a fresh `SweepHit` alert on
+/// *every* `raid_check` past the threshold — the pressure never resets when
+/// `run_raid` finds nothing to sweep, so every later check re-posted. The
+/// badge would relight the instant it was dismissed. Deleted-fix check:
+/// move the `post_alert` back above the `is_empty` return and this fails.
+#[test]
+fn raid_check_with_nothing_raidable_posts_no_sweep_hit_alert() {
+    let mut game = Game::new(19306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    spawn_min_raid_staff(&mut game);
+    place_home(&mut game);
+
+    // Force `raid_check` past its threshold on every call without drawing
+    // `GameRng` for a target — `run_raid` finding nothing to sweep never
+    // resets the pressure, so this stays true for every iteration below.
+    {
+        let mut pressure = game.world.resource_mut::<crate::resources::RaidPressure>();
+        pressure.next_at = Some(1);
+        pressure.level = 1;
+        pressure.warned = true;
+    }
+
+    for _ in 0..5 {
+        game.raid_check();
+    }
+
+    assert_eq!(
+        alert_kind_count(&game, &AlertKind::SweepHit),
+        0,
+        "nothing raidable stands, so a sweep never actually lands and must not post"
+    );
+}
+
 /// The siege's approach warning, `SiegePressure`'s own latch — `raid_check`'s
 /// pattern exactly.
 #[test]
@@ -887,5 +922,168 @@ fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
     assert_eq!(
         alert.count, 2,
         "the latch cleared and re-armed, collapsing into the same row"
+    );
+}
+
+/// IMPORTANT fix: the fallback `Errand::Deposit(machine)` — bouncing a load
+/// back into the worker's own machine because nowhere else will take it —
+/// used to clear `board.depots_full` on any `moved > 0`, exactly like a real
+/// Depot delivery. Two independent bounces (one per worker/machine) must
+/// still read as one open blocker: the second worker's own recompute, still
+/// walking an undeliverable load home, must not see the latch falsely
+/// cleared by the first worker's bounce and repost. Deleted-fix check:
+/// restore the unconditional `if moved > 0 { board.depots_full = false; }`
+/// and this fails (count climbs past 1).
+#[test]
+fn a_second_bounce_does_not_repost_once_the_latch_correctly_holds() {
+    let mut game = alert_base_for_hauling(19405);
+    let (bx, by) = game.base_pos().unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node1 = alert_structure_at(&mut game, bx + 1, by);
+    place_now(&mut game, "mining_node", -1, 0).unwrap();
+    let node2 = alert_structure_at(&mut game, bx - 1, by);
+    place_now(&mut game, "depot", 4, 0).unwrap();
+    let depot = alert_structure_at(&mut game, bx + 4, by);
+
+    let worker1 = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker1, node1).unwrap();
+    let worker2 = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker2, node2).unwrap();
+
+    let cap1 = game.world.get::<Stock>(node1).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(node1)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), cap1);
+    let cap2 = game.world.get::<Stock>(node2).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(node2)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), cap2);
+
+    for _ in 0..200 {
+        if game.world.get::<Carrying>(worker1).is_some()
+            && game.world.get::<Carrying>(worker2).is_some()
+        {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker1).is_some()
+            && game.world.get::<Carrying>(worker2).is_some(),
+        "precondition: both workers have to actually pick up while the depot still has room"
+    );
+
+    // The one shared Depot fills up with something neither load is, so both
+    // round trips fail and bounce back into their own machine.
+    let depot_cap = game.world.get::<Stock>(depot).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), depot_cap);
+
+    for _ in 0..300 {
+        if game.world.get::<Carrying>(worker1).is_none()
+            && game.world.get::<Carrying>(worker2).is_none()
+        {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker1).is_none()
+            && game.world.get::<Carrying>(worker2).is_none(),
+        "precondition: both loads have to actually come back, or neither bounce ran"
+    );
+
+    let alert = game
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == AlertKind::DepotsFull)
+        .unwrap();
+    assert_eq!(
+        alert.count, 1,
+        "two loads bouncing back into their own machines is still one open \
+         blocker — bouncing into your own machine must not re-arm the latch, \
+         or the second worker's own bounce reposts too"
+    );
+}
+
+/// IMPORTANT fix: the fixed sentence used to say "Every Depot is full",
+/// which is false whenever the real reason is a Depot's own filter refusing
+/// the item — a Depot standing right there with room to spare. Two Depots:
+/// one that swallows the room that made the pickup viable, and a second
+/// that keeps room the whole test but denies the item outright.
+#[test]
+fn the_message_does_not_claim_every_depot_is_full_when_one_merely_refuses_the_item() {
+    let mut game = alert_base_for_hauling(19406);
+    let (bx, by) = game.base_pos().unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = alert_structure_at(&mut game, bx + 1, by);
+    place_now(&mut game, "depot", 4, 0).unwrap();
+    let depot_a = alert_structure_at(&mut game, bx + 4, by);
+    place_now(&mut game, "depot", -4, 0).unwrap();
+    let depot_b = alert_structure_at(&mut game, bx - 4, by);
+    game.set_depot_filter(depot_b, &ItemId::from(ids::CORE_FRAGMENT), false);
+
+    let worker = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker, node).unwrap();
+
+    let cap = game.world.get::<Stock>(node).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), cap);
+
+    for _ in 0..200 {
+        if game.world.get::<Carrying>(worker).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker has to actually pick up a load"
+    );
+
+    // depot_a, the one that made the pickup viable, fills up completely —
+    // depot_b is left standing with room the whole test, refusing the item.
+    let depot_a_cap = game.world.get::<Stock>(depot_a).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(depot_a)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), depot_a_cap);
+
+    for _ in 0..300 {
+        if game.world.get::<Carrying>(worker).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "precondition: the load has to actually come back"
+    );
+    assert!(
+        game.world.get::<Stock>(depot_b).unwrap().output_room() > 0,
+        "precondition: depot_b must still have room, or 'is full' would happen to be true anyway"
+    );
+
+    let alert = game
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == AlertKind::DepotsFull)
+        .unwrap();
+    assert!(
+        !alert.text.to_lowercase().contains("full"),
+        "a Depot still has room and simply refuses the item, so the message \
+         must not claim every Depot is full: {:?}",
+        alert.text
     );
 }

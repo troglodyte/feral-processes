@@ -756,16 +756,20 @@ pub(crate) fn set_machine_status(
     log.push_base(text.clone());
     // Only the six stall states reach the board — `Running` and `Idle` are
     // not blockers, and posting them would put a resolved-machine entry on
-    // a list that a stall's own resolution never removes.
-    if matches!(
-        next,
+    // a list that a stall's own resolution never removes. An exhaustive
+    // match rather than `matches!` with a fixed list, `cell_mark`'s rule: a
+    // ninth `MachineStatus` variant must say whether it is a blocker rather
+    // than silently falling out of a list nobody is forced to revisit.
+    let is_blocker = match next {
         MachineStatus::Starved
-            | MachineStatus::Clogged
-            | MachineStatus::Unstaffed
-            | MachineStatus::Stranded
-            | MachineStatus::Unpowered
-            | MachineStatus::Dry
-    ) {
+        | MachineStatus::Clogged
+        | MachineStatus::Unstaffed
+        | MachineStatus::Stranded
+        | MachineStatus::Unpowered
+        | MachineStatus::Dry => true,
+        MachineStatus::Running | MachineStatus::Idle => false,
+    };
+    if is_blocker {
         let subject = format!("{}@{},{}", site.kind, site.machine.0, site.machine.1);
         alerts::post(board, AlertKind::MachineStalled(next), subject, text);
     }

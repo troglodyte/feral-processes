@@ -39,9 +39,6 @@ impl Game {
         // Posted unconditionally, even when the shortfall below turns out to
         // be zero: a siege fully held off while the player was away is still
         // worth seeing on the board (correction 2).
-        // Posted unconditionally, even when the shortfall below turns out to
-        // be zero: a siege fully held off while the player was away is still
-        // worth seeing on the board (correction 2).
         self.post_alert(
             crate::alerts::AlertKind::SiegeBegun,
             "siege",

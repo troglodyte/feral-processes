@@ -508,6 +508,40 @@ pub(crate) fn place_outpost_east_of_player(app: &mut App) -> (i32, i32) {
     target
 }
 
+/// `place_outpost_east_of_player`'s shape with `integrity` pre-damaged —
+/// `Game`'s `world` field is private with no accessor (the architectural
+/// rule this repo enforces at the compiler), so a test that needs a damaged
+/// outpost writes it through the save file exactly as the healthy fixture
+/// does, rather than reaching into the ECS from app-core.
+pub(crate) fn place_damaged_outpost_east_of_player(app: &mut App, integrity: u32) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost_damaged", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity,
+        stock: Vec::new(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
+}
+
 /// `place_outpost_east_of_player` plus one ordinary base-staff program, for
 /// a test driving `Mode::OutpostPost`'s picker by keypress alone — nothing
 /// here needs the program's `Entity`, since the picker is walked with

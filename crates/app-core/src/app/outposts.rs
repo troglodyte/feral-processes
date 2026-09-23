@@ -97,11 +97,11 @@ impl App {
                 let outcome = game.recall_from_outpost(entity);
                 self.report(outcome);
             }
-            // `[R]` repairs — a refusal until Phase 5 wires
-            // `Game::repair_outpost`, bound now so the key table does not
-            // change later (outposts plan Task 6).
+            // `[R]` repairs — design spec §8.
             GameKey::Char('R') => {
-                self.refuse("There's no way to repair an outpost yet.");
+                let Some(game) = &mut self.game else { return };
+                let outcome = game.repair_outpost(tile);
+                self.report(outcome);
             }
             _ => {}
         }

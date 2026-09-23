@@ -67,9 +67,15 @@ fn a_founded_outpost_survives_a_real_save_round_trip() {
     assert_eq!(after.stock, before.stock);
     assert_eq!(after.stale_ticks, before.stale_ticks);
     assert_eq!(after.cycle_progress, before.cycle_progress);
-    // Not part of `save::OutpostSave` — inert until Phase 5 re-seeds it
-    // from the freshly-derived trend right after load.
-    assert_eq!(after.announced, None);
+    // Not part of `save::OutpostSave`, but `Game::reseed_outpost_announcements`
+    // fixes it back to the real trend before `load` returns — this outpost
+    // has no crew, which `outposts::trend` reads as `Declining` regardless
+    // of every other field.
+    assert_eq!(
+        after.announced,
+        Some(crate::outposts::Trend::Declining),
+        "announced must be re-seeded to the current trend, not left None"
+    );
 }
 
 #[test]
@@ -462,4 +468,204 @@ fn a_seeded_run_of_many_cycles_is_deterministic() {
         game.world.resource::<Outposts>().0[&tile].stock.clone()
     };
     assert_eq!(run(), run());
+}
+
+// ---------------------------------------------------------------------
+// Alerts: `Game::announce_outpost_trend` and the reload latch — Phase 5,
+// design correction 10.
+// ---------------------------------------------------------------------
+
+/// A crewless outpost is `Trend::Declining` from its very first tick
+/// (`outposts::trend`'s crew-floor check), which posts an `OutpostDeclining`
+/// alert on the transition out of `announced: None`.
+#[test]
+fn an_uncrewed_outpost_posts_a_declining_alert_on_its_first_tick() {
+    let mut game = Game::new(7040, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+
+    game.run_outposts();
+
+    let alerts = game.alerts();
+    let alert = alerts
+        .iter()
+        .find(|a| a.kind == crate::alerts::AlertKind::OutpostDeclining)
+        .expect("an uncrewed outpost must post OutpostDeclining on its first tick");
+    assert_eq!(alert.count, 1);
+    // Deleted-fix check: without `announce_outpost_trend`'s call from
+    // `tick_one_outpost`, `alerts` above is empty and this `find` panics.
+}
+
+/// Holding the same trend across many ticks posts nothing further — the
+/// board's own `count` would climb past 1 if `announced` didn't latch it,
+/// since `alerts::post` collapses same-kind-same-subject posts by bumping
+/// rather than by refusing a repeat.
+#[test]
+fn holding_the_same_declining_state_posts_nothing_more() {
+    let mut game = Game::new(7041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+
+    for _ in 0..(OUTPOST_CYCLE_TICKS * 5) {
+        game.run_outposts();
+    }
+
+    let alerts = game.alerts();
+    let alert = alerts
+        .iter()
+        .find(|a| a.kind == crate::alerts::AlertKind::OutpostDeclining)
+        .unwrap();
+    assert_eq!(
+        alert.count, 1,
+        "a trend that never changes must post exactly once, however many ticks it holds"
+    );
+}
+
+/// A reload does not re-post an alert for a state the player already saw —
+/// `Game::reseed_outpost_announcements`' whole purpose. Saved while
+/// `Declining`, so `announced` on disk (dropped: it isn't part of
+/// `OutpostSave`) would come back `None` without the re-seed, and the very
+/// next tick would post a second time.
+#[test]
+fn a_reload_does_not_post_the_same_alert_again() {
+    let scratch = scratch_assets_dir("outpost_alert_reload");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let mut game = Game::new(7042, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+    game.run_outposts();
+    assert_eq!(
+        game.alerts()
+            .iter()
+            .find(|a| a.kind == crate::alerts::AlertKind::OutpostDeclining)
+            .unwrap()
+            .count,
+        1
+    );
+
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    loaded.run_outposts();
+
+    let alert = loaded
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == crate::alerts::AlertKind::OutpostDeclining)
+        .unwrap();
+    assert_eq!(
+        alert.count, 1,
+        "a reload must not re-post an alert for a state already announced before the save"
+    );
+}
+
+/// `Trend::Stale` posts its own kind, distinct from `Declining` — enough
+/// crew to clear the floor, growth already at the top tier (so a full crew
+/// reads `Stable`/`Stale` rather than `Growing`), and stock sitting at the
+/// cap.
+#[test]
+fn stale_posts_its_own_alert_kind() {
+    let mut game = Game::new(7043, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    let mut outpost = Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY);
+    outpost.growth =
+        crate::tuning::OUTPOST_TIER_GROWTH[crate::tuning::OUTPOST_TIER_GROWTH.len() - 1];
+    outpost
+        .stock
+        .insert(ItemId("raw_trace".to_string()), OUTPOST_STOCK_CAP);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, outpost);
+    for _ in 0..*crate::tuning::OUTPOST_TIER_CREW.last().unwrap() {
+        let crew = spawn_tamed(&mut game, 10, 3);
+        game.world.entity_mut(crew).insert(PostedAt(tile));
+    }
+
+    game.run_outposts();
+
+    assert!(
+        game.alerts()
+            .iter()
+            .any(|a| a.kind == crate::alerts::AlertKind::OutpostStale),
+        "a fully staffed, fully grown, full-stock outpost must post OutpostStale"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Attention: `Game::attention` — Phase 5, design correction 10.
+// ---------------------------------------------------------------------
+
+/// A declining outpost earns an `AttentionKind::OutpostTrend` row, worded
+/// with its tile — `Game::attention`'s own row-per-outpost rule.
+#[test]
+fn a_declining_outpost_earns_an_attention_row() {
+    let mut game = Game::new(7044, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+
+    let rows = game.attention();
+
+    assert!(
+        rows.iter()
+            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend && r.text.contains("400")),
+        "a crewless, declining outpost must earn an attention row naming its tile: {rows:?}"
+    );
+}
+
+/// A dark outpost earns `AttentionKind::OutpostDark` instead of the trend
+/// row — `Game::attention`'s dark branch returns before reading `Trend` at
+/// all.
+#[test]
+fn a_dark_outpost_earns_its_own_attention_row() {
+    let mut game = Game::new(7045, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tile = (400, 400);
+    let mut outpost = Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY);
+    outpost.integrity = 0;
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, outpost);
+
+    let rows = game.attention();
+
+    assert!(
+        rows.iter()
+            .any(|r| r.kind == crate::views::AttentionKind::OutpostDark),
+        "a dark outpost must earn its own attention row: {rows:?}"
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend),
+        "a dark outpost must not also earn a trend row"
+    );
+}
+
+/// A healthy, growing outpost earns no attention row at all.
+#[test]
+fn a_healthy_outpost_earns_no_attention_row() {
+    let (mut game, _tile) = an_outpost_ready_to_cycle(7046);
+
+    let rows = game.attention();
+
+    assert!(
+        !rows.iter().any(|r| matches!(
+            r.kind,
+            crate::views::AttentionKind::OutpostTrend | crate::views::AttentionKind::OutpostDark
+        )),
+        "a single-crew, freshly founded outpost is Growing and must earn no row: {rows:?}"
+    );
 }

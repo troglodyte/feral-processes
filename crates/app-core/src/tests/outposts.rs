@@ -125,10 +125,10 @@ fn a_letter_then_u_recalls_the_selected_crew_member() {
     );
 }
 
-/// `[R]` refuses — Phase 5 has not wired `Game::repair_outpost` yet, and the
-/// key is bound now so the table does not change later.
+/// `[R]` refuses at full integrity — there is nothing to repair, and
+/// `Game::repair_outpost` says so rather than spending materials on a no-op.
 #[test]
-fn r_refuses_until_phase_5_wires_repair() {
+fn r_refuses_at_full_integrity() {
     let mut app = test_app(977);
     place_outpost_east_of_player(&mut app);
     app.handle_key(GameKey::Right);
@@ -137,6 +137,25 @@ fn r_refuses_until_phase_5_wires_repair() {
 
     assert!(app.status_line.is_some(), "R must refuse, not act silently");
     assert_eq!(app.mode, Mode::OutpostVisit);
+}
+
+/// `[R]` repairs a damaged outpost — design spec §8, wired in Phase 5. The
+/// shipped test def's `repair_cost` is empty, so the bill is free and the
+/// only thing under test is that the key reaches `Game::repair_outpost` at
+/// all.
+#[test]
+fn r_repairs_a_damaged_outpost() {
+    let mut app = test_app(978);
+    place_damaged_outpost_east_of_player(&mut app, 10);
+    app.handle_key(GameKey::Right);
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(
+        app.outpost_report().unwrap().integrity,
+        feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        "R must restore full integrity"
+    );
 }
 
 /// `c` opens the transfer picker against the outpost's own stock — design

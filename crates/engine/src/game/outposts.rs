@@ -169,6 +169,119 @@ impl Game {
         Ok(())
     }
 
+    /// Restores the outpost at `tile` to full integrity — design spec §8.
+    /// Pays `OutpostDef::repair_cost` from the pack, every line refused
+    /// before a unit moves — a research bill's own rule (`Game::
+    /// select_research`'s reason one door over).
+    pub fn repair_outpost(&mut self, tile: (i32, i32)) -> Result<(), String> {
+        if !self.world.resource::<Outposts>().0.contains_key(&tile) {
+            return Err("No outpost stands there.".into());
+        }
+        if !self.standing_at_outpost(tile) {
+            return Err("You need to be standing at the outpost to repair it.".into());
+        }
+        if self.world.resource::<Outposts>().0[&tile].integrity == OUTPOST_MAX_INTEGRITY {
+            return Err("The outpost is already at full integrity.".into());
+        }
+        let Some(def) = self.world.resource::<OutpostDb>().def().cloned() else {
+            return Err("No outpost design is known.".into());
+        };
+        let player = self.player_entity();
+        for (item, need) in &def.repair_cost {
+            let held = self
+                .world
+                .get::<Inventory>(player)
+                .map(|inv| inv.count(item))
+                .unwrap_or(0);
+            if held < *need {
+                return Err(format!(
+                    "Not enough {} to repair it: need {need}, have {held}.",
+                    self.item_name(item)
+                ));
+            }
+        }
+        for (item, need) in &def.repair_cost {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), *need);
+        }
+        self.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = OUTPOST_MAX_INTEGRITY;
+        self.log("The outpost is repaired.".to_string());
+        Ok(())
+    }
+
+    /// Posts an alert the moment `trend` first differs from what was last
+    /// announced for this outpost — design correction 10. Latched on
+    /// `Outpost::announced` rather than re-checked every tick against the
+    /// board's own collapse rule, which is what keeps a whole `Trend::Stale`
+    /// stretch from re-posting on every single tick it holds.
+    ///
+    /// **Entering `Stale` or `Declining` posts; every other trend (including
+    /// leaving one of those two) only updates the latch.** `reason` is
+    /// `Trend::reason` itself — the screen's status line and the alert
+    /// board cannot disagree about why, `Trend::reason`'s own doc.
+    fn announce_outpost_trend(
+        &mut self,
+        tile: (i32, i32),
+        trend: crate::outposts::Trend,
+        crew: usize,
+        tier: usize,
+    ) {
+        let already = self
+            .world
+            .resource::<Outposts>()
+            .0
+            .get(&tile)
+            .and_then(|o| o.announced);
+        if already == Some(trend) {
+            return;
+        }
+        {
+            let mut outposts = self.world.resource_mut::<Outposts>();
+            outposts.0.get_mut(&tile).unwrap().announced = Some(trend);
+        }
+        let kind = match trend {
+            crate::outposts::Trend::Stale => crate::alerts::AlertKind::OutpostStale,
+            crate::outposts::Trend::Declining => crate::alerts::AlertKind::OutpostDeclining,
+            crate::outposts::Trend::Growing | crate::outposts::Trend::Stable => return,
+        };
+        let outpost = self.world.resource::<Outposts>().0[&tile].clone();
+        let reason = trend.reason(&outpost, crew, tier);
+        let subject = format!("outpost@{},{}", tile.0, tile.1);
+        let text = format!("Outpost at ({}, {}): {reason}", tile.0, tile.1);
+        self.post_alert(kind, subject, text);
+    }
+
+    /// Re-seeds `Outpost::announced` to the trend it derives to right now —
+    /// design correction 10. The one caller is `Game::load`, right after
+    /// `attach_outpost_crew` (trend reads crew count): without this, a
+    /// freshly loaded save's `announced: None` would differ from a trend
+    /// that was already true when the run was saved, and the very next tick
+    /// would post an alert for a state the player already knows about.
+    pub(crate) fn reseed_outpost_announcements(&mut self) {
+        let tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<Outposts>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        for tile in tiles {
+            let crew = self.outpost_crew(tile).len();
+            let mut outposts = self.world.resource_mut::<Outposts>();
+            let outpost = outposts.0.get_mut(&tile).unwrap();
+            let tier = crate::outposts::tier(outpost, crew);
+            let trend = crate::outposts::trend(outpost, crew, tier, OUTPOST_STOCK_CAP);
+            outpost.announced = Some(trend);
+        }
+    }
+
     /// Whether the player is standing at (or diagonally beside) `tile` —
     /// the shared "at the outpost" reach `post_to_outpost` and
     /// `take_from_outpost` both refuse without.
@@ -217,7 +330,7 @@ impl Game {
         // buys — both are the record's own state, mutated once up front so
         // the production step below reads a tier already caught up with
         // this tick's growth.
-        let tier_now = {
+        let (tier_now, trend_now) = {
             let mut outposts = self.world.resource_mut::<Outposts>();
             let outpost = outposts.0.get_mut(&tile).unwrap();
             let stock_total: u32 = outpost.stock.values().sum();
@@ -227,7 +340,8 @@ impl Game {
                 outpost.stale_ticks = 0;
             }
             let tier = crate::outposts::tier(outpost, crew_count);
-            match crate::outposts::trend(outpost, crew_count, tier, OUTPOST_STOCK_CAP) {
+            let trend = crate::outposts::trend(outpost, crew_count, tier, OUTPOST_STOCK_CAP);
+            match trend {
                 crate::outposts::Trend::Growing => {
                     // Crew counted from the tier-1 floor upward, so the
                     // minimum crew that avoids `Trend::Declining` still
@@ -242,8 +356,9 @@ impl Game {
                 }
                 crate::outposts::Trend::Stale | crate::outposts::Trend::Stable => {}
             }
-            tier
+            (tier, trend)
         };
+        self.announce_outpost_trend(tile, trend_now, crew_count, tier_now);
 
         // Step 2: advance toward the next cycle. Nothing below runs — no
         // crew roll, no `GameRng` draw — until the cycle actually elapses,
@@ -1030,6 +1145,168 @@ mod tests {
         let mut game = game(29);
         let program = staff(&mut game);
         assert!(game.recall_from_outpost(program).is_err());
+    }
+
+    // -- Phase 5: repair_outpost ----------------------------------------
+
+    /// Writes a temp `assets/outposts/outpost.ron` naming `cost` as
+    /// `repair_cost`, loads it and returns the `OutpostDb` — the shipped def
+    /// ships an empty `repair_cost` (Phase 6 fills it in), so a test of the
+    /// refusal-then-spend ladder needs one of its own with real lines in it.
+    fn outpost_db_with_repair_cost(cost: &[(&str, u32)]) -> OutpostDb {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_outpost_repair_cost_{}_{}",
+            std::process::id(),
+            cost.len()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lines: String = cost
+            .iter()
+            .map(|(id, qty)| format!("(\"{id}\", {qty}), "))
+            .collect();
+        let ron = format!(
+            "OutpostDef(name: \"Outpost\", glyph: '#', kit: \"outpost_kit\", \
+             repair_cost: [{lines}], tiers: [(yields: {{Deadlock: [\"raw_trace\"]}})])"
+        );
+        std::fs::write(dir.join("outpost.ron"), ron).unwrap();
+        let (db, warnings) = OutpostDb::load_dir(&dir).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "the fixture's own RON must parse cleanly"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+        db
+    }
+
+    #[test]
+    fn repair_outpost_refuses_without_a_record_at_the_tile() {
+        let mut game = game(60);
+        let (ax, ay) = game.anchor_position().unwrap();
+        assert!(game.repair_outpost((ax + 999, ay + 999)).is_err());
+    }
+
+    #[test]
+    fn repair_outpost_refuses_when_the_player_is_too_far() {
+        let mut game = game(61);
+        let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.found_outpost(tile).unwrap();
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        let err = game
+            .repair_outpost(tile)
+            .expect_err("the player must be standing at the outpost");
+        assert!(err.contains("standing"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn repair_outpost_refuses_at_full_integrity() {
+        let mut game = game(62);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        assert!(game.repair_outpost(tile).is_err());
+    }
+
+    #[test]
+    fn repair_outpost_refuses_without_a_loaded_outpost_def() {
+        let mut game = game(63);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        game.world.insert_resource(OutpostDb::default());
+        assert_eq!(
+            game.repair_outpost(tile),
+            Err("No outpost design is known.".to_string())
+        );
+    }
+
+    /// Every refusal lands before anything is spent, asserted per refusal —
+    /// `every_refusal_leaves_stock_and_routes_exactly_as_they_were`'s shape.
+    /// **The deleted-fix check for this ladder**: a version that spends
+    /// each line as it checks it, rather than checking every line before
+    /// spending any, would leave `raw_trace` gone here even though the bill
+    /// as a whole was refused for want of `static_mesh`.
+    #[test]
+    fn repair_outpost_refuses_the_whole_bill_before_a_unit_moves() {
+        let mut game = game(64);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        game.world.insert_resource(outpost_db_with_repair_cost(&[
+            ("raw_trace", 3),
+            ("static_mesh", 2),
+        ]));
+        let player = game.player_entity();
+        let raw_trace = crate::items::ItemId("raw_trace".to_string());
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(raw_trace.clone(), 3);
+        // static_mesh is short by the whole amount — the bill must refuse
+        // before raw_trace, which alone would have been affordable, is spent.
+
+        let err = game.repair_outpost(tile).expect_err("static_mesh is short");
+        let static_mesh = crate::items::ItemId("static_mesh".to_string());
+        let static_mesh_name = game.item_name(&static_mesh).to_string();
+        assert!(err.contains(&static_mesh_name), "unexpected error: {err}");
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&raw_trace),
+            3,
+            "a refused bill must not spend the lines that were individually affordable"
+        );
+        assert_eq!(
+            game.world.resource::<Outposts>().0[&tile].integrity,
+            10,
+            "a refused repair must not touch integrity"
+        );
+    }
+
+    #[test]
+    fn repair_outpost_spends_the_cost_and_restores_full_integrity() {
+        let mut game = game(65);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        game.world
+            .insert_resource(outpost_db_with_repair_cost(&[("raw_trace", 3)]));
+        let player = game.player_entity();
+        let raw_trace = crate::items::ItemId("raw_trace".to_string());
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(raw_trace.clone(), 3);
+
+        game.repair_outpost(tile).unwrap();
+
+        assert_eq!(
+            game.world.resource::<Outposts>().0[&tile].integrity,
+            OUTPOST_MAX_INTEGRITY
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&raw_trace),
+            0,
+            "the cost is spent in full"
+        );
     }
 
     // -- Task 5: visit, report, marks, transfer take ------------------------

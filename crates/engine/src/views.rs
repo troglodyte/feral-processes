@@ -1627,6 +1627,12 @@ pub enum AttentionKind {
     /// `RaidIncoming`'s twin on `resources::SiegePressure`'s clock — see
     /// `Game::siege_warned`.
     SiegeIncoming,
+    /// An outpost is `Trend::Stale` or `Trend::Declining` — design
+    /// correction 10. Not a threat: unlike a raid warning, this is a state
+    /// the player can walk out and fix.
+    OutpostTrend,
+    /// An outpost's integrity has reached zero and it needs `[R]` repair.
+    OutpostDark,
 }
 
 /// One thing that needs the player right now — see `Game::attention`.

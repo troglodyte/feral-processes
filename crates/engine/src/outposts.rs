@@ -16,8 +16,9 @@ use serde::Deserialize;
 
 use crate::items::ItemId;
 use crate::tuning::{
-    OUTPOST_DAMAGED_FRACTION, OUTPOST_MAX_INTEGRITY, OUTPOST_STALE_GRACE_TICKS, OUTPOST_TIER_CREW,
-    OUTPOST_TIER_GROWTH,
+    OUTPOST_CREW_DEFENSE, OUTPOST_DAMAGED_FRACTION, OUTPOST_HOSTILE_TOWN_BONUS,
+    OUTPOST_MAX_INTEGRITY, OUTPOST_RAID_BASE_CHANCE, OUTPOST_RAID_CHANCE_CAP,
+    OUTPOST_STALE_GRACE_TICKS, OUTPOST_TIER_CREW, OUTPOST_TIER_GROWTH,
 };
 use crate::world::Biome;
 
@@ -48,6 +49,11 @@ pub struct OutpostDef {
     /// `Game::found_outpost` and `Game::use_item`.
     #[serde(default)]
     pub kit: ItemId,
+    /// What `Game::repair_outpost` spends from the pack to restore a dark
+    /// outpost to full integrity — a research bill's shape (spec §8): every
+    /// line is refused before a unit moves.
+    #[serde(default)]
+    pub repair_cost: Vec<(ItemId, u32)>,
     /// Raw, then processed, then complex — index 0 is tier 1 (the tier a
     /// freshly founded outpost starts at). See `yields`.
     pub tiers: Vec<OutpostTierDef>,
@@ -136,9 +142,11 @@ pub struct Outpost {
     /// Progress toward the next production cycle (Phase 2).
     pub cycle_progress: u32,
     /// Which `Trend` last posted an alert, so a reload does not repeat one
-    /// — design correction 10 (Phase 5). Not part of `save::OutpostSave`:
-    /// it is inert until Phase 5 re-seeds it from the freshly-derived trend
-    /// right after load, which is what keeps a reload from posting again.
+    /// — design correction 10. Not part of `save::OutpostSave`:
+    /// `Game::reseed_outpost_announcements` re-seeds it from the
+    /// freshly-derived trend right after load (after crew is reattached,
+    /// since trend reads crew count), which is what keeps a reload from
+    /// posting again.
     pub announced: Option<Trend>,
 }
 
@@ -252,6 +260,17 @@ pub fn trend(outpost: &Outpost, crew: usize, tier: usize, stock_cap: u32) -> Tre
         return Trend::Stable;
     }
     Trend::Growing
+}
+
+/// The chance an outpost raid roll lands — design spec §8. A base rate,
+/// raised per nearby Hostile town and lowered per posted crew member,
+/// clamped below certainty (`OUTPOST_RAID_CHANCE_CAP`) so however many
+/// hostile towns pile onto the bonus term, a raid stays a possibility to
+/// defend against rather than a guarantee.
+pub fn raid_chance(hostile_towns: usize, crew: usize) -> f64 {
+    let raised = OUTPOST_RAID_BASE_CHANCE + OUTPOST_HOSTILE_TOWN_BONUS * hostile_towns as f64;
+    let lowered = (raised - OUTPOST_CREW_DEFENSE * crew as f64).max(0.0);
+    lowered.min(OUTPOST_RAID_CHANCE_CAP)
 }
 
 /// The growth bar's fill, 0.0..=1.0 within `tier`'s own band — the fraction
@@ -596,5 +615,32 @@ mod tests {
         let need = OUTPOST_TIER_CREW[2] - crew;
         assert!(msg.contains(&need.to_string()));
         assert!(msg.contains('3'));
+    }
+
+    #[test]
+    fn raid_chance_with_no_towns_and_no_crew_is_the_base_rate() {
+        assert_eq!(raid_chance(0, 0), OUTPOST_RAID_BASE_CHANCE);
+    }
+
+    #[test]
+    fn raid_chance_rises_per_hostile_town() {
+        assert_eq!(
+            raid_chance(2, 0),
+            OUTPOST_RAID_BASE_CHANCE + 2.0 * OUTPOST_HOSTILE_TOWN_BONUS
+        );
+    }
+
+    #[test]
+    fn raid_chance_falls_per_crew_member_and_floors_at_zero() {
+        let some_crew = raid_chance(0, 1);
+        assert!(some_crew < OUTPOST_RAID_BASE_CHANCE);
+        // Deleted-fix check: without the `.max(0.0)` floor this goes
+        // negative and a caller feeding it straight to `random_bool` panics.
+        assert_eq!(raid_chance(0, 1000), 0.0);
+    }
+
+    #[test]
+    fn raid_chance_is_clamped_below_certainty() {
+        assert_eq!(raid_chance(1000, 0), OUTPOST_RAID_CHANCE_CAP);
     }
 }

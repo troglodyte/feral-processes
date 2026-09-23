@@ -1005,7 +1005,9 @@ impl Game {
     /// `restore_routes`' shape one type over: an outpost names no entity
     /// either, so this is a straight field-for-field rebuild keyed back onto
     /// its tile. `announced` is not part of `save::OutpostSave` and comes
-    /// back `None` on every load — see `outposts::Outpost::announced`'s doc.
+    /// back `None` here — `Game::reseed_outpost_announcements`, called once
+    /// `attach_outpost_crew` has run, is what fixes it back to the real
+    /// trend before the load returns.
     fn restore_outposts(&mut self, saved: Vec<save::OutpostSave>) {
         let map: std::collections::BTreeMap<(i32, i32), crate::outposts::Outpost> = saved
             .into_iter()
@@ -1691,6 +1693,7 @@ impl Game {
         game.restore_settlements(data.settlements);
         game.restore_outposts(data.outposts);
         game.attach_outpost_crew(pending_outpost_crew);
+        game.reseed_outpost_announcements();
         // After the towns exist, and the one place a patrol's tether is
         // rebuilt. A tile naming no town — the settlement catalogue was
         // edited between sessions — drops the tether silently rather than

@@ -1,12 +1,16 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
-use crate::components::{Disgruntled, Downed, Grievance};
+use crate::components::{Disgruntled, Downed, Grievance, PostedAt};
 use crate::game::base::upkeep::DEV_HIT_DAMAGE_PERCENT;
+use crate::outposts::Outpost;
+use crate::resources::Outposts;
 use crate::tuning::{
-    FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, STRUCTURE_REGEN_INTERVAL,
+    FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, OUTPOST_MAX_INTEGRITY,
+    OUTPOST_RAID_DAMAGE, OUTPOST_RAID_STEAL_FRACTION, RAID_DAMAGE, RAID_DEFENDER_DAMAGE,
+    RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, STRUCTURE_REGEN_INTERVAL,
 };
+use crate::world::Biome;
 use crate::*;
 
 /// The two axes are independent, and this is the line that proves it. A raid
@@ -2744,5 +2748,260 @@ fn winding_the_clock_reaches_the_warning_and_not_the_sweep() {
         game.world.get::<Durability>(structure).unwrap().hp,
         30,
         "and sweeps nothing, which is the whole point of the row"
+    );
+}
+
+// ---------------------------------------------------------------- Outposts
+// design spec §8, correction 9 — the raid roll and its consequences.
+
+/// An outpost record standing at `tile` with `qty` of a test item in stock —
+/// inserted directly rather than through `Game::found_outpost`, which is the
+/// placement ladder's own test in `game::outposts::tests`, not this one's.
+fn place_raidable_outpost(game: &mut Game, tile: (i32, i32), qty: u32) {
+    let mut outpost = Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY);
+    outpost.stock.insert(ItemId::from(ids::CORE_FRAGMENT), qty);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert(tile, outpost);
+}
+
+/// A bare tamed program posted at `tile`, for a raid's crew-benching arm —
+/// `game::outposts::tests::staff`'s shape, restated for this file's own
+/// reason above.
+fn posted_at(game: &mut Game, tile: (i32, i32)) -> Entity {
+    let program = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(program).insert(PostedAt(tile));
+    program
+}
+
+/// A seeded hit applies `OUTPOST_RAID_DAMAGE`, steals
+/// `OUTPOST_RAID_STEAL_FRACTION` of the stock, and benches the first crew
+/// member by `ProgramId` — swept across seeds, `a_hostile_town_beside_the_
+/// route_taxes_it_and_says_so_in_the_log`'s reason: whether a roll at
+/// `OUTPOST_RAID_BASE_CHANCE` lands on a given seed is chance, and this
+/// asserts on the seed that lands rather than assuming any particular one
+/// will.
+#[test]
+fn a_raid_hit_damages_steals_stock_and_benches_the_first_crew_member() {
+    let tile = (500, 500);
+    let found = (9000..9080u32).any(|seed| {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_raidable_outpost(&mut game, tile, 10);
+        // Spawned in this order, so a query-order bug would bench the wrong
+        // one rather than merely a different one — `outpost_crew_is_sorted_
+        // by_program_id`'s reason one feature over. `spawn_tamed` mints
+        // `ProgramId`s in ascending order, so `lower_id` (spawned first)
+        // holds the lower id and is the one `outpost_crew` sorts to the
+        // front — the one a hit must bench.
+        let lower_id = posted_at(&mut game, tile);
+        let higher_id = posted_at(&mut game, tile);
+
+        game.raid_one_outpost(tile);
+
+        let Some(outpost) = game.world.resource::<Outposts>().0.get(&tile).cloned() else {
+            return false;
+        };
+        if outpost.integrity == OUTPOST_MAX_INTEGRITY {
+            return false; // no hit this seed — try the next
+        }
+        assert_eq!(
+            outpost.integrity,
+            OUTPOST_MAX_INTEGRITY - OUTPOST_RAID_DAMAGE,
+            "a hit takes OUTPOST_RAID_DAMAGE, no more and no less"
+        );
+        let expected_stock = 10 - (10.0 * OUTPOST_RAID_STEAL_FRACTION) as u32;
+        assert_eq!(
+            outpost
+                .stock
+                .get(&ItemId::from(ids::CORE_FRAGMENT))
+                .copied()
+                .unwrap_or(0),
+            expected_stock,
+            "a hit steals OUTPOST_RAID_STEAL_FRACTION of the stock"
+        );
+        let crew = game.outpost_crew(tile);
+        assert_eq!(crew.len(), 1, "exactly one crew member is benched");
+        assert_eq!(
+            crew[0], higher_id,
+            "the crew member with the lower ProgramId is the one benched"
+        );
+        assert!(
+            game.world.get::<Downed>(lower_id).is_some(),
+            "the benched member is marked Downed — bench_or_dissolve's Forgiving arm"
+        );
+        assert!(
+            game.world.get::<Downed>(higher_id).is_none(),
+            "the surviving crew member is untouched"
+        );
+        true
+    });
+    assert!(
+        found,
+        "no seed in the sweep landed a raid hit on the outpost"
+    );
+}
+
+/// A hit that brings integrity to exactly zero recalls every remaining crew
+/// member to staff and stays on the map — design spec §8's "dark" outcome.
+#[test]
+fn a_hit_that_reaches_zero_integrity_recalls_the_rest_of_the_crew() {
+    let tile = (500, 500);
+    let mut game = Game::new(9200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_raidable_outpost(&mut game, tile, 4);
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .get_mut(&tile)
+        .unwrap()
+        .integrity = OUTPOST_RAID_DAMAGE; // exactly one hit from zero
+    let bystander = posted_at(&mut game, tile);
+
+    // Force the hit rather than sweeping for a seed — `OUTPOST_HOSTILE_TOWN_BONUS`
+    // stacked past the cap would work too, but forcing the roll directly
+    // through a seeded RNG that is known to land keeps the fixture legible.
+    let hit_seed = (9300..9400u32).find(|&seed| {
+        super::support::reseed_rng(&mut game, seed.into());
+        let mut probe = game.world.resource_mut::<crate::resources::GameRng>();
+        use rand::RngExt;
+        probe.0.random_bool(crate::outposts::raid_chance(0, 1))
+    });
+    let hit_seed = hit_seed.expect("some seed in this range must land a 10% roll");
+    super::support::reseed_rng(&mut game, hit_seed.into());
+
+    game.raid_one_outpost(tile);
+
+    let outpost = &game.world.resource::<Outposts>().0[&tile];
+    assert_eq!(outpost.integrity, 0, "the outpost must be dark");
+    assert!(
+        game.world.get::<PostedAt>(bystander).is_none(),
+        "the surviving crew member must be recalled, not left posted at a dark outpost"
+    );
+    assert_eq!(
+        game.program_role(bystander),
+        Some(ProgramRole::Staff),
+        "a recalled program returns to ordinary base staff"
+    );
+}
+
+/// The positive half of the zone boundary below: at `RAID_MIN_ZONE`, a real
+/// sweep fired through `Game::raid_check` (not `raid_one_outpost` called
+/// directly) does eventually damage the outpost — proof `run_outpost_raids`
+/// is actually wired into the firing branch, which `zone_1_outposts_are_
+/// never_raided` alone cannot show (that test would pass just as well if
+/// the wiring were missing entirely). `OUTPOST_RAID_BASE_CHANCE` (10%) over
+/// 200 forced sweeps misses with probability on the order of 1e-9.
+#[test]
+fn zone_2_outposts_can_be_raided_through_a_real_sweep() {
+    let tile = (500, 500);
+    let mut game = Game::new(9550, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, RAID_MIN_ZONE);
+    spawn_min_raid_staff(&mut game);
+    game.world.spawn((
+        Structure {
+            kind: "mining_node".to_string(),
+        },
+        Position { x: 5, y: 5 },
+        Durability { hp: 30, max_hp: 30 },
+    ));
+    place_raidable_outpost(&mut game, tile, 10);
+
+    for _ in 0..200 {
+        sweep_now(&mut game);
+    }
+
+    assert!(
+        game.world.resource::<Outposts>().0[&tile].integrity < OUTPOST_MAX_INTEGRITY,
+        "200 forced sweeps at zone 2 must land at least one outpost hit — \
+         `run_outpost_raids` may not be wired into `raid_check`'s firing branch"
+    );
+}
+
+/// Zone 1 is never raided — `raid_check`'s own `RAID_MIN_ZONE` gate applies
+/// before the outpost roll is ever reached, correction 9's stated
+/// consequence. Meaningful only alongside `zone_2_outposts_can_be_raided_
+/// through_a_real_sweep` above — on its own this would pass even if
+/// `run_outpost_raids` were never called at all.
+#[test]
+fn zone_1_outposts_are_never_raided() {
+    let tile = (500, 500);
+    let mut game = Game::new(9500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // `Game::new` starts at zone 1 — asserted rather than assumed, since the
+    // whole test is meaningless if this default ever moves.
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    spawn_min_raid_staff(&mut game);
+    game.world.spawn((
+        Structure {
+            kind: "mining_node".to_string(),
+        },
+        Position { x: 5, y: 5 },
+        Durability { hp: 30, max_hp: 30 },
+    ));
+    place_raidable_outpost(&mut game, tile, 10);
+
+    for _ in 0..(RAID_ATTEMPTS_PER_SEED * 10) {
+        sweep_now(&mut game);
+    }
+
+    assert_eq!(
+        game.world.resource::<Outposts>().0[&tile].integrity,
+        OUTPOST_MAX_INTEGRITY,
+        "an outpost in zone 1 must never take raid damage"
+    );
+}
+
+/// Once zone 2 is reached, the base's own sweep firing is what unlocks the
+/// outpost roll — `run_outpost_raids` is called from inside `raid_check`'s
+/// firing branch, so a sweep that finds nothing to hit (`run_raid` returns
+/// `false`) must not run it either. `run_outpost_raids` draws no `GameRng`
+/// with no outposts standing — the traps precedent.
+#[test]
+fn run_outpost_raids_draws_no_rng_with_no_outposts_standing() {
+    let mut game = Game::new(9600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(game.world.resource::<Outposts>().0.is_empty());
+
+    fn peek(g: &mut Game) -> u64 {
+        use rand::RngExt;
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    super::support::reseed_rng(&mut game, 42);
+    let without = peek(&mut game);
+
+    super::support::reseed_rng(&mut game, 42);
+    game.run_outpost_raids();
+    let with = peek(&mut game);
+
+    assert_eq!(without, with, "no outposts stand, so nothing may be rolled");
+}
+
+/// `resolve_siege_offscreen`/`open_siege` never touch an outpost — design
+/// spec §8's last bullet. A siege is a base-space event; an outpost stands
+/// on the zone surface and carries no `Position` a siege board could ever
+/// seat.
+#[test]
+fn a_siege_leaves_outposts_untouched() {
+    let tile = (500, 500);
+    let mut game = Game::new(9700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_raidable_outpost(&mut game, tile, 10);
+    let program = posted_at(&mut game, tile);
+
+    game.resolve_siege_offscreen();
+
+    let outpost = &game.world.resource::<Outposts>().0[&tile];
+    assert_eq!(outpost.integrity, OUTPOST_MAX_INTEGRITY);
+    assert_eq!(
+        outpost
+            .stock
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(10)
+    );
+    assert!(
+        game.world.get::<PostedAt>(program).is_some(),
+        "an outpost's crew must not be swept up by a siege's own defender pool"
     );
 }

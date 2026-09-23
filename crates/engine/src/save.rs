@@ -347,9 +347,9 @@ pub struct OutpostRouteSave {
 /// either, so this is a straight field-for-field rebuild in
 /// `Game::restore_outposts` with nothing to reconcile.
 ///
-/// `Outpost::announced` is deliberately not here — it is inert until
-/// Phase 5 re-seeds it from the freshly-derived trend right after load,
-/// which is what keeps a reload from re-posting an alert.
+/// `Outpost::announced` is deliberately not here — `Game::
+/// reseed_outpost_announcements` re-seeds it from the freshly-derived trend
+/// right after load, which is what keeps a reload from re-posting an alert.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutpostSave {
     pub tile: (i32, i32),

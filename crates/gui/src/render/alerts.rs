@@ -32,8 +32,14 @@ fn alert_color(kind: &AlertKind) -> Color {
         AlertKind::SweepIncoming
         | AlertKind::SweepHit
         | AlertKind::SiegeIncoming
-        | AlertKind::SiegeBegun => hud::palette::THREAT,
-        AlertKind::ProgramDowned | AlertKind::SiteCutOff | AlertKind::DepotsFull => TEXT,
+        | AlertKind::SiegeBegun
+        | AlertKind::OutpostRaided => hud::palette::THREAT,
+        AlertKind::ProgramDowned
+        | AlertKind::SiteCutOff
+        | AlertKind::DepotsFull
+        | AlertKind::OutpostStale
+        | AlertKind::OutpostDeclining
+        | AlertKind::OutpostDark => TEXT,
     }
 }
 

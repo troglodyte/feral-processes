@@ -1799,6 +1799,57 @@ impl Game {
             });
         }
 
+        // One row per outpost in `Trend::Stale`, `Trend::Declining` or dark
+        // — design correction 10. Tile order (`resources::Outposts`' own
+        // `BTreeMap` order), so the row a player sees first is stable.
+        let outpost_tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        for tile in outpost_tiles {
+            let Some(outpost) = self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .get(&tile)
+                .cloned()
+            else {
+                continue;
+            };
+            if outpost.integrity == 0 {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::OutpostDark,
+                    text: format!("outpost at ({}, {}) is dark", tile.0, tile.1),
+                    key: 'b',
+                    threat: true,
+                });
+                continue;
+            }
+            let crew = self.outpost_crew(tile).len();
+            let tier = crate::outposts::tier(&outpost, crew);
+            let trend =
+                crate::outposts::trend(&outpost, crew, tier, crate::tuning::OUTPOST_STOCK_CAP);
+            if matches!(
+                trend,
+                crate::outposts::Trend::Stale | crate::outposts::Trend::Declining
+            ) {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::OutpostTrend,
+                    text: format!(
+                        "outpost at ({}, {}): {}",
+                        tile.0,
+                        tile.1,
+                        trend.reason(&outpost, crew, tier)
+                    ),
+                    key: 'b',
+                    threat: false,
+                });
+            }
+        }
+
         rows
     }
 

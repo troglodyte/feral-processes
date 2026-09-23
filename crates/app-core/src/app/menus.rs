@@ -263,6 +263,38 @@ impl App {
         self.scroll(key, rows);
     }
 
+    /// The alert board (`Mode::Alerts`, opened with `N`).
+    ///
+    /// `x`/`d` are matched **before** `App::selected_index`, so they dismiss
+    /// the highlighted row rather than acting as the row shortcut lowercase
+    /// letters are everywhere else — the design spec's own test is that they
+    /// dismiss row `menu_selected` names, not whatever row their letter
+    /// would resolve to. Everything else — Up/Down, digits, other letters —
+    /// goes through `selected_index` like an ordinary menu.
+    pub(crate) fn handle_alerts_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        if matches!(key, GameKey::Char('x') | GameKey::Char('d')) {
+            let Some(game) = self.game.as_mut() else {
+                return;
+            };
+            let len = game.alerts().len();
+            if len == 0 {
+                return;
+            }
+            game.dismiss_alert(self.menu_selected);
+            // Clamped to the new length, `App::selected_index`'s own rule —
+            // dismissing the last row must not leave the highlight pointing
+            // one past the end of a now-shorter list.
+            self.menu_selected = self.menu_selected.min(len.saturating_sub(2));
+            return;
+        }
+        let rows = self.game.as_ref().map(|g| g.alerts().len()).unwrap_or(0);
+        let _ = self.selected_index(key, rows);
+    }
+
     /// The destination picker. Scrolls like the history; Enter points the
     /// compass at the highlighted row and `X` clears it.
     ///

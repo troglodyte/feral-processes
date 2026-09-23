@@ -304,6 +304,7 @@ impl App {
             Mode::Research => self.handle_research_key(key, ResearchTree::Base),
             Mode::RoutineResearch => self.handle_research_key(key, ResearchTree::Routines),
             Mode::Contracts => self.handle_contracts_key(key),
+            Mode::Alerts => self.handle_alerts_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Compass => self.handle_compass_key(key),
             Mode::Structures => self.handle_structures_key(key),

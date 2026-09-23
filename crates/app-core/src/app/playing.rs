@@ -230,6 +230,20 @@ impl App {
                 self.mode = Mode::History;
                 return;
             }
+            // Bound up here, beside `L`/`u`/`f` and for their reason: this
+            // match runs before the `is_underground()` hand-off below, so
+            // the board opens on the surface, in base space and in the
+            // Stack alike with no second arm down there to drift from this
+            // one. Reading the board is not an action, hence the `return`,
+            // and opening it is the one thing that marks every alert read.
+            GameKey::Char('N') => {
+                if let Some(game) = self.game.as_mut() {
+                    game.mark_alerts_read();
+                }
+                self.menu_selected = 0;
+                self.mode = Mode::Alerts;
+                return;
+            }
             // Where the run's known destinations lie. A `return` for `L`'s
             // reason — reading the map is not an action and must not cost a
             // turn. Lowercase because it is bound on the zone map, where

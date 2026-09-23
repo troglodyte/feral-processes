@@ -308,7 +308,13 @@
   machine's worker rather than anything naming the Depot. Found rebuilding
   the `chains` dev template's supplier bank around one: a hauler has to
   stand beside a Depot to deliver, so a supplier bank ringing one boxes it
-  in. Keep a free tile on every Depot.
+  in. **`hauling::nearest_depot` now skips a depot the worker has no
+  `post_reach` to** and takes the next in Chebyshev rank, so a boxed Depot
+  only strands a worker when it is the *only* candidate — a player save had
+  its one free face held by an idle body hemmed in by the very worker
+  waiting on it, stranding two Mining Nodes beside a second, open Depot.
+  The lone-candidate case still strands, deliberately, so keep a free tile
+  on a base's only Depot.
 - **The raid clock is spent by a sweep, not by reaching its threshold, and
   both floors hold the pressure rather than forgiving it.**
   `resources::RaidPressure` accrues `RAID_PRESSURE_PER_ZONE * zone` a tick

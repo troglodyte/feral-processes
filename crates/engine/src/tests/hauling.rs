@@ -1619,3 +1619,36 @@ fn a_haulers_walk_field_crosses_footprint_floor_but_never_the_anchor() {
         "the walk must never step onto the anchor"
     );
 }
+
+/// **The nearest Depot is not a destination if nothing can stand beside
+/// it.** Ranking stays Chebyshev, but a worker skips a Depot it has no walk
+/// to and delivers to the next one. The save that found this had its only
+/// free face held by an idle body that could not move either — two Mining
+/// Nodes read "cut off" for five hundred ticks beside a second Depot with
+/// three open sides. Boxed in by Walls here so the blockage cannot wander
+/// off mid-test.
+#[test]
+fn a_worker_skips_a_nearer_depot_it_cannot_reach() {
+    let mut game = base(4);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let boxed = deploy(&mut game, "depot", 2, -1);
+    for (dx, dy) in [(1, -1), (3, -1), (2, -2), (2, 0)] {
+        deploy(&mut game, "wall", dx, dy);
+    }
+    let open = deploy(&mut game, "depot", -2, 1);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, open, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert_eq!(
+        node_output(&game, open, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the load belongs in the depot the worker can reach"
+    );
+    assert_eq!(node_output(&game, boxed, ids::CORE_FRAGMENT), 0);
+}

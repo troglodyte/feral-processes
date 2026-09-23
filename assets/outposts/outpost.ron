@@ -1,0 +1,45 @@
+// Placeholder item picks — Phase 6 of the outposts plan replaces these with
+// the real per-biome yield tables and the crafted, research-gated kit item.
+// See docs/superpowers/specs/2026-09-23-outposts-design.md and
+// docs/superpowers/plans/2026-09-23-outposts.md.
+OutpostDef(
+    name: "Outpost",
+    glyph: '⌂',
+    kit: "outpost_kit",
+    tiers: [
+        // Tier 1 — raw
+        (
+            yields: {
+                DataVoid: ["raw_trace"],
+                Deadlock: ["raw_trace"],
+                NullSector: ["static_mesh"],
+                Backplane: ["static_mesh"],
+                OpenGrid: ["raw_trace"],
+                BlackIce: ["static_mesh"],
+            },
+        ),
+        // Tier 2 — processed
+        (
+            yields: {
+                DataVoid: ["static_mesh"],
+                Deadlock: ["static_mesh"],
+                NullSector: ["core_fragment"],
+                Backplane: ["core_fragment"],
+                OpenGrid: ["static_mesh"],
+                BlackIce: ["core_fragment"],
+            },
+        ),
+        // Tier 3 — complex
+        (
+            yields: {
+                DataVoid: ["core_fragment"],
+                Deadlock: ["core_fragment"],
+                NullSector: ["cache_grain"],
+                Backplane: ["cache_grain"],
+                OpenGrid: ["core_fragment"],
+                BlackIce: ["cache_grain"],
+            },
+        ),
+    ],
+    features: [],
+)

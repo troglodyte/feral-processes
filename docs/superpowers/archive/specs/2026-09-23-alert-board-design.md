@@ -1,6 +1,6 @@
 # Alert board
 
-**Status:** approved design, not yet implemented.
+**Status:** implemented, `v0.13.228`.
 
 ## Intent
 

@@ -1,7 +1,7 @@
 # Player emulation
 
 **Date:** 2026-09-16
-**Status:** design approved, not implemented. Sequenced after
+**Status:** implemented, `v0.13.204` (Part A) and `v0.13.205` (Part B). Sequenced after
 `2026-09-16-routine-research-tree-design.md` (todo #101).
 **Todo:** #100, "druid like transformations".
 

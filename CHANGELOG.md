@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.228
+
+**Press `N` to open an alert board listing what is blocking the base: stalled
+machines, downed programs, sweeps and sieges, cut-off sites, and loads with
+nowhere to go.** Before, each of these was a single line in the log that
+scrolled away. Now each is kept on a board of up to 50 entries. A repeat
+folds into one row counted `×N`, `x` or `d` dismisses the highlighted row,
+and a badge on the status bar shows how many are unread. The board is saved
+with the run.
+
 ## 0.13.227
 
 **A Recharger Node that runs out of Power Cells now has one fetched from

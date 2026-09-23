@@ -4655,6 +4655,13 @@ pub const ROUTE_PREDATION_LOSS: f32 = 0.3;
 /// `TransitCue` traffic, not because a throughput number was derived for it.
 pub const ROUTE_MAX_ACTIVE: usize = 4;
 
+/// The most an outpost route's outbound leg loads off an outpost's stock in
+/// one arrival, summed across every item — `routes::RouteEnd::Outpost`'s own
+/// leg, `OUTPOST_STOCK_CAP`'s sibling rather than a share of it, since a
+/// route's haul and an outpost's storage are two different questions.
+/// Unmeasured — see design spec §11.
+pub const ROUTE_OUTPOST_CARRY: u32 = 20;
+
 // ---------------------------------------------------------------------------
 // Caravan traders
 // ---------------------------------------------------------------------------
@@ -5752,6 +5759,35 @@ pub const OUTPOST_DAMAGED_FRACTION: f32 = 0.5;
 /// `Outpost::cycle_progress` every tick and rolls the crew once it reaches
 /// this. Unmeasured — see design spec §11.
 pub const OUTPOST_CYCLE_TICKS: u32 = 50;
+
+/// An outpost raid's base chance, rolled once per outpost inside
+/// `raid_check`'s firing branch — design spec §8. Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_RAID_BASE_CHANCE: f64 = 0.1;
+
+/// How much each known Hostile town within `SETTLEMENT_RAID_RADIUS` of the
+/// outpost's own tile — not the anchor — raises that chance, `Standing::
+/// sends_raiders`'s own gate reused rather than restated. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_HOSTILE_TOWN_BONUS: f64 = 0.1;
+
+/// How much each posted crew member lowers the chance. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_CREW_DEFENSE: f64 = 0.03;
+
+/// The ceiling an outpost raid's rolled chance is clamped below —
+/// `SETTLEMENT_GARRISON_MAX`'s reason one axis over: however many hostile
+/// towns pile onto the bonus term, a raid must stay a possibility to defend
+/// against rather than a certainty. Unmeasured — see design spec §11.
+pub const OUTPOST_RAID_CHANCE_CAP: f64 = 0.9;
+
+/// Integrity a raid hit takes off an outpost. Unmeasured — see design spec
+/// §11.
+pub const OUTPOST_RAID_DAMAGE: u32 = 25;
+
+/// The share of an outpost's stock a raid hit steals, applied per item and
+/// rounded down. Unmeasured — see design spec §11.
+pub const OUTPOST_RAID_STEAL_FRACTION: f32 = 0.5;
 
 #[cfg(test)]
 mod tests {

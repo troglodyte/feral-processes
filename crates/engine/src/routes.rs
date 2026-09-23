@@ -33,22 +33,68 @@ pub enum RouteLeg {
     Inbound,
 }
 
+/// Where a route runs to — the extension point design correction 4 asks
+/// for, in place of the spec's rejected `Route::outpost: Option<_>`.
+///
+/// **Not `Serialize`.** `Route` itself isn't either — the save split is
+/// `save::RouteSave` (settlement, untouched) and `save::OutpostRouteSave`
+/// (new, additive), never a serialized `RouteEnd` — changing `RouteSave`'s
+/// `destination` field to an enum is not an additive save change, which is
+/// the whole reason this collapses three in-memory fields rather than
+/// widening the save form.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RouteEnd {
+    Settlement {
+        /// The town this trip runs to, by region — the one name for a
+        /// settlement that cannot drift, `SettlementKey`'s own reason.
+        key: SettlementKey,
+        /// The whole resolved destination, not its id — see the module doc.
+        def: SettlementDef,
+        /// The tile the destination actually stands on, recorded rather
+        /// than re-derived — `resources::KnownSettlement::tile`'s reason.
+        tile: (i32, i32),
+    },
+    /// An outpost names no entity and no def of its own worth resolving
+    /// ahead of time — `crate::outposts::Outpost`'s record already lives at
+    /// this tile in `resources::Outposts`, looked up live on every tick.
+    Outpost((i32, i32)),
+}
+
+impl RouteEnd {
+    /// The tile this endpoint stands on, whichever kind it is — the one
+    /// comparison `dispatch_route`'s `Duplicate` refusal and
+    /// `Game::sever_route` need, so neither has to match on the variant
+    /// itself.
+    pub fn tile(&self) -> (i32, i32) {
+        match self {
+            RouteEnd::Settlement { tile, .. } => *tile,
+            RouteEnd::Outpost(tile) => *tile,
+        }
+    }
+
+    /// `Some` only for a settlement endpoint — `Game::sever_route`'s own
+    /// door, since an outpost route has no `SettlementKey` to sever by.
+    pub fn settlement_key(&self) -> Option<SettlementKey> {
+        match self {
+            RouteEnd::Settlement { key, .. } => Some(*key),
+            RouteEnd::Outpost(_) => None,
+        }
+    }
+}
+
 /// One caravan trip, dispatched or standing.
 ///
-/// Not `Serialize`: the save form is `save::RouteSave`. `resources::Sorties`
-/// is the shape being copied, though a route needs no entity reconciliation
-/// on load the way a sortie's membership does.
+/// Not `Serialize`: the save form is `save::RouteSave` /
+/// `save::OutpostRouteSave`. `resources::Sorties` is the shape being copied,
+/// though a route needs no entity reconciliation on load the way a sortie's
+/// membership does.
 #[derive(Clone, Debug)]
 pub struct Route {
-    /// The town this trip runs to, by region — the one name for a
-    /// settlement that cannot drift, `SettlementKey`'s own reason.
-    pub destination: SettlementKey,
-    /// The whole resolved destination, not its id — see the module doc.
-    pub destination_def: SettlementDef,
-    /// The tile the destination actually stands on, recorded rather than
-    /// re-derived — `resources::KnownSettlement::tile`'s reason.
-    pub destination_tile: (i32, i32),
+    /// Which kind of endpoint this trip runs to — see `RouteEnd`.
+    pub destination: RouteEnd,
     /// What the outbound leg carries, spent from base stock at dispatch.
+    /// Always empty at dispatch for an outpost endpoint — see
+    /// `Game::run_routes`'s outpost arm.
     pub cargo: Vec<(ItemId, u32)>,
     /// Whether this trip reloads and departs again on its own arrival home,
     /// rather than being a one-off. Severing (`Game::sever_route`) clears

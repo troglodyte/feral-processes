@@ -421,9 +421,7 @@ impl Game {
             max_integrity: OUTPOST_MAX_INTEGRITY,
             stock,
             stock_cap: OUTPOST_STOCK_CAP,
-            // Phase 4's `RouteEnd::Outpost` fills this in; nothing routes to
-            // an outpost yet.
-            route: None,
+            route: self.outpost_route_line(tile),
             crew,
             yields,
             next_tier_requirement,
@@ -1104,7 +1102,7 @@ mod tests {
         assert_eq!(report.stock, 5);
         assert_eq!(report.stock_cap, OUTPOST_STOCK_CAP);
         assert_eq!(report.crew.len(), 2);
-        assert!(report.route.is_none(), "no route endpoint exists yet");
+        assert!(report.route.is_none(), "no caravan route runs to this tile");
         assert!(!report.yields.is_empty(), "a founded outpost yields tier 1");
         assert_eq!(report.tier_label, crate::outposts::tier_label(report.tier));
         assert!(!report.dark, "integrity 40 is not zero");
@@ -1123,6 +1121,45 @@ mod tests {
 
         let report = game.outpost_report(tile).unwrap();
         assert!(report.dark);
+    }
+
+    /// `outpost_report`'s `route` field reads `Game::outpost_route_line` —
+    /// a route to this tile is filled in and a stalled one names it, rather
+    /// than a route runs directly through `dispatch_outpost_route` (that
+    /// door's own fixture and refusal ladder live in `tests::routes`).
+    #[test]
+    fn outpost_report_route_reflects_a_route_bound_to_this_tile() {
+        let mut game = game(40);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        assert!(game.outpost_report(tile).unwrap().route.is_none());
+
+        game.world
+            .resource_mut::<crate::resources::Routes>()
+            .0
+            .push(crate::routes::Route {
+                destination: crate::routes::RouteEnd::Outpost(tile),
+                cargo: Vec::new(),
+                standing: true,
+                stalled: false,
+                leg: crate::routes::RouteLeg::Outbound,
+                ticks_total: 100,
+                ticks_elapsed: 40,
+                proceeds: 0,
+            });
+        let line = game.outpost_report(tile).unwrap().route;
+        assert!(line.is_some_and(|l| l.contains("60")), "60 ticks remain");
+
+        game.world
+            .resource_mut::<crate::resources::Routes>()
+            .0
+            .get_mut(0)
+            .unwrap()
+            .stalled = true;
+        let line = game.outpost_report(tile).unwrap().route;
+        assert!(
+            line.clone().is_some_and(|l| l.contains("can't reach")),
+            "a stalled route must say so: {line:?}"
+        );
     }
 
     #[test]

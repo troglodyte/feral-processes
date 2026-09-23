@@ -1409,10 +1409,9 @@ pub struct OutpostReport {
     pub max_integrity: u32,
     pub stock: u32,
     pub stock_cap: u32,
-    /// `None` until Phase 4 wires a caravan route to an outpost endpoint —
-    /// design correction 4's `RouteEnd`. A pre-resolved sentence rather than
-    /// a route handle, `Trend::reason`'s own reason: the screen builds no
-    /// prose of its own.
+    /// `Game::outpost_route_line` — `None` when no caravan route runs to
+    /// this tile. A pre-resolved sentence rather than a route handle,
+    /// `Trend::reason`'s own reason: the screen builds no prose of its own.
     pub route: Option<String>,
     /// Sorted by `ProgramId` — `Game::outpost_crew`'s own order, so the
     /// screen's row letters land on the same program every read.

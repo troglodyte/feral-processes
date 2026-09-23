@@ -322,6 +322,25 @@ pub struct RouteSave {
     pub proceeds: u32,
 }
 
+/// One caravan route running to an outpost, `RouteSave`'s twin for
+/// `routes::RouteEnd::Outpost` — design correction 4. **Untouched
+/// `RouteSave` stays settlement-only**, so this is a new, additive vector on
+/// `SaveData` rather than a widened `destination` field: changing
+/// `RouteSave::destination`'s type would not be an additive save change.
+///
+/// No `proceeds` field — an outpost route never banks Credits, only cargo,
+/// which is what `cargo` already carries mid-trip.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutpostRouteSave {
+    pub tile: (i32, i32),
+    pub cargo: Vec<(ItemId, u32)>,
+    pub standing: bool,
+    pub stalled: bool,
+    pub leg: crate::routes::RouteLeg,
+    pub ticks_total: u64,
+    pub ticks_elapsed: u64,
+}
+
 /// One founded outpost — `outposts::Outpost`'s stored fields, plus the tile
 /// that keys it in `resources::Outposts`. Crew rides `CreatureSave::outpost`
 /// instead, `RouteSave`'s reason one level over: an outpost names no entity
@@ -1740,6 +1759,16 @@ pub struct SaveData {
     /// that run had. No `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub outposts: Vec<OutpostSave>,
+    /// Every route running to an outpost — see `OutpostRouteSave`. A
+    /// settlement route still lives in `PlayerSave::routes`; this is a
+    /// separate, additive vector rather than a widened `RouteSave`, design
+    /// correction 4's reason.
+    ///
+    /// `#[serde(default)]`, `outposts`' reason: a file written before this
+    /// existed loads with none in flight, which is exactly true of that run.
+    /// No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub outpost_routes: Vec<OutpostRouteSave>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -2159,6 +2188,7 @@ mod tests {
             alerts: Vec::new(),
             next_program_id: crate::resources::NextProgramId::START.0,
             outposts: Vec::new(),
+            outpost_routes: Vec::new(),
         }
     }
 

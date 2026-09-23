@@ -957,13 +957,16 @@ impl Game {
     fn restore_routes(&mut self, saved: Vec<save::RouteSave>) {
         // Straight field-for-field, `routes::Route`'s own reason: cargo
         // names no entity, so there is nothing here to reconcile against
-        // `sortie_members` above.
+        // `sortie_members` above. Settlement routes only — `restore_outpost_routes`
+        // appends the other half onto this same resource.
         let routes: Vec<crate::routes::Route> = saved
             .into_iter()
             .map(|r| crate::routes::Route {
-                destination: r.destination,
-                destination_def: r.destination_def,
-                destination_tile: r.destination_tile,
+                destination: crate::routes::RouteEnd::Settlement {
+                    key: r.destination,
+                    def: r.destination_def,
+                    tile: r.destination_tile,
+                },
                 cargo: r.cargo,
                 standing: r.standing,
                 stalled: r.stalled,
@@ -974,6 +977,29 @@ impl Game {
             })
             .collect();
         self.world.insert_resource(crate::resources::Routes(routes));
+    }
+
+    /// `restore_routes`' twin for the outpost half of `resources::Routes` —
+    /// appends rather than inserting, so call order with `restore_routes`
+    /// does not matter.
+    fn restore_outpost_routes(&mut self, saved: Vec<save::OutpostRouteSave>) {
+        let mut routes: Vec<crate::routes::Route> = saved
+            .into_iter()
+            .map(|r| crate::routes::Route {
+                destination: crate::routes::RouteEnd::Outpost(r.tile),
+                cargo: r.cargo,
+                standing: r.standing,
+                stalled: r.stalled,
+                leg: r.leg,
+                ticks_total: r.ticks_total,
+                ticks_elapsed: r.ticks_elapsed,
+                proceeds: 0,
+            })
+            .collect();
+        self.world
+            .resource_mut::<crate::resources::Routes>()
+            .0
+            .append(&mut routes);
     }
 
     /// `restore_routes`' shape one type over: an outpost names no entity
@@ -1629,6 +1655,7 @@ impl Game {
         game.world.insert_resource(WieldedProgram(wielded));
         game.restore_sorties(saved_sorties, &sortie_members);
         game.restore_routes(saved_routes);
+        game.restore_outpost_routes(std::mem::take(&mut data.outpost_routes));
 
         let structure_positions = game.restore_structures(data.structures);
 
@@ -2615,23 +2642,29 @@ impl Game {
             .map(|a| a.iter().map(|(id, v)| (id.clone(), v)).collect())
             .unwrap_or_default();
         // No membership to gather, `routes::Route`'s own reason: a
-        // field-for-field conversion is the whole of it.
+        // field-for-field conversion is the whole of it. Settlement routes
+        // only — an outpost route saves as `SaveData::outpost_routes`
+        // instead, design correction 4's reason (`RouteSave` stays
+        // untouched, so widening its `destination` field is not an option).
         let routes: Vec<save::RouteSave> = self
             .world
             .resource::<crate::resources::Routes>()
             .0
             .iter()
-            .map(|r| save::RouteSave {
-                destination: r.destination,
-                destination_def: r.destination_def.clone(),
-                destination_tile: r.destination_tile,
-                cargo: r.cargo.clone(),
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: r.proceeds,
+            .filter_map(|r| match &r.destination {
+                crate::routes::RouteEnd::Settlement { key, def, tile } => Some(save::RouteSave {
+                    destination: *key,
+                    destination_def: def.clone(),
+                    destination_tile: *tile,
+                    cargo: r.cargo.clone(),
+                    standing: r.standing,
+                    stalled: r.stalled,
+                    leg: r.leg,
+                    ticks_total: r.ticks_total,
+                    ticks_elapsed: r.ticks_elapsed,
+                    proceeds: r.proceeds,
+                }),
+                crate::routes::RouteEnd::Outpost(_) => None,
             })
             .collect();
         save::PlayerSave {
@@ -2950,6 +2983,24 @@ impl Game {
                     stock: o.stock.iter().map(|(id, &n)| (id.clone(), n)).collect(),
                     stale_ticks: o.stale_ticks,
                     cycle_progress: o.cycle_progress,
+                })
+                .collect(),
+            outpost_routes: self
+                .world
+                .resource::<crate::resources::Routes>()
+                .0
+                .iter()
+                .filter_map(|r| match &r.destination {
+                    crate::routes::RouteEnd::Outpost(tile) => Some(save::OutpostRouteSave {
+                        tile: *tile,
+                        cargo: r.cargo.clone(),
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                    }),
+                    crate::routes::RouteEnd::Settlement { .. } => None,
                 })
                 .collect(),
         };

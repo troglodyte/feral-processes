@@ -14,7 +14,7 @@ use crate::components::GlyphColor;
 use crate::game::sortie::DispatchReach;
 use crate::items::ItemId;
 use crate::resources::{self, MessageKind};
-use crate::routes::{Route, RouteLeg};
+use crate::routes::{Route, RouteEnd, RouteLeg};
 use crate::settlements::relations::Standing;
 use crate::settlements::{SettlementKey, Temperament};
 
@@ -26,7 +26,8 @@ use crate::settlements::{SettlementKey, Temperament};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RouteRefusal {
     NotAtRelay,
-    /// `destination` names no settlement the run has discovered yet.
+    /// `destination` names no settlement the run has discovered yet, or (for
+    /// `Game::dispatch_outpost_route`) no outpost stands at the tile given.
     UnknownDestination,
     /// The town is Hostile and refuses service outright — `refuses_service`.
     Refused,
@@ -197,7 +198,7 @@ impl Game {
             .resource::<resources::Routes>()
             .0
             .iter()
-            .any(|r| r.destination == destination)
+            .any(|r| r.destination.tile() == known.tile)
         {
             return Err(RouteRefusal::Duplicate);
         }
@@ -234,9 +235,11 @@ impl Game {
             .resource_mut::<resources::Routes>()
             .0
             .push(Route {
-                destination,
-                destination_def: known.def,
-                destination_tile: known.tile,
+                destination: RouteEnd::Settlement {
+                    key: destination,
+                    def: known.def,
+                    tile: known.tile,
+                },
                 cargo,
                 standing,
                 stalled: false,
@@ -249,6 +252,88 @@ impl Game {
         Ok(())
     }
 
+    /// The one-line sentence `views::OutpostReport::route` shows for the
+    /// caravan route bound to `tile`, if one exists — `Trend::reason`'s own
+    /// convention that the screen builds no prose of its own. `None` when
+    /// no route runs there, which is also why there is no dispatch-hub row
+    /// for it: `Game::route_destinations` never lists an outpost, so this
+    /// sentence, read from the outpost's own screen, is the only place a
+    /// player checks on one.
+    pub(crate) fn outpost_route_line(&self, tile: (i32, i32)) -> Option<String> {
+        let route = self
+            .world
+            .resource::<resources::Routes>()
+            .0
+            .iter()
+            .find(|r| matches!(&r.destination, RouteEnd::Outpost(t) if *t == tile))?;
+        if route.stalled {
+            return Some("A caravan can't reach it right now — nothing stands there.".to_string());
+        }
+        let ticks_left = route.ticks_total.saturating_sub(route.ticks_elapsed);
+        Some(match route.leg {
+            RouteLeg::Outbound => {
+                format!("A caravan is {ticks_left} ticks out, coming to collect its stock.")
+            }
+            RouteLeg::Inbound => {
+                let units: u32 = route.cargo.iter().map(|(_, qty)| *qty).sum();
+                format!("A caravan is hauling {units} units home, {ticks_left} ticks out.")
+            }
+        })
+    }
+
+    /// `dispatch_route`'s twin for an outpost endpoint — design spec §7.
+    ///
+    /// Carries no manifest and spends no base stock up front: the outbound
+    /// leg sells nothing, so there is nothing to refuse for want of stock —
+    /// `EmptyManifest`/`Understocked` simply do not apply to this door.
+    pub fn dispatch_outpost_route(
+        &mut self,
+        tile: (i32, i32),
+        standing: bool,
+    ) -> Result<(), RouteRefusal> {
+        if self.dispatch_reach() != DispatchReach::AtRelay {
+            return Err(RouteRefusal::NotAtRelay);
+        }
+        if !self
+            .world
+            .resource::<resources::Outposts>()
+            .0
+            .contains_key(&tile)
+        {
+            return Err(RouteRefusal::UnknownDestination);
+        }
+        if self
+            .world
+            .resource::<resources::Routes>()
+            .0
+            .iter()
+            .any(|r| r.destination.tile() == tile)
+        {
+            return Err(RouteRefusal::Duplicate);
+        }
+        if self.world.resource::<resources::Routes>().0.len() >= crate::tuning::ROUTE_MAX_ACTIVE {
+            return Err(RouteRefusal::TooMany);
+        }
+        let anchor = self.anchor_position().unwrap_or((0, 0));
+        let ticks = Self::route_duration(anchor, tile);
+        self.queue_cargo_walk(true);
+        self.world
+            .resource_mut::<resources::Routes>()
+            .0
+            .push(Route {
+                destination: RouteEnd::Outpost(tile),
+                cargo: Vec::new(),
+                standing,
+                stalled: false,
+                leg: RouteLeg::Outbound,
+                ticks_total: ticks,
+                ticks_elapsed: 0,
+                proceeds: 0,
+            });
+        self.log_base("A caravan departs for the outpost.".to_string());
+        Ok(())
+    }
+
     /// Clears `standing` on the route running to `destination`, if one is
     /// both in flight and still standing. Returns whether anything was
     /// cleared.
@@ -256,10 +341,17 @@ impl Game {
     /// **Clears `standing` and nothing else** — the trip already in flight
     /// still completes and still pays, through the ordinary tick. No
     /// refund path, no cargo teleport.
+    ///
+    /// Settlement-only by construction — `RouteEnd::settlement_key` answers
+    /// `None` for an outpost route, so this can never sever one.
     pub fn sever_route(&mut self, destination: SettlementKey) -> bool {
         let cleared = {
             let mut routes = self.world.resource_mut::<resources::Routes>();
-            match routes.0.iter_mut().find(|r| r.destination == destination) {
+            match routes
+                .0
+                .iter_mut()
+                .find(|r| r.destination.settlement_key() == Some(destination))
+            {
                 Some(route) if route.standing => {
                     route.standing = false;
                     true
@@ -274,23 +366,31 @@ impl Game {
         cleared
     }
 
-    /// Every trip currently in flight, worded for a screen —
+    /// Every settlement trip currently in flight, worded for a screen —
     /// `Game::sortie_reports`' shape: `&self`, and derives nothing back
     /// into the world, so a screen that draws it twice cannot move a trip.
+    ///
+    /// **Settlement routes only.** An outpost route's status is read off
+    /// `Game::outpost_report(tile).route` instead — there is no dispatch-hub
+    /// row for an outpost destination to occupy yet, since
+    /// `Game::route_destinations` only ever lists settlements.
     pub fn route_reports(&self) -> Vec<RouteReport> {
         self.world
             .resource::<resources::Routes>()
             .0
             .iter()
-            .map(|r| RouteReport {
-                destination: r.destination,
-                destination_name: r.destination_def.name.clone(),
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                cargo: r.cargo.clone(),
-                ticks_left: r.ticks_total.saturating_sub(r.ticks_elapsed),
-                proceeds: r.proceeds,
+            .filter_map(|r| match &r.destination {
+                RouteEnd::Settlement { key, def, .. } => Some(RouteReport {
+                    destination: *key,
+                    destination_name: def.name.clone(),
+                    standing: r.standing,
+                    stalled: r.stalled,
+                    leg: r.leg,
+                    cargo: r.cargo.clone(),
+                    ticks_left: r.ticks_total.saturating_sub(r.ticks_elapsed),
+                    proceeds: r.proceeds,
+                }),
+                RouteEnd::Outpost(_) => None,
             })
             .collect()
     }
@@ -365,12 +465,10 @@ impl Game {
     fn step_route(&mut self, index: usize) -> bool {
         if self.world.resource::<resources::Routes>().0[index].stalled {
             // The countdown does not move while stalled — it is parked at
-            // the inbound-complete point, and every tick just retries the
-            // reload rather than re-running predation and the deposit a
-            // second time. `try_reload_route` reads `standing` itself, so a
-            // severed stalled route is dropped here rather than retried
-            // forever.
-            return self.try_reload_route(index);
+            // the inbound-complete (or, for an outpost, the arrival) point,
+            // and every tick just retries rather than re-running predation
+            // and the deposit a second time.
+            return self.retry_stalled_route(index);
         }
         let (elapsed, total, leg) = {
             let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
@@ -389,29 +487,62 @@ impl Game {
         }
     }
 
-    /// The outbound leg lands: predation against the cargo, the sale of
-    /// what survives at the destination's own price, and standing paid on
-    /// the turnover — then the trip turns around.
+    /// Dispatches a stalled route's retry to the right endpoint —
+    /// `RouteEnd`'s own extension point: a settlement retries its reload
+    /// (dry stock), an outpost retries its pickup (the record went missing).
+    fn retry_stalled_route(&mut self, index: usize) -> bool {
+        match self.world.resource::<resources::Routes>().0[index].destination {
+            RouteEnd::Settlement { .. } => self.try_reload_route(index),
+            RouteEnd::Outpost(tile) => self.try_outpost_pickup(index, tile),
+        }
+    }
+
+    /// The outbound leg lands — dispatched by endpoint kind, `retry_stalled_route`'s
+    /// own split. A settlement sells what survives predation; an outpost
+    /// carries nothing outbound and loads its stock instead (design spec §7).
+    fn complete_outbound_leg(&mut self, index: usize) {
+        match self.world.resource::<resources::Routes>().0[index].destination {
+            RouteEnd::Settlement { .. } => self.complete_settlement_outbound_leg(index),
+            RouteEnd::Outpost(tile) => {
+                self.try_outpost_pickup(index, tile);
+            }
+        }
+    }
+
+    /// The inbound leg lands — dispatched by endpoint kind.
+    fn complete_inbound_leg(&mut self, index: usize) -> bool {
+        match self.world.resource::<resources::Routes>().0[index].destination {
+            RouteEnd::Settlement { .. } => self.complete_settlement_inbound_leg(index),
+            RouteEnd::Outpost(tile) => self.complete_outpost_inbound_leg(index, tile),
+        }
+    }
+
+    /// A settlement's outbound leg lands: predation against the cargo, the
+    /// sale of what survives at the destination's own price, and standing
+    /// paid on the turnover — then the trip turns around.
     ///
     /// **`Route::cargo` is never mutated by predation** — only a local copy
     /// is, which is what lets a standing route's next departure keep asking
     /// for the manifest it was given rather than one that shrinks a little
     /// on every trip a predator catches.
-    fn complete_outbound_leg(&mut self, index: usize) {
+    fn complete_settlement_outbound_leg(&mut self, index: usize) {
         let (anchor, destination_tile, destination, temperament, mut surviving) = {
             let route = &self.world.resource::<resources::Routes>().0[index];
+            let RouteEnd::Settlement { key, def, tile } = &route.destination else {
+                unreachable!("complete_settlement_outbound_leg is the Settlement arm")
+            };
             (
                 self.anchor_position().unwrap_or((0, 0)),
-                route.destination_tile,
-                route.destination,
-                route.destination_def.temperament,
+                *tile,
+                *key,
+                def.temperament,
                 route.cargo.clone(),
             )
         };
-        self.roll_cargo_predation(anchor, destination_tile, destination, &mut surviving);
+        let name = self.settlement_name(destination);
+        self.roll_cargo_predation(anchor, destination_tile, &name, &mut surviving);
         let proceeds = self.route_quote(&surviving, temperament);
         self.credit_trade_volume(destination, proceeds);
-        let name = self.settlement_name(destination);
         let currency = self.trade_currency();
         let currency_name = self.item_name(&currency).to_string();
         self.log_base_kind(
@@ -424,17 +555,20 @@ impl Game {
         route.ticks_elapsed = 0;
     }
 
-    /// The inbound leg lands: predation against the proceeds, the deposit
-    /// of whatever survives into base stock, then a reload (standing, stock
-    /// allowing), a stall, or dropping the record for good. Returns whether
-    /// the record was dropped.
-    fn complete_inbound_leg(&mut self, index: usize) -> bool {
+    /// A settlement's inbound leg lands: predation against the proceeds, the
+    /// deposit of whatever survives into base stock, then a reload
+    /// (standing, stock allowing), a stall, or dropping the record for
+    /// good. Returns whether the record was dropped.
+    fn complete_settlement_inbound_leg(&mut self, index: usize) -> bool {
         let (anchor, destination_tile, destination, mut proceeds) = {
             let route = &self.world.resource::<resources::Routes>().0[index];
+            let RouteEnd::Settlement { key, tile, .. } = &route.destination else {
+                unreachable!("complete_settlement_inbound_leg is the Settlement arm")
+            };
             (
                 self.anchor_position().unwrap_or((0, 0)),
-                route.destination_tile,
-                route.destination,
+                *tile,
+                *key,
                 route.proceeds,
             )
         };
@@ -457,18 +591,18 @@ impl Game {
         self.try_reload_route(index)
     }
 
-    /// Attempts to reload a route's own manifest from base stock and send
-    /// it out again — the initial attempt at inbound completion, and every
-    /// stalled tick's retry. Returns whether the record was dropped for
-    /// good.
+    /// Attempts to reload a settlement route's own manifest from base stock
+    /// and send it out again — the initial attempt at inbound completion,
+    /// and every stalled tick's retry. Returns whether the record was
+    /// dropped for good.
     ///
-    /// **Reads `standing` first**, `complete_inbound_leg`'s own check moved
-    /// in here: a stalled route that gets severed is parked at home with its
-    /// proceeds already deposited, not in flight, so severing it must drop
-    /// the record rather than leave it consuming a `ROUTE_MAX_ACTIVE` slot
-    /// forever (stock never returns) or send it out on one more round trip
-    /// the player refused (stock does return) — Finding 2 of the
-    /// 2026-09-05 whole-branch review.
+    /// **Reads `standing` first**, `complete_settlement_inbound_leg`'s own
+    /// check moved in here: a stalled route that gets severed is parked at
+    /// home with its proceeds already deposited, not in flight, so severing
+    /// it must drop the record rather than leave it consuming a
+    /// `ROUTE_MAX_ACTIVE` slot forever (stock never returns) or send it out
+    /// on one more round trip the player refused (stock does return) —
+    /// Finding 2 of the 2026-09-05 whole-branch review.
     ///
     /// Marks `stalled` on a standing route's failed reload rather than
     /// dropping or severing the record — a stalled work order's rule,
@@ -476,7 +610,10 @@ impl Game {
     fn try_reload_route(&mut self, index: usize) -> bool {
         let (cargo, destination, standing) = {
             let route = &self.world.resource::<resources::Routes>().0[index];
-            (route.cargo.clone(), route.destination, route.standing)
+            let RouteEnd::Settlement { key, .. } = &route.destination else {
+                unreachable!("try_reload_route is the Settlement arm")
+            };
+            (route.cargo.clone(), *key, route.standing)
         };
         if !standing {
             self.world
@@ -511,6 +648,130 @@ impl Game {
         false
     }
 
+    /// Loads up to `ROUTE_OUTPOST_CARRY` units off the outpost standing at
+    /// `tile` into a fresh cargo manifest, in `ItemId` order (`Outpost::
+    /// stock`'s own `BTreeMap` order) — design spec §7. Draws down the
+    /// outpost's stock as it goes, `Game::take_from_outpost`'s own clamp
+    /// shape one level over.
+    fn load_outpost_cargo(&mut self, tile: (i32, i32)) -> Vec<(ItemId, u32)> {
+        let available: Vec<(ItemId, u32)> = self
+            .world
+            .resource::<resources::Outposts>()
+            .0
+            .get(&tile)
+            .map(|o| o.stock.iter().map(|(id, &qty)| (id.clone(), qty)).collect())
+            .unwrap_or_default();
+        let mut remaining = crate::tuning::ROUTE_OUTPOST_CARRY;
+        let mut cargo = Vec::new();
+        for (item, have) in available {
+            if remaining == 0 {
+                break;
+            }
+            let take = have.min(remaining);
+            if take == 0 {
+                continue;
+            }
+            remaining -= take;
+            cargo.push((item.clone(), take));
+            let mut outposts = self.world.resource_mut::<resources::Outposts>();
+            if let Some(outpost) = outposts.0.get_mut(&tile) {
+                let stock_qty = outpost
+                    .stock
+                    .get_mut(&item)
+                    .expect("just read from this map");
+                *stock_qty -= take;
+                if *stock_qty == 0 {
+                    outpost.stock.remove(&item);
+                }
+            }
+        }
+        cargo
+    }
+
+    /// The outbound leg's arrival at an outpost — `complete_outbound_leg`'s
+    /// Outpost arm, and `retry_stalled_route`'s once the outpost went
+    /// missing at a previous attempt. `try_reload_route`'s twin in shape
+    /// only: unlike a settlement reload, this never fires from the inbound
+    /// side — `complete_outpost_inbound_leg`'s "departs again" is a fresh
+    /// outbound journey, and this is reached again only once that journey's
+    /// `ticks_total` has actually elapsed. Returns whether the record was
+    /// dropped (always `false`: a missing outpost stalls rather than drops
+    /// the route, design spec §7).
+    fn try_outpost_pickup(&mut self, index: usize, tile: (i32, i32)) -> bool {
+        if !self
+            .world
+            .resource::<resources::Outposts>()
+            .0
+            .contains_key(&tile)
+        {
+            let was_stalled = self.world.resource::<resources::Routes>().0[index].stalled;
+            self.world.resource_mut::<resources::Routes>().0[index].stalled = true;
+            if !was_stalled {
+                self.log_base(
+                    "The caravan finds nothing at the outpost — it isn't there anymore."
+                        .to_string(),
+                );
+            }
+            return false;
+        }
+        let cargo = self.load_outpost_cargo(tile);
+        let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
+        route.cargo = cargo;
+        route.leg = RouteLeg::Inbound;
+        route.ticks_elapsed = 0;
+        route.stalled = false;
+        false
+    }
+
+    /// An outpost's inbound leg lands: predation against the goods, the
+    /// deposit of whatever survives through `return_material`, then
+    /// departing again empty-handed (standing) or dropping the record for
+    /// good (one-off) — design spec §7. Returns whether the record was
+    /// dropped.
+    ///
+    /// **A standing route departs, it does not instantly reload.** Unlike a
+    /// settlement leg — where loading happens at the base and costs no
+    /// ticks — an outpost's cargo lives at the *far* end, so "again" means a
+    /// fresh `RouteLeg::Outbound` empty-handed journey back to the tile, not
+    /// a same-tick pickup. `try_outpost_pickup` is reached only once that
+    /// journey's `ticks_total` has actually elapsed, through the ordinary
+    /// `complete_outbound_leg` path — never from here.
+    fn complete_outpost_inbound_leg(&mut self, index: usize, tile: (i32, i32)) -> bool {
+        let (mut cargo, standing) = {
+            let route = &self.world.resource::<resources::Routes>().0[index];
+            (route.cargo.clone(), route.standing)
+        };
+        let anchor = self.anchor_position().unwrap_or((0, 0));
+        self.roll_cargo_predation(anchor, tile, "the outpost", &mut cargo);
+        let total: u32 = cargo.iter().map(|(_, qty)| *qty).sum();
+        if total > 0 {
+            for (item, qty) in &cargo {
+                self.return_material(item, *qty);
+            }
+            self.log_base_kind(
+                MessageKind::Loot,
+                format!("The caravan returns from the outpost with {total} units of cargo."),
+            );
+        } else {
+            self.log_base("The caravan returns from the outpost empty-handed.".to_string());
+        }
+        self.queue_cargo_walk(false);
+        if !standing {
+            self.world
+                .resource_mut::<resources::Routes>()
+                .0
+                .remove(index);
+            return true;
+        }
+        self.queue_cargo_walk(true);
+        let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
+        route.leg = RouteLeg::Outbound;
+        route.ticks_elapsed = 0;
+        route.cargo = Vec::new();
+        self.log_base("The caravan departs again for the outpost.".to_string());
+        false
+    }
+
     /// Every known settlement close enough to this trip's segment, and
     /// Hostile enough, to try preying on it — `routes::settlements_near_route`
     /// filtered to `Standing::preys_on_routes`, the module doc's own
@@ -535,11 +796,16 @@ impl Game {
     /// **The only place this feature draws `resources::GameRng`**, and only
     /// once nothing has filtered a predator out — an empty `predators` rolls
     /// nothing at all.
+    ///
+    /// `dest_name` is narration only — a settlement's own name, or a fixed
+    /// string for an outpost, which has none of its own worth resolving —
+    /// so this reads the same for either endpoint kind, `RouteEnd`'s own
+    /// extension point.
     fn roll_cargo_predation(
         &mut self,
         base: (i32, i32),
         destination: (i32, i32),
-        destination_key: SettlementKey,
+        dest_name: &str,
         cargo: &mut [(ItemId, u32)],
     ) {
         let predators = self.route_predators(base, destination);
@@ -559,7 +825,6 @@ impl Game {
                 taken_units += take;
             }
             let predator_name = self.settlement_name(predator);
-            let dest_name = self.settlement_name(destination_key);
             let line = format!(
                 "{predator_name} raids the caravan bound for {dest_name}, seizing {taken_units} units of cargo."
             );

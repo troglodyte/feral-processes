@@ -739,10 +739,10 @@ fn missing_ingredient(
     })
 }
 
-/// The nearest Depot actually holding `item`.
+/// The nearest of `stores` actually holding `item` in its output.
 ///
-/// `stores` is every Depot whatever its state, not the `depots` list the
-/// delivery leg uses — that one is filtered to those with *room*, and a full
+/// `stores` is every Depot whatever its state — or, for a burning supplier,
+/// every structure — not the `depots` list the delivery leg uses — that one is filtered to those with *room*, and a full
 /// shelf is still one to take something off.
 fn nearest_store_holding(
     stores: &[(Entity, Position)],
@@ -911,6 +911,13 @@ pub(crate) fn haul_step_system(
         .map(|(e, p, _, _)| (e, *p))
         .collect();
 
+    // A burning supplier's collect list: every structure's output, not the
+    // shelves alone. Its fuel is the grid, and a Conduit's cells stranded
+    // behind a full Depot kept a real base dark for good — see
+    // `Game::fuel_wants`, whose stock gate counts the same buffers.
+    let every_structure: Vec<(Entity, Position)> =
+        structures.iter().map(|(e, p, _, _)| (e, *p)).collect();
+
     let by_tile: HashMap<(i32, i32), Entity> = structures
         .iter()
         .map(|(e, p, _, _)| ((p.x, p.y), e))
@@ -947,11 +954,18 @@ pub(crate) fn haul_step_system(
                     .unwrap_or(1);
                 post_reach(&grid, worker_pos, at, side, &blocked, pocket_radius).is_ok()
             };
-            let recipe = structures
+            let def = structures
                 .get(machine)
                 .ok()
-                .and_then(|(_, _, _, s)| db.get(&s.kind))
-                .and_then(|def| intake_recipe(def, &items));
+                .and_then(|(_, _, _, s)| db.get(&s.kind));
+            let recipe = def.and_then(|def| intake_recipe(def, &items));
+            // The burner itself is in `every_structure`, harmlessly: a
+            // fetched cell lands in its *input*, never its output.
+            let sources = if def.is_some_and(|d| d.power_upkeep.is_some()) {
+                &every_structure
+            } else {
+                &stores
+            };
             let recipe = recipe.as_deref();
             match &carrying {
                 Some(load) => {
@@ -1003,7 +1017,7 @@ pub(crate) fn haul_step_system(
                             .unwrap_or(0)
                             .min(tuning::HAUL_CARRY_CAPACITY);
                         let depot = nearest_store_holding(
-                            &stores,
+                            sources,
                             worker_pos,
                             &item,
                             &structures,

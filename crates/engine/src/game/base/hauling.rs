@@ -156,23 +156,42 @@ fn chebyshev(a: Position, b: Position) -> i32 {
     (a.x - b.x).abs().max((a.y - b.y).abs())
 }
 
-/// The depot a worker at `from` should deliver to: fewest Chebyshev tiles
-/// away, ties broken by the depot's `(x, y)`.
+/// The depot a worker at `from` should deliver to: the nearest one it can
+/// walk to, fewest Chebyshev tiles away and ties broken by the depot's
+/// `(x, y)`.
 ///
-/// Deliberately not `walk_field` path cost. That would be a second field per
-/// worker per tick for a difference only a wall between two near-equidistant
-/// depots can produce, and the tie-break exists for the reason
-/// `assembler_system` sorts by position: bevy's query iteration order is not
-/// stable, and a base that picked a different depot after a reload is a
-/// flaky test waiting to happen.
+/// Ranked by Chebyshev rather than `walk_field` path cost. That would be a
+/// second field per worker per tick for a difference only a wall between
+/// two near-equidistant depots can produce, and the tie-break exists for the
+/// reason `assembler_system` sorts by position: bevy's query iteration order
+/// is not stable, and a base that picked a different depot after a reload is
+/// a flaky test waiting to happen.
+///
+/// **Ranking is not choosing, though: a depot nothing can stand beside is
+/// skipped.** Taken on distance alone, a Depot whose one free face was held
+/// by an idle body — itself hemmed in by the worker waiting on it — stranded
+/// two Mining Nodes for five hundred ticks beside a second Depot with three
+/// open sides. `reachable` is asked in rank order and the first yes wins, so
+/// the ranking still decides between depots that all work. With none
+/// reachable the nearest is the answer anyway, and the worker reads
+/// `Stranded` against it — the stall stays loud rather than going quiet.
+/// A lone candidate is never walked: whatever the walk said, it would be the
+/// answer.
 pub(crate) fn nearest_depot(
     depots: &[(Entity, Position)],
     from: Position,
+    reachable: impl Fn(Entity, Position) -> bool,
 ) -> Option<(Entity, Position)> {
-    depots
+    let mut ranked = depots.to_vec();
+    ranked.sort_by_key(|(_, p)| (chebyshev(*p, from), p.x, p.y));
+    if ranked.len() <= 1 {
+        return ranked.first().copied();
+    }
+    ranked
         .iter()
-        .min_by_key(|(_, p)| (chebyshev(*p, from), p.x, p.y))
         .copied()
+        .find(|&(e, p)| reachable(e, p))
+        .or_else(|| ranked.first().copied())
 }
 
 /// Every cell in base space that is already spoken for: the tile each
@@ -730,6 +749,7 @@ fn nearest_store_holding(
     from: Position,
     item: &ItemId,
     structures: &HaulStructures,
+    reachable: impl Fn(Entity, Position) -> bool,
 ) -> Option<Entity> {
     let holding: Vec<(Entity, Position)> = stores
         .iter()
@@ -740,7 +760,7 @@ fn nearest_store_holding(
                 .is_ok_and(|(_, _, s, _)| s.output.get(item).copied().unwrap_or(0) > 0)
         })
         .collect();
-    nearest_depot(&holding, from).map(|(e, _)| e)
+    nearest_depot(&holding, from, reachable).map(|(e, _)| e)
 }
 
 /// What a posted program does with the tick: take a load off a clogged
@@ -917,6 +937,16 @@ pub(crate) fn haul_step_system(
         // — see `Errand`. Scoped so every read of `structures` is finished
         // before the arrival below writes to it.
         let errand = {
+            // `post_reach` asked of a candidate depot, for `nearest_depot`.
+            let reachable = |depot: Entity, at: Position| {
+                let side = structures
+                    .get(depot)
+                    .ok()
+                    .and_then(|(_, _, _, s)| db.get(&s.kind))
+                    .map(|d| d.footprint)
+                    .unwrap_or(1);
+                post_reach(&grid, worker_pos, at, side, &blocked, pocket_radius).is_ok()
+            };
             let recipe = structures
                 .get(machine)
                 .ok()
@@ -949,7 +979,7 @@ pub(crate) fn haul_step_system(
                             .filter(|(e, _)| accepts(*e, &load.item))
                             .collect();
                         Errand::Deposit(
-                            nearest_depot(&taking, worker_pos)
+                            nearest_depot(&taking, worker_pos, reachable)
                                 .map(|(e, _)| e)
                                 // Every depot full, refusing this item, or
                                 // none built: the load goes back where it
@@ -972,7 +1002,13 @@ pub(crate) fn haul_step_system(
                             })
                             .unwrap_or(0)
                             .min(tuning::HAUL_CARRY_CAPACITY);
-                        let depot = nearest_store_holding(&stores, worker_pos, &item, &structures)?;
+                        let depot = nearest_store_holding(
+                            &stores,
+                            worker_pos,
+                            &item,
+                            &structures,
+                            reachable,
+                        )?;
                         (want > 0).then_some(Errand::Collect { depot, item, want })
                     })
                     .unwrap_or(Errand::Tend(machine)),

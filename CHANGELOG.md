@@ -42,6 +42,13 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.229
+
+**The green `+` over a program being mended at a Repair Bay now floats up
+and fades out, and the next one starts from the patient.** Before, it
+bounced up and down on the spot. Now a long repair reads as a stream of
+pluses rising off the body, and two patients side by side float out of step.
+
 ## 0.13.228
 
 **Press `N` to open an alert board listing what is blocking the base: stalled

@@ -1,6 +1,7 @@
 pub mod abilities;
 pub mod achievements;
 pub mod affixes;
+pub mod alerts;
 pub mod arena;
 pub mod attributes;
 pub mod balance_sim;

@@ -5651,6 +5651,14 @@ pub const TRAP_CAPTURE_CHANCE: f64 = 0.15;
 /// on the feature working.
 pub const TRAP_CONDITION_PENALTY: u8 = 15;
 
+// ---------------------------------------------------------------------------
+// Alert board
+// ---------------------------------------------------------------------------
+
+/// How many rows the alert board holds before the oldest is dropped — see
+/// `alerts::post`.
+pub const ALERT_BOARD_CAP: usize = 50;
+
 #[cfg(test)]
 mod tests {
     use super::*;

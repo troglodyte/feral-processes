@@ -850,10 +850,12 @@ pub struct Stranded {
 /// can stall", which is why a Home never reports a status it could not
 /// possibly leave.
 ///
-/// Deliberately not saved. It initialises to `Running` and is corrected on
-/// the first tick, so a base that loads starved announces it once — which is
-/// information the player wants, and costs no save field.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// Deliberately not saved **as a component**. It initialises to `Running`
+/// and is corrected on the first tick, so a base that loads starved
+/// announces it once — which is information the player wants, and costs no
+/// save field. `Serialize`/`Deserialize` are derived only so
+/// `alerts::AlertKind::MachineStalled` can carry one inside a saved `Alert`.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MachineStatus {
     #[default]
     Running,

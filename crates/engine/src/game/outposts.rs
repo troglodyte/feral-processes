@@ -6,9 +6,12 @@ use rand::RngExt;
 
 use crate::Game;
 use crate::ProgramRole;
+use crate::base_ledger::LootSource;
 use crate::components::{
-    Carrying, Creature, Downed, Perks, Position, PostedAt, ProgramId, Tamed, Task,
+    Carrying, Creature, Downed, Experience, Inventory, Perks, Position, PostedAt, ProgramId, Tamed,
+    Task,
 };
+use crate::game::base::transfer::{Moved, TransferBasket};
 use crate::outposts::{Outpost, OutpostDb};
 use crate::perks::Perk;
 use crate::resources::{GameRng, Outposts};
@@ -19,6 +22,7 @@ use crate::tuning::{
     OUTPOST_GROWTH_PER_CREW, OUTPOST_MAX_INTEGRITY, OUTPOST_MIN_ANCHOR_DISTANCE,
     OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW,
 };
+use crate::views::{OutpostCrewRow, OutpostMark, OutpostReport, OutpostYieldRow, TransferRow};
 use crate::world::{Biome, WorldMap};
 
 impl Game {
@@ -124,12 +128,7 @@ impl Game {
         if !self.world.resource::<Outposts>().0.contains_key(&tile) {
             return Err("No outpost stands there.".into());
         }
-        let (px, py) = self
-            .world
-            .get::<Position>(player)
-            .map(|p| (p.x, p.y))
-            .ok_or_else(|| "You have nowhere to post from.".to_string())?;
-        if (px - tile.0).abs().max((py - tile.1).abs()) > 1 {
+        if !self.standing_at_outpost(tile) {
             return Err("You need to be standing at the outpost to post someone there.".into());
         }
         if self.outpost_crew(tile).len() >= OUTPOST_CREW_CAP {
@@ -168,6 +167,17 @@ impl Game {
         let name = self.creature_label(creature);
         self.log(format!("{name} is recalled to base staff."));
         Ok(())
+    }
+
+    /// Whether the player is standing at (or diagonally beside) `tile` —
+    /// the shared "at the outpost" reach `post_to_outpost` and
+    /// `take_from_outpost` both refuse without.
+    fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
+        let player = self.player_entity();
+        let Some(pos) = self.world.get::<Position>(player) else {
+            return false;
+        };
+        (pos.x - tile.0).abs().max((pos.y - tile.1).abs()) <= 1
     }
 
     /// One tick of every outpost — design spec §5, called from `tick_inner`
@@ -344,6 +354,191 @@ impl Game {
                 },
             );
         }
+    }
+
+    /// `Mode::OutpostVisit`'s one derivation — design spec §9. `None` when
+    /// no outpost stands at `tile`, or the def that founded it has since
+    /// been removed from `assets/outposts/`.
+    pub fn outpost_report(&mut self, tile: (i32, i32)) -> Option<OutpostReport> {
+        let outpost = self.world.resource::<Outposts>().0.get(&tile)?.clone();
+        let def = self.world.resource::<OutpostDb>().def()?.clone();
+        let crew_entities = self.outpost_crew(tile);
+        let crew_count = crew_entities.len();
+        let tier = crate::outposts::tier(&outpost, crew_count);
+        let trend = crate::outposts::trend(&outpost, crew_count, tier, OUTPOST_STOCK_CAP);
+        let reason = trend.reason(&outpost, crew_count, tier);
+        let growth_fill = crate::outposts::growth_fill(&outpost, tier);
+        let crew = crew_entities
+            .into_iter()
+            .map(|entity| {
+                let name = self.creature_label(entity);
+                let species = self
+                    .world
+                    .get::<Creature>(entity)
+                    .map(|c| self.species_name(&c.species).to_string())
+                    .unwrap_or_default();
+                let level = self
+                    .world
+                    .get::<Experience>(entity)
+                    .map(|e| e.level)
+                    .unwrap_or(0);
+                OutpostCrewRow {
+                    name,
+                    species,
+                    level,
+                }
+            })
+            .collect();
+        let yields = crate::outposts::yields_with_tier(&def, tier, outpost.biome)
+            .into_iter()
+            .map(|(item, first_tier)| {
+                let name = self.item_name(&item).to_string();
+                OutpostYieldRow {
+                    item,
+                    name,
+                    tier: first_tier + 1,
+                }
+            })
+            .collect();
+        let next_tier_requirement = (tier + 1 < OUTPOST_TIER_CREW.len()).then(|| {
+            format!(
+                "Tier {} needs {} crew",
+                tier + 2,
+                OUTPOST_TIER_CREW[tier + 1]
+            )
+        });
+        let stock: u32 = outpost.stock.values().sum();
+        Some(OutpostReport {
+            tile,
+            name: def.name.clone(),
+            biome: outpost.biome,
+            tier,
+            tier_label: crate::outposts::tier_label(tier),
+            growth_fill,
+            trend,
+            reason,
+            integrity: outpost.integrity,
+            max_integrity: OUTPOST_MAX_INTEGRITY,
+            stock,
+            stock_cap: OUTPOST_STOCK_CAP,
+            // Phase 4's `RouteEnd::Outpost` fills this in; nothing routes to
+            // an outpost yet.
+            route: None,
+            crew,
+            yields,
+            next_tier_requirement,
+            dark: outpost.integrity == 0,
+        })
+    }
+
+    /// Every outpost's tile mark for the surface map — design spec §9's
+    /// growth bar and tier pips. `views::DigMark`'s counterpart: a record
+    /// with no entity has no other way onto `Game::view_entities_at`'s
+    /// list, so the map needs a pass of its own to find it at all.
+    pub fn outpost_marks(&mut self) -> Vec<OutpostMark> {
+        let Some(def) = self.world.resource::<OutpostDb>().def().cloned() else {
+            return Vec::new();
+        };
+        let tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<Outposts>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        tiles
+            .into_iter()
+            .filter_map(|tile| {
+                let outpost = self.world.resource::<Outposts>().0.get(&tile)?.clone();
+                let crew = self.outpost_crew(tile).len();
+                let tier = crate::outposts::tier(&outpost, crew);
+                let trend = crate::outposts::trend(&outpost, crew, tier, OUTPOST_STOCK_CAP);
+                Some(OutpostMark {
+                    tile,
+                    glyph: def.glyph,
+                    tier,
+                    fill: crate::outposts::growth_fill(&outpost, tier),
+                    trend,
+                    dark: outpost.integrity == 0,
+                })
+            })
+            .collect()
+    }
+
+    /// Every item sitting in the outpost's stock, as `Mode::Transfer`'s take
+    /// side lists it — design correction 11. Take-only, so every row is
+    /// `can_put: 0`: nothing may be put back into an outpost by hand.
+    pub fn outpost_transfer_offer(&self, tile: (i32, i32)) -> Vec<TransferRow> {
+        let Some(outpost) = self.world.resource::<Outposts>().0.get(&tile) else {
+            return Vec::new();
+        };
+        let player = self.player_entity();
+        let carried = self.world.get::<Inventory>(player);
+        outpost
+            .stock
+            .iter()
+            .filter(|(_, qty)| **qty > 0)
+            .map(|(item, qty)| TransferRow {
+                item: item.clone(),
+                on_shelves: *qty,
+                carried: carried.map(|inv| inv.count(item)).unwrap_or(0),
+                can_put: 0,
+            })
+            .collect()
+    }
+
+    /// Moves stock out of the outpost at `tile` into the pack — the take
+    /// side of `Mode::Transfer`'s one basket, design correction 11's engine
+    /// door. Every refusal lands before anything is spent.
+    ///
+    /// `basket.give` and `.carriers` are silently ignored rather than
+    /// refused: `outpost_transfer_offer`'s rows are all `can_put: 0`, so
+    /// nothing in app-core can ever populate either — there is no partner
+    /// error to invent for an empty list.
+    ///
+    /// Bounded by the stock actually standing, `TransferBasket`'s own
+    /// clamp-not-refuse convention (`take_from_adjacent`), and reported per
+    /// unit through `Game::grant_loot` with `LootSource::Outpost` —
+    /// correction 5's second, later event, distinct from the cycle's own
+    /// `base_ledger::Event::Extract`.
+    pub fn take_from_outpost(
+        &mut self,
+        tile: (i32, i32),
+        basket: &TransferBasket,
+    ) -> Result<Moved, String> {
+        if !self.world.resource::<Outposts>().0.contains_key(&tile) {
+            return Err("No outpost stands there.".into());
+        }
+        if !self.standing_at_outpost(tile) {
+            return Err("You need to be standing at the outpost to take its stock.".into());
+        }
+        let mut moved = Moved::new();
+        for (item, want) in &basket.take {
+            let have = self
+                .world
+                .resource::<Outposts>()
+                .0
+                .get(&tile)
+                .and_then(|o| o.stock.get(item))
+                .copied()
+                .unwrap_or(0);
+            let qty = (*want).min(have);
+            if qty == 0 {
+                continue;
+            }
+            {
+                let mut outposts = self.world.resource_mut::<Outposts>();
+                let outpost = outposts.0.get_mut(&tile).unwrap();
+                let remaining = outpost.stock.get_mut(item).unwrap();
+                *remaining -= qty;
+                if *remaining == 0 {
+                    outpost.stock.remove(item);
+                }
+            }
+            self.grant_loot(item.clone(), qty, LootSource::Outpost);
+            moved.push((item.clone(), qty));
+        }
+        Ok(moved)
     }
 }
 
@@ -837,5 +1032,222 @@ mod tests {
         let mut game = game(29);
         let program = staff(&mut game);
         assert!(game.recall_from_outpost(program).is_err());
+    }
+
+    // -- Task 5: visit, report, marks, transfer take ------------------------
+
+    #[test]
+    fn walking_onto_an_outpost_queues_a_visit_and_leaves_position_unchanged() {
+        let mut game = game(30);
+        let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.found_outpost(tile).unwrap();
+        let player = game.player_entity();
+        // Stand one step away and bump into it, `settlement_east_of_player`'s
+        // shape — a directed step rather than teleporting onto the tile,
+        // since the bump is the arm under test.
+        {
+            let mut pos = game.world.get_mut::<Position>(player).unwrap();
+            pos.x = tile.0 - 1;
+            pos.y = tile.1;
+        }
+        let before = *game.world.get::<Position>(player).unwrap();
+
+        game.move_player(1, 0);
+
+        let after = *game.world.get::<Position>(player).unwrap();
+        assert_eq!(
+            before, after,
+            "an outpost admits nobody — the bump must not move the player"
+        );
+        assert_eq!(
+            game.take_visit(),
+            Some(crate::resources::Visit::Outpost(tile)),
+            "the bump must name the outpost it landed on"
+        );
+        assert_eq!(
+            game.take_visit(),
+            None,
+            "the drain must answer None on the second call"
+        );
+    }
+
+    #[test]
+    fn outpost_report_is_none_without_a_record_at_the_tile() {
+        let mut game = game(31);
+        let (ax, ay) = game.anchor_position().unwrap();
+        assert!(game.outpost_report((ax + 999, ay + 999)).is_none());
+    }
+
+    #[test]
+    fn outpost_report_reflects_a_hand_built_record() {
+        let mut game = game(32);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        {
+            let mut outposts = game.world.resource_mut::<Outposts>();
+            let outpost = outposts.0.get_mut(&tile).unwrap();
+            outpost.growth = crate::tuning::OUTPOST_TIER_GROWTH[1];
+            outpost.integrity = 40;
+            outpost
+                .stock
+                .insert(crate::items::ItemId("raw_trace".to_string()), 5);
+        }
+        let a = staff(&mut game);
+        let b = staff(&mut game);
+        game.post_to_outpost(tile, a).unwrap();
+        game.post_to_outpost(tile, b).unwrap();
+
+        let report = game.outpost_report(tile).expect("the record exists");
+
+        assert_eq!(report.tile, tile);
+        assert_eq!(report.integrity, 40);
+        assert_eq!(report.max_integrity, OUTPOST_MAX_INTEGRITY);
+        assert_eq!(report.stock, 5);
+        assert_eq!(report.stock_cap, OUTPOST_STOCK_CAP);
+        assert_eq!(report.crew.len(), 2);
+        assert!(report.route.is_none(), "no route endpoint exists yet");
+        assert!(!report.yields.is_empty(), "a founded outpost yields tier 1");
+        assert_eq!(report.tier_label, crate::outposts::tier_label(report.tier));
+        assert!(!report.dark, "integrity 40 is not zero");
+    }
+
+    #[test]
+    fn outpost_report_is_dark_at_zero_integrity() {
+        let mut game = game(33);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 0;
+
+        let report = game.outpost_report(tile).unwrap();
+        assert!(report.dark);
+    }
+
+    #[test]
+    fn outpost_marks_reports_one_mark_per_outpost() {
+        let mut game = game(34);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+
+        let marks = game.outpost_marks();
+
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0].tile, tile);
+        assert_eq!(marks[0].tier, 0);
+        assert!(!marks[0].dark);
+    }
+
+    #[test]
+    fn outpost_marks_is_empty_with_no_outposts() {
+        let mut game = game(35);
+        assert!(game.outpost_marks().is_empty());
+    }
+
+    #[test]
+    fn outpost_transfer_offer_rows_never_allow_a_put() {
+        let mut game = game(36);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let item = crate::items::ItemId("raw_trace".to_string());
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .stock
+            .insert(item.clone(), 9);
+
+        let rows = game.outpost_transfer_offer(tile);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].item, item);
+        assert_eq!(rows[0].on_shelves, 9);
+        assert_eq!(rows[0].can_put, 0);
+    }
+
+    #[test]
+    fn take_from_outpost_refuses_without_a_record_at_the_tile() {
+        let mut game = game(37);
+        let (ax, ay) = game.anchor_position().unwrap();
+        let basket =
+            TransferBasket::items(&[(crate::items::ItemId("raw_trace".to_string()), 1)], &[]);
+        assert!(
+            game.take_from_outpost((ax + 999, ay + 999), &basket)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn take_from_outpost_refuses_when_the_player_is_too_far() {
+        let mut game = game(38);
+        let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.found_outpost(tile).unwrap();
+        let item = crate::items::ItemId("raw_trace".to_string());
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .stock
+            .insert(item.clone(), 9);
+        let basket = TransferBasket::items(&[(item, 1)], &[]);
+
+        let err = game
+            .take_from_outpost(tile, &basket)
+            .expect_err("standing far away must refuse");
+        assert!(err.contains("standing"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn take_from_outpost_clamps_to_the_stock_actually_standing_and_reports_it() {
+        let mut game = game(39);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let item = crate::items::ItemId("raw_trace".to_string());
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .stock
+            .insert(item.clone(), 3);
+        game.world
+            .resource_mut::<crate::resources::BattleTelemetry>()
+            .on = true;
+        let player = game.player_entity();
+        let before = game
+            .world
+            .get::<Inventory>(player)
+            .map(|i| i.count(&item))
+            .unwrap_or(0);
+        let basket = TransferBasket::items(&[(item.clone(), 10)], &[]);
+
+        let moved = game.take_from_outpost(tile, &basket).unwrap();
+
+        assert_eq!(moved, vec![(item.clone(), 3)], "clamped to what stood");
+        assert_eq!(
+            game.world
+                .resource::<Outposts>()
+                .0
+                .get(&tile)
+                .unwrap()
+                .stock
+                .get(&item),
+            None,
+            "an emptied item is removed from the map rather than left at zero"
+        );
+        let after = game.world.get::<Inventory>(player).unwrap().count(&item);
+        assert_eq!(after, before + 3);
+        let records = &game
+            .world
+            .resource::<crate::resources::BattleTelemetry>()
+            .records;
+        assert!(
+            records.iter().any(|r| matches!(
+                r,
+                crate::telemetry::Record::Acquire { item: i, qty, source, .. }
+                    if i.as_str() == "raw_trace" && *qty == 3 && source.as_str() == "outpost"
+            )),
+            "a hand take must report through Game::grant_loot with LootSource::Outpost: {records:?}"
+        );
     }
 }

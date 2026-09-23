@@ -129,7 +129,7 @@ use resources::{
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,
     LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TacticalFxCue,
-    TacticalFxKind, TransitCue, VisualEffect, condense,
+    TacticalFxKind, TransitCue, Visit, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

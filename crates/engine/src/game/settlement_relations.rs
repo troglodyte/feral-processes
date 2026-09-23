@@ -364,7 +364,8 @@ impl Game {
         // tied to the same question the bump answers, and a distant set-down
         // leaves the party looking at the map with a walk left to do.
         if self.settlement_reach(key) {
-            self.world.resource_mut::<resources::PendingVisit>().0 = Some(key);
+            self.world.resource_mut::<resources::PendingVisit>().0 =
+                Some(resources::Visit::Settlement(key));
         }
         let name = self.settlement_name(key);
         self.log(format!("The relay sets you down outside {name}."));

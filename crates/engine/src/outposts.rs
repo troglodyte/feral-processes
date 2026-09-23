@@ -254,23 +254,74 @@ pub fn trend(outpost: &Outpost, crew: usize, tier: usize, stock_cap: u32) -> Tre
     Trend::Growing
 }
 
+/// The growth bar's fill, 0.0..=1.0 within `tier`'s own band — the fraction
+/// of the way from `OUTPOST_TIER_GROWTH[tier]` to the next tier's
+/// threshold, and a full bar at the top tier (there is no next band to fill
+/// toward).
+///
+/// **`tier` is the caller's own `outposts::tier(outpost, crew)`**, not
+/// recomputed here — `trend`'s own convention, since growth can sit above
+/// the band a crew-capped tier reports (growth is never reset by a crew
+/// shortfall) and clamping absorbs exactly that without the caller having
+/// to know why.
+pub fn growth_fill(outpost: &Outpost, tier: usize) -> f32 {
+    if tier + 1 >= OUTPOST_TIER_GROWTH.len() {
+        return 1.0;
+    }
+    let lo = OUTPOST_TIER_GROWTH[tier];
+    let hi = OUTPOST_TIER_GROWTH[tier + 1];
+    ((outpost.growth.saturating_sub(lo)) as f32 / (hi - lo) as f32).clamp(0.0, 1.0)
+}
+
 /// The items a `tier`-th outpost (0-indexed: tier 0 is raw) can produce in
-/// `biome` — the union of every tier up to and including it, design spec
-/// §4. A tier missing a row for `biome` falls back to that tier's first
+/// `biome`, each tagged with the **lowest** tier (0-indexed) it is first
+/// offered at — the union of every tier up to and including `tier`, design
+/// spec §4. A tier missing a row for `biome` falls back to that tier's first
 /// listed biome (`BTreeMap` order), so a new `Biome` variant with no
-/// authored row still yields something rather than nothing. Sorted and
-/// deduped, since the same item can appear in more than one tier's row.
-pub fn yields(def: &OutpostDef, tier: usize, biome: Biome) -> Vec<ItemId> {
-    let mut out: Vec<ItemId> = Vec::new();
-    for t in def.tiers.iter().take(tier + 1) {
-        let row = t.yields.get(&biome).or_else(|| t.yields.values().next());
+/// authored row still yields something rather than nothing.
+///
+/// A `BTreeMap` accumulator rather than a sort-and-dedup pass: iterating
+/// tiers low to high and taking `or_insert` is what makes "first tier seen"
+/// exactly the tier an item was introduced at, for the outpost screen's own
+/// per-yield tier label (`views::OutpostYieldRow`) — `yields` below reads
+/// off the same map rather than restating the walk.
+pub fn yields_with_tier(def: &OutpostDef, tier: usize, biome: Biome) -> Vec<(ItemId, usize)> {
+    let mut first_seen: BTreeMap<ItemId, usize> = BTreeMap::new();
+    for (t, tier_def) in def.tiers.iter().enumerate().take(tier + 1) {
+        let row = tier_def
+            .yields
+            .get(&biome)
+            .or_else(|| tier_def.yields.values().next());
         if let Some(row) = row {
-            out.extend(row.iter().cloned());
+            for item in row {
+                first_seen.entry(item.clone()).or_insert(t);
+            }
         }
     }
-    out.sort();
-    out.dedup();
-    out
+    first_seen.into_iter().collect()
+}
+
+/// The items a `tier`-th outpost can produce in `biome` — `yields_with_tier`
+/// with the per-item tier dropped, `BTreeMap` order (sorted by `ItemId`,
+/// deduped by construction).
+pub fn yields(def: &OutpostDef, tier: usize, biome: Biome) -> Vec<ItemId> {
+    yields_with_tier(def, tier, biome)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// `"Raw"` / `"Processed"` / `"Complex"` — the screen's own name for a tier,
+/// design spec §9's header. Not moddable: the three-tier ladder is the
+/// tuning ladder's own shape (`OUTPOST_TIER_GROWTH`'s length), so the
+/// labels are fixed prose rather than a fourth thing content would have to
+/// author in step with it.
+pub fn tier_label(tier: usize) -> &'static str {
+    match tier {
+        0 => "Raw",
+        1 => "Processed",
+        _ => "Complex",
+    }
 }
 
 #[cfg(test)]
@@ -355,6 +406,33 @@ mod tests {
         // `NullSector` has no row of its own, so it falls back to
         // `DataVoid`'s — the lowest-sorted key present.
         assert_eq!(yields(&def, 0, Biome::NullSector), ids(&["raw_trace"]));
+    }
+
+    #[test]
+    fn yields_with_tier_tags_each_item_with_the_lowest_tier_it_first_appears_at() {
+        let def = OutpostDef {
+            tiers: vec![
+                tier(&[(Biome::Deadlock, &["raw_trace"])]),
+                tier(&[(Biome::Deadlock, &["raw_trace", "static_mesh"])]),
+            ],
+            ..Default::default()
+        };
+        // `raw_trace` reappears in tier 1's row, but it was first offered at
+        // tier 0 — reappearing must not bump its tag forward.
+        assert_eq!(
+            yields_with_tier(&def, 1, Biome::Deadlock),
+            vec![
+                (ItemId("raw_trace".to_string()), 0),
+                (ItemId("static_mesh".to_string()), 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn tier_label_names_the_three_shipped_tiers() {
+        assert_eq!(tier_label(0), "Raw");
+        assert_eq!(tier_label(1), "Processed");
+        assert_eq!(tier_label(2), "Complex");
     }
 
     #[test]
@@ -472,6 +550,35 @@ mod tests {
         let o = record(0, OUTPOST_MAX_INTEGRITY, 0);
         let tier = super::tier(&o, crew);
         assert_eq!(trend(&o, crew, tier, OUTPOST_STOCK_CAP), Trend::Growing);
+    }
+
+    #[test]
+    fn growth_fill_is_zero_at_the_bottom_of_a_tiers_band() {
+        let o = record(OUTPOST_TIER_GROWTH[1], OUTPOST_MAX_INTEGRITY, 0);
+        assert_eq!(growth_fill(&o, 1), 0.0);
+    }
+
+    #[test]
+    fn growth_fill_is_full_partway_through_the_band() {
+        let mid = (OUTPOST_TIER_GROWTH[1] + OUTPOST_TIER_GROWTH[2]) / 2;
+        let o = record(mid, OUTPOST_MAX_INTEGRITY, 0);
+        let fill = growth_fill(&o, 1);
+        assert!(fill > 0.4 && fill < 0.6, "fill was {fill}");
+    }
+
+    #[test]
+    fn growth_fill_is_always_full_at_the_top_tier() {
+        let o = record(OUTPOST_TIER_GROWTH[2], OUTPOST_MAX_INTEGRITY, 0);
+        assert_eq!(growth_fill(&o, 2), 1.0);
+    }
+
+    #[test]
+    fn growth_fill_clamps_above_one_when_growth_outruns_a_crew_capped_tier() {
+        // Growth banked all the way to tier 3 while the caller reports tier
+        // 1 (a crew shortfall) — the fill must still read as "full", not
+        // overflow past 1.0.
+        let o = record(OUTPOST_TIER_GROWTH[2], OUTPOST_MAX_INTEGRITY, 0);
+        assert_eq!(growth_fill(&o, 0), 1.0);
     }
 
     #[test]

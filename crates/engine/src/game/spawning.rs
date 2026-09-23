@@ -1250,9 +1250,10 @@ impl Game {
             .map(|(_, s)| s.key)
     }
 
-    /// Drains the settlement visit `move_player`'s door arm queued, if any
-    /// — `Game::take_effects`/`take_transits`' shape: answers `Some` once
-    /// and `None` on every call after.
+    /// Drains the landmark visit `move_player`'s door arms queued, if any —
+    /// a settlement's fourth arm or an outpost's sixth — `Game::
+    /// take_effects`/`take_transits`' shape: answers `Some` once and `None`
+    /// on every call after.
     ///
     /// The drain is load-bearing and not incidental. A plain getter would
     /// pass every other test this feature has, but leaves app-core with no
@@ -1260,7 +1261,7 @@ impl Game {
     /// still standing here" — so the screen it opens would reopen on the
     /// very next keypress spent walking away, and the tile would read as a
     /// wall the player can never leave.
-    pub fn take_settlement_visit(&mut self) -> Option<crate::settlements::SettlementKey> {
+    pub fn take_visit(&mut self) -> Option<crate::resources::Visit> {
         self.world
             .resource_mut::<crate::resources::PendingVisit>()
             .0

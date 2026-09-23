@@ -922,7 +922,7 @@ impl Game {
     /// reason, one level over.
     ///
     /// Takes the settlement's own key rather than the map `Entity`, since a
-    /// caller reaches this two ways — the bump cue (`take_settlement_visit`)
+    /// caller reaches this two ways — the bump cue (`take_visit`)
     /// already hands back a key, and examine has one `Entity` and needs
     /// `settlement_key` to get from one to the other first. Infallible: a
     /// key with a materialized entity always has a `Settlements` record —

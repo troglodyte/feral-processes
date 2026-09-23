@@ -741,7 +741,7 @@ impl Game {
             // ever runs.
             self.world
                 .resource_mut::<crate::resources::PendingVisit>()
-                .0 = Some(key);
+                .0 = Some(crate::resources::Visit::Settlement(key));
             // The same arm records having been there: reaching a town is
             // what promotes its compass row from a bearing to a name and a
             // distance, and this bump is the only thing that means reached.
@@ -756,8 +756,24 @@ impl Game {
             self.tick();
             return 0;
         }
+        if self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .contains_key(&(nx, ny))
+        {
+            // The fifth arm, a settlement's own shape one tile of content
+            // over: a record with no entity is still a landmark you read
+            // from the outside, not a door — design correction 3's `Visit`
+            // extension point.
+            self.world
+                .resource_mut::<crate::resources::PendingVisit>()
+                .0 = Some(crate::resources::Visit::Outpost((nx, ny)));
+            self.tick();
+            return 0;
+        }
         if let Some(trap) = self.find_trap_at(nx, ny) {
-            // The fifth arm of the ladder and, like the four above it, not a
+            // The sixth arm of the ladder and, like the five above it, not a
             // step: the player stays where they are either way.
             //
             // Nothing stops a wild program spawning onto a trap later —

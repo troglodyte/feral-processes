@@ -387,7 +387,7 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
     )
 }
 
-/// The bouncing green `+` a program wears while a Repair Bay is mending it,
+/// The floating green `+` a program wears while a Repair Bay is mending it,
 /// or nothing at all for every other cell on the map.
 ///
 /// **The gate lives in here rather than at the call site**, so a test can
@@ -417,10 +417,13 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// further push down for the mark's own measured height — is what leaves the
 /// patient's centred glyph, well below, untouched.
 ///
-/// It still rides `Fx::centred_bob`, the build caret's curve — the same
-/// rate, the same entity phase, so a base with a build site and a mending
-/// body in it still reads as one map rather than two animations, and two
-/// patients still bounce out of step.
+/// **It floats up and fades, and never comes back down** —
+/// `Fx::recovery_float`. It used to ride `Fx::centred_bob`, the build
+/// caret's curve, and a `+` sinking back onto the patient read as the mark
+/// bouncing in place rather than Integrity coming off the Bay. Each mark
+/// now rises from rest and fades out, and the next starts at rest; the rest
+/// position is the lowest it ever draws, which is what keeps it clear of
+/// the patient's own glyph on every frame.
 pub(super) fn draw_recovery_mark(
     painter: &Painter,
     actor: Option<&EntityView>,
@@ -434,13 +437,14 @@ pub(super) fn draw_recovery_mark(
     };
     let glyph = RECOVERY_MARK.to_string();
     let dims = painter.measure_map(&glyph, glyph_px);
-    let lift = fx.centred_bob(ev.entity);
+    let (lift, alpha) = fx.recovery_float(ev.entity, cell.h);
+    let color = at_level(hud::palette::HEALTHY, vig);
     painter.map(
         &glyph,
         cell.x + (cell.w - dims.width) / 2.0,
         cell.y + RARITY_BAR_PX + IDENTITY_MARK_INSET - lift,
         glyph_px,
-        at_level(hud::palette::HEALTHY, vig),
+        Color::new(color.r, color.g, color.b, color.a * alpha),
     );
 }
 

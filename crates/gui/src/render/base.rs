@@ -1674,7 +1674,7 @@ mod tests {
     /// frame times rather than at one hand-picked half period, so retuning
     /// the bob's rate cannot turn this into a failure that means nothing.
     #[test]
-    fn a_recovering_program_wears_a_bouncing_mark_and_nothing_else_does() {
+    fn a_recovering_program_wears_a_floating_mark_and_nothing_else_does() {
         let mut fx = Fx::new();
         fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
 
@@ -1697,7 +1697,37 @@ mod tests {
             .collect();
         assert!(
             ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
-            "the mark must bounce, not sit still: {ys:?}"
+            "the mark must move, not sit still: {ys:?}"
+        );
+
+        // It floats *up* off its rest position and never below it — the
+        // rest position, which a disabled fx draws at, is the lowest the
+        // mark ever sits.
+        let mut still = Fx::new();
+        still.enabled = false;
+        still.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        let rest = recovery_mark_at(&still, &busy).expect("drawn with animations off");
+        assert!(
+            ys.iter().all(|y| *y <= rest + 0.01),
+            "the mark sank below its rest position {rest}: {ys:?}"
+        );
+
+        // And it fades as it goes, so it disappears rather than snapping back.
+        let alphas: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
+            .into_iter()
+            .map(|now| {
+                fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+                crate::paint::painted_map_glyphs(&recovery_mark_shapes(&fx, &busy))
+                    .into_iter()
+                    .find(|(text, _)| text == "+")
+                    .expect("the mark is drawn every frame")
+                    .1
+                    .a
+            })
+            .collect();
+        assert!(
+            alphas.iter().any(|a| *a < 0.5),
+            "the mark must fade out as it rises: {alphas:?}"
         );
     }
 
@@ -1710,7 +1740,10 @@ mod tests {
     /// be, so a revert to the old colour fails here rather than in play.
     #[test]
     fn the_recovery_mark_is_painted_in_the_healthy_role_and_not_the_threat_one() {
+        // Animations off, so the mark is fully opaque: egui premultiplies
+        // alpha into the colour, and the float's fade would read as a hue drift.
         let mut fx = Fx::new();
+        fx.enabled = false;
         fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
 
         let shapes = recovery_mark_shapes(&fx, &patient_view(true));

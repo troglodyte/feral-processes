@@ -120,6 +120,13 @@ const HEAL_MARK_BOUNCES: f32 = 2.0;
 /// How high a heal mark bounces, as a fraction of a tile.
 const HEAL_MARK_HEIGHT: f32 = 0.55;
 
+/// How long one green `+` over a body a Repair Bay is mending takes to float
+/// up and fade out, and how far it floats as a share of the tile. The next
+/// one starts back at rest, so a long recovery reads as a stream of marks
+/// rising off the patient rather than one mark bouncing on it.
+const RECOVERY_FLOAT_SECONDS: f64 = 1.0;
+const RECOVERY_FLOAT_RISE: f32 = 0.5;
+
 /// How long a reaction's `!` lives. Shorter than a heal's mark: it has to
 /// be read beside the swing it announces, not after it.
 pub const REACTION_MARK_SECONDS: f64 = 0.6;
@@ -594,6 +601,18 @@ fn heal_mark_height(t: f32) -> f32 {
 /// than a heal's bounce, so the two marks never read as the same news.
 fn reaction_mark_height(t: f32) -> f32 {
     REACTION_MARK_HEIGHT * (t / REACTION_MARK_RISE).min(1.0)
+}
+
+/// How high a mending body's `+` sits above its rest position, as a share
+/// of the tile, and how opaque it is. Eased out, so each mark pops off the
+/// patient and slows as it fades, and phase-keyed for `staffed_bob_offset`'s
+/// reason: two patients float out of step.
+fn recovery_float(time: f64, phase_key: u64) -> (f32, f32) {
+    let turns =
+        time / RECOVERY_FLOAT_SECONDS + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
+    let t = turns.fract() as f32;
+    let eased = 1.0 - (1.0 - t).powi(2);
+    (RECOVERY_FLOAT_RISE * eased, cell_mark_alpha(t))
 }
 
 /// A cell mark fades linearly across its whole life, `draw_floats`' own
@@ -1179,6 +1198,18 @@ impl Fx {
             return 0.0;
         }
         staffed_bob_offset(self.now, entity.to_bits()) - STAFFED_BOB_PX / 2.0
+    }
+
+    /// How far above its rest position to draw a mending body's `+` this
+    /// frame, in pixels of a `tile_px` tile, and at what alpha. The rise is a
+    /// share of the tile so it reads the same at every zoom, and that share
+    /// stays private here, `strain_jitter`'s rule.
+    pub fn recovery_float(&self, entity: Entity, tile_px: f32) -> (f32, f32) {
+        if !self.enabled {
+            return (0.0, 1.0);
+        }
+        let (rise, alpha) = recovery_float(self.now, entity.to_bits());
+        (rise * tile_px, alpha)
     }
 
     /// How far to offset the **ink** of a body a research project is
@@ -2078,6 +2109,63 @@ mod tests {
                 "offset {dy} escaped the band"
             );
         }
+    }
+
+    /// A mending body's `+` floats up and fades, and the next one starts
+    /// back at rest — it never comes back *down* while it can be seen. The
+    /// only frame on which the lift falls is the restart, and that frame is
+    /// at rest and opaque, so what the eye reads is a new mark rather than
+    /// the old one sinking.
+    #[test]
+    fn the_recovery_float_only_rises_and_restarts_at_rest() {
+        for key in 0..7 {
+            let samples: Vec<(f32, f32)> = (0..400)
+                .map(|i| recovery_float(i as f64 * 0.01, key))
+                .collect();
+            for pair in samples.windows(2) {
+                let ((lift0, alpha0), (lift1, alpha1)) = (pair[0], pair[1]);
+                assert!(
+                    (0.0..=RECOVERY_FLOAT_RISE).contains(&lift1),
+                    "lift {lift1} escaped the band"
+                );
+                if lift1 < lift0 {
+                    assert!(
+                        lift1 < 0.1 * RECOVERY_FLOAT_RISE && alpha1 > 0.9,
+                        "the mark sank ({lift0} -> {lift1}) while visible (alpha {alpha1})"
+                    );
+                } else {
+                    assert!(alpha1 <= alpha0, "the mark brightened as it rose");
+                }
+            }
+            assert!(
+                samples
+                    .iter()
+                    .any(|&(lift, _)| lift > 0.8 * RECOVERY_FLOAT_RISE),
+                "the mark never floated anywhere"
+            );
+        }
+    }
+
+    #[test]
+    fn two_patients_float_out_of_step() {
+        let (a, b) = (recovery_float(0.3, 4), recovery_float(0.3, 5));
+        assert!(
+            (a.0 - b.0).abs() > 0.01,
+            "marks moved in lockstep: {a:?} vs {b:?}"
+        );
+    }
+
+    /// Animations off is a mark at rest and fully drawn — never one faded
+    /// out, which would hide the recovery rather than still it.
+    #[test]
+    fn a_disabled_fx_holds_the_recovery_mark_at_rest() {
+        let mut fx = Fx::new();
+        fx.enabled = false;
+        fx.now = 4.2;
+        assert_eq!(
+            fx.recovery_float(Entity::from_raw_u32(9).unwrap(), 20.0),
+            (0.0, 1.0)
+        );
     }
 
     /// Two marks are deliberately out of step: a base full of them should

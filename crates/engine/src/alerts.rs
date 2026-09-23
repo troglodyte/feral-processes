@@ -59,10 +59,6 @@ pub struct AlertBoard {
     /// Set on the false→true edge of every depot being full
     /// (`game::base::hauling::haul_step_system`) and cleared by the next
     /// successful deposit into any depot.
-    ///
-    /// `#[allow(dead_code)]` until Task 6 wires up its first reader and
-    /// writer.
-    #[allow(dead_code)]
     pub(crate) depots_full: bool,
 }
 

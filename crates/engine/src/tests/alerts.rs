@@ -602,3 +602,290 @@ fn an_off_screen_siege_with_no_shortfall_still_posts_siege_begun() {
     );
     assert_eq!(alert_kind_count(&game, &AlertKind::SiegeBegun), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Task 6: sites cut off and depots full.
+// ---------------------------------------------------------------------------
+
+/// A Home laid, the party standing at its own exit cell, and `n` idle staff
+/// — `base_space.rs`'s `base_with_a_crew`, reconstructed here since that one
+/// is private to its own file.
+fn alert_base_with_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    place_now(&mut game, "home", 1, 0).unwrap();
+    stand_in_base_at(&mut game, 0, 0);
+    let mut staff = Vec::new();
+    for _ in 0..n {
+        staff.push(spawn_tamed(&mut game, 10, 3));
+    }
+    (game, staff)
+}
+
+/// Open ground far enough out that nothing walkable touches it — a station
+/// exists and no route to it does, `base_space.rs`'s `STRANDED_STATION`/
+/// `STRANDED_CELL` fixture.
+const ALERT_STRANDED_STATION: (i32, i32) = (20, 0);
+const ALERT_STRANDED_CELL: (i32, i32) = (21, 0);
+
+#[test]
+fn an_unreachable_dig_site_posts_a_site_cut_off_alert_once() {
+    let (mut game, _staff) = alert_base_with_crew(19401, 1);
+    // A cut the base could pay to floor, so the route is what stalls it
+    // rather than a dry base dropping the want before the route matters.
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
+    let tick = game.current_tick();
+    game.world.resource_mut::<base_grid::BaseGrid>().open(
+        ALERT_STRANDED_STATION.0,
+        ALERT_STRANDED_STATION.1,
+        tick,
+    );
+    game.toggle_mark_box(ALERT_STRANDED_CELL, ALERT_STRANDED_CELL, None);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(alert_kind_count(&game, &AlertKind::SiteCutOff), 1);
+    let alert = game
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == AlertKind::SiteCutOff)
+        .unwrap();
+    assert_eq!(
+        alert.count, 1,
+        "repeated ticks past the first stall post nothing more"
+    );
+}
+
+#[test]
+fn an_unreachable_build_site_posts_a_site_cut_off_alert_once() {
+    let mut game = Game::new(19402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(&mut game, "home", 1, 0).unwrap();
+    stand_in_base_at(&mut game, 0, 0);
+    // A build needs laid `Floor`, unlike a dig site's `Open` station — the
+    // island still has no route back to the pocket, since nothing between
+    // the two is carved at all.
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(ALERT_STRANDED_STATION.0, ALERT_STRANDED_STATION.1);
+
+    file_build(
+        &mut game,
+        "mining_node",
+        ALERT_STRANDED_STATION.0,
+        ALERT_STRANDED_STATION.1,
+    )
+    .unwrap();
+    // `file_build`'s own program is spent as the build's cost (a build costs
+    // a tamed program exactly when the structure runs a job) and its spare
+    // lands in the party, not on staff — so a body actually free to be sent
+    // (and refused) has to be spawned on top.
+    spawn_tamed(&mut game, 10, 3);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(alert_kind_count(&game, &AlertKind::SiteCutOff), 1);
+}
+
+/// A worker whose load has nowhere to land — `hauling.rs`'s
+/// `a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine` fixture,
+/// reconstructed for the same private-to-its-file reason as the crew above.
+fn alert_base_for_hauling(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    game
+}
+
+/// Finds the structure standing at `(x, y)` — `deploy`'s own lookup, since
+/// `place_now` reports only success.
+fn alert_structure_at(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.world
+        .query::<(Entity, &Position, &Structure)>()
+        .iter(&game.world)
+        .find(|(_, p, _)| p.x == x && p.y == y)
+        .map(|(e, ..)| e)
+        .expect("the structure was just deployed")
+}
+
+#[test]
+fn depots_full_posts_once_across_repeated_failed_hauls() {
+    let mut game = alert_base_for_hauling(19403);
+    let (bx, by) = game.base_pos().unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = alert_structure_at(&mut game, bx + 1, by);
+    place_now(&mut game, "depot", 4, 0).unwrap();
+    let depot = alert_structure_at(&mut game, bx + 4, by);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker, node).unwrap();
+
+    let cap = game.world.get::<Stock>(node).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), cap);
+
+    for _ in 0..200 {
+        if game.world.get::<Carrying>(worker).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker has to actually pick up a load"
+    );
+
+    // Brim-full with something a Mining Node never makes, so the only reason
+    // the load cannot land is room.
+    let depot_cap = game.world.get::<Stock>(depot).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), depot_cap);
+
+    for _ in 0..300 {
+        if game.world.get::<Carrying>(worker).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "precondition: the load has to actually come back, or the branch never runs"
+    );
+
+    assert_eq!(
+        alert_kind_count(&game, &AlertKind::DepotsFull),
+        1,
+        "the first failure has to latch"
+    );
+
+    // Several more failed round trips off the same clog, all under the one
+    // latch.
+    for _ in 0..300 {
+        game.tick();
+    }
+
+    assert_eq!(
+        alert_kind_count(&game, &AlertKind::DepotsFull),
+        1,
+        "repeated failures under the same latch post nothing more"
+    );
+    assert_eq!(
+        game.alerts()
+            .into_iter()
+            .find(|a| a.kind == AlertKind::DepotsFull)
+            .unwrap()
+            .count,
+        1
+    );
+}
+
+/// After a successful deposit clears the latch, the next failure posts again
+/// and collapses into `×2`.
+#[test]
+fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
+    let mut game = alert_base_for_hauling(19404);
+    let (bx, by) = game.base_pos().unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = alert_structure_at(&mut game, bx + 1, by);
+    place_now(&mut game, "depot", 4, 0).unwrap();
+    let depot = alert_structure_at(&mut game, bx + 4, by);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker, node).unwrap();
+
+    // The depot must still have room when the worker *picks up* the load —
+    // `Errand::Tend` refuses to start an errand at all while `depots` (every
+    // depot with room) is empty, `with_no_depot_a_clogged_machine_just_
+    // stays_clogged`'s rule. So the clog and the full depot are staged in
+    // that order, with a pickup wait between them, on both round trips.
+    let clog_node = |game: &mut Game| {
+        let cap = game.world.get::<Stock>(node).unwrap().capacity;
+        game.world
+            .get_mut::<Stock>(node)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), cap);
+    };
+    let fill_depot = |game: &mut Game| {
+        let depot_cap = game.world.get::<Stock>(depot).unwrap().capacity;
+        game.world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::POWER_CELL), depot_cap);
+    };
+    let wait_for_pickup = |game: &mut Game| {
+        for _ in 0..200 {
+            if game.world.get::<Carrying>(worker).is_some() {
+                return;
+            }
+            game.tick();
+        }
+    };
+    let wait_for_return = |game: &mut Game| {
+        for _ in 0..300 {
+            if game.world.get::<Carrying>(worker).is_none() {
+                return;
+            }
+            game.tick();
+        }
+    };
+
+    clog_node(&mut game);
+    wait_for_pickup(&mut game);
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker has to actually pick up a load"
+    );
+    fill_depot(&mut game);
+    wait_for_return(&mut game);
+    assert_eq!(
+        alert_kind_count(&game, &AlertKind::DepotsFull),
+        1,
+        "precondition: the first failure has to actually latch"
+    );
+
+    // Empty the depot, so the next attempt actually lands.
+    game.world.get_mut::<Stock>(depot).unwrap().output.clear();
+
+    for _ in 0..300 {
+        if game.world.get::<Stock>(node).unwrap().output_used() == 0 {
+            break;
+        }
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<Stock>(node).unwrap().output_used(),
+        0,
+        "precondition: the load has to actually land this time"
+    );
+
+    // Re-clog the machine to force another failed round trip.
+    clog_node(&mut game);
+    wait_for_pickup(&mut game);
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the second round trip has to actually start"
+    );
+    fill_depot(&mut game);
+    wait_for_return(&mut game);
+
+    let alert = game
+        .alerts()
+        .into_iter()
+        .find(|a| a.kind == AlertKind::DepotsFull)
+        .unwrap();
+    assert_eq!(
+        alert.count, 2,
+        "the latch cleared and re-armed, collapsing into the same row"
+    );
+}

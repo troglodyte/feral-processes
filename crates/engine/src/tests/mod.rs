@@ -56,6 +56,7 @@ mod message_log;
 mod needs;
 mod nemesis;
 mod notifications;
+mod outposts;
 mod party;
 mod perks;
 mod permadeath;

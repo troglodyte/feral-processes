@@ -322,6 +322,28 @@ pub struct RouteSave {
     pub proceeds: u32,
 }
 
+/// One founded outpost — `outposts::Outpost`'s stored fields, plus the tile
+/// that keys it in `resources::Outposts`. Crew rides `CreatureSave::outpost`
+/// instead, `RouteSave`'s reason one level over: an outpost names no entity
+/// either, so this is a straight field-for-field rebuild in
+/// `Game::restore_outposts` with nothing to reconcile.
+///
+/// `Outpost::announced` is deliberately not here — it is inert until
+/// Phase 5 re-seeds it from the freshly-derived trend right after load,
+/// which is what keeps a reload from re-posting an alert.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutpostSave {
+    pub tile: (i32, i32),
+    pub biome: crate::world::Biome,
+    pub growth: u32,
+    pub integrity: u32,
+    /// Vec-of-pairs on disk rather than the live `BTreeMap`,
+    /// `StructureSave::stock_input`'s precedent.
+    pub stock: Vec<(ItemId, u32)>,
+    pub stale_ticks: u32,
+    pub cycle_progress: u32,
+}
+
 /// A siege in progress, assembled from the board and the bodies rather
 /// than by serialising `tactical::TacticalBattle` itself — see that type's
 /// own doc for why it does not gain `Serialize`. `game::siege::persist::
@@ -1692,6 +1714,14 @@ pub struct SaveData {
     /// additive.
     #[serde(default)]
     pub base_ledger: crate::base_ledger::BaseLedger,
+    /// Every outpost currently standing — see `resources::Outposts` and
+    /// `OutpostSave`.
+    ///
+    /// `#[serde(default)]`, `contracts`' reason: a file written before
+    /// outposts existed loads with none standing, which is exactly what
+    /// that run had. No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub outposts: Vec<OutpostSave>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -2110,6 +2140,7 @@ mod tests {
             work_orders: Vec::new(),
             alerts: Vec::new(),
             next_program_id: crate::resources::NextProgramId::START.0,
+            outposts: Vec::new(),
         }
     }
 

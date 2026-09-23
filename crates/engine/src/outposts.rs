@@ -3,7 +3,10 @@
 //!
 //! `OutpostDef` and `OutpostDb::load_dir` follow `NeedDb`'s absent-is-silent
 //! pattern: no `assets/outposts/` directory means no outposts exist and the
-//! kit refuses with a message, never a panic.
+//! kit refuses with a message, never a panic. `Outpost` is the per-tile
+//! record a founded outpost carries; `resources::Outposts` is the keyed
+//! collection a `Game` holds of them. Crew is deliberately not part of
+//! either — see `components::PostedAt` and `save::CreatureSave::outpost`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -104,6 +107,62 @@ impl OutpostDb {
         }
         Ok((Self { def }, warnings))
     }
+}
+
+/// A founded outpost's stored state — design spec §2.
+///
+/// Crew is deliberately absent: membership rides `components::PostedAt` and
+/// `save::CreatureSave::outpost`, `resources::Sorties`' `sortie_index`
+/// precedent one level over. Stock capacity, crew cap and max integrity come
+/// from `tuning.rs`, so none of them is stored either — everything past
+/// these six fields is derived on every read (tier, trend, current yields).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Outpost {
+    /// Read once at `Game::found_outpost` and never re-derived: the yield
+    /// table is keyed by the ground the outpost was built on, not by
+    /// whatever the tile classifies as on a later read.
+    pub biome: Biome,
+    /// The one stored progress number growth tracks.
+    pub growth: u32,
+    pub integrity: u32,
+    pub stock: BTreeMap<ItemId, u32>,
+    /// Ticks spent with `stock` at its cap — `trend`'s Stale/Declining
+    /// split (Phase 2).
+    pub stale_ticks: u32,
+    /// Progress toward the next production cycle (Phase 2).
+    pub cycle_progress: u32,
+    /// Which `Trend` last posted an alert, so a reload does not repeat one
+    /// — design correction 10 (Phase 5). Not part of `save::OutpostSave`:
+    /// it is inert until Phase 5 re-seeds it from the freshly-derived trend
+    /// right after load, which is what keeps a reload from posting again.
+    pub announced: Option<Trend>,
+}
+
+impl Outpost {
+    /// A freshly founded outpost: no growth, no stock, full integrity.
+    pub fn new(biome: Biome, integrity: u32) -> Self {
+        Self {
+            biome,
+            growth: 0,
+            integrity,
+            stock: BTreeMap::new(),
+            stale_ticks: 0,
+            cycle_progress: 0,
+            announced: None,
+        }
+    }
+}
+
+/// How an outpost is doing right now — derived on every read and never
+/// stored, design spec §4. `trend()` (Phase 2) is the one derivation; one
+/// function answers the growth bar's colour, the screen's status line and
+/// the alert board alike.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trend {
+    Growing,
+    Stable,
+    Stale,
+    Declining,
 }
 
 /// The items a `tier`-th outpost (0-indexed: tier 0 is raw) can produce in

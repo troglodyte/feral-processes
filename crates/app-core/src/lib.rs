@@ -168,7 +168,7 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
             ),
         ));
     }
-    if game.is_consumable(item) {
+    if game.is_usable(item) {
         actions.push(('c', "[C]onsume".to_string()));
     }
     // Lowercase like every other row on this page — the uppercase rule is

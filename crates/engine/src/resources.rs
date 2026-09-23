@@ -2030,6 +2030,18 @@ pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
 
+/// Every outpost currently standing, keyed by its zone-surface tile — see
+/// `outposts::Outpost`. A `BTreeMap` rather than a `HashMap`, `Settlements`'
+/// reason and `Stock`'s precedent: the production roll (Phase 2) and the
+/// save encoding both have to walk it in `(x, y)` order, not whatever a hash
+/// happens to iterate in.
+///
+/// Persisted through `save::SaveData::outposts` (`Vec<OutpostSave>`) rather
+/// than derived `Serialize`/`Deserialize` on this type directly —
+/// `Game::save`/`restore_outposts` are the one door each way.
+#[derive(Resource, Default)]
+pub struct Outposts(pub BTreeMap<(i32, i32), crate::outposts::Outpost>);
+
 /// What a town thinks of the party, and how the run has changed it.
 ///
 /// **A second map beside `Settlements` rather than a field on

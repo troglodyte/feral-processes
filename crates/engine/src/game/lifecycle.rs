@@ -458,6 +458,7 @@ impl Game {
             talents: talent_db,
             affixes: affix_db,
             settlements: settlement_db,
+            outposts: outpost_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -478,6 +479,7 @@ impl Game {
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(settlement_db);
+        world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -546,6 +548,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
@@ -967,6 +970,31 @@ impl Game {
         self.world.insert_resource(crate::resources::Routes(routes));
     }
 
+    /// `restore_routes`' shape one type over: an outpost names no entity
+    /// either, so this is a straight field-for-field rebuild keyed back onto
+    /// its tile. `announced` is not part of `save::OutpostSave` and comes
+    /// back `None` on every load — see `outposts::Outpost::announced`'s doc.
+    fn restore_outposts(&mut self, saved: Vec<save::OutpostSave>) {
+        let map: std::collections::BTreeMap<(i32, i32), crate::outposts::Outpost> = saved
+            .into_iter()
+            .map(|o| {
+                (
+                    o.tile,
+                    crate::outposts::Outpost {
+                        biome: o.biome,
+                        growth: o.growth,
+                        integrity: o.integrity,
+                        stock: o.stock.into_iter().collect(),
+                        stale_ticks: o.stale_ticks,
+                        cycle_progress: o.cycle_progress,
+                        announced: None,
+                    },
+                )
+            })
+            .collect();
+        self.world.insert_resource(crate::resources::Outposts(map));
+    }
+
     fn restore_structures(
         &mut self,
         structures: Vec<save::StructureSave>,
@@ -1190,6 +1218,7 @@ impl Game {
             talents: talent_db,
             affixes: affix_db,
             settlements: settlement_db,
+            outposts: outpost_db,
             policy: enemy_policy,
             warnings: mut load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -1228,6 +1257,7 @@ impl Game {
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(settlement_db);
+        world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -1318,6 +1348,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
@@ -1591,6 +1622,7 @@ impl Game {
         game.world.insert_resource(data.standings);
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
+        game.restore_outposts(data.outposts);
         // After the towns exist, and the one place a patrol's tether is
         // rebuilt. A tile naming no town — the settlement catalogue was
         // edited between sessions — drops the tether silently rather than
@@ -2853,6 +2885,21 @@ impl Game {
                 .world
                 .resource::<crate::base_ledger::BaseLedger>()
                 .clone(),
+            outposts: self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .iter()
+                .map(|(&tile, o)| save::OutpostSave {
+                    tile,
+                    biome: o.biome,
+                    growth: o.growth,
+                    integrity: o.integrity,
+                    stock: o.stock.iter().map(|(id, &n)| (id.clone(), n)).collect(),
+                    stale_ticks: o.stale_ticks,
+                    cycle_progress: o.cycle_progress,
+                })
+                .collect(),
         };
         save::save_to_file(path, &data)
     }
@@ -3058,6 +3105,7 @@ struct AssetDbs {
     talents: crate::talents::TalentDb,
     affixes: AffixDb,
     settlements: crate::settlements::SettlementDb,
+    outposts: crate::outposts::OutpostDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -3135,6 +3183,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (settlements, settlement_warnings) =
         crate::settlements::SettlementDb::load_dir(&assets_dir.join("settlements"))?;
     warnings.extend(settlement_warnings);
+    // Same absent-is-silent rule again — see `OutpostDb`'s own doc. An
+    // empty catalogue leaves the kit refusing with a message, which is the
+    // pre-outpost game.
+    let (outposts, outpost_warnings) =
+        crate::outposts::OutpostDb::load_dir(&assets_dir.join("outposts"))?;
+    warnings.extend(outpost_warnings);
     let (policy, policy_warnings) =
         crate::policy::load_file(&assets_dir.join("policies/enemy_battle.ron"))?;
     warnings.extend(policy_warnings);
@@ -3238,6 +3292,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         perks,
         affixes,
         settlements,
+        outposts,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

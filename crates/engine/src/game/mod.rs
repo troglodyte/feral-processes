@@ -35,6 +35,7 @@ pub(crate) mod lifecycle;
 pub(crate) mod listen;
 pub(crate) mod memories;
 pub(crate) mod notify;
+pub(crate) mod outposts;
 pub(crate) mod party;
 pub(crate) mod passives;
 pub(crate) mod pursuit;

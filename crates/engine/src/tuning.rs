@@ -5659,6 +5659,42 @@ pub const TRAP_CONDITION_PENALTY: u8 = 15;
 /// `alerts::post`.
 pub const ALERT_BOARD_CAP: usize = 50;
 
+// ---------------------------------------------------------------------------
+// Outposts
+// ---------------------------------------------------------------------------
+
+/// How many outposts may stand at once — `ROUTE_MAX_ACTIVE`'s reason: a cap
+/// so an unbounded number of fixtures cannot pile onto the raid roll and the
+/// production tick, not a throughput number derived for it. Unmeasured; see
+/// design spec §11.
+pub const MAX_OUTPOSTS: usize = 4;
+
+/// How close a candidate tile must be walked before it may be founded, in
+/// Chebyshev tiles from the base anchor.
+///
+/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a base-space
+/// constant, value 4) — an outpost stands on the *zone surface*, a
+/// different coordinate space at a different scale, and reusing a base-space
+/// literal there would make an unrelated base-building retune silently move
+/// where an outpost may stand. **A fraction of a region**,
+/// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against
+/// nothing, and this is close enough to the anchor to reach on foot in one
+/// session while still being outside `SETTLEMENT_GARRISON_RADIUS`'s own
+/// half-region reach. Unmeasured — see design spec §11.
+pub const OUTPOST_MIN_ANCHOR_DISTANCE: i32 = crate::settlements::placement::REGION_TILES / 8;
+
+/// How far apart two outposts must stand, in Chebyshev tiles.
+///
+/// A fraction of a region, `OUTPOST_MIN_ANCHOR_DISTANCE`'s reason and
+/// smaller than it: two outposts crowding each other is a lesser problem
+/// than one crowding the base. Unmeasured — see design spec §11.
+pub const OUTPOST_MIN_SPACING: i32 = crate::settlements::placement::REGION_TILES / 16;
+
+/// The integrity a freshly founded outpost starts at, and the ceiling
+/// `repair_outpost` restores it to (Phase 5). Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_MAX_INTEGRITY: u32 = 100;
+
 #[cfg(test)]
 mod tests {
     use super::*;

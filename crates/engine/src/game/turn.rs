@@ -1099,8 +1099,47 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        // The outpost kit is not a `ConsumeDef` effect — it founds a record
+        // rather than restoring Power or arming a buff — so it is
+        // intercepted here, before `consume_item`, rather than folded into
+        // that function's effect table. See `Game::found_outpost`.
+        if self
+            .world
+            .resource::<crate::outposts::OutpostDb>()
+            .def()
+            .is_some_and(|def| &def.kit == id)
+        {
+            self.use_outpost_kit(id);
+            return;
+        }
         if self.consume_item(self.player_entity(), id) {
             self.tick();
+        }
+    }
+
+    /// The outpost-kit half of `use_item`. Refuses before spending anything:
+    /// no unit leaves `Inventory` unless `found_outpost` returns `Ok`.
+    fn use_outpost_kit(&mut self, id: &ItemId) {
+        let player = self.player_entity();
+        if self
+            .world
+            .get::<Inventory>(player)
+            .is_none_or(|inv| inv.count(id) == 0)
+        {
+            let name = self.item_name(id).to_string();
+            self.note_refusal(format!("You have no {name}."));
+            return;
+        }
+        let pos = *self.world.get::<Position>(player).unwrap();
+        match self.found_outpost((pos.x, pos.y)) {
+            Ok(()) => {
+                self.world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .take(id.clone(), 1);
+                self.tick();
+            }
+            Err(msg) => self.note_refusal(msg),
         }
     }
 

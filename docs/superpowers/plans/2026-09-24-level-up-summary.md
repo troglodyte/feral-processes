@@ -48,10 +48,10 @@
 
 ## Phase 1 — Engine
 
-- [ ] **1.1** Extract `SpeciesDef::natural_range` (correction 3). The existing suite is the regression gate. Commit.
-- [ ] **1.2** Types. `LevelSnapshot { level, max_hp, mitigation, perk_points, decompiler, combatant: battle::Combatant }` and `PendingLevelUp(Option<LevelSnapshot>)` (`#[derive(Resource, Default)]`). `LevelUpReport { from_level, to_level, zone, stats: Vec<StatRow>, hit_chance: (f64, f64), per_swing: (f64, f64), swings_to_win: (u32, u32), swings_to_down_you: (u32, u32), perk_points_gained, perk_points_unspent, decompiler_gained }`. Pairs are `(before, after)`. Keep them as tuples unless the gui wants a struct.
-- [ ] **1.3** Tests first, in `tests/level_up.rs` (fixtures in `tests/support.rs`). There are the spec's five engine tests, plus: (a) an overflow award at the cap leaves no report; (b) a level from a contract reward, outside a fight, produces a report. For the figure test, compute the expected values from `battle::*` calls on the report's own `Combatant`s. Expose them with `#[cfg(test)]` accessors if they are needed, and do not copy a formula. `swings_*` use `f64::ceil`, cast to `u32`. Guard against a zero `expected_damage`: `u32::MAX` would render badly, so clamp and document it, or show `—`. Decide in 1.4 and test whichever you pick.
-- [ ] **1.4** Implement `game/level_up.rs` and the write site (corrections 1, 2, 4, 5, 6). Run the targeted tests, then the whole suite. Commit.
+- [x] **1.1** Extract `SpeciesDef::natural_range` (correction 3). The existing suite is the regression gate. Commit.
+- [x] **1.2** Types. `LevelSnapshot { level, max_hp, mitigation, perk_points, decompiler, combatant: battle::Combatant }` and `PendingLevelUp(Option<LevelSnapshot>)` (`#[derive(Resource, Default)]`). `LevelUpReport { from_level, to_level, zone, stats: Vec<StatRow>, hit_chance: (f64, f64), per_swing: (f64, f64), swings_to_win: (u32, u32), swings_to_down_you: (u32, u32), perk_points_gained, perk_points_unspent, decompiler_gained }`. Pairs are `(before, after)`. Keep them as tuples unless the gui wants a struct.
+- [x] **1.3** Tests first, in `tests/level_up.rs` (fixtures in `tests/support.rs`). There are the spec's five engine tests, plus: (a) an overflow award at the cap leaves no report; (b) a level from a contract reward, outside a fight, produces a report. For the figure test, compute the expected values from `battle::*` calls on the report's own `Combatant`s. Expose them with `#[cfg(test)]` accessors if they are needed, and do not copy a formula. `swings_*` use `f64::ceil`, cast to `u32`. Guard against a zero `expected_damage`: `u32::MAX` would render badly, so clamp and document it, or show `—`. Decide in 1.4 and test whichever you pick.
+- [x] **1.4** Implement `game/level_up.rs` and the write site (corrections 1, 2, 4, 5, 6). Run the targeted tests, then the whole suite. Commit.
 
 ## Phase 2 — App-core
 

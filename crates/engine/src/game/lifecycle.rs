@@ -574,6 +574,13 @@ impl Game {
         world.init_resource::<crate::resources::SiegePressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
+        // `RunFeats`' precedent: not saved, so quitting between a level-up
+        // and the summary page loses the page, never the level itself —
+        // `Experience`/`Stats` already carry the real gain to disk. Both
+        // doors anyway, `PowerGrid`'s reason below, so a reader that beats
+        // the first `award_player_xp` call finds an empty resource rather
+        // than a missing one.
+        world.insert_resource(crate::resources::PendingLevelUp::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
         // restores this from a save because nothing saves it: it is a
         // per-tick cache of `game::base::power::ledger`, and
@@ -1447,6 +1454,13 @@ impl Game {
         world.init_resource::<crate::resources::SiegePressure>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
+        // `RunFeats`' precedent: not saved, so quitting between a level-up
+        // and the summary page loses the page, never the level itself —
+        // `Experience`/`Stats` already carry the real gain to disk. Both
+        // doors anyway, `PowerGrid`'s reason below, so a reader that beats
+        // the first `award_player_xp` call finds an empty resource rather
+        // than a missing one.
+        world.insert_resource(crate::resources::PendingLevelUp::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
         // restores this from a save because nothing saves it: it is a
         // per-tick cache of `game::base::power::ledger`, and

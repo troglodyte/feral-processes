@@ -8,10 +8,12 @@ use crate::balance_sim::{
     best_gear_stats, median_ordinary_species, min_level_to_clear_zone, toughest_ordinary_species,
 };
 use crate::components::{Decompiler, Experience, Stats};
+use crate::game::level_up::{LEVEL_UP_SWINGS_UNREACHABLE, swings_to};
 use crate::progression::{StatRow, stat_block};
 use crate::resources::{CONDENSE_LOOKBACK, LogLine, MessageSource, condense};
 use crate::species::SpeciesDb;
 use crate::stack::Dir;
+use crate::tactical::TacticalBattle;
 use crate::tuning::{
     BASE_PET_CAPACITY, DECOMPILER_SKILL_PER_LEVEL, KERNEL_RING_MAX, LEVELS_PER_RING,
     PERK_POINTS_PER_LEVEL, TALENT_START_LEVEL, ZONE_LEVEL_CAP_FLOOR, arena_level_ceiling,
@@ -740,4 +742,222 @@ fn an_arena_scenario_still_stages_a_level_twelve_companion() {
         TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING,
         "and the arena's own ceiling is unchanged by the zone cap"
     );
+}
+
+// --- The level-up summary page (TODO #57) ---------------------------------
+//
+// `Game::take_level_up_report` reads `resources::PendingLevelUp`, written by
+// `Game::award_player_xp` on a levelling award. These tests are about that
+// report, not the log block above — `a_player_level_up_lists_what_each_stat_
+// grew_to` already covers the announcement.
+
+/// Crosses exactly one level with a small, deterministic award — the same
+/// trick `a_player_level_up_lists_what_each_stat_grew_to` uses above, so the
+/// fixture needs no combat and no RNG draw.
+fn force_one_level(game: &mut Game, player: Entity) {
+    game.world.get_mut::<Experience>(player).unwrap().xp_to_next = 5;
+    game.award_player_xp(player, 5);
+}
+
+/// Several level-ups gained before the page shows are **one page**: the
+/// resource's own `None` guard keeps only the snapshot from before the
+/// first of them, so a second and third level-up in the same fight must
+/// not push `from_level` forward.
+#[test]
+fn a_run_of_several_level_ups_reports_the_level_before_the_first_one() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let starting_level = game.world.get::<Experience>(player).unwrap().level;
+
+    force_one_level(&mut game, player);
+    force_one_level(&mut game, player);
+    let ending_level = game.world.get::<Experience>(player).unwrap().level;
+    assert!(
+        ending_level >= starting_level + 2,
+        "the fixture must actually cross two levels, or this proves nothing: \
+         {starting_level} -> {ending_level}"
+    );
+
+    let report = game
+        .take_level_up_report()
+        .expect("two level-ups must leave a report");
+    assert_eq!(report.from_level, starting_level);
+    assert_eq!(report.to_level, ending_level);
+}
+
+/// `take_notification`'s shape: a second call after the first finds
+/// nothing, so a frontend that reads it once cannot see it twice.
+#[test]
+fn take_level_up_report_drains_once() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    force_one_level(&mut game, player);
+
+    assert!(game.take_level_up_report().is_some());
+    assert!(
+        game.take_level_up_report().is_none(),
+        "a second take must find nothing left"
+    );
+}
+
+/// An award that does not cross a level threshold writes nothing —
+/// `PendingLevelUp` stays `None`, so the page never opens on a stray kill.
+#[test]
+fn an_award_with_no_level_up_leaves_no_report() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().xp_to_next = 1_000_000;
+
+    game.award_player_xp(player, 1);
+
+    assert!(game.take_level_up_report().is_none());
+}
+
+/// XP that arrives at the level cap converts to Perk Points
+/// (`Game::convert_overflow_xp`) and grants no level, so it must not open
+/// the page either — `gain.levels > 0` is the one guard on the write.
+#[test]
+fn an_overflow_award_at_the_level_cap_leaves_no_report() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(1));
+    let cap = game.level_cap();
+    let player = game.player_entity();
+    set_level(&mut game, player, cap);
+
+    game.award_player_xp(player, xp_past_every_cap());
+
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().level,
+        cap,
+        "the fixture must actually sit at the cap, or this proves nothing"
+    );
+    assert!(
+        game.take_level_up_report().is_none(),
+        "overflow at the cap buys Perk Points, not a level, and must not open the page"
+    );
+}
+
+/// Both XP callers — a kill (`combat_round.rs`/`combat_rewards.rs`) and a
+/// contract reward (`contracts.rs`) — reach `award_player_xp` and nothing
+/// else, so a level earned with no `BattleState`/`TacticalBattle` open
+/// (contracts.rs's own comment: "through `Game::award_player_xp` so a
+/// level-up full-heals...") is covered with no code of its own.
+#[test]
+fn a_level_earned_outside_a_fight_still_produces_a_report() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.world.get_resource::<BattleState>().is_none()
+            && game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fixture must not be mid-fight, or this proves nothing"
+    );
+    let player = game.player_entity();
+    let starting_level = game.world.get::<Experience>(player).unwrap().level;
+
+    force_one_level(&mut game, player);
+
+    let report = game
+        .take_level_up_report()
+        .expect("a level earned outside a fight must still report");
+    assert_eq!(report.from_level, starting_level);
+}
+
+/// A stat that did not move between the snapshot and now draws no row —
+/// `StatRow`'s own `before == after` filter. Written against a fabricated
+/// `PendingLevelUp` rather than a real level-up, because the player's real
+/// growth (`ATK_PER_LEVEL` at `BASELINE_GROWTH_MULTIPLIER`) always moves
+/// both stats, so no real level-up can exercise the drop.
+#[test]
+fn an_unchanged_stat_produces_no_row() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let real_atk = game.snapshot_player(player).combatant.atk;
+    let mut snapshot = game.snapshot_player(player);
+    snapshot.combatant.atk = real_atk - 3;
+    game.world.resource_mut::<PendingLevelUp>().0 = Some(snapshot);
+
+    let report = game.take_level_up_report().unwrap();
+
+    assert_eq!(
+        report.stats,
+        vec![StatRow::new("ATK", real_atk - 3, real_atk)],
+        "Max HP did not move between the fabricated snapshot and now, and must not draw a row: \
+         {:?}",
+        report.stats
+    );
+}
+
+/// Every figure on the report is a *call* into `battle::hit_chance`,
+/// `battle::expected_damage` or `battle::effective_hp` — this test builds
+/// the same calls independently, from the report's own before/after
+/// `Combatant`s (`Game::snapshot_player`/`Game::typical_foe`), and checks
+/// the report agrees. It does not copy a formula: `hit_chance`,
+/// `expected_damage` and `effective_hp` are the formulas, called here
+/// exactly as `take_level_up_report` calls them.
+#[test]
+fn every_figure_on_the_report_equals_a_direct_battle_call() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before = game.snapshot_player(player);
+
+    force_one_level(&mut game, player);
+
+    let after = game.snapshot_player(player);
+    let (foe, foe_ehp) = game.typical_foe();
+    let report = game.take_level_up_report().unwrap();
+
+    let hit_before = battle::hit_chance(before.combatant.accuracy, foe.evasion);
+    let hit_after = battle::hit_chance(after.combatant.accuracy, foe.evasion);
+    assert_eq!(report.hit_chance, (hit_before, hit_after));
+
+    let per_swing_before = battle::expected_damage(before.combatant, foe);
+    let per_swing_after = battle::expected_damage(after.combatant, foe);
+    assert_eq!(report.per_swing, (per_swing_before, per_swing_after));
+    assert_eq!(
+        report.swings_to_win,
+        (
+            (foe_ehp / per_swing_before).ceil() as u32,
+            (foe_ehp / per_swing_after).ceil() as u32,
+        )
+    );
+
+    let foe_per_swing_before = battle::expected_damage(foe, before.combatant);
+    let foe_per_swing_after = battle::expected_damage(foe, after.combatant);
+    let player_ehp_before = battle::effective_hp(before.max_hp, before.mitigation);
+    let player_ehp_after = battle::effective_hp(after.max_hp, after.mitigation);
+    assert_eq!(
+        report.swings_to_down_you,
+        (
+            (player_ehp_before / foe_per_swing_before).ceil() as u32,
+            (player_ehp_after / foe_per_swing_after).ceil() as u32,
+        )
+    );
+
+    assert_eq!(
+        report.perk_points_gained,
+        after.perk_points - before.perk_points
+    );
+    assert_eq!(report.perk_points_unspent, after.perk_points);
+    assert_eq!(
+        report.decompiler_gained,
+        after.decompiler - before.decompiler
+    );
+}
+
+/// `hit_chance` never returns 0 (`HIT_CHANCE_MIN`), so the only way
+/// `expected_damage` lands at exactly 0 is a combatant with both a
+/// zero-width, zero-power damage band and zero ATK — unreachable from any
+/// shipped species, but reachable from a mod's all-status "move". Rust's
+/// float-to-int cast saturates rather than panicking, so an unguarded
+/// `(ehp / 0.0).ceil() as u32` would silently become `u32::MAX` and the page
+/// would read "4294967295 swings to win" — `swings_to` clamps to a constant
+/// chosen to read as "not happening" instead.
+#[test]
+fn swings_to_clamps_a_zero_expected_damage_rather_than_saturating() {
+    assert_eq!(swings_to(500.0, 0.0), LEVEL_UP_SWINGS_UNREACHABLE);
+    assert_eq!(
+        swings_to(500.0, 100.0),
+        5,
+        "an exact multiple ceils to itself"
+    );
+    assert_eq!(swings_to(501.0, 100.0), 6, "ceil, not floor or round");
 }

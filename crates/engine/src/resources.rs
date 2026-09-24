@@ -3,7 +3,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::battle::{AttackOutcome, BattleAction, EnemyGroup};
+use crate::battle::{AttackOutcome, BattleAction, Combatant, EnemyGroup};
 use crate::components::GlyphColor;
 use crate::items::GearCopy;
 use crate::stack::{Dir, Frame};
@@ -999,6 +999,38 @@ pub struct RunFeats {
     /// `game::contracts::contract_system`.
     pub deeds: Vec<crate::contracts::Deed>,
 }
+
+/// The player's state the instant a level-up began, for the level-up
+/// summary page to read back against their state now — see
+/// `Game::take_level_up_report`.
+///
+/// `combatant` is the resolved `battle::Combatant` `combatant_profile`
+/// built at that moment (the attacker side of the player's own swing, its
+/// `evasion` field serving the defender side too — see
+/// `Game::snapshot_player`), stored rather than re-derived at the old
+/// level: a re-derivation would be a second copy of `combatant_profile`
+/// with a level parameter, and the copy is what drifts.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LevelSnapshot {
+    pub level: u32,
+    pub max_hp: i32,
+    pub mitigation: i32,
+    pub perk_points: u32,
+    pub decompiler: i32,
+    pub combatant: Combatant,
+}
+
+/// The level-up summary page's whole state machine: `None` until a level
+/// lands, holding the "before" snapshot until `Game::take_level_up_report`
+/// drains it.
+///
+/// **Not saved**, `RunFeats`' precedent: quitting between the level-up and
+/// the page loses the page, never the level itself — `Experience` and
+/// `Stats` already carry the real gain to disk. Inserted at both `Game`
+/// constructors anyway, `PowerGrid`'s reason, so a reader that runs before
+/// the first tick finds an empty resource rather than a missing one.
+#[derive(Resource, Default)]
+pub struct PendingLevelUp(pub Option<LevelSnapshot>);
 
 /// The hand-compile the player is currently standing over — the item, how
 /// much of the batch is left, and how far into the unit in flight they are.

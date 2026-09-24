@@ -3302,9 +3302,10 @@ pub struct ExtractionOptionView {
 /// currencies, and the `Routines` one cannot answer with an outcome at all.
 #[derive(Clone, Debug)]
 pub enum ExtractionPreview {
-    /// `extraction_yield`'s own rows, granted verbatim. Empty when the
-    /// grade rounds to no units at all.
-    Items(Vec<(ItemId, u32)>),
+    /// `Game::extraction_items`: every item some roll could grant, named
+    /// without a count because the count is rolled at the act. Empty when
+    /// even the band's top rolls to no units at all.
+    Items(Vec<ItemId>),
     /// A `Routines` tool: how many unfamiliar routines the draw would come
     /// from (`routine_candidates`'s pool, counted rather than named — spec
     /// §4 "Concealment": extraction previews a downed *wild* program's kit,

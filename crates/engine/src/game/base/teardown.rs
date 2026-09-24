@@ -3,8 +3,8 @@
 //! section 10.
 //!
 //! **A `&mut Game` pass rather than a bevy system, and that is forced.**
-//! `Game::extraction_yield` and `Game::extraction_ticks` are `&Game`
-//! methods folding perks, `SpeciesDb`, `ItemDb` and the best standing bench
+//! `Game::extraction_band`, `Game::extraction_yield` and
+//! `Game::extraction_ticks` are `Game` methods folding perks, `SpeciesDb`, `ItemDb` and the best standing bench
 //! tier; a bevy system cannot call them and would have to re-derive the
 //! formula, which is exactly the crack section 3's "one derivation" exists
 //! to prevent. So this joins `run_dig_crew`, `run_build_crew`,
@@ -133,8 +133,15 @@ impl Game {
         // a time; a program pays several at once, and clamping to the room
         // available would destroy the rest. A rig that cannot hold the
         // payout holds the program (decision 9).
-        let granted = self.extraction_yield(&entry.program, &tool);
-        let total: u32 = granted.iter().map(|(_, qty)| *qty).sum();
+        // Gated on the band's *top* count, because the roll happens only at
+        // completion — rolling here would spend a `GameRng` draw every tick
+        // and gate on a payout the program then does not pay.
+        let band = self.extraction_band(&entry.program, &tool);
+        let total: u32 = self
+            .extraction_yield(&entry.program, &tool, band.max)
+            .iter()
+            .map(|(_, qty)| *qty)
+            .sum();
         let room = self
             .world
             .get::<Stock>(rig)
@@ -164,6 +171,7 @@ impl Game {
             hopper.queue.remove(0);
             hopper.progress = 0;
         }
+        let granted = self.roll_extraction_yield(&entry.program, &tool);
         {
             let mut stock = self.world.get_mut::<Stock>(rig).unwrap();
             for (item, qty) in &granted {

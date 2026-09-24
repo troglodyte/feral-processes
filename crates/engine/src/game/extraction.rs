@@ -1,10 +1,12 @@
-//! The extraction door: `Game::extraction_yield` (the one derivation of
-//! what a tool draws out of a downed program) and `Game::extract_program`
+//! The extraction door: `Game::extraction_band` and
+//! `Game::extraction_yield` (the one derivation of what a tool draws out of
+//! a downed program, rolled once by `Game::roll_extraction_yield`) and `Game::extract_program`
 //! (the one act that spends a program on it) — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
 //! sections 3 and 4.
 
 use crate::abilities::AbilityId;
+use crate::battle::DamageRange;
 use crate::components::Hopper;
 use crate::game::routines::RoutineTaken;
 use crate::items::DownedProgram;
@@ -27,13 +29,10 @@ fn tier_scale(tier: u32) -> f32 {
 
 /// Splits `units` whole items across `pool` by weight, deterministically —
 /// largest-remainder apportionment (Hamilton's method) rather than a draw
-/// per unit. `extraction_yield` is `&self` because the screen's preview
-/// calls it once per installed tool with nothing spent, so it
-/// cannot touch the shared `GameRng`; apportioning rather than sampling is
-/// also what makes `extract_program` calling this once and granting its
-/// `Vec` verbatim *sufficient* to prove the previewed figure and the
-/// granted one agree — calling this again on the same inputs always
-/// returns the same rows, with no coincidence required.
+/// per unit. The randomness is all in *how many* units — one draw on
+/// `Game::extraction_band` — and never in the mix, so the rig's room gate
+/// can price the band's top count exactly and `Game::extraction_items` can
+/// name every item a roll could pay by walking the band.
 ///
 /// Every weight is finite and positive by construction —
 /// `ToolDef::invalid_yield_weight` refuses a tool file that isn't, at load
@@ -152,39 +151,53 @@ impl Game {
         ((tool.ticks as f32 / divisor).round() as u64).max(1)
     }
 
-    /// What extracting `program` with `tool` grants — the one derivation,
-    /// called by `extract_program` (below) and by the screen's preview
-    /// (`extraction_options`) alike, so a quoted figure and a granted one
-    /// cannot differ.
+    /// The band a Materials-kind extraction rolls its pool units from —
+    /// `round(TOOL_BASE_UNITS * tier_scale(tool.tier + bench) *
+    /// program.grade())` at the centre, `tuning::EXTRACT_UNIT_SPREAD` of it
+    /// either side. Symmetric, so the mean is the figure extraction paid
+    /// when it was deterministic and a median kill stays drop-neutral on
+    /// average (`the_starter_tool_is_drop_neutral_for_a_median_kill`).
     ///
-    /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier + bench) *
-    /// program.grade())`, split across `tool.yields` by weight
-    /// (`apportion`), plus `Perk::Teardown`'s `salvage_bonus` added to the
-    /// unit count as a flat addend — never a second `GameRng` draw, the
-    /// discipline the retired `roll_work_resource_drop` followed and this
-    /// reasserts (`extraction_yield_spends_no_gamerng_draw_even_with_
-    /// teardown_bought`). `rich_in`'s bonus part is added on top,
-    /// regardless of the tool's own category, from `tuning::
-    /// RICH_IN_UNITS` — merged into an existing row rather than a
-    /// duplicate one if the tool's own pool already names the same item
-    /// (`scrapper` extracted with `salvage_clamp`, both naming
-    /// `core_fragment`, is exactly this case).
+    /// `battle::DamageRange` because its `roll` is the one-draw-whatever-
+    /// the-width rule: a zero-unit program still spends its draw, so the
+    /// seeded stream moves with the number of extractions and never with
+    /// what was extracted.
     ///
-    /// Still no `structure_tier` parameter, now that phase 3 has authored
-    /// the structure that would supply one: the tier is read inside, from
-    /// `Game::extraction_bench_tier`, because a parameter with exactly one
-    /// correct value is how the screen ends up quoting a tier-0 figure
-    /// while the act grants a tier-3 one — the divergence this function
-    /// being the one derivation exists to prevent.
-    pub fn extraction_yield(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)> {
+    /// The bench's tier is read inside rather than passed, because a
+    /// parameter with one correct value is how the rig's gate and the act
+    /// end up pricing different benches.
+    pub fn extraction_band(&self, program: &DownedProgram, tool: &ToolDef) -> DamageRange {
         // The bench's term is `tier - 1`, not `tier` — a bench that has
         // never been upgraded pays nothing, and the upgrade is what sells
         // yield. See `tuning::TOOL_TIER_SCALE_STEP`'s neighbouring doc.
         let bench = self.extraction_bench_tier().saturating_sub(1);
         let scale = tier_scale(tool.tier + bench);
-        let base_units = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as u32;
+        let centre = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as i32;
+        let spread = (centre as f32 * tuning::EXTRACT_UNIT_SPREAD).round() as i32;
+        DamageRange::centred(centre, spread)
+    }
+
+    /// What extracting `program` with `tool` grants once the band has
+    /// rolled `rolled` pool units — pure, so the rig's room gate (at the
+    /// band's `max`) and the act (at the roll) cannot compute two different
+    /// payouts for one count.
+    ///
+    /// `rolled` plus `Perk::Teardown`'s `salvage_bonus` is split across
+    /// `tool.yields` by weight (`apportion`). `rich_in`'s bonus part is
+    /// added on top, regardless of the tool's own category, from
+    /// `tuning::RICH_IN_UNITS` — merged into an existing row rather than a
+    /// duplicate one if the tool's own pool already names the same item
+    /// (`scrapper` extracted with `salvage_clamp`, both naming
+    /// `core_fragment`, is exactly this case). Both bonuses are flat and
+    /// never rolled: a perk bought and a species' specialty are promises.
+    pub fn extraction_yield(
+        &self,
+        program: &DownedProgram,
+        tool: &ToolDef,
+        rolled: i32,
+    ) -> Vec<(ItemId, u32)> {
         let bonus = crate::perks::salvage_bonus(self.player_perks());
-        let units = base_units + bonus;
+        let units = rolled.max(0) as u32 + bonus;
 
         // Filtered *before* apportionment, so the units the research
         // currency would have taken redistribute across what is left rather
@@ -214,6 +227,41 @@ impl Game {
         }
 
         granted
+    }
+
+    /// Every item some roll of the band could grant, in the order the grant
+    /// would list them — what the screen's preview names, deliberately
+    /// without a count. A union over every count in the band rather than
+    /// the pool as authored, because apportionment can starve a
+    /// small-weight item at every count a low-grade program reaches, and a
+    /// preview naming an item no roll can pay promises it.
+    pub fn extraction_items(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<ItemId> {
+        let band = self.extraction_band(program, tool);
+        let mut items: Vec<ItemId> = Vec::new();
+        for rolled in band.min..=band.max {
+            for (item, _) in self.extraction_yield(program, tool, rolled) {
+                if !items.contains(&item) {
+                    items.push(item);
+                }
+            }
+        }
+        items
+    }
+
+    /// Rolls the band once against `GameRng` and grants at that count —
+    /// the one draw `extract_program` and the Teardown Rig each spend per
+    /// program stripped.
+    pub(crate) fn roll_extraction_yield(
+        &mut self,
+        program: &DownedProgram,
+        tool: &ToolDef,
+    ) -> Vec<(ItemId, u32)> {
+        let band = self.extraction_band(program, tool);
+        let rolled = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            band.roll(&mut rng.0)
+        };
+        self.extraction_yield(program, tool, rolled)
     }
 
     /// What an `Image` tool would teach off `program` — the one derivation
@@ -706,7 +754,7 @@ impl Game {
                     ),
                     ToolCategory::Materials | ToolCategory::Parts | ToolCategory::Cores => {
                         crate::views::ExtractionPreview::Items(
-                            self.extraction_yield(&program, &tool),
+                            self.extraction_items(&program, &tool),
                         )
                     }
                     ToolCategory::Image => match self.image_yield(&program) {
@@ -791,7 +839,7 @@ impl Game {
             return self.extract_image_from_program(index, &program, &tool_def);
         }
 
-        let granted = self.extraction_yield(&program, &tool_def);
+        let granted = self.roll_extraction_yield(&program, &tool_def);
 
         self.world
             .get_mut::<DownedPrograms>(player)

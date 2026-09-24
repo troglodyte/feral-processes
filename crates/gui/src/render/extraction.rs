@@ -137,7 +137,7 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
             ExtractionPreview::Items(yields) => {
                 let outcome = yields
                     .iter()
-                    .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
+                    .map(|item| game.item_name(item).to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 (

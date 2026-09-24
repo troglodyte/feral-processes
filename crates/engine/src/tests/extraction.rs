@@ -328,6 +328,27 @@ fn totals(rows: &[(ItemId, u32)]) -> std::collections::BTreeMap<ItemId, u32> {
     out
 }
 
+/// The payout at the band's centre — the figure extraction paid before the
+/// count was rolled, and the one the formula tests (grade, tier, perk,
+/// `rich_in`) compare, since every term but the roll moves it the same way.
+fn centre_yield(game: &Game, prog: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)> {
+    let band = game.extraction_band(prog, tool);
+    game.extraction_yield(prog, tool, (band.min + band.max) / 2)
+}
+
+/// Whether `granted` is exactly what some roll of the band pays — the
+/// safety property the rolled grant keeps in place of equalling a quote.
+fn is_a_roll_of(
+    game: &Game,
+    prog: &DownedProgram,
+    tool: &ToolDef,
+    granted: &std::collections::BTreeMap<ItemId, u32>,
+) -> bool {
+    let band = game.extraction_band(prog, tool);
+    (band.min..=band.max)
+        .any(|rolled| totals(&game.extraction_yield(prog, tool, rolled)) == *granted)
+}
+
 fn starter_tool_def(game: &Game) -> ToolDef {
     game.world
         .resource::<ToolDb>()
@@ -399,7 +420,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
         carried: None,
     };
     let tool = starter_tool_def(&game);
-    let granted = totals(&game.extraction_yield(&prog, &tool));
+    let granted = totals(&centre_yield(&game, &prog, &tool));
 
     assert_eq!(
         granted
@@ -428,7 +449,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
         species: "rich_in_plain_species".to_string(),
         ..prog
     };
-    let plain_granted = totals(&game.extraction_yield(&plain_prog, &tool));
+    let plain_granted = totals(&centre_yield(&game, &plain_prog, &tool));
     assert!(
         !plain_granted.contains_key(&ItemId::from(crate::items::ids::CHARGE_COIL)),
         "with rich_in unset, falling back to work_resource (core_fragment) must not somehow \
@@ -438,7 +459,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
 }
 
 #[test]
-fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
+fn extraction_removes_the_program_and_grants_some_roll_of_the_band() {
     let mut game = Game::new(4476, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let prog = program(70, Rarity::Gold, 20);
@@ -446,9 +467,8 @@ fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
     let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
     let tool_def = starter_tool_def(&game);
 
-    let preview = game.extraction_yield(&prog, &tool_def);
     assert!(
-        !preview.is_empty(),
+        !centre_yield(&game, &prog, &tool_def).is_empty(),
         "test premise: a Gold, level-20 program run through the starter tool must yield \
          something, or this test proves nothing"
     );
@@ -481,14 +501,18 @@ fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
             delta.insert(item, now - prior);
         }
     }
-    let expected: std::collections::BTreeMap<ItemId, i64> = totals(&preview)
+    assert!(
+        delta.values().all(|qty| *qty > 0),
+        "an extraction must not remove anything as a side effect: {delta:?}"
+    );
+    let granted: std::collections::BTreeMap<ItemId, u32> = delta
         .into_iter()
-        .map(|(item, qty)| (item, qty as i64))
+        .map(|(item, qty)| (item, qty as u32))
         .collect();
-    assert_eq!(
-        delta, expected,
-        "the inventory delta a real extraction grants must equal the previewed yield exactly, \
-         with no unaccounted decrease anywhere"
+    assert!(
+        is_a_roll_of(&game, &prog, &tool_def, &granted),
+        "the inventory delta a real extraction grants must be exactly what some roll of the \
+         band pays, got {granted:?}"
     );
 }
 
@@ -504,8 +528,8 @@ fn a_higher_grade_program_yields_more_than_a_lower_one_all_else_equal() {
         "test premise: the two fixtures must actually differ in grade"
     );
 
-    let low: u32 = totals(&game.extraction_yield(&worst, &tool)).values().sum();
-    let high: u32 = totals(&game.extraction_yield(&best, &tool)).values().sum();
+    let low: u32 = totals(&centre_yield(&game, &worst, &tool)).values().sum();
+    let high: u32 = totals(&centre_yield(&game, &best, &tool)).values().sum();
     assert!(
         high > low,
         "a higher-grade program must yield more total units through the same tool: {low} vs \
@@ -529,10 +553,10 @@ fn a_higher_tier_tool_yields_more_than_a_lower_one_on_the_same_program() {
         "test premise: core_tap must actually be a higher tier than the starter tool"
     );
 
-    let low: u32 = totals(&game.extraction_yield(&prog, &low_tier))
+    let low: u32 = totals(&centre_yield(&game, &prog, &low_tier))
         .values()
         .sum();
-    let high: u32 = totals(&game.extraction_yield(&prog, &high_tier))
+    let high: u32 = totals(&centre_yield(&game, &prog, &high_tier))
         .values()
         .sum();
     assert!(
@@ -548,13 +572,13 @@ fn teardown_perk_adds_its_flat_bonus_to_the_unit_count() {
     let tool = starter_tool_def(&game);
     let prog = program(70, Rarity::Gold, 20);
 
-    let without: u32 = totals(&game.extraction_yield(&prog, &tool)).values().sum();
+    let without: u32 = totals(&centre_yield(&game, &prog, &tool)).values().sum();
     game.world
         .get_mut::<Perks>(player)
         .unwrap()
         .unlocked
         .push(Perk::Teardown);
-    let with: u32 = totals(&game.extraction_yield(&prog, &tool)).values().sum();
+    let with: u32 = totals(&centre_yield(&game, &prog, &tool)).values().sum();
 
     assert_eq!(
         with,
@@ -564,15 +588,11 @@ fn teardown_perk_adds_its_flat_bonus_to_the_unit_count() {
 }
 
 #[test]
-fn extraction_yield_spends_no_gamerng_draw_even_with_teardown_bought() {
-    // `Perk::Teardown` used to sit on top of `roll_work_resource_drop`'s own
-    // draw as a flat addend, never a second roll — the property
-    // `teardown_adds_flat_salvage_to_a_kill_without_rerolling` held before
-    // Task 4 deleted that function. `extraction_yield` is where the perk's
-    // term lives now, so this reasserts the same property there: calling it
-    // — with the perk bought — must not move the shared `GameRng` stream at
-    // all, `&self`'s own reason (the screen's preview calls this once per
-    // installed tool with nothing spent).
+fn quoting_an_extraction_spends_no_gamerng_draw_even_with_teardown_bought() {
+    // The screen's preview calls these once per installed tool with nothing
+    // spent, so looking at the menu must not move the stream — only the act
+    // rolls. `Perk::Teardown`'s term rides the pure half as a flat addend,
+    // never a second draw.
     assert!(
         rng_unadvanced_by(4480, |game| {
             let player = game.player_entity();
@@ -583,9 +603,34 @@ fn extraction_yield_spends_no_gamerng_draw_even_with_teardown_bought() {
                 .push(Perk::Teardown);
             let tool = starter_tool_def(game);
             let prog = program(70, Rarity::Gold, 20);
-            let _ = game.extraction_yield(&prog, &tool);
+            let band = game.extraction_band(&prog, &tool);
+            let _ = game.extraction_yield(&prog, &tool, band.max);
+            let _ = game.extraction_items(&prog, &tool);
+            game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog];
+            let _ = game.extraction_options(0);
         }),
-        "extraction_yield must not draw from the shared GameRng stream, salvage_bonus included"
+        "quoting an extraction must not draw from the shared GameRng stream"
+    );
+}
+
+#[test]
+fn rolling_an_extraction_draws_even_when_the_band_is_a_single_count() {
+    // `DamageRange::roll`'s rule: the draw is a property of the extraction,
+    // not of what was extracted, so a zero-width band still spends it and a
+    // seeded run's stream does not shift with the grade of what it strips.
+    let game = Game::new(4481, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tool = starter_tool_def(&game);
+    let worthless = program(0, Rarity::Ordinary, 0);
+    let band = game.extraction_band(&worthless, &tool);
+    assert_eq!(
+        band.min, band.max,
+        "test premise: a zero-condition program's band is one count, got {band:?}"
+    );
+    assert!(
+        !rng_unadvanced_by(4481, |game| {
+            let _ = game.roll_extraction_yield(&worthless, &tool);
+        }),
+        "a degenerate band must still spend its one draw"
     );
 }
 
@@ -693,9 +738,19 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
     let tool = starter_tool_def(&game);
     let median = program(tuning::CONDITION_BASE, Rarity::Ordinary, 1);
 
-    let granted = game.extraction_yield(&median, &tool);
-    let rows = totals(&granted);
-    let total: u32 = rows.values().sum();
+    // The count is rolled, so the gate is on the mean over the band — every
+    // count in it equally likely, `DamageRange::roll`'s uniform draw.
+    let band = game.extraction_band(&median, &tool);
+    let counts: Vec<u32> = (band.min..=band.max)
+        .map(|rolled| {
+            game.extraction_yield(&median, &tool, rolled)
+                .iter()
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
+        .collect();
+    let mean = counts.iter().sum::<u32>() as f32 / counts.len() as f32;
+    let granted = centre_yield(&game, &median, &tool);
 
     // The retired roll's own mean, from its own constant — never restated
     // as a literal, so a future change to `WORK_RESOURCE_DROP`'s range (it
@@ -713,15 +768,16 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
     // unit", so it still satisfies the brief's own bound; it just can no
     // longer be satisfied by accident.
     assert_eq!(
-        total,
-        3,
+        mean,
+        3.0,
         "a median kill (ordinary, CONDITION_BASE condition, level 1) through the starter tool \
-         must pay exactly 3 units — within one unit of the retired WORK_RESOURCE_DROP roll's \
-         mean ({retired_mean}) — got {total} (grade {}, rows {granted:?})",
+         must pay exactly 3 units on average — within one unit of the retired \
+         WORK_RESOURCE_DROP roll's mean ({retired_mean}) — got {mean} over {counts:?} (grade {})",
         median.grade()
     );
 
-    // Pin the complete row map, not just the total and a `>=` on one row:
+    // Pin the complete row map at the band's centre, not just the total and
+    // a `>=` on one row:
     // `rows.get(&rich_item).is_some_and(|&qty| qty >= RICH_IN_UNITS)` (the
     // shape this test shipped with) passes with zero contribution from
     // `rich_in` at all, because `scrapper`'s `rich_in` fallback
@@ -758,7 +814,8 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
         (ItemId::from(crate::items::ids::BYTECODE_BLOCK), 1u32),
     ]);
     assert_eq!(
-        rows, expected_rows,
+        totals(&granted),
+        expected_rows,
         "the median kill's granted rows must match the derived apportionment plus the rich_in \
          addend exactly, not just their sum: got {granted:?}"
     );
@@ -918,8 +975,8 @@ fn extraction_options_lists_every_installed_tool_with_its_own_preview_yield() {
         match &option.preview {
             views::ExtractionPreview::Items(rows) => assert_eq!(
                 rows,
-                &game.extraction_yield(&prog, tool),
-                "the preview must be extraction_yield's own answer, not a second copy of it"
+                &game.extraction_items(&prog, tool),
+                "the preview must be extraction_items' own answer, not a second copy of it"
             ),
             other => panic!("a material tool must preview items, got {other:?}"),
         }
@@ -936,42 +993,63 @@ fn extraction_options_is_empty_for_an_index_the_store_does_not_hold() {
 }
 
 #[test]
-fn extraction_options_preview_matches_what_extract_program_actually_grants() {
-    // The screen's whole safety property: a quoted figure and a granted one
-    // cannot differ. `extraction_yield`'s own doc argues this follows from
-    // determinism alone, but this test is what actually drives the preview
-    // path (`extraction_options`) rather than the direct call every other
-    // test in this file uses.
+fn every_extraction_grants_a_roll_the_preview_named_and_the_count_varies() {
+    // The screen's safety property now the count is rolled: every item a
+    // real extraction pays is one the preview named, the payout is exactly
+    // some roll of the band, and — the feature — the rolls are not all the
+    // same. Driven through `extraction_options` and `extract_program`, the
+    // two doors a player reaches, over twenty seeded strips.
     let mut game = Game::new(4494, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let prog = program(70, Rarity::Gold, 20);
-    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
     let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    let tool_def = starter_tool_def(&game);
+    let band = game.extraction_band(&prog, &tool_def);
+    assert!(
+        band.max > band.min,
+        "test premise: a Gold, level-20 program must roll across a real band, got {band:?}"
+    );
 
-    let options = game.extraction_options(0);
-    let option = options
-        .iter()
-        .find(|o| o.tool == tool_id)
-        .expect("the starter tool must be among the offered options");
-    let views::ExtractionPreview::Items(rows) = &option.preview else {
-        panic!("the starter tool must preview items");
-    };
-    let preview = totals(rows);
+    let mut paid_totals = std::collections::BTreeSet::new();
+    for _ in 0..20 {
+        game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+        let option = game
+            .extraction_options(0)
+            .into_iter()
+            .find(|o| o.tool == tool_id)
+            .expect("the starter tool must be among the offered options");
+        let views::ExtractionPreview::Items(named) = option.preview else {
+            panic!("the starter tool must preview items");
+        };
 
-    let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
-    game.extract_program(0, &tool_id)
-        .expect("nothing here refuses the extraction");
-    let after = totals(&game.world.get::<Inventory>(player).unwrap().items);
+        let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
+        game.extract_program(0, &tool_id)
+            .expect("nothing here refuses the extraction");
+        let after = totals(&game.world.get::<Inventory>(player).unwrap().items);
+        let granted: std::collections::BTreeMap<ItemId, u32> = after
+            .iter()
+            .filter_map(|(item, now)| {
+                let prior = before.get(item).copied().unwrap_or(0);
+                (*now > prior).then(|| (item.clone(), now - prior))
+            })
+            .collect();
 
-    for (item, qty) in &preview {
-        let prior = before.get(item).copied().unwrap_or(0);
-        let now = after.get(item).copied().unwrap_or(0);
-        assert_eq!(
-            now - prior,
-            *qty,
-            "the previewed yield for {item:?} must equal what was actually granted"
+        for item in granted.keys() {
+            assert!(
+                named.contains(item),
+                "{item:?} was granted but the preview never named it: {named:?}"
+            );
+        }
+        assert!(
+            is_a_roll_of(&game, &prog, &tool_def, &granted),
+            "the grant must be exactly some roll of the band, got {granted:?}"
         );
+        paid_totals.insert(granted.values().sum::<u32>());
     }
+    assert!(
+        paid_totals.len() > 1,
+        "twenty strips of one program must not all pay the same count: {paid_totals:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1912,10 +1990,10 @@ fn give_downed_program(game: &mut Game, program: DownedProgram) {
 /// What the player holds of each item a quoted yield names, before the act —
 /// so a granted row can be compared against the quote item by item rather
 /// than as a total that a compensating error could survive.
-fn held_counts(game: &Game, quoted: &[(ItemId, u32)]) -> std::collections::BTreeMap<ItemId, u32> {
-    quoted
+fn held_counts(game: &Game, items: &[ItemId]) -> std::collections::BTreeMap<ItemId, u32> {
+    items
         .iter()
-        .map(|(item, _)| (item.clone(), held(game, item)))
+        .map(|item| (item.clone(), held(game, item)))
         .collect()
 }
 
@@ -1947,13 +2025,13 @@ fn a_fresh_bench_does_not_change_a_yield() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 5);
     let tool = starter_tool(&game);
-    let before = game.extraction_yield(&program, &tool);
+    let before = centre_yield(&game, &program, &tool);
 
     build_program_bench(&mut game, None);
 
     assert_eq!(game.extraction_bench_tier(), 1, "the bench is standing");
     assert_eq!(
-        game.extraction_yield(&program, &tool),
+        centre_yield(&game, &program, &tool),
         before,
         "tier 1 is the identity — only upgrades sell yield"
     );
@@ -1964,16 +2042,14 @@ fn an_upgraded_bench_raises_a_yield_by_the_shared_tier_curve() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 5);
     let tool = starter_tool(&game);
-    let before: u32 = game
-        .extraction_yield(&program, &tool)
+    let before: u32 = centre_yield(&game, &program, &tool)
         .iter()
         .map(|(_, qty)| qty)
         .sum();
 
     build_program_bench(&mut game, Some(5));
 
-    let after: u32 = game
-        .extraction_yield(&program, &tool)
+    let after: u32 = centre_yield(&game, &program, &tool)
         .iter()
         .map(|(_, qty)| qty)
         .sum();
@@ -1999,21 +2075,33 @@ fn the_previewed_yield_tracks_the_bench_tier() {
         .next()
         .expect("the starter tool");
     let tool_id = option.tool;
-    let views::ExtractionPreview::Items(quoted) = option.preview else {
+    let views::ExtractionPreview::Items(named) = option.preview else {
         panic!("the starter tool must preview items");
     };
-    let held_before = held_counts(&game, &quoted);
+    let program = test_program("scrapper", 5);
+    let tool = starter_tool(&game);
+    assert_eq!(
+        named,
+        game.extraction_items(&program, &tool),
+        "the preview must name what the tier-4 band can pay"
+    );
+    let held_before = held_counts(&game, &named);
 
     game.extract_program(0, &tool_id)
         .expect("the extraction runs");
 
-    for (item, qty) in &quoted {
-        assert_eq!(
-            held(&game, item),
-            held_before.get(item).copied().unwrap_or(0) + qty,
-            "granted {item} does not match the quoted {qty}"
-        );
-    }
+    let granted: std::collections::BTreeMap<ItemId, u32> = named
+        .iter()
+        .map(|item| {
+            let prior = held_before.get(item).copied().unwrap_or(0);
+            (item.clone(), held(&game, item) - prior)
+        })
+        .filter(|(_, qty)| *qty > 0)
+        .collect();
+    assert!(
+        is_a_roll_of(&game, &program, &tool, &granted),
+        "the grant must be a roll of the tier-4 band, not an untiered one: {granted:?}"
+    );
 }
 
 /// The screen names the bench it priced. `extraction_bench_tier` takes the
@@ -3457,7 +3545,7 @@ fn a_tool_pool_of_pure_research_currency_yields_nothing() {
     let mut tool = starter_tool(&game);
     tool.yields = vec![(rd.clone(), 1.0)];
 
-    let granted = game.extraction_yield(&program(80, Rarity::Gold, 20), &tool);
+    let granted = centre_yield(&game, &program(80, Rarity::Gold, 20), &tool);
     assert!(
         !granted.iter().any(|(item, _)| *item == rd),
         "research currency reached a yield: {granted:?}"
@@ -3487,8 +3575,8 @@ fn research_currency_in_a_pool_redistributes_rather_than_shrinking_the_yield() {
     let mut tainted = clean.clone();
     tainted.yields.push((rd.clone(), 1.0));
 
-    let clean_total: u32 = totals(&game.extraction_yield(&prog, &clean)).values().sum();
-    let tainted_rows = game.extraction_yield(&prog, &tainted);
+    let clean_total: u32 = totals(&centre_yield(&game, &prog, &clean)).values().sum();
+    let tainted_rows = centre_yield(&game, &prog, &tainted);
     let tainted_total: u32 = totals(&tainted_rows).values().sum();
 
     assert!(
@@ -3519,7 +3607,7 @@ fn a_species_rich_in_research_currency_pays_no_bonus() {
     }
 
     let tool = starter_tool(&game);
-    let granted = game.extraction_yield(&program(80, Rarity::Gold, 20), &tool);
+    let granted = centre_yield(&game, &program(80, Rarity::Gold, 20), &tool);
     assert!(
         !granted.iter().any(|(item, _)| *item == rd),
         "a rich_in of research currency paid a bonus: {granted:?}"
@@ -3711,7 +3799,7 @@ fn a_staffed_rig_loaded_with_one_program() -> (Game, Entity) {
 /// the rig as a third caller. It fails loudly the day anyone re-derives the
 /// yield formula inside the step.
 #[test]
-fn what_a_rig_pays_equals_what_extraction_yield_quotes_for_the_same_pair() {
+fn what_a_rig_pays_is_a_roll_of_the_same_band_the_player_rolls() {
     let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
     let entry = game.world.get::<Hopper>(rig).unwrap().queue[0].clone();
     let tool = game
@@ -3719,22 +3807,29 @@ fn what_a_rig_pays_equals_what_extraction_yield_quotes_for_the_same_pair() {
         .into_iter()
         .find(|d| d.id == entry.tool)
         .unwrap();
-    let quoted = game.extraction_yield(&entry.program, &tool);
     let ticks = game.extraction_ticks(&tool);
-    assert!(!quoted.is_empty(), "the fixture needs a payout to compare");
+    assert!(
+        !centre_yield(&game, &entry.program, &tool).is_empty(),
+        "the fixture needs a payout to compare"
+    );
 
     for _ in 0..ticks {
         game.tick();
     }
 
-    let output = &game.world.get::<Stock>(rig).unwrap().output;
-    for (item, qty) in &quoted {
-        assert_eq!(
-            output.get(item).copied().unwrap_or(0),
-            *qty,
-            "the rig paid a different figure than extraction_yield quoted for {item:?}"
-        );
-    }
+    let output: std::collections::BTreeMap<ItemId, u32> = game
+        .world
+        .get::<Stock>(rig)
+        .unwrap()
+        .output
+        .iter()
+        .filter(|(_, qty)| **qty > 0)
+        .map(|(item, qty)| (item.clone(), *qty))
+        .collect();
+    assert!(
+        is_a_roll_of(&game, &entry.program, &tool, &output),
+        "the rig paid something no roll of the band pays: {output:?}"
+    );
     assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
 }
 
@@ -3779,8 +3874,9 @@ fn a_rig_that_cannot_hold_the_whole_yield_holds_the_program() {
         .into_iter()
         .find(|d| d.id == entry.tool)
         .unwrap();
+    let band = game.extraction_band(&entry.program, &tool);
     let total: u32 = game
-        .extraction_yield(&entry.program, &tool)
+        .extraction_yield(&entry.program, &tool, band.max)
         .iter()
         .map(|(_, q)| *q)
         .sum();

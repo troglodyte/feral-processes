@@ -1247,6 +1247,18 @@
   `clear_bars()`'s own reason. See
   `seam:tacticalfxqueue-is-boltcues-pattern-for-a-bodys-own-hit-or`.
 
+- **A battle map's round wrap is marked in two places and queued in
+  neither.** The engine half is one `MessageKind::Round` divider at the top
+  of `Game::tactical_round_upkeep`, which both wraps reach (`hand_on_turn`
+  and a siege body leaving the board in `siege/raiders.rs`), so a third
+  wrap path marks itself by calling it. The gui half is derived, not cued:
+  `Fx::observe_round` diffs `Game::tactical_round` once a frame, and a wrap
+  is a round *rising* while one fight stays open — `None` between fights is
+  what stops a new fight's round 1 from reading as a wrap. **The trap is
+  `begin_frame`'s `in_battle` clear**: that flag is `Mode::is_battle`, which
+  a battle map deliberately is not, so banner state kept beside
+  `cell_marks` would be wiped in the frame that raised it. The sound is
+  played off `observe_round`'s answer whether or not effects are on.
 - **A battle map's blows are heard off `SwingCueQueue`, never off the
   reveal.** A tactical fight never calls `MessageLog::open_round`, so
   `Game::battle_log` is the whole fight, and `App::advance_reveal` — which

@@ -459,15 +459,6 @@ impl Game {
         let Some(mut durability) = self.world.get_mut::<Durability>(site) else {
             return;
         };
-        // A site standing on solid rock with nothing left to cut is a cell
-        // entropy took back: it was opened, never floored, and the wall
-        // re-knit under a mark that outlived it. The wall is whole again, so
-        // it costs the swings a whole wall costs — without this the next
-        // swing lands on a spent `Durability` and opens it for free, which
-        // is the promise `BASE_ENTROPY_REFILL_TICKS` makes read backwards.
-        if durability.hp == 0 {
-            durability.hp = durability.max_hp;
-        }
         durability.hp = durability.hp.saturating_sub(dmg);
         let still_standing = durability.hp > 0;
         // Above the break/no-break split deliberately: the swing that opens
@@ -482,8 +473,8 @@ impl Game {
         }
 
         // Read before the cell is opened rather than after: the swing lands
-        // on this tick, and `base_entropy_system` measures its window from
-        // it.
+        // on this tick, and `mined_at` records it — save format only now,
+        // since nothing reads the tick back.
         let tick = self.world.resource::<GameClock>().tick;
         self.world.resource_mut::<BaseGrid>().open(x, y, tick);
         let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
@@ -667,13 +658,13 @@ impl Game {
                 // An unmarked site earns its keep by holding chip progress,
                 // and *both* ends of the meter hold none. A full meter is a
                 // wall nobody has touched; a spent one on a cell that is
-                // still solid is what entropy leaves behind when it reverts
-                // a marked `Open` cell, and `strike_rock` refills it on the
-                // next swing anyway. Keeping either leaves an entity drawn
-                // nowhere, wanted by nobody, and written to every save from
-                // then on. A finish or strip mark never holds chip progress
-                // — there is no rock left to cut — so clearing one always
-                // despawns it.
+                // still solid is stale — nothing in play produces that state
+                // any more, since open ground never reverts, but a leftover
+                // from an older save should not linger forever either.
+                // Keeping either leaves an entity drawn nowhere, wanted by
+                // nobody, and written to every save from then on. A finish
+                // or strip mark never holds chip progress — there is no rock
+                // left to cut — so clearing one always despawns it.
                 let holds_progress = self
                     .world
                     .get::<Durability>(site)

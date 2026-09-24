@@ -1844,8 +1844,8 @@ fn identical_swings_at_rock_do_identical_damage() {
     );
 }
 
-/// A3's entropy window is measured against this and nothing else, so the
-/// tick a cell was opened on has to be the tick the swing landed on.
+/// `mined_at` is save format only now, but it still has to name the tick
+/// the swing actually landed on, not some other tick nearby.
 #[test]
 fn an_opened_cell_records_the_tick_it_was_opened() {
     let mut game = game_at_the_frontier_cutting(3213);
@@ -2105,7 +2105,7 @@ fn the_laid_tile_is_named_a_vectorstasis_tile() {
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: entropy on the frontier
+// Slice 2: the frontier stays cut
 // ---------------------------------------------------------------------------
 
 /// A base with `cut` carved out on the tick the fixture returns, and the
@@ -2127,105 +2127,20 @@ fn wait_out(game: &mut Game, ticks: u64) {
     game.wait();
 }
 
-/// The wall re-knits whole: the cell leaves `BaseGrid` entirely rather than
-/// coming back as chipped rock, which is what makes an abandoned frontier
-/// cost the swings it cost the first time.
+/// Open ground stays open forever: only a laid `BaseCell::Floor` may ever
+/// take a structure (`Game::place_structure`'s own gate), so leaving a cut
+/// cell bare costs nothing, however long the base is left alone.
 #[test]
-fn an_unfloored_cell_reverts_after_the_entropy_window() {
+fn an_unfloored_cell_stays_open_forever() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3230, cut);
 
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS + 1);
-
-    assert_eq!(
-        cell(&game, cut),
-        None,
-        "an abandoned cut cell must be absent from BaseGrid, not chipped rock"
-    );
-}
-
-/// What keeps "the party is standing inside rock" unreachable *by
-/// construction* rather than merely unlikely — the same argument
-/// `die_in_the_rock` makes for the Stack, one locale over.
-#[test]
-fn a_cell_the_party_is_standing_on_never_reverts() {
-    let cut = WALL;
-    let mut game = game_with_a_cut_cell(3231, cut);
-    stand_in_base_at(&mut game, cut.0, cut.1);
-
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+    wait_out(&mut game, 1000);
 
     assert!(
         matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
-        "the cell under the party's feet closed over them"
+        "an unfloored cell must stay open forever"
     );
-}
-
-#[test]
-fn a_cell_a_posted_program_is_standing_on_never_reverts() {
-    let cut = WALL;
-    let mut game = game_with_a_cut_cell(3232, cut);
-    // Hand-spawned rather than posted through `work_structure`: what the
-    // system reads is a `Task` and a base-space `Position`, and a fixture
-    // that walked a real program out to the frontier would be asserting on
-    // the scheduler instead.
-    let node = spawn_mining_node(&mut game, 0, 1);
-    game.world.spawn((
-        Task {
-            kind: TaskKind::GatherResource,
-            target: node,
-            progress: 0,
-            required: 10,
-        },
-        Position { x: cut.0, y: cut.1 },
-    ));
-
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
-
-    assert!(
-        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
-        "the cell under a posted program closed over it"
-    );
-}
-
-/// Entropy takes the frontier you dug and never floored, and nothing else:
-/// a laid tile is permanent, or a base could not be left alone.
-#[test]
-fn a_floored_cell_never_reverts() {
-    let cut = WALL;
-    let mut game = game_with_a_cut_cell(3233, cut);
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .lay_floor(cut.0, cut.1);
-
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 5);
-
-    assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_floor(cut.0, cut.1),
-        "laid floor is permanent — entropy takes the frontier, not the base"
-    );
-}
-
-/// Pins the comparison's direction. The window is how long a cut cell
-/// survives, so the tick it reaches it is the last one it is still open on.
-#[test]
-fn a_cell_reverts_only_after_the_window_not_on_the_tick_it_hits_it() {
-    let cut = WALL;
-    let mut game = game_with_a_cut_cell(3234, cut);
-
-    // The clock advances at the *end* of a tick, so the turn this spends
-    // runs the schedule with the cell exactly `BASE_ENTROPY_REFILL_TICKS`
-    // old — the last tick it is still open on.
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS);
-    assert!(
-        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
-        "the cell must survive the tick the window is reached on"
-    );
-
-    game.wait();
-    assert_eq!(cell(&game, cut), None, "and go on the next one");
 }
 
 // ---------------------------------------------------------------------------
@@ -2815,18 +2730,12 @@ const CUT_OFF: &str = "marked cell at";
 /// cell open and has no Blank Substrate anywhere to floor it with.
 const NO_SUBSTRATE: &str = "nothing to floor";
 
-/// The same shortage told one step earlier: a marked cell the crew will not
-/// cut, because nothing is spare to floor the cut with and bare ground is
-/// reclaimed. A needle of its own, `CUT_OFF`'s rule — two stalls sharing one
-/// would let either satisfy the other's test.
-const HELD_OFF: &str = "holds off cutting";
-
 /// Enough Blank Substrate in the party's pack to floor `tiles` cells.
 ///
-/// **Every test below that expects a cut needs this**: a cut claims the tile
-/// that will hold it, so a crew with nothing to floor with does not swing at
-/// all. The tests about the shortage itself deliberately leave the base
-/// empty.
+/// **Every test below that expects a tile laid needs this**: cutting is
+/// free, but flooring the cut claims the tile it will hold, so a crew with
+/// nothing to floor with cuts the wall and leaves it bare. The tests about
+/// the shortage itself deliberately leave the base empty.
 fn substrate_for(game: &mut Game, tiles: u32) {
     give(game, &ItemId::from(ids::BLANK_SUBSTRATE), tiles);
 }
@@ -3055,9 +2964,9 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
 
 /// **The deadlock this closes**: a body pinned to a job it cannot pay for is
 /// a body that cannot go make the thing it is short of. A dry base with a
-/// plan on the wall and a Mining Node on order has to send its one body to
-/// the node — which is the only way the fragments that become substrate ever
-/// arrive — rather than stand it at a cut it may not start.
+/// tile waiting to be laid and a Mining Node on order has to send its one
+/// body to the node — which is the only way the fragments that become
+/// substrate ever arrive — rather than stand it at a tile it may not lay.
 /// `a_request_the_base_cannot_supply_does_not_deadlock_production`'s shape,
 /// one subsystem over.
 #[test]
@@ -3068,6 +2977,10 @@ fn a_dry_dig_job_frees_the_body_for_production() {
         0,
         "the fixture must start dry for this test to mean anything"
     );
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(WALL.0, WALL.1, tick);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     game.set_standing_job(mine, true, false).unwrap();
     mark(&mut game, WALL);
@@ -3077,8 +2990,8 @@ fn a_dry_dig_job_frees_the_body_for_production() {
     assert_eq!(
         posted_at(&game, staff[0]),
         Some(mine),
-        "a body held at a cut the base cannot floor is a base that never \
-         makes the substrate that would let it cut"
+        "a body held at a tile the base cannot floor is a base that never \
+         makes the substrate that would let it floor"
     );
     assert!(
         is_marked(&mut game, WALL),
@@ -3086,12 +2999,11 @@ fn a_dry_dig_job_frees_the_body_for_production() {
     );
 }
 
-/// **The rule**: a cut claims the tile that will hold it. Cutting spends no
-/// substrate itself, so a crew that reads its own job alone always says yes
-/// — and leaves bare ground that `BASE_ENTROPY_REFILL_TICKS` takes back,
-/// with every swing that opened it owed again.
+/// **The rule**: cutting is free. A crew with no Blank Substrate anywhere
+/// still cuts every marked solid cell — only the tile it turns into can go
+/// dry.
 #[test]
-fn a_marked_solid_cell_waits_for_the_substrate_that_will_floor_it() {
+fn a_marked_solid_cell_is_cut_with_no_substrate_anywhere() {
     let (mut game, staff) = base_with_a_crew(3285, 1);
     assert_eq!(
         count_item(&game, ids::BLANK_SUBSTRATE),
@@ -3099,41 +3011,31 @@ fn a_marked_solid_cell_waits_for_the_substrate_that_will_floor_it() {
         "the fixture must start with no substrate anywhere for the rule to bite"
     );
     mark(&mut game, WALL);
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("marking a solid cell spawns its dig site");
 
-    let wait = ticks_to_cut(&game, staff[0]);
-    pass(&mut game, wait * 2);
+    pass(&mut game, 2);
 
-    assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
-        "a marked cell must stay whole while there is nothing to floor the cut with"
-    );
-    assert!(
-        is_marked(&mut game, WALL),
-        "the plan outlives the shortage — the cut starts when stock does"
-    );
     assert_eq!(
-        lines_saying(&game, HELD_OFF),
-        1,
-        "the held-off cut is news once, not once a cycle for the rest of the run"
+        posted_at(&game, staff[0]),
+        Some(site),
+        "cutting is free and must be worked whatever the base's stock"
     );
 }
 
-/// The hold is a wait, not a refusal: the same mark is cut and floored once
-/// the base can pay for the tile, with nothing for the player to do but
-/// stock the shelf.
+/// The hold is on the tile, not the cut: cutting is free, but the same mark
+/// is floored once the base can pay for the tile, with nothing for the
+/// player to do but stock the shelf.
 #[test]
-fn a_held_off_cut_starts_when_the_substrate_arrives() {
+fn a_held_off_tile_lays_when_the_substrate_arrives() {
     let (mut game, staff) = base_with_a_crew(3286, 1);
     mark(&mut game, WALL);
     let dry_wait = ticks_to_cut(&game, staff[0]);
     pass(&mut game, dry_wait);
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
-        "precondition: the dry base must not have cut anything"
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "precondition: cutting is free and must proceed with no substrate anywhere"
     );
 
     substrate_for(&mut game, 1);
@@ -3143,15 +3045,15 @@ fn a_held_off_cut_starts_when_the_substrate_arrives() {
     assert_eq!(
         cell(&game, WALL),
         Some(base_grid::BaseCell::Floor),
-        "one Blank Substrate in store must buy the cut and the tile that holds it"
+        "one Blank Substrate in store must buy the tile once it arrives"
     );
 }
 
-/// **The budget is shared, and one unit pays for one cell.** Read per site
-/// the substrate is enough for every cut in the base at once — which is how
-/// a crew opens the whole plan and floors one cell of it.
+/// **The budget is shared, and one unit pays for one tile.** Cutting is
+/// free, so both marked cells open regardless of stock — the shared
+/// substrate then decides which *one* gets floored.
 #[test]
-fn one_substrate_does_not_pay_for_two_cuts() {
+fn one_substrate_does_not_floor_two_cuts() {
     let (mut game, staff) = base_with_a_crew(3288, 2);
     let second = (WALL.0, WALL.1 + 1);
     assert!(
@@ -3165,25 +3067,34 @@ fn one_substrate_does_not_pay_for_two_cuts() {
     mark(&mut game, second);
 
     let swings = swings_for(&game, staff[0], WALL).max(swings_for(&game, staff[1], second));
-    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE;
+    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize
+        + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize
+        + WALK_ALLOWANCE;
     pass(&mut game, wait);
 
-    let opened = [WALL, second]
+    for wall in [WALL, second] {
+        assert!(
+            cell(&game, wall).is_some(),
+            "cutting is free — both marked cells must open regardless of stock"
+        );
+    }
+    let floored = [WALL, second]
         .into_iter()
-        .filter(|c| cell(&game, *c).is_some())
+        .filter(|c| cell(&game, *c) == Some(base_grid::BaseCell::Floor))
         .count();
     assert_eq!(
-        opened, 1,
-        "two bodies and one Blank Substrate must open one cell, not both"
+        floored, 1,
+        "two open cells and one Blank Substrate must floor one, not both"
     );
 }
 
-/// **A cell already open outranks one still solid**: its entropy window is
-/// already running, so the one unit in store holds what the base has cut
-/// before it buys another cut.
+/// **A cell already open outranks one still solid**: laying its tile spends
+/// the shared substrate and cutting the other cell does not, so with one
+/// body the tile job runs first — and finishes fast enough that the cut
+/// behind it has not even started.
 #[test]
 fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
-    let (mut game, staff) = base_with_a_crew(3289, 1);
+    let (mut game, _staff) = base_with_a_crew(3289, 1);
     let solid = (WALL.0, WALL.1 + 1);
     let tick = game.current_tick();
     game.world
@@ -3193,8 +3104,10 @@ fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
     mark(&mut game, WALL);
     mark(&mut game, solid);
 
-    let swings = swings_for(&game, staff[0], solid);
-    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE;
+    // Exactly one floor cycle plus the walk out: enough to land WALL's tile
+    // job and nothing more, so a crew that touched `solid` at all in this
+    // window would have to be cutting it rather than finishing WALL first.
+    let wait = crate::tuning::BASE_DIG_TICKS_PER_SWING as usize + WALK_ALLOWANCE;
     pass(&mut game, wait);
 
     assert_eq!(
@@ -3206,7 +3119,7 @@ fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
         game.world
             .resource::<base_grid::BaseGrid>()
             .is_solid(solid.0, solid.1),
-        "and the cut that would have spent it must wait"
+        "and the cut waits its turn behind the open cell's own floor job"
     );
 }
 
@@ -3454,47 +3367,6 @@ fn a_site_that_becomes_reachable_again_can_complain_again() {
     );
 }
 
-/// A cell the crew cut and never floored is taken back by entropy — and
-/// taking it back has to mean the wall is whole again.
-///
-/// A mark outlives the cut, so the `DigSite` outlives it too, holding a
-/// `Durability` that is already spent. Without the re-knit clause the next
-/// swing lands on nothing and opens the cell for free, which reads as
-/// `BASE_ENTROPY_REFILL_TICKS` doing nothing at all.
-#[test]
-fn a_marked_cell_entropy_took_back_costs_the_whole_wall_again() {
-    let mut game = game_at_the_frontier(3267);
-    let player = game.player_entity();
-    assert!(
-        crate::tuning::BASE_ROCK_DURABILITY > game.swing_damage(player),
-        "a wall that opens on one swing makes this test vacuous"
-    );
-    mark(&mut game, WALL);
-    while game
-        .world
-        .resource::<base_grid::BaseGrid>()
-        .is_solid(WALL.0, WALL.1)
-    {
-        game.strike_rock(player, WALL.0, WALL.1);
-    }
-    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS + 1);
-    assert_eq!(
-        cell(&game, WALL),
-        None,
-        "precondition: the abandoned cut cell must have re-knit"
-    );
-
-    game.strike_rock(player, WALL.0, WALL.1);
-
-    assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
-        "one swing at a re-knit wall opened it for free"
-    );
-}
-
 /// The middle rung of settled decision 7. Dig jobs sit below work orders
 /// *and* below standing jobs, and the order test alone cannot see the
 /// difference: an order's wants are built before standing jobs either way,
@@ -3538,39 +3410,6 @@ fn a_posted_digger_is_named_by_the_cell_it_is_cutting() {
     assert!(
         !activity.contains("You"),
         "and must not fall through to the player, got: {activity}"
-    );
-}
-
-/// The occupancy rule is "a body is standing here", not "a body holding a
-/// `Task` is standing here". Base staff between postings hold none — and a
-/// cell reverted under one seals it inside solid rock, where `post_field`
-/// gates its own start tile on `BaseGrid::walkable` and can never route it
-/// out again.
-#[test]
-fn a_cell_an_idle_base_staffer_is_standing_on_never_reverts() {
-    let cut = WALL;
-    let mut game = game_with_a_cut_cell(3234, cut);
-    let staffer = spawn_tamed(&mut game, 10, 3);
-    *game.world.get_mut::<Position>(staffer).unwrap() = Position { x: cut.0, y: cut.1 };
-    assert_eq!(
-        game.base_staff(),
-        vec![staffer],
-        "precondition: an owned program outside the party is base staff"
-    );
-
-    // The bevy schedule rather than a whole turn, because a whole turn runs
-    // `schedule_base_labour` first and `drift_idle_staff` would walk the body
-    // off the cell before entropy could look at it. That gap is the case
-    // this test is about: the labour scheduler early-returns on a game over
-    // or an active battle, and declines a candidate tile that is occupied or
-    // not laid floor, while the schedule holding `base_entropy_system` keeps
-    // running regardless.
-    game.world.resource_mut::<GameClock>().tick += crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3;
-    game.schedule.run(&mut game.world);
-
-    assert!(
-        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
-        "the cell under an idle base staffer closed over it"
     );
 }
 
@@ -3624,9 +3463,11 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
 }
 
 /// An unmarked site earns its keep by holding chip progress, and a spent
-/// meter on a solid cell holds none — `strike_rock` refills it on the next
-/// swing. Keeping one leaves an invisible entity that is drawn nowhere,
-/// wanted by nobody, and written to every save from then on.
+/// meter on a solid cell holds none. Nothing in play reverts a cell to solid
+/// any more, but a stray site in that shape — left over from an older save,
+/// or reconstructed here by hand — must not linger forever once unmarked.
+/// Keeping one leaves an invisible entity that is drawn nowhere, wanted by
+/// nobody, and written to every save from then on.
 #[test]
 fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
     let cut = WALL;
@@ -3638,10 +3479,15 @@ fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
         "marking an open cell spawns a site to floor"
     );
 
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+    // `BaseGrid::revert` by hand: nothing in play calls it any more, but the
+    // shape it used to leave behind — a spent meter on a solid cell — still
+    // has to be handled gracefully if it is ever seen again.
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .revert(cut.0, cut.1);
     assert!(
         cell(&game, cut).is_none(),
-        "the frontier cell should have reverted to solid"
+        "precondition: the cell must be solid rock again"
     );
     game.toggle_mark_box(cut, cut, None);
 
@@ -4033,7 +3879,7 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
 
 /// The other half of the same starvation, and the half `has_station` cannot
 /// answer: a marked cell with a perfectly good face that **no body can walk
-/// to**. A pocket sealed off by entropy, or a plan drawn beyond
+/// to**. A sealed-off pocket, or a plan drawn beyond
 /// `haul_walk_radius`, leaves cells that pass the face test and fail the
 /// walk — and the walk used to be asked *below* the truncation, so those
 /// cells took the whole budget and the one reachable cell was cut off the
@@ -4476,11 +4322,12 @@ fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
     }
 }
 
-/// Cutting a cell lights up its neighbours, and entropy taking it back puts
-/// them out again. The reason `is_exposed` is derived per lookup rather than
-/// cached: three different verbs move it.
+/// Cutting a cell lights up its neighbours, and reverting it (via
+/// `BaseGrid::revert`, a fixture-only operation now) puts them out again.
+/// The reason `is_exposed` is derived per lookup rather than cached: more
+/// than one verb moves it.
 #[test]
-fn cutting_a_cell_exposes_its_neighbours_and_entropy_un_exposes_them() {
+fn cutting_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
     let mut game = game_at_the_frontier_cutting(9202);
     let beyond = (WALL.0 + 1, WALL.1);
     assert!(
@@ -4510,7 +4357,7 @@ fn cutting_a_cell_exposes_its_neighbours_and_entropy_un_exposes_them() {
             .world
             .resource::<crate::base_grid::BaseGrid>()
             .is_exposed(beyond.0, beyond.1),
-        "rock re-knitting over a cell left its neighbour still lit"
+        "reverting a cell left its neighbour still lit"
     );
 }
 

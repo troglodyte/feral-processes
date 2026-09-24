@@ -1789,9 +1789,8 @@ pub enum Mode {
     /// anchor and a box, which commit through `Game::toggle_mark_box`.
     ///
     /// **A mode, not an action.** Nothing in it ticks the game, so planning
-    /// a wing of the base costs no turns and entropy is not eating the
-    /// frontier while the player draws. That is the property
-    /// `excavation_plan_never_ticks_the_game` exists to hold.
+    /// a wing of the base — however large — costs no turns. That is the
+    /// property `excavation_plan_never_ticks_the_game` exists to hold.
     Excavate,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no

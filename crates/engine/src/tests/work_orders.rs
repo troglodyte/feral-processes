@@ -1164,13 +1164,11 @@ fn an_idle_program_inside_the_base_only_ever_steps_to_a_neighbour() {
 
 /// **Laid floor is the leash, and it is not the same rule as `walkable`.**
 ///
-/// `base_entropy_system` reverts a mined `Open` cell that nobody is
-/// standing on, and a body only holds the cell under its own feet. A
-/// wanderer that strolled down a fresh corridor would be sealed in behind
-/// it — unpostable and unreachable for the rest of the run, since
-/// `hauling::post_field` gates its own start tile on `BaseGrid::walkable`.
-/// Floor never reverts, so confining the drift to it closes that by
-/// construction rather than by a radius to tune.
+/// Open ground is walkable but is not the base's footprint — only laid
+/// floor may ever take a structure — so a wanderer let loose on it would be
+/// roaming ground nothing can ever be built or posted on. Confining the
+/// drift to floor closes that by construction rather than by a radius to
+/// tune.
 #[test]
 fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1179,8 +1177,8 @@ fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
     let staff = hire(&mut game, 2);
     let node_pos = *game.world.get::<Position>(node).unwrap();
     // A cut corridor running off the pocket's edge, mined and never
-    // floored — which is exactly the ground entropy takes back. Without
-    // it `walkable` and `is_floor` answer the same on every tile the
+    // floored — open ground that is walkable but not the base's footprint.
+    // Without it `walkable` and `is_floor` answer the same on every tile the
     // fixture owns, and this test would pass against either rule.
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();

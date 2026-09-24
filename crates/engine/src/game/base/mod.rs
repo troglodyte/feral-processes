@@ -18,7 +18,6 @@ pub(crate) mod collect;
 pub(crate) mod construction;
 pub(crate) mod deposit;
 pub(crate) mod depot_filter;
-pub(crate) mod entropy;
 pub(crate) mod hauling;
 pub(crate) mod morale;
 pub(crate) mod offshift;

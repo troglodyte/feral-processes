@@ -21,10 +21,10 @@ use crate::floors::{FloorDb, FloorId};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseCell {
     /// Carved out but not yet floored: walkable, but not a `Floor` for
-    /// whatever a later task ties to build placement. `mined_at` is the
-    /// tick it was opened, and `base::entropy::base_entropy_system` reads it
-    /// every tick: an `Open` cell left unfloored past
-    /// `BASE_ENTROPY_REFILL_TICKS` goes back to solid.
+    /// build placement — `Game::place_structure`'s own gate. `mined_at`
+    /// records the tick the cell was cut, and stays a field only because
+    /// removing it would be a `SAVE_FORMAT_VERSION` bump — nothing reads it
+    /// any more. Open ground now stays open forever.
     Open { mined_at: u64 },
     /// Carved out and floored: the buildable, walkable base tile.
     Floor,
@@ -99,11 +99,9 @@ impl BaseGrid {
     /// least one **orthogonal** walkable neighbour.
     ///
     /// Orthogonal rather than 8-way — a diagonal neighbour does not expose a
-    /// face. Derived per lookup and never cached, and
-    /// `base::entropy::base_entropy_system` is the argument for that: a
-    /// re-knitting cell changes the exposure of its four neighbours, and a
-    /// cached flag would need keeping in step with every open, floor and
-    /// revert.
+    /// face. Derived per lookup and never cached: cutting or flooring a
+    /// cell changes the exposure of its four neighbours, and a cached flag
+    /// would need keeping in step with every open and floor.
     pub fn is_exposed(&self, x: i32, y: i32) -> bool {
         self.is_solid(x, y)
             && [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -146,7 +144,8 @@ impl BaseGrid {
     ///
     /// `Game::strike_rock` is the one caller in play — the swing that takes
     /// a wall's last durability — which is what makes `mined_at` the tick
-    /// the wall came down and so the tick entropy measures its window from.
+    /// the wall came down. Save format only now; nothing measures a window
+    /// from it any more.
     pub(crate) fn open(&mut self, x: i32, y: i32, tick: u64) {
         self.cells.insert((x, y), BaseCell::Open { mined_at: tick });
     }
@@ -163,9 +162,9 @@ impl BaseGrid {
     /// cannot staff.
     ///
     /// Walked rather than cached, the same argument `Game::build_radius`
-    /// makes about deriving over stored state: a cell opened, floored or
-    /// reclaimed by entropy changes this answer, and a cached one would need
-    /// keeping in step with all three.
+    /// makes about deriving over stored state: a cell opened or floored
+    /// changes this answer, and a cached one would need keeping in step
+    /// with both.
     pub(crate) fn radius(&self) -> i32 {
         self.cells
             .keys()
@@ -185,11 +184,13 @@ impl BaseGrid {
 
     /// Takes `(x, y)` back out of the map: solid rock again, and absent
     /// rather than chipped, because absent is what this module means by
-    /// solid. `game::base::entropy` is the one caller — nothing else in the
-    /// game ever *shrinks* base space.
+    /// solid. Nothing in play calls this any more — open ground stays open
+    /// forever — so it survives only for test fixtures that need to put a
+    /// cell back to solid by hand.
     ///
     /// Also drops any finish on the cell: "a finish implies floor" is a
     /// property of this store while the game is running, not only at load.
+    #[cfg(test)]
     pub(crate) fn revert(&mut self, x: i32, y: i32) {
         self.cells.remove(&(x, y));
         self.finishes.remove(&(x, y));
@@ -243,9 +244,8 @@ impl BaseGrid {
     }
 
     /// The map in key order — the deterministic iteration this type exists
-    /// to guarantee. `base_entropy_system` is the one thing in play that
-    /// walks base space cell by cell; `tests::base_grid` walks it to check
-    /// the order itself.
+    /// to guarantee. `tests::base_grid` walks it to check the order itself.
+    #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&(i32, i32), &BaseCell)> {
         self.cells.iter()
     }

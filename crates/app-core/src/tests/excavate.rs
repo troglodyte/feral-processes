@@ -196,7 +196,7 @@ fn committing_a_box_reaches_toggle_mark_box() {
 }
 
 /// The load-bearing property of the whole mode: planning a wing of the base
-/// costs no game time, so entropy is not eating the frontier while you draw.
+/// costs no game time at all.
 #[test]
 fn excavation_plan_never_ticks_the_game() {
     let mut app = app_at_the_frontier(4304);

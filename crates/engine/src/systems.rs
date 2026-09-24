@@ -65,7 +65,7 @@ pub fn needs_tick_system(
 ///
 /// **Staff only** — a party member and the wielded program are not on shift,
 /// which is the v1 scope. The query is deliberately wider than that rule and
-/// narrows through `party::role_of`, `base_entropy_system`'s idiom: the
+/// narrows through `party::role_of`, `haul_step_system`'s idiom: the
 /// narrowing is the part that must not exist twice.
 ///
 /// Seeding is the first thing it does, through `Needs::seed_missing`, and it

@@ -27,8 +27,8 @@ pub enum ProgramRole {
     /// Away from the base on a sortie — `resources::Sorties`. Ranked
     /// between the party and the labour pool: a dispatched program is not
     /// staff, which is what takes it out of `schedule_base_labour`,
-    /// `drift_idle_staff`, `base_entropy_system`, `needs_drain_system` and
-    /// the surface map in one edit rather than five.
+    /// `drift_idle_staff`, `needs_drain_system` and the surface map in one
+    /// edit rather than four.
     Sortie,
     /// Posted at an outpost — `components::PostedAt`. Between `Sortie` and
     /// `UnderStudy` for `Sortie`'s own reason: this program is away from the
@@ -37,9 +37,9 @@ pub enum ProgramRole {
     /// §6 and correction 1/2 of the outposts plan.
     ///
     /// The doors that already filter on `== Staff` (`dispatch_sortie`,
-    /// `pin_subject`, `needs_drain_system`, `base_entropy_system`) refuse an
-    /// outpost crew member for free, the same way they refuse a sortie
-    /// member or a pinned subject. `wield_program`, `add_companion`,
+    /// `pin_subject`, `needs_drain_system`) refuse an outpost crew member
+    /// for free, the same way they refuse a sortie member or a pinned
+    /// subject. `wield_program`, `add_companion`,
     /// `extract_routine` and `open_kernel_ring` check neither role and each
     /// need an explicit refusal — the outposts plan's own census, run the
     /// way decision 2 above ran `UnderStudy`'s.
@@ -100,11 +100,9 @@ pub(crate) struct RoleMarkers {
 
 /// The role rule itself, over values rather than a `Game`.
 ///
-/// A free function for `game::stack::surfaced`'s reason: `base_entropy_system`
+/// A free function for `game::stack::surfaced`'s reason: `haul_step_system`
 /// is a bevy system and has no `Game` to ask, but must not carry a second
-/// copy of who counts as staff — a cell reverting under a body seals it in
-/// solid rock for the rest of the run, and a drifted copy is how that comes
-/// back. `Game::program_role` is the other applier.
+/// copy of who counts as staff. `Game::program_role` is the other applier.
 pub(crate) fn role_of(
     creature: Entity,
     owner: Entity,

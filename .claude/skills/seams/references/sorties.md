@@ -1,12 +1,12 @@
 # Sorties
 
-- **`ProgramRole` has a fourth variant, and a sortie's five consequences are
+- **`ProgramRole` has a fourth variant, and a sortie's four consequences are
   omissions rather than checks.** `Sortie` sits **between `InParty` and
   `Staff`**, keeping `Staff` as what is left over. `schedule_base_labour`,
-  `drift_idle_staff`, `base_entropy_system`, `needs_drain_system` and
-  `position_is_honest` all narrow through `party::role_of` and all want
-  `Staff` exactly, so an away program leaves the labour pool, the drift, the
-  occupancy set, the needs drain and the surface map in one edit. Needs
+  `drift_idle_staff`, `needs_drain_system` and `position_is_honest` all
+  narrow through `party::role_of` and all want `Staff` exactly, so an away
+  program leaves the labour pool, the drift, the needs drain and the surface
+  map in one edit. Needs
   **freeze**, exactly as a party member's do. Widening `role_of`
   deliberately fails to compile at all three appliers; **`party::Roles` is
   the `SystemParam` bundling the four resources that decide a role**, a thin
@@ -152,8 +152,8 @@
   are.** The three exhaustive matches (`roster_rank`, gui's `role_heading`,
   the rest-repair arm) are compiler-checked; the audit half is not. The
   doors that already filter on `== ProgramRole::Staff` — `dispatch_sortie`,
-  `pin_subject`, `needs_drain_system`, `base_entropy_system` — refuse an
-  outpost crew member for free. Four that checked neither role compiled
+  `pin_subject`, `needs_drain_system` — refuse an outpost crew member for
+  free. Four that checked neither role compiled
   clean and would have silently allowed one through: `wield_program`, the
   party-add door, `extract_routine`, `open_kernel_ring` — each needed an
   explicit refusal, run as `UnderStudy`'s own census

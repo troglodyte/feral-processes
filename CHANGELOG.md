@@ -53,6 +53,15 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.232
+
+**The status bar's `[GRID]` figure now shows how close the base is to
+running out of grid.** The figure is draw over supply. It is green with more
+than 5 to spare, yellow at 5 or less (including exactly at capacity), and
+red when the machines draw more than the base supplies — the state in which
+some of them go dark. It used to be plain grey until the grid was already
+short, and then amber, which read as a warning rather than a shortage.
+
 ## 0.13.231
 
 **When a production chain or a research project is stuck because nothing

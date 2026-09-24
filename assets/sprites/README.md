@@ -61,6 +61,19 @@ to survive being multiplied by anything from green through red. It is a bar
 along the bottom edge of the tile now, and a boss and a nemesis wear corner
 marks, so all three reach a tile without touching a sprite's pixels.
 
+### Opting out: `.colour` files
+
+Art authored in colour goes muddy under a hued tint. Name the file
+`<key>.colour.png` and it is looked up under `<key>` exactly as
+`<key>.png` would be, but drawn with a **grey** tint at the brightest
+channel of the colour the glyph would have had. The hue is dropped, and
+brightness, the map's edge shading and the damage dimming, still darkens
+it. `depot.colour.png` is the shipped example: every depot tier points at
+`depot`, so marking the file rather than six `.ron` defs is what keeps them
+from disagreeing.
+
+If both `<key>.png` and `<key>.colour.png` exist, the colour one draws.
+
 ### The one exception: a player-drawn icon
 
 The player's own drawn icon (the pixel editor, `"@drawn"` in the sprite

@@ -84,6 +84,12 @@ pub const SPRITE_PALETTE: [(u8, u8, u8); 19] = [
 /// didn't mean to paint here," not as a washed-out swatch.
 pub const SPRITE_ALPHA_THRESHOLD: u8 = 128;
 
+/// The file-stem suffix that marks a sprite as authored in colour:
+/// `depot.colour.png` is drawn under the key `depot` with its tint's hue
+/// dropped. Here rather than in gui so the asset census can resolve a
+/// `sprite:` override to either file. See `assets/sprites/README.md`.
+pub const FULL_COLOUR_SUFFIX: &str = ".colour";
+
 /// Maps an arbitrary RGBA pixel — a pixel read back from an existing sprite
 /// PNG — onto `SPRITE_PALETTE`, nearest colour by squared euclidean
 /// distance in RGB. A perceptual colour space is overkill at 19 swatches.

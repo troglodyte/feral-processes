@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.237
+
+**Levelling up now opens a page showing what changed.** After the battle
+results close — or on your next return to the map, when the level came from
+outside a fight — a page reads back your stat gains, how you now stack up
+against a typical program of the current sector (hit chance, damage per
+swing, swings to win and its swings to down you), and the Perk Points and
+Decompiler skill gained. Several levels at once show as one page. `P` goes
+straight to Perks; `Esc` closes.
+
 ## 0.13.236
 
 **A hostile's colour now reflects how hard it hits, not just how much it can

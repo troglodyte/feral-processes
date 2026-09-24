@@ -6095,4 +6095,43 @@ mod engagement {
         );
         assert_eq!(battle.round, 2, "a solitary player still advances rounds");
     }
+
+    fn round_dividers(game: &Game) -> Vec<String> {
+        game.message_log(200)
+            .into_iter()
+            .filter(|e| e.kind == crate::MessageKind::Round)
+            .map(|e| e.text)
+            .collect()
+    }
+
+    /// A battle map's wrap is marked in the log the way a group fight's
+    /// round is — one divider naming the round that has just begun — and
+    /// the first round, which the fight's opening already marks, is not.
+    #[test]
+    fn a_round_wrap_logs_one_divider_naming_the_new_round() {
+        let mut game = game();
+        open_fight(&mut game);
+        let player = game.player_entity();
+        let distant_hostile = plain(&mut game, true);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(player, (0, 0));
+            battle.place(distant_hostile, (29, 29));
+            battle.set_initiative(vec![player]);
+        }
+        assert!(
+            round_dividers(&game).is_empty(),
+            "round 1 must not log a divider"
+        );
+
+        end_turn_of(&mut game, player, 1);
+        let dividers = round_dividers(&game);
+        assert_eq!(dividers.len(), 1, "one wrap, one divider: {dividers:?}");
+        assert!(dividers[0].contains("round 2"), "{dividers:?}");
+
+        end_turn_of(&mut game, player, 2);
+        let dividers = round_dividers(&game);
+        assert_eq!(dividers.len(), 2, "{dividers:?}");
+        assert!(dividers[1].contains("round 3"), "{dividers:?}");
+    }
 }

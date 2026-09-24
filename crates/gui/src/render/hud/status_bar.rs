@@ -73,24 +73,28 @@ fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
     ]
 }
 
-/// The grid figure's colour: `palette::ATTENTION` while the base cannot cover
-/// its own draw, otherwise the ordinary body grey.
+/// Spare supply at or under which the grid figure warns: one more machine
+/// switched on is likely to take the base short.
+const GRID_NEAR_HEADROOM: u32 = 5;
+
+/// The grid figure's colour, banded by headroom: `palette::OFFLINE` while
+/// the draw exceeds the supply, `palette::ATTENTION` within
+/// [`GRID_NEAR_HEADROOM`] of it, `palette::HEALTHY` otherwise.
 ///
-/// **ATTENTION, not THREAT.** A short grid is the palette's own definition of
-/// the amber — "the player must act", the same role an idle structure and an
-/// unspent perk point wear — and br red stays reserved for hostility. The one
-/// red on this screen is `palette::OFFLINE`, worn by the dry supplier that
-/// caused the shortfall, on the map rather than on this bar.
+/// Short is `>` and not `>=`: a base exactly at capacity has nothing dark,
+/// which is what `game::base::power::ledger` cuts on and what
+/// `a_base_exactly_at_capacity_has_nothing_dark` pins. It is still the near
+/// band, having no headroom at all.
 ///
-/// `>` and not `>=`: a base exactly at capacity has nothing dark, which is
-/// what `game::base::power::ledger` cuts on and what
-/// `a_base_exactly_at_capacity_has_nothing_dark` pins. Colouring it would be
-/// this row inventing a second definition of short.
+/// A grid nothing draws on is healthy whatever it supplies, or a run with no
+/// base yet reads `0/0` in amber from its first tick.
 fn grid_color((draw, supply): (u32, u32)) -> Color {
     if draw > supply {
+        palette::OFFLINE
+    } else if draw > 0 && supply - draw <= GRID_NEAR_HEADROOM {
         palette::ATTENTION
     } else {
-        palette::BODY
+        palette::HEALTHY
     }
 }
 
@@ -314,31 +318,33 @@ mod tests {
         });
     }
 
-    /// Both halves in one test, `a_threat_badge_is_red`'s rule: either alone
-    /// passes against a segment drawing one constant colour.
+    /// All three bands and both boundaries, `a_threat_badge_is_red`'s rule:
+    /// any one case passes against a segment drawing one constant colour.
     ///
-    /// The boundary is the third case and the one worth having. A base
-    /// exactly at capacity has nothing dark — `ledger` cuts on `budget >=
-    /// draw` — so drawing it as short would be this row inventing a second
-    /// definition of the word.
+    /// Exactly at capacity is not short — `ledger` cuts on `budget >= draw`,
+    /// so nothing is dark — but it has no headroom, so it is the near band.
     #[test]
-    fn the_grid_figure_reddens_only_when_the_base_is_short() {
-        let (text, color) = grid_piece(&grid_state((7, 4)));
-        assert_eq!(text, "7/4");
+    fn the_grid_figure_bands_by_headroom() {
+        let (text, short) = grid_piece(&grid_state((16, 12)));
+        assert_eq!(text, "16/12");
+        assert_eq!(short, palette::OFFLINE, "draw over supply is red");
+
+        let (_, exact) = grid_piece(&grid_state((12, 12)));
+        assert_eq!(exact, palette::ATTENTION, "at capacity has no headroom");
+
+        let edge = 12 - GRID_NEAR_HEADROOM;
+        let (_, near) = grid_piece(&grid_state((edge, 12)));
         assert_eq!(
-            color,
+            near,
             palette::ATTENTION,
-            "a short grid is what ATTENTION means"
+            "headroom of exactly the margin is near"
         );
 
-        let (_, healthy) = grid_piece(&grid_state((4, 8)));
-        assert_eq!(healthy, palette::BODY, "a covered grid is an ordinary fact");
+        let (_, healthy) = grid_piece(&grid_state((edge - 1, 12)));
+        assert_eq!(healthy, palette::HEALTHY, "one past the margin is healthy");
 
-        let (_, exact) = grid_piece(&grid_state((8, 8)));
-        assert_eq!(
-            exact, healthy,
-            "a base exactly at capacity has nothing dark and is not short"
-        );
+        let (_, idle) = grid_piece(&grid_state((0, 0)));
+        assert_eq!(idle, palette::HEALTHY, "nothing drawing cannot go dark");
     }
 
     /// The grid is a *base* figure and the bar draws on every screen, so it

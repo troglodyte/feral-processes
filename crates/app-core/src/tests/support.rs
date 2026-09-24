@@ -542,6 +542,31 @@ pub(crate) fn place_damaged_outpost_east_of_player(app: &mut App, integrity: u32
     target
 }
 
+/// Merges `items` into the player's pack via a save round trip — extended
+/// row by row rather than assigned over, `app_owning_a_program_and_a_
+/// compiler_with_cargo`'s reason one screen over: replacing the whole
+/// inventory would silently delete whatever `Game::new`'s starting kit
+/// already granted.
+pub(crate) fn give_player_items(app: &mut App, items: &[(&str, u32)]) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("give_player_items", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    for (item, qty) in items {
+        let id = feral_processes_engine::items::ItemId::from(*item);
+        match data.player.inventory.iter_mut().find(|(i, _)| *i == id) {
+            Some((_, have)) => *have += qty,
+            None => data.player.inventory.push((id, *qty)),
+        }
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 /// `place_outpost_east_of_player` plus one ordinary base-staff program, for
 /// a test driving `Mode::OutpostPost`'s picker by keypress alone — nothing
 /// here needs the program's `Entity`, since the picker is walked with

@@ -1,0 +1,6 @@
+(
+    id: "outpost_kit",
+    name: "Outpost Kit",
+    description: "A folded shell, a beacon and a seed stock of parts. Use it on open ground, well clear of the base, to found an unmanned outpost there.",
+    value: Some(10),
+)

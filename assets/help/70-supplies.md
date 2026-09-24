@@ -70,4 +70,4 @@ fighting it.
   holding.
 
 Read on: [zones and breaching](zones), [your base](your-base), [taking a program apart](extraction),
-and [the Stack](the-stack).
+[the Stack](the-stack), and [outposts](outposts).

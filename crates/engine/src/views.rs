@@ -14,6 +14,7 @@ use crate::icon::PlayerIcon;
 use crate::items::{GearCopy, ItemId};
 use crate::outposts::Trend;
 use crate::perks::Perk;
+use crate::progression::StatRow;
 use crate::research::ResearchId;
 use crate::resources::DifficultyMode;
 use crate::species::{AffinityClass, MoveDef, SpeciesId};
@@ -3443,4 +3444,35 @@ pub struct AlertView {
     pub text: String,
     pub count: u32,
     pub unread: bool,
+}
+
+/// The level-up summary page, read back from `Game::take_level_up_report`.
+/// Several levels gained before the page shows are **one page**:
+/// `from_level` is the level the player held before the first of them, and
+/// `to_level` is where they stand now.
+///
+/// Every pair is `(before, after)`. `stats` is `StatRow`'s own shape — the
+/// log's own labels and arrow format — with a row already dropped when it
+/// did not move (mitigation never grows with level, so a run with only that
+/// row eligible ships an empty list rather than a page with nothing on it).
+///
+/// The four duel figures are measured against `zone`'s typical foe (see
+/// `Game::typical_foe`), which does not itself change between the two
+/// columns — only the player does. `perk_points_gained` and
+/// `decompiler_gained` are `current − snapshot`, not
+/// `PERK_POINTS_PER_LEVEL * levels`, so an overflow point earned in the
+/// same award counts too.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LevelUpReport {
+    pub from_level: u32,
+    pub to_level: u32,
+    pub zone: u32,
+    pub stats: Vec<StatRow>,
+    pub hit_chance: (f64, f64),
+    pub per_swing: (f64, f64),
+    pub swings_to_win: (u32, u32),
+    pub swings_to_down_you: (u32, u32),
+    pub perk_points_gained: u32,
+    pub perk_points_unspent: u32,
+    pub decompiler_gained: i32,
 }

@@ -256,6 +256,7 @@ impl App {
             Mode::OutpostVisit => self.handle_outpost_visit_key(key),
             Mode::OutpostPost => self.handle_outpost_post_key(key),
             Mode::Notification => self.handle_notification_key(key),
+            Mode::LevelUp => self.handle_level_up_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),
             Mode::Inventory => self.handle_inventory_key(key),

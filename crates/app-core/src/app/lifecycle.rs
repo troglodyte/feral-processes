@@ -69,6 +69,7 @@ impl App {
             pending_structure_manifest: None,
             pending_description: None,
             pending_notification: None,
+            pending_level_up: None,
             manifest_origin: ManifestOrigin::default(),
             pending_fuse_first: None,
             pending_fuse_second: None,
@@ -493,12 +494,26 @@ impl App {
     /// engine holds the queue and this is its only reader, so a notification
     /// raised four frames down is still there when the party surfaces.
     ///
-    /// The **one writer** of `pending_notification`.
+    /// The **one writer** of `pending_notification` — and, ahead of it, of
+    /// `pending_level_up`.
+    ///
+    /// The level-up check sits here rather than beside it so it inherits
+    /// this door's whole gate for free: `Mode::Playing` only, and — since
+    /// this is `after_tick`'s tail, called after the `in_arena()` early
+    /// return above it — never during a staged arena fight. Checked first,
+    /// so a level earned in the same fight a notification queued shows its
+    /// own page before the notification does, and the notification is not
+    /// dropped, only delayed one screen further.
     pub(crate) fn show_next_notification(&mut self) {
         if self.mode != Mode::Playing {
             return;
         }
         let Some(game) = &mut self.game else { return };
+        if let Some(report) = game.take_level_up_report() {
+            self.pending_level_up = Some(report);
+            self.mode = Mode::LevelUp;
+            return;
+        }
         let Some(next) = game.take_notification() else {
             return;
         };

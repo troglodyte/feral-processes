@@ -27,6 +27,7 @@ mod icon_editor;
 mod info_tab;
 mod inventory;
 mod keys;
+mod level_up;
 mod log_filter;
 mod menus;
 mod notifications;

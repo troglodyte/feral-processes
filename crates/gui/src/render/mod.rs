@@ -53,6 +53,7 @@ mod history;
 pub(crate) mod hud;
 mod icon_editor;
 mod inventory;
+mod level_up;
 mod manifest;
 mod manifest_layout;
 mod marks;
@@ -577,6 +578,7 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::FrameMap
             | Mode::FieldRoutineCell
             | Mode::Notification
+            | Mode::LevelUp
             | Mode::SpritePicker
             | Mode::SpriteEditor
     )
@@ -642,6 +644,19 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 // The mode is only ever entered with a subject, so this is
                 // unreachable — but a blank window would be a soft lock the
                 // player cannot read their way out of, and the map is not.
+                None => draw_mode_overlay(app, None, painter, &m),
+            }
+        }
+        // `Mode::Notification`'s own arrangement, one vendor over: drawn
+        // over the map rather than over black, no `draw_popup` (no scroll,
+        // no refusal of its own), and `needs_status_banner` carries any
+        // refusal raised underneath it.
+        Mode::LevelUp => {
+            draw_playing_base(app, fx, None, painter, &m, reveal);
+            match &app.pending_level_up {
+                Some(report) => level_up::draw_level_up(report, painter, &m),
+                // Only ever entered with a report, `Mode::Notification`'s
+                // own unreachable-in-practice fallback.
                 None => draw_mode_overlay(app, None, painter, &m),
             }
         }
@@ -1527,7 +1542,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 118] = [
+    const ALL_MODES: [Mode; 119] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1636,6 +1651,7 @@ mod tests {
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
+        Mode::LevelUp,
         Mode::GameOver,
         Mode::QuitRunConfirm,
         Mode::QuitAppConfirm,

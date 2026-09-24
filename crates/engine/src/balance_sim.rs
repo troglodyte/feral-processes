@@ -69,7 +69,12 @@ fn companion_level_for_player_level(player_level: u32) -> u32 {
 
 /// `species`' `Stats` as scaled for a wild spawn in `zone`, per
 /// `ZoneLevel::stat_multiplier`.
-fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
+///
+/// `pub(crate)` rather than private: the level-up summary page's typical-foe
+/// projection (`Game::typical_foe`) calls it directly rather than keeping a
+/// second copy of the scaling, `CLAUDE.md`'s rule on a doc comment that
+/// claims to mirror another module's formula.
+pub(crate) fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
     let mult = ZoneLevel(zone).stat_multiplier();
     Stats {
         hp: species.base_hp * mult,

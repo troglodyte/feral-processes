@@ -908,6 +908,8 @@ relying on one, and correct all three places if it has moved.
 - **XP at the cap is banked, not discarded, and banking and taxing share the
   one accumulator.** `add_xp` accumulates into `Experience::xp` and reports
   `LevelGain::overflow`, staying pure — it reports, the caller spends.
+- **The level-up page's before column is a stored `Combatant`, never a
+  re-derivation at the old level.**
 
 ### Tactical battles
 

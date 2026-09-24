@@ -423,6 +423,19 @@ impl SpeciesDef {
             .collect()
     }
 
+    /// This species' unarmed reach — its first authored move's damage band,
+    /// or `PLAYER_UNARMED_DAMAGE` for a species with none (a boss with no
+    /// `moves` entry, or a malformed file caught elsewhere).
+    ///
+    /// Pulled out of `Game::natural_range_of`'s `Kit::Innate` arm so the
+    /// level-up page's typical-foe projection can read a species' reach
+    /// with no `Game` and no entity to ask `Kit::of` about.
+    pub fn natural_range(&self) -> crate::battle::DamageRange {
+        self.moves
+            .first()
+            .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range())
+    }
+
     /// The class this species reads as, or `None` for one that raises no
     /// axis or more than one.
     ///

@@ -1624,3 +1624,22 @@ writing a member's `Stats`; a capture takes the lead and prices the roll as
 the lead, not as the summed block; and disbanding hands each member back at
 the squad's Integrity fraction, floored at 1, which is deliberately **not**
 damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.
+- **The level-up page's before column is a stored `Combatant`, never a
+  re-derivation at the old level.** `Game::snapshot_player` calls the same
+  `combatant_profile` a live fight calls, at the instant a level-up begins,
+  and `resources::PendingLevelUp` holds the result until
+  `Game::take_level_up_report` drains it. The trap is a second
+  `combatant_profile`-shaped function parameterized on a level — Stats are
+  mutated in place on level-up with no per-level history kept, so "what did
+  the player's `Combatant` look like one level ago" has no live source of
+  truth except a snapshot taken *before* the mutation; a re-derivation would
+  have to either rewind `Stats` (nothing stores the old values) or duplicate
+  `combatant_profile`'s whole formula with a level parameter threaded through
+  it, which is exactly the "a doc comment that claims to mirror another
+  module's formula must be a call, not a copy" trap CLAUDE.md's code
+  principles already name four times against `balance_sim.rs`. The write is
+  guarded on `PendingLevelUp` being `None`, which is what makes several
+  levels gained in one award collapse into **one** page: `from_level` is the
+  level held before the *first* of them, not a fresh snapshot per level.
+  `PendingLevelUp` is not saved — `RunFeats`' own precedent — so quitting
+  between the level and reading the page loses the page, never the levels.

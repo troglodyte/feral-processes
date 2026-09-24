@@ -1000,6 +1000,13 @@ impl Game {
         // only caller today, but the parameter doesn't guarantee it).
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let level_cap = self.level_cap();
+        // Taken before `add_xp` mutates `Stats`/`Experience` below: by the
+        // time `gain.levels` is known, the "before" state a level-up page
+        // would read is already gone. Built on every award, not only a
+        // levelling one — whether this award levels at all is exactly what
+        // `gain` (computed next) answers, so the decision to keep it has to
+        // come after this line, not before it.
+        let snapshot = self.snapshot_player(player);
         let (gain, new_level) = {
             let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
             let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, player) else {
@@ -1031,6 +1038,14 @@ impl Game {
             tally.perk_points += self.convert_overflow_xp();
         }
         if gain.levels > 0 {
+            // Only the FIRST level-up of a run of several keeps its
+            // snapshot: several levels gained before the page shows are one
+            // page, and `PendingLevelUp`'s own `None` guard is what makes
+            // "before" the level the player held when that run started
+            // rather than the level just before the last one in it.
+            if self.world.resource::<PendingLevelUp>().0.is_none() {
+                self.world.resource_mut::<PendingLevelUp>().0 = Some(snapshot);
+            }
             // The player's tally runs longer than a companion's: a level also
             // pays a Perk Point and a point of Decompiler skill, and neither
             // was announced anywhere before this, so a player could bank

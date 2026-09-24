@@ -53,6 +53,17 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.236
+
+**A hostile's colour now reflects how hard it hits, not just how much it can
+take.** The green-to-red tint compared a program's Integrity with yours and
+all but ignored its attack, so one that hit twice as hard as you could read
+Yellow beside one that could barely scratch you. It now weighs a whole
+exchange — each side's damage against the other's Integrity — and counts the
+programs fighting at your side. The XP a kill pays and the odds of a
+decompile read the same measure; XP still measures against you alone, so a
+companion never costs you any.
+
 ## 0.13.235
 
 **A new round on the battle map is announced.** When the turn order comes

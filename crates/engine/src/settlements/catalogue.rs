@@ -103,3 +103,69 @@ impl SettlementDb {
         self.defs.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settlements::SettlementKind;
+
+    fn def_text(id: &str, name: &str) -> String {
+        format!(
+            "(id: \"{id}\", name: \"{name}\", blurb: \"b\", kind: Server, specialty: Programs, temperament: Open)"
+        )
+    }
+
+    fn scratch() -> crate::tests::support::ScratchAssets {
+        let d = crate::tests::support::scratch_assets_dir("settlement_catalogue");
+        std::fs::create_dir_all(&*d).unwrap();
+        d
+    }
+
+    #[test]
+    fn an_absent_directory_loads_empty() {
+        let d = crate::tests::support::scratch_assets_dir("settlement_catalogue");
+        let (db, warnings) = SettlementDb::load_dir(&d).unwrap();
+        assert!(db.is_empty());
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn a_valid_file_loads_and_other_extensions_are_ignored() {
+        let d = scratch();
+        std::fs::write(d.join("alpha.ron"), def_text("alpha", "Alpha")).unwrap();
+        std::fs::write(d.join("notes.txt"), "x").unwrap();
+        let (db, warnings) = SettlementDb::load_dir(&d).unwrap();
+        assert_eq!(db.len(), 1);
+        assert!(warnings.is_empty());
+        assert_eq!(db.get("alpha").unwrap().kind, SettlementKind::Server);
+    }
+
+    #[test]
+    fn a_malformed_file_is_skipped_with_a_warning() {
+        let d = scratch();
+        std::fs::write(d.join("alpha.ron"), def_text("alpha", "Alpha")).unwrap();
+        std::fs::write(d.join("bad.ron"), "( not valid ron").unwrap();
+        let (db, warnings) = SettlementDb::load_dir(&d).unwrap();
+        assert_eq!(db.len(), 1);
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn an_empty_id_is_skipped() {
+        let d = scratch();
+        std::fs::write(d.join("empty_id.ron"), def_text("", "Alpha")).unwrap();
+        let (db, warnings) = SettlementDb::load_dir(&d).unwrap();
+        assert!(db.is_empty());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("id must not be empty"));
+    }
+
+    #[test]
+    fn a_blank_name_is_skipped() {
+        let d = scratch();
+        std::fs::write(d.join("blank_name.ron"), def_text("alpha", "   ")).unwrap();
+        let (db, warnings) = SettlementDb::load_dir(&d).unwrap();
+        assert!(db.is_empty());
+        assert_eq!(warnings.len(), 1);
+    }
+}

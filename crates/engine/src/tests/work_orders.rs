@@ -142,6 +142,46 @@ fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     assert!(game.work_orders().is_empty());
 }
 
+/// An ingredient nothing in the base makes at all is a machine to build,
+/// and the sentence says which one — not where a neighbour would have to
+/// stand, which reads as a placement puzzle when there is nothing to place.
+#[test]
+fn an_ingredient_nothing_makes_names_the_machine_to_build() {
+    let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "disk_press", 4, 0);
+
+    let err = game
+        .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .expect_err("no Lathe anywhere, so no substrate");
+
+    assert_eq!(err, "No Blank Substrate — build a Lathe to make it.");
+}
+
+/// A producer that stands but out of reach with no Depot is not "build
+/// one" — the player has one — so the sentence names both machines and the
+/// two ways to join them.
+#[test]
+fn an_ingredient_made_out_of_reach_names_both_machines_and_the_depot() {
+    let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "mining_node", 2, 0);
+    spawn_machine_at(&mut game, "lathe", 3, 0);
+    spawn_machine_at(&mut game, "disk_press", 9, 9);
+
+    let err = game
+        .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .expect_err("the Lathe is nowhere near the press");
+
+    assert_eq!(
+        err,
+        "The Disk Press can't reach your Lathe's Blank Substrate — build a Lathe \
+         beside it, or a Depot to carry it over."
+    );
+}
+
 #[test]
 fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

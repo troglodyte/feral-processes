@@ -1779,8 +1779,8 @@ mod tests {
                             },
                             progress: 0,
                             // The screen's worst case for height again: a
-                            // `chain_break` sentence runs to 158 characters
-                            // and wraps to lines of its own.
+                            // long `chain_break` sentence wraps to lines of
+                            // its own.
                             blocked_by: Some(
                                 "Nothing is making Bytecode Block within the Disk Press's \
                                  reach — it can only take what a neighbour has finished, or \

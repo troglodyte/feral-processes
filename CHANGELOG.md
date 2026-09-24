@@ -53,6 +53,21 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.235
+
+**A new round on the battle map is announced.** When the turn order comes
+back round, `ROUND N` fades in over the top of the map, a short chime plays
+and the log gets a `── round N ──` divider — before, the only sign was the
+number changing in the corner of the turn strip. The banner never holds the
+fight up: the next body acts underneath it.
+
+**Hits, heals and interrupts on the battle map now show.** The red flash on
+a body that is struck, the green `+` over one that is healed and the `!`
+over one taking an opportunity swing were each wiped in the same frame they
+appeared, so none of them had ever been visible in play. The effects layer
+was told a battle-map fight was not a fight, and now asks whether one is
+open.
+
 ## 0.13.234
 
 **Every Depot now shows how full it is.** A bar along the top of the

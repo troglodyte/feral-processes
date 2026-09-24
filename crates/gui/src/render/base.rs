@@ -1347,6 +1347,17 @@ fn draw_surface_map(
             if let Some((done, color)) = cell_bar(structure, building) {
                 draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
             }
+            // How full a Depot is, along the top edge — after the outline for
+            // the progress bar's reason, since the shield pulse draws a wall
+            // along that edge too. See `draw_depot_fill`.
+            draw_depot_fill(
+                painter,
+                structure.and_then(|ev| ev.depot_fill),
+                px,
+                py,
+                tile_px,
+                vig,
+            );
             // "Someone is on this job", on a channel of its own rather than
             // sharing the outline with machine state. It was a yellow outline
             // until machines took that channel over, at which point a machine
@@ -1671,6 +1682,7 @@ mod tests {
             recovering,
             build: None,
             job_progress: None,
+            depot_fill: None,
             output_stranded: false,
             hp_fraction: None,
             level: None,
@@ -4538,6 +4550,75 @@ mod tests {
         let track = progress_bar_rect(0.0, 0.0, CELL).w;
         assert_eq!(bar_widths(Some(4.0)), vec![track, track]);
         assert_eq!(bar_widths(Some(-1.0)), vec![track]);
+    }
+
+    /// A Depot's bar is the progress bar's own track turned to the top
+    /// edge, so the two read as one kind of mark and never share pixels on
+    /// a Depot being upgraded.
+    #[test]
+    fn a_depots_bar_mirrors_the_progress_bar_on_the_top_edge() {
+        for tile_px in [CELL, CELL * 2.0, CELL * 3.0] {
+            let top = depot_fill_rect(0.0, 0.0, tile_px);
+            let bottom = progress_bar_rect(0.0, 0.0, tile_px);
+            assert_eq!((top.x, top.w, top.h), (bottom.x, bottom.w, bottom.h));
+            assert_eq!(top.y, tile_px - 1.0 - (bottom.y + bottom.h));
+            assert!(top.y + top.h < bottom.y, "the two bars overlap");
+        }
+    }
+
+    /// Green with room, yellow with a tenth or less left, red when full —
+    /// the `[GRID]` readout's three roles, so the colours mean one thing
+    /// on the status bar and the map.
+    #[test]
+    fn a_depots_bar_turns_yellow_with_a_tenth_left_and_red_when_full() {
+        let at = |held| depot_fill_color(DepotFill { held, capacity: 50 });
+        assert_eq!(at(0), hud::palette::HEALTHY);
+        assert_eq!(at(44), hud::palette::HEALTHY, "six left is over a tenth");
+        assert_eq!(at(45), hud::palette::ATTENTION, "five left is a tenth");
+        assert_eq!(at(49), hud::palette::ATTENTION);
+        assert_eq!(at(50), hud::palette::OFFLINE);
+        assert_eq!(
+            depot_fill_color(DepotFill {
+                held: 0,
+                capacity: 0
+            }),
+            hud::palette::OFFLINE,
+            "a box that holds nothing has no room"
+        );
+    }
+
+    /// The fill is held against capacity, and an empty Depot still draws its
+    /// track so it reads as a Depot you can read the level of.
+    #[test]
+    fn a_depots_bar_fills_in_proportion_and_an_empty_one_keeps_its_track() {
+        let widths = |held| {
+            let (_, shapes) = with_painter(|p| {
+                draw_depot_fill(
+                    p,
+                    Some(DepotFill { held, capacity: 50 }),
+                    0.0,
+                    0.0,
+                    CELL,
+                    1.0,
+                )
+            });
+            let mut w: Vec<f32> = shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) => Some(r.rect.width()),
+                    _ => None,
+                })
+                .collect();
+            w.sort_by(|a, b| a.partial_cmp(b).expect("no NaN widths"));
+            w
+        };
+        let track = depot_fill_rect(0.0, 0.0, CELL).w;
+        assert_eq!(widths(0), vec![track]);
+        assert_eq!(widths(50), vec![track, track]);
+        let half = widths(25);
+        assert!((half[0] - track / 2.0).abs() < 0.01, "{half:?}");
+        let (_, none) = with_painter(|p| draw_depot_fill(p, None, 0.0, 0.0, CELL, 1.0));
+        assert!(none.is_empty(), "not a Depot, no bar");
     }
 
     /// A structure as the map sees one, running a cycle or not.

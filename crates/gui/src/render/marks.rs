@@ -351,7 +351,18 @@ pub(super) fn draw_progress_bar(
     let Some(done) = progress else {
         return;
     };
-    let bar = progress_bar_rect(px, py, tile_px);
+    draw_bar(
+        painter,
+        progress_bar_rect(px, py, tile_px),
+        done,
+        color,
+        vig,
+    );
+}
+
+/// A track and a clamped fill in `bar` — the one body both tile bars draw
+/// through, so the Depot's reads as the same kind of mark as a job's.
+fn draw_bar(painter: &Painter, bar: Rect, done: f32, color: Color, vig: f32) {
     painter.rect(
         bar.x,
         bar.y,
@@ -363,6 +374,60 @@ pub(super) fn draw_progress_bar(
     if filled > 0.0 {
         painter.rect(bar.x, bar.y, filled, bar.h, at_level(color, vig));
     }
+}
+
+/// A Depot turns yellow once this share of its room or less is left.
+const DEPOT_NEAR_FULL_PERCENT: u32 = 10;
+
+/// Where a Depot's fill bar sits — `progress_bar_rect` reflected onto the
+/// top edge. The top edge is the rarity bar's, but rarity is an actor's and
+/// a body never stops on a structure, so on a Depot it is free; the bottom
+/// edge stays the job bar's, which a Depot being upgraded still needs.
+pub(super) fn depot_fill_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let bar = progress_bar_rect(px, py, tile_px);
+    Rect::new(bar.x, py + PROGRESS_BAR_INSET, bar.w, bar.h)
+}
+
+/// The `[GRID]` readout's three roles over a Depot's room: `OFFLINE` when
+/// full, `ATTENTION` with `DEPOT_NEAR_FULL_PERCENT` or less left, `HEALTHY`
+/// otherwise. Integer arithmetic, so a Depot at exactly a tenth is yellow.
+pub(super) fn depot_fill_color(fill: DepotFill) -> Color {
+    let room = fill.capacity.saturating_sub(fill.held);
+    if room == 0 {
+        hud::palette::OFFLINE
+    } else if room * 100 <= fill.capacity * DEPOT_NEAR_FULL_PERCENT {
+        hud::palette::ATTENTION
+    } else {
+        hud::palette::HEALTHY
+    }
+}
+
+/// How full a Depot is, or nothing for any other cell — see
+/// `EntityView::depot_fill`. An empty Depot still draws its track, so the
+/// tile says *this level can be read* before there is anything in it.
+pub(super) fn draw_depot_fill(
+    painter: &Painter,
+    fill: Option<DepotFill>,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    vig: f32,
+) {
+    let Some(fill) = fill else {
+        return;
+    };
+    let done = if fill.capacity == 0 {
+        1.0
+    } else {
+        fill.held as f32 / fill.capacity as f32
+    };
+    draw_bar(
+        painter,
+        depot_fill_rect(px, py, tile_px),
+        done,
+        depot_fill_color(fill),
+        vig,
+    );
 }
 
 /// Where the "someone is on this job" mark sits, `lift` px up from its

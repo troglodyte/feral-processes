@@ -1344,6 +1344,14 @@ impl Game {
                     _ if !is_structure => build.as_ref().map(|row| row.percent() as f32 / 100.0),
                     _ => None,
                 };
+                let depot_fill = self
+                    .is_depot(entity)
+                    .then(|| self.world.get::<Stock>(entity))
+                    .flatten()
+                    .map(|s| DepotFill {
+                        held: s.output_used(),
+                        capacity: s.capacity,
+                    });
                 EntityView {
                     entity,
                     pos: (pos.x, pos.y),
@@ -1383,6 +1391,7 @@ impl Game {
                     rarity: self.rarity_of(entity),
                     machine_status,
                     job_progress,
+                    depot_fill,
                     build,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                     unseen_routine: self.unseen_routine(entity),

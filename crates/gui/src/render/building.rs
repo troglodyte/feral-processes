@@ -1654,6 +1654,7 @@ mod tests {
             position_is_honest: true,
             structure_attended: false,
             job_progress: None,
+            depot_fill: None,
             recovering: false,
             build: None,
             output_stranded: false,

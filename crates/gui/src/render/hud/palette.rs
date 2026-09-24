@@ -64,6 +64,9 @@ pub(crate) const THREAT: Color = rgb(0xf26d6d);
 /// stays ATTENTION: reddening every consequence of one dry node would paint
 /// half the base and point at none of it. This colour marks the tile to walk
 /// to.
+///
+/// The status bar's `[GRID]` figure is its other wearer, while draw exceeds
+/// supply: a short grid does not recover by waiting either.
 pub(crate) const OFFLINE: Color = rgb(0xd93025);
 /// green — a healthy bar fill, and the calm `ALL NOMINAL` state.
 pub(crate) const HEALTHY: Color = rgb(0x4fa65b);

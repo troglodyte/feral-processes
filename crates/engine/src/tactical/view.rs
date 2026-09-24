@@ -314,6 +314,13 @@ impl Game {
         self.world.get_resource::<TacticalBattle>().is_some()
     }
 
+    /// The open tactical fight's round, or `None` — what the renderer
+    /// watches once a frame to mark a wrap, without `tactical_view`'s clone
+    /// of the whole board.
+    pub fn tactical_round(&self) -> Option<u32> {
+        self.world.get_resource::<TacticalBattle>().map(|b| b.round)
+    }
+
     /// The open tactical fight, or `None`.
     pub fn tactical_view(&mut self) -> Option<TacticalView> {
         self.world.get_resource::<TacticalBattle>()?;

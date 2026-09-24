@@ -217,6 +217,10 @@ const FLOAT_SECONDS: f64 = 0.6;
 const FLOAT_RISE_PX: f32 = 24.0;
 
 const LOG_FLASH_SECONDS: f64 = 0.35;
+/// How long a battle map's `ROUND N` banner takes to fade out. It never
+/// holds the fight's pacing — the next body acts underneath it — so this
+/// is a read-at-a-glance length, not a wait.
+const ROUND_BANNER_SECONDS: f64 = 1.2;
 
 // --- Cloud shadows ----------------------------------------------------
 //
@@ -801,6 +805,8 @@ pub struct Fx {
     camera_hold: Option<CameraHold>,
     log_flash_until: f64,
     last_log_line: Option<LogLine>,
+    round_seen: Option<u32>,
+    round_banner: Option<(u32, f64)>,
 }
 
 impl Fx {
@@ -819,6 +825,8 @@ impl Fx {
             camera_hold: None,
             log_flash_until: 0.0,
             last_log_line: None,
+            round_seen: None,
+            round_banner: None,
         }
     }
 
@@ -1416,6 +1424,36 @@ impl Fx {
         }
     }
 
+    /// Watches the open battle map's round and answers whether it has just
+    /// wrapped, raising the `ROUND N` banner when it has.
+    ///
+    /// `None` — no fight open — is what ends the banner, rather than
+    /// `begin_frame`'s `in_battle` clear, because the round is the one thing
+    /// here that must also know *which* fight it is watching: a fight's
+    /// first round, and a later fight's opening at 1, are both sightings
+    /// rather than wraps.
+    ///
+    /// Reported whether or not effects are on: the caller plays the wrap's
+    /// sound off the answer, and sound is not a visual effect.
+    pub fn observe_round(&mut self, round: Option<u32>) -> bool {
+        let wrapped = matches!((self.round_seen, round), (Some(seen), Some(now)) if now > seen);
+        self.round_seen = round;
+        match round {
+            None => self.round_banner = None,
+            Some(now) if wrapped && self.enabled => self.round_banner = Some((now, self.now)),
+            Some(_) => {}
+        }
+        wrapped
+    }
+
+    /// The banner to draw this frame — the round it names and its alpha —
+    /// or `None` once it has faded.
+    pub fn round_banner(&self) -> Option<(u32, f32)> {
+        let (round, start) = self.round_banner?;
+        let t = (self.now - start) / ROUND_BANNER_SECONDS;
+        (t < 1.0).then_some((round, (1.0 - t * t) as f32))
+    }
+
     /// Watches for a newly logged raid or tantrum line and starts the log
     /// pane's flash. Compares the last line rather than counting lines, since
     /// `message_log` only ever returns a window of recent ones.
@@ -1651,6 +1689,67 @@ mod tests {
             fx.log_flash_until <= fx.now,
             "and ordinary chatter must not"
         );
+    }
+
+    fn at(fx: &mut Fx, now: f64) {
+        fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+    }
+
+    /// A wrap is a round *rising* within one fight: the first round a fight
+    /// is seen at is its opening, and a later fight starting over at 1 is
+    /// not a wrap either.
+    #[test]
+    fn only_a_rising_round_within_one_fight_is_a_wrap() {
+        let mut fx = Fx::new();
+        at(&mut fx, 0.0);
+        assert!(!fx.observe_round(None));
+        assert!(!fx.observe_round(Some(1)), "a fight's opening round");
+        assert!(!fx.observe_round(Some(1)), "a round held across frames");
+        assert!(fx.observe_round(Some(2)), "the wrap");
+        assert!(!fx.observe_round(Some(2)), "heard once, not every frame");
+        assert!(!fx.observe_round(None));
+        assert!(!fx.observe_round(Some(1)), "the next fight's opening");
+    }
+
+    #[test]
+    fn a_wrap_raises_a_banner_that_fades_and_retires() {
+        let mut fx = Fx::new();
+        at(&mut fx, 0.0);
+        fx.observe_round(Some(1));
+        assert!(fx.round_banner().is_none());
+
+        at(&mut fx, 1.0);
+        fx.observe_round(Some(2));
+        let (round, alpha) = fx.round_banner().expect("a wrap raises the banner");
+        assert_eq!(round, 2);
+        assert!(alpha > 0.9, "{alpha}");
+
+        at(&mut fx, 1.0 + ROUND_BANNER_SECONDS * 0.8);
+        let (_, later) = fx.round_banner().expect("still fading");
+        assert!(later < alpha, "{later} should have faded from {alpha}");
+
+        at(&mut fx, 1.0 + ROUND_BANNER_SECONDS);
+        assert!(fx.round_banner().is_none(), "retired on its own timer");
+    }
+
+    /// The banner goes with the fight, and never shows at all with effects
+    /// off — though the wrap is still reported, since sound is not a visual
+    /// effect.
+    #[test]
+    fn a_banner_leaves_with_its_fight_and_stays_off_with_effects() {
+        let mut fx = Fx::new();
+        at(&mut fx, 0.0);
+        fx.observe_round(Some(1));
+        fx.observe_round(Some(2));
+        fx.observe_round(None);
+        assert!(fx.round_banner().is_none());
+
+        let mut quiet = Fx::new();
+        quiet.enabled = false;
+        at(&mut quiet, 0.0);
+        quiet.observe_round(Some(1));
+        assert!(quiet.observe_round(Some(2)), "the sound still plays");
+        assert!(quiet.round_banner().is_none());
     }
 
     #[test]

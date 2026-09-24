@@ -1247,6 +1247,25 @@
   `clear_bars()`'s own reason. See
   `seam:tacticalfxqueue-is-boltcues-pattern-for-a-bodys-own-hit-or`.
 
+- **A battle map's round wrap is marked in two places and queued in
+  neither.** The engine half is one `MessageKind::Round` divider at the top
+  of `Game::tactical_round_upkeep`, which both wraps reach (`hand_on_turn`
+  and a siege body leaving the board in `siege/raiders.rs`), so a third
+  wrap path marks itself by calling it. The gui half is derived, not cued:
+  `Fx::observe_round` diffs `Game::tactical_round` once a frame, and a wrap
+  is a round *rising* while one fight stays open — `None` between fights is
+  what stops a new fight's round 1 from reading as a wrap. The sound is
+  played off `observe_round`'s answer whether or not effects are on.
+- **`Fx`'s fight-scoped state is kept by `gui::fx_in_fight`, never by
+  `Mode::is_battle` alone.** A battle map is deliberately not a battle
+  mode, and `begin_frame` clears the bars, `tactical_flashes` and
+  `cell_marks` whenever its flag is false — so with `is_battle` alone every
+  hit flash, heal mark and reaction mark on a battle map was cleared in the
+  frame that pushed it, shipped that way, and no test saw it because every
+  renderer test passes `true` by hand. The flag asks `in_tactical_battle`
+  rather than listing modes, since the clear exists so a mark cannot
+  outlive the board its cell indexes. `draw_a_frame` calls the same
+  function, which is what makes the regression test a test of the frame.
 - **A battle map's blows are heard off `SwingCueQueue`, never off the
   reveal.** A tactical fight never calls `MessageLog::open_round`, so
   `Game::battle_log` is the whole fight, and `App::advance_reveal` — which

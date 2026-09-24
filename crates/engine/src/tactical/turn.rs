@@ -1609,6 +1609,14 @@ impl Game {
     /// The tick is skipped when the reap closed the fight, because
     /// `settle_tactical` spent the round's tick on the way out.
     pub(crate) fn tactical_round_upkeep(&mut self) {
+        // Both wraps come through here, so this is the one place a battle
+        // map's round is marked. Ahead of the upkeep, so what the upkeep
+        // does reads as the new round's, as a group fight's does.
+        let round = self.world.resource::<TacticalBattle>().round;
+        self.log_kind(
+            crate::resources::MessageKind::Round,
+            format!("── round {round} ──"),
+        );
         // A turret is a property of a structure, not a combatant — no
         // initiative slot, so it fires here, once a round, rather than
         // taking a turn. Ahead of the reap below, so a besieger a turret

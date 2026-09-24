@@ -384,6 +384,7 @@ pub(super) fn draw_playing_base(
         // reason — and a fight has no destination for a bearing to point
         // at, so the two can never want it at once.
         tactical::draw_turn_strip(&view, regions.map_pane, painter, m);
+        tactical::draw_round_banner(fx, regions.map_pane, painter, m);
     } else if let Some(view) = game.stack_view() {
         draw_stack(&view, painter, regions.map_pane, m, status.power);
         // Over the corridor, not part of it: the same map the `g` screen

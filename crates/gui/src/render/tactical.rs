@@ -794,6 +794,38 @@ pub(super) fn draw_turn_strip(view: &TacticalView, pane: Rect, painter: &Painter
     draw_tamper_block(view, pane, x + w, y + h, w, painter, m);
 }
 
+/// A wrap's `ROUND N`, fading over the pane while the next body acts — the
+/// strip's own number changes too, but in a corner nobody is looking at.
+///
+/// Centred across the pane and a quarter of the way down it, because the
+/// camera holds the acting body at the middle and a banner there would
+/// cover the very turn it announces.
+pub(super) fn draw_round_banner(fx: &Fx, pane: Rect, painter: &Painter, m: &Metrics) {
+    let Some((round, alpha)) = fx.round_banner() else {
+        return;
+    };
+    let text = format!("ROUND {round}");
+    let size = m.title() * 2;
+    let pad = m.line_height * 0.5;
+    let text_w = painter.measure_ui_advance(&text, size);
+    let w = text_w + pad * 2.0;
+    let h = size as f32 + pad * 2.0;
+    let x = pane.x + (pane.w - w) / 2.0;
+    let y = pane.y + pane.h * 0.25 - h / 2.0;
+    if w > pane.w || y < pane.y {
+        return;
+    }
+    painter.rect(x, y, w, h, Color::new(0.04, 0.06, 0.08, 0.7 * alpha));
+    let c = palette::PANE_TITLE;
+    painter.ui(
+        &text,
+        x + pad,
+        y + pad + size as f32 * 0.8,
+        size,
+        Color::new(c.r, c.g, c.b, alpha),
+    );
+}
+
 /// A rung's own tag text, decision 7's exhaustive vocabulary — `cell_mark`'s
 /// rule, so a sixth `TamperTag` fails to compile here rather than drawing a
 /// blank word.
@@ -2272,6 +2304,35 @@ mod tests {
         assert!(
             painted.iter().any(|t| t.contains("ROUND")),
             "the turn strip drew no round: {painted:?}"
+        );
+    }
+
+    /// A wrap's banner names the new round, and lands whole inside the pane
+    /// — above the middle, where the camera holds the body that is acting.
+    #[test]
+    fn a_wrap_banner_names_the_round_inside_the_pane() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        let m = ui_metrics(720.0);
+        let (_, quiet) = with_painter(|p| draw_round_banner(&fx, pane(), p, &m));
+        assert!(painted_text(&quiet).is_empty(), "no wrap, no banner");
+
+        fx.observe_round(Some(2));
+        fx.observe_round(Some(3));
+        let (_, shapes) = with_painter(|p| draw_round_banner(&fx, pane(), p, &m));
+        let boxes = crate::paint::painted_text_boxes(&shapes);
+        let (_, _, ink) = boxes
+            .iter()
+            .find(|(_, text, _)| text == "ROUND 3")
+            .unwrap_or_else(|| panic!("the banner drew no round: {boxes:?}"));
+        let p = pane();
+        assert!(
+            ink.x >= p.x && ink.x + ink.w <= p.x + p.w && ink.y >= p.y,
+            "{ink:?} spills out of {p:?}"
+        );
+        assert!(
+            ink.y + ink.h < p.y + p.h / 2.0,
+            "{ink:?} sits over the acting body"
         );
     }
 

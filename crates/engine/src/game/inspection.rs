@@ -50,6 +50,10 @@ const CARAVAN_ON_TILE: u8 = 3;
 /// pointing `x` at a wild program standing on a town's doorstep wants the
 /// program, not the settlement behind it.
 const SETTLEMENT_ON_TILE: u8 = 4;
+/// Last of the five, `SETTLEMENT_ON_TILE`'s own reason one fixture over: an
+/// outpost never stands in base space, and a wild program standing on its
+/// tile is the more immediately actionable answer to `x`.
+const OUTPOST_ON_TILE: u8 = 5;
 
 impl Game {
     /// The tile grid the map renders — the zone surface, or base space when
@@ -612,6 +616,33 @@ impl Game {
                 (self.stands_in_base_space(e) == in_base).then_some((step, SETTLEMENT_ON_TILE, e))
             }));
         }
+        // An outpost carries no entity at all — `resources::Outposts`' own
+        // record lives keyed by tile, not spawned into the ECS — so it takes
+        // no `Entity` query. `candidates` carries `Entity::PLACEHOLDER` in
+        // its place and the real tile travels alongside in `outpost_tile`,
+        // read back out below. `SETTLEMENT_ON_TILE`'s gate one fixture over:
+        // an outpost never stands in base space, so `!in_base` is the whole
+        // of what `== in_base` reduces to for a fixture with no entity to
+        // ask `stands_in_base_space` about.
+        let mut outpost_tile: Option<(i32, i32)> = None;
+        if !in_base {
+            let outposts = self.world.resource::<crate::resources::Outposts>();
+            if let Some((step, tile)) = outposts
+                .0
+                .keys()
+                .filter_map(|&tile| {
+                    let pos = Position {
+                        x: tile.0,
+                        y: tile.1,
+                    };
+                    on_ray(&pos).map(|step| (step, tile))
+                })
+                .min()
+            {
+                candidates.push((step, OUTPOST_ON_TILE, Entity::PLACEHOLDER));
+                outpost_tile = Some(tile);
+            }
+        }
 
         let found = candidates
             .into_iter()
@@ -621,6 +652,9 @@ impl Game {
                 BUILD_SITE_ON_TILE => InspectTarget::BuildSite(entity),
                 CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
                 SETTLEMENT_ON_TILE => InspectTarget::Settlement(entity),
+                OUTPOST_ON_TILE => InspectTarget::Outpost(
+                    outpost_tile.expect("an OUTPOST_ON_TILE candidate always carries a tile"),
+                ),
                 _ => InspectTarget::Creature(entity),
             });
         // Only on a hit. Pointing `x` at blank ground reports nothing, and

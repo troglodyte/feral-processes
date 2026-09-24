@@ -659,6 +659,108 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
     target
 }
 
+/// An outpost east of the player already crewed by `n` posted programs,
+/// with `stock` on its shelf — the `c`/`C` key-collision test's fixture
+/// (I2): `outpost: Some(target)` on each `CreatureSave` posts it directly
+/// on load, `game/lifecycle.rs`'s `pending_outpost_crew` path, rather than
+/// driving `Mode::OutpostPost`'s picker once per body.
+pub(crate) fn place_outpost_with_crew_and_stock(
+    app: &mut App,
+    n: u32,
+    stock: &[(&str, u32)],
+) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost_crew_stock", 0);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        stock: stock
+            .iter()
+            .map(|(id, qty)| (feral_processes_engine::items::ItemId(id.to_string()), *qty))
+            .collect(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    for i in 0..n {
+        data.creatures.push(CreatureSave {
+            sortie_index: None,
+            boss: false,
+            species: species.clone(),
+            position: (px + 50 + i as i32, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            mitigation: 2,
+            tamed: true,
+            power: 100.0,
+            level: 1,
+            xp: 0,
+            xp_to_next: 10,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            ring: 0,
+            talents: Vec::new(),
+            bought_stats: Default::default(),
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
+            nest_position: None,
+            patrol_position: None,
+            study_station: None,
+            outpost: Some(target),
+            pursuing: false,
+            carrying: None,
+            carrying_program: None,
+            rarity: Default::default(),
+            nemesis_grudges: 0,
+            equipment: Vec::new(),
+            program_id: 1 + i,
+            disposition: None,
+            disgruntled: None,
+            disgruntled_stranded: false,
+            memories: Vec::new(),
+            needs: Default::default(),
+            attributes: Default::default(),
+            off_shift: None,
+            staff: false,
+            downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
+}
+
 /// `place_settlement_east_of_player`, out of reach — twelve tiles east, so
 /// `Game::settlement_reach` (Chebyshev 1) answers no while `x` still would.
 /// The tile needs no clearing: nothing walks into it.

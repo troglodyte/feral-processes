@@ -14,7 +14,8 @@ Walking onto a founded outpost opens its own page.
 - P posts a base-staff program there. It stops counting toward your labour pool at home the moment
   it is posted — the same trade a sortie or a wield makes.
 - U recalls the highlighted crew member back to ordinary staff.
-- c opens the same take-only transfer screen your Depots use, straight onto the outpost's stock.
+- Shift-C opens the same take-only transfer screen your Depots use, straight onto the outpost's
+  stock — uppercase because lowercase letters already pick a crew row.
 - R repairs a damaged outpost from your own pack, once it has taken a hit.
 
 Growth runs in three tiers — raw, processed, complex — and each tier's crew produces everything

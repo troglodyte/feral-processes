@@ -46,6 +46,15 @@ const DARK_GLYPH_LEVEL: f32 = 0.35;
 /// pass shape (`base.rs::draw_excavation_plan`), a pass of its own after the
 /// tile loop rather than three more branches inside it, since none of this
 /// is a property of a *tile* the loop already owns.
+///
+/// `occupant` answers `Some(is_nemesis)` when the earlier entity pass
+/// already drew something on `mark.tile` — the player's `@` or a wild
+/// program — and `None` for bare ground (I4). The glyph never draws over an
+/// entity's own; the growth bar holds the bottom edge, which every corner
+/// mark that could share a tile is built to lift clear of
+/// (`marks.rs`'s corner census), so it draws regardless. The tier pips sit
+/// in the nemesis mark's own top-right corner, so they draw unless the
+/// occupant is a nemesis.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_outpost_marks(
     painter: &Painter,
@@ -54,6 +63,7 @@ pub(super) fn draw_outpost_marks(
     tile_px: f32,
     glyph_px: u16,
     pane: Rect,
+    occupant: impl Fn((i32, i32)) -> Option<bool>,
 ) {
     for mark in marks {
         let (px, py) = at(mark.tile);
@@ -64,20 +74,23 @@ pub(super) fn draw_outpost_marks(
         {
             continue;
         }
-        let color = if mark.dark {
-            at_level(outpost_glyph_color(), DARK_GLYPH_LEVEL)
-        } else {
-            outpost_glyph_color()
-        };
-        let glyph = mark.glyph.to_string();
-        let dims = painter.measure_map(&glyph, glyph_px);
-        painter.map(
-            &glyph,
-            px + (tile_px - dims.width) / 2.0,
-            py + (tile_px + dims.height) / 2.0,
-            glyph_px,
-            color,
-        );
+        let occupant_here = occupant(mark.tile);
+        if occupant_here.is_none() {
+            let color = if mark.dark {
+                at_level(outpost_glyph_color(), DARK_GLYPH_LEVEL)
+            } else {
+                outpost_glyph_color()
+            };
+            let glyph = mark.glyph.to_string();
+            let dims = painter.measure_map(&glyph, glyph_px);
+            painter.map(
+                &glyph,
+                px + (tile_px - dims.width) / 2.0,
+                py + (tile_px + dims.height) / 2.0,
+                glyph_px,
+                color,
+            );
+        }
         if mark.dark {
             continue;
         }
@@ -90,9 +103,11 @@ pub(super) fn draw_outpost_marks(
             outpost_trend_color(mark.trend),
             1.0,
         );
-        let pip_color = outpost_glyph_color();
-        for rect in outpost_pip_rects(px, py, tile_px, mark.tier + 1) {
-            painter.rect(rect.x, rect.y, rect.w, rect.h, pip_color);
+        if occupant_here != Some(true) {
+            let pip_color = outpost_glyph_color();
+            for rect in outpost_pip_rects(px, py, tile_px, mark.tier + 1) {
+                painter.rect(rect.x, rect.y, rect.w, rect.h, pip_color);
+            }
         }
     }
 }
@@ -200,7 +215,7 @@ pub(super) fn outpost_page_rows(report: &OutpostReport, selected: usize) -> Vec<
         rows.push(text_row(format!("  {next}")));
     }
     rows.push(text_row(""));
-    rows.push(text_row("[P] Post  [U] Recall  [R] Repair  [c] Take stock"));
+    rows.push(text_row("[P] Post  [U] Recall  [R] Repair  [C] Take stock"));
     rows
 }
 
@@ -228,7 +243,7 @@ pub(super) fn draw_outpost_post(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::with_painter;
+    use crate::paint::{painted_rect_fill_count, painted_text, with_painter};
     use crate::text::ui_metrics;
     use feral_processes_engine::items::ItemId;
     use feral_processes_engine::outposts::Trend;
@@ -333,5 +348,95 @@ mod tests {
         assert!(dark.r < bright.r);
         assert!(dark.g < bright.g);
         assert!(dark.b < bright.b);
+    }
+
+    fn a_mark() -> OutpostMark {
+        OutpostMark {
+            tile: (0, 0),
+            glyph: 'O',
+            tier: 1,
+            fill: 0.5,
+            trend: Trend::Growing,
+            dark: false,
+        }
+    }
+
+    fn draw_one_mark(
+        mark: &OutpostMark,
+        occupant: impl Fn((i32, i32)) -> Option<bool>,
+    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let (_, shapes) = with_painter(|p| {
+            draw_outpost_marks(
+                p,
+                std::slice::from_ref(mark),
+                |_| (0.0, 0.0),
+                CELL,
+                CELL_GLYPH_PX,
+                Rect::new(0.0, 0.0, CELL, CELL),
+                occupant,
+            )
+        });
+        shapes
+    }
+
+    const CELL: f32 = 20.0;
+    const CELL_GLYPH_PX: u16 = 16;
+
+    /// I4: the outpost's own glyph never draws over an entity's — the
+    /// player's `@` or a wild program standing on the tile.
+    #[test]
+    fn glyph_draws_when_the_tile_is_unoccupied() {
+        let mark = a_mark();
+        let shapes = draw_one_mark(&mark, |_| None);
+        assert!(painted_text(&shapes).contains(&"O".to_string()));
+    }
+
+    #[test]
+    fn glyph_is_suppressed_when_an_entity_stands_on_the_tile() {
+        let mark = a_mark();
+        let shapes = draw_one_mark(&mark, |_| Some(false));
+        assert!(
+            !painted_text(&shapes).contains(&"O".to_string()),
+            "the outpost glyph must not paint over the entity's own"
+        );
+    }
+
+    /// The growth bar holds the bottom edge, which every corner mark that
+    /// could share a tile is built to lift clear of — `marks.rs`'s corner
+    /// census — so it keeps drawing whether or not the tile is occupied.
+    #[test]
+    fn the_growth_bar_still_draws_over_a_non_nemesis_occupant() {
+        let mark = a_mark();
+        let shapes = draw_one_mark(&mark, |_| Some(false));
+        assert!(
+            painted_rect_fill_count(&shapes, outpost_trend_color(mark.trend)) > 0,
+            "the growth bar's fill must still be drawn"
+        );
+    }
+
+    /// The tier pips share the nemesis mark's top-right corner
+    /// (`marks.rs`'s corner census), so a nemesis standing on the tile wins
+    /// that corner and the pips must not draw over it.
+    #[test]
+    fn pips_are_suppressed_when_a_nemesis_occupies_the_tile() {
+        let mark = a_mark();
+        let shapes = draw_one_mark(&mark, |_| Some(true));
+        assert_eq!(
+            painted_rect_fill_count(&shapes, outpost_glyph_color()),
+            0,
+            "the pips must not collide with the nemesis mark in the same corner"
+        );
+    }
+
+    /// A non-nemesis occupant (the player, an ordinary wild program) does not
+    /// contest that corner, so the pips still draw.
+    #[test]
+    fn pips_still_draw_over_a_non_nemesis_occupant() {
+        let mark = a_mark();
+        let shapes = draw_one_mark(&mark, |_| Some(false));
+        assert!(
+            painted_rect_fill_count(&shapes, outpost_glyph_color()) > 0,
+            "the pips must still draw when nothing contests their corner"
+        );
     }
 }

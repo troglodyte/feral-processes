@@ -72,8 +72,9 @@ impl RouteEnd {
         }
     }
 
-    /// `Some` only for a settlement endpoint — `Game::sever_route`'s own
-    /// door, since an outpost route has no `SettlementKey` to sever by.
+    /// `Some` only for a settlement endpoint — `Game::sever_route`'s
+    /// settlement-side match, since an outpost route has no `SettlementKey`
+    /// to compare against and is matched on `tile()` instead.
     pub fn settlement_key(&self) -> Option<SettlementKey> {
         match self {
             RouteEnd::Settlement { key, .. } => Some(*key),

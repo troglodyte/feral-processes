@@ -954,52 +954,64 @@ impl Game {
             .insert_resource(crate::resources::Sorties(sorties));
     }
 
-    fn restore_routes(&mut self, saved: Vec<save::RouteSave>) {
-        // Straight field-for-field, `routes::Route`'s own reason: cargo
-        // names no entity, so there is nothing here to reconcile against
-        // `sortie_members` above. Settlement routes only — `restore_outpost_routes`
-        // appends the other half onto this same resource.
-        let routes: Vec<crate::routes::Route> = saved
+    /// Straight field-for-field, `routes::Route`'s own reason: cargo names
+    /// no entity, so there is nothing here to reconcile against
+    /// `sortie_members` above. Settlement routes only — `restore_outpost_routes`
+    /// builds the other half, and the two are merged by `order` rather than
+    /// inserted directly: `SaveData::routes`/`outpost_routes` is a
+    /// settlement/outpost split of one live `Vec<Route>`, so simply
+    /// appending one after the other would reorder any save with the two
+    /// kinds interleaved — see `save::RouteSave::order`'s doc.
+    fn restore_routes(&self, saved: Vec<save::RouteSave>) -> Vec<(usize, crate::routes::Route)> {
+        saved
             .into_iter()
-            .map(|r| crate::routes::Route {
-                destination: crate::routes::RouteEnd::Settlement {
-                    key: r.destination,
-                    def: r.destination_def,
-                    tile: r.destination_tile,
-                },
-                cargo: r.cargo,
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: r.proceeds,
+            .map(|r| {
+                (
+                    r.order,
+                    crate::routes::Route {
+                        destination: crate::routes::RouteEnd::Settlement {
+                            key: r.destination,
+                            def: r.destination_def,
+                            tile: r.destination_tile,
+                        },
+                        cargo: r.cargo,
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                        proceeds: r.proceeds,
+                    },
+                )
             })
-            .collect();
-        self.world.insert_resource(crate::resources::Routes(routes));
+            .collect()
     }
 
     /// `restore_routes`' twin for the outpost half of `resources::Routes` —
-    /// appends rather than inserting, so call order with `restore_routes`
-    /// does not matter.
-    fn restore_outpost_routes(&mut self, saved: Vec<save::OutpostRouteSave>) {
-        let mut routes: Vec<crate::routes::Route> = saved
+    /// see its doc comment for why the two are merged by `order` rather than
+    /// one simply appended onto the other.
+    fn restore_outpost_routes(
+        &self,
+        saved: Vec<save::OutpostRouteSave>,
+    ) -> Vec<(usize, crate::routes::Route)> {
+        saved
             .into_iter()
-            .map(|r| crate::routes::Route {
-                destination: crate::routes::RouteEnd::Outpost(r.tile),
-                cargo: r.cargo,
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: 0,
+            .map(|r| {
+                (
+                    r.order,
+                    crate::routes::Route {
+                        destination: crate::routes::RouteEnd::Outpost(r.tile),
+                        cargo: r.cargo,
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                        proceeds: 0,
+                    },
+                )
             })
-            .collect();
-        self.world
-            .resource_mut::<crate::resources::Routes>()
-            .0
-            .append(&mut routes);
+            .collect()
     }
 
     /// `restore_routes`' shape one type over: an outpost names no entity
@@ -1656,8 +1668,15 @@ impl Game {
         // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
         game.restore_sorties(saved_sorties, &sortie_members);
-        game.restore_routes(saved_routes);
-        game.restore_outpost_routes(std::mem::take(&mut data.outpost_routes));
+        // Merged by `order` and not simply concatenated — `restore_routes`'
+        // doc comment on why a settlement/outpost split needs the seam.
+        let mut ordered_routes = game.restore_routes(saved_routes);
+        ordered_routes
+            .extend(game.restore_outpost_routes(std::mem::take(&mut data.outpost_routes)));
+        ordered_routes.sort_by_key(|(order, _)| *order);
+        game.world.insert_resource(crate::resources::Routes(
+            ordered_routes.into_iter().map(|(_, r)| r).collect(),
+        ));
 
         let structure_positions = game.restore_structures(data.structures);
 
@@ -2654,7 +2673,8 @@ impl Game {
             .resource::<crate::resources::Routes>()
             .0
             .iter()
-            .filter_map(|r| match &r.destination {
+            .enumerate()
+            .filter_map(|(order, r)| match &r.destination {
                 crate::routes::RouteEnd::Settlement { key, def, tile } => Some(save::RouteSave {
                     destination: *key,
                     destination_def: def.clone(),
@@ -2666,6 +2686,7 @@ impl Game {
                     ticks_total: r.ticks_total,
                     ticks_elapsed: r.ticks_elapsed,
                     proceeds: r.proceeds,
+                    order,
                 }),
                 crate::routes::RouteEnd::Outpost(_) => None,
             })
@@ -2993,7 +3014,8 @@ impl Game {
                 .resource::<crate::resources::Routes>()
                 .0
                 .iter()
-                .filter_map(|r| match &r.destination {
+                .enumerate()
+                .filter_map(|(order, r)| match &r.destination {
                     crate::routes::RouteEnd::Outpost(tile) => Some(save::OutpostRouteSave {
                         tile: *tile,
                         cargo: r.cargo.clone(),
@@ -3002,6 +3024,7 @@ impl Game {
                         leg: r.leg,
                         ticks_total: r.ticks_total,
                         ticks_elapsed: r.ticks_elapsed,
+                        order,
                     }),
                     crate::routes::RouteEnd::Settlement { .. } => None,
                 })

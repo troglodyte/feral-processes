@@ -66,6 +66,22 @@ fn an_unrelated_action_after_esc_does_not_reopen_the_outpost_page() {
     );
 }
 
+/// I4: `x` toward an outpost finds it through `find_target_in_direction` and
+/// opens the same page a bump would — `examining_a_settlement_opens_the_
+/// same_page`'s shape, `InspectTarget::Outpost` one fixture over.
+#[test]
+fn examining_an_outpost_opens_the_same_page() {
+    let mut app = test_app(985);
+    let tile = place_outpost_east_of_player(&mut app);
+
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(app.mode, Mode::InspectDirection);
+    app.handle_key(GameKey::Right);
+
+    assert_eq!(app.mode, Mode::OutpostVisit);
+    assert_eq!(app.pending_outpost, Some(tile));
+}
+
 /// `[P]` opens the staff picker, and a letter posts the highlighted
 /// candidate — driven entirely by keypress, `Mode::SortieSquad`'s own
 /// candidate list one screen over.
@@ -159,15 +175,16 @@ fn r_repairs_a_damaged_outpost() {
     );
 }
 
-/// `c` opens the transfer picker against the outpost's own stock — design
-/// correction 11's `TransferSource::Outpost`.
+/// `C` opens the transfer picker against the outpost's own stock — design
+/// correction 11's `TransferSource::Outpost`. Uppercase (I2): lowercase `c`
+/// is the third crew row (`OUTPOST_CREW_CAP` 6 → rows a-f) and would collide.
 #[test]
-fn c_opens_transfer_with_the_outposts_stock() {
+fn shift_c_opens_transfer_with_the_outposts_stock() {
     let mut app = test_app(978);
     let tile = place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
     app.handle_key(GameKey::Right);
 
-    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Char('C'));
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.transfer_source, TransferSource::Outpost(tile));
@@ -187,7 +204,7 @@ fn committing_a_take_spends_through_take_from_outpost_and_returns_to_the_visit_p
     let mut app = test_app(979);
     place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
     app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Char('C'));
     assert_eq!(app.mode, Mode::Transfer);
     // Take everything on the one row.
     app.handle_key(GameKey::ShiftLeft);
@@ -209,11 +226,33 @@ fn esc_from_the_outposts_transfer_picker_returns_to_the_visit_page() {
     let mut app = test_app(980);
     place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
     app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Char('C'));
 
     app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::OutpostVisit);
+}
+
+/// `c` selects the third crew row and `C` opens transfer — the two must not
+/// collide (I2). `OUTPOST_CREW_CAP` is 6, rows a-f, so three crew puts a
+/// selectable row at `c`.
+#[test]
+fn lowercase_c_selects_a_crew_row_and_uppercase_c_opens_transfer() {
+    let mut app = test_app(981);
+    place_outpost_with_crew_and_stock(&mut app, 3, &[("raw_trace", 4)]);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::OutpostVisit);
+    assert_eq!(app.outpost_report().unwrap().crew.len(), 3);
+
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(
+        app.menu_selected, 2,
+        "lowercase c must select the third crew row, not open transfer"
+    );
+    assert_eq!(app.mode, Mode::OutpostVisit);
+
+    app.handle_key(GameKey::Char('C'));
+    assert_eq!(app.mode, Mode::Transfer, "uppercase C must open transfer");
 }
 
 /// `place_outpost_east_of_player` plus a fixed stock, for the transfer

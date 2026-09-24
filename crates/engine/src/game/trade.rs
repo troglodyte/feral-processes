@@ -705,6 +705,19 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
+        // `sell_companion` has no other away-role refusal — a party slot, a
+        // cronjob and a guard post are all silently cancelled and announced
+        // through `sale_detachments` — but a posted crew member has to be
+        // recalled first: `detach_from_play` strips `PostedAt` with no
+        // detachment line of its own, so selling one straight off the
+        // outpost would vanish it from the crew list with nothing said.
+        if self
+            .world
+            .get::<crate::components::PostedAt>(creature)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost — recall it first.".into());
+        }
         // Explicit here even though `dissolve_tamed_program` strips too:
         // `program_payout` reads `Stats::power()` and runs *before* the
         // dissolve, so a trader would otherwise pay for gear the player is

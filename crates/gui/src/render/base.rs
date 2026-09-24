@@ -688,6 +688,22 @@ fn draw_surface_map(
     } else {
         Vec::new()
     };
+    // Which of those tiles already carries an entity's own glyph and marks
+    // — `draw_outpost_marks`'s own doc: an outpost's glyph must not paint
+    // over the player's `@` or a wild program standing on its tile, and its
+    // pips share the nemesis mark's top-right corner (`marks.rs`'s corner
+    // census), so a nemesis on the tile has to win that corner. The growth
+    // bar needs no such check — it holds the bottom edge, and every corner
+    // mark that could share it is built to lift clear of that edge instead.
+    let mut outpost_occupants: std::collections::HashMap<(i32, i32), bool> = Default::default();
+    if outdoors {
+        for ev in &entities {
+            outpost_occupants
+                .entry(ev.pos)
+                .and_modify(|nemesis| *nemesis |= ev.nemesis)
+                .or_insert(ev.nemesis);
+        }
+    }
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
     painter.rect(
@@ -1422,6 +1438,7 @@ fn draw_surface_map(
             tile_px,
             glyph_px,
             pane,
+            |tile| outpost_occupants.get(&tile).copied(),
         );
     }
     // After every tile so debris lands on top of the base rather than under

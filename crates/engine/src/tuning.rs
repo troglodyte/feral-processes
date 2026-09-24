@@ -5668,6 +5668,15 @@ pub const ALERT_BOARD_CAP: usize = 50;
 
 // ---------------------------------------------------------------------------
 // Outposts
+//
+// **Correction 6: v1 applies no class-based yield bonus at an outpost.**
+// `Game::run_outposts` calls `systems::mining_success_chance` directly for
+// each crew member — base INT and the player's Keen Scavenger perk, with
+// `morale`/`need_strain` at `0.0` because away crew have neither — and
+// builds no `CycleModifiers` for the program, which is the door a Striker's
+// second action or a Leech bonus would otherwise come through. Open per
+// design spec §11: whether either should apply at an outpost is unresolved,
+// not "the base's own rule already covers it."
 // ---------------------------------------------------------------------------
 
 /// How many outposts may stand at once — `ROUTE_MAX_ACTIVE`'s reason: a cap
@@ -5686,8 +5695,9 @@ pub const MAX_OUTPOSTS: usize = 4;
 /// where an outpost may stand. **A fraction of a region**,
 /// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against
 /// nothing, and this is close enough to the anchor to reach on foot in one
-/// session while still being outside `SETTLEMENT_GARRISON_RADIUS`'s own
-/// half-region reach. Unmeasured — see design spec §11.
+/// session — a quarter of `SETTLEMENT_GARRISON_RADIUS`'s own half-region
+/// reach, so an outpost this close to the base always sits well inside it,
+/// not outside. Unmeasured — see design spec §11.
 pub const OUTPOST_MIN_ANCHOR_DISTANCE: i32 = crate::settlements::placement::REGION_TILES / 8;
 
 /// How far apart two outposts must stand, in Chebyshev tiles.

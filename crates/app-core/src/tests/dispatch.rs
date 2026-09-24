@@ -458,10 +458,13 @@ fn enter_on_the_outpost_cargo_picker_dispatches_the_route() {
     );
 }
 
-/// `[T]` (fast travel) and `[X]` (cut a standing route) both refuse on an
-/// outpost row rather than reaching a door built for a `SettlementKey`.
+/// `[T]` (fast travel) refuses on an outpost row — there is no fast-travel
+/// door for a tile, only a `SettlementKey`. `[X]` on the same row with
+/// nothing dispatched yet refuses too, but for the ordinary "nothing
+/// standing" reason `Game::sever_route` gives a settlement in the same
+/// state, not because the door is closed to outposts.
 #[test]
-fn t_and_x_refuse_on_an_outpost_destination_row() {
+fn t_refuses_and_x_reports_nothing_standing_on_an_outpost_destination_row() {
     let (mut app, _, _) = a_dispatch_ready_app(2113);
     let tile = (500, 503);
     register_a_known_outpost(&mut app, tile);
@@ -490,5 +493,42 @@ fn t_and_x_refuse_on_an_outpost_destination_row() {
             .is_some_and(|l| l.contains("standing")),
         "{:?}",
         app.status_line
+    );
+}
+
+/// `[X]` on the hub severs a *standing* route to an outpost too —
+/// `x_on_the_hub_severs_a_standing_route`'s shape, `Game::sever_route`
+/// reached through `RouteDestinationId::Outpost` rather than refused
+/// outright.
+#[test]
+fn x_on_the_hub_severs_a_standing_outpost_route() {
+    let (mut app, _, _) = a_dispatch_ready_app(2114);
+    let tile = (500, 504);
+    register_a_known_outpost(&mut app, tile);
+    let outcome = app
+        .game
+        .as_mut()
+        .unwrap()
+        .dispatch_outpost_route(tile, true);
+    assert!(outcome.is_ok(), "{outcome:?}");
+
+    app.mode = Mode::Dispatch;
+    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
+    let idx = destinations
+        .iter()
+        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
+        .expect("the outpost is listed as a destination");
+    app.menu_selected = sites.len() + idx;
+    app.handle_key(GameKey::Char('X'));
+    assert_eq!(app.status_line, None);
+
+    let (_, reports) = app.dispatch_trip_reports();
+    let route = reports
+        .iter()
+        .find(|r| r.destination == RouteDestinationId::Outpost(tile))
+        .unwrap();
+    assert!(
+        !route.standing,
+        "severing must clear standing and nothing else"
     );
 }

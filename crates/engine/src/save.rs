@@ -320,6 +320,18 @@ pub struct RouteSave {
     pub ticks_total: u64,
     pub ticks_elapsed: u64,
     pub proceeds: u32,
+    /// This route's position in `resources::Routes` at save time, shared
+    /// with `OutpostRouteSave::order` — the two save vectors are a
+    /// settlement/outpost split of one live `Vec`, so the interleaving
+    /// between them is lost unless each row carries back where it stood.
+    /// `Game::restore_routes` and `restore_outpost_routes` sort their
+    /// combined output on this rather than settlement-then-outpost.
+    /// `#[serde(default)]`: additive, and a save written before this field
+    /// existed has no order worth recovering, so every row defaulting to 0
+    /// and sorting stably (settlement rows first, as it already loaded)
+    /// costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub order: usize,
 }
 
 /// One caravan route running to an outpost, `RouteSave`'s twin for
@@ -339,6 +351,9 @@ pub struct OutpostRouteSave {
     pub leg: crate::routes::RouteLeg,
     pub ticks_total: u64,
     pub ticks_elapsed: u64,
+    /// `RouteSave::order`'s own field and own reason — see its doc comment.
+    #[serde(default)]
+    pub order: usize,
 }
 
 /// One founded outpost — `outposts::Outpost`'s stored fields, plus the tile

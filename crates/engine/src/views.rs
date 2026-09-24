@@ -2443,6 +2443,12 @@ pub enum InspectTarget {
     /// (`Game::broker_reach`), so a shelf gets its own reach check without
     /// this variant moving.
     Settlement(Entity),
+    /// An outpost standing on the zone surface. Tile-keyed rather than
+    /// `Entity`-keyed — `crate::outposts::Outpost`'s own record lives in
+    /// `resources::Outposts`, addressed by tile, and has no entity to name.
+    /// `Game::outpost_report(tile)` is the whole of what the player gets,
+    /// the same door a bump onto the tile already opens.
+    Outpost((i32, i32)),
 }
 
 /// The whole of a settlement's hub screen — `Game::settlement_report`.

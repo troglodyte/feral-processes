@@ -533,7 +533,7 @@ fn severing_clears_standing_and_nothing_else() {
     game.dispatch_route(key, vec![(item.clone(), 5)], true)
         .unwrap();
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     let routes = game.world.resource::<crate::resources::Routes>().0.clone();
     assert_eq!(routes.len(), 1, "severing does not drop the trip in flight");
     let route = &routes[0];
@@ -542,7 +542,7 @@ fn severing_clears_standing_and_nothing_else() {
     assert_eq!(route.cargo, vec![(item, 5)]);
 
     assert!(
-        !game.sever_route(key),
+        !game.sever_route(RouteDestinationId::Settlement(key)),
         "severing an already-severed route clears nothing further"
     );
 }
@@ -550,7 +550,12 @@ fn severing_clears_standing_and_nothing_else() {
 #[test]
 fn severing_an_absent_route_does_nothing() {
     let mut game = Game::new(6401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(!game.sever_route(SettlementKey { rx: 1, ry: 1 }));
+    assert!(
+        !game.sever_route(RouteDestinationId::Settlement(SettlementKey {
+            rx: 1,
+            ry: 1
+        }))
+    );
 }
 
 /// The report reads the record without changing it — `sortie_reports`'
@@ -796,7 +801,7 @@ fn a_severed_route_completes_its_trip_and_pays_but_does_not_go_again() {
     set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
     game.dispatch_route(key, vec![(item, 300)], true)
         .expect("a legal dispatch");
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
 
     let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
     let before_stock = stock_total(&game);
@@ -941,7 +946,7 @@ fn a_severed_stalled_route_with_no_stock_is_dropped_rather_than_stranded() {
          first, or this proves nothing"
     );
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     game.run_routes();
 
     assert!(
@@ -972,7 +977,7 @@ fn a_severed_stalled_route_does_not_depart_again_when_stock_returns() {
         "must stall first, or this proves nothing"
     );
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     // Exactly the shape that lets a still-standing stalled route reload and
     // depart again — a severed one must not take it.
     deploy_depot(&mut game, 0, 2, &item, 200);
@@ -1335,6 +1340,29 @@ fn a_standing_outpost_route_reloads_on_arrival() {
     assert_eq!(route.ticks_elapsed, 0);
 }
 
+/// `Game::sever_route` reaches an outpost route too — `RouteDestinationId`
+/// covers both endpoint kinds, and severing keeps `severing_clears_standing_
+/// and_nothing_else`'s rule: only `standing` clears, the trip in flight
+/// still completes.
+#[test]
+fn severing_an_outpost_route_clears_standing_and_nothing_else() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8650, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(&mut game, tile, &item, 5);
+    game.dispatch_outpost_route(tile, true).unwrap();
+
+    assert!(game.sever_route(RouteDestinationId::Outpost(tile)));
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(routes.len(), 1, "severing does not drop the trip in flight");
+    assert!(!routes[0].standing);
+
+    assert!(
+        !game.sever_route(RouteDestinationId::Outpost(tile)),
+        "severing an already-severed route clears nothing further"
+    );
+}
+
 /// Predation is the only thing an outpost's leg completion may draw
 /// `GameRng` for — `the_tick_draws_no_rng_when_nothing_preys`'s shape.
 #[test]
@@ -1367,6 +1395,54 @@ fn the_tick_draws_no_rng_for_an_outpost_route_when_nothing_preys() {
     assert_eq!(
         without, with,
         "no predator stands near this trip, so completing the leg must not touch GameRng"
+    );
+}
+
+/// Minor item: `restore_routes`/`restore_outpost_routes` used to append the
+/// outpost half onto the settlement half regardless of how the two were
+/// interleaved in `resources::Routes` before the save — `save::RouteSave::
+/// order`'s fix. Dispatched outpost-then-settlement here so a naive
+/// concatenation (settlement rows first) would visibly disagree with this
+/// test's expected order.
+#[test]
+fn interleaved_routes_keep_their_original_order_across_a_reload() {
+    let scratch = scratch_assets_dir("interleaved_routes_roundtrip");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let tile = (600, 600);
+    let (mut game, item, key) = a_dispatch_ready_base(8900, 40);
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+
+    game.dispatch_outpost_route(tile, false).unwrap();
+    game.dispatch_route(key, vec![(item, 5)], false).unwrap();
+
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let routes = loaded
+        .world
+        .resource::<crate::resources::Routes>()
+        .0
+        .clone();
+    assert_eq!(routes.len(), 2);
+    assert_eq!(
+        routes[0].destination,
+        RouteEnd::Outpost(tile),
+        "the outpost route was dispatched first and must reload first"
+    );
+    assert_eq!(
+        routes[1].destination.settlement_key(),
+        Some(key),
+        "the settlement route was dispatched second and must reload second"
     );
 }
 

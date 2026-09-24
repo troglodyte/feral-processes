@@ -2844,6 +2844,14 @@ fn a_raid_hit_damages_steals_stock_and_benches_the_first_crew_member() {
 
 /// A hit that brings integrity to exactly zero recalls every remaining crew
 /// member to staff and stays on the map — design spec §8's "dark" outcome.
+///
+/// **Two crew, not one** (I5's fix): with a single posted member, that one
+/// program is exactly the one `crew.first()` benches as the hit's ordinary
+/// consequence, and `bench_or_dissolve` already drops it from
+/// `outpost_crew` before the "every remaining crew member" recall loop
+/// (`game/base/upkeep.rs`'s `raid_one_outpost`) ever runs — so the loop
+/// iterates zero times and the assertion below passed vacuously. A second
+/// member is what actually reaches the loop body.
 #[test]
 fn a_hit_that_reaches_zero_integrity_recalls_the_rest_of_the_crew() {
     let tile = (500, 500);
@@ -2855,6 +2863,7 @@ fn a_hit_that_reaches_zero_integrity_recalls_the_rest_of_the_crew() {
         .get_mut(&tile)
         .unwrap()
         .integrity = OUTPOST_RAID_DAMAGE; // exactly one hit from zero
+    let benched = posted_at(&mut game, tile);
     let bystander = posted_at(&mut game, tile);
 
     // Force the hit rather than sweeping for a seed — `OUTPOST_HOSTILE_TOWN_BONUS`
@@ -2864,7 +2873,7 @@ fn a_hit_that_reaches_zero_integrity_recalls_the_rest_of_the_crew() {
         super::support::reseed_rng(&mut game, seed.into());
         let mut probe = game.world.resource_mut::<crate::resources::GameRng>();
         use rand::RngExt;
-        probe.0.random_bool(crate::outposts::raid_chance(0, 1))
+        probe.0.random_bool(crate::outposts::raid_chance(0, 2))
     });
     let hit_seed = hit_seed.expect("some seed in this range must land a 10% roll");
     super::support::reseed_rng(&mut game, hit_seed.into());
@@ -2873,6 +2882,14 @@ fn a_hit_that_reaches_zero_integrity_recalls_the_rest_of_the_crew() {
 
     let outpost = &game.world.resource::<Outposts>().0[&tile];
     assert_eq!(outpost.integrity, 0, "the outpost must be dark");
+    assert!(
+        game.world.get::<Downed>(benched).is_some(),
+        "the hit's ordinary consequence still benches the first crew member"
+    );
+    assert!(
+        game.world.get::<PostedAt>(benched).is_none(),
+        "bench_or_dissolve already dropped the benched member from the crew list"
+    );
     assert!(
         game.world.get::<PostedAt>(bystander).is_none(),
         "the surviving crew member must be recalled, not left posted at a dark outpost"

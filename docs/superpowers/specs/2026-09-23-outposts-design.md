@@ -123,10 +123,11 @@ Trend`, derived from current conditions and never stored. The first match wins:
 1. Accumulate `stale_ticks` (or reset it) and apply the growth delta for
    `trend`.
 2. Advance `cycle_progress`. At `OUTPOST_CYCLE_TICKS`, **each crew member**
-   rolls a payout through `systems::mining_success_chance` with a
-   `CycleModifiers` built for that program (class and base INT; `morale: 0`
-   and `need_strain: 0` because away crew have neither). That is a **call**,
-   not a copy of the formula.
+   rolls a payout through `systems::mining_success_chance` directly — base
+   INT and the player's Keen Scavenger perk, `morale: 0.0` and
+   `need_strain: 0.0` because away crew have neither, and no class-based
+   bonus at all (correction 6: no `CycleModifiers` is built for the crew
+   member). That is a **call**, not a copy of the formula.
 3. On a success, pick an item from the current tier's union: one `GameRng`
    draw, and none when the union has one entry. Add 1 to stock unless it is
    full.
@@ -285,8 +286,12 @@ in `Game::attention`. It is announced only when the state changes
   gates none of them. Write the first playtest's numbers into
   `docs/measurements/`.
 - Whether a Striker's second action or a Leech bonus should apply at an
-  outpost. v1 passes `class` through `CycleModifiers` exactly as the base
-  does, so whatever the base does, the outpost does.
+  outpost. **Correction 6**: v1 applies no class-based yield bonus at all —
+  `Game::run_outposts` calls `systems::mining_success_chance` directly with
+  no `CycleModifiers` built for the crew member, so a Striker or a Leech
+  posted at an outpost earns no more than any other class does. The question
+  above is open for whenever that changes, not resolved by "the base's own
+  rule already applies."
 - **§8's "flash `THREAT` on the tile if it is drawn" is not built.**
   `resources::EffectQueue`/`VisualEffect` is base-space by construction —
   `render/base.rs` and `crates/gui/src/lib.rs`'s `in_base` gate both read a

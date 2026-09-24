@@ -52,14 +52,13 @@ impl App {
         };
         let crew_len = self.outpost_report().map(|r| r.crew.len()).unwrap_or(0);
         match key {
-            // `c` is the one exception to "lowercase selects a row" —
-            // it is already the transfer key everywhere else in the game,
-            // so it has to be matched before the generic lowercase arm
-            // below would otherwise treat it as a crew-row pick.
+            // Uppercase (I2): `OUTPOST_CREW_CAP` is 6, rows a-f, so
+            // lowercase `c` is a real crew row here and the generic
+            // lowercase arm below must be the one that handles it.
             //
             // Opens the transfer picker, take side only — the outpost's
             // own door onto `Mode::Transfer` (design correction 11).
-            GameKey::Char('c') => {
+            GameKey::Char('C') => {
                 let Some(game) = &mut self.game else { return };
                 let rows = game.outpost_transfer_offer(tile);
                 if rows.is_empty() {

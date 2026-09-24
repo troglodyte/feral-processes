@@ -200,24 +200,20 @@ impl App {
                     _ => self.refuse("Highlight a destination to travel to."),
                 }
             }
-            // Settlement-only, `Game::sever_route`'s own shape — an outpost
-            // route has no standing arrangement this door can reach, so it
-            // reads exactly like a settlement with nothing to cut.
+            // `Game::sever_route` reaches both endpoint kinds now —
+            // `RouteDestinationId` is the one id it matches on, so this row
+            // needs no per-kind branch of its own.
             GameKey::Char('X') => {
                 match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Destination(i)) => match destinations[i].destination {
-                        RouteDestinationId::Settlement(target) => {
-                            let Some(game) = &mut self.game else { return };
-                            if game.sever_route(target) {
-                                self.status_line = None;
-                            } else {
-                                self.refuse("There's no standing route there to cut.");
-                            }
-                        }
-                        RouteDestinationId::Outpost(_) => {
+                    Some(DispatchRow::Destination(i)) => {
+                        let target = destinations[i].destination;
+                        let Some(game) = &mut self.game else { return };
+                        if game.sever_route(target) {
+                            self.status_line = None;
+                        } else {
                             self.refuse("There's no standing route there to cut.");
                         }
-                    },
+                    }
                     _ => self.refuse("Highlight a destination to cut a standing route from."),
                 }
             }

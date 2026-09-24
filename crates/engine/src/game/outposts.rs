@@ -8,8 +8,8 @@ use crate::Game;
 use crate::ProgramRole;
 use crate::base_ledger::LootSource;
 use crate::components::{
-    Carrying, Creature, Downed, Experience, Inventory, Perks, Position, PostedAt, ProgramId, Tamed,
-    Task,
+    Carrying, CarryingProgram, Creature, Downed, Experience, Inventory, Perks, Position, PostedAt,
+    ProgramId, Tamed, Task,
 };
 use crate::game::base::transfer::{Moved, TransferBasket};
 use crate::outposts::{Outpost, OutpostDb};
@@ -48,12 +48,16 @@ impl Game {
         {
             return Err("That's still within reach of the base. Walk further out.".into());
         }
-        // The Stack link, nest and settlement checks reuse the existing
-        // occupancy queries `place_trap` already draws on, rather than
-        // restating what "something stands here" means a fourth time.
+        // The Stack link, nest, settlement and trap checks reuse the
+        // existing occupancy queries `place_trap` already draws on, rather
+        // than restating what "something stands here" means a fifth time.
+        // The trap check matters beyond "something stands there": `move_
+        // player`'s outpost-bump arm comes before its trap arm, so a trap
+        // under a founded outpost would be permanently unreachable.
         if self.find_nest_at(x, y).is_some()
             || self.find_surface_link_at(x, y).is_some()
             || self.find_settlement_at(x, y).is_some()
+            || self.find_trap_at(x, y).is_some()
         {
             return Err("Something already stands there.".into());
         }
@@ -121,9 +125,16 @@ impl Game {
         }
         // Refused rather than freed: unlike a pin, posting has nowhere for
         // the load to land, and `hauling`'s own rule is that a body holding
-        // `Carrying` is never freed for exactly this reason.
+        // `Carrying` is never freed for exactly this reason. `CarryingProgram`
+        // is `is_on_shift`'s pairing — a carried kill is a program the player
+        // cannot get back, so it is refused for the same reason.
         if self.world.get::<Carrying>(creature).is_some() {
             return Err("That program is carrying a load — it has to deliver that first.".into());
+        }
+        if self.world.get::<CarryingProgram>(creature).is_some() {
+            return Err(
+                "That program is carrying a downed program — it has to deliver that first.".into(),
+            );
         }
         if !self.world.resource::<Outposts>().0.contains_key(&tile) {
             return Err("No outpost stands there.".into());
@@ -152,13 +163,14 @@ impl Game {
     /// Returns `creature` from outpost duty to ordinary base staff — design
     /// spec §6.
     ///
-    /// **`Position` is deliberately left untouched.** A posted program's
-    /// last written `Position` is exactly the "a body with no honest
-    /// base-space cell yet" case `game::base::work_orders::entry_tile`
-    /// already exists to recover from — the same arrival path a program
-    /// downed in the Stack takes on its very next `drift_idle_staff` beat —
-    /// so recalling one here reuses that arrival rather than writing a
-    /// second one.
+    /// **`Position` is deliberately left untouched.** A recalled program
+    /// keeps whatever base-space `Position` it held before being posted, and
+    /// `drift_idle_staff` walks it from there on its very next beat: if that
+    /// tile is still laid floor, `wander_step` continues from it directly.
+    /// `game::base::work_orders::entry_tile` — a ring around the Home — is
+    /// only the fallback for the *off-floor* case, the same arrival path a
+    /// program downed in the Stack takes; an ordinary recall does not go
+    /// through it at all.
     pub fn recall_from_outpost(&mut self, creature: Entity) -> Result<(), String> {
         if self.world.get::<PostedAt>(creature).is_none() {
             return Err("That program isn't posted at an outpost.".into());
@@ -903,6 +915,30 @@ mod tests {
         // an ordinary open tile refuses it.
     }
 
+    /// `move_player`'s outpost-bump arm comes before its trap arm — a trap
+    /// under a founded outpost would be permanently unreachable, since the
+    /// bump always wins the tile first.
+    #[test]
+    fn refuses_when_a_trap_stands_on_the_tile() {
+        let mut game = game(14);
+        let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.world.spawn((
+            crate::components::Trap {
+                item: crate::items::ItemId::from("core_fragment"),
+                next_roll: 10,
+                caught: None,
+            },
+            Position {
+                x: tile.0,
+                y: tile.1,
+            },
+        ));
+        assert!(game.found_outpost(tile).is_err());
+        // Deleted-fix check: without the trap occupancy guard this same call
+        // would succeed on top of the trap, since nothing else about an
+        // ordinary open tile refuses it.
+    }
+
     #[test]
     fn refuses_when_the_outpost_cap_is_reached() {
         let mut game = game(9);
@@ -1078,6 +1114,35 @@ mod tests {
         // Deleted-fix check: without this guard the post succeeds and
         // despawns nothing, but the carried load is stranded on a body that
         // no longer walks the base at all.
+    }
+
+    /// `is_on_shift`'s pairing (I3): a body walking a downed program to a
+    /// rack is exactly as un-freeable as one holding `Carrying`, and for the
+    /// same reason — a carried kill is a program the player cannot get back.
+    #[test]
+    fn post_to_outpost_refuses_a_program_carrying_a_program() {
+        let mut game = game(26);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let program = staff(&mut game);
+        let species = game.species_defs()[0].id.clone();
+        game.world
+            .entity_mut(program)
+            .insert(crate::components::CarryingProgram(
+                crate::items::DownedProgram {
+                    species,
+                    level: 1,
+                    rarity: Default::default(),
+                    boss: false,
+                    condition: 100,
+                    carried: None,
+                },
+            ));
+
+        assert!(game.post_to_outpost(tile, program).is_err());
+        assert!(game.outpost_crew(tile).is_empty());
+        // Deleted-fix check: without this guard the post succeeds and the
+        // carried program is stranded on a body that no longer walks the
+        // base at all.
     }
 
     #[test]

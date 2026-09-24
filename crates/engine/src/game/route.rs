@@ -361,24 +361,23 @@ impl Game {
         Ok(())
     }
 
-    /// Clears `standing` on the route running to `destination`, if one is
-    /// both in flight and still standing. Returns whether anything was
-    /// cleared.
+    /// Clears `standing` on the route running to `destination` — settlement
+    /// or outpost — if one is both in flight and still standing. Returns
+    /// whether anything was cleared.
     ///
     /// **Clears `standing` and nothing else** — the trip already in flight
     /// still completes and still pays, through the ordinary tick. No
     /// refund path, no cargo teleport.
-    ///
-    /// Settlement-only by construction — `RouteEnd::settlement_key` answers
-    /// `None` for an outpost route, so this can never sever one.
-    pub fn sever_route(&mut self, destination: SettlementKey) -> bool {
+    pub fn sever_route(&mut self, destination: RouteDestinationId) -> bool {
         let cleared = {
             let mut routes = self.world.resource_mut::<resources::Routes>();
-            match routes
-                .0
-                .iter_mut()
-                .find(|r| r.destination.settlement_key() == Some(destination))
-            {
+            let found = routes.0.iter_mut().find(|r| match destination {
+                RouteDestinationId::Settlement(key) => r.destination.settlement_key() == Some(key),
+                RouteDestinationId::Outpost(tile) => {
+                    matches!(r.destination, RouteEnd::Outpost(t) if t == tile)
+                }
+            });
+            match found {
                 Some(route) if route.standing => {
                     route.standing = false;
                     true
@@ -387,7 +386,10 @@ impl Game {
             }
         };
         if cleared {
-            let name = self.settlement_name(destination);
+            let name = match destination {
+                RouteDestinationId::Settlement(key) => self.settlement_name(key),
+                RouteDestinationId::Outpost(tile) => self.outpost_destination_name(tile),
+            };
             self.log_base(format!("You cut the standing arrangement with {name}."));
         }
         cleared

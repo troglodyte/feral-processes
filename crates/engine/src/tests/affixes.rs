@@ -328,3 +328,134 @@ fn wearing_and_removing_a_drawback_copy_leaves_no_dent() {
         "a drawback copy left a permanent dent in the wearer's base stats"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The loader's other refusals.
+
+/// Its bonus would have no visible source on the item's name.
+#[test]
+fn an_affix_with_neither_prefix_nor_suffix_is_refused() {
+    let dir = affix_dir(
+        "affix_no_prefix_or_suffix",
+        &[("bare.ron", r#"(id: "bare", stats: (atk: 1))"#)],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("bare.ron"));
+}
+
+/// No screen has room for a name carrying both.
+#[test]
+fn an_affix_with_both_prefix_and_suffix_is_refused() {
+    let dir = affix_dir(
+        "affix_both_prefix_and_suffix",
+        &[(
+            "both.ron",
+            r#"(id: "both", prefix: Some("Honed"), suffix: Some("of Static"), stats: (atk: 1))"#,
+        )],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("both.ron"));
+}
+
+/// An affix with zero weight is unusable because it would never roll.
+#[test]
+fn an_affix_with_zero_weight_is_refused() {
+    let dir = affix_dir(
+        "affix_zero_weight",
+        &[(
+            "never.ron",
+            r#"(id: "never", prefix: Some("Never"), weight: 0, stats: (atk: 1))"#,
+        )],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("never.ron"));
+}
+
+/// It would rename an item and change nothing else.
+#[test]
+fn an_affix_granting_no_stats_is_refused() {
+    let dir = affix_dir(
+        "affix_no_stats",
+        &[(
+            "hollow.ron",
+            r#"(id: "hollow", prefix: Some("Hollow"), stats: ())"#,
+        )],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("hollow.ron"));
+    // `has_upside` would refuse this file too; the reason given is what tells the two arms apart.
+    assert!(
+        warnings[0].contains("grants no stats"),
+        "wrong reason: {}",
+        warnings[0]
+    );
+}
+
+/// It allows no slots, so it could never be rolled.
+#[test]
+fn an_affix_with_an_empty_slot_list_is_refused() {
+    let dir = affix_dir(
+        "affix_empty_slots",
+        &[(
+            "nowhere.ron",
+            r#"(id: "nowhere", prefix: Some("Nowhere"), slots: Some([]), stats: (atk: 1))"#,
+        )],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("nowhere.ron"));
+}
+
+/// An unparseable affix file is skipped with a warning.
+#[test]
+fn an_unparseable_affix_file_is_skipped_with_a_warning() {
+    let dir = affix_dir("affix_broken_ron", &[("broken.ron", r#"(id: "#)]);
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("broken.ron"));
+}
+
+/// Loading from a missing directory yields an empty database and no warnings.
+#[test]
+fn a_missing_affix_directory_yields_an_empty_database() {
+    let dir = scratch_assets_dir("affix_missing");
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 0);
+    assert!(warnings.is_empty());
+}
+
+/// A notes.txt file beside a valid affix is ignored without warnings.
+#[test]
+fn a_notes_txt_file_is_ignored_without_warnings() {
+    let dir = affix_dir(
+        "affix_with_notes",
+        &[
+            (
+                "ok.ron",
+                r#"(id: "ok", prefix: Some("Ok"), stats: (atk: 1))"#,
+            ),
+            ("notes.txt", "This is a note."),
+        ],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert_eq!(db.all().count(), 1);
+    assert!(warnings.is_empty());
+}

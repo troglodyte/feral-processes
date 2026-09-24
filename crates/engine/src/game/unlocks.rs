@@ -864,13 +864,7 @@ impl Game {
         if !crate::game::base::work_orders::producers_of(self, currency).is_empty() {
             return None;
         }
-        let name = self.item_name(currency);
-        Some(
-            match crate::game::base::work_orders::makeable_by(self, currency) {
-                Some(def) => format!("No {} deployed — that is what makes {name}.", def.name),
-                None => format!("Nothing the base can build makes {name}."),
-            },
-        )
+        Some(crate::game::base::work_orders::no_producer(self, currency))
     }
 
     /// Whether there is a research tree to open at all, for `tree`.

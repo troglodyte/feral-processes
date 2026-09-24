@@ -176,6 +176,17 @@ pub(crate) fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
         .find(|def| produced_item(def) == Some(item))
 }
 
+/// The sentence for an `item` no deployed machine makes: the machine to
+/// build, by name. Shared by `chain_break`'s two depths and the research
+/// tree's "no Research Node" block, so the three cannot word it apart.
+pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
+    let name = game.item_name(item);
+    match makeable_by(game, item) {
+        Some(def) => format!("No {name} — build a {} to make it.", def.name),
+        None => format!("Nothing the base can build makes {name}."),
+    }
+}
+
 /// The one sentence naming why a line for `item` can never move, or `None`
 /// if it is whole.
 ///
@@ -205,14 +216,7 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     }
     let machines = producers_of(game, item);
     if machines.is_empty() {
-        let name = game.item_name(item);
-        return Some(match makeable_by(game, item) {
-            Some(def) => format!(
-                "No {} deployed — that is what makes a {name}.",
-                def.name.clone()
-            ),
-            None => format!("Nothing the base can build makes a {name}."),
-        });
+        return Some(no_producer(game, item));
     }
     // **One whole line is enough.** A second bench standing somewhere with
     // nothing beside it is a half-built plan, not a reason to refuse an
@@ -362,10 +366,21 @@ fn break_at(
     let recipe: Vec<ItemId> = recipe.iter().map(|(item, _)| item.clone()).collect();
     for ingredient in recipe {
         let Some(&feeder) = feeders_for(game, by_tile, pos, &ingredient).first() else {
+            // `feeders_for` widens to every producer once a Depot stands, so
+            // a producer that exists but was not offered means no Depot —
+            // and "build one" would tell the player to buy what they own.
+            let Some(&far) = producers_of(game, &ingredient).first() else {
+                return Some(no_producer(game, &ingredient));
+            };
             let want = game.item_name(&ingredient);
+            let maker = game
+                .world
+                .get::<Structure>(far)
+                .and_then(|s| db.get(&s.kind))
+                .map_or_else(|| want.to_string(), |d| d.name.clone());
             return Some(format!(
-                "Nothing is making {want} within the {}'s reach — it can only take what a \
-                 neighbour has finished, or what a worker can fetch off a Depot shelf.",
+                "The {} can't reach your {maker}'s {want} — build a {maker} beside it, or a \
+                 Depot to carry it over.",
                 def.name
             ));
         };

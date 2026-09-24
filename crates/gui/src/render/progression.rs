@@ -303,7 +303,8 @@ pub(super) fn research_header(active: Option<&(String, u32, u32)>) -> String {
 /// row — see `Game::research_block`.
 ///
 /// **Wrapped, and on the row rather than in the refusal line.** A
-/// `chain_break` sentence runs to 158 characters and a `LogLine` is never
+/// `chain_break` sentence names up to three things, machines and an item,
+/// so its length is the assets' to decide, and a `LogLine` is never
 /// wrapped, so this is the only place it fits. Amber, `row_color`'s reason: it
 /// is a wall the player clears by building what it names.
 ///
@@ -753,9 +754,10 @@ mod tests {
     }
 
     /// The blocked sentence is the one row on this screen whose length is not
-    /// bounded by the assets: `work_orders::chain_break`'s longest shape runs to
-    /// 158 characters against a `PopupSize::Large` body of roughly 114, so it
-    /// has to wrap or its tail is drawn outside the box in silence.
+    /// bounded by the assets: `work_orders::chain_break` names machines and
+    /// an item, so a modded name can carry it past a `PopupSize::Large` body
+    /// of roughly 114 characters, and it has to wrap or its tail is drawn
+    /// outside the box in silence. The fixture is a deliberately long one.
     ///
     /// Measured against a synthetic sentence rather than the shipped tree, and
     /// deliberately: `the_widest_progression_row_fits_the_popup_it_is_drawn_in`

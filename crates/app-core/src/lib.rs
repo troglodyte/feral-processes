@@ -104,11 +104,11 @@ use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
     DispatchReach, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
-    FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, OutpostReport, ProgramSaleOption, RigToolView, RouteDestination,
-    RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport,
-    SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow, Visit,
-    WorkOrder, WorkOrderReport, WorkProfile, condense,
+    FieldRoutineTargetView, Game, HandCraftProgress, LevelUpReport, LogEntry, LogLine,
+    MESSAGE_LOG_CAP, MessageSource, OutpostReport, ProgramSaleOption, RigToolView,
+    RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
+    Visit, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2014,6 +2014,21 @@ pub enum Mode {
     /// takes the next one straight away if the queue is not empty, so a
     /// burst arrives one at a time rather than being collapsed or dropped.
     Notification,
+    /// The level-up summary, shown once a level lands and the player is
+    /// back on the map — see `App::pending_level_up` and correction 8 of
+    /// `docs/superpowers/plans/2026-09-24-level-up-summary.md`.
+    ///
+    /// Opened from inside `App::show_next_notification`, **ahead of** the
+    /// notification queue it already gates: a level-up earned mid-fight
+    /// waits for the results screen to close exactly as a notification
+    /// does, and a notification queued behind it is not dropped, only
+    /// delayed one screen further.
+    ///
+    /// `Esc` closes to `Mode::Playing` and lets the next notification
+    /// through; uppercase `P` closes the page and opens `Mode::Perks`
+    /// instead, since the page exists to answer "what do I do with what I
+    /// just earned."
+    LevelUp,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
     /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
@@ -2233,7 +2248,8 @@ impl Mode {
             | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers
             // over a fight.
-            | Mode::Notification => false,
+            | Mode::Notification
+            | Mode::LevelUp => false,
         }
     }
 }
@@ -2457,6 +2473,11 @@ pub struct App {
     /// writer is `App::show_next_notification`; a second one is three
     /// distinct failures inherited, `GearInspect`'s rule.
     pub pending_notification: Option<feral_processes_engine::notifications::Notification>,
+    /// The report on screen in `Mode::LevelUp`. The **one** writer is
+    /// `App::show_next_notification`, `pending_notification`'s own rule —
+    /// and it is checked first, so a level earned in the same tick a
+    /// notification queued takes the screen before the notification does.
+    pub pending_level_up: Option<LevelUpReport>,
     /// Which screen `Mode::Manifest` was opened from, and so where Esc goes
     /// back to. See `ManifestOrigin`.
     pub manifest_origin: ManifestOrigin,

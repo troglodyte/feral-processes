@@ -55,8 +55,8 @@
 
 ## Phase 2 — App-core
 
-- [ ] **2.1** Tests first, in `tests/level_up.rs`: the spec's three tests, plus `Esc` → `Playing` from Perks after `P` (correction 9), plus an arena session never opens the page. Drive the level with a real fight or with a contract award. Remember `app-core-battles-are-always-one-group-one-slot`.
-- [ ] **2.2** Add `Mode::LevelUp`, the field, the hook (correction 8), `handle_level_up_key` (only `Esc` and uppercase `P` act; everything else is ignored), and the correction 10 app-core sites. Commit.
+- [x] **2.1** Tests first, in `tests/level_up.rs`: the spec's three tests, plus `Esc` → `Playing` from Perks after `P` (correction 9), plus an arena session never opens the page. Drive the level with a real fight or with a contract award. Remember `app-core-battles-are-always-one-group-one-slot`.
+- [x] **2.2** Add `Mode::LevelUp`, the field, the hook (correction 8), `handle_level_up_key` (only `Esc` and uppercase `P` act; everything else is ignored), and the correction 10 app-core sites. Commit.
 
 ## Phase 3 — Gui and docs
 

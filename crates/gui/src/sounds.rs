@@ -29,6 +29,7 @@ pub struct SoundBank {
     defeat: Handle<AudioSource>,
     mine: Handle<AudioSource>,
     reaction: Handle<AudioSource>,
+    round_end: Handle<AudioSource>,
 }
 
 impl SoundBank {
@@ -49,6 +50,7 @@ impl SoundBank {
             defeat: add(include_bytes!("../../../assets/sounds/defeat.wav")),
             mine: add(include_bytes!("../../../assets/sounds/mine.wav")),
             reaction: add(include_bytes!("../../../assets/sounds/reaction.wav")),
+            round_end: add(include_bytes!("../../../assets/sounds/round_end.wav")),
         }
     }
 
@@ -72,6 +74,7 @@ impl SoundBank {
             SoundEvent::Defeat => &self.defeat,
             SoundEvent::Mine => &self.mine,
             SoundEvent::Reaction => &self.reaction,
+            SoundEvent::RoundEnd => &self.round_end,
         };
         commands.spawn((
             AudioPlayer::new(source.clone()),

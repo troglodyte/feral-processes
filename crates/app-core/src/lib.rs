@@ -898,6 +898,9 @@ pub enum SoundEvent {
     /// other blow. `Mine`'s arrangement: it comes off the engine's tactical
     /// fx queue (`TacticalFxKind::Reaction`), never pushed by `App`.
     Reaction,
+    /// A battle map's round wrapped. Never pushed by `App` either: gui hears
+    /// it off `Fx::observe_round`, the same sighting that raises the banner.
+    RoundEnd,
 }
 
 /// Which pane of the HUD's info column is open.

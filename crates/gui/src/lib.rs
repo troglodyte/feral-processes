@@ -621,6 +621,10 @@ fn frame(
     fe.fx
         .begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
     fe.fx.observe_log(last_log.as_ref());
+    let round = fe.app.game.as_ref().and_then(|g| g.tactical_round());
+    if fe.fx.observe_round(round) {
+        sounds.play(&mut commands, SoundEvent::RoundEnd, fe.volume);
+    }
 
     // Timed whether or not the readout is on: a meter fed only while it is
     // visible reports the first second after F3 as a cold start every time.

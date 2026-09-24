@@ -53,6 +53,27 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.230
+
+**You can found an outpost out on the surface with an Outpost Kit, post
+programs to crew it, and watch it grow from raw materials to processed
+and then complex ones.** Until now everything the base extracted came from
+inside base space. An outpost is a foothold out in the zone: it grows while
+it is crewed, stalls and then declines when it is not, and its tier sets what
+it yields. The kit is unlocked by the new Outpost Founding research.
+
+**A caravan route can now run to an outpost as well as a town.** It goes out
+empty and hauls back up to a cartload of whatever the outpost has stocked. It
+can be one-off or standing, and it is dispatched and cut from the same Relay
+hub. You can also walk up to an outpost and carry its stock home yourself.
+
+**Outposts can be raided when a GC Entropy Sweep hits, and a raided outpost
+loses integrity and stock and can have a crew member downed.** A bigger crew
+makes an outpost harder to hit, and a hostile town nearby makes it easier. An
+outpost at zero integrity goes dark and sends its crew home until you repair
+it. Zone 1 outposts are never raided, and the alert board says when an
+outpost is stalling, declining, dark or raided.
+
 ## 0.13.229
 
 **The green `+` over a program being mended at a Repair Bay now floats up

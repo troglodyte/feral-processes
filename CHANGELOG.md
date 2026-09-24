@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.233
+
+**Stripping a downed program for materials now pays a varying amount.**
+Each extraction rolls its unit count up to half again either side of what
+it used to pay, so a typical kill through the starting tool pays 2 to 4
+units instead of always 3 — the same on average. The extraction screen now
+names the items a tool can draw out without quoting counts, and the
+Teardown Rig rolls the same way. The Teardown perk and a species' own
+specialty still add their flat bonus on top.
+
 ## 0.13.232
 
 **The status bar's `[GRID]` figure now shows how close the base is to

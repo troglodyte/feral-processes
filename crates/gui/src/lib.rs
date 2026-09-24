@@ -601,7 +601,7 @@ fn frame(
 
     // Effects are drained every frame whether or not they'll be drawn,
     // so a disabled `Fx` can't leave the engine's queue at its cap.
-    let in_battle = fe.app.mode.is_battle();
+    let in_battle = fx_in_fight(&fe.app);
     let in_base = fe.app.game.as_ref().is_some_and(|g| g.base_pos().is_some());
     let (effects, transits, bolts, tactical_fx, last_log) = match &mut fe.app.game {
         Some(game) => (
@@ -648,6 +648,20 @@ fn frame(
         draw_perf(&readout.line(), &painter);
     }
     Ok(())
+}
+
+/// Whether `Fx` should keep a fight's own state — the bars' ghost trails,
+/// a battle map's flashes and marks — across this frame.
+///
+/// **Not `Mode::is_battle` alone**: a battle map is deliberately not a
+/// battle mode (that flag gates the reveal), so on it alone every hit
+/// flash, heal mark and reaction mark was cleared in the frame that took it
+/// in. The open fight is asked instead of a list of tactical modes, because
+/// what the clear protects against is a mark outliving the board its cell
+/// indexes — and that board is exactly the one `in_tactical_battle` says is
+/// still open.
+fn fx_in_fight(app: &App) -> bool {
+    app.mode.is_battle() || app.game.as_ref().is_some_and(|g| g.in_tactical_battle())
 }
 
 /// Which cues this frame plays: what `App` queued for the key the player
@@ -895,6 +909,71 @@ mod tests {
         );
     }
 
+    /// An `App` standing in an open battle-map fight, in the mode the router
+    /// puts one in — `render::tactical`'s own fixture, lifted to an `App`.
+    fn app_in_tactical_fight() -> App {
+        let assets = assets_dir();
+        let tmp = std::env::temp_dir().join("feral_processes_gui_tactical_fx");
+        let mut app = App::new(
+            assets.clone(),
+            tmp.join("saves"),
+            tmp.join("log"),
+            tmp.join("profile.ron"),
+            tmp.join("arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        for seed in 0..200u32 {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets).unwrap();
+            let mut profile = game.profile().clone();
+            profile.tactical_battles = true;
+            game.install_profile(profile);
+            let at = game.player_status().position;
+            let Some(target) = game
+                .view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - at.0).abs() + (e.pos.1 - at.1).abs() == 1)
+            else {
+                continue;
+            };
+            game.move_player(target.pos.0 - at.0, target.pos.1 - at.1);
+            if game.in_tactical_battle() {
+                app.game = Some(game);
+                app.mode = Mode::TacticalBattle;
+                return app;
+            }
+        }
+        panic!("no seed under 200 opened a battle-map fight");
+    }
+
+    /// A battle map's own effects must outlive the frame that took them in.
+    /// The flag `begin_frame` clears them on was `Mode::is_battle`, which a
+    /// battle map deliberately is not — so every hit flash, heal mark and
+    /// reaction mark was wiped in the call that pushed it, and the renderer's
+    /// own tests, all passing `true`, never saw it.
+    #[test]
+    fn a_battle_map_keeps_its_own_effects_past_the_frame() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+        let app = app_in_tactical_fight();
+        let mut fx = Fx::new();
+        let cue = TacticalFxCue {
+            pos: (2, 3),
+            kind: TacticalFxKind::Hit,
+        };
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![cue],
+            fx_in_fight(&app),
+        );
+        assert!(
+            fx.tactical_tile_flash((2, 3)).is_some(),
+            "the hit's flash was cleared in the frame that queued it"
+        );
+    }
+
     /// An `App` standing on `(x, y)` of Stack frame 1 with the given facing.
     ///
     /// Built by editing a save and reloading it, which is what
@@ -1046,7 +1125,7 @@ mod tests {
     /// One turn of the real frontend loop: drain effects the way `frame`
     /// does, then draw whatever mode the app is now in.
     fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
-        let in_battle = app.mode.is_battle();
+        let in_battle = fx_in_fight(app);
         let (effects, transits, bolts, tactical_fx, last_log) = match &mut app.game {
             Some(game) => (
                 game.take_effects(),

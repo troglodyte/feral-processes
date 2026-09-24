@@ -1427,12 +1427,11 @@ impl Fx {
     /// Watches the open battle map's round and answers whether it has just
     /// wrapped, raising the `ROUND N` banner when it has.
     ///
-    /// **Kept out of `begin_frame`'s `in_battle` clear.** That flag is
-    /// `Mode::is_battle`, which a battle map deliberately is not, so a
-    /// banner living beside `cell_marks` would be wiped the frame it was
-    /// raised. `None` — no fight open — is what ends this one's, and a
-    /// fight's first round, and a later fight's opening at 1, are both
-    /// sightings rather than wraps.
+    /// `None` — no fight open — is what ends the banner, rather than
+    /// `begin_frame`'s `in_battle` clear, because the round is the one thing
+    /// here that must also know *which* fight it is watching: a fight's
+    /// first round, and a later fight's opening at 1, are both sightings
+    /// rather than wraps.
     ///
     /// Reported whether or not effects are on: the caller plays the wrap's
     /// sound off the answer, and sound is not a visual effect.

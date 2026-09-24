@@ -778,7 +778,10 @@ mod tests {
     fn effective_hp_prices_mitigation_as_soak_and_caps_it() {
         assert!((effective_hp(90, 0) - 90.0).abs() < 1e-9);
         assert!((effective_hp(90, 50) - 180.0).abs() < 1e-9);
-        assert_eq!(effective_hp(90, 1000), effective_hp(90, MAX_MITIGATION_PERCENT));
+        assert_eq!(
+            effective_hp(90, 1000),
+            effective_hp(90, MAX_MITIGATION_PERCENT)
+        );
     }
 
     #[test]

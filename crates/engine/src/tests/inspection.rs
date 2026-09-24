@@ -394,26 +394,92 @@ fn find_target_in_direction_never_looks_behind_the_player() {
 }
 
 #[test]
-fn difficulty_color_buckets_relative_power_into_con_colors() {
+fn difficulty_color_buckets_the_threat_ratio_into_con_colors() {
     assert_eq!(
-        difficulty_color(50, 100),
+        difficulty_color(0.5),
         GlyphColor::Green,
         "much weaker than the player"
     );
+    assert_eq!(difficulty_color(1.0), GlyphColor::Yellow, "an even match");
+    assert_eq!(difficulty_color(1.4), GlyphColor::Orange, "notably tougher");
     assert_eq!(
-        difficulty_color(100, 100),
-        GlyphColor::Yellow,
-        "an even match"
-    );
-    assert_eq!(
-        difficulty_color(140, 100),
-        GlyphColor::Orange,
-        "notably tougher"
-    );
-    assert_eq!(
-        difficulty_color(200, 100),
+        difficulty_color(2.0),
         GlyphColor::Red,
         "far stronger than the player"
+    );
+}
+
+/// A con rung as a number, for asserting that one read is hotter than
+/// another without pinning either to a bucket.
+fn con_rung(color: GlyphColor) -> u8 {
+    match color {
+        GlyphColor::Green => 0,
+        GlyphColor::Yellow => 1,
+        GlyphColor::Orange => 2,
+        GlyphColor::Red => 3,
+        other => panic!("{other:?} is not a con rung"),
+    }
+}
+
+fn hostile_with(game: &mut Game, dx: i32, max_hp: i32, atk: i32) -> Entity {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("scrapper", pos.x + dx, pos.y)
+        .expect("scrapper ships with the game");
+    let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+    stats.max_hp = max_hp;
+    stats.hp = max_hp;
+    stats.atk = atk;
+    wild
+}
+
+fn con_of(game: &mut Game, entity: Entity) -> GlyphColor {
+    game.view_entities(8, 8)
+        .into_iter()
+        .find(|v| v.entity == entity)
+        .and_then(|v| v.difficulty)
+        .expect("a hostile in view carries a con read")
+}
+
+/// Todo #112. The con read was `Stats::power` — effective HP plus attack —
+/// and at HP ten times the size of attack that is HP alone: a program
+/// hitting far harder than the player read no hotter than one barely able
+/// to scratch them. Two programs of the same species, so only the stats
+/// differ.
+#[test]
+fn a_program_that_hits_hard_reads_hotter_than_one_that_only_soaks() {
+    let mut game = Game::new(9032, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let cannon = hostile_with(&mut game, 1, 50, 20);
+    let sponge = hostile_with(&mut game, -1, 80, 1);
+
+    let (cannon_con, sponge_con) = (con_of(&mut game, cannon), con_of(&mut game, sponge));
+    assert!(
+        con_rung(cannon_con) > con_rung(sponge_con),
+        "a glass cannon ({cannon_con:?}) must read hotter than a sponge ({sponge_con:?})"
+    );
+}
+
+/// The con read measures the fight you would actually have, so a companion
+/// standing with you cools it — and kill XP, measured against the player
+/// alone, must not move, or recruiting would cost the player XP.
+#[test]
+fn a_companion_cools_the_con_read_but_not_the_xp_a_kill_pays() {
+    let mut game = Game::new(9033, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = hostile_with(&mut game, 1, 120, 12);
+    let alone = game.party_threat(wild);
+    let xp_alone = game.kill_xp(wild);
+
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.push(companion);
+
+    assert!(
+        game.party_threat(wild) < alone,
+        "a second body on the player's side must make the same foe read easier"
+    );
+    assert_eq!(
+        game.kill_xp(wild),
+        xp_alone,
+        "kill XP is priced against the player alone"
     );
 }
 
@@ -436,8 +502,7 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
     // whenever a wrong override happens to land on the colour the fight was
     // going to be anyway, and an even matchup draws Yellow — which is
     // exactly what a first draft of this test collided with.
-    let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().strength);
+    let expected = difficulty_color(game.party_threat(wild));
     let shiny = game
         .view_entities(5, 5)
         .into_iter()
@@ -454,11 +519,6 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
         Rarity::Gold,
         "the tier rides its own field for the map bar to draw"
     );
-}
-
-#[test]
-fn difficulty_color_never_divides_by_zero_player_power() {
-    assert_eq!(difficulty_color(10, 0), GlyphColor::Red);
 }
 
 /// The pure `difficulty_color` tests above prove the bucketing; this proves
@@ -478,8 +538,7 @@ fn a_marked_hostile_reports_its_mark_without_giving_up_its_con_read() {
         .spawn_wild_creature("scrapper", pos.x + 1, pos.y)
         .expect("scrapper ships with the game");
 
-    let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().strength);
+    let expected = difficulty_color(game.party_threat(wild));
 
     game.world.entity_mut(wild).insert(Nemesis(1));
     let view = game
@@ -2514,8 +2573,7 @@ fn a_hostile_keeps_its_authored_colour_and_reports_difficulty_on_its_own_channel
         .expect("scrapper ships with the game");
 
     let authored = game.world.get::<Glyph>(wild).unwrap().color;
-    let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().strength);
+    let expected = difficulty_color(game.party_threat(wild));
 
     let view = game
         .view_entities(5, 5)

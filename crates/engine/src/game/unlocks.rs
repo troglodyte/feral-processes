@@ -1,7 +1,6 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
-use crate::game::inspection::power_ratio;
 use crate::resources::ActiveResearch;
 use crate::taming::{DecompilerBonuses, TargetResistance};
 use crate::tuning::DEFAULT_TAMING_DIFFICULTY;
@@ -62,7 +61,7 @@ impl Game {
     /// battle view already did.
     ///
     /// **A squad is priced as the body a capture actually takes.** What
-    /// leaves a `components::Squad` is one member, so `power_ratio` and the
+    /// leaves a `components::Squad` is one member, so `threat_ratio` and the
     /// species' resistance are read off the lead rather than off the summed
     /// block — against five bodies' `Stats::power` every attempt sat on
     /// `CAPTURE_CHANCE_MIN` and the feature was unreachable. The other two
@@ -79,10 +78,6 @@ impl Game {
             .get::<Squad>(entity)
             .and_then(|squad| squad.members.first().copied())
             .unwrap_or(entity);
-        let power = self
-            .world
-            .get::<Stats>(priced_as)
-            .map_or_else(|| stats.power(), |s| s.power());
         Some(TargetResistance {
             hp_fraction: stats.hp_fraction(),
             taming_difficulty: self
@@ -92,7 +87,7 @@ impl Game {
                 .map(|s| s.taming_difficulty)
                 .unwrap_or(DEFAULT_TAMING_DIFFICULTY),
             prior_attempts: self.decompile_attempts(entity),
-            power_ratio: power_ratio(power, self.player_power()) as f32,
+            threat_ratio: self.party_threat(priced_as) as f32,
         })
     }
 

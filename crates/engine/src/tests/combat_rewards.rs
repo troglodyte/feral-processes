@@ -585,13 +585,16 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
     let members: Vec<Entity> = (0..5)
         .map(|i| game.spawn_wild_creature("glitch", x, y + i).unwrap())
         .collect();
-    // Uniform, tiny HP, so every member is worth the same and the total
+    // Uniform, tiny stats, so every member is worth the same and the total
     // stays well under xp_for_level(1) — a level-up mid-fight would grow the
-    // player's power and change what the later members pay.
+    // player's power and change what the later members pay. Attack and
+    // mitigation too, since a kill is priced by the threat it posed.
     for &m in &members {
         let mut stats = game.world.get_mut::<Stats>(m).unwrap();
         stats.max_hp = 3;
         stats.hp = 3;
+        stats.atk = 1;
+        stats.mitigation = 0;
     }
     game.start_battle(members.clone());
     let per_kill = game.kill_xp(members[0]);

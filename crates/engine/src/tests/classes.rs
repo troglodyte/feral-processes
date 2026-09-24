@@ -291,7 +291,7 @@ fn a_decompiler_lands_more_decompiles_than_anyone_else() {
         hp_fraction: 0.5,
         taming_difficulty: 0.3,
         prior_attempts: 0,
-        power_ratio: 1.0,
+        threat_ratio: 1.0,
     };
     let plain = game_as(9101, PlayerClass::Striker);
     let specialist = game_as(9101, PlayerClass::Decompiler);
@@ -317,7 +317,7 @@ fn the_decompiler_bonus_does_not_dilute_as_the_stat_grows() {
         hp_fraction: 0.5,
         taming_difficulty: 0.3,
         prior_attempts: 0,
-        power_ratio: 1.0,
+        threat_ratio: 1.0,
     };
     let gap_at = |skill: i32| {
         let bonuses = |class| crate::taming::DecompilerBonuses {

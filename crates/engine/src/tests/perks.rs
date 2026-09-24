@@ -93,8 +93,8 @@ fn unlock_perk_rejects_without_enough_points() {
 /// health sits close enough to `CAPTURE_CHANCE_MIN` that the clamp, not the
 /// perk, would decide what these tests measure.
 ///
-/// Its Attack and Defense are padded to put `Stats::power` at
-/// `DIFFICULTY_EVEN_MAX` of the player's, for the same kind of reason.
+/// Its Attack is padded until `Game::party_threat` reaches
+/// `DIFFICULTY_EVEN_MAX`, for the same kind of reason.
 /// Exploit Focus and `taming::power_relief` subtract from the same
 /// `CAPTURE_HP_PENALTY`, and relief waives all of it at a Green-con gap — so
 /// an unpadded 12-power dummy leaves the perk nothing to reduce and turns
@@ -107,16 +107,8 @@ fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
         .into_iter()
         .min_by(|a, b| a.taming_difficulty.total_cmp(&b.taming_difficulty))
         .expect("at least one species");
-    let even_match = (game.player_power() as f64 * DIFFICULTY_EVEN_MAX).ceil() as i32;
-    // All of the padding goes into `atk`, and none into mitigation. Under
-    // `Stats::power` mitigation is priced as the effective HP it buys rather
-    // than summed in, so it is the wrong knob for "make this thing's power
-    // reach N" — past `MAX_MITIGATION_PERCENT` it is clamped and the power
-    // saturates short of the threshold, leaving the target inside the relief
-    // ramp this fixture exists to clear. With mitigation at 0 the sum is
-    // exactly `max_hp + atk`.
-    let padding = (even_match - max_hp).max(1);
-    game.world
+    let wild = game
+        .world
         .spawn((
             Creature {
                 species: species.id.clone(),
@@ -126,11 +118,20 @@ fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
             Stats {
                 hp,
                 max_hp,
-                atk: padding,
+                atk: 1,
                 mitigation: 0,
             },
         ))
-        .id()
+        .id();
+    // All of the padding goes into `atk`: `hp`/`max_hp` are the callers'
+    // own, and mitigation saturates at `MAX_MITIGATION_PERCENT` short of
+    // whatever the threshold asks for.
+    while game.party_threat(wild) < DIFFICULTY_EVEN_MAX {
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        assert!(stats.atk < 10_000, "padding never reached an even match");
+        stats.atk += 1;
+    }
+    wild
 }
 
 #[test]

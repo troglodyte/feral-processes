@@ -197,6 +197,15 @@
   colour.** `progression::kill_xp`, clamped to `XP_CHALLENGE_FLOOR`..`CEIL`.
   The denominator is the player's power **alone** — counting the party would
   dock XP for recruiting. Both clamps are load-bearing in opposite directions.
+- **How outmatched you are is one duel formula on two sides, `Game::threat_to`
+  — the party for the con and the capture odds, the player alone for kill
+  XP.** `Stats::power` is effective HP *plus* attack, and at HP ten times the
+  size of attack it measured HP alone: a program hitting twice as hard as the
+  player read Yellow beside one barely scratching them (todo #112). Handing
+  any of the three readers `Stats::power` again compiles clean and brings
+  that back; so does passing `party_threat` to `kill_xp`, which makes a
+  companion cost XP. A fixture that sizes a program "to an even match" must
+  pad until `party_threat` reaches the threshold, not add up a power total.
 - **Levels come at half the count and twice the size, and that is
   power-neutral by construction.** Every per-level constant carries `K = 2`,
   every levels-per constant its reciprocal, and `XP_PER_LEVEL_STEP` carries

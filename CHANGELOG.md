@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.238
+
+**The depot has new art, drawn in its own colours.** Every depot tier now
+shows an orange cabinet with a hazard stripe instead of the old sprite.
+Map sprites are normally drawn white and tinted with their structure's
+colour, which would have turned this art a murky green; a sprite file named
+`<name>.colour.png` now keeps its own colours, and still darkens with the
+map's shading and with damage. The naming rule is in
+`assets/sprites/README.md`.
+
 ## 0.13.237
 
 **Levelling up now opens a page showing what changed.** After the battle

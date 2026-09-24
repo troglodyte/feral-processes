@@ -112,8 +112,8 @@ pub use game::settlement_relations::{
 pub use game::sortie::{DispatchReach, SortieRefusal};
 pub use game::stack_view::ExamineDir;
 pub use icon::{
-    ICON_CELL_PIXELS, ICON_GRID, ICON_PALETTE, ICON_SIZE, PlayerIcon, SPRITE_ALPHA_THRESHOLD,
-    SPRITE_PALETTE, quantise, sprite_rgba,
+    FULL_COLOUR_SUFFIX, ICON_CELL_PIXELS, ICON_GRID, ICON_PALETTE, ICON_SIZE, PlayerIcon,
+    SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE, quantise, sprite_rgba,
 };
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};

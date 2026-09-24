@@ -4125,8 +4125,9 @@ fn every_shipped_sprite_override_resolves_to_a_real_file() {
     for def in &species {
         let Some(name) = &def.sprite else { continue };
         let path = sprites_dir.join(format!("{name}.png"));
+        let colour = sprites_dir.join(format!("{name}{}.png", crate::icon::FULL_COLOUR_SUFFIX));
         assert!(
-            path.exists(),
+            path.exists() || colour.exists(),
             "species {:?} overrides sprite to {:?}, missing at {}",
             def.id,
             name,
@@ -4136,8 +4137,9 @@ fn every_shipped_sprite_override_resolves_to_a_real_file() {
     for def in &structures {
         let Some(name) = &def.sprite else { continue };
         let path = sprites_dir.join(format!("{name}.png"));
+        let colour = sprites_dir.join(format!("{name}{}.png", crate::icon::FULL_COLOUR_SUFFIX));
         assert!(
-            path.exists(),
+            path.exists() || colour.exists(),
             "structure {:?} overrides sprite to {:?}, missing at {}",
             def.id,
             name,

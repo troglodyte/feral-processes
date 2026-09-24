@@ -167,14 +167,33 @@ pub fn install_fonts(ctx: &egui::Context) {
 /// rather refcounted — every frame alongside the `Painter` that reads it.
 /// Empty is a supported state and is what `assets/sprites/` being absent
 /// looks like: every lookup misses and every caller draws its glyph.
+///
+/// **A stem ending `.colour` is full-colour art**: it is keyed without the
+/// suffix and drawn with its tint's hue dropped (see `Painter::sprite`).
+/// The flag lives on the file rather than on a def because it is a property
+/// of the pixels, and `depot_mk2`..`mk6` all share one image.
 #[derive(Clone, Default)]
 pub struct SpriteTable {
-    by_name: HashMap<String, egui::TextureId>,
+    by_name: HashMap<String, (egui::TextureId, bool)>,
 }
 
 impl SpriteTable {
-    pub fn insert(&mut self, name: impl Into<String>, texture: egui::TextureId) {
-        self.by_name.insert(name.into(), texture);
+    /// Files `texture` under the file stem `stem`. A plain stem and its
+    /// `.colour` twin both claim one key; the colour one wins whatever the
+    /// load order, so which art draws cannot depend on which file the asset
+    /// server finished first.
+    pub fn insert(&mut self, stem: impl Into<String>, texture: egui::TextureId) {
+        let stem = stem.into();
+        match stem.strip_suffix(feral_processes_engine::FULL_COLOUR_SUFFIX) {
+            Some(name) => {
+                self.by_name.insert(name.to_string(), (texture, true));
+            }
+            None => {
+                if !self.by_name.get(&stem).is_some_and(|&(_, colour)| colour) {
+                    self.by_name.insert(stem, (texture, false));
+                }
+            }
+        }
     }
 
     /// Drops the entry `name` holds, if any. The runtime-built player icon
@@ -184,7 +203,8 @@ impl SpriteTable {
         self.by_name.remove(name);
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<egui::TextureId> {
+    /// The texture under `name`, and whether it is full-colour art.
+    pub(crate) fn get(&self, name: &str) -> Option<(egui::TextureId, bool)> {
         self.by_name.get(name).copied()
     }
 }
@@ -393,13 +413,24 @@ impl Painter {
     /// the boss and nemesis marks are channels of their own now — a bar and
     /// two corners — so they reach a tile without going through here.
     ///
+    /// **Full-colour art (a `.colour` file) is the exception**: multiplied by
+    /// a hue it goes muddy, so it takes a grey tint at the brightest channel
+    /// of `color`. The hue is dropped; the map's shading and the damage
+    /// dimming, which are brightness, still reach it.
+    ///
     /// Returns `false` for a name the table has nothing under, which is what
     /// makes `assets/sprites/` optional: the caller draws its glyph instead,
     /// so a species with no art ships visible rather than blank.
     #[must_use]
     pub fn sprite(&self, name: &str, x: f32, y: f32, size: f32, color: Color) -> bool {
-        let Some(texture) = self.sprites.get(name) else {
+        let Some((texture, full_colour)) = self.sprites.get(name) else {
             return false;
+        };
+        let color = if full_colour {
+            let value = color.r.max(color.g).max(color.b);
+            Color::new(value, value, value, color.a)
+        } else {
+            color
         };
         self.painter.image(
             texture,
@@ -1159,6 +1190,48 @@ mod tests {
             painted_images(&shapes)[0].2,
             to_egui(red),
             "the sprite must be tinted with the colour the caller passed"
+        );
+    }
+
+    /// A `.colour` file is looked up under its stem with the suffix
+    /// dropped, so `depot.colour.png` answers every def naming `depot`.
+    #[test]
+    fn a_colour_file_is_keyed_without_its_suffix() {
+        let mut table = SpriteTable::default();
+        table.insert("depot.colour", egui::TextureId::User(3));
+
+        let (drew, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, WHITE));
+
+        assert!(drew, "`depot` must find the art filed as `depot.colour`");
+        assert_eq!(painted_images(&shapes)[0].0, egui::TextureId::User(3));
+    }
+
+    /// With both `depot.png` and `depot.colour.png` on disk, the colour one
+    /// draws whichever the asset server finishes last.
+    #[test]
+    fn a_plain_file_loaded_second_does_not_displace_its_colour_twin() {
+        let mut table = SpriteTable::default();
+        table.insert("depot.colour", egui::TextureId::User(3));
+        table.insert("depot", egui::TextureId::User(4));
+
+        assert_eq!(table.get("depot"), Some((egui::TextureId::User(3), true)));
+    }
+
+    /// Full-colour art drops the tint's hue and keeps its value, so a cyan
+    /// structure's orange art stays orange while the map's shading and the
+    /// damage dimming still darken it.
+    #[test]
+    fn a_colour_sprite_is_tinted_grey_at_the_tints_brightest_channel() {
+        let mut table = SpriteTable::default();
+        table.insert("depot.colour", egui::TextureId::User(3));
+        let dim_cyan = Color::new(0.1, 0.6, 0.5, 1.0);
+
+        let (_, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, dim_cyan));
+
+        assert_eq!(
+            painted_images(&shapes)[0].2,
+            to_egui(Color::new(0.6, 0.6, 0.6, 1.0)),
+            "a colour sprite's tint must be neutral at the tint's value"
         );
     }
 }

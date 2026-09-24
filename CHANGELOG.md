@@ -53,6 +53,13 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.234
+
+**Every Depot now shows how full it is.** A bar along the top of the
+Depot's tile fills as it takes stock — green while there is room, yellow
+with a tenth or less left, red when it is full — the same three colours
+the status bar's `[GRID]` figure uses.
+
 ## 0.13.233
 
 **Stripping a downed program for materials now pays a varying amount.**

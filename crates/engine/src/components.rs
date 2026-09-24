@@ -179,22 +179,14 @@ impl Stats {
 
     /// A rough "how strong is this" scalar — effective HP plus attack.
     ///
-    /// Used to gauge relative difficulty (`Game::difficulty_color`), to
-    /// price a kill's XP (`progression::kill_xp`'s denominator), and by
-    /// trade valuation and the unlock ratios. Summing a *percentage* into a
-    /// total the way the old `max_hp + atk + def` did is meaningless, so
-    /// mitigation is priced as the soak it actually buys:
-    /// `max_hp / (1 - mitigation/100)`.
-    ///
-    /// The clamp to `MAX_MITIGATION_PERCENT` is load-bearing — it is what
-    /// keeps the denominator away from zero on a value that a save, a mod
-    /// affix or a stacked buff could hand in past the cap.
+    /// Used by gear ratings, trade valuation, the roster's figures and the
+    /// jack-out odds. **Not** how outmatched the player is by one program:
+    /// at HP ten times the size of attack this sum measures HP alone, which
+    /// is why the con colours, kill XP and capture odds read
+    /// `battle::threat_ratio` instead. Mitigation is priced as the soak it
+    /// buys, `battle::effective_hp`.
     pub fn power(&self) -> i32 {
-        let mitigation = self
-            .mitigation
-            .clamp(0, crate::tuning::MAX_MITIGATION_PERCENT);
-        let soak = self.max_hp as f64 / (1.0 - mitigation as f64 / 100.0);
-        soak.round() as i32 + self.atk
+        crate::battle::effective_hp(self.max_hp, self.mitigation).round() as i32 + self.atk
     }
 }
 

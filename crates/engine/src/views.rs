@@ -1028,6 +1028,19 @@ pub struct FormLook {
     pub sprite: Option<String>,
 }
 
+/// What a Depot holds against what it can hold — its own `Stock::output`
+/// total and `Stock::capacity`, carried as counts rather than a fraction so
+/// "full" is an integer comparison and never a float landing at 0.9999.
+///
+/// Depots only: a machine's output buffer filling is already
+/// `MachineStatus::Clogged` on the outline, and a bar beside it would say
+/// the same thing twice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DepotFill {
+    pub held: u32,
+    pub capacity: u32,
+}
+
 #[derive(Clone)]
 pub struct EntityView {
     pub entity: Entity,
@@ -1254,6 +1267,9 @@ pub struct EntityView {
     /// outline are about the machine, so its bar is too. The upgrade's own
     /// figure is on the examine page.
     pub job_progress: Option<f32>,
+    /// How full this Depot is, or `None` for anything that is not one — see
+    /// `DepotFill`.
+    pub depot_fill: Option<DepotFill>,
     /// The build request this entity *is*, or `None` for everything that is
     /// not one — see `views::BuildOrderRow`.
     ///

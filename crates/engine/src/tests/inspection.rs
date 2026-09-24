@@ -2651,3 +2651,41 @@ fn view_entities_honours_a_species_sprite_override() {
 
     assert_eq!(view.sprite, Some("custom_sprite_key".to_string()));
 }
+
+/// A Depot's view carries what it holds against what it can hold, read off
+/// its own `Stock` — and nothing else does, since a machine's full output is
+/// already the outline's `Clogged` and a second signal would say it twice.
+#[test]
+fn a_depot_reports_how_full_it_is_and_a_machine_does_not() {
+    let mut game = Game::new(1415, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 24);
+    place_now(&mut game, "depot", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 2, 0).unwrap();
+    let report = game.structure_report();
+    let of = |kind: &str| report.iter().find(|s| s.kind == kind).unwrap().entity;
+    let (depot, node) = (of("depot"), of("mining_node"));
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::BLANK_SUBSTRATE), 7);
+    let capacity = game.world.get::<Stock>(depot).unwrap().capacity;
+
+    let fill = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .expect("the structure is standing")
+            .depot_fill
+    };
+    assert_eq!(
+        fill(&mut game, depot),
+        Some(DepotFill { held: 7, capacity })
+    );
+    assert_eq!(fill(&mut game, node), None);
+}

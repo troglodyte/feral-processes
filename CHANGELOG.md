@@ -53,6 +53,18 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.231
+
+**When a production chain or a research project is stuck because nothing
+makes one of its ingredients, the message now names the machine to build.**
+It used to say "Nothing is making Raw Trace within the Transcriber's reach —
+it can only take what a neighbour has finished, or what a worker can fetch
+off a Depot shelf", which reads as a placement puzzle when the real answer
+is that the base has no Log Scraper. It now says "No Raw Trace — build a Log
+Scraper to make it." When the machine does exist but stands out of reach
+with no Depot to carry between them, the message names both machines and
+both fixes: build one beside it, or build a Depot.
+
 ## 0.13.230
 
 **You can found an outpost out on the surface with an Outpost Kit, post

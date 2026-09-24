@@ -347,13 +347,18 @@
   out-of-range-index check spends anything before returning its own error —
   `tests/extraction.rs` has one test per refusal, each checking both the
   store and `Inventory` are byte-identical to before the call.
-- **`Game::extraction_yield` takes `&self` and draws no `GameRng`, which is
-  what lets the screen's preview and the grant agree without coincidence.**
-  A version drawing per unit would either spend a draw from a screen that
-  grants nothing (corrupting the seeded stream) or quote a distribution
-  instead of a figure — either way "3 Core Fragments" previewed and 2 or 4
-  granted reads as a bug that was never wrong, just nondeterministic.
-- **`extraction_yield` and `extraction_ticks` read the bench tier
+- **The roll is in the count, never the mix, and only the act draws.**
+  `extraction_band`, `extraction_yield(…, rolled)` and `extraction_items`
+  are pure; `roll_extraction_yield` is the one draw, spent by
+  `extract_program` and the rig at completion. Three traps: rolling in the
+  preview spends a draw from a screen that grants nothing; rolling in the
+  rig's room gate draws every tick and gates on a payout it then does not
+  pay (it gates on `band.max` instead); and a preview built from the pool
+  as authored names items no roll can pay, since apportionment starves a
+  small weight at a low count — `extraction_items` walks the band.
+  Previewing a figure was retired with the roll (2026-09-24): a
+  "3 Core Fragments" quote with 2 or 4 granted reads as a bug.
+- **`extraction_band` and `extraction_ticks` read the bench tier
   themselves; the spec's `structure_tier` parameter does not exist.** A
   parameter is a thing a caller can get wrong, and both functions have two
   callers — the screen's preview and the act — whose entire reason for
@@ -384,7 +389,11 @@
   either, so the Reader's exclusive branch is implemented and currently
   unreachable in shipped content — a test has to mint a species to exercise
   it. Do not read that branch as dead code.
-- **The drop-neutrality gate is a single point, and `apportion` conserves
+- **The drop-neutrality gate is the band's *mean* at a single point, and
+  the band is symmetric only because nothing clamps it** — a floor or a
+  cap on `DamageRange::centred` moves the mean everywhere the band reaches
+  it, and the median kill's `1..=3` reaches neither, so the gate stays
+  green while other grades drift. `apportion` conserves
   the unit *total* under any weighting** — so a tool's `yields` weights
   have no lever on the gate at all, only which items a fixed count becomes.
   `TOOL_BASE_UNITS`'s own comment names the real band the gate admits

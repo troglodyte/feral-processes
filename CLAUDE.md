@@ -1241,13 +1241,11 @@ relying on one, and correct all three places if it has moved.
 - **`Game::extract_program` is the one door a downed program is spent
   through, and every refusal lands before anything is spent** — asserted
   per refusal, since a single test over one path passes against the others.
-- **`Game::extraction_yield` is the one derivation of what a tool draws out
-  of a downed program, shared by the act and the screen's preview**, so a
-  quoted figure and a granted figure cannot differ.
-- **The yield is a deterministic weighted apportionment, not an RNG draw**
-  — `apportion`'s largest-remainder split, never a per-unit sample — which
-  is what makes the preview able to equal the grant at all, and spends no
-  `GameRng`, so extraction cannot shift the seeded stream.
+- **An extraction rolls *how many* units and never *which*** — one
+  `GameRng` draw on `Game::extraction_band` (a `DamageRange`, so a
+  zero-width band still draws), then `apportion`'s fixed split in the pure
+  `Game::extraction_yield`; the preview names `extraction_items` without
+  counts and the rig gates on the band's `max`.
 - **The starter tool's knowledge is derived, never stored** — `knows_tool`
   answers true for `tuning::STARTER_TOOL_ID` and `tool_rows` unions the same
   helper, which is what makes pulling it recoverable and repairs saves
@@ -1257,10 +1255,10 @@ relying on one, and correct all three places if it has moved.
   `item_name`'s raw-id fallback means a missing one is silent.
 - **A tool carrier is sold everywhere and bought nowhere**, filtered through
   `ItemId::tool_id` in `caravan::stock_pool` and `ItemDb::creation_shelf`.
-- **`extraction_yield` and `extraction_ticks` read the bench tier
-  themselves; there is no `structure_tier` parameter.** Both have two
-  callers — the screen's preview and the act — and an argument is the crack
-  a quoted figure and a granted one would differ through.
+- **`extraction_band` and `extraction_ticks` read the bench tier
+  themselves; there is no `structure_tier` parameter.** Each has two
+  callers — the preview or the rig's gate, and the act — and an argument is
+  the crack a quoted figure and a granted one would differ through.
 - **A standing extraction bench buys time; upgrading it buys materials.**
   The yield term is `bench_tier - 1` (a never-upgraded structure reads as
   tier 1, so a `tier` term would pay a full `TOOL_TIER_SCALE_STEP` for

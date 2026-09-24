@@ -5113,6 +5113,13 @@ pub const MAX_ATTRIBUTE_ROWS: usize = 10;
 /// untouched, and no combination of them could narrow this band either.
 pub const TOOL_BASE_UNITS: f32 = 3.0;
 
+/// How far either side of its centre `Game::extraction_band` reaches, as a
+/// fraction of the centre, rounded to whole units — a median kill's `2`
+/// pool units roll `1..=3`. Symmetric so the mean stays the deterministic
+/// figure `TOOL_BASE_UNITS` was checked against; the swing is the feature,
+/// and the preview names items without counts because of it.
+pub const EXTRACT_UNIT_SPREAD: f32 = 0.5;
+
 /// How much each tier past 1 scales `extraction_yield`'s unit count, in
 /// `game::extraction::tier_scale`. A tool's own `tier` and a later phase's
 /// structure `structure_tier` (spec section 3) are meant to share this one

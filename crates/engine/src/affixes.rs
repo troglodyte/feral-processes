@@ -197,3 +197,76 @@ impl AffixDb {
         self.defs.values()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn def(id: &str, slots: Option<Vec<EquipmentSlot>>) -> AffixDef {
+        AffixDef {
+            id: AffixId(id.into()),
+            prefix: None,
+            suffix: None,
+            stats: EquipmentStats {
+                atk: 1,
+                ..Default::default()
+            },
+            slots,
+            weight: 1,
+        }
+    }
+
+    #[test]
+    fn decorate_puts_a_prefix_before_and_a_suffix_after() {
+        let with_prefix = AffixDef {
+            prefix: Some("Honed".into()),
+            ..def("p", None)
+        };
+        assert_eq!(with_prefix.decorate("Arc Lance"), "Honed Arc Lance");
+
+        let with_suffix = AffixDef {
+            suffix: Some("of Static".into()),
+            ..def("s", None)
+        };
+        assert_eq!(with_suffix.decorate("Arc Lance"), "Arc Lance of Static");
+    }
+
+    #[test]
+    fn an_affix_with_no_slot_list_fits_every_slot() {
+        let no_slots = def("ns", None);
+        assert!(no_slots.fits(EquipmentSlot::Weapon));
+        assert!(no_slots.fits(EquipmentSlot::Armor));
+        assert!(no_slots.fits(EquipmentSlot::Module));
+
+        let weapon_only = def("w", Some(vec![EquipmentSlot::Weapon]));
+        assert!(weapon_only.fits(EquipmentSlot::Weapon));
+        assert!(!weapon_only.fits(EquipmentSlot::Armor));
+    }
+
+    #[test]
+    fn pool_for_filters_by_slot_and_sorts_by_id() {
+        let defs = HashMap::from([
+            (
+                "zeta".into(),
+                def("zeta", Some(vec![EquipmentSlot::Weapon])),
+            ),
+            ("mid".into(), def("mid", Some(vec![EquipmentSlot::Armor]))),
+            ("alpha".into(), def("alpha", None)),
+            // Five fit, so a HashMap's order passes an unsorted pool 1 run in 120, not 1 in 2.
+            ("echo".into(), def("echo", None)),
+            (
+                "bravo".into(),
+                def("bravo", Some(vec![EquipmentSlot::Weapon])),
+            ),
+            ("delta".into(), def("delta", None)),
+        ]);
+        let db = AffixDb { defs };
+
+        let pool: Vec<&str> = db
+            .pool_for(EquipmentSlot::Weapon)
+            .iter()
+            .map(|a| a.id.as_str())
+            .collect();
+        assert_eq!(pool, vec!["alpha", "bravo", "delta", "echo", "zeta"]);
+    }
+}

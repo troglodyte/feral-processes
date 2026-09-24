@@ -50,6 +50,10 @@ const CARAVAN_ON_TILE: u8 = 3;
 /// pointing `x` at a wild program standing on a town's doorstep wants the
 /// program, not the settlement behind it.
 const SETTLEMENT_ON_TILE: u8 = 4;
+/// Last of the five, `SETTLEMENT_ON_TILE`'s own reason one fixture over: an
+/// outpost never stands in base space, and a wild program standing on its
+/// tile is the more immediately actionable answer to `x`.
+const OUTPOST_ON_TILE: u8 = 5;
 
 impl Game {
     /// The tile grid the map renders — the zone surface, or base space when
@@ -612,6 +616,33 @@ impl Game {
                 (self.stands_in_base_space(e) == in_base).then_some((step, SETTLEMENT_ON_TILE, e))
             }));
         }
+        // An outpost carries no entity at all — `resources::Outposts`' own
+        // record lives keyed by tile, not spawned into the ECS — so it takes
+        // no `Entity` query. `candidates` carries `Entity::PLACEHOLDER` in
+        // its place and the real tile travels alongside in `outpost_tile`,
+        // read back out below. `SETTLEMENT_ON_TILE`'s gate one fixture over:
+        // an outpost never stands in base space, so `!in_base` is the whole
+        // of what `== in_base` reduces to for a fixture with no entity to
+        // ask `stands_in_base_space` about.
+        let mut outpost_tile: Option<(i32, i32)> = None;
+        if !in_base {
+            let outposts = self.world.resource::<crate::resources::Outposts>();
+            if let Some((step, tile)) = outposts
+                .0
+                .keys()
+                .filter_map(|&tile| {
+                    let pos = Position {
+                        x: tile.0,
+                        y: tile.1,
+                    };
+                    on_ray(&pos).map(|step| (step, tile))
+                })
+                .min()
+            {
+                candidates.push((step, OUTPOST_ON_TILE, Entity::PLACEHOLDER));
+                outpost_tile = Some(tile);
+            }
+        }
 
         let found = candidates
             .into_iter()
@@ -621,6 +652,9 @@ impl Game {
                 BUILD_SITE_ON_TILE => InspectTarget::BuildSite(entity),
                 CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
                 SETTLEMENT_ON_TILE => InspectTarget::Settlement(entity),
+                OUTPOST_ON_TILE => InspectTarget::Outpost(
+                    outpost_tile.expect("an OUTPOST_ON_TILE candidate always carries a tile"),
+                ),
                 _ => InspectTarget::Creature(entity),
             });
         // Only on a hit. Pointing `x` at blank ground reports nothing, and
@@ -922,7 +956,7 @@ impl Game {
     /// reason, one level over.
     ///
     /// Takes the settlement's own key rather than the map `Entity`, since a
-    /// caller reaches this two ways — the bump cue (`take_settlement_visit`)
+    /// caller reaches this two ways — the bump cue (`take_visit`)
     /// already hands back a key, and examine has one `Entity` and needs
     /// `settlement_key` to get from one to the other first. Infallible: a
     /// key with a materialized entity always has a `Settlements` record —
@@ -1797,6 +1831,57 @@ impl Game {
                 key: 'p',
                 threat: false,
             });
+        }
+
+        // One row per outpost in `Trend::Stale`, `Trend::Declining` or dark
+        // — design correction 10. Tile order (`resources::Outposts`' own
+        // `BTreeMap` order), so the row a player sees first is stable.
+        let outpost_tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        for tile in outpost_tiles {
+            let Some(outpost) = self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .get(&tile)
+                .cloned()
+            else {
+                continue;
+            };
+            if outpost.integrity == 0 {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::OutpostDark,
+                    text: format!("outpost at ({}, {}) is dark", tile.0, tile.1),
+                    key: 'b',
+                    threat: true,
+                });
+                continue;
+            }
+            let crew = self.outpost_crew(tile).len();
+            let tier = crate::outposts::tier(&outpost, crew);
+            let trend =
+                crate::outposts::trend(&outpost, crew, tier, crate::tuning::OUTPOST_STOCK_CAP);
+            if matches!(
+                trend,
+                crate::outposts::Trend::Stale | crate::outposts::Trend::Declining
+            ) {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::OutpostTrend,
+                    text: format!(
+                        "outpost at ({}, {}): {}",
+                        tile.0,
+                        tile.1,
+                        trend.reason(&outpost, crew, tier)
+                    ),
+                    key: 'b',
+                    threat: false,
+                });
+            }
         }
 
         rows

@@ -696,6 +696,21 @@ impl Game {
             .is_some_and(|d| d.consume.is_some())
     }
 
+    /// Whether `Game::use_item` does something with `id` — a `ConsumeDef`
+    /// effect, **or** the outpost kit, which `use_item` intercepts before
+    /// ever reaching `consume_item`. The inventory screen's "[C]onsume" row
+    /// gates on this rather than on `is_consumable` alone, so a kit that
+    /// founds an outpost still gets an action row despite having no
+    /// `ConsumeDef` of its own — see `crate::outposts::OutpostDef::kit`.
+    pub fn is_usable(&self, id: &ItemId) -> bool {
+        self.is_consumable(id)
+            || self
+                .world
+                .resource::<crate::outposts::OutpostDb>()
+                .def()
+                .is_some_and(|def| &def.kit == id)
+    }
+
     /// Whether `id` may be dropped on the ground as a trap — see
     /// `ItemDef::trap` and `Game::place_trap`. `is_consumable`'s shape one
     /// field over, so the inventory screen asks the engine rather than

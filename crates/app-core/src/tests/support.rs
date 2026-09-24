@@ -300,6 +300,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -387,6 +388,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -470,6 +472,293 @@ pub(crate) fn place_settlement_east_of_player(
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
     (key, target)
+}
+
+/// `place_settlement_east_of_player`'s shape one landmark over — an outpost
+/// is a record with no entity (`resources::Outposts`, not a spawned one), so
+/// it is written straight into the save rather than founded through
+/// `Game::found_outpost`, which would refuse a tile this close to the
+/// player's own spawn (`OUTPOST_MIN_ANCHOR_DISTANCE`). Returns the tile.
+pub(crate) fn place_outpost_east_of_player(app: &mut App) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        stock: Vec::new(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
+}
+
+/// `place_outpost_east_of_player`'s shape with `integrity` pre-damaged —
+/// `Game`'s `world` field is private with no accessor (the architectural
+/// rule this repo enforces at the compiler), so a test that needs a damaged
+/// outpost writes it through the save file exactly as the healthy fixture
+/// does, rather than reaching into the ECS from app-core.
+pub(crate) fn place_damaged_outpost_east_of_player(app: &mut App, integrity: u32) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost_damaged", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity,
+        stock: Vec::new(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
+}
+
+/// Merges `items` into the player's pack via a save round trip — extended
+/// row by row rather than assigned over, `app_owning_a_program_and_a_
+/// compiler_with_cargo`'s reason one screen over: replacing the whole
+/// inventory would silently delete whatever `Game::new`'s starting kit
+/// already granted.
+pub(crate) fn give_player_items(app: &mut App, items: &[(&str, u32)]) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("give_player_items", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    for (item, qty) in items {
+        let id = feral_processes_engine::items::ItemId::from(*item);
+        match data.player.inventory.iter_mut().find(|(i, _)| *i == id) {
+            Some((_, have)) => *have += qty,
+            None => data.player.inventory.push((id, *qty)),
+        }
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
+/// `place_outpost_east_of_player` plus one ordinary base-staff program, for
+/// a test driving `Mode::OutpostPost`'s picker by keypress alone — nothing
+/// here needs the program's `Entity`, since the picker is walked with
+/// letters the way a player would.
+pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost_staff", 0);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        stock: Vec::new(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position: (px + 50, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        study_station: None,
+        outpost: None,
+        pursuing: false,
+        carrying: None,
+        carrying_program: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 1,
+        disposition: None,
+        disgruntled: None,
+        disgruntled_stranded: false,
+        memories: Vec::new(),
+        needs: Default::default(),
+        attributes: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+        siege_cell: None,
+        siege_order: None,
+        besieger: false,
+        stolen_from: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
+}
+
+/// An outpost east of the player already crewed by `n` posted programs,
+/// with `stock` on its shelf — the `c`/`C` key-collision test's fixture
+/// (I2): `outpost: Some(target)` on each `CreatureSave` posts it directly
+/// on load, `game/lifecycle.rs`'s `pending_outpost_crew` path, rather than
+/// driving `Mode::OutpostPost`'s picker once per body.
+pub(crate) fn place_outpost_with_crew_and_stock(
+    app: &mut App,
+    n: u32,
+    stock: &[(&str, u32)],
+) -> (i32, i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("outpost_crew_stock", 0);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    data.settlements.0.retain(|_, s| s.tile != target);
+    data.outposts.push(save::OutpostSave {
+        tile: target,
+        biome: feral_processes_engine::world::Biome::Deadlock,
+        growth: 0,
+        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
+        stock: stock
+            .iter()
+            .map(|(id, qty)| (feral_processes_engine::items::ItemId(id.to_string()), *qty))
+            .collect(),
+        stale_ticks: 0,
+        cycle_progress: 0,
+    });
+    for i in 0..n {
+        data.creatures.push(CreatureSave {
+            sortie_index: None,
+            boss: false,
+            species: species.clone(),
+            position: (px + 50 + i as i32, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            mitigation: 2,
+            tamed: true,
+            power: 100.0,
+            level: 1,
+            xp: 0,
+            xp_to_next: 10,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            ring: 0,
+            talents: Vec::new(),
+            bought_stats: Default::default(),
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
+            nest_position: None,
+            patrol_position: None,
+            study_station: None,
+            outpost: Some(target),
+            pursuing: false,
+            carrying: None,
+            carrying_program: None,
+            rarity: Default::default(),
+            nemesis_grudges: 0,
+            equipment: Vec::new(),
+            program_id: 1 + i,
+            disposition: None,
+            disgruntled: None,
+            disgruntled_stranded: false,
+            memories: Vec::new(),
+            needs: Default::default(),
+            attributes: Default::default(),
+            off_shift: None,
+            staff: false,
+            downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    target
 }
 
 /// `place_settlement_east_of_player`, out of reach — twelve tiles east, so
@@ -590,6 +879,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         nest_position: Some(guardian_pos),
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: true,
         carrying: None,
         carrying_program: None,
@@ -726,6 +1016,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -846,6 +1137,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -966,6 +1258,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1075,6 +1368,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1427,6 +1721,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -1527,6 +1822,7 @@ pub(crate) fn app_with_companions_and_cargo(
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -1834,6 +2130,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -2278,6 +2575,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        outpost: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,

@@ -25,6 +25,7 @@ mod inspection;
 mod inventory;
 mod lifecycle;
 mod menus;
+pub(crate) mod outposts;
 mod party;
 mod playing;
 mod progression;

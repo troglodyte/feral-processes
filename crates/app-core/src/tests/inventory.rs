@@ -107,6 +107,29 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
     }
 }
 
+/// The outpost kit has no `ConsumeDef` of its own — founding an outpost is
+/// not a restore-Power-or-arm-a-buff effect — so `is_usable` (not
+/// `is_consumable` alone) is what has to gate the `[C]onsume` row, or the
+/// only door onto `Game::found_outpost` never opens from this screen.
+#[test]
+fn the_outpost_kit_offers_consume_despite_having_no_consume_effect() {
+    let mut app = test_app(906);
+    let game = app.game.as_mut().unwrap();
+    let kit = ItemId::from("outpost_kit");
+    assert!(
+        !game.is_consumable(&kit),
+        "the shipped kit must not carry a ConsumeDef effect"
+    );
+    let keys: Vec<char> = inventory_item_actions(game, &kit)
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert!(
+        keys.contains(&'c'),
+        "the outpost kit must offer [C]onsume so it can found an outpost"
+    );
+}
+
 #[test]
 fn a_plain_resource_offers_only_describe_and_erase() {
     let mut app = test_app(905);

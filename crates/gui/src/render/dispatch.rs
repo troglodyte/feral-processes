@@ -72,12 +72,15 @@ pub(super) fn dispatch_hub_rows(
         rows.push(text_row("    Nothing known yet."));
     }
     for dest in destinations {
+        let tag = match dest.band {
+            Some(band) => band.label().to_string(),
+            None => "outpost".to_string(),
+        };
         rows.push(item_row(
             format!(
-                "[{}] {} — {}, {} ticks",
+                "[{}] {} — {tag}, {} ticks",
                 menu_shortcut(idx),
                 dest.name,
-                dest.band.label(),
                 dest.ticks
             ),
             idx == selected,
@@ -229,18 +232,27 @@ pub(super) fn draw_route_cargo(
 }
 
 pub(super) fn route_cargo_rows(basket: &RouteCargoBasket, selected: usize) -> Vec<Row> {
-    let mut rows = vec![
-        text_row(if basket.standing {
-            "Standing: yes — reloads and departs again on arrival home."
-        } else {
-            "Standing: no — a one-off trip."
-        }),
-        text_row(format!(
-            "This basket would sell for {} at the destination.",
-            basket.quote
-        )),
-        text_row(""),
-    ];
+    let mut rows = vec![text_row(if basket.standing {
+        "Standing: yes — reloads and departs again on arrival home."
+    } else {
+        "Standing: no — a one-off trip."
+    })];
+    // An outpost's outbound leg carries nothing to pick — `RouteCargoBasket`'s
+    // own doc — so there is no manifest to draw, only the flat carry figure
+    // `Game::dispatch_outpost_route` actually runs.
+    if let Some(cap) = basket.outpost_carry_cap {
+        rows.push(text_row(format!("Hauls up to {cap} units per trip.")));
+        rows.push(text_row(""));
+        rows.push(text_row(
+            "[T] toggle standing  ·  Enter to dispatch  ·  Esc to step away",
+        ));
+        return rows;
+    }
+    rows.push(text_row(format!(
+        "This basket would sell for {} at the destination.",
+        basket.quote
+    )));
+    rows.push(text_row(""));
     if basket.stock.is_empty() {
         rows.push(text_row("(nothing on the shelves)"));
     }
@@ -273,7 +285,7 @@ mod tests {
     use feral_processes_engine::settlements::relations::Standing;
     use feral_processes_engine::settlements::{SettlementDb, SettlementKey};
     use feral_processes_engine::sorties::SortieDb;
-    use feral_processes_engine::{DifficultyMode, Game};
+    use feral_processes_engine::{DifficultyMode, Game, RouteDestinationId};
 
     fn assets() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -332,9 +344,9 @@ mod tests {
             ticks: 9_999,
         }];
         let destinations = vec![RouteDestination {
-            destination: SettlementKey { rx: 0, ry: 0 },
+            destination: RouteDestinationId::Settlement(SettlementKey { rx: 0, ry: 0 }),
             name: widest_town_name,
-            band: Standing::Allied,
+            band: Some(Standing::Allied),
             ticks: 9_999,
         }];
         let sortie_reports = vec![SortieReport {
@@ -413,12 +425,47 @@ mod tests {
             qty: 9_999,
         }];
         let basket = RouteCargoBasket {
-            destination: SettlementKey { rx: 0, ry: 0 },
             destination_name: "A Very Long Settlement Name Indeed".to_string(),
             stock,
             cells: vec![(9_999, 9_999)],
             quote: 9_999_999,
             standing: true,
+            outpost_carry_cap: None,
+        };
+        let rows = route_cargo_rows(&basket, 0);
+        assert_rows_fit(&rows);
+    }
+
+    /// An outpost's own hub row — the "outpost" tag in place of a standing
+    /// band — against a synthetic worst-case name, since v1 ships one short
+    /// def name but `outpost_destination_name` appends tile coordinates
+    /// that could run wide (`no_dispatch_hub_row_overflows_its_popup`'s
+    /// shape, one destination kind over).
+    #[test]
+    fn no_outpost_destination_row_overflows_its_popup() {
+        let destinations = vec![RouteDestination {
+            destination: RouteDestinationId::Outpost((-9_999_999, -9_999_999)),
+            name: "A Very Long Outpost Design Name Indeed (-9999999, -9999999)".to_string(),
+            band: None,
+            ticks: 9_999,
+        }];
+        let rows = dispatch_hub_rows(&[], &destinations, &[], &[], 0);
+        assert_rows_fit(&rows);
+    }
+
+    /// The outpost cargo picker's "hauls up to N" line stands in for a
+    /// manifest and a quote — its own worst case against the same synthetic
+    /// name.
+    #[test]
+    fn no_outpost_cargo_row_overflows_its_popup() {
+        let basket = RouteCargoBasket {
+            destination_name: "A Very Long Outpost Design Name Indeed (-9999999, -9999999)"
+                .to_string(),
+            stock: Vec::new(),
+            cells: Vec::new(),
+            quote: 0,
+            standing: true,
+            outpost_carry_cap: Some(9_999),
         };
         let rows = route_cargo_rows(&basket, 0);
         assert_rows_fit(&rows);

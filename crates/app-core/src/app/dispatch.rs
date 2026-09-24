@@ -86,8 +86,13 @@ pub struct SortieSquadRow {
 
 /// A cargo basket over `Game::base_stock`, and what it is worth at the
 /// picked destination — `settlement_market::SettlementMarketBasket`'s shape.
+///
+/// **An outpost destination builds no manifest.** Its outbound leg carries
+/// nothing (`Game::dispatch_outpost_route`'s own rule), so `stock`/`cells`
+/// stay empty and `quote` stays `0` for one; `outpost_carry_cap` is `Some`
+/// in exactly that case, and the screen shows it — "hauls up to N" — in
+/// place of the sale preview.
 pub struct RouteCargoBasket {
-    pub destination: SettlementKey,
     pub destination_name: String,
     pub stock: Vec<StockRow>,
     /// `(amount, ceiling)` per `stock` row, index-aligned with
@@ -97,6 +102,7 @@ pub struct RouteCargoBasket {
     /// so this can never quote a different figure from the sale it previews.
     pub quote: u32,
     pub standing: bool,
+    pub outpost_carry_cap: Option<u32>,
 }
 
 impl App {
@@ -161,33 +167,42 @@ impl App {
             // action landing on a site row refuses rather than acting on
             // the wrong one. On success the hub closes: `travel_to_settlement`
             // queues the arrival cue, and `Mode::Playing` is where the map
-            // and that cue meet.
+            // and that cue meet. An outpost row has no fast-travel of its
+            // own — walk there instead — so it refuses rather than reaching
+            // `travel_to_settlement` with a tile it cannot take.
             GameKey::Char('T') => {
                 match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Destination(i)) => {
-                        let target = destinations[i].destination;
-                        let outcome = match &mut self.game {
-                            Some(game) => game.travel_to_settlement(target),
-                            None => return,
-                        };
-                        let went = outcome.is_ok();
-                        self.report(outcome);
-                        if went {
-                            self.close_screen();
-                            // `finish_compile`'s rule — the same
-                            // bookkeeping a move gets, since travel spends
-                            // ordinary ticks. It is also what **drains the
-                            // arrival cue**: `travel_to_settlement` queues
-                            // `PendingVisit` and `after_world_action` is the
-                            // one place that reads it, so without this the
-                            // town page opens later, on some unrelated
-                            // action, for a town already walked away from.
-                            self.after_world_action(true, false, 0);
+                    Some(DispatchRow::Destination(i)) => match destinations[i].destination {
+                        RouteDestinationId::Settlement(target) => {
+                            let outcome = match &mut self.game {
+                                Some(game) => game.travel_to_settlement(target),
+                                None => return,
+                            };
+                            let went = outcome.is_ok();
+                            self.report(outcome);
+                            if went {
+                                self.close_screen();
+                                // `finish_compile`'s rule — the same
+                                // bookkeeping a move gets, since travel spends
+                                // ordinary ticks. It is also what **drains the
+                                // arrival cue**: `travel_to_settlement` queues
+                                // `PendingVisit` and `after_world_action` is the
+                                // one place that reads it, so without this the
+                                // town page opens later, on some unrelated
+                                // action, for a town already walked away from.
+                                self.after_world_action(true, false, 0);
+                            }
                         }
-                    }
+                        RouteDestinationId::Outpost(_) => {
+                            self.refuse("You can't fast-travel to an outpost — walk there.");
+                        }
+                    },
                     _ => self.refuse("Highlight a destination to travel to."),
                 }
             }
+            // `Game::sever_route` reaches both endpoint kinds now —
+            // `RouteDestinationId` is the one id it matches on, so this row
+            // needs no per-kind branch of its own.
             GameKey::Char('X') => {
                 match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
                     Some(DispatchRow::Destination(i)) => {
@@ -309,41 +324,59 @@ impl App {
 
     /// The cargo basket over `Game::base_stock` for `pending_dispatch_destination`
     /// — `None` only when there is no active game or no pending destination
-    /// at all. **Not** a graceful fallback for a destination that has since
+    /// at all. **Not** a graceful fallback for a settlement that has since
     /// vanished: `game.settlement_report(destination)` below `.expect()`s a
     /// `resources::Settlements` record for the key, which is safe only
     /// because nothing removes a settlement from that resource today — a
     /// stale key here panics rather than drawing nothing. A future removal
     /// path needs its own refusal before this comment's old claim is true.
+    ///
+    /// An outpost destination builds no manifest — see `RouteCargoBasket`'s
+    /// own doc — so this branch never touches `route_cargo_amounts` at all.
     pub fn route_cargo_basket(&mut self) -> Option<RouteCargoBasket> {
-        let destination = self.pending_dispatch_destination?;
-        let game = self.game.as_ref()?;
-        let stock = game.base_stock();
-        if self.route_cargo_amounts.len() != stock.len() {
-            self.route_cargo_amounts = vec![0; stock.len()];
+        match self.pending_dispatch_destination? {
+            RouteDestinationId::Settlement(destination) => {
+                let game = self.game.as_ref()?;
+                let stock = game.base_stock();
+                if self.route_cargo_amounts.len() != stock.len() {
+                    self.route_cargo_amounts = vec![0; stock.len()];
+                }
+                let cells: Vec<(u32, u32)> = stock
+                    .iter()
+                    .enumerate()
+                    .map(|(i, row)| {
+                        (
+                            self.route_cargo_amounts.get(i).copied().unwrap_or(0),
+                            row.qty,
+                        )
+                    })
+                    .collect();
+                let cargo = route_cargo_manifest(&self.route_cargo_amounts, &stock);
+                let game = self.game.as_ref()?;
+                let quote = game.route_manifest_quote(destination, &cargo).unwrap_or(0);
+                let destination_name = game.settlement_name(destination);
+                Some(RouteCargoBasket {
+                    destination_name,
+                    stock,
+                    cells,
+                    quote,
+                    standing: self.route_standing,
+                    outpost_carry_cap: None,
+                })
+            }
+            RouteDestinationId::Outpost(tile) => {
+                let game = self.game.as_ref()?;
+                let destination_name = game.outpost_destination_name(tile);
+                Some(RouteCargoBasket {
+                    destination_name,
+                    stock: Vec::new(),
+                    cells: Vec::new(),
+                    quote: 0,
+                    standing: self.route_standing,
+                    outpost_carry_cap: Some(feral_processes_engine::tuning::ROUTE_OUTPOST_CARRY),
+                })
+            }
         }
-        let cells: Vec<(u32, u32)> = stock
-            .iter()
-            .enumerate()
-            .map(|(i, row)| {
-                (
-                    self.route_cargo_amounts.get(i).copied().unwrap_or(0),
-                    row.qty,
-                )
-            })
-            .collect();
-        let cargo = route_cargo_manifest(&self.route_cargo_amounts, &stock);
-        let game = self.game.as_ref()?;
-        let quote = game.route_manifest_quote(destination, &cargo).unwrap_or(0);
-        let destination_name = game.settlement_name(destination);
-        Some(RouteCargoBasket {
-            destination,
-            destination_name,
-            stock,
-            cells,
-            quote,
-            standing: self.route_standing,
-        })
     }
 
     fn edit_route_cargo_row(&mut self, stock: &[StockRow], f: impl FnOnce(u32, u32) -> u32) {
@@ -365,10 +398,18 @@ impl App {
             self.mode = Mode::Dispatch;
             return;
         }
-        let Some(destination) = self.pending_dispatch_destination else {
-            self.mode = Mode::Dispatch;
-            return;
-        };
+        match self.pending_dispatch_destination {
+            Some(RouteDestinationId::Settlement(destination)) => {
+                self.handle_settlement_cargo_key(destination, key)
+            }
+            Some(RouteDestinationId::Outpost(tile)) => self.handle_outpost_cargo_key(tile, key),
+            None => self.mode = Mode::Dispatch,
+        }
+    }
+
+    /// `Mode::RouteCargo`'s settlement branch — the original manifest
+    /// builder, unchanged in every particular but its own entry point.
+    fn handle_settlement_cargo_key(&mut self, destination: SettlementKey, key: GameKey) {
         let Some(game) = &self.game else { return };
         let stock = game.base_stock();
         if self.route_cargo_amounts.len() != stock.len() {
@@ -394,6 +435,32 @@ impl App {
                     Ok(()) => {
                         self.pending_dispatch_destination = None;
                         self.route_cargo_amounts.clear();
+                        self.route_standing = false;
+                        self.status_line = None;
+                        self.mode = Mode::Dispatch;
+                    }
+                    Err(e) => {
+                        let line = route_refusal_line(game, e);
+                        self.refuse(line);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `Mode::RouteCargo`'s outpost branch — no manifest to build, so only
+    /// standing and dispatch itself are reachable, `RouteCargoBasket`'s own
+    /// doc: `Game::dispatch_outpost_route` takes no cargo argument at all.
+    fn handle_outpost_cargo_key(&mut self, tile: (i32, i32), key: GameKey) {
+        match key {
+            GameKey::Char('T') => self.route_standing = !self.route_standing,
+            GameKey::Enter => {
+                let standing = self.route_standing;
+                let Some(game) = &mut self.game else { return };
+                match game.dispatch_outpost_route(tile, standing) {
+                    Ok(()) => {
+                        self.pending_dispatch_destination = None;
                         self.route_standing = false;
                         self.status_line = None;
                         self.mode = Mode::Dispatch;

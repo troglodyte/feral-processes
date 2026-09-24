@@ -147,3 +147,44 @@
   `push_downed_program` (the store), and the sortie calls the former,
   because a drifted second copy is exactly the trap `Perk::Teardown` fell
   into on the old material-drop path.
+- **`ProgramRole::Outpost` sits between `Sortie` and `UnderStudy`, and its
+  crew's consequences are omissions in the same doors `Sortie`'s already
+  are.** The three exhaustive matches (`roster_rank`, gui's `role_heading`,
+  the rest-repair arm) are compiler-checked; the audit half is not. The
+  doors that already filter on `== ProgramRole::Staff` — `dispatch_sortie`,
+  `pin_subject`, `needs_drain_system`, `base_entropy_system` — refuse an
+  outpost crew member for free. Four that checked neither role compiled
+  clean and would have silently allowed one through: `wield_program`, the
+  party-add door, `extract_routine`, `open_kernel_ring` — each needed an
+  explicit refusal, run as `UnderStudy`'s own census
+  (`rg -n 'UnderStudy' crates/engine/src`) but for `PostedAt`. **A sixth
+  role added later must repeat this grep by hand** — there is no compiler
+  check that a `==`-based reader stays exhaustive when a role is added,
+  only the ones that already match on the whole enum.
+- **`routes::RouteEnd` is the caravan route's endpoint extension point, and
+  `Route` itself is free to change even though `RouteSave` cannot.** The
+  design spec's first draft proposed a fourth `Route::outpost: Option<_>`
+  field beside the settlement ones — rejected once the source was checked:
+  `Route` carries no `Serialize` at all (only `save::RouteSave` does), but
+  `RouteSave::destination` is not optional, so widening *its* type would not
+  be additive. The shipped shape collapses the three settlement fields into
+  `RouteEnd::{Settlement { key, def, tile }, Outpost((i32,i32))}` entirely
+  in memory, and the save split stays two things: `RouteSave` untouched,
+  plus a new `OutpostRouteSave` vector, additive behind
+  `#[serde(default)]`. **The trap for a third endpoint kind**: it is a new
+  `RouteEnd` variant plus a new parallel `Save` vector, never a change to
+  `RouteSave`'s own shape — that is the one move that is not additive.
+- **An outpost's standing route reloads through a fresh, empty outbound
+  leg — never an instant same-tick pickup.** A settlement's reload
+  (`try_reload_route`) is free of travel time because the manifest lives at
+  the base; an outpost's cargo lives at the *far end*, so
+  `complete_outpost_inbound_leg` departs again **empty-handed**, and
+  `try_outpost_pickup` — the function that actually loads cargo — is
+  reached only once that fresh outbound leg's full `ticks_total` has
+  elapsed, through the ordinary `complete_outbound_leg` path. **The trap**:
+  pattern-matching off `try_reload_route`'s shape and "simplifying" the
+  outpost's reload to draw from `resources::Outposts` and flip straight to
+  `Inbound` the same tick would make a standing outpost route pay its
+  outbound travel time exactly once, ever — every trip after the first
+  would be free, breaking the tick economy every other route (and every
+  sortie) is built on.

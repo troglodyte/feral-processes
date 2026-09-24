@@ -250,6 +250,10 @@ relying on one, and correct all three places if it has moved.
   town's name rather than a flag.
 - **A patrol's tether saves by the town's tile and is resolved *after*
   `restore_settlements`**, `pending_cronjobs`' deferral.
+- **An outpost is a `resources::Outposts` record with no entity, never a
+  `Structure`** — `resources::Settlements`' own precedent one tile over.
+- **`Visit` is the second visit extension point after `Settlement`, and
+  `resources::PendingVisit` widened rather than gaining a second field.**
 
 ### Traps
 
@@ -317,6 +321,9 @@ relying on one, and correct all three places if it has moved.
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **The raid clock is spent by a sweep, not by reaching its threshold, and
   both floors hold the pressure rather than forgiving it.**
+- **An outpost's raid roll rides `raid_check`'s firing branch, after
+  `run_raid`, so it inherits `RAID_MIN_ZONE` and is invisible to
+  `dev_force_raid`.**
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.**
 - **The map pane's top-left corner is one box of three sections —
@@ -644,6 +651,9 @@ relying on one, and correct all three places if it has moved.
 - **`ProgramRole` has a fourth variant, and a sortie's five consequences are
   omissions rather than checks.** `Sortie` sits **between `InParty` and
   `Staff`**, keeping `Staff` as what is left over.
+- **`ProgramRole::Outpost` sits between `Sortie` and `UnderStudy`, and its
+  crew's consequences are omissions in the same doors `Sortie`'s already
+  are.**
 - **A sortie battle is spawn, fight and despawn inside a single call, and
   that is the whole feature's load-bearing decision.**
 - **The fights are real by construction, and the trained policy is
@@ -686,6 +696,10 @@ relying on one, and correct all three places if it has moved.
   measures to the **segment** anchor→destination and not to either end.
 - **Predation is the only thing in `Game::run_routes` that may draw
   `GameRng`**, and a test asserts the tick draws nothing when nothing preys.
+- **`routes::RouteEnd` is the caravan route's endpoint extension point, and
+  `Route` itself is free to change even though `RouteSave` cannot.**
+- **An outpost's standing route reloads through a fresh, empty outbound
+  leg — never an instant same-tick pickup.**
 
 ### Combat, progression and balance
 

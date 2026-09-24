@@ -3,11 +3,13 @@
 
 use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
+use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
-    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_DAMAGE, RAID_DEFENDER_DAMAGE,
-    RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE,
-    RAID_PRESSURE_THRESHOLD, RAID_PRESSURE_WARN_PERCENT, STRUCTURE_REGEN_INTERVAL,
+    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, OUTPOST_RAID_DAMAGE,
+    OUTPOST_RAID_STEAL_FRACTION, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF,
+    RAID_MIN_ZONE, RAID_PRESSURE_JITTER_PERCENT, RAID_PRESSURE_PER_ZONE, RAID_PRESSURE_THRESHOLD,
+    RAID_PRESSURE_WARN_PERCENT, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -353,16 +355,26 @@ impl Game {
     /// a save round trip. `town_raid_check` picks from this with one draw
     /// and would otherwise be seed-unstable.
     pub(crate) fn raiding_towns(&self) -> Vec<crate::settlements::SettlementKey> {
-        let Some((ax, ay)) = self.anchor_position() else {
+        let Some(anchor) = self.anchor_position() else {
             return Vec::new();
         };
+        self.raiders_near(anchor)
+    }
+
+    /// `raiding_towns`'s own geometry, generalised to any center — an
+    /// outpost's raid roll (design spec §8) measures from the outpost's own
+    /// tile rather than the anchor, and this is what lets it share the
+    /// radius and the `sends_raiders` filter rather than restate them.
+    fn raiders_near(&self, center: (i32, i32)) -> Vec<crate::settlements::SettlementKey> {
         let near: Vec<crate::settlements::SettlementKey> = self
             .world
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
             .filter(|(_, known)| {
-                (known.tile.0 - ax).abs().max((known.tile.1 - ay).abs())
+                (known.tile.0 - center.0)
+                    .abs()
+                    .max((known.tile.1 - center.1).abs())
                     <= crate::tuning::SETTLEMENT_RAID_RADIUS
             })
             .map(|(key, _)| *key)
@@ -566,10 +578,82 @@ impl Game {
         if !self.run_raid() {
             return;
         }
+        // Rides the same firing branch as the base's own sweep — design
+        // spec §8, correction 9. `RAID_MIN_ZONE`'s gate above already
+        // applies to reaching this point, so an outpost in zone 1 is never
+        // raided; that is intended, and is stated on the outposts help page.
+        self.run_outpost_raids();
         let mut pressure = self.world.resource_mut::<crate::resources::RaidPressure>();
         pressure.level = 0;
         pressure.warned = false;
         pressure.next_at = None;
+    }
+
+    /// One raid roll per outpost, in `resources::Outposts`' own key order —
+    /// the traps precedent. A dark outpost (integrity 0) is skipped: nothing
+    /// stands there to steal or damage, and no crew left to bench.
+    pub(crate) fn run_outpost_raids(&mut self) {
+        let tiles: Vec<(i32, i32)> = self
+            .world
+            .resource::<Outposts>()
+            .0
+            .iter()
+            .filter(|(_, o)| o.integrity > 0)
+            .map(|(&tile, _)| tile)
+            .collect();
+        for tile in tiles {
+            self.raid_one_outpost(tile);
+        }
+    }
+
+    /// The roll and its consequences for one outpost — design spec §8.
+    /// `crate::outposts::raid_chance` is the pure formula; everything below
+    /// it is the effect of a hit landing.
+    pub(crate) fn raid_one_outpost(&mut self, tile: (i32, i32)) {
+        let hostile_towns = self.raiders_near(tile).len();
+        let crew = self.outpost_crew(tile);
+        let chance = crate::outposts::raid_chance(hostile_towns, crew.len());
+        let hit = self
+            .world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random_bool(chance);
+        if !hit {
+            return;
+        }
+        let subject = format!("outpost@{},{}", tile.0, tile.1);
+        let dark = {
+            let mut outposts = self.world.resource_mut::<Outposts>();
+            let outpost = outposts.0.get_mut(&tile).unwrap();
+            outpost.integrity = outpost.integrity.saturating_sub(OUTPOST_RAID_DAMAGE);
+            for qty in outpost.stock.values_mut() {
+                let take = (*qty as f32 * OUTPOST_RAID_STEAL_FRACTION) as u32;
+                *qty -= take;
+            }
+            outpost.stock.retain(|_, qty| *qty > 0);
+            outpost.integrity == 0
+        };
+        // The first by `ProgramId` — `outpost_crew`'s own sort, deterministic
+        // and spending no extra `GameRng` draw.
+        let line = match crew.first() {
+            Some(&member) => {
+                let name = self.bench_or_dissolve(member);
+                format!("Raiders hit the outpost, downing {name}.")
+            }
+            None => "Raiders hit the outpost.".to_string(),
+        };
+        self.log_base_kind(MessageKind::Raid, line.clone());
+        self.post_alert(AlertKind::OutpostRaided, subject.clone(), line);
+        if dark {
+            // Every remaining crew member is recalled — `bench_or_dissolve`
+            // above already dropped the one it benched from this same list.
+            for member in self.outpost_crew(tile) {
+                let _ = self.recall_from_outpost(member);
+            }
+            let text = "The outpost has gone dark and needs repair.".to_string();
+            self.log_base_kind(MessageKind::Raid, text.clone());
+            self.post_alert(AlertKind::OutpostDark, subject, text);
+        }
     }
 
     /// One interval, jittered, in `resources::RaidPressure`'s units.

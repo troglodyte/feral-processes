@@ -3027,6 +3027,30 @@ fn a_pinned_subject_is_not_offered_to_a_build() {
     );
 }
 
+/// A crew member posted at an outpost is standing away from the base
+/// exactly as a pinned subject is — offering it here would let the picker
+/// confirm a spend `commit_program` then silently declines, `commit_program`'s
+/// own reason one role over (see `committing_a_posted_program_is_refused`).
+#[test]
+fn a_posted_program_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260926, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(p)
+        .insert(crate::components::PostedAt((5, 5)));
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a posted crew member is not spendable on a build"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one still on staff is offered, so the list is not simply empty"
+    );
+}
+
 /// The program rule may never demand a depth the tier ceiling would not
 /// have let the player reach. If `upgrade_ceiling` ever loosens, this is
 /// what says so out loud instead of leaving an unsatisfiable upgrade.
@@ -3339,6 +3363,25 @@ fn committing_a_pinned_subject_is_refused() {
 
     assert!(game.commit_program(p).is_none());
     assert!(game.world.get_entity(p).is_ok());
+}
+
+/// `programs_for_build`'s and `fuse_companions`'s own reason for the
+/// identical exclusion, `UnderStudy`'s census run again for
+/// `components::PostedAt` (outposts plan correction 2): a crew member is
+/// not reachable to spend either, and a refused commit must not despawn the
+/// body `resources::Outposts`' crew count still names.
+#[test]
+fn committing_a_posted_program_is_refused() {
+    let mut game = Game::new(20260923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world
+        .entity_mut(p)
+        .insert(crate::components::PostedAt((5, 5)));
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+    // Deleted-fix check: without this guard the commit succeeds and
+    // despawns `p`, leaving `PostedAt` naming a body that no longer exists.
 }
 
 /// Ownership is the outermost guard: a wild creature standing in the base is
@@ -4689,6 +4732,28 @@ fn pin_subject_is_refused_unless_the_program_is_staff() {
                 .is_none()
         );
     }
+}
+
+/// Free off the same `!= Staff` check above, and the outposts plan's own
+/// census of doors that already filter on `Staff` — no code change here,
+/// only the test that proves it.
+#[test]
+fn pin_subject_is_refused_for_a_program_posted_at_an_outpost() {
+    let (mut game, station) = base_with_station(20260924);
+    let posted = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(posted)
+        .insert(crate::components::PostedAt((5, 5)));
+
+    let err = game
+        .pin_subject(posted, station)
+        .expect_err("a posted crew member isn't staff");
+    assert!(err.contains("base staff"), "unexpected error: {err}");
+    assert!(
+        game.world
+            .get::<crate::components::UnderStudy>(posted)
+            .is_none()
+    );
 }
 
 #[test]

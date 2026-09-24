@@ -346,6 +346,25 @@
   *more* frequent than the sweep. **Unmeasured** — `balance_sim` has no raid
   term and `tuning.rs` says no instrument here models one, so every figure
   was reasoned from the tick rate rather than measured.
+- **An outpost's raid roll rides `raid_check`'s firing branch, after
+  `run_raid`, so it inherits `RAID_MIN_ZONE` and is invisible to
+  `dev_force_raid`.** `Game::run_outpost_raids()` sits inside the same
+  branch `raid_check` reaches only once the base's own sweep has actually
+  fired — a deliberate placement (design spec §8, correction 9) over the
+  design spec's first draft, which gave outposts their own independent
+  roll. Riding the branch means `RAID_MIN_ZONE`'s zone-1 gate at
+  `raid_check`'s own entry applies for free, so a zone-1 outpost is never
+  raided — intended, and stated on the outposts help page. It also means
+  `dev_force_raid`, which calls `run_raid()` directly and deliberately
+  bypasses `raid_check` (its own doc comment says so, for the console), never
+  reaches `run_outpost_raids()` either — an outpost reads as unraidable from
+  the console, which is a real omission and not a bug. **The trap**: "fixing"
+  that gap by calling `run_outpost_raids()` from inside `dev_force_raid` (or
+  from `run_raid` itself, which both paths share) would restore console
+  coverage at the cost of making outposts raidable in zone 1, since neither
+  of those has `raid_check`'s own zone gate. The fix for missing console
+  coverage is a second, explicit dev hook that mirrors the gate, never a
+  shared call site.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.** Every `VisualEffect` names a structure's tile, so
   the queue is base-space by construction — ungated, `tile_flash` and

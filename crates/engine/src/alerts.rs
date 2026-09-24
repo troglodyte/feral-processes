@@ -34,6 +34,21 @@ pub enum AlertKind {
     /// A dig or build site with no route to work it.
     SiteCutOff,
     DepotsFull,
+    /// An outpost's `Trend` crossed into `Stale` — design correction 10.
+    /// Posted only on the transition, latched by `outposts::Outpost::announced`.
+    OutpostStale,
+    /// An outpost's `Trend` crossed into `Declining` — `OutpostStale`'s twin.
+    OutpostDeclining,
+    /// An outpost's integrity reached zero. Posted once, from the raid hit
+    /// that caused it — a dark outpost is excluded from every later raid
+    /// roll, so this can never fire a second time for the same outpost
+    /// without a repair in between.
+    OutpostDark,
+    /// A raid hit an outpost. Posted on every hit, not just a transition —
+    /// unlike the trend kinds above, a hit is a discrete event rather than a
+    /// state, and the board's own collapse-and-bump rule (`post`) is what
+    /// keeps repeated hits from spamming rather than a second latch here.
+    OutpostRaided,
 }
 
 /// One row on the board. `subject` is the collapse key the poster mints —

@@ -143,4 +143,5 @@ The rest of what a base does:
 - A Contract Broker posts work the sector is paying for. Read its board from anywhere; sign and
   deliver at the base.
 
-Read on: [supplies](supplies), [your companions](companions), and [getting stronger](getting-stronger).
+Read on: [supplies](supplies), [your companions](companions), [getting stronger](getting-stronger),
+and [outposts](outposts).

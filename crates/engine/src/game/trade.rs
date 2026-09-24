@@ -594,7 +594,9 @@ impl Game {
 
     /// Everything a program leaving play does *before* the world decides
     /// whether it comes back: gear returned, detachments announced, out of
-    /// the party, off its post.
+    /// the party, off its post — a base job's `Task` and an outpost's
+    /// `components::PostedAt` alike, since a raid can bench a crew member
+    /// through `bench_or_dissolve` exactly as it can a posted worker.
     ///
     /// Extracted rather than copied into `bench_or_dissolve`'s Forgiving arm
     /// for `dissolve_tamed_program`'s own reason one level up — a comment
@@ -614,7 +616,10 @@ impl Game {
             .resource_mut::<Party>()
             .0
             .retain(|&e| e != creature);
-        self.world.entity_mut(creature).remove::<Task>();
+        self.world
+            .entity_mut(creature)
+            .remove::<Task>()
+            .remove::<crate::components::PostedAt>();
         name
     }
 
@@ -699,6 +704,19 @@ impl Game {
             .owner;
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
+        }
+        // `sell_companion` has no other away-role refusal — a party slot, a
+        // cronjob and a guard post are all silently cancelled and announced
+        // through `sale_detachments` — but a posted crew member has to be
+        // recalled first: `detach_from_play` strips `PostedAt` with no
+        // detachment line of its own, so selling one straight off the
+        // outpost would vanish it from the crew list with nothing said.
+        if self
+            .world
+            .get::<crate::components::PostedAt>(creature)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost — recall it first.".into());
         }
         // Explicit here even though `dissolve_tamed_program` strips too:
         // `program_payout` reads `Stats::power()` and runs *before* the

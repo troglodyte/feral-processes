@@ -151,6 +151,13 @@ pub enum LootSource {
     /// it is a second, later event with its own source rather than a late
     /// arrival of the kill's own loot.
     Extract,
+    /// Taken by hand off an outpost's stock — `Game::take_from_outpost`.
+    /// Distinct from `Extract`'s own production event
+    /// (`base_ledger::Event::Extract`, which already folds an outpost's
+    /// cycle into the base output page's MINED column): this is the second,
+    /// later event of the unit actually reaching the pack, `Extract`'s own
+    /// argument for why a downed program's teardown gets its own variant.
+    Outpost,
 }
 
 impl LootSource {
@@ -166,6 +173,7 @@ impl LootSource {
             LootSource::Etch => "etch",
             LootSource::Forge => "forge",
             LootSource::Extract => "extract",
+            LootSource::Outpost => "outpost",
         }
     }
 }

@@ -17,6 +17,7 @@ impl App {
         carriers: Vec<TransferCarrier>,
         room: Option<u32>,
         rack_room: u32,
+        source: TransferSource,
     ) {
         // Items first, carriers after: a carrier row's position less the
         // item count is its index into `Game::rack_offer()`, which is what
@@ -30,6 +31,7 @@ impl App {
         self.basket_rows = entries;
         self.basket_room = room;
         self.basket_rack_room = rack_room;
+        self.transfer_source = source;
         self.menu_selected = 0;
         self.mode = Mode::Transfer;
     }
@@ -41,16 +43,31 @@ impl App {
     /// row has one amount.
     ///
     /// An all-zero basket never reaches the engine. `Game::transfer_items`
-    /// already makes that request a no-op, so calling through would be
-    /// harmless today — but then two places would both have to keep the
-    /// no-op true.
+    /// and `Game::take_from_outpost` already make that request a no-op, so
+    /// calling through would be harmless today — but then two places would
+    /// both have to keep the no-op true.
     ///
     /// No `status_line`: the engine has already logged what moved, and the
     /// log pane is where a haul is reported.
+    ///
+    /// **`TransferSource` decides which door the basket spends through, and
+    /// nothing else about the screen changes.** An outpost's rows are
+    /// `can_put: 0` (`Game::outpost_transfer_offer`), so `basket.give` is
+    /// always empty there — `Game::take_from_outpost` only ever sees a
+    /// take.
     pub(crate) fn commit_transfer(&mut self) {
         let basket = self.basket_request();
-        if let (false, Some(game)) = (basket.is_empty(), &mut self.game) {
-            game.transfer_items(&basket);
+        if !basket.is_empty()
+            && let Some(game) = &mut self.game
+        {
+            match self.transfer_source {
+                TransferSource::Base => {
+                    game.transfer_items(&basket);
+                }
+                TransferSource::Outpost(tile) => {
+                    self.status_line = game.take_from_outpost(tile, &basket).err();
+                }
+            }
         }
         self.leave_basket();
     }

@@ -1,0 +1,50 @@
+// The raw/processed/complex ladder mirrors the base's own material chain —
+// Raw Trace transcribes into a Logic Wafer at the Transcriber, and Cache
+// Grain is the one ZONE_MATERIALS entry (`tests/assets.rs`) — rather than
+// inventing a second, outpost-only economy. Uniform across every biome:
+// nothing else in this game varies a raw material by biome, so a
+// per-biome split here would be flavour with no precedent to read it
+// against. A mod is free to split it; `yields_with_tier`'s biome fallback
+// exists for exactly that case.
+OutpostDef(
+    name: "Outpost",
+    glyph: '⌂',
+    kit: "outpost_kit",
+    repair_cost: [("logic_wafer", 4), ("bytecode_block", 4)],
+    tiers: [
+        // Tier 1 — raw
+        (
+            yields: {
+                DataVoid: ["raw_trace"],
+                Deadlock: ["raw_trace"],
+                NullSector: ["raw_trace"],
+                Backplane: ["raw_trace"],
+                OpenGrid: ["raw_trace"],
+                BlackIce: ["raw_trace"],
+            },
+        ),
+        // Tier 2 — processed
+        (
+            yields: {
+                DataVoid: ["logic_wafer"],
+                Deadlock: ["logic_wafer"],
+                NullSector: ["logic_wafer"],
+                Backplane: ["logic_wafer"],
+                OpenGrid: ["logic_wafer"],
+                BlackIce: ["logic_wafer"],
+            },
+        ),
+        // Tier 3 — complex
+        (
+            yields: {
+                DataVoid: ["cache_grain"],
+                Deadlock: ["cache_grain"],
+                NullSector: ["cache_grain"],
+                Backplane: ["cache_grain"],
+                OpenGrid: ["cache_grain"],
+                BlackIce: ["cache_grain"],
+            },
+        ),
+    ],
+    features: [],
+)

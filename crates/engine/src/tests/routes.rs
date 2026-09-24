@@ -7,10 +7,10 @@ use bevy_ecs::prelude::Entity;
 use super::support::{scratch_assets_dir, test_assets_dir};
 use crate::Game;
 use crate::components::{Glyph, GlyphColor, Inventory, Position, Stock, Structure};
-use crate::game::route::RouteRefusal;
+use crate::game::route::{RouteDestinationId, RouteRefusal};
 use crate::items::ItemId;
 use crate::resources::DifficultyMode;
-use crate::routes::{Route, RouteLeg};
+use crate::routes::{Route, RouteEnd, RouteLeg};
 use crate::settlements::relations::{Relation, Standing};
 use crate::settlements::{SettlementDef, SettlementKey, SettlementKind, Specialty, Temperament};
 
@@ -29,9 +29,11 @@ fn a_destination() -> SettlementDef {
 /// A route in flight, half a leg in, carrying one line of cargo.
 fn an_in_flight_route() -> Route {
     Route {
-        destination: SettlementKey { rx: 3, ry: -2 },
-        destination_def: a_destination(),
-        destination_tile: (300, -200),
+        destination: RouteEnd::Settlement {
+            key: SettlementKey { rx: 3, ry: -2 },
+            def: a_destination(),
+            tile: (300, -200),
+        },
         cargo: vec![(ItemId("cache_grain".to_string()), 12)],
         standing: true,
         stalled: false,
@@ -66,8 +68,6 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
     assert_eq!(routes.len(), 1, "the route in flight must survive the load");
     let after = &routes[0];
     assert_eq!(after.destination, before.destination);
-    assert_eq!(after.destination_def, before.destination_def);
-    assert_eq!(after.destination_tile, before.destination_tile);
     assert_eq!(after.cargo, before.cargo);
     assert_eq!(after.standing, before.standing);
     assert_eq!(after.stalled, before.stalled);
@@ -258,9 +258,9 @@ fn route_destinations_lists_every_known_settlement() {
     let rows = game.route_destinations().expect("a Relay stands");
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
-    assert_eq!(row.destination, key);
+    assert_eq!(row.destination, RouteDestinationId::Settlement(key));
     assert_eq!(row.name, a_destination().name);
-    assert_eq!(row.band, Standing::Neutral);
+    assert_eq!(row.band, Some(Standing::Neutral));
     let (ax, ay) = game.anchor_position().unwrap();
     let d = (ax - 200).abs().max((ay - (-100)).abs()) as u64;
     assert_eq!(
@@ -495,8 +495,8 @@ fn a_legal_dispatch_spends_cargo_and_records_a_route() {
     let routes = game.world.resource::<crate::resources::Routes>().0.clone();
     assert_eq!(routes.len(), 1);
     let route = &routes[0];
-    assert_eq!(route.destination, key);
-    assert_eq!(route.destination_tile, tile);
+    assert_eq!(route.destination.settlement_key(), Some(key));
+    assert_eq!(route.destination.tile(), tile);
     assert_eq!(route.cargo, vec![(item, 12)]);
     assert!(route.standing);
     assert!(!route.stalled);
@@ -533,7 +533,7 @@ fn severing_clears_standing_and_nothing_else() {
     game.dispatch_route(key, vec![(item.clone(), 5)], true)
         .unwrap();
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     let routes = game.world.resource::<crate::resources::Routes>().0.clone();
     assert_eq!(routes.len(), 1, "severing does not drop the trip in flight");
     let route = &routes[0];
@@ -542,7 +542,7 @@ fn severing_clears_standing_and_nothing_else() {
     assert_eq!(route.cargo, vec![(item, 5)]);
 
     assert!(
-        !game.sever_route(key),
+        !game.sever_route(RouteDestinationId::Settlement(key)),
         "severing an already-severed route clears nothing further"
     );
 }
@@ -550,7 +550,12 @@ fn severing_clears_standing_and_nothing_else() {
 #[test]
 fn severing_an_absent_route_does_nothing() {
     let mut game = Game::new(6401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(!game.sever_route(SettlementKey { rx: 1, ry: 1 }));
+    assert!(
+        !game.sever_route(RouteDestinationId::Settlement(SettlementKey {
+            rx: 1,
+            ry: 1
+        }))
+    );
 }
 
 /// The report reads the record without changing it — `sortie_reports`'
@@ -564,7 +569,7 @@ fn route_reports_reads_the_record_without_changing_it() {
     let reports = game.route_reports();
     assert_eq!(reports.len(), 1);
     let report = &reports[0];
-    assert_eq!(report.destination, key);
+    assert_eq!(report.destination, RouteDestinationId::Settlement(key));
     assert!(report.standing);
     assert!(!report.stalled);
     assert_eq!(report.leg, RouteLeg::Outbound);
@@ -796,7 +801,7 @@ fn a_severed_route_completes_its_trip_and_pays_but_does_not_go_again() {
     set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
     game.dispatch_route(key, vec![(item, 300)], true)
         .expect("a legal dispatch");
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
 
     let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
     let before_stock = stock_total(&game);
@@ -941,7 +946,7 @@ fn a_severed_stalled_route_with_no_stock_is_dropped_rather_than_stranded() {
          first, or this proves nothing"
     );
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     game.run_routes();
 
     assert!(
@@ -972,7 +977,7 @@ fn a_severed_stalled_route_does_not_depart_again_when_stock_returns() {
         "must stall first, or this proves nothing"
     );
 
-    assert!(game.sever_route(key));
+    assert!(game.sever_route(RouteDestinationId::Settlement(key)));
     // Exactly the shape that lets a still-standing stalled route reload and
     // depart again — a severed one must not take it.
     deploy_depot(&mut game, 0, 2, &item, 200);
@@ -985,4 +990,588 @@ fn a_severed_stalled_route_does_not_depart_again_when_stock_returns() {
             .is_empty(),
         "a severed route must not depart again just because stock returned"
     );
+}
+
+// ---------------------------------------------------------------- Phase 4
+// the outpost endpoint — `routes::RouteEnd::Outpost`
+
+/// A base with a Home and a Relay, and an outpost record standing at `tile`
+/// — inserted directly into `resources::Outposts` rather than through
+/// `Game::found_outpost`, since these tests are about the route mechanism
+/// and not the placement ladder (already covered in `game::outposts::tests`).
+fn an_outpost_ready_base(seed: u32, tile: (i32, i32)) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+    game
+}
+
+/// Puts `qty` of `item` into the outpost's own stock at `tile`.
+fn stock_the_outpost(game: &mut Game, tile: (i32, i32), item: &ItemId, qty: u32) {
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .get_mut(&tile)
+        .unwrap()
+        .stock
+        .insert(item.clone(), qty);
+}
+
+fn outpost_stock_total(game: &Game, tile: (i32, i32)) -> u32 {
+    game.world
+        .resource::<crate::resources::Outposts>()
+        .0
+        .get(&tile)
+        .map(|o| o.stock.values().sum())
+        .unwrap_or(0)
+}
+
+/// Every refusal lands before anything changes, asserted per refusal —
+/// `every_refusal_leaves_stock_and_routes_exactly_as_they_were`'s shape,
+/// with no cargo to spend up front (`EmptyManifest`/`Understocked` do not
+/// apply to this door).
+#[test]
+fn outpost_dispatch_every_refusal_leaves_routes_exactly_as_they_were() {
+    let tile = (500, 500);
+    #[allow(clippy::type_complexity)]
+    let cases: Vec<(&str, Box<dyn Fn() -> (Game, (i32, i32))>)> = vec![
+        (
+            "not at the Relay",
+            Box::new(move || {
+                let mut game = an_outpost_ready_base(8000, tile);
+                game.world
+                    .insert_resource(crate::resources::Locale::Surface);
+                (game, tile)
+            }),
+        ),
+        (
+            "no outpost at the tile",
+            Box::new(move || {
+                let mut game =
+                    Game::new(8001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+                deploy_relay(&mut game);
+                (game, tile)
+            }),
+        ),
+        (
+            "a duplicate destination",
+            Box::new(move || {
+                let mut game = an_outpost_ready_base(8002, tile);
+                game.dispatch_outpost_route(tile, false)
+                    .expect("the first dispatch must succeed");
+                (game, tile)
+            }),
+        ),
+        (
+            "too many routes",
+            Box::new(move || {
+                let mut game = an_outpost_ready_base(8003, tile);
+                for n in 0..crate::tuning::ROUTE_MAX_ACTIVE {
+                    let k = SettlementKey {
+                        rx: 10 + n as i32,
+                        ry: 10,
+                    };
+                    register_settlement(&mut game, k, a_destination(), (1000 + n as i32, 1000));
+                    let item = ItemId::from("cache_grain");
+                    deploy_depot(&mut game, 0, 1 + n as i32, &item, 5);
+                    game.dispatch_route(k, vec![(item, 5)], false)
+                        .expect("filling to the cap must succeed");
+                }
+                (game, tile)
+            }),
+        ),
+    ];
+
+    for (name, build) in cases {
+        let (mut game, tile) = build();
+        let before_routes = game.world.resource::<crate::resources::Routes>().0.len();
+        assert!(
+            game.dispatch_outpost_route(tile, false).is_err(),
+            "{name} should have been refused"
+        );
+        assert_eq!(
+            game.world.resource::<crate::resources::Routes>().0.len(),
+            before_routes,
+            "{name} filed a record anyway"
+        );
+    }
+}
+
+#[test]
+fn a_legal_outpost_dispatch_records_a_route_with_no_cargo() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8100, tile);
+
+    game.dispatch_outpost_route(tile, true)
+        .expect("a legal dispatch");
+
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(routes.len(), 1);
+    let route = &routes[0];
+    assert_eq!(route.destination, RouteEnd::Outpost(tile));
+    assert!(
+        route.cargo.is_empty(),
+        "the outbound leg carries nothing to an outpost"
+    );
+    assert!(route.standing);
+    assert_eq!(route.leg, RouteLeg::Outbound);
+}
+
+/// A round trip loads the outpost's stock on arrival and deposits it at
+/// home — design spec §7.
+#[test]
+fn an_outpost_round_trip_brings_stock_home() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8200, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(&mut game, tile, &item, 5);
+    // No Depot stands in this fixture, so it lands in the player's pack —
+    // `proceeds_land_on_the_player_when_the_base_has_no_depot`'s shape.
+    let player = game.player_entity();
+    let before = game
+        .world
+        .get::<Inventory>(player)
+        .map(|inv| inv.count(&item))
+        .unwrap_or(0);
+
+    game.dispatch_outpost_route(tile, false).unwrap();
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    // Outbound leg lands (loads cargo) and then the inbound leg of the same
+    // length lands (deposits it) — `2 * total` ticks covers both.
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a one-off outpost route comes home for good"
+    );
+    assert_eq!(
+        outpost_stock_total(&game, tile),
+        0,
+        "the outpost is drained"
+    );
+    let after = game
+        .world
+        .get::<Inventory>(player)
+        .map(|inv| inv.count(&item))
+        .unwrap_or(0);
+    assert_eq!(
+        after,
+        before + 5,
+        "the base must land what the outpost held"
+    );
+}
+
+/// The outbound leg never loads more than `ROUTE_OUTPOST_CARRY`, summed
+/// across every item, whatever the outpost is holding.
+#[test]
+fn the_carry_is_capped_at_route_outpost_carry() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8300, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(
+        &mut game,
+        tile,
+        &item,
+        crate::tuning::ROUTE_OUTPOST_CARRY + 50,
+    );
+
+    game.dispatch_outpost_route(tile, false).unwrap();
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..total {
+        game.run_routes();
+    }
+
+    let route = &game.world.resource::<crate::resources::Routes>().0[0];
+    let carried: u32 = route.cargo.iter().map(|(_, qty)| *qty).sum();
+    assert_eq!(carried, crate::tuning::ROUTE_OUTPOST_CARRY);
+    assert_eq!(
+        outpost_stock_total(&game, tile),
+        50,
+        "the rest stays behind for the next trip"
+    );
+}
+
+/// A Hostile town beside the line takes its cut of the goods and says so in
+/// the log — `a_hostile_town_beside_the_route_taxes_it_and_says_so_in_the_log`'s
+/// shape, one endpoint over.
+#[test]
+fn a_hostile_town_beside_the_outpost_route_taxes_the_goods_and_says_so() {
+    let tile = (500, 500);
+    let found = (8400..8460).any(|seed| {
+        let mut game = an_outpost_ready_base(seed, tile);
+        let item = ItemId::from("cache_grain");
+        stock_the_outpost(&mut game, tile, &item, 20);
+
+        let (ax, ay) = game.anchor_position().unwrap();
+        let midpoint = ((ax + tile.0) / 2, (ay + tile.1) / 2);
+        let predator = SettlementKey { rx: 50, ry: 50 };
+        register_settlement(&mut game, predator, a_predator_def(), midpoint);
+        set_standing(
+            &mut game,
+            predator,
+            crate::tuning::SETTLEMENT_HOSTILE_STANDING,
+        );
+
+        game.dispatch_outpost_route(tile, false).unwrap();
+        let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+        // Land the outbound leg — the pickup, no predation there.
+        for _ in 0..total {
+            game.run_routes();
+        }
+        let picked_up: u32 = game.world.resource::<crate::resources::Routes>().0[0]
+            .cargo
+            .iter()
+            .map(|(_, qty)| *qty)
+            .sum();
+        let player = game.player_entity();
+        let before_pack = game
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&item))
+            .unwrap_or(0);
+        // Land the inbound leg — predation against the goods has its one
+        // roll here, then whatever survives deposits into the player's pack
+        // (no Depot stands in this fixture).
+        for _ in 0..total {
+            game.run_routes();
+        }
+        let after_pack = game
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&item))
+            .unwrap_or(0);
+        let delivered = after_pack - before_pack;
+        let taxed = delivered < picked_up;
+        let logged = game
+            .message_log(200)
+            .iter()
+            .any(|line| line.text.contains(&a_predator_def().name));
+        taxed && logged
+    });
+    assert!(
+        found,
+        "no seed in the sweep saw the Hostile town tax the outpost's goods and say so"
+    );
+}
+
+/// If the outpost record vanishes before the caravan arrives, the route
+/// stalls with a log line instead of dropping — design spec §7 — and
+/// retries every tick, exactly like a settlement's dry-stock stall.
+#[test]
+fn a_gone_outpost_stalls_the_route_with_a_log_line() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8500, tile);
+    game.dispatch_outpost_route(tile, true).unwrap();
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .remove(&tile);
+    for _ in 0..total {
+        game.run_routes();
+    }
+
+    let route = game.world.resource::<crate::resources::Routes>().0[0].clone();
+    assert!(route.stalled, "a missing outpost must stall, not drop");
+    assert!(
+        game.message_log(50)
+            .iter()
+            .any(|line| line.text.contains("isn't there anymore")),
+        "the stall must say so once"
+    );
+
+    // Retried every tick: putting the record back releases it on the next.
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+    game.run_routes();
+    let route = game.world.resource::<crate::resources::Routes>().0[0].clone();
+    assert!(
+        !route.stalled,
+        "the record reappearing must release the stall"
+    );
+    assert_eq!(route.leg, RouteLeg::Inbound);
+}
+
+/// A standing outpost route reloads and departs again on arrival home.
+#[test]
+fn a_standing_outpost_route_reloads_on_arrival() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8600, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(&mut game, tile, &item, 5);
+    game.dispatch_outpost_route(tile, true).unwrap();
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(
+        routes.len(),
+        1,
+        "a standing route does not come home for good"
+    );
+    let route = &routes[0];
+    assert_eq!(route.leg, RouteLeg::Outbound, "it has departed again");
+    assert_eq!(route.ticks_elapsed, 0);
+}
+
+/// `Game::sever_route` reaches an outpost route too — `RouteDestinationId`
+/// covers both endpoint kinds, and severing keeps `severing_clears_standing_
+/// and_nothing_else`'s rule: only `standing` clears, the trip in flight
+/// still completes.
+#[test]
+fn severing_an_outpost_route_clears_standing_and_nothing_else() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8650, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(&mut game, tile, &item, 5);
+    game.dispatch_outpost_route(tile, true).unwrap();
+
+    assert!(game.sever_route(RouteDestinationId::Outpost(tile)));
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(routes.len(), 1, "severing does not drop the trip in flight");
+    assert!(!routes[0].standing);
+
+    assert!(
+        !game.sever_route(RouteDestinationId::Outpost(tile)),
+        "severing an already-severed route clears nothing further"
+    );
+}
+
+/// Predation is the only thing an outpost's leg completion may draw
+/// `GameRng` for — `the_tick_draws_no_rng_when_nothing_preys`'s shape.
+#[test]
+fn the_tick_draws_no_rng_for_an_outpost_route_when_nothing_preys() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8700, tile);
+    let item = ItemId::from("cache_grain");
+    stock_the_outpost(&mut game, tile, &item, 5);
+    game.dispatch_outpost_route(tile, false).unwrap();
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(total - 1) {
+        game.run_routes();
+    }
+
+    fn peek(g: &mut Game) -> u64 {
+        use rand::RngExt;
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    super::support::reseed_rng(&mut game, 55);
+    let without = peek(&mut game);
+
+    super::support::reseed_rng(&mut game, 55);
+    game.run_routes();
+    let with = peek(&mut game);
+
+    assert_eq!(
+        without, with,
+        "no predator stands near this trip, so completing the leg must not touch GameRng"
+    );
+}
+
+/// Minor item: `restore_routes`/`restore_outpost_routes` used to append the
+/// outpost half onto the settlement half regardless of how the two were
+/// interleaved in `resources::Routes` before the save — `save::RouteSave::
+/// order`'s fix. Dispatched outpost-then-settlement here so a naive
+/// concatenation (settlement rows first) would visibly disagree with this
+/// test's expected order.
+#[test]
+fn interleaved_routes_keep_their_original_order_across_a_reload() {
+    let scratch = scratch_assets_dir("interleaved_routes_roundtrip");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let tile = (600, 600);
+    let (mut game, item, key) = a_dispatch_ready_base(8900, 40);
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+
+    game.dispatch_outpost_route(tile, false).unwrap();
+    game.dispatch_route(key, vec![(item, 5)], false).unwrap();
+
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let routes = loaded
+        .world
+        .resource::<crate::resources::Routes>()
+        .0
+        .clone();
+    assert_eq!(routes.len(), 2);
+    assert_eq!(
+        routes[0].destination,
+        RouteEnd::Outpost(tile),
+        "the outpost route was dispatched first and must reload first"
+    );
+    assert_eq!(
+        routes[1].destination.settlement_key(),
+        Some(key),
+        "the settlement route was dispatched second and must reload second"
+    );
+}
+
+/// An outpost route in flight survives a real save round trip —
+/// `a_route_in_flight_survives_a_real_save_round_trip`'s shape, the new
+/// `SaveData::outpost_routes` vector rather than `PlayerSave::routes`.
+#[test]
+fn an_outpost_route_in_flight_survives_a_real_save_round_trip() {
+    let scratch = scratch_assets_dir("outpost_route_inflight_roundtrip");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8800, tile);
+    let item = ItemId::from("cache_grain");
+    game.dispatch_outpost_route(tile, true).unwrap();
+    {
+        let mut routes = game.world.resource_mut::<crate::resources::Routes>();
+        routes.0[0].cargo = vec![(item.clone(), 4)];
+        routes.0[0].ticks_elapsed = 3;
+    }
+
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let routes = loaded
+        .world
+        .resource::<crate::resources::Routes>()
+        .0
+        .clone();
+    assert_eq!(
+        routes.len(),
+        1,
+        "the outpost route in flight must survive the load"
+    );
+    let route = &routes[0];
+    assert_eq!(route.destination, RouteEnd::Outpost(tile));
+    assert_eq!(route.cargo, vec![(item, 4)]);
+    assert!(route.standing);
+    assert_eq!(route.leg, RouteLeg::Outbound);
+    assert_eq!(route.ticks_elapsed, 3);
+}
+
+/// A save written before outpost routes existed carries no `outpost_routes`
+/// key at all, and must load with none rather than refusing or panicking —
+/// `a_pre_routes_save_loads_with_no_routes`'s shape.
+#[test]
+fn a_pre_outpost_routes_save_loads_with_none() {
+    let scratch = scratch_assets_dir("outpost_route_pre_save");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8801, tile);
+    game.dispatch_outpost_route(tile, true).unwrap();
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.outpost_routes.clear();
+    let text = crate::save::to_ron(&data).unwrap();
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("outpost_routes:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        stripped.lines().count() < text.lines().count(),
+        "the key must have been there to strip, or this proves nothing"
+    );
+    let old_path = scratch.join("old.bin");
+    let stripped_data =
+        crate::save::from_ron(&stripped).expect("a pre-outpost-routes save still parses");
+    crate::save::save_to_file(&old_path, &stripped_data).unwrap();
+
+    let loaded = Game::load(&old_path, &test_assets_dir()).unwrap();
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a pre-outpost-routes save has no outpost route in flight"
+    );
+}
+
+/// The hub's destination list gains a row per founded outpost, after every
+/// known settlement — `route_destinations` widened to list both kinds
+/// (Part A of the 2026-09-23 plan's dispatch gap).
+#[test]
+fn route_destinations_lists_a_founded_outpost_after_settlements() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8900, tile);
+    // `Game::new` already ran `ensure_local_settlements` — clear what world
+    // generation found nearby so only the one town registered below is
+    // counted, `route_destinations_lists_every_known_settlement`'s fixture.
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .clear();
+    let key = SettlementKey { rx: 2, ry: -1 };
+    register_settlement(&mut game, key, a_destination(), (200, -100));
+
+    let rows = game.route_destinations().expect("a Relay stands");
+    assert_eq!(rows.len(), 2, "one settlement plus one outpost");
+    assert_eq!(rows[0].destination, RouteDestinationId::Settlement(key));
+    let outpost_row = &rows[1];
+    assert_eq!(outpost_row.destination, RouteDestinationId::Outpost(tile));
+    assert!(
+        outpost_row.band.is_none(),
+        "an outpost carries no diplomatic standing"
+    );
+    let (ax, ay) = game.anchor_position().unwrap();
+    let d = (ax - tile.0).abs().max((ay - tile.1).abs()) as u64;
+    assert_eq!(
+        outpost_row.ticks,
+        crate::tuning::ROUTE_TICKS_BASE + crate::tuning::ROUTE_TICKS_PER_TILE * d
+    );
+}
+
+/// An outpost route in flight shows up on the hub's own "in flight" list,
+/// not only on the outpost's own screen — the second half of the same gap.
+#[test]
+fn route_reports_includes_an_outpost_route_in_flight() {
+    let tile = (500, 500);
+    let mut game = an_outpost_ready_base(8901, tile);
+    game.dispatch_outpost_route(tile, true).unwrap();
+
+    let reports = game.route_reports();
+    assert_eq!(reports.len(), 1);
+    let report = &reports[0];
+    assert_eq!(report.destination, RouteDestinationId::Outpost(tile));
+    assert!(report.standing);
+    assert_eq!(report.leg, RouteLeg::Outbound);
 }

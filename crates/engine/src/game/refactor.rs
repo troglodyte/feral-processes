@@ -238,6 +238,16 @@ impl Game {
         {
             return Err("You don't control that program.".into());
         }
+        // The outposts plan's own census: `open_kernel_ring` checked
+        // neither role before this, and nothing else here would refuse a
+        // posted crew member spending a Privilege Ring while away.
+        if self
+            .world
+            .get::<crate::components::PostedAt>(target)
+            .is_some()
+        {
+            return Err("That program is posted at an outpost. Recall it first.".into());
+        }
         let current = self.world.get::<KernelRing>(target).map_or(0, |r| r.0);
         if current >= KERNEL_RING_MAX {
             return Err(format!(

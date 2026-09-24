@@ -28,6 +28,7 @@ pub mod memories;
 pub mod needs;
 pub mod nemesis;
 pub mod notifications;
+pub mod outposts;
 pub mod perks;
 pub mod policy;
 pub mod progression;
@@ -100,7 +101,7 @@ pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRI
 pub use game::environment::TerrainRow;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
-pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
+pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};
 /// Every sentence the town page's aid rows can carry — exported so the
 /// renderer's width and height censuses measure the real strings rather than
 /// a parallel copy of them. See `game::settlement_relations::AID_GARRISON`.
@@ -128,7 +129,7 @@ use resources::{
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,
     LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TacticalFxCue,
-    TacticalFxKind, TransitCue, VisualEffect, condense,
+    TacticalFxKind, TransitCue, Visit, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

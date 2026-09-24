@@ -320,6 +320,62 @@ pub struct RouteSave {
     pub ticks_total: u64,
     pub ticks_elapsed: u64,
     pub proceeds: u32,
+    /// This route's position in `resources::Routes` at save time, shared
+    /// with `OutpostRouteSave::order` — the two save vectors are a
+    /// settlement/outpost split of one live `Vec`, so the interleaving
+    /// between them is lost unless each row carries back where it stood.
+    /// `Game::restore_routes` and `restore_outpost_routes` sort their
+    /// combined output on this rather than settlement-then-outpost.
+    /// `#[serde(default)]`: additive, and a save written before this field
+    /// existed has no order worth recovering, so every row defaulting to 0
+    /// and sorting stably (settlement rows first, as it already loaded)
+    /// costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub order: usize,
+}
+
+/// One caravan route running to an outpost, `RouteSave`'s twin for
+/// `routes::RouteEnd::Outpost` — design correction 4. **Untouched
+/// `RouteSave` stays settlement-only**, so this is a new, additive vector on
+/// `SaveData` rather than a widened `destination` field: changing
+/// `RouteSave::destination`'s type would not be an additive save change.
+///
+/// No `proceeds` field — an outpost route never banks Credits, only cargo,
+/// which is what `cargo` already carries mid-trip.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutpostRouteSave {
+    pub tile: (i32, i32),
+    pub cargo: Vec<(ItemId, u32)>,
+    pub standing: bool,
+    pub stalled: bool,
+    pub leg: crate::routes::RouteLeg,
+    pub ticks_total: u64,
+    pub ticks_elapsed: u64,
+    /// `RouteSave::order`'s own field and own reason — see its doc comment.
+    #[serde(default)]
+    pub order: usize,
+}
+
+/// One founded outpost — `outposts::Outpost`'s stored fields, plus the tile
+/// that keys it in `resources::Outposts`. Crew rides `CreatureSave::outpost`
+/// instead, `RouteSave`'s reason one level over: an outpost names no entity
+/// either, so this is a straight field-for-field rebuild in
+/// `Game::restore_outposts` with nothing to reconcile.
+///
+/// `Outpost::announced` is deliberately not here — `Game::
+/// reseed_outpost_announcements` re-seeds it from the freshly-derived trend
+/// right after load, which is what keeps a reload from re-posting an alert.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutpostSave {
+    pub tile: (i32, i32),
+    pub biome: crate::world::Biome,
+    pub growth: u32,
+    pub integrity: u32,
+    /// Vec-of-pairs on disk rather than the live `BTreeMap`,
+    /// `StructureSave::stock_input`'s precedent.
+    pub stock: Vec<(ItemId, u32)>,
+    pub stale_ticks: u32,
+    pub cycle_progress: u32,
 }
 
 /// A siege in progress, assembled from the board and the bodies rather
@@ -598,6 +654,24 @@ pub struct CreatureSave {
     /// what it had.
     #[serde(default)]
     pub study_station: Option<(i32, i32)>,
+    /// The outpost tile this program is posted at, if it is
+    /// `ProgramRole::Outpost` — `components::PostedAt`'s tile. `None` for a
+    /// program that isn't posted.
+    ///
+    /// Resolved directly against `resources::Outposts`, already restored by
+    /// the time creatures resolve their deferred state (`Game::restore_outposts`
+    /// runs right after `restore_settlements`, before creatures resolve at
+    /// all) — unlike `study_station` this names no entity to rebuild first.
+    /// A tile naming no outpost (the record was lost or edited away between
+    /// sessions) **drops the membership silently**, `nest_position`'s
+    /// leniency: the program comes back as ordinary `Staff`, which is what
+    /// standing the outpost down would have left it as.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** — an older save simply carries no posted crew, which is what
+    /// it had.
+    #[serde(default)]
+    pub outpost: Option<(i32, i32)>,
     /// Whether this creature is currently `Pursuing` the player — see that
     /// component's docs. Meaningless unless one of the two tethers above is
     /// also `Some`.
@@ -1692,6 +1766,24 @@ pub struct SaveData {
     /// additive.
     #[serde(default)]
     pub base_ledger: crate::base_ledger::BaseLedger,
+    /// Every outpost currently standing — see `resources::Outposts` and
+    /// `OutpostSave`.
+    ///
+    /// `#[serde(default)]`, `contracts`' reason: a file written before
+    /// outposts existed loads with none standing, which is exactly what
+    /// that run had. No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub outposts: Vec<OutpostSave>,
+    /// Every route running to an outpost — see `OutpostRouteSave`. A
+    /// settlement route still lives in `PlayerSave::routes`; this is a
+    /// separate, additive vector rather than a widened `RouteSave`, design
+    /// correction 4's reason.
+    ///
+    /// `#[serde(default)]`, `outposts`' reason: a file written before this
+    /// existed loads with none in flight, which is exactly true of that run.
+    /// No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub outpost_routes: Vec<OutpostRouteSave>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -2110,6 +2202,8 @@ mod tests {
             work_orders: Vec::new(),
             alerts: Vec::new(),
             next_program_id: crate::resources::NextProgramId::START.0,
+            outposts: Vec::new(),
+            outpost_routes: Vec::new(),
         }
     }
 
@@ -2151,6 +2245,7 @@ mod tests {
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

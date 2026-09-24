@@ -2030,6 +2030,18 @@ pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
 
+/// Every outpost currently standing, keyed by its zone-surface tile — see
+/// `outposts::Outpost`. A `BTreeMap` rather than a `HashMap`, `Settlements`'
+/// reason and `Stock`'s precedent: the production roll (Phase 2) and the
+/// save encoding both have to walk it in `(x, y)` order, not whatever a hash
+/// happens to iterate in.
+///
+/// Persisted through `save::SaveData::outposts` (`Vec<OutpostSave>`) rather
+/// than derived `Serialize`/`Deserialize` on this type directly —
+/// `Game::save`/`restore_outposts` are the one door each way.
+#[derive(Resource, Default)]
+pub struct Outposts(pub BTreeMap<(i32, i32), crate::outposts::Outpost>);
+
 /// What a town thinks of the party, and how the run has changed it.
 ///
 /// **A second map beside `Settlements` rather than a field on
@@ -2095,18 +2107,32 @@ pub struct KnownSettlement {
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct CompassBearing(pub Option<crate::settlements::CompassTarget>);
 
-/// The settlement the player's last step bumped into, waiting for a
-/// frontend to open its screen.
+/// A landmark the player's last step bumped into, waiting for a frontend to
+/// open its screen — a settlement or an outpost, the outposts plan's second
+/// extension point (design spec §10 "Beachhead (D)").
+///
+/// `Outpost` deliberately carries the tile rather than a lookup into
+/// `resources::Outposts`: unlike a `SettlementKey`, a zone-surface tile is
+/// already the outpost's own identity, so a second key would just be a copy
+/// of the `PendingVisit` value itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Visit {
+    Settlement(crate::settlements::SettlementKey),
+    Outpost((i32, i32)),
+}
+
+/// The landmark the player's last step bumped into, waiting for a frontend
+/// to open its screen.
 ///
 /// Deliberately not serialized, `CurrentStack`'s reason: this is a cue about
 /// *this instant*, not a fact about the world, and a save that restored one
 /// would reopen a screen the moment the file loaded rather than on the step
-/// that actually asked for it. `Game::take_settlement_visit` is the one
-/// door that reads it, and reading it clears it — `EffectQueue`/
-/// `TransitQueue`'s shape — so a keypress the player spends walking away
-/// from the tile does not find the screen reopening under it.
+/// that actually asked for it. `Game::take_visit` is the one door that reads
+/// it, and reading it clears it — `EffectQueue`/`TransitQueue`'s shape — so
+/// a keypress the player spends walking away from the tile does not find
+/// the screen reopening under it.
 #[derive(Resource, Default)]
-pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
+pub struct PendingVisit(pub Option<Visit>);
 
 /// The images the player has learned — `Game::emulation_options()`'s
 /// source, and the "no images known" half of `ability_unavailable`'s

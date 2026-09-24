@@ -2324,6 +2324,35 @@ fn find_target_in_direction_finds_a_settlement_it_previously_looked_through() {
     );
 }
 
+/// I4: `find_target_in_direction` used to look straight through an outpost
+/// the same way it once did for a settlement — no `Creature`, no
+/// `Structure`, and `resources::Outposts`' own tile-keyed record had no arm
+/// of its own on the ray walk.
+#[test]
+fn find_target_in_direction_finds_an_outpost_it_previously_looked_through() {
+    let mut game = Game::new(9102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let start = *game.world.get::<Position>(player).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 5);
+    let tile = (start.x + 2, start.y);
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 5),
+        Some(InspectTarget::Outpost(tile)),
+        "an outpost standing on the ray must not be looked through"
+    );
+}
+
 /// `KnownSettlement::def` stores the whole resolved catalogue entry, and
 /// this is the reason: the report must not go back to `SettlementDb` for
 /// anything, or a mod removing or rewriting a file after a town has been

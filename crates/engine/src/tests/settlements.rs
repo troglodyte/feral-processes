@@ -44,29 +44,29 @@ fn the_bump_queues_exactly_one_visit_naming_that_settlements_key() {
     game.move_player(1, 0);
 
     assert_eq!(
-        game.take_settlement_visit(),
-        Some(key),
+        game.take_visit(),
+        Some(crate::resources::Visit::Settlement(key)),
         "the bump must name the settlement it landed on"
     );
 }
 
 /// Written first and watched red against a non-draining read (a `fn
-/// take_settlement_visit(&self) -> Option<SettlementKey> { self.world
+/// take_visit(&self) -> Option<SettlementKey> { self.world
 /// .resource::<PendingVisit>().0 }`) — a plain getter passes every other
 /// test in this file, since none of the others call it twice. Only this one
 /// tells a getter from a drain.
 #[test]
-fn a_second_take_settlement_visit_answers_none() {
+fn a_second_take_visit_answers_none() {
     let mut game = game();
     settlement_east_of_player(&mut game);
     game.move_player(1, 0);
 
     assert!(
-        game.take_settlement_visit().is_some(),
+        game.take_visit().is_some(),
         "the fixture's own bump must have queued a visit"
     );
     assert_eq!(
-        game.take_settlement_visit(),
+        game.take_visit(),
         None,
         "a screen reopening on the next keypress — the one spent walking away — \
          is the bug this drain exists to close"
@@ -88,7 +88,7 @@ fn the_pending_visit_does_not_survive_a_save_and_load() {
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(
-        loaded.take_settlement_visit(),
+        loaded.take_visit(),
         None,
         "a cue about this instant must not reopen a screen the moment a save loads — \
          `resources::CurrentStack`'s reason"
@@ -131,7 +131,7 @@ fn walking_onto_ordinary_ground_beside_a_settlement_still_moves_you_and_queues_n
         "ordinary ground beside a settlement must still be walkable"
     );
     assert_eq!(
-        game.take_settlement_visit(),
+        game.take_visit(),
         None,
         "a step that never touched the settlement tile must queue no visit"
     );

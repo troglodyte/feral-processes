@@ -23,8 +23,9 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, EmulationOption, Entity, EntityView, Game,
-    InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption,
-    RecipeChain, RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
+    InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, OutpostMark, OutpostReport,
+    PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, SettlementView, StockRow,
+    StructureReport, morale_band,
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
@@ -57,6 +58,7 @@ mod manifest_layout;
 mod marks;
 mod meta;
 mod notify;
+mod outposts;
 mod party;
 mod popup;
 mod progression;
@@ -122,6 +124,7 @@ use meta::{
     draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
+use outposts::{draw_outpost_post, draw_outpost_visit};
 use party::{
     draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
     draw_fuse_name_menu, draw_fuse_second_menu, draw_refactor, draw_refactor_item,
@@ -1050,6 +1053,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // the figure is derived from more than one field, so the borrow cannot
     // be split at the call.
     let craft_quantity = app.craft_quantity();
+    // `App::outpost_post_candidates` takes `&self`, `sortie_squad_candidates`'s
+    // own reason for running before `game` below takes `&mut app.game`.
+    let outpost_post_candidates = match app.mode {
+        Mode::OutpostPost => app.outpost_post_candidates(),
+        _ => Vec::new(),
+    };
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, refusal, painter, m),
@@ -1209,6 +1218,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::OutpostVisit => {
+            draw_outpost_visit(game, app.pending_outpost, selected, refusal, painter, m)
+        }
+        Mode::OutpostPost => {
+            draw_outpost_post(&outpost_post_candidates, selected, refusal, painter, m)
+        }
         Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
@@ -1512,7 +1527,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 116] = [
+    const ALL_MODES: [Mode; 118] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1563,6 +1578,8 @@ mod tests {
         Mode::Settlement,
         Mode::SettlementMarket,
         Mode::SettlementBoard,
+        Mode::OutpostVisit,
+        Mode::OutpostPost,
         Mode::Inventory,
         Mode::EquipSwap,
         Mode::InventoryItemAction,

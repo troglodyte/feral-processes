@@ -831,7 +831,7 @@ fn arriving_by_relay_opens_the_town_exactly_when_walking_into_it_would() {
     // trip alone: a set-down several tiles out would otherwise open a page
     // whose market and board `settlement_reach` immediately refuses.
     let in_reach = game.settlement_view(key).is_some();
-    assert_eq!(game.take_settlement_visit().is_some(), in_reach);
+    assert_eq!(game.take_visit().is_some(), in_reach);
 }
 
 #[test]
@@ -839,7 +839,7 @@ fn travelling_home_lands_on_the_anchor_and_charges_the_walk() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     let anchor = game.anchor_position().unwrap();
     let from = player_tile(&game);
     let expected = ((from.0 - anchor.0).abs().max((from.1 - anchor.1).abs()) as u64)
@@ -857,7 +857,7 @@ fn travelling_home_refuses_from_out_of_reach_of_the_town_and_spends_nothing() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     // Step away, so the town is no longer within a tile.
     for _ in 0..3 {
         game.move_player(-1, 0);
@@ -873,7 +873,7 @@ fn travelling_home_refuses_a_town_below_allied_and_spends_nothing() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
     let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
 
@@ -1107,7 +1107,7 @@ fn travelling_home_refuses_after_game_over_and_spends_nothing() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
     game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
 
@@ -1120,7 +1120,7 @@ fn travelling_home_refuses_during_a_battle_and_spends_nothing() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
     game.world
         .insert_resource(super::extraction::minimal_active_battle(&game));
@@ -1134,7 +1134,7 @@ fn travelling_home_refuses_without_a_relay_and_spends_nothing() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip out");
-    let _ = game.take_settlement_visit();
+    let _ = game.take_visit();
     // Take the Relay away, leaving the party standing at the town.
     let relays: Vec<Entity> = game
         .world

@@ -21,7 +21,10 @@ pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
     (1, 1),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+// `PartialOrd, Ord` so `outposts::OutpostTierDef` can key its yield table by
+// biome in a `BTreeMap` — the save is field-named RON, not bincode, so
+// unlike `Perk`'s variant order this costs no save-format guarantee.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Biome {
     DataVoid,
     /// Renamed from `StaticField`; the alias is what keeps every save and

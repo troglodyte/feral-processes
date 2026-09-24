@@ -295,6 +295,14 @@ impl Game {
         // same reason — a route dispatched this tick does not complete a
         // leg before the base has finished its own beat.
         self.run_routes();
+        // Beside `run_routes` for its own reason and place: an outpost's
+        // production cycle is `&mut Game` work no bevy system can express
+        // (it names programs through `creature_label`-style lookups the
+        // crew roll reads, and reports through `Game::report_base`), and it
+        // sits after the crews and the Bays for the reason every base seam
+        // above it does — a program posted this tick does not roll before
+        // the base has finished its own beat.
+        self.run_outposts();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an
@@ -733,7 +741,7 @@ impl Game {
             // ever runs.
             self.world
                 .resource_mut::<crate::resources::PendingVisit>()
-                .0 = Some(key);
+                .0 = Some(crate::resources::Visit::Settlement(key));
             // The same arm records having been there: reaching a town is
             // what promotes its compass row from a bearing to a name and a
             // distance, and this bump is the only thing that means reached.
@@ -748,8 +756,24 @@ impl Game {
             self.tick();
             return 0;
         }
+        if self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .contains_key(&(nx, ny))
+        {
+            // The fifth arm, a settlement's own shape one tile of content
+            // over: a record with no entity is still a landmark you read
+            // from the outside, not a door — design correction 3's `Visit`
+            // extension point.
+            self.world
+                .resource_mut::<crate::resources::PendingVisit>()
+                .0 = Some(crate::resources::Visit::Outpost((nx, ny)));
+            self.tick();
+            return 0;
+        }
         if let Some(trap) = self.find_trap_at(nx, ny) {
-            // The fifth arm of the ladder and, like the four above it, not a
+            // The sixth arm of the ladder and, like the five above it, not a
             // step: the player stays where they are either way.
             //
             // Nothing stops a wild program spawning onto a trap later —
@@ -1099,8 +1123,47 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        // The outpost kit is not a `ConsumeDef` effect — it founds a record
+        // rather than restoring Power or arming a buff — so it is
+        // intercepted here, before `consume_item`, rather than folded into
+        // that function's effect table. See `Game::found_outpost`.
+        if self
+            .world
+            .resource::<crate::outposts::OutpostDb>()
+            .def()
+            .is_some_and(|def| &def.kit == id)
+        {
+            self.use_outpost_kit(id);
+            return;
+        }
         if self.consume_item(self.player_entity(), id) {
             self.tick();
+        }
+    }
+
+    /// The outpost-kit half of `use_item`. Refuses before spending anything:
+    /// no unit leaves `Inventory` unless `found_outpost` returns `Ok`.
+    fn use_outpost_kit(&mut self, id: &ItemId) {
+        let player = self.player_entity();
+        if self
+            .world
+            .get::<Inventory>(player)
+            .is_none_or(|inv| inv.count(id) == 0)
+        {
+            let name = self.item_name(id).to_string();
+            self.note_refusal(format!("You have no {name}."));
+            return;
+        }
+        let pos = *self.world.get::<Position>(player).unwrap();
+        match self.found_outpost((pos.x, pos.y)) {
+            Ok(()) => {
+                self.world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .take(id.clone(), 1);
+                self.tick();
+            }
+            Err(msg) => self.note_refusal(msg),
         }
     }
 
@@ -1364,21 +1427,28 @@ impl Game {
         for (creature, role) in owned {
             // Exhaustive rather than a `!=`, `cell_mark`'s rule: the question
             // is whether this program is standing *with* the player, the
-            // five roles answer it two and three, and there is no safe side
-            // to default a sixth one to. `UnderStudy` falls on the `false`
-            // side with `Sortie` and `Staff` — a pinned program is not
-            // beside you either, and this is the one reader of the enum a
-            // fifth role could not leave silently wrong: decision 2 in
+            // six roles answer it two and four, and there is no safe side
+            // to default a seventh one to. `UnderStudy` falls on the `false`
+            // side with `Sortie`, `Outpost` and `Staff` — a pinned program is
+            // not beside you either, and this is the one reader of the enum
+            // a fifth role could not leave silently wrong: decision 2 in
             // `docs/superpowers/plans/2026-09-20-research-station-study.md`
             // found this the only one of the role's five intended omissions
-            // that is an exhaustive match rather than a comparison. `None`
-            // is unreachable — `owned` is already filtered to programs this
-            // player owns — and is spelled out rather than folded into a
-            // catch-all so it cannot become the arm a new role quietly lands
-            // in.
+            // that is an exhaustive match rather than a comparison. `Outpost`
+            // widened it the same way, a `false` arm for the same reason —
+            // an away crew member is no more beside you than a pinned one.
+            // `None` is unreachable — `owned` is already filtered to
+            // programs this player owns — and is spelled out rather than
+            // folded into a catch-all so it cannot become the arm a new role
+            // quietly lands in.
             let repaired = match role {
                 Some(ProgramRole::InParty | ProgramRole::Wielded) => true,
-                Some(ProgramRole::Sortie | ProgramRole::Staff | ProgramRole::UnderStudy) => false,
+                Some(
+                    ProgramRole::Sortie
+                    | ProgramRole::Outpost
+                    | ProgramRole::Staff
+                    | ProgramRole::UnderStudy,
+                ) => false,
                 None => false,
             };
             if repaired && let Some(mut stats) = self.world.get_mut::<Stats>(creature) {

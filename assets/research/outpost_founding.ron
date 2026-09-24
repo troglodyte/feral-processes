@@ -1,0 +1,17 @@
+(
+    id: "outpost_founding",
+    name: "Outpost Founding",
+    description: "A folded shell, a beacon and a seed stock of parts, compiled into a portable Outpost Kit. Used out on the surface, it founds an unmanned outpost that a posted crew can grow and work.",
+    cost: 18,
+    // Logic Wafers and Bytecode Blocks are both reachable from the same
+    // chain this node itself requires — the Transcriber (Logic Wafers) and
+    // the Refinery (Bytecode Blocks, ungated) — so the bill never asks for
+    // something the tree has not unlocked yet.
+    materials: [("logic_wafer", 6), ("bytecode_block", 4)],
+    requires: ["routine_fabrication"],
+    requires_subject: true,
+    unlocks_recipes: [(
+        result: "outpost_kit",
+        cost: [("logic_wafer", 8), ("bytecode_block", 6)],
+    )],
+)

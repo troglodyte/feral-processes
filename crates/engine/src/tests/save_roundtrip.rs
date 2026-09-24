@@ -53,6 +53,8 @@ struct Roster {
     sentry: Entity,
     /// Pinned in a Research Station's pen — `ProgramRole::UnderStudy`.
     subject: Entity,
+    /// Posted at an outpost — `ProgramRole::Outpost`.
+    crew: Entity,
 }
 
 /// Every creature is named, so a census can find its row in a file where
@@ -71,6 +73,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
     let scout = spawn_tamed(game, 25, 7);
     let sentry = spawn_wild_on_player_tile(game);
     let subject = spawn_tamed(game, 15, 3);
+    let crew = spawn_tamed(game, 14, 3);
 
     // Everything that goes through an engine verb happens first: `enlist`,
     // `wear` and `wield_program` each tick, and a tick drains needs and
@@ -201,6 +204,9 @@ fn seed_the_roster(game: &mut Game) -> Roster {
     game.world
         .entity_mut(subject)
         .insert(CustomName("Analyst".to_string()));
+    game.world
+        .entity_mut(crew)
+        .insert(CustomName("Beacon".to_string()));
 
     Roster {
         member,
@@ -209,6 +215,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         scout,
         sentry,
         subject,
+        crew,
     }
 }
 
@@ -242,6 +249,22 @@ fn add_the_position_tethers(game: &mut Game, roster: &Roster) {
     game.world
         .entity_mut(roster.subject)
         .insert(crate::components::UnderStudy { station });
+
+    // Unlike the three tethers above, an outpost names no entity — it is a
+    // record in `resources::Outposts` keyed by tile — so there is no bare
+    // stand-in to spawn. This save-side fixture inserts the record directly
+    // rather than through `Game::post_to_outpost`, `Sortie`'s own reason:
+    // the record only has to exist for the write side this file tests.
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            (51, 52),
+            crate::outposts::Outpost::new(crate::world::Biome::Deadlock, 100),
+        );
+    game.world
+        .entity_mut(roster.crew)
+        .insert(crate::components::PostedAt((51, 52)));
 }
 
 /// The first need the game ships, whatever it is — the fixture wants a real
@@ -341,6 +364,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         nest_position: _,
         patrol_position: _,
         study_station: _,
+        outpost: _,
         pursuing: _,
         carrying: _,
         carrying_program: _,
@@ -410,6 +434,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(saved.nest_position.is_none(), "nest_position");
     assert!(saved.patrol_position.is_none(), "patrol_position");
     assert!(saved.study_station.is_none(), "study_station");
+    assert!(saved.outpost.is_none(), "outpost");
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
     assert!(saved.carrying_program.is_none(), "carrying_program");
@@ -564,6 +589,19 @@ fn the_roles_and_the_tethers_are_written_per_creature() {
     );
     assert!(!subject.wielded, "a pinned subject is not wielded");
     assert_eq!(subject.sortie_index, None, "a pinned subject is not away");
+
+    let crew = named(&creatures, "Beacon");
+    assert_eq!(crew.outpost, Some((51, 52)), "outpost");
+    assert!(
+        !crew.staff,
+        "a posted crew member is not on the staff — it is `ProgramRole::Outpost`"
+    );
+    assert_eq!(
+        crew.party_slot, None,
+        "a posted crew member is not in the party"
+    );
+    assert!(!crew.wielded, "a posted crew member is not wielded");
+    assert_eq!(crew.sortie_index, None, "a posted crew member is not away");
 }
 
 /// Saving, loading and saving again must write the same lines.

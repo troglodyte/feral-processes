@@ -83,6 +83,15 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::Settlement;
             }
+            // An outpost takes `Settlement`'s own shape one fixture over —
+            // its own page, `Mode::OutpostVisit`, the same one a bump opens.
+            // `InspectTarget::Outpost` already carries the tile, so there is
+            // no entity-to-key bridge to reach through here.
+            Some(InspectTarget::Outpost(tile)) => {
+                self.pending_outpost = Some(tile);
+                self.status_line = None;
+                self.mode = Mode::OutpostVisit;
+            }
             // Nothing standing there — but in base space the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a

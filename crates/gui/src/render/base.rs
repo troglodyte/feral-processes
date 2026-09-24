@@ -1,6 +1,7 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
 use super::marks::*;
+use super::outposts::draw_outpost_marks;
 use super::stack::draw_stack;
 use super::terrain::*;
 use super::*;
@@ -678,6 +679,31 @@ fn draw_surface_map(
     // `render/stack.rs` and never reaches here at all — so this one flag is
     // the whole of the gate: it is a property of the locale, not of a tile.
     let outdoors = base_pos.is_none();
+    // Outposts are zone-surface fixtures and never stand in base space or
+    // the Stack (which draws through `render/stack.rs` and never reaches
+    // this function at all) — `outdoors`'s own gate, `marked`'s mirror one
+    // locale over.
+    let outpost_marks = if outdoors {
+        game.outpost_marks()
+    } else {
+        Vec::new()
+    };
+    // Which of those tiles already carries an entity's own glyph and marks
+    // — `draw_outpost_marks`'s own doc: an outpost's glyph must not paint
+    // over the player's `@` or a wild program standing on its tile, and its
+    // pips share the nemesis mark's top-right corner (`marks.rs`'s corner
+    // census), so a nemesis on the tile has to win that corner. The growth
+    // bar needs no such check — it holds the bottom edge, and every corner
+    // mark that could share it is built to lift clear of that edge instead.
+    let mut outpost_occupants: std::collections::HashMap<(i32, i32), bool> = Default::default();
+    if outdoors {
+        for ev in &entities {
+            outpost_occupants
+                .entry(ev.pos)
+                .and_modify(|nemesis| *nemesis |= ev.nemesis)
+                .or_insert(ev.nemesis);
+        }
+    }
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
     painter.rect(
@@ -1390,6 +1416,29 @@ fn draw_surface_map(
             },
             tile_px,
             pane,
+        );
+    }
+    // The surface's own mirror of the plan pass above: a record with no
+    // entity has no other way onto the map, `render/outposts.rs::
+    // draw_outpost_marks`'s own doc.
+    if outdoors {
+        draw_outpost_marks(
+            painter,
+            &outpost_marks,
+            |world| {
+                tile_origin_px(
+                    world,
+                    center,
+                    (half_w, half_h),
+                    (off_x, off_y),
+                    tile_px,
+                    pane,
+                )
+            },
+            tile_px,
+            glyph_px,
+            pane,
+            |tile| outpost_occupants.get(&tile).copied(),
         );
     }
     // After every tile so debris lands on top of the base rather than under
@@ -5524,6 +5573,7 @@ mod tests {
                 nest_position: None,
                 patrol_position: None,
                 study_station: None,
+                outpost: None,
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,

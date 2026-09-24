@@ -31,6 +31,7 @@ mod log_filter;
 mod menus;
 mod notifications;
 mod options;
+mod outposts;
 mod party;
 mod playing;
 mod quitting;

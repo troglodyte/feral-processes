@@ -215,6 +215,11 @@ pub(crate) struct CreatureRestore {
     /// array rebuilds, so a study tether can be no sooner than a cronjob's
     /// target is.
     pub(crate) pending_study: Vec<(Entity, (i32, i32))>,
+    /// `(program, outpost tile)` — resolved right after `restore_outposts`,
+    /// which needs no structure array rebuilt first: an outpost is a record
+    /// in `resources::Outposts` keyed by tile, not an entity, so unlike
+    /// `pending_study` there is nothing else to wait on.
+    pub(crate) pending_outpost_crew: Vec<(Entity, (i32, i32))>,
     /// `(siege_order, member, siege_cell)` — `sortie_members`' shape,
     /// applied to `game::siege::persist::restore` rather than
     /// `restore_sorties`: entity ids aren't stable across a save/load round
@@ -249,6 +254,7 @@ impl CreatureRestore {
             pending_cronjobs: Vec::new(),
             pending_patrols: Vec::new(),
             pending_study: Vec::new(),
+            pending_outpost_crew: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_stolen_from: Vec::new(),
         }
@@ -458,6 +464,7 @@ impl Game {
             talents: talent_db,
             affixes: affix_db,
             settlements: settlement_db,
+            outposts: outpost_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -478,6 +485,7 @@ impl Game {
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(settlement_db);
+        world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -546,6 +554,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
@@ -945,26 +954,91 @@ impl Game {
             .insert_resource(crate::resources::Sorties(sorties));
     }
 
-    fn restore_routes(&mut self, saved: Vec<save::RouteSave>) {
-        // Straight field-for-field, `routes::Route`'s own reason: cargo
-        // names no entity, so there is nothing here to reconcile against
-        // `sortie_members` above.
-        let routes: Vec<crate::routes::Route> = saved
+    /// Straight field-for-field, `routes::Route`'s own reason: cargo names
+    /// no entity, so there is nothing here to reconcile against
+    /// `sortie_members` above. Settlement routes only — `restore_outpost_routes`
+    /// builds the other half, and the two are merged by `order` rather than
+    /// inserted directly: `SaveData::routes`/`outpost_routes` is a
+    /// settlement/outpost split of one live `Vec<Route>`, so simply
+    /// appending one after the other would reorder any save with the two
+    /// kinds interleaved — see `save::RouteSave::order`'s doc.
+    fn restore_routes(&self, saved: Vec<save::RouteSave>) -> Vec<(usize, crate::routes::Route)> {
+        saved
             .into_iter()
-            .map(|r| crate::routes::Route {
-                destination: r.destination,
-                destination_def: r.destination_def,
-                destination_tile: r.destination_tile,
-                cargo: r.cargo,
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: r.proceeds,
+            .map(|r| {
+                (
+                    r.order,
+                    crate::routes::Route {
+                        destination: crate::routes::RouteEnd::Settlement {
+                            key: r.destination,
+                            def: r.destination_def,
+                            tile: r.destination_tile,
+                        },
+                        cargo: r.cargo,
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                        proceeds: r.proceeds,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// `restore_routes`' twin for the outpost half of `resources::Routes` —
+    /// see its doc comment for why the two are merged by `order` rather than
+    /// one simply appended onto the other.
+    fn restore_outpost_routes(
+        &self,
+        saved: Vec<save::OutpostRouteSave>,
+    ) -> Vec<(usize, crate::routes::Route)> {
+        saved
+            .into_iter()
+            .map(|r| {
+                (
+                    r.order,
+                    crate::routes::Route {
+                        destination: crate::routes::RouteEnd::Outpost(r.tile),
+                        cargo: r.cargo,
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                        proceeds: 0,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// `restore_routes`' shape one type over: an outpost names no entity
+    /// either, so this is a straight field-for-field rebuild keyed back onto
+    /// its tile. `announced` is not part of `save::OutpostSave` and comes
+    /// back `None` here — `Game::reseed_outpost_announcements`, called once
+    /// `attach_outpost_crew` has run, is what fixes it back to the real
+    /// trend before the load returns.
+    fn restore_outposts(&mut self, saved: Vec<save::OutpostSave>) {
+        let map: std::collections::BTreeMap<(i32, i32), crate::outposts::Outpost> = saved
+            .into_iter()
+            .map(|o| {
+                (
+                    o.tile,
+                    crate::outposts::Outpost {
+                        biome: o.biome,
+                        growth: o.growth,
+                        integrity: o.integrity,
+                        stock: o.stock.into_iter().collect(),
+                        stale_ticks: o.stale_ticks,
+                        cycle_progress: o.cycle_progress,
+                        announced: None,
+                    },
+                )
             })
             .collect();
-        self.world.insert_resource(crate::resources::Routes(routes));
+        self.world.insert_resource(crate::resources::Outposts(map));
     }
 
     fn restore_structures(
@@ -1135,6 +1209,39 @@ impl Game {
         }
     }
 
+    /// Reattaches `components::PostedAt` now that `resources::Outposts` is
+    /// restored — `attach_pinned_subjects`' shape, but with nothing to wait
+    /// on: an outpost is a record keyed by tile, not a structure entity, so
+    /// this can resolve as soon as `restore_outposts` has run rather than
+    /// after the structures array further down.
+    ///
+    /// **A tile naming no outpost drops the membership** — `nest_position`'s
+    /// leniency: the record was edited away or lost between sessions, so the
+    /// program comes back as ordinary `Staff` instead of refusing the whole
+    /// load. Unlike `attach_pinned_subjects` this logs the drop, since a
+    /// player watching their staff count is the one who would otherwise
+    /// wonder where a body went.
+    fn attach_outpost_crew(&mut self, pending: Vec<(Entity, (i32, i32))>) {
+        for (program, tile) in pending {
+            if !self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .contains_key(&tile)
+            {
+                let name = self.creature_label(program);
+                self.log(format!(
+                    "{name} was posted at an outpost that's no longer there, \
+                     and rejoins the base staff."
+                ));
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::PostedAt(tile));
+        }
+    }
+
     /// Reconnects a besieger's `components::StolenFrom` to its source
     /// structure now that both sides exist — `attach_cronjobs`'s shape and
     /// leniency: a tile naming no structure (it was destroyed before the
@@ -1190,6 +1297,7 @@ impl Game {
             talents: talent_db,
             affixes: affix_db,
             settlements: settlement_db,
+            outposts: outpost_db,
             policy: enemy_policy,
             warnings: mut load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -1228,6 +1336,7 @@ impl Game {
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(settlement_db);
+        world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -1318,6 +1427,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
         world.insert_resource(crate::resources::CompassBearing::default());
@@ -1543,6 +1653,7 @@ impl Game {
             pending_cronjobs,
             pending_patrols,
             pending_study,
+            pending_outpost_crew,
             pending_siege_members,
             pending_stolen_from,
             ..
@@ -1557,7 +1668,15 @@ impl Game {
         // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
         game.restore_sorties(saved_sorties, &sortie_members);
-        game.restore_routes(saved_routes);
+        // Merged by `order` and not simply concatenated — `restore_routes`'
+        // doc comment on why a settlement/outpost split needs the seam.
+        let mut ordered_routes = game.restore_routes(saved_routes);
+        ordered_routes
+            .extend(game.restore_outpost_routes(std::mem::take(&mut data.outpost_routes)));
+        ordered_routes.sort_by_key(|(order, _)| *order);
+        game.world.insert_resource(crate::resources::Routes(
+            ordered_routes.into_iter().map(|(_, r)| r).collect(),
+        ));
 
         let structure_positions = game.restore_structures(data.structures);
 
@@ -1591,6 +1710,9 @@ impl Game {
         game.world.insert_resource(data.standings);
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
+        game.restore_outposts(data.outposts);
+        game.attach_outpost_crew(pending_outpost_crew);
+        game.reseed_outpost_announcements();
         // After the towns exist, and the one place a patrol's tether is
         // rebuilt. A tile naming no town — the settlement catalogue was
         // edited between sessions — drops the tether silently rather than
@@ -1984,6 +2106,13 @@ impl Game {
                 // Station is one of the structures rebuilt further down
                 // `Game::load`, so there is nothing yet for a tile to name.
                 ctx.pending_study.push((creature_id, tile));
+            } else if let Some(tile) = c.outpost {
+                // Same precedence argument as `study_station` above, one
+                // role over: `Game::post_to_outpost` frees a program's stale
+                // `Task` the moment it is posted, so this and `cronjob`
+                // shouldn't co-occur in a save this build writes, but an
+                // older or hand-edited one could carry both.
+                ctx.pending_outpost_crew.push((creature_id, tile));
             } else if let Some(cronjob) = c.cronjob.clone() {
                 ctx.pending_cronjobs.push((creature_id, cronjob));
             }
@@ -2221,6 +2350,10 @@ impl Game {
             nest_position,
             patrol_position,
             study_station,
+            outpost: self
+                .world
+                .get::<crate::components::PostedAt>(e)
+                .map(|p| p.0),
             pursuing: self.world.get::<Pursuing>(e).is_some(),
             boss: self.world.get::<Boss>(e).is_some(),
             carrying: self
@@ -2531,23 +2664,31 @@ impl Game {
             .map(|a| a.iter().map(|(id, v)| (id.clone(), v)).collect())
             .unwrap_or_default();
         // No membership to gather, `routes::Route`'s own reason: a
-        // field-for-field conversion is the whole of it.
+        // field-for-field conversion is the whole of it. Settlement routes
+        // only — an outpost route saves as `SaveData::outpost_routes`
+        // instead, design correction 4's reason (`RouteSave` stays
+        // untouched, so widening its `destination` field is not an option).
         let routes: Vec<save::RouteSave> = self
             .world
             .resource::<crate::resources::Routes>()
             .0
             .iter()
-            .map(|r| save::RouteSave {
-                destination: r.destination,
-                destination_def: r.destination_def.clone(),
-                destination_tile: r.destination_tile,
-                cargo: r.cargo.clone(),
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: r.proceeds,
+            .enumerate()
+            .filter_map(|(order, r)| match &r.destination {
+                crate::routes::RouteEnd::Settlement { key, def, tile } => Some(save::RouteSave {
+                    destination: *key,
+                    destination_def: def.clone(),
+                    destination_tile: *tile,
+                    cargo: r.cargo.clone(),
+                    standing: r.standing,
+                    stalled: r.stalled,
+                    leg: r.leg,
+                    ticks_total: r.ticks_total,
+                    ticks_elapsed: r.ticks_elapsed,
+                    proceeds: r.proceeds,
+                    order,
+                }),
+                crate::routes::RouteEnd::Outpost(_) => None,
             })
             .collect();
         save::PlayerSave {
@@ -2853,6 +2994,41 @@ impl Game {
                 .world
                 .resource::<crate::base_ledger::BaseLedger>()
                 .clone(),
+            outposts: self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .iter()
+                .map(|(&tile, o)| save::OutpostSave {
+                    tile,
+                    biome: o.biome,
+                    growth: o.growth,
+                    integrity: o.integrity,
+                    stock: o.stock.iter().map(|(id, &n)| (id.clone(), n)).collect(),
+                    stale_ticks: o.stale_ticks,
+                    cycle_progress: o.cycle_progress,
+                })
+                .collect(),
+            outpost_routes: self
+                .world
+                .resource::<crate::resources::Routes>()
+                .0
+                .iter()
+                .enumerate()
+                .filter_map(|(order, r)| match &r.destination {
+                    crate::routes::RouteEnd::Outpost(tile) => Some(save::OutpostRouteSave {
+                        tile: *tile,
+                        cargo: r.cargo.clone(),
+                        standing: r.standing,
+                        stalled: r.stalled,
+                        leg: r.leg,
+                        ticks_total: r.ticks_total,
+                        ticks_elapsed: r.ticks_elapsed,
+                        order,
+                    }),
+                    crate::routes::RouteEnd::Settlement { .. } => None,
+                })
+                .collect(),
         };
         save::save_to_file(path, &data)
     }
@@ -3058,6 +3234,7 @@ struct AssetDbs {
     talents: crate::talents::TalentDb,
     affixes: AffixDb,
     settlements: crate::settlements::SettlementDb,
+    outposts: crate::outposts::OutpostDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -3135,6 +3312,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (settlements, settlement_warnings) =
         crate::settlements::SettlementDb::load_dir(&assets_dir.join("settlements"))?;
     warnings.extend(settlement_warnings);
+    // Same absent-is-silent rule again — see `OutpostDb`'s own doc. An
+    // empty catalogue leaves the kit refusing with a message, which is the
+    // pre-outpost game.
+    let (outposts, outpost_warnings) =
+        crate::outposts::OutpostDb::load_dir(&assets_dir.join("outposts"))?;
+    warnings.extend(outpost_warnings);
     let (policy, policy_warnings) =
         crate::policy::load_file(&assets_dir.join("policies/enemy_battle.ron"))?;
     warnings.extend(policy_warnings);
@@ -3238,6 +3421,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         perks,
         affixes,
         settlements,
+        outposts,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

@@ -2432,6 +2432,168 @@ fn a_pinned_program_is_not_healed_by_a_rest() {
 }
 
 // ---------------------------------------------------------------------
+// The sixth role: `ProgramRole::Outpost`
+//
+// The outposts plan's own census, run the way decision 2 ran `UnderStudy`'s
+// above: `docs/superpowers/plans/2026-09-23-outposts.md`, corrections 1 and
+// 2. `components::PostedAt` is the one authoritative fact; `program_role` is
+// the one reader of it, and the doors below are held by these tests and
+// nothing else.
+// ---------------------------------------------------------------------
+
+#[test]
+fn roster_rank_places_outpost_between_sortie_and_under_study() {
+    assert!(ProgramRole::Sortie.roster_rank() < ProgramRole::Outpost.roster_rank());
+    assert!(ProgramRole::Outpost.roster_rank() < ProgramRole::UnderStudy.roster_rank());
+}
+
+/// The first omission: a posted crew member is not `Staff`, so
+/// `Game::base_staff` excludes it without a check of its own.
+#[test]
+fn a_program_carrying_the_posted_at_marker_reads_that_role_and_leaves_the_staff_pool() {
+    let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert_eq!(game.base_staff(), vec![program]);
+
+    game.world
+        .entity_mut(program)
+        .insert(components::PostedAt((5, 5)));
+
+    assert_eq!(game.program_role(program), Some(ProgramRole::Outpost));
+    assert!(
+        game.base_staff().is_empty(),
+        "a posted crew member must not be offered a base job"
+    );
+}
+
+/// The second omission, against the real scheduler: a pending build request
+/// a posted crew member is the only body free to take is never handed to
+/// it — `UnderStudy`'s own test one role over.
+#[test]
+fn a_posted_program_is_never_posted_to_a_pending_build() {
+    let mut game = Game::new(4221, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::PostedAt((5, 5)));
+
+    file_build(&mut game, "depot", 2, 2).expect("a depot needs no program to file");
+
+    for _ in 0..20 {
+        game.tick();
+        assert!(
+            game.world.get::<Task>(program).is_none(),
+            "a posted crew member must never be handed the pending build"
+        );
+    }
+}
+
+/// The third omission: `add_companion` checked no role for this before the
+/// outposts plan — one of its four explicit new refusals.
+#[test]
+fn a_posted_program_cannot_be_recalled_into_the_party() {
+    let mut game = Game::new(4222, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::PostedAt((5, 5)));
+
+    let err = game
+        .add_companion(program)
+        .expect_err("a posted crew member must not join the party");
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+    assert_eq!(
+        game.program_role(program),
+        Some(ProgramRole::Outpost),
+        "a refused add must leave the role, and so the component, untouched"
+    );
+    assert!(!game.world.resource::<Party>().0.contains(&program));
+}
+
+/// The fourth omission: neither half of a fusion may be posted, since
+/// `fuse_companions` does its own reap rather than calling
+/// `dissolve_tamed_program` and would otherwise strand `PostedAt` on a
+/// despawned body.
+#[test]
+fn fuse_companions_rejects_a_posted_program_as_either_input() {
+    let mut game = Game::new(4223, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let posted = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(posted)
+        .insert(components::PostedAt((5, 5)));
+
+    let err = game
+        .fuse_companions(posted, other, None)
+        .expect_err("a posted crew member must not be spent on a fusion");
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+    assert!(game.world.get::<Creature>(posted).is_some());
+    assert!(game.world.get::<Creature>(other).is_some());
+
+    let err = game
+        .fuse_companions(other, posted, None)
+        .expect_err("order must not matter");
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+}
+
+/// The fifth omission: the rest-repair match in `game/turn.rs` is the one
+/// reader of the six roles that fails to compile without an arm.
+#[test]
+fn a_posted_program_is_not_healed_by_a_rest() {
+    let mut game = Game::new(4224, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::PostedAt((5, 5)));
+    game.world.get_mut::<Stats>(program).unwrap().hp = 1;
+
+    let partied = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(partied)
+        .expect("the party is decided at base, and this fixture stands there");
+    game.world.get_mut::<Stats>(partied).unwrap().hp = 1;
+
+    game.rest().expect("resting inside the base is free");
+
+    assert_eq!(
+        game.world.get::<Stats>(program).unwrap().hp,
+        1,
+        "a posted crew member is not repaired by a rest"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(partied).unwrap().hp,
+        10,
+        "a partied companion at the same deficit must be repaired, proving the \
+         rest loop actually reached both bodies"
+    );
+}
+
+/// One of the four explicit new refusals: `wield_program` checked no role
+/// for this before the outposts plan.
+#[test]
+fn wield_program_refuses_a_posted_program() {
+    let mut game = Game::new(4225, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(components::PostedAt((5, 5)));
+
+    let err = game
+        .wield_program(program)
+        .expect_err("a posted crew member must not be wielded");
+    assert!(err.contains("outpost"), "unexpected error: {err}");
+    assert_eq!(game.wielded_program(), None);
+}
+
+// ---------------------------------------------------------------------
 // Who is in your party is decided at base
 // ---------------------------------------------------------------------
 

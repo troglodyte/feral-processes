@@ -4890,8 +4890,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 28,
-        "expected the shipped base tree's 28 nodes; a count that moved means a node was \
+        checked, 29,
+        "expected the shipped base tree's 29 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5486,5 +5486,120 @@ fn every_shipped_class_authors_every_attribute() {
                 class.name
             );
         }
+    }
+}
+
+/// The outpost content censuses from the 2026-09-23 outposts plan's Phase
+/// 6: the yield table, the item ids it names, the zone material at the top
+/// tier, and the founding kit's research gate.
+mod outpost_content {
+    use super::*;
+    use crate::outposts::OutpostDb;
+    use crate::world::Biome;
+
+    /// Every biome `WorldMap::classify` can actually produce. `Platform`,
+    /// `Excavated` and `Entropy` are base-space rendering-only variants —
+    /// `Biome::walkable`'s doc and `classify_never_produces_the_platform_
+    /// biome` — so an outpost can never stand on one and this list leaves
+    /// them out on purpose.
+    const SURFACE_BIOMES: [Biome; 6] = [
+        Biome::DataVoid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+        Biome::OpenGrid,
+        Biome::BlackIce,
+    ];
+
+    fn shipped_def() -> crate::outposts::OutpostDef {
+        let (db, warnings) =
+            OutpostDb::load_dir(&test_assets_dir().join("outposts")).expect("the dir reads");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        db.def().expect("v1 ships one outpost def").clone()
+    }
+
+    /// Every shipped biome has an explicit row at tier 1 — the plan's own
+    /// wording, stricter than the engine's own fallback: a new biome
+    /// silently inheriting another one's row at the very first tier would
+    /// never be noticed at the keyboard.
+    #[test]
+    fn every_shipped_biome_has_a_tier_1_row() {
+        let def = shipped_def();
+        let tier1 = &def.tiers[0].yields;
+        for biome in SURFACE_BIOMES {
+            assert!(
+                tier1.contains_key(&biome),
+                "{biome:?} has no tier-1 row in the shipped outpost def"
+            );
+        }
+    }
+
+    /// Every item id the shipped def names anywhere actually exists —
+    /// `OutpostDef` names items in Rust nowhere else, so a typo here would
+    /// otherwise surface only as a silent draw of nothing at that biome.
+    #[test]
+    fn every_item_the_shipped_def_names_exists() {
+        let game = Game::new(9500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = shipped_def();
+        let mut checked = 0;
+        for tier in &def.tiers {
+            for items in tier.yields.values() {
+                for item in items {
+                    assert!(
+                        game.item_defs().iter().any(|d| d.id == *item),
+                        "{item:?} is named by the outpost def but no such item exists"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0, "the def named no items at all");
+    }
+
+    /// Tier 3 (index 2) — the "complex" row — names at least one
+    /// `ZONE_MATERIALS` entry, `every_zone_gated_gear_recipe_asks_for_a_
+    /// zone_material`'s rule one content directory over: the top of an
+    /// outpost's ladder has to cost something a breach actually gates.
+    #[test]
+    fn tier_3_names_a_zone_material() {
+        let def = shipped_def();
+        let tier3 = &def.tiers[2].yields;
+        let names_one = tier3
+            .values()
+            .any(|items| items.iter().any(|id| ZONE_MATERIALS.contains(&id.as_str())));
+        assert!(
+            names_one,
+            "tier 3 names no zone material — {:?}",
+            tier3.values().collect::<Vec<_>>()
+        );
+    }
+
+    /// The founding kit exists, and it is reachable only by research — never
+    /// its own `craftable` field, which `Game::craft_recipes` offers from
+    /// turn one with no gate at all.
+    #[test]
+    fn the_kit_exists_and_is_gated_by_research() {
+        let game = Game::new(9501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let def = shipped_def();
+        let kit = def.kit.clone();
+        let items = game.item_defs();
+        let item = items
+            .iter()
+            .find(|d| d.id == kit)
+            .unwrap_or_else(|| panic!("the outpost def names kit {kit:?}, which does not exist"));
+        assert!(
+            item.craftable.is_none(),
+            "{kit:?} carries its own `craftable` field, which is always available and defeats \
+             the research gate"
+        );
+        let gate = game
+            .world
+            .resource::<crate::research::ResearchDb>()
+            .all()
+            .find(|node| node.unlocks_recipes.iter().any(|r| r.result == kit));
+        assert!(
+            gate.is_some(),
+            "no research node's `unlocks_recipes` names {kit:?} — it cannot be made at all"
+        );
     }
 }

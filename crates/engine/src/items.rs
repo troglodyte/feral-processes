@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 /// `Ord` so `components::Stock` can key its buffers by item in a
 /// `BTreeMap`: iteration order there feeds the production-chain pull phase
 /// and the save encoding, both of which have to be identical run to run.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// `Default` (the empty string) only for `#[serde(default)]` fields that
+/// name an item optionally — `outposts::OutpostDef::kit` is the one caller —
+/// never for a def's own primary id, which stays a required field.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ItemId(pub String);
 

@@ -252,6 +252,34 @@ fn a_refused_sale_never_destroys_the_program() {
     );
 }
 
+/// A posted crew member is the one away role `sale_detachments` says nothing
+/// about — `detach_from_play` strips `PostedAt` silently — so `sell_companion`
+/// refuses it outright rather than vanishing it off the outpost's crew list
+/// with no line said.
+#[test]
+fn selling_a_posted_crew_member_refuses() {
+    let mut game = Game::new(128, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let market = spawn_market(&mut game);
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.world
+        .entity_mut(pet)
+        .insert(crate::components::PostedAt((500, 500)));
+
+    assert!(game.sell_companion(market, pet).is_err());
+    assert!(
+        game.world.get::<Stats>(pet).is_some(),
+        "a refused sale must leave the program alive"
+    );
+    assert!(
+        game.world.get::<crate::components::PostedAt>(pet).is_some(),
+        "a refused sale must leave the program posted"
+    );
+    // Deleted-fix check: without this guard the sale succeeds, silently
+    // vanishing the program off the outpost's crew list with no detachment
+    // line at all.
+}
+
 #[test]
 fn a_trader_that_does_not_buy_programs_refuses() {
     let mut game = Game::new(123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -291,6 +291,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::InParty => "In your party",
         ProgramRole::Wielded => "Carried as your weapon",
         ProgramRole::Sortie => "Away on a sortie",
+        ProgramRole::Outpost => "Posted at an outpost",
         ProgramRole::UnderStudy => "Under study",
         ProgramRole::Staff => "Base staff",
     }
@@ -1419,6 +1420,7 @@ mod tests {
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            outpost: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

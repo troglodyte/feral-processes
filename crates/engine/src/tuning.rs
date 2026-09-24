@@ -4655,6 +4655,13 @@ pub const ROUTE_PREDATION_LOSS: f32 = 0.3;
 /// `TransitCue` traffic, not because a throughput number was derived for it.
 pub const ROUTE_MAX_ACTIVE: usize = 4;
 
+/// The most an outpost route's outbound leg loads off an outpost's stock in
+/// one arrival, summed across every item — `routes::RouteEnd::Outpost`'s own
+/// leg, `OUTPOST_STOCK_CAP`'s sibling rather than a share of it, since a
+/// route's haul and an outpost's storage are two different questions.
+/// Unmeasured — see design spec §11.
+pub const ROUTE_OUTPOST_CARRY: u32 = 20;
+
 // ---------------------------------------------------------------------------
 // Caravan traders
 // ---------------------------------------------------------------------------
@@ -5659,6 +5666,139 @@ pub const TRAP_CONDITION_PENALTY: u8 = 15;
 /// `alerts::post`.
 pub const ALERT_BOARD_CAP: usize = 50;
 
+// ---------------------------------------------------------------------------
+// Outposts
+//
+// **Correction 6: v1 applies no class-based yield bonus at an outpost.**
+// `Game::run_outposts` calls `systems::mining_success_chance` directly for
+// each crew member — base INT and the player's Keen Scavenger perk, with
+// `morale`/`need_strain` at `0.0` because away crew have neither — and
+// builds no `CycleModifiers` for the program, which is the door a Striker's
+// second action or a Leech bonus would otherwise come through. Open per
+// design spec §11: whether either should apply at an outpost is unresolved,
+// not "the base's own rule already covers it."
+// ---------------------------------------------------------------------------
+
+/// How many outposts may stand at once — `ROUTE_MAX_ACTIVE`'s reason: a cap
+/// so an unbounded number of fixtures cannot pile onto the raid roll and the
+/// production tick, not a throughput number derived for it. Unmeasured; see
+/// design spec §11.
+pub const MAX_OUTPOSTS: usize = 4;
+
+/// How close a candidate tile must be walked before it may be founded, in
+/// Chebyshev tiles from the base anchor.
+///
+/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a base-space
+/// constant, value 4) — an outpost stands on the *zone surface*, a
+/// different coordinate space at a different scale, and reusing a base-space
+/// literal there would make an unrelated base-building retune silently move
+/// where an outpost may stand. **A fraction of a region**,
+/// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against
+/// nothing, and this is close enough to the anchor to reach on foot in one
+/// session — a quarter of `SETTLEMENT_GARRISON_RADIUS`'s own half-region
+/// reach, so an outpost this close to the base always sits well inside it,
+/// not outside. Unmeasured — see design spec §11.
+pub const OUTPOST_MIN_ANCHOR_DISTANCE: i32 = crate::settlements::placement::REGION_TILES / 8;
+
+/// How far apart two outposts must stand, in Chebyshev tiles.
+///
+/// A fraction of a region, `OUTPOST_MIN_ANCHOR_DISTANCE`'s reason and
+/// smaller than it: two outposts crowding each other is a lesser problem
+/// than one crowding the base. Unmeasured — see design spec §11.
+pub const OUTPOST_MIN_SPACING: i32 = crate::settlements::placement::REGION_TILES / 16;
+
+/// The integrity a freshly founded outpost starts at, and the ceiling
+/// `repair_outpost` restores it to (Phase 5). Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_MAX_INTEGRITY: u32 = 100;
+
+/// How many programs may be posted at one outpost at once.
+///
+/// `OUTPOST_TIER_CREW`'s own ceiling, so the top tier's crew requirement
+/// must never exceed this — asserted by a test, `a-gated-consequence-can-
+/// be-green-and-unreachable`'s rule. Unmeasured — see design spec §11.
+pub const OUTPOST_CREW_CAP: usize = 6;
+
+/// The stored `growth` an outpost needs to *hold* each tier, index 0 being
+/// tier 1 (raw) — `outposts::OutpostTierDef`'s own indexing.
+///
+/// **Growth is never reset by a crew shortfall.** `outposts::tier` reads
+/// this against the crew ladder below and takes the lower of the two, so an
+/// outpost that grew to tier 3 and then lost crew reports a lower tier
+/// without losing the banked number — re-crewing it recovers instantly
+/// rather than re-growing from zero. Unmeasured — see design spec §11.
+pub const OUTPOST_TIER_GROWTH: [u32; 3] = [0, 200, 500];
+
+/// The crew an outpost needs *posted* to hold each tier, `OUTPOST_TIER_GROWTH`'s
+/// index for index. The top entry must stay at or below `OUTPOST_CREW_CAP`,
+/// or tier 3 is a gated consequence nobody can ever reach — asserted by a
+/// test. Unmeasured — see design spec §11.
+pub const OUTPOST_TIER_CREW: [usize; 3] = [1, 3, 5];
+
+/// How much stored `growth` one `OUTPOST_CYCLE_TICKS` period of `Trend::Growing`
+/// adds, per crew member counted from the tier-1 floor (`OUTPOST_TIER_CREW[0]`)
+/// upward — so the minimum crew that avoids `Trend::Declining` still grows at
+/// this base rate, and every program posted past it scales that rate up
+/// rather than the floor crew growing nothing at all. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_GROWTH_PER_CREW: u32 = 2;
+
+/// How much stored `growth` one tick of `Trend::Declining` costs. Unmeasured
+/// — see design spec §11.
+pub const OUTPOST_DECAY_PER_TICK: u32 = 1;
+
+/// Ticks an outpost's stock may sit at `OUTPOST_STOCK_CAP` before
+/// `Trend::Stale` degrades into `Trend::Declining`. Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_STALE_GRACE_TICKS: u32 = 200;
+
+/// The total units an outpost's `stock` may hold across every item at once
+/// — one combined figure, `Stock`'s per-item capacity deliberately not
+/// reused here since an outpost's yield union can name several items at
+/// once and the screen shows one "Stock N/cap" figure for all of them.
+/// Unmeasured — see design spec §11.
+pub const OUTPOST_STOCK_CAP: u32 = 60;
+
+/// Integrity below this fraction of `OUTPOST_MAX_INTEGRITY` is `Trend::Declining`
+/// regardless of crew or stock — a damaged outpost falls even at full
+/// staffing, which is what makes `repair_outpost` (Phase 5) necessary rather
+/// than optional. Unmeasured — see design spec §11.
+pub const OUTPOST_DAMAGED_FRACTION: f32 = 0.5;
+
+/// Ticks between production cycles — `Game::run_outposts` advances
+/// `Outpost::cycle_progress` every tick and rolls the crew once it reaches
+/// this. Unmeasured — see design spec §11.
+pub const OUTPOST_CYCLE_TICKS: u32 = 50;
+
+/// An outpost raid's base chance, rolled once per outpost inside
+/// `raid_check`'s firing branch — design spec §8. Unmeasured — see design
+/// spec §11.
+pub const OUTPOST_RAID_BASE_CHANCE: f64 = 0.1;
+
+/// How much each known Hostile town within `SETTLEMENT_RAID_RADIUS` of the
+/// outpost's own tile — not the anchor — raises that chance, `Standing::
+/// sends_raiders`'s own gate reused rather than restated. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_HOSTILE_TOWN_BONUS: f64 = 0.1;
+
+/// How much each posted crew member lowers the chance. Unmeasured — see
+/// design spec §11.
+pub const OUTPOST_CREW_DEFENSE: f64 = 0.03;
+
+/// The ceiling an outpost raid's rolled chance is clamped below —
+/// `SETTLEMENT_GARRISON_MAX`'s reason one axis over: however many hostile
+/// towns pile onto the bonus term, a raid must stay a possibility to defend
+/// against rather than a certainty. Unmeasured — see design spec §11.
+pub const OUTPOST_RAID_CHANCE_CAP: f64 = 0.9;
+
+/// Integrity a raid hit takes off an outpost. Unmeasured — see design spec
+/// §11.
+pub const OUTPOST_RAID_DAMAGE: u32 = 25;
+
+/// The share of an outpost's stock a raid hit steals, applied per item and
+/// rounded down. Unmeasured — see design spec §11.
+pub const OUTPOST_RAID_STEAL_FRACTION: f32 = 0.5;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5788,5 +5928,18 @@ mod tests {
             .find(|z| 1 + ZONE_GROUP_STEP * (z - 1) >= MAX_GROUP_SIZE)
             .expect("group growth should reach MAX_GROUP_SIZE within twenty zones");
         assert_eq!(zones_to_saturate, 12);
+    }
+
+    /// `a-gated-consequence-can-be-green-and-unreachable`'s rule: a top tier
+    /// whose crew requirement exceeds the cap on how many programs may ever
+    /// be posted would be a tier 3 nothing can reach, which is green right
+    /// up until someone tries to staff it.
+    #[test]
+    fn the_top_outposts_tier_is_reachable_under_the_crew_cap() {
+        assert!(
+            *OUTPOST_TIER_CREW.last().unwrap() <= OUTPOST_CREW_CAP,
+            "OUTPOST_TIER_CREW's top entry ({}) exceeds OUTPOST_CREW_CAP ({OUTPOST_CREW_CAP})",
+            OUTPOST_TIER_CREW.last().unwrap(),
+        );
     }
 }

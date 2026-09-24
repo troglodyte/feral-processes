@@ -326,3 +326,35 @@
   call — `pending_cronjobs`' treatment. A tile naming no town drops the
   tether silently, `nest_position`'s rule. **A RON round trip cannot catch a
   skipped field**, so the gate is a real save and a real load.
+- **An outpost is a `resources::Outposts` record with no entity, never a
+  `Structure`** — `resources::Settlements`' own precedent one tile over.
+  `Outpost` is keyed by tile in a `BTreeMap`, not spawned, and drawing/
+  examining it follows the settlement tile-drawing path rather than
+  `views::drawn_on_surface_map`, which is about entities and reads nothing
+  here. `Game::outpost_marks()` is its own pass over the resource for
+  exactly that reason — a record with no entity has no other way onto a
+  map-drawing pass that iterates entities, `views::DigMark`'s problem one
+  level over. **The trap**: spawning a `Structure` entity for an outpost to
+  get it drawn "for free" through the entity-iterating renderer would put a
+  zone-surface fixture into every base-space-only system that assumes a
+  `Structure` stands in base space — `stands_in_base_space`, the build/
+  work-order screens, `structure_defs()`-driven upgrade paths, the base's
+  own `damage_structure` raid targeting — corrupting all of them with an
+  impostor that has no `Durability` and no base-space `Position`. Crew
+  membership follows the same discipline: it rides `components::PostedAt`
+  on the *program* entity, never a component on an outpost entity that does
+  not exist.
+- **`Visit` is the second visit extension point after `Settlement`, and
+  `resources::PendingVisit` widened rather than gaining a second field.**
+  The naive shape — a second `PendingOutpostVisit: Option<(i32,i32)>` beside
+  the settlement one — was rejected for `Visit::{Settlement(SettlementKey),
+  Outpost((i32,i32))}` with `PendingVisit` staying one field,
+  `Option<Visit>`; `Game::take_settlement_visit` was renamed
+  `take_visit() -> Option<Visit>` with its one app-core caller updated to
+  match. Not serialized, so no `SAVE_FORMAT_VERSION` change. **The trap for
+  the next extension** (spec §10's "Beachhead" is explicitly slated to need
+  one): a second field is wrong a second time, because every reader of "is
+  there a pending visit" would have to be taught to check both, and one
+  updated without the other silently stops seeing (or starts missing) a
+  whole visit kind. A fourth kind is a third `Visit` variant, never a third
+  `Option` field.

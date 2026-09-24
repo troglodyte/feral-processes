@@ -106,7 +106,12 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         // patch machines, which is that tab's whole subject.
         | AttentionKind::RaidIncoming
         // A siege's own approach, `RaidIncoming`'s reason exactly.
-        | AttentionKind::SiegeIncoming => InfoTab::Base,
+        | AttentionKind::SiegeIncoming
+        // An outpost's crew and stock are a production concern same as a
+        // stalled machine, even though there is no outpost pane on this
+        // tab to answer it from — `RaidIncoming`'s reason again.
+        | AttentionKind::OutpostTrend
+        | AttentionKind::OutpostDark => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::Unslotted => InfoTab::Crew,
     }
 }

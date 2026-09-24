@@ -743,6 +743,9 @@ relying on one, and correct all three places if it has moved.
   to.
 - **A kill's XP is priced by challenge, sharing its thresholds with the con
   colour.** `progression::kill_xp`, clamped to `XP_CHALLENGE_FLOOR`..`CEIL`.
+- **How outmatched you are is one duel formula on two sides, `Game::threat_to`
+  — the party for the con and the capture odds, the player alone for kill
+  XP — and `Stats::power` is not it.**
 - **Levels come at half the count and twice the size, and that is
   power-neutral by construction.** Every per-level constant carries `K = 2`,
   every levels-per constant its reciprocal, and `XP_PER_LEVEL_STEP` carries

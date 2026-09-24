@@ -22,8 +22,9 @@ down. A program you compile joins your roster: it fights beside you, or it works
 you are elsewhere.
 
 Colour is the warning you get before a fight. A hostile program is tinted by how it measures against
-your current strength — green is much weaker, yellow an even match, orange notably tougher, red
-dangerous, and magenta is a boss whatever the numbers say.
+you and the programs at your side, how hard it hits as much as how much it can take — green is much
+weaker, yellow an even match, orange notably tougher, red dangerous, and magenta is a boss whatever
+the numbers say.
 
 The first thing worth doing is a Home. It anchors a platform, it lets you recharge free anywhere on
 that platform — out in the field a recharge burns a Power Outlet and can be interrupted — and it is

@@ -472,7 +472,7 @@ pub const PARTY_XP_DIVISOR: u32 = 2;
 pub const XP_PER_LEVEL_STEP: u32 = 80;
 
 /// A kill's XP is the victim's max HP scaled by how hard it was — see
-/// `progression::kill_xp`. The scale is `power_ratio` (the very number
+/// `progression::kill_xp`. The scale is `battle::threat_ratio` (the formula
 /// `difficulty_color` buckets into the map's con-colours) over
 /// `DIFFICULTY_EASY_MAX`, so full XP lands exactly at the green/yellow
 /// boundary and the rule a player can state is "green pays less, yellow and
@@ -785,8 +785,8 @@ pub const ENGAGED_GROUPS: usize = 2;
 pub const ZONE_PORTAL_COST_GROWTH_PERCENT: u32 = 50;
 
 /// Thresholds for `difficulty_color`'s old-school "con" coloring, as
-/// upper bounds on a hostile program's power (see `Stats::power`) relative
-/// to the player's own — anything at or under `DIFFICULTY_EASY_MAX` reads
+/// upper bounds on `Game::party_threat` — how outmatched the player's side is
+/// by one hostile program, `battle::threat_ratio`'s scale — so anything at or under `DIFFICULTY_EASY_MAX` reads
 /// Green, up through `DIFFICULTY_EVEN_MAX` reads Yellow, up through
 /// `DIFFICULTY_TOUGH_MAX` reads Orange, and anything above that reads Red.
 pub const DIFFICULTY_EASY_MAX: f64 = 0.7;
@@ -1095,8 +1095,8 @@ pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
 pub const CAPTURE_HP_PENALTY: f32 = 0.65;
 pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
 
-/// How the gap between the two sides' `Stats::power` bends a decompile. The
-/// ratio is `inspection::power_ratio`'s — the same number `difficulty_color`
+/// How the gap between the two sides bends a decompile. The ratio is
+/// `Game::party_threat`'s — the same number `difficulty_color`
 /// buckets into con colors — so the color painted on a program and the odds
 /// rolled against it can never disagree about which of you is stronger. Both
 /// ramps are bounded by the `DIFFICULTY_*` thresholds rather than by numbers

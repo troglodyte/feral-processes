@@ -324,7 +324,6 @@ impl Game {
     /// The open tactical fight, or `None`.
     pub fn tactical_view(&mut self) -> Option<TacticalView> {
         self.world.get_resource::<TacticalBattle>()?;
-        let player_power = self.player_power();
         // **The door and not a third predicate.** `tactical_ai_actor` gates
         // on `Hostile` because every party body is the player's to command,
         // and `tactical_awaits_input` is its complement — asked here as
@@ -357,7 +356,7 @@ impl Game {
         let marks_cover_against = actor.filter(|&a| self.is_hostile(a));
         let bodies: Vec<TacticalBody> = placed
             .iter()
-            .map(|&(entity, cell)| self.body_view(entity, cell, player_power, marks_cover_against))
+            .map(|&(entity, cell)| self.body_view(entity, cell, marks_cover_against))
             .collect();
         let order: Vec<TurnRow> = initiative
             .iter()
@@ -510,7 +509,6 @@ impl Game {
         &self,
         entity: Entity,
         cell: (i32, i32),
-        player_power: i32,
         attacker: Option<Entity>,
     ) -> TacticalBody {
         let glyph = self.world.get::<Glyph>(entity).copied();
@@ -541,7 +539,7 @@ impl Game {
                 .map(|def| def.sprite_name().to_string()),
             color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
             difficulty: is_hostile
-                .then(|| stats.map(|s| difficulty_color(s.power(), player_power)))
+                .then(|| stats.map(|_| difficulty_color(self.party_threat(entity))))
                 .flatten(),
             label: self.entity_label(entity),
             is_player,

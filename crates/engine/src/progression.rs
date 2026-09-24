@@ -123,14 +123,15 @@ pub fn xp_for_level(level: u32) -> u32 {
 /// What a defeated program is worth: its whole HP bar, scaled by how hard it
 /// was to put down.
 ///
-/// `power_ratio` is `game::inspection::power_ratio` — the victim's
-/// `Stats::power` over the player's, and the very number `difficulty_color`
-/// buckets into the con-colours already drawn on the map. That sharing is
-/// the point rather than a convenience: the glyph's colour is the only
-/// advance notice a fight's XP value gets, so the two must be one
-/// computation. Full XP lands at `DIFFICULTY_EASY_MAX`, the green/yellow
-/// boundary, which makes the whole rule "green pays less, yellow and up pays
-/// full or more".
+/// `threat_ratio` is `battle::threat_ratio` of the victim against the
+/// player alone, taken by `Game::kill_xp` — the formula `difficulty_color`
+/// buckets into the con-colours drawn on the map, measured against a
+/// narrower side. That sharing is the point rather than a convenience: the
+/// glyph's colour is the only advance notice a fight's XP value gets, so the
+/// two must be one formula. The con reads the whole party and this reads the
+/// player alone, so a companion never costs XP. Full XP lands at
+/// `DIFFICULTY_EASY_MAX`, the green/yellow boundary, which makes the whole
+/// rule "green pays less, yellow and up pays full or more".
 ///
 /// Takes the ratio rather than the two powers so it stays a pure function of
 /// numbers, testable without a `Game` — the same reason `add_xp` takes
@@ -145,11 +146,11 @@ pub fn xp_for_level(level: u32) -> u32 {
 /// and a kill that silently pays nothing reads as a bug rather than as
 /// contempt. Unreachable on the shipped roster — the smallest `base_hp` is
 /// 38 — so this is a floor for mods and fixtures.
-pub fn kill_xp(victim_max_hp: i32, power_ratio: f64) -> u32 {
+pub fn kill_xp(victim_max_hp: i32, threat_ratio: f64) -> u32 {
     if victim_max_hp <= 0 {
         return 0;
     }
-    let factor = (power_ratio / DIFFICULTY_EASY_MAX).clamp(XP_CHALLENGE_FLOOR, XP_CHALLENGE_CEIL);
+    let factor = (threat_ratio / DIFFICULTY_EASY_MAX).clamp(XP_CHALLENGE_FLOOR, XP_CHALLENGE_CEIL);
     ((victim_max_hp as f64 * factor).round() as u32).max(1)
 }
 

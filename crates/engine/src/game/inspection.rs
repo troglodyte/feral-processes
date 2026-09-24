@@ -1220,7 +1220,6 @@ impl Game {
         // has to stop wearing the mark without anything having to notice.
         let recovering_bodies = self.recovering_programs();
 
-        let player_power = self.player_power();
         let mut linked_edges = self.linked_edges_by_structure();
 
         let mut views: Vec<EntityView> = hits
@@ -1279,7 +1278,7 @@ impl Game {
                 // companion.
                 let color = glyph.color;
                 let difficulty = is_hostile
-                    .then(|| stats.map(|s| difficulty_color(s.power(), player_power)))
+                    .then(|| stats.map(|_| difficulty_color(self.party_threat(entity))))
                     .flatten();
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
                 let durability = self
@@ -2381,37 +2380,72 @@ impl Game {
         })
     }
 
-    /// The denominator of every `power_ratio` reading. The `unwrap` is the
-    /// player entity always carrying `Stats` — the same invariant the map
-    /// coloring has always relied on here.
-    pub(crate) fn player_power(&self) -> i32 {
-        self.world
-            .get::<Stats>(self.player_entity())
-            .unwrap()
-            .power()
+    /// How outmatched the player's side is by `foe` — the player and every
+    /// living `Party` member, the fight they would actually have. What the
+    /// con colours bucket and the capture odds ramp on.
+    ///
+    /// Kill XP deliberately does not read this: see `Game::kill_xp`.
+    pub(crate) fn party_threat(&self, foe: Entity) -> f64 {
+        let player = self.player_entity();
+        let side: Vec<Entity> = std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .filter(|&e| self.creature_alive(e))
+            .collect();
+        self.threat_to(foe, &side)
+    }
+
+    /// `battle::threat_ratio` of `foe` against the bodies of `side`, each
+    /// measured through the doors a real swing resolves through: the band
+    /// `natural_range_of` swings for, `attacks_for`'s count, the to-hit
+    /// odds `combatant_profile` carries, and `effective_mitigation`'s soak.
+    ///
+    /// Max Integrity rather than current, as `Stats::power` always was: a
+    /// con that reddened as a hostile healed and greened as it bled would
+    /// be answering a different question every round.
+    ///
+    /// `foe` hits one body at a time, so its damage is the mean across the
+    /// side; the side's is summed, since every one of them swings at it.
+    pub(crate) fn threat_to(&self, foe: Entity, side: &[Entity]) -> f64 {
+        let foe_side = battle::DuelSide {
+            ehp: self.duel_ehp(foe),
+            damage: side
+                .iter()
+                .map(|&body| self.duel_damage(foe, body))
+                .sum::<f64>()
+                / side.len().max(1) as f64,
+        };
+        let own_side = battle::DuelSide {
+            ehp: side.iter().map(|&body| self.duel_ehp(body)).sum(),
+            damage: side.iter().map(|&body| self.duel_damage(body, foe)).sum(),
+        };
+        battle::threat_ratio(foe_side, own_side)
+    }
+
+    fn duel_ehp(&self, body: Entity) -> f64 {
+        let max_hp = self.world.get::<Stats>(body).map_or(0, |s| s.max_hp);
+        battle::effective_hp(max_hp, self.effective_mitigation(body))
+    }
+
+    /// One round of `attacker`'s ordinary swings at `defender`, as
+    /// `battle::expected_damage`'s mean — the one RNG-free reading of what
+    /// `resolve_attack` rolls. The defender is profiled without cover, so a
+    /// con does not flicker as a body steps behind a boulder.
+    fn duel_damage(&self, attacker: Entity, defender: Entity) -> f64 {
+        let swing = battle::Swing {
+            range: self.natural_range_of(attacker),
+            ..Default::default()
+        };
+        let per_swing = battle::expected_damage(
+            self.combatant_profile(attacker, swing),
+            self.combatant_profile(defender, battle::Swing::default()),
+        );
+        per_swing * self.attacks_for(attacker) as f64
     }
 }
 
-/// How outmatched the player is by one creature, as its `Stats::power` over
-/// theirs — the single reading two systems share. `difficulty_color` buckets
-/// it into the con colors drawn on the map, and `Game::target_resistance`
-/// hands it to `taming::capture_chance`, whose two power ramps are bounded by
-/// the same `DIFFICULTY_*` thresholds this is bucketed against. One function
-/// rather than two divisions, so the color on a program and the decompile
-/// odds against it can never come to different conclusions about which of the
-/// two is stronger.
-///
-/// `player_power` is floored at 1 rather than guarded by the caller: the one
-/// value that would divide by zero is a dead player, and every caller here
-/// runs while they are alive.
-pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
-    creature_power as f64 / player_power.max(1) as f64
-}
-
-/// Old-school "con"-style map coloring for a hostile wild program, relative
-/// to the player's current `Stats::power`. Green (easy) → Yellow (even) →
-/// Orange (tough) → Red (hard) as `creature_power` grows past
-/// `player_power`.
+/// Old-school "con"-style map coloring for a hostile wild program, bucketing
+/// `Game::party_threat`. Green (easy) → Yellow (even) → Orange (tough) → Red
+/// (hard) as the threat grows past an even fight.
 ///
 /// **Four rungs and nothing else.** A boss and a nemesis used to override
 /// the ratio here, returning Magenta and Blue — which spent the "can I win
@@ -2423,8 +2457,7 @@ pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
 ///
 /// Pulled out of `view_entities` so the bucketing is unit-testable without
 /// spinning up a `Game`.
-pub(crate) fn difficulty_color(creature_power: i32, player_power: i32) -> GlyphColor {
-    let ratio = power_ratio(creature_power, player_power);
+pub(crate) fn difficulty_color(ratio: f64) -> GlyphColor {
     if ratio <= DIFFICULTY_EASY_MAX {
         GlyphColor::Green
     } else if ratio <= DIFFICULTY_EVEN_MAX {

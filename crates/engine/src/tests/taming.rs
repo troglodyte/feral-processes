@@ -824,14 +824,15 @@ fn a_failed_decompile_at_the_cap_says_persistence_has_run_out() {
     );
 }
 
-/// Rewrites a creature to a chosen `Stats::power` at full Integrity. How the
-/// total splits across the three stats is arbitrary — only the sum reaches
-/// `inspection::power_ratio`.
-fn set_power_at_full_integrity(game: &mut Game, entity: Entity, power: i32) {
+/// Rewrites a creature to the player's own Integrity and Attack scaled by
+/// `fraction`, at full Integrity — so `Game::party_threat` scales with it,
+/// since both halves of `battle::threat_ratio`'s product move together.
+fn set_scaled_to_player(game: &mut Game, entity: Entity, fraction: f64) {
+    let player = *game.world.get::<Stats>(game.player_entity()).unwrap();
     let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
-    stats.atk = 1;
-    stats.mitigation = 1;
-    stats.max_hp = power - 2;
+    stats.max_hp = ((player.max_hp as f64 * fraction).round() as i32).max(1);
+    stats.atk = ((player.atk as f64 * fraction).round() as i32).max(1);
+    stats.mitigation = player.mitigation;
     stats.hp = stats.max_hp;
 }
 
@@ -849,14 +850,12 @@ fn a_program_far_beneath_you_previews_better_odds_than_an_even_match() {
     let mut game = Game::new(3108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_wild_on_player_tile(&mut game);
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    let player_power = game.player_power();
-
-    set_power_at_full_integrity(&mut game, wild, player_power);
+    set_scaled_to_player(&mut game, wild, 1.0);
     let even = program_manifest(&game, wild)
         .decompile_chance
         .expect("holding a catalyst should quote odds");
 
-    set_power_at_full_integrity(&mut game, wild, player_power / 4);
+    set_scaled_to_player(&mut game, wild, 0.25);
     let outclassed = program_manifest(&game, wild)
         .decompile_chance
         .expect("holding a catalyst should quote odds");

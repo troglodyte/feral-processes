@@ -43,15 +43,15 @@ pub struct TargetResistance {
     /// program in *this* fight. Counted by `Game::attempt_decompile` into
     /// `BattleState::decompile_attempts`, so it dies with the battle.
     pub prior_attempts: u32,
-    /// The target's `Stats::power` over the player's, from
-    /// `inspection::power_ratio` — below 1.0 you are the stronger one. Drives
+    /// How outmatched the player's side is by the target,
+    /// `Game::party_threat` — below 1.0 you are the stronger one. Drives
     /// both `power_relief` and `outclassed_multiplier`; see
     /// `CAPTURE_OUTCLASSED_RATIO_FLOOR` for why one term became two.
-    pub power_ratio: f32,
+    pub threat_ratio: f32,
 }
 
 /// Hand-written rather than derived for one field's sake: a derived
-/// `power_ratio` of `0.0` reads as "infinitely outclassed by you" and would
+/// `threat_ratio` of `0.0` reads as "infinitely outclassed by you" and would
 /// quietly hand a default-constructed target the full `power_relief`. The
 /// neutral ratio is an even match.
 impl Default for TargetResistance {
@@ -60,7 +60,7 @@ impl Default for TargetResistance {
             hp_fraction: 0.0,
             taming_difficulty: 0.0,
             prior_attempts: 0,
-            power_ratio: 1.0,
+            threat_ratio: 1.0,
         }
     }
 }
@@ -70,9 +70,9 @@ impl Default for TargetResistance {
 /// `DIFFICULTY_EASY_MAX`. Returning a share of that constant rather than an
 /// authored ceiling is what stops a retune of the penalty leaving the relief
 /// overshooting it.
-fn power_relief(power_ratio: f32) -> f32 {
+fn power_relief(threat_ratio: f32) -> f32 {
     let (easy, even) = (DIFFICULTY_EASY_MAX as f32, DIFFICULTY_EVEN_MAX as f32);
-    let ramp = ((even - power_ratio) / (even - easy)).clamp(0.0, 1.0);
+    let ramp = ((even - threat_ratio) / (even - easy)).clamp(0.0, 1.0);
     CAPTURE_HP_PENALTY * ramp
 }
 
@@ -80,9 +80,9 @@ fn power_relief(power_ratio: f32) -> f32 {
 /// at `DIFFICULTY_TOUGH_MAX` down to `CAPTURE_OUTCLASSED_MULT_FLOOR` at
 /// `CAPTURE_OUTCLASSED_RATIO_FLOOR` and holding there however far past it the
 /// target is.
-fn outclassed_multiplier(power_ratio: f32) -> f32 {
+fn outclassed_multiplier(threat_ratio: f32) -> f32 {
     let tough = DIFFICULTY_TOUGH_MAX as f32;
-    let ramp = ((power_ratio - tough) / (CAPTURE_OUTCLASSED_RATIO_FLOOR - tough)).clamp(0.0, 1.0);
+    let ramp = ((threat_ratio - tough) / (CAPTURE_OUTCLASSED_RATIO_FLOOR - tough)).clamp(0.0, 1.0);
     1.0 - (1.0 - CAPTURE_OUTCLASSED_MULT_FLOOR) * ramp
 }
 
@@ -111,7 +111,7 @@ fn outclassed_multiplier(power_ratio: f32) -> f32 {
 /// `DECOMPILE_ATTEMPT_BONUS_CAP` attempts' worth — after which a stubborn
 /// target simply stays stubborn, however many catalysts get fed to it.
 ///
-/// `target.power_ratio` is the only term that enters twice, through
+/// `target.threat_ratio` is the only term that enters twice, through
 /// `power_relief` and `outclassed_multiplier`, and the asymmetry is the point
 /// — see `CAPTURE_OUTCLASSED_RATIO_FLOOR`. Being the stronger side subtracts
 /// from the HP penalty rather than scaling the attempt, because the thing a
@@ -126,7 +126,7 @@ pub fn capture_chance(
     player: DecompilerBonuses,
 ) -> f32 {
     let hp_penalty =
-        (CAPTURE_HP_PENALTY - player.hp_penalty_reduction - power_relief(target.power_ratio))
+        (CAPTURE_HP_PENALTY - player.hp_penalty_reduction - power_relief(target.threat_ratio))
             .max(0.0);
     let base = item_potency
         * (CAPTURE_POTENCY_CEILING - target.hp_fraction * hp_penalty)
@@ -141,7 +141,7 @@ pub fn capture_chance(
         * skill_multiplier
         * boost_multiplier
         * attempt_multiplier
-        * outclassed_multiplier(target.power_ratio))
+        * outclassed_multiplier(target.threat_ratio))
     .clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
 }
 
@@ -190,14 +190,14 @@ mod tests {
             hp_fraction,
             taming_difficulty,
             prior_attempts: 0,
-            power_ratio: EVEN_MATCH,
+            threat_ratio: EVEN_MATCH,
         }
     }
 
     /// The same target, in a fight the player is winning on paper.
     fn weaker_than_you(hp_fraction: f32, taming_difficulty: f32) -> TargetResistance {
         TargetResistance {
-            power_ratio: OUTCLASSED_BY_YOU,
+            threat_ratio: OUTCLASSED_BY_YOU,
             ..fresh(hp_fraction, taming_difficulty)
         }
     }
@@ -438,7 +438,7 @@ mod tests {
         let over = capture_chance(
             0.4,
             TargetResistance {
-                power_ratio: OUTCLASSES_YOU,
+                threat_ratio: OUTCLASSES_YOU,
                 ..fresh(0.5, 0.4)
             },
             RAW,
@@ -502,7 +502,7 @@ mod tests {
                             let c = capture_chance(
                                 0.55,
                                 TargetResistance {
-                                    power_ratio: ratio,
+                                    threat_ratio: ratio,
                                     ..fresh(hp, diff)
                                 },
                                 DecompilerBonuses {

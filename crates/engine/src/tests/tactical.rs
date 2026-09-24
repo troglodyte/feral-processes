@@ -4736,12 +4736,12 @@ mod squads {
     /// **A squad's capture is priced as the lead, not as the summed block.**
     /// The spec and `decompile_squad`'s own doc both say the roll is taken
     /// as though for the lead at the squad's Integrity fraction, and
-    /// `TargetResistance::power_ratio` is the term that was reading five
+    /// `TargetResistance::threat_ratio` is the term that was reading five
     /// bodies' `Stats::power` instead of one — enough to bury every attempt
     /// at `CAPTURE_CHANCE_MIN`.
     ///
     /// Read off the odds rather than off a roll: at full Integrity the two
-    /// differ in `power_ratio` alone, so the quoted chances must be equal to
+    /// differ in `threat_ratio` alone, so the quoted chances must be equal to
     /// the float.
     #[test]
     fn a_squads_capture_is_priced_as_its_lead_and_not_as_the_summed_block() {
@@ -4762,12 +4762,12 @@ mod squads {
         let squad_at = game.target_resistance(squad).unwrap();
         let lead_at = game.target_resistance(lead).unwrap();
         assert_eq!(
-            squad_at.power_ratio, lead_at.power_ratio,
+            squad_at.threat_ratio, lead_at.threat_ratio,
             "the squad's roll is priced against its whole summed block"
         );
         assert_eq!(
             squad_at.hp_fraction, 1.0,
-            "fixture: the squad is at full Integrity, so only power_ratio can differ"
+            "fixture: the squad is at full Integrity, so only threat_ratio can differ"
         );
 
         let (_, potency) = game
@@ -4786,7 +4786,7 @@ mod squads {
     /// A squad's death pays each remaining member's own kill — the same XP
     /// five separate kills would pay, not one kill priced off the squad's
     /// inflated combined `Stats`. The player's `atk` is boosted to a
-    /// one-hit kill so `kill_xp`'s `power_ratio` denominator (the player's
+    /// one-hit kill so `kill_xp`'s `threat_ratio` denominator (the player's
     /// own power) is identical whether read before the swing or at the
     /// moment of death.
     #[test]

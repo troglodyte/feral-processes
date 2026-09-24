@@ -963,15 +963,18 @@ impl Game {
     /// What defeating `victim` is worth: its whole HP bar, scaled by
     /// `progression::kill_xp`'s challenge factor.
     ///
-    /// The one place the two powers behind that factor are gathered, so a
-    /// third award site cannot quietly price a kill off something else — the
-    /// two that exist (a kill in `combat_round`, a decompile here) differ
-    /// only in how the program stopped fighting.
+    /// The one place that factor's threat reading is taken, so a third award
+    /// site cannot quietly price a kill off something else — the two that
+    /// exist (a kill in `combat_round`, a decompile here) differ only in how
+    /// the program stopped fighting.
     ///
-    /// The denominator is the player's power **alone**, deliberately not the
-    /// party's. A companion makes a fight easier, so counting the roster in
-    /// would dock the player XP for recruiting one — turning the party into
-    /// a cost, when it is the point.
+    /// Measured against the player **alone**, deliberately not the party the
+    /// con colour reads (`Game::party_threat`). A companion makes a fight
+    /// easier, so counting the roster in would dock the player XP for
+    /// recruiting one — turning the party into a cost, when it is the point.
+    /// The same `Game::threat_to` on a narrower side, so the two readings
+    /// cannot disagree about the formula, only about who is standing there;
+    /// a kill that read Yellow with a full party can pay green-tier XP.
     ///
     /// Must be read before the victim's `Stats` can change; the decompile
     /// caller takes it while the program is still hostile, for that reason.
@@ -979,14 +982,9 @@ impl Game {
         let Some(victim_stats) = self.world.get::<Stats>(victim) else {
             return 0;
         };
-        let player_power = self
-            .world
-            .get::<Stats>(self.player_entity())
-            .map(|s| s.power())
-            .unwrap_or(1);
         progression::kill_xp(
             victim_stats.max_hp,
-            crate::game::inspection::power_ratio(victim_stats.power(), player_power),
+            self.threat_to(victim, &[self.player_entity()]),
         )
     }
 

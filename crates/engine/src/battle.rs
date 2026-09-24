@@ -352,6 +352,43 @@ pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
     plain * (mean + atk) + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
 }
 
+/// What `max_hp` is worth once `mitigation` cuts every blow:
+/// `max_hp / (1 - mitigation/100)`.
+///
+/// The clamp to `MAX_MITIGATION_PERCENT` is load-bearing — it is what keeps
+/// the denominator away from zero on a value that a save, a mod affix or a
+/// stacked buff could hand in past the cap.
+pub fn effective_hp(max_hp: i32, mitigation: i32) -> f64 {
+    let mitigation = mitigation.clamp(0, crate::tuning::MAX_MITIGATION_PERCENT);
+    max_hp as f64 / (1.0 - mitigation as f64 / 100.0)
+}
+
+/// One side of a `threat_ratio`: how much it absorbs, and how much it lands
+/// on the other side in a round.
+#[derive(Clone, Copy, Debug)]
+pub struct DuelSide {
+    pub ehp: f64,
+    pub damage: f64,
+}
+
+/// How outmatched `side` is by `foe` — the reading the con colours bucket,
+/// `progression::kill_xp` prices and `taming::capture_chance` ramps on.
+///
+/// Each side's time to wear the other down is the other's `ehp` over its
+/// own `damage`, so the fight's balance is the ratio of the two products.
+/// **A product and not a sum**: the `Stats::power` this replaced added
+/// attack onto effective HP, and at HP ten times the size of attack it
+/// measured HP alone — a program hitting twice as hard as the player read
+/// Yellow beside one barely scratching them (todo #112).
+///
+/// The square root keeps it on the scale the `DIFFICULTY_*` thresholds were
+/// written against: a foe uniformly `k` times the side reads `k`, and a
+/// mirror match reads exactly 1.
+pub fn threat_ratio(foe: DuelSide, side: DuelSide) -> f64 {
+    let side_strength = (side.ehp * side.damage).max(f64::EPSILON);
+    (foe.ehp * foe.damage / side_strength).sqrt()
+}
+
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
 /// one whose HP the roster shows. Emptying a group removes it from
@@ -701,7 +738,51 @@ mod tests {
     // Only the caller of `jack_out_chance` draws against these; the function
     // itself takes luck as a parameter, so they aren't imported at module
     // scope.
-    use crate::tuning::{JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN};
+    use crate::tuning::{JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_MITIGATION_PERCENT};
+
+    fn duel(ehp: f64, damage: f64) -> DuelSide {
+        DuelSide { ehp, damage }
+    }
+
+    #[test]
+    fn a_mirror_match_is_an_even_fight() {
+        assert!((threat_ratio(duel(90.0, 12.0), duel(90.0, 12.0)) - 1.0).abs() < 1e-9);
+    }
+
+    /// Todo #112: the con read summed HP and attack, so HP — ten times the
+    /// larger number — was all it measured. A foe that trades HP for damage
+    /// at the same product is exactly as dangerous, and has to read so.
+    #[test]
+    fn trading_integrity_for_damage_at_the_same_product_reads_the_same() {
+        let side = duel(90.0, 12.0);
+        let sponge = threat_ratio(duel(120.0, 6.0), side);
+        let cannon = threat_ratio(duel(40.0, 18.0), side);
+        assert!((sponge - cannon).abs() < 1e-9, "{sponge} vs {cannon}");
+    }
+
+    /// The square root is what keeps the thresholds on their old scale: a
+    /// foe uniformly `k` times the side reads `k`, not `k²`.
+    #[test]
+    fn a_foe_uniformly_twice_as_strong_reads_two() {
+        let ratio = threat_ratio(duel(180.0, 24.0), duel(90.0, 12.0));
+        assert!((ratio - 2.0).abs() < 1e-9, "{ratio}");
+    }
+
+    #[test]
+    fn a_side_that_cannot_land_anything_is_outclassed_not_nan() {
+        let ratio = threat_ratio(duel(50.0, 5.0), duel(90.0, 0.0));
+        assert!(ratio.is_finite() && ratio > 100.0, "{ratio}");
+    }
+
+    #[test]
+    fn effective_hp_prices_mitigation_as_soak_and_caps_it() {
+        assert!((effective_hp(90, 0) - 90.0).abs() < 1e-9);
+        assert!((effective_hp(90, 50) - 180.0).abs() < 1e-9);
+        assert_eq!(
+            effective_hp(90, 1000),
+            effective_hp(90, MAX_MITIGATION_PERCENT)
+        );
+    }
 
     #[test]
     fn power_attack_multiplier_is_full_strength_at_and_above_the_threshold() {

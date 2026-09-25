@@ -992,6 +992,16 @@ fn a_step_that_hurts_the_player_ends_a_travel() {
         "test premise: a travel is queued"
     );
 
+    // A step onto live Static weather also queues `NotificationKind::
+    // FirstStatic` (`Game::move_player`'s own movement hook), which
+    // `after_tick` can turn into `Mode::Notification` before this call
+    // returns — a second mode change that itself clears `self.walk` via
+    // `update_realtime`'s own `mode != Mode::Playing` guard. The assertion
+    // below must stay right here, after exactly this one call: a second
+    // `update_realtime` call added later, to double-check the travel stays
+    // ended, would still see `app.walk == None` even with the actual fix
+    // (the `ground_bite > 0` clause in `spend_walk_tick`) reverted, because
+    // the notification's own mode change clears it independently.
     app.update_realtime(tick);
 
     assert_ne!(

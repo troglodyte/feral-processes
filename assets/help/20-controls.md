@@ -56,7 +56,10 @@ Reading and housekeeping:
 - N — the alert board: production blockers and program events, capped and dismissed with x or d.
   Opening it marks everything read.
 - f — filter the log: all, field, or base
-- space — double the log pane's height, and back
+- tab — double the log pane's height, and back
+- space — pause the world, and resume. You can still act while paused; each action takes its
+  own turn
+- , — cycle the world's speed: x1, x2, x4
 - s — save
 - q — main menu, which confirms first
 - +/- — zoom

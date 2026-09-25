@@ -30,7 +30,7 @@ const INFO_W_MAX_CH: f32 = 56.0;
 /// state.
 const LOG_TEXT_ROWS: f32 = 4.0;
 /// The log pane's message rows expanded — see `App::log_expanded`, toggled
-/// by SPACE on the map screen. Twice the collapsed count rather than an
+/// by TAB on the map screen. Twice the collapsed count rather than an
 /// independently-tuned figure, so "expanded" always means the same thing.
 const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
 /// The filter header's row, on top of whichever message count is in force.
@@ -40,7 +40,7 @@ const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
 /// background quad reaches `STRIP_CLEARANCE_RATIO` past its line on *both*
 /// sides, so two strips on one border cut each other in half. A separate
 /// constant, and added to both row counts rather than folded into either, so
-/// SPACE keeps doubling exactly the message rows: the pane grows by one row
+/// TAB keeps doubling exactly the message rows: the pane grows by one row
 /// once, statically, and `map_pane` pays for it once.
 pub(in crate::render) const LOG_FILTER_ROWS: f32 = 1.0;
 
@@ -126,7 +126,7 @@ pub(in crate::render) struct HudRegions {
 ///
 /// `char_w` is the UI face's advance for one character, measured by the
 /// caller — see the module comment for why it is not read off `m`.
-/// `log_expanded` is `App::log_expanded` — SPACE on the map screen doubles
+/// `log_expanded` is `App::log_expanded` — TAB on the map screen doubles
 /// `log_pane`'s row count and back. The extra rows are taken upward over
 /// `map_pane`, whose geometry does not depend on the flag at all.
 pub(in crate::render) fn regions(
@@ -150,7 +150,7 @@ pub(in crate::render) fn regions(
     let content_top = head_h + clearance;
 
     // The map is laid out against the *collapsed* log at every window size:
-    // SPACE changes what the log shows, not what the screen is, so the pane
+    // TAB changes what the log shows, not what the screen is, so the pane
     // it grows over keeps its geometry and the grid does not re-lay-out
     // under the player.
     // `strip_inset` and not `m.inset`, at **both** ends: this pane carries a
@@ -356,10 +356,10 @@ mod tests {
         }
     }
 
-    /// The filter row is a body row and the message rows are what SPACE
+    /// The filter row is a body row and the message rows are what TAB
     /// doubles, so the pane is exactly one row taller than its message
     /// count in **both** states. Folding the filter into `LOG_TEXT_ROWS`
-    /// compiles and reads the same at a glance, and makes SPACE grow the
+    /// compiles and reads the same at a glance, and makes TAB grow the
     /// pane by five rows instead of four.
     ///
     /// The pane's own edges cost `strip_inset` and not `m.inset`, because
@@ -386,7 +386,7 @@ mod tests {
         }
     }
 
-    /// **Bug C.** SPACE is a change of what the log shows, not of what the
+    /// **Bug C.** TAB is a change of what the log shows, not of what the
     /// screen is. The expanded pane grows *upward over* the map — bottom
     /// edge pinned, `map_pane` untouched — because paying for the extra
     /// rows out of the map's height re-lays the whole grid out and the map
@@ -419,7 +419,7 @@ mod tests {
         }
     }
 
-    /// **Bug B.** SPACE doubles the log pane's row count, so its height
+    /// **Bug B.** TAB doubles the log pane's row count, so its height
     /// grows by exactly the four extra rows — nothing else on the screen is
     /// supposed to move because of it.
     #[test]
@@ -436,7 +436,7 @@ mod tests {
             );
             assert!(
                 expanded.log_pane.h > collapsed.log_pane.h,
-                "SPACE did not grow the log pane at {w}x{h}"
+                "TAB did not grow the log pane at {w}x{h}"
             );
         }
     }

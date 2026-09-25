@@ -2300,7 +2300,7 @@ mod tests {
 
     /// **Bug C's other half.** The expanded log pane is an *overlay*: it
     /// keeps the collapsed pane's bottom edge and grows upward over the
-    /// bottom of the map, which is what stops SPACE re-laying the grid out
+    /// bottom of the map, which is what stops TAB re-laying the grid out
     /// under the player. That costs the layout nothing only because the log
     /// is drawn **after** the map and fills opaquely — move
     /// `draw_log_pane` above the map and the expanded rows are painted over
@@ -2450,7 +2450,7 @@ mod tests {
     }
 
     /// **The second complaint, and the reason the strip moved.** With the
-    /// log expanded (SPACE, `App::log_expanded`) the pane grows upward over
+    /// log expanded (TAB, `App::log_expanded`) the pane grows upward over
     /// the bottom of the map as an overlay — so a strip riding the *map*
     /// pane's bottom border vanished entirely for as long as the log was
     /// open. Riding the *log* pane's top border instead, it travels with

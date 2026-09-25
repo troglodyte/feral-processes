@@ -22,7 +22,7 @@
 //! `seam:a-top-mounted-strip-eats-its-own-panes-body`.
 //!
 //! The vitals ride *this* pane rather than the map's for a second reason:
-//! the expanded pane (SPACE, `App::log_expanded`) is an overlay over the
+//! the expanded pane (TAB, `App::log_expanded`) is an overlay over the
 //! bottom of the map, so a strip on the map's bottom border disappeared
 //! entirely for as long as the log was open. Mounted here it travels with
 //! the pane.
@@ -285,7 +285,7 @@ fn divider() -> Vec<Piece> {
 /// whether the party is stepping onto their base or into a stack, and the
 /// keys carry that direction before they carry a role.
 ///
-/// `SPACE` (expand/collapse this pane, see `App::log_expanded`) is not a
+/// `TAB` (expand/collapse this pane, see `App::log_expanded`) is not a
 /// segment here for the same reason: at 60.5px of slack left over at
 /// 1280x720 it is already narrower than what the next-lowest-priority key
 /// (`e drain`) needs, and this bar has no room to spend on advertising a key
@@ -1251,7 +1251,7 @@ mod tests {
     /// counts the pane's height is built out of.
     const ALL_SIZES: [(f32, f32); 3] = [(1280.0, 720.0), (1440.0, 810.0), (1920.0, 1080.0)];
 
-    /// **What the pane's height is for.** `LOG_TEXT_ROWS` is four and SPACE
+    /// **What the pane's height is for.** `LOG_TEXT_ROWS` is four and TAB
     /// doubles it, and the pane has to keep drawing exactly that many
     /// message rows once its body has paid `strip_inset` at both ends —
     /// otherwise the fix for the strips is a row silently taken off the log.

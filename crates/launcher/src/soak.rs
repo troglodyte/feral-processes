@@ -16,10 +16,10 @@
 //! the untrodden branches are. A walk from `Game::new` only ever tests the
 //! opening minutes.
 //!
-//! `App::update_realtime` is deliberately never called: it reads
-//! `Instant::now()`, so a walk that depended on it would be wall-clock
-//! dependent. Keys spend the world's ticks through `handle_key`'s own tail,
-//! which is where the movement in this walk comes from.
+//! `App::update_realtime` is deliberately never called: it is paced by the
+//! frame's `dt`, which a walk has none of. Keys spend the world's ticks
+//! through `handle_key`'s own tail, which is where the movement in this walk
+//! comes from.
 
 use std::path::Path;
 

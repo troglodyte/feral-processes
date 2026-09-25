@@ -604,8 +604,8 @@ fn swap_stats_column(stats: &str) -> String {
 const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 
 /// How many idle ticks the world takes per real second while the player
-/// sits on `Mode::Playing` and touches nothing — the one knob for how fast
-/// the world runs against the wall clock.
+/// sits on `Mode::Playing` and touches nothing, at `WorldSpeed::Normal` —
+/// the one knob for how fast the world runs against the wall clock.
 ///
 /// **Everything in the game is priced in ticks, so this rebalances
 /// nothing**: raids, need decay, caravans, production and a hauler's step

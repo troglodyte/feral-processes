@@ -95,6 +95,16 @@ pub struct WorkOrder {
     /// asserted by a save-then-load test rather than a RON one.
     #[serde(default)]
     pub for_research: bool,
+    /// Whether the dig plan filed this order rather than the player — see
+    /// `Game::sync_dig_order`.
+    ///
+    /// Provenance, `for_research`'s rule and its save half: the plan
+    /// resizes and withdraws its own line by this flag and never by the
+    /// item, so a player's own Blank Substrate order is left alone, and a
+    /// reload that dropped the flag would leave the plan filing a second
+    /// line beside an orphan it can no longer touch.
+    #[serde(default)]
+    pub for_dig: bool,
 }
 
 impl WorkOrder {
@@ -106,6 +116,7 @@ impl WorkOrder {
             standing: false,
             announced_stalled: false,
             for_research: false,
+            for_dig: false,
         }
     }
 
@@ -132,6 +143,14 @@ impl WorkOrder {
     pub fn with_research(self) -> Self {
         Self {
             for_research: true,
+            ..self
+        }
+    }
+
+    /// Marks it as filed on the dig plan's behalf.
+    pub fn with_dig(self) -> Self {
+        Self {
+            for_dig: true,
             ..self
         }
     }
@@ -796,9 +815,13 @@ pub(crate) fn ingredient_depths(
     depths
 }
 
-/// Which of the two things `Game::announce_dig_dry` ran out of Blank
-/// Substrate for — the two wordings share everything but this.
+/// Which of the three things `Game::announce_dig_dry` ran out of Blank
+/// Substrate for — the three wordings share everything but this.
 enum DigDryReason {
+    /// A marked solid cell, held back because nothing is spare to floor the
+    /// cut with. Its own wording because the cell is still whole: told in
+    /// the tile job's words it reads as a cut that already happened.
+    Cut,
     Tile,
     Finish,
 }
@@ -1848,12 +1871,22 @@ impl Game {
     /// base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
-    /// **Cutting itself is never dry — only what it turns into can be.**
-    /// A cut claims `0`: open ground stays open forever now, so opening a
-    /// cell with nothing in store to floor it costs nothing and loses no
-    /// ground. The tile job a cut turns into claims `1`; an `Apply` claims
-    /// `FLOOR_FINISH_COST`; a `Strip` claims nothing, spending nothing and
-    /// leaving nothing exposed.
+    /// **A cut is dry when the tile that will hold it is**, which is what
+    /// makes the substrate a *budget* claimed in want order rather than a
+    /// figure each site reads for itself. Cutting spends nothing, so asked
+    /// per site the answer is always yes, and a crew holding no Blank
+    /// Substrate opens the whole plan and floors none of it — bare ground
+    /// no structure can stand on. So a cut claims the tile it will need
+    /// (`1`), the same claim the tile job it turns into makes, carried over
+    /// unchanged because a site is only ever one of the two; an `Apply`
+    /// claims `FLOOR_FINISH_COST`; a `Strip` claims nothing, spending
+    /// nothing and leaving nothing exposed.
+    ///
+    /// **The sum of those claims is what the plan asks the Lathe for**,
+    /// handed to `Game::sync_dig_order` from here because this is the one
+    /// pass that has priced every site the crew can reach. Holding the cut
+    /// without asking is the other half of the same stall: the crew waits
+    /// on a shelf nobody is told to fill.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
     /// and above the truncation**, and that placement is the budget's half
@@ -1876,6 +1909,7 @@ impl Game {
     /// to say, from the one place that can see every site every tick.
     fn drop_dry_dig_wants(&mut self, wanted: &mut Vec<(Entity, TaskKind)>) {
         let mut budget = self.substrate_available();
+        let mut need = 0;
         let mut dry: Vec<Entity> = Vec::new();
         let sites: Vec<Entity> = wanted
             .iter()
@@ -1892,15 +1926,16 @@ impl Game {
                 .and_then(|d| d.finish.clone());
             let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
             let claim = match &finish {
-                None if solid => 0,
                 None => 1,
                 Some(FinishOrder::Apply(_)) => crate::tuning::FLOOR_FINISH_COST,
                 Some(FinishOrder::Strip) => 0,
             };
+            need += claim;
             if budget < claim {
-                let reason = match &finish {
-                    Some(_) => DigDryReason::Finish,
-                    None => DigDryReason::Tile,
+                let reason = match (&finish, solid) {
+                    (Some(_), _) => DigDryReason::Finish,
+                    (None, true) => DigDryReason::Cut,
+                    (None, false) => DigDryReason::Tile,
                 };
                 self.announce_dig_dry(site, at.x, at.y, reason);
                 dry.push(site);
@@ -1912,6 +1947,60 @@ impl Game {
             }
         }
         wanted.retain(|(site, kind)| *kind != TaskKind::Excavate || !dry.contains(site));
+        self.sync_dig_order(need);
+    }
+
+    /// Keeps the dig plan's own standing Blank Substrate order at `need`,
+    /// filing it when the plan first needs something and withdrawing it when
+    /// it needs nothing.
+    ///
+    /// **A level, not a batch**: the crew spends the stock as it floors, and
+    /// `need` falls by the same unit, so "hold what the plan will spend" is
+    /// a figure that stays true without counting what was already made.
+    ///
+    /// **Filed at the bottom, once**, like any player order —
+    /// `move_work_order` is how the player promotes it, and a resize keeps
+    /// whatever position it has. Filed only where `queue_work_order` would
+    /// accept it: a base with no Lathe gets no order the chain rule would
+    /// refuse by hand, and the held-off lines already say what is short. An
+    /// order already standing when the chain later breaks stays, and stalls
+    /// the way a player's does.
+    ///
+    /// Filing is news; resizing and withdrawing are bookkeeping the player
+    /// asked for by marking and unmarking, and say nothing.
+    fn sync_dig_order(&mut self, need: u32) {
+        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+        let at = self
+            .world
+            .resource::<resources::WorkOrders>()
+            .0
+            .iter()
+            .position(|order| order.for_dig);
+        match at {
+            Some(index) if need == 0 => {
+                self.world
+                    .resource_mut::<resources::WorkOrders>()
+                    .0
+                    .remove(index);
+            }
+            Some(index) => {
+                self.world.resource_mut::<resources::WorkOrders>().0[index].qty = need;
+            }
+            None if need == 0 => {}
+            None => {
+                if chain_break(self, &substrate).is_some() {
+                    return;
+                }
+                let name = self.item_name(&substrate).to_string();
+                self.world
+                    .resource_mut::<resources::WorkOrders>()
+                    .0
+                    .push(WorkOrder::level(substrate, need).with_dig());
+                self.log_base(format!(
+                    "Your dig plan filed a standing work order: hold {need} x {name} to floor it."
+                ));
+            }
+        }
     }
 
     /// Says once that there is nothing anywhere to floor or finish `site`'s
@@ -1939,6 +2028,13 @@ impl Game {
         // site can be dry while the base holds stock, because the units are
         // claimed by the jobs ahead of it.
         let line = match reason {
+            // Deliberately not "the marked cell at", which is the *cut off*
+            // announcement's own wording a few hundred lines up: two stalls
+            // sharing a phrase is two tests each satisfied by the other's
+            // bug.
+            DigDryReason::Cut => format!(
+                "Your crew holds off cutting ({x}, {y}) — no {name} to spare to floor the cut with."
+            ),
             DigDryReason::Tile => format!(
                 "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} to spare."
             ),
@@ -2554,8 +2650,16 @@ impl Game {
     pub fn cancel_work_order(&mut self, index: usize) -> Result<(), String> {
         let dropped = {
             let mut orders = self.world.resource_mut::<resources::WorkOrders>();
-            if index >= orders.0.len() {
-                return Err("No such work order.".into());
+            match orders.0.get(index) {
+                None => return Err("No such work order.".into()),
+                // Cancelled by hand it would be filed again next tick, so the
+                // refusal names the lever that really moves it.
+                Some(order) if order.for_dig => {
+                    return Err(
+                        "Your dig plan keeps this order — clear dig marks to shrink it.".into(),
+                    );
+                }
+                Some(_) => {}
             }
             orders.0.remove(index)
         };

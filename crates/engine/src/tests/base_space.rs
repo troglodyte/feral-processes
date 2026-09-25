@@ -2730,12 +2730,18 @@ const CUT_OFF: &str = "marked cell at";
 /// cell open and has no Blank Substrate anywhere to floor it with.
 const NO_SUBSTRATE: &str = "nothing to floor";
 
+/// The same shortage told one step earlier: a marked cell the crew will not
+/// cut, because nothing is spare to floor the cut with. A needle of its own,
+/// `CUT_OFF`'s rule — two stalls sharing one would let either satisfy the
+/// other's test.
+const HELD_OFF: &str = "holds off cutting";
+
 /// Enough Blank Substrate in the party's pack to floor `tiles` cells.
 ///
-/// **Every test below that expects a tile laid needs this**: cutting is
-/// free, but flooring the cut claims the tile it will hold, so a crew with
-/// nothing to floor with cuts the wall and leaves it bare. The tests about
-/// the shortage itself deliberately leave the base empty.
+/// **Every test below that expects a cut needs this**: a cut claims the
+/// tile it will hold, so a crew with nothing to floor with leaves the wall
+/// whole. The tests about the shortage itself deliberately leave the base
+/// empty.
 fn substrate_for(game: &mut Game, tiles: u32) {
     give(game, &ItemId::from(ids::BLANK_SUBSTRATE), tiles);
 }
@@ -2999,11 +3005,12 @@ fn a_dry_dig_job_frees_the_body_for_production() {
     );
 }
 
-/// **The rule**: cutting is free. A crew with no Blank Substrate anywhere
-/// still cuts every marked solid cell — only the tile it turns into can go
-/// dry.
+/// **The rule**: a cut claims the tile that will hold it. Cutting spends no
+/// substrate itself, so a crew that reads its own job alone always says yes
+/// — and opens the whole plan while flooring none of it, which is the base a
+/// player found 112 bare cells into with nobody laying tiles.
 #[test]
-fn a_marked_solid_cell_is_cut_with_no_substrate_anywhere() {
+fn a_marked_solid_cell_waits_for_the_substrate_that_will_floor_it() {
     let (mut game, staff) = base_with_a_crew(3285, 1);
     assert_eq!(
         count_item(&game, ids::BLANK_SUBSTRATE),
@@ -3011,31 +3018,41 @@ fn a_marked_solid_cell_is_cut_with_no_substrate_anywhere() {
         "the fixture must start with no substrate anywhere for the rule to bite"
     );
     mark(&mut game, WALL);
-    let site = game
-        .dig_site_at(WALL.0, WALL.1)
-        .expect("marking a solid cell spawns its dig site");
 
-    pass(&mut game, 2);
+    let wait = ticks_to_cut(&game, staff[0]);
+    pass(&mut game, wait * 2);
 
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(WALL.0, WALL.1),
+        "a marked cell must stay whole while there is nothing to floor the cut with"
+    );
+    assert!(
+        is_marked(&mut game, WALL),
+        "the plan outlives the shortage — the cut starts when stock does"
+    );
     assert_eq!(
-        posted_at(&game, staff[0]),
-        Some(site),
-        "cutting is free and must be worked whatever the base's stock"
+        lines_saying(&game, HELD_OFF),
+        1,
+        "the held-off cut is news once, not once a cycle for the rest of the run"
     );
 }
 
-/// The hold is on the tile, not the cut: cutting is free, but the same mark
-/// is floored once the base can pay for the tile, with nothing for the
-/// player to do but stock the shelf.
+/// The hold is a wait, not a refusal: the same mark is cut and floored once
+/// the base can pay for the tile, with nothing for the player to do but
+/// stock the shelf.
 #[test]
-fn a_held_off_tile_lays_when_the_substrate_arrives() {
+fn a_held_off_cut_starts_when_the_substrate_arrives() {
     let (mut game, staff) = base_with_a_crew(3286, 1);
     mark(&mut game, WALL);
     let dry_wait = ticks_to_cut(&game, staff[0]);
     pass(&mut game, dry_wait);
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
-        "precondition: cutting is free and must proceed with no substrate anywhere"
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(WALL.0, WALL.1),
+        "precondition: the dry base must not have cut anything"
     );
 
     substrate_for(&mut game, 1);
@@ -3045,15 +3062,15 @@ fn a_held_off_tile_lays_when_the_substrate_arrives() {
     assert_eq!(
         cell(&game, WALL),
         Some(base_grid::BaseCell::Floor),
-        "one Blank Substrate in store must buy the tile once it arrives"
+        "one Blank Substrate in store must buy the cut and the tile that holds it"
     );
 }
 
-/// **The budget is shared, and one unit pays for one tile.** Cutting is
-/// free, so both marked cells open regardless of stock — the shared
-/// substrate then decides which *one* gets floored.
+/// **The budget is shared, and one unit pays for one cell.** Read per site
+/// the substrate is enough for every cut in the base at once — which is how
+/// a crew opens the whole plan and floors one cell of it.
 #[test]
-fn one_substrate_does_not_floor_two_cuts() {
+fn one_substrate_does_not_pay_for_two_cuts() {
     let (mut game, staff) = base_with_a_crew(3288, 2);
     let second = (WALL.0, WALL.1 + 1);
     assert!(
@@ -3067,24 +3084,16 @@ fn one_substrate_does_not_floor_two_cuts() {
     mark(&mut game, second);
 
     let swings = swings_for(&game, staff[0], WALL).max(swings_for(&game, staff[1], second));
-    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize
-        + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize
-        + WALK_ALLOWANCE;
+    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE;
     pass(&mut game, wait);
 
-    for wall in [WALL, second] {
-        assert!(
-            cell(&game, wall).is_some(),
-            "cutting is free — both marked cells must open regardless of stock"
-        );
-    }
-    let floored = [WALL, second]
+    let opened = [WALL, second]
         .into_iter()
-        .filter(|c| cell(&game, *c) == Some(base_grid::BaseCell::Floor))
+        .filter(|c| cell(&game, *c).is_some())
         .count();
     assert_eq!(
-        floored, 1,
-        "two open cells and one Blank Substrate must floor one, not both"
+        opened, 1,
+        "two bodies and one Blank Substrate must open one cell, not both"
     );
 }
 
@@ -5148,4 +5157,145 @@ fn describe_base_rock_names_a_finish_with_no_rock_in_range() {
         .describe_base_rock(1, 0, 5)
         .expect("a finish alone must still answer Some");
     assert_eq!(line, "Cobalt Carpet underfoot.");
+}
+
+// ---------------------------------------------------------------------------
+// The dig plan asks for its own tiles
+// ---------------------------------------------------------------------------
+
+/// A Mining Node and the Lathe beside it: the shortest line that makes Blank
+/// Substrate, so `chain_break` lets an order for it stand.
+fn lay_substrate_line(game: &mut Game) {
+    spawn_machine_at(game, "mining_node", 2, 0);
+    spawn_machine_at(game, "lathe", 2, 1);
+}
+
+fn dig_orders(game: &Game) -> Vec<WorkOrder> {
+    game.work_orders()
+        .iter()
+        .filter(|o| o.for_dig)
+        .cloned()
+        .collect()
+}
+
+/// **The fix for a base that cut 112 cells and floored none**: nothing asked
+/// the Lathe for the tiles a plan needs, so no body ever went to run it. A
+/// marked plan files a standing Blank Substrate order sized to what it will
+/// spend, and files it **below** the player's own orders.
+#[test]
+fn a_dig_plan_files_a_standing_substrate_order_below_the_players() {
+    let (mut game, _staff) = base_with_a_crew(3400, 1);
+    lay_substrate_line(&mut game);
+    game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 20))
+        .unwrap();
+    mark(&mut game, WALL);
+    mark(&mut game, (WALL.0, WALL.1 + 1));
+
+    pass(&mut game, 2);
+
+    let orders = game.work_orders();
+    assert_eq!(
+        orders.len(),
+        2,
+        "one player order and one plan order: {orders:?}"
+    );
+    assert_eq!(orders[0].item, ItemId::from(ids::CORE_FRAGMENT));
+    assert!(
+        !orders[0].for_dig,
+        "the player's order is still the player's"
+    );
+    let plan = &orders[1];
+    assert!(plan.for_dig, "the plan's order says whose it is");
+    assert_eq!(plan.item, ItemId::from(ids::BLANK_SUBSTRATE));
+    assert!(
+        plan.standing,
+        "a level held, so flooring draws it down and wakes it"
+    );
+    assert_eq!(plan.qty, 2, "one tile per marked cell");
+}
+
+/// The order tracks the plan: clearing the marks withdraws it, silently —
+/// the player cancelled the marks, not the order.
+#[test]
+fn clearing_the_plan_withdraws_its_order() {
+    let (mut game, _staff) = base_with_a_crew(3401, 1);
+    lay_substrate_line(&mut game);
+    mark(&mut game, WALL);
+    pass(&mut game, 2);
+    assert_eq!(
+        dig_orders(&game).len(),
+        1,
+        "precondition: the plan filed its order"
+    );
+
+    mark(&mut game, WALL);
+    pass(&mut game, 2);
+
+    assert!(
+        dig_orders(&game).is_empty(),
+        "a plan with nothing marked asks for nothing: {:?}",
+        game.work_orders()
+    );
+}
+
+/// Cancelled by hand it would only be filed again next tick, so the queue
+/// says where the lever is instead.
+#[test]
+fn the_plans_order_cannot_be_cancelled_by_hand() {
+    let (mut game, _staff) = base_with_a_crew(3402, 1);
+    lay_substrate_line(&mut game);
+    mark(&mut game, WALL);
+    pass(&mut game, 2);
+
+    let err = game
+        .cancel_work_order(0)
+        .expect_err("the plan's order is the plan's");
+
+    assert!(
+        err.contains("mark"),
+        "the refusal names the lever, got: {err}"
+    );
+    assert_eq!(dig_orders(&game).len(), 1);
+}
+
+/// With nothing standing that makes Blank Substrate, the plan files nothing —
+/// an order `queue_work_order` would refuse is not one the plan may file
+/// behind its back.
+#[test]
+fn a_plan_with_no_lathe_files_nothing() {
+    let (mut game, _staff) = base_with_a_crew(3403, 1);
+    mark(&mut game, WALL);
+
+    pass(&mut game, 2);
+
+    assert!(game.work_orders().is_empty(), "{:?}", game.work_orders());
+}
+
+/// The provenance survives a reload, or a reloaded plan's order turns into a
+/// player order the plan can no longer resize or withdraw — and the plan
+/// files a second one beside it. A save→load test, since a skipped field is
+/// invisible to the RON round trip.
+#[test]
+fn a_plan_order_keeps_its_provenance_across_a_save() {
+    let (mut game, _staff) = base_with_a_crew(3404, 1);
+    lay_substrate_line(&mut game);
+    mark(&mut game, WALL);
+    pass(&mut game, 2);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_base_space_plan_order_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    pass(&mut loaded, 2);
+
+    assert_eq!(
+        dig_orders(&loaded).len(),
+        1,
+        "exactly the one plan order after a reload: {:?}",
+        loaded.work_orders()
+    );
+    assert_eq!(loaded.work_orders().len(), 1);
 }

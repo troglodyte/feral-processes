@@ -693,9 +693,9 @@ pub(crate) fn place_pursuing_guardian_adjacent(app: &mut App, dx: i32, dy: i32) 
 /// So this goes through the same save-edit-reload trick every other fixture
 /// here uses, writing `SaveData::settlements` directly.
 ///
-/// Clears the target tile of a creature, a nest or a Stack entrance, any of
-/// which would answer the bump ladder *before* `find_settlement_at` is ever
-/// reached — the settlement arm is the fourth, after the wild-creature, nest
+/// Clears the footprint and the ring round it of a creature, a nest or a
+/// Stack entrance, any of which would answer the bump ladder *before*
+/// `find_settlement_at` is ever reached — the settlement arm is the fourth, after the wild-creature, nest
 /// and surface-link arms, and any of those three intercepting the press
 /// would make this fixture's tests exercise the wrong feature.
 pub(crate) fn place_settlement_east_of_player(
@@ -711,10 +711,15 @@ pub(crate) fn place_settlement_east_of_player(
 
     let mut data = save::load_from_file(&path).unwrap();
     let (px, py) = data.player.position;
-    let target = (px + 1, py);
-    data.creatures.retain(|c| c.position != target);
-    data.nests.retain(|n| n.position != target);
-    data.link_sites.retain(|&site| site != target);
+    // Two east, not one: a town's footprint is a square around its tile, so
+    // at one east its west column would cover the player and the load's
+    // displacement would move them. Its nearest cell is then the one a
+    // step east bumps.
+    let target = (px + 2, py);
+    let near = |(x, y): (i32, i32)| (x - target.0).abs().max((y - target.1).abs()) <= 2;
+    data.creatures.retain(|c| !near(c.position));
+    data.nests.retain(|n| !near(n.position));
+    data.link_sites.retain(|&site| !near(site));
     let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
     data.settlements.0.insert(
         key,
@@ -1078,13 +1083,15 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
 
     let mut data = save::load_from_file(&path).unwrap();
     let (px, py) = data.player.position;
-    let target = (px + 1, py);
+    // Two east for `place_settlement_east_of_player`'s reason.
+    let target = (px + 2, py);
     let guardian_pos = (px, py - 1);
+    let near = |(x, y): (i32, i32)| (x - target.0).abs().max((y - target.1).abs()) <= 2;
     data.creatures
-        .retain(|c| c.position != target && c.position != guardian_pos);
+        .retain(|c| !near(c.position) && c.position != guardian_pos);
     data.nests
-        .retain(|n| n.position != target && n.position != guardian_pos);
-    data.link_sites.retain(|&site| site != target);
+        .retain(|n| !near(n.position) && n.position != guardian_pos);
+    data.link_sites.retain(|&site| !near(site));
     let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
     data.settlements.0.insert(
         key,

@@ -53,6 +53,17 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.241
+
+**Marking ground to dig out now asks for the tiles to floor it, and your
+crew only cuts what it can floor.** Before, nothing ordered Blank Substrate
+for a dig plan, so a crew could cut a hundred cells and lay no tiles at all
+unless you remembered to order some yourself. Now a marked plan keeps its
+own standing Blank Substrate order in your work order queue, sized to what
+it will spend. It is filed at the bottom, and you can move it up. The crew
+also waits to cut a wall until a tile is spare to floor it, and floors
+cells already cut before it opens new ones.
+
 ## 0.13.240
 
 **A program that couldn't find a way to somewhere to rest now tries again.**

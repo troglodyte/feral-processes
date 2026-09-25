@@ -765,6 +765,7 @@ impl App {
             // path for every *other* way `mode` leaves `Playing` — Esc out
             // of a screen the map opened, say — reaching the same result.
             self.walk = None;
+            self.drag_ticks_owed = 0;
             return;
         }
         if self.paused {

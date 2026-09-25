@@ -2931,6 +2931,17 @@ pub struct App {
     /// tile. Cleared in `App::install_game`, the one door both a new game
     /// and a load share.
     walk: Option<Walk>,
+    /// Drag ground's extra ticks, owed and not yet spent — `Game::
+    /// move_player_paced`'s own report, paid one plain `idle_tick` a clock
+    /// tick by `App::spend_walk_tick` rather than all at once, which is
+    /// what stops the clocked walk from fast-forwarding the world past the
+    /// speed setting on drag ground (`travel-on-the-clock`'s task A). The
+    /// walk itself does not advance while this is nonzero: the player
+    /// waits out the ground's cost before the next step is asked for.
+    ///
+    /// Not saved, `walk`'s own reason, and cleared everywhere `walk` is
+    /// cleared for the same one.
+    drag_ticks_owed: u32,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
     /// of, not instead of, typing a row's own number/letter directly.

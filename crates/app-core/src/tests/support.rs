@@ -72,6 +72,86 @@ pub(crate) fn walk(app: &mut App, key: GameKey) {
     app.update_realtime(1.0 / app.world_speed.ticks_per_second());
 }
 
+/// Bumps the run to zone 2 and overrides a `len`-tile-deep, `2 * band +
+/// 1`-tile-wide block east of the player with `biome` —
+/// `travel-on-the-clock`'s drag and weather-damage tests (task A and task
+/// B) need real ground with a real `EnvironmentEffect`, which only exists
+/// past zone 1 (`Game::environment_biome_at`'s gate).
+///
+/// The engine exposes no public door onto `WorldMap`, so this goes through
+/// the same save-edit-reload trick every other fixture in this file uses,
+/// writing `SaveData::tile_overrides` directly rather than
+/// `WorldMap::set_override` (`pub(crate)` to the engine).
+///
+/// **A block, not a single row.** `Game::travel_step`'s route is built over
+/// `walk_field`'s Chebyshev cost — a diagonal step costs the same as an
+/// orthogonal one — so two neighbours can tie for "toward the goal" and
+/// which one wins the tie is not this fixture's to predict. `band` widens
+/// the override far enough off the row that whichever neighbour the router
+/// actually picks still lands on the ground under test, and a travel test
+/// asserts on *that* rather than on a specific tile the party crosses.
+///
+/// Which of the overridden tiles actually carries an effect is seed- and
+/// position-specific — a `GroundCondition` claims a whole
+/// `tuning::CONDITION_CELL_TILES` block keyed off `(seed, zone, biome,
+/// block)`, and `Game::condition_at` that decides it is `pub(crate)` too —
+/// so each call site picks a seed and an offset found by hand and says so.
+pub(crate) fn override_biome_stretch_east(
+    app: &mut App,
+    biome: feral_processes_engine::world::Biome,
+    len: i32,
+    band: i32,
+) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("biome_stretch", 0);
+    let game = app.game.as_mut().unwrap();
+    game.warp_to_zone(2).unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    for i in 1..=len {
+        for j in -band..=band {
+            data.tile_overrides.push((
+                (px + i, py + j),
+                feral_processes_engine::world::Tile {
+                    biome,
+                    walkable: true,
+                    rock_shade: None,
+                },
+            ));
+        }
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    // `warp_to_zone` queues an achievement ("First Breach") that only
+    // resolves onto `Notifications` from inside a *tick* — a plain
+    // `take_notification` drain here, before anything has ticked, sees
+    // nothing. Left alone it takes `Mode::Playing` on the caller's own
+    // first `update_realtime`, which reads as the walk itself being
+    // interrupted when it is really this fixture's own setup doing it. So
+    // this spends ticks and dismisses whatever they queue until the run
+    // is quiet, before handing the app back — capped rather than an
+    // unbounded loop, so a genuine regression here fails loudly instead of
+    // hanging the suite.
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+    for _ in 0..20 {
+        app.update_realtime(tick);
+        if app.mode == Mode::Notification {
+            app.handle_key(GameKey::Esc);
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "override_biome_stretch_east could not settle the run back onto Mode::Playing"
+    );
+}
+
 /// Clears a box around the player of every wild creature, nest, surface
 /// link and settlement — a movement or travel test's guarantee that a short
 /// walk can't be interrupted by whatever the seed's world generation

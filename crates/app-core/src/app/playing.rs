@@ -43,6 +43,21 @@ fn stepped(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> bool {
     game.current_tick() > before || game.is_game_over().is_some()
 }
 
+/// `stepped`'s own shape for the clocked walk: calls `Game::move_player_paced`
+/// instead of `Game::move_player`, so drag ground's extra ticks come back as
+/// a number owed rather than being spent inline — `App::spend_walk_tick`
+/// holds that count in `drag_ticks_owed` and pays it one `idle_tick` a clock
+/// tick, which is `travel-on-the-clock`'s drag fix (task A). `stepped` itself
+/// stays as it is for the paused, turn-based path, where spending drag
+/// inline is still correct — `acting_while_paused_still_spends_a_turn`.
+fn stepped_paced(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> (bool, u32) {
+    let before = game.current_tick();
+    let (b, owed) = game.move_player_paced(dx, dy);
+    *bite = b;
+    let acted = game.current_tick() > before || game.is_game_over().is_some();
+    (acted, owed)
+}
+
 /// Which keys hand the map's camera back to the party — see `App::watching`.
 ///
 /// Esc is the advertised way out. The eight movement keys are here because
@@ -81,6 +96,18 @@ fn is_move_key(key: GameKey) -> bool {
     )
 }
 
+/// SPACE (pause) and `,` (world speed) — the two keys `handle_playing_key`'s
+/// own match binds "up here, beside the digits below", for the toggle's own
+/// reason: the clock runs underground too. Neither is a move key, but a
+/// travel set while paused is meant to wait for the clock (the design's own
+/// words), so the walk-clearing check below has to know them by name rather
+/// than by the "any key that isn't itself a step" rule everything else on
+/// this screen follows — task C's fix, since pressing SPACE to resume a
+/// paused travel used to cancel the very travel it was unpausing.
+fn is_clock_key(key: GameKey) -> bool {
+    matches!(key, GameKey::Char(' ') | GameKey::Char(','))
+}
+
 impl App {
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
         // Watching is a camera, not a mode: every other key still does
@@ -102,7 +129,13 @@ impl App {
         // leave a queued `Walk::Step` behind for a following tick-spending
         // key (an arrow, then `.` or `r`, inside one frame) to spend
         // unasked.
-        if !is_move_key(key) && self.walk.is_some() {
+        //
+        // **Except the clock's own two keys.** SPACE and `,` don't spend a
+        // tick and don't mean "do something else instead" — a travel set
+        // while paused is meant to wait for the clock, so unpausing it with
+        // the very key that resumes the clock must not read as the player
+        // asking for anything but that (task C).
+        if !is_move_key(key) && !is_clock_key(key) && self.walk.is_some() {
             self.walk = None;
         }
         match key {
@@ -798,7 +831,25 @@ impl App {
     /// settlement or outpost visit, and switches to a fight, so a walked
     /// step can't pick a different cue or skip one of those than a typed
     /// one does.
+    ///
+    /// **Drag ground owed is paid first, ahead of the walk.** A step onto
+    /// drag ground reports its extra ticks through `drag_ticks_owed`
+    /// (`stepped_paced`/`Game::move_player_paced`) rather than spending them
+    /// inline the way the paused path still does — this is what stops
+    /// `travel-on-the-clock`'s clocked walk from fast-forwarding the world
+    /// by more than one tick per clock tick. Each owed tick is one plain
+    /// `idle_tick`, exactly what a standing-still player already spends
+    /// every real-time tick — the walk itself does not advance while any
+    /// are outstanding, so the player waits on drag ground rather than
+    /// crossing it in a burst.
     pub(crate) fn spend_walk_tick(&mut self) {
+        if self.drag_ticks_owed > 0 {
+            self.drag_ticks_owed -= 1;
+            if let Some(game) = &mut self.game {
+                game.idle_tick();
+            }
+            return;
+        }
         let Some(walk) = self.walk else {
             if let Some(game) = &mut self.game {
                 game.idle_tick();
@@ -807,13 +858,16 @@ impl App {
         };
         let mut ground_bite = 0;
         let mut no_route = false;
+        let mut drag_owed = 0;
         let acted = {
             let Some(game) = &mut self.game else { return };
             let before = game.current_tick();
             let acted = match walk {
                 Walk::Step(dx, dy) => {
                     self.walk = None;
-                    stepped(game, dx, dy, &mut ground_bite)
+                    let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
+                    drag_owed = owed;
+                    acted
                 }
                 Walk::Travel { goal, in_base } => {
                     // The space the travel was set in no longer matches
@@ -829,7 +883,8 @@ impl App {
                         match game.travel_step(goal) {
                             TravelStep::Toward(dx, dy) => {
                                 let before = current_travel_tile(game, in_base);
-                                let acted = stepped(game, dx, dy, &mut ground_bite);
+                                let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
+                                drag_owed = owed;
                                 // A route that didn't actually move anybody
                                 // — a hostile stepped onto the planned cell,
                                 // say — would otherwise be asked again next
@@ -841,7 +896,9 @@ impl App {
                             }
                             TravelStep::Last(dx, dy) => {
                                 self.walk = None;
-                                stepped(game, dx, dy, &mut ground_bite)
+                                let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
+                                drag_owed = owed;
+                                acted
                             }
                             TravelStep::Arrived | TravelStep::Gone => {
                                 self.walk = None;
@@ -870,6 +927,20 @@ impl App {
             }
             acted
         };
+        self.drag_ticks_owed = drag_owed;
+        // A step that hurt the player ends the walk right here — "the
+        // player should stop moving if weather is making them take
+        // damage" (task B). The damage is already announced by
+        // `Game::move_player_paced` itself (the "takes N off you." log
+        // line `after_world_action`'s `Hit` cue plays over), so this adds
+        // no second sentence — it only stops the *next* step from being
+        // queued. A `Walk::Step` is a one-off already cleared above; this
+        // is what actually matters for `Walk::Travel`, which would
+        // otherwise keep walking the party across ground that is hurting
+        // them.
+        if ground_bite > 0 {
+            self.walk = None;
+        }
         self.after_world_action(acted, true, ground_bite);
         if no_route {
             self.refuse("No clear way there.");
@@ -881,6 +952,7 @@ impl App {
         // left off the moment the screen it opened is left.
         if self.mode != Mode::Playing {
             self.walk = None;
+            self.drag_ticks_owed = 0;
         }
     }
 }

@@ -136,6 +136,7 @@ impl App {
             paused: false,
             world_speed: WorldSpeed::Normal,
             walk: None,
+            drag_ticks_owed: 0,
             menu_selected: 0,
             research_graph_view: false,
             last_autosave_tick: 0,
@@ -562,6 +563,7 @@ impl App {
         // `Travel` surviving the swap would send the party wherever that
         // tile ended up meaning in the new run.
         self.walk = None;
+        self.drag_ticks_owed = 0;
         // Forced: a fresh or just-loaded run has no prior side to compare
         // against, so it must open on the true tab rather than wait for a
         // crossing that, from this run's point of view, already happened

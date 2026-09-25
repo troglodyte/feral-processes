@@ -163,6 +163,47 @@ fn a_paused_arrow_still_steps_immediately_and_spends_one_tick() {
     );
 }
 
+/// Unpausing must not cancel the very travel it is resuming (task C). The
+/// design's own words — "a travel set while paused waits for the clock" —
+/// mean SPACE has to reach `self.paused` without ever reaching the
+/// "any key that isn't itself a step clears a walk" rule
+/// `handle_playing_key` applies to everything else on this screen; before
+/// `is_clock_key` this pressed indistinguishably from any other key and
+/// cancelled the travel before the clock ever got to spend it.
+#[test]
+fn unpausing_with_the_clock_key_does_not_cancel_a_paused_travel() {
+    let mut app = test_app(2612);
+    clear_the_area_around_player(&mut app);
+    let start = player_pos(&app);
+
+    app.handle_key(GameKey::Char(' '));
+    assert!(app.paused, "test premise: the clock is paused");
+
+    app.travel_to(start.0 + 3, start.1);
+    assert!(
+        matches!(app.walk, Some(Walk::Travel { .. })),
+        "test premise: a travel is queued while paused"
+    );
+
+    app.handle_key(GameKey::Char(' '));
+    assert!(!app.paused, "test premise: the clock is unpaused again");
+    assert!(
+        app.walk.is_some(),
+        "unpausing with the clock's own key must not cancel the travel it just resumed"
+    );
+
+    app.update_realtime(1.0 / app.world_speed.ticks_per_second());
+
+    // Not a fixed `(start.0 + 1, start.1)`: `travel_step`'s route may not
+    // be the straight line for this seed's own layout, and that routing is
+    // tested elsewhere — this only has to see the travel actually resume.
+    assert_ne!(
+        player_pos(&app),
+        start,
+        "the travel must resume once unpaused"
+    );
+}
+
 /// **The regression finding 1 exists for.** A queued step that bounces off
 /// base rock with mining off spends no world tick inside the engine at
 /// all — `Game::move_in_base` refuses it for free. `spend_walk_tick` must
@@ -707,5 +748,119 @@ fn a_step_that_attrits_sounds_like_taking_a_hit() {
     assert!(
         app.take_sounds().is_empty(),
         "an action that was not a step queues no movement cue, bite or not"
+    );
+}
+
+/// `travel-on-the-clock`'s drag fix (task A): a step onto drag ground must
+/// not fast-forward the world past the speed setting the way spending
+/// `1 + extra_ticks` inline used to. The step itself still lands on the
+/// very next clock tick — `Game::move_player_paced` always spends exactly
+/// its own one — and the owed drag tick is a second, separate clock tick
+/// rather than folded into the first.
+///
+/// Seed 9001 east of its own starting tile, overridden to Deadlock, is
+/// Lock Contention's own claimed ground (`GroundCondition::for_biome`
+/// claims the whole 16-tile block the start sits in for this seed) —
+/// found by hand rather than derived, since `Game::condition_at` is
+/// `pub(crate)` to the engine and app-core has no door onto it. Deadlock
+/// carries drag and no attrition, keeping this test clear of task B's
+/// damage path.
+#[test]
+fn drag_ground_is_paid_one_clock_tick_at_a_time_not_spent_inline() {
+    let mut app = test_app(9001);
+    clear_the_area_around_player(&mut app);
+    override_biome_stretch_east(
+        &mut app,
+        feral_processes_engine::world::Biome::Deadlock,
+        1,
+        0,
+    );
+    let start = player_pos(&app);
+    let start_tick = tick_of(&app);
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+
+    app.handle_key(GameKey::Right);
+    app.update_realtime(tick);
+
+    assert_eq!(
+        player_pos(&app),
+        (start.0 + 1, start.1),
+        "the step itself must land on the very next clock tick"
+    );
+    assert_eq!(
+        tick_of(&app),
+        start_tick + 1,
+        "only the step's own tick was spent — the drag must not be spent inline"
+    );
+    assert_eq!(
+        app.drag_ticks_owed, 1,
+        "Lock Contention's own drag figure is owed, not yet paid"
+    );
+
+    app.update_realtime(tick);
+
+    assert_eq!(
+        tick_of(&app),
+        start_tick + 2,
+        "the owed tick is paid by a second clock tick — world ticks equal the clock's ticks"
+    );
+    assert_eq!(app.drag_ticks_owed, 0, "the debt is now clear");
+    assert_eq!(
+        player_pos(&app),
+        (start.0 + 1, start.1),
+        "paying the drag debt is not itself a step"
+    );
+}
+
+/// The player should stop moving if weather is making them take damage
+/// (task B): a step that hurts the player ends a `Walk::Travel` rather
+/// than letting the party keep walking across ground that is hurting
+/// them.
+///
+/// Seed 9001 east of its own starting tile, overridden to Null Sector, has
+/// Leaking Memory (`StaticEvent`) live at tick 0 — an epoch-wide weather
+/// event rather than a per-cell condition, so it claims every tile in the
+/// biome rather than one seed-specific block, and it carries attrition with
+/// no drag term, keeping this test clear of task A's drag path.
+///
+/// The override is a block (`band: 2`), not a single row: `travel_step`'s
+/// route may tie-break onto a neighbour off the straight line (`walk_field`'s
+/// Chebyshev cost makes a diagonal step and an orthogonal one cost the
+/// same), so this asserts on the walk ending and the player having taken
+/// damage rather than on a specific tile the party crosses.
+#[test]
+fn a_step_that_hurts_the_player_ends_a_travel() {
+    let mut app = test_app(9001);
+    clear_the_area_around_player(&mut app);
+    override_biome_stretch_east(
+        &mut app,
+        feral_processes_engine::world::Biome::NullSector,
+        5,
+        2,
+    );
+    let start = player_pos(&app);
+    let start_hp = app.game.as_ref().unwrap().player_status().hp;
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+
+    app.travel_to(start.0 + 5, start.1);
+    assert!(
+        matches!(app.walk, Some(Walk::Travel { .. })),
+        "test premise: a travel is queued"
+    );
+
+    app.update_realtime(tick);
+
+    assert_ne!(
+        player_pos(&app),
+        start,
+        "the travel's first step must still land"
+    );
+    assert!(
+        app.game.as_ref().unwrap().player_status().hp < start_hp,
+        "test premise: the step actually took damage"
+    );
+    assert_eq!(
+        app.walk, None,
+        "a step that hurt the player must end the travel rather than continue it"
     );
 }

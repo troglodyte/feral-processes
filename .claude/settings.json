@@ -1,7 +1,6 @@
 {
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-
     "playwright@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": false,
@@ -9,7 +8,6 @@
     "claude-code-setup@claude-plugins-official": false,
     "ralph-loop@claude-plugins-official": false
   },
-
   "skillOverrides": {
     "kotlin-mcp-server-generator": "off",
     "stripe-best-practices": "off",
@@ -20,5 +18,19 @@
     "dataviz": "off",
     "claude-in-chrome": "off",
     "claude-api": "user-invocable-only"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-bash.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

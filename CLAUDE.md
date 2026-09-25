@@ -518,10 +518,12 @@ relying on one, and correct all three places if it has moved.
   hauler uses, over the same buffers the stock block counts.
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
   crossed over**, and `Game::drop_dry_dig_wants` is where it is asked.
-- **Cutting claims nothing; only the tile a cut turns into does**, so the
-  substrate is one budget claimed in want order — open cells before solid
-  ones, and settled *after* the unreachable drop rather than inside
-  `Game::dig_wants`.
+- **A cut claims the tile that will hold it**, so the substrate is one
+  budget claimed in want order — open cells before solid ones, and settled
+  *after* the unreachable drop rather than inside `Game::dig_wants`.
+- **The dig plan asks for its own tiles, through `Game::sync_dig_order`** —
+  one standing order flagged `WorkOrder::for_dig`, sized to the budget's
+  total claim, filed at the bottom and never cancellable by hand.
 - **What a program needs is a catalogue, and `assets/needs/` deleted is the
   pre-needs game.** `needs::NeedDb` is `MemoryDb`'s seam again — nine
   required fields, an absent directory loading silently empty, `iter` sorted

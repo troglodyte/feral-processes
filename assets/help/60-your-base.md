@@ -21,9 +21,8 @@ Everything past that first pocket is solid, and you cut it out yourself.
   the same thickness in every zone at every depth — what changes is you. A cell that opens sometimes
   shakes a Core Fragment loose.
 - A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for one
-  Blank Substrate, and only laid tile is permanent and buildable. Bare cut ground is the frontier,
-  and the frontier does not keep — leave it long enough and it goes back to solid at full thickness.
-  Laid tile is never reclaimed, and neither is a cell somebody is standing on.
+  Blank Substrate, and only laid tile is buildable. Bare cut ground stays open, but nothing can
+  stand on it until it is floored.
 - m opens the Excavation plan. The cursor costs no time at all: space drops one corner, moving
   previews a rectangle, and space again commits it. Starting the box on a cell that is already
   marked clears instead of marking, which is why there is no separate erase. A marked wall is cut
@@ -34,7 +33,10 @@ sector — but digging is the lowest priority the base has, below work orders an
 spare body digs and a needed one does not. Marking a corridor can never stall production. The crew
 will not start a cut it cannot hold, either: a marked wall waits until the base has a Blank
 Substrate spare for the tile that follows it, and says so once. Cells already cut and waiting on
-their floor are served first. Your own swings are never held back this way — walking into a wall
+their floor are served first. The plan asks for its own tiles: while anything is marked, a standing
+Blank Substrate order sits in your work order queue, sized to what the plan will spend. It is filed
+at the bottom, so move it up if the floor matters more than what you are making. Clearing the marks
+is how it goes away. Your own swings are never held back this way — walking into a wall
 still cuts it, whatever the shelves hold.
 
 Building works the same way, and the Home is the one exception. Every other structure you pick out

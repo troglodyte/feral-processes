@@ -417,12 +417,14 @@ impl Game {
     }
 
     /// The tile a relay trip to `key` sets down on — the nearest walkable
-    /// cell **beside** the town, never the town's own.
+    /// cell **beside** the town's footprint, never one of its own cells.
     ///
-    /// Band 1 and not band 0, and that is the whole of it: a settlement tile
-    /// admits nobody (`move_player`'s fourth arm queues the visit and leaves
-    /// `Position` untouched), so landing on one puts the party somewhere
-    /// walking could never have taken them. The ring order is
+    /// Band `radius + 1` and not band 0, and that is the whole of it: a
+    /// settlement tile admits nobody (`move_player`'s fourth arm queues the
+    /// visit and leaves `Position` untouched), so landing on one puts the
+    /// party somewhere walking could never have taken them, and the search
+    /// has to start past the whole square rather than past a single tile
+    /// once that square can be a 5x5 or a 7x7. The ring order is
     /// `spawning::ring_tiles`, shared with `standable_near` rather than
     /// copied.
     ///
@@ -437,8 +439,12 @@ impl Game {
             .0
             .get(&key)?
             .tile;
-        let candidates =
-            crate::game::spawning::ring_tiles(tile, 1, crate::tuning::SETTLEMENT_SITE_SEARCH_TILES);
+        let radius = self.settlement_radius(key)?;
+        let candidates = crate::game::spawning::ring_tiles(
+            tile,
+            radius + 1,
+            crate::tuning::SETTLEMENT_SITE_SEARCH_TILES,
+        );
         candidates.into_iter().find(|&(x, y)| {
             self.world
                 .resource_mut::<crate::world::WorldMap>()

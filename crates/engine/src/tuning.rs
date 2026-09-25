@@ -3672,6 +3672,46 @@ pub const SETTLEMENT_REGION_PERCENT: usize = 45;
 /// derivation never chose and, at the extreme, outside its own region.
 pub const SETTLEMENT_SITE_SEARCH_TILES: i32 = 24;
 
+/// A Server's footprint half-width — `Game::settlement_radius`'s Server
+/// arm. A 3x3 square, so the one tile `move_player`'s bump ladder used to
+/// admit nobody onto becomes nine.
+pub const SETTLEMENT_RADIUS_SERVER: i32 = 1;
+
+/// A Starved Mainframe's half-width — the same square as the town it may
+/// have grown out of, `growth::Vitality::rows`'s reason one axis over: a
+/// neglected city has nowhere worse to fall to on size than it does on
+/// shelf.
+pub const SETTLEMENT_RADIUS_STARVED: i32 = 1;
+
+/// A Steady Mainframe's half-width, and what a freshly grown city reads —
+/// `growth::vitality_floor` holds an untraded city here.
+pub const SETTLEMENT_RADIUS_STEADY: i32 = 2;
+
+/// A Thriving Mainframe's half-width, the largest a footprint ever gets.
+pub const SETTLEMENT_RADIUS_THRIVING: i32 = 3;
+
+/// The largest radius any settlement ever reads, over the four above — a
+/// `const` expression rather than a restated 3, so a retune of
+/// `SETTLEMENT_RADIUS_THRIVING` moves the outpost gate with it instead of
+/// leaving it quietly wrong.
+pub const SETTLEMENT_FOOTPRINT_MAX_RADIUS: i32 = {
+    let radii = [
+        SETTLEMENT_RADIUS_SERVER,
+        SETTLEMENT_RADIUS_STARVED,
+        SETTLEMENT_RADIUS_STEADY,
+        SETTLEMENT_RADIUS_THRIVING,
+    ];
+    let mut max = radii[0];
+    let mut i = 1;
+    while i < radii.len() {
+        if radii[i] > max {
+            max = radii[i];
+        }
+        i += 1;
+    }
+    max
+};
+
 /// How often a settlement's shelf turns over — one epoch per this many
 /// ticks, `Game::settlement_epoch`'s divisor.
 ///

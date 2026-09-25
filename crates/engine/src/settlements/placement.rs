@@ -320,9 +320,12 @@ mod tests {
         }
     }
 
-    /// Each settlement is drawn exactly once. The pass runs every tick, so
-    /// a missing "already known" check stacks a fresh entity on the tile
-    /// each time and reads as the glyph getting brighter.
+    /// Each footprint cell is drawn exactly once, and a tick that changes
+    /// nothing about a town does not respawn its cells. The pass runs every
+    /// tick, so a missing "already known" check (materialization) or a
+    /// missing early return (`sync_settlement_footprint`) stacks fresh
+    /// entities on the same tiles each time and reads as the glyphs getting
+    /// brighter.
     #[test]
     fn walking_does_not_materialize_a_settlement_twice() {
         let mut game = game(4242);
@@ -332,20 +335,47 @@ mod tests {
         }
         assert_eq!(known(&game).len(), before, "the record grew on its own");
 
-        let mut query = game
-            .world
-            .query::<(&crate::components::Settlement, &crate::components::Position)>();
-        let drawn: Vec<_> = query
-            .iter(&game.world)
-            .map(|(s, p)| (s.key, p.x, p.y))
-            .collect();
-        let distinct: std::collections::BTreeSet<_> = drawn.iter().map(|(k, _, _)| *k).collect();
+        let cells = |game: &mut crate::Game| -> Vec<(SettlementKey, i32, i32)> {
+            let mut query = game
+                .world
+                .query::<(&crate::components::Settlement, &crate::components::Position)>();
+            query
+                .iter(&game.world)
+                .map(|(s, p)| (s.key, p.x, p.y))
+                .collect()
+        };
+        let drawn = cells(&mut game);
+        let distinct: std::collections::BTreeSet<_> = drawn.iter().copied().collect();
         assert_eq!(
             drawn.len(),
             distinct.len(),
-            "a settlement is drawn more than once: {drawn:?}"
+            "a settlement cell is drawn more than once: {drawn:?}"
         );
-        assert_eq!(distinct.len(), before, "a known settlement is not drawn");
+        // Every cell a materialized town's footprint says should exist, and
+        // no others -- `Game::sync_settlement_footprint`'s whole contract.
+        let mut counts = std::collections::BTreeMap::<SettlementKey, usize>::new();
+        for (key, ..) in &drawn {
+            *counts.entry(*key).or_default() += 1;
+        }
+        for key in known(&game).keys().copied().collect::<Vec<_>>() {
+            assert_eq!(
+                counts.get(&key).copied().unwrap_or(0),
+                game.footprint(key).len(),
+                "{key:?}'s drawn cell count does not match its derived footprint"
+            );
+        }
+
+        // A tick that changes nothing about any town's kind or vitality must
+        // not respawn a single cell -- the early return `sync_settlement_
+        // footprint` opens with.
+        for _ in 0..40 {
+            game.tick();
+        }
+        assert_eq!(
+            cells(&mut game).len(),
+            drawn.len(),
+            "a settled footprint grew or shrank on ticks that changed nothing"
+        );
     }
 
     /// A place the party has walked to has to still be there, at the same
@@ -370,11 +400,17 @@ mod tests {
         );
 
         let mut query = loaded.world.query::<&crate::components::Settlement>();
-        assert_eq!(
-            query.iter(&loaded.world).count(),
-            before.len(),
-            "a loaded settlement has no entity to draw"
-        );
+        let mut counts = std::collections::BTreeMap::<SettlementKey, usize>::new();
+        for settlement in query.iter(&loaded.world) {
+            *counts.entry(settlement.key).or_default() += 1;
+        }
+        for key in before.keys() {
+            assert_eq!(
+                counts.get(key).copied().unwrap_or(0),
+                loaded.footprint(*key).len(),
+                "{key:?}'s footprint did not rebuild at its derived size after a load"
+            );
+        }
     }
 
     /// The catalogue is the whole of what a settlement is, so a shipped file

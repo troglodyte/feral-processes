@@ -2817,6 +2817,17 @@ pub struct Settlement {
     pub key: crate::settlements::SettlementKey,
 }
 
+/// The one cell of a settlement's footprint that a tether may name.
+///
+/// A footprint's outer cells are despawned and respawned as it grows and
+/// shrinks (`Game::sync_settlement_footprint`), but `components::TownPatrol`
+/// tethers to an *entity*, and `settlement_entity`/`towns_by_tile` have to
+/// resolve to the same one every time. The centre is the cell a radius that
+/// never drops below 1 can never despawn, so it carries this marker and
+/// every other reader of "which entity is this settlement" filters on it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SettlementCentre;
+
 /// Tags a wild program that was conjured for a Stack encounter rather
 /// than found on the zone map.
 ///

@@ -130,9 +130,10 @@ impl Game {
     /// entity's `Position`, for the same reason — the record is the half
     /// that is authoritative.
     fn settlement_entity(&mut self, key: crate::settlements::SettlementKey) -> Option<Entity> {
-        let mut query = self
-            .world
-            .query::<(Entity, &crate::components::Settlement)>();
+        let mut query = self.world.query_filtered::<(
+            Entity,
+            &crate::components::Settlement,
+        ), With<crate::components::SettlementCentre>>();
         query
             .iter(&self.world)
             .find(|(_, settlement)| settlement.key == key)

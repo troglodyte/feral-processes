@@ -1728,10 +1728,15 @@ impl Game {
         // failing the load, `nest_position`'s rule: the program comes back
         // as ordinary wild, which is exactly what standing its town down
         // would have left it as. `Pursuing` goes with it and never alone.
+        // Filtered to the centre even though an outer cell could never
+        // collide with it by tile — `settlement_entity`'s reason, so the two
+        // doors onto "which entity is this settlement" read as one rule.
         let towns_by_tile: HashMap<(i32, i32), Entity> = {
-            let mut query = game
-                .world
-                .query::<(Entity, &crate::components::Settlement, &Position)>();
+            let mut query = game.world.query_filtered::<(
+                Entity,
+                &crate::components::Settlement,
+                &Position,
+            ), With<crate::components::SettlementCentre>>();
             query
                 .iter(&game.world)
                 .map(|(entity, _, pos)| ((pos.x, pos.y), entity))

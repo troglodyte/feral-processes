@@ -246,6 +246,22 @@ impl Game {
         // announced by this. Beside the patrol roll because both are
         // settlement work keyed to the map rather than to the base.
         self.settlement_growth_tick();
+        // Vitality moves with commerce on any tick, not only the one a
+        // growth latch flips on, so every known town's footprint is
+        // resynced here rather than only from `announce_growth` — a city
+        // that drifted from Thriving to Steady between growth checks would
+        // otherwise keep its old, larger square until something else
+        // happened to call the sync.
+        let known_settlements: Vec<crate::settlements::SettlementKey> = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        for key in known_settlements {
+            self.sync_settlement_footprint(key);
+        }
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.
         // Beside `maybe_spawn_wild_creature` for the same reason that one is

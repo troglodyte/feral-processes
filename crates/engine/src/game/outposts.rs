@@ -20,7 +20,7 @@ use crate::systems::mining_success_chance;
 use crate::tuning::{
     DEFAULT_BASE_INT, MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
     OUTPOST_GROWTH_PER_CREW, OUTPOST_MAX_INTEGRITY, OUTPOST_MIN_ANCHOR_DISTANCE,
-    OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW,
+    OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
 use crate::views::{OutpostCrewRow, OutpostMark, OutpostReport, OutpostYieldRow, TransferRow};
 use crate::world::{Biome, WorldMap};
@@ -47,6 +47,23 @@ impl Game {
             && (x - ax).abs().max((y - ay).abs()) < OUTPOST_MIN_ANCHOR_DISTANCE
         {
             return Err("That's still within reach of the base. Walk further out.".into());
+        }
+        // `SETTLEMENT_FOOTPRINT_MAX_RADIUS`, not a known town's *current*
+        // radius: an outpost is never displaced (the design's displacement
+        // table has no row for one), so the only way to keep a growing city
+        // from ever reaching one is to refuse ground it could someday cover,
+        // not merely ground it covers today.
+        if self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .values()
+            .any(|known| {
+                (x - known.tile.0).abs().max((y - known.tile.1).abs())
+                    <= SETTLEMENT_FOOTPRINT_MAX_RADIUS
+            })
+        {
+            return Err("A settlement could grow onto that ground.".into());
         }
         // The Stack link, nest, settlement and trap checks reuse the
         // existing occupancy queries `place_trap` already draws on, rather

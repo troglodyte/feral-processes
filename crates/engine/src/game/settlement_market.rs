@@ -52,11 +52,14 @@ impl Game {
     /// gate `Game::commit_settlement_basket`, `Game::settlement_view` and
     /// `Game::settlement_buy_back` all share.
     ///
-    /// **Chebyshev adjacency, not equality.** Walking onto a settlement's
-    /// own tile is refused — `find_settlement_at` queues a visit instead of
-    /// admitting the player, the same as a wall — so the player's `Position`
-    /// can never equal `KnownSettlement::tile`; it can only ever be one of
-    /// its eight neighbours, however they approached.
+    /// **Chebyshev adjacency to the footprint, not to its centre.** Walking
+    /// onto any of a settlement's own cells is refused — `find_settlement_at`
+    /// queues a visit instead of admitting the player, the same as a wall —
+    /// so the player's `Position` can never be inside the square; it can
+    /// only ever be next to it, however they approached. `radius + 1` rather
+    /// than a flat 1, `Game::footprint`'s reason: a 5x5 city's own edge is
+    /// two tiles from its centre, and adjacency has to be measured to the
+    /// edge the party can actually stand beside.
     ///
     /// **The space guard is the first line, not an omission.** A `Position`
     /// is a *surface* tile only while `Locale::Open`: in base space it is a
@@ -73,10 +76,13 @@ impl Game {
         let Some(known) = self.world.resource::<resources::Settlements>().0.get(&key) else {
             return false;
         };
+        let Some(radius) = self.settlement_radius(key) else {
+            return false;
+        };
         let Some(pos) = self.world.get::<Position>(self.player_entity()) else {
             return false;
         };
-        (pos.x - known.tile.0).abs() <= 1 && (pos.y - known.tile.1).abs() <= 1
+        (pos.x - known.tile.0).abs() <= radius + 1 && (pos.y - known.tile.1).abs() <= radius + 1
     }
 
     /// What the settlement `key` names has on its shelf this `epoch` —

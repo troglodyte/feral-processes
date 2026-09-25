@@ -100,13 +100,18 @@ pub(super) fn generic_settlement_def() -> crate::settlements::SettlementDef {
     }
 }
 
-/// Materializes a settlement at `(x, y)` directly — the same two writes
-/// `Game::ensure_local_settlements` makes (the `resources::Settlements`
-/// record and the map entity) without walking the region derivation, which
-/// has its own coverage from Phase 1. Despawns anything already standing on
-/// the tile first, `ground_step`'s reason: a bump test that landed on a
-/// wild program the seed happened to place there would find the wrong
-/// thing.
+/// Materializes a settlement at `(x, y)` directly — the `resources::
+/// Settlements` record and one centre entity, without walking the region
+/// derivation or building out the rest of its footprint, both of which have
+/// their own coverage elsewhere. Deliberately one cell: most of this
+/// fixture's callers place a wild program, a trap or the player at an exact
+/// offset from the town and would read differently if a 3x3-or-larger square
+/// of `Settlement` cells stood in the way. `SettlementCentre` still goes on
+/// it, or `Game::field_patrol`'s `settlement_entity` lookup (and the load
+/// path's `towns_by_tile`) would find nothing here. Despawns anything
+/// already standing on the tile first, `ground_step`'s reason: a bump test
+/// that landed on a wild program the seed happened to place there would find
+/// the wrong thing.
 pub(super) fn place_settlement(
     game: &mut Game,
     key: crate::settlements::SettlementKey,
@@ -156,6 +161,7 @@ pub(super) fn place_settlement(
     game.world
         .spawn((
             crate::components::Settlement { key },
+            crate::components::SettlementCentre,
             Position { x, y },
             Glyph {
                 ch: def.kind.glyph(),

@@ -1321,28 +1321,33 @@ impl Game {
     ///
     /// The record must be in `Settlements` **before** this is called, and
     /// `Standings` must be too, or the latch reads as unset.
+    ///
+    /// Spawns only the centre — `Game::sync_settlement_footprint` is the one
+    /// writer of the rest of the footprint, and it is what this calls to
+    /// grow the square out from here. `GlyphColor::Yellow` was
+    /// `palette::WARN` and, worse, the authored colour of the Scrapper — a
+    /// settlement and a scrapper nest were the same hue on the same map.
+    /// `Orange` is the one variant no species authors: every hue a species
+    /// declares is reachable on the surface (a nest takes its guardian's
+    /// colour), which makes "unclaimed" mean unclaimed by a species rather
+    /// than unclaimed outright, and Orange's only other uses are base
+    /// space's `BuildSite` glyph and three base structures — a coordinate
+    /// space that can never share a tile with a town.
     fn spawn_settlement_at(&mut self, key: crate::settlements::SettlementKey, (x, y): (i32, i32)) {
         let ch = self
             .settlement_kind(key)
             .unwrap_or(crate::settlements::SettlementKind::Server)
             .glyph();
-        // `GlyphColor::Yellow` was `palette::WARN` and, worse, the authored
-        // colour of the Scrapper — a settlement and a scrapper nest were the
-        // same hue on the same map. `Orange` is the one variant no species
-        // authors: every hue a species declares is reachable on the surface
-        // (a nest takes its guardian's colour), which makes "unclaimed"
-        // mean unclaimed by a species rather than unclaimed outright, and
-        // Orange's only other uses are base space's `BuildSite` glyph and
-        // three base structures — a coordinate space that can never share a
-        // tile with a town.
         self.world.spawn((
             crate::components::Settlement { key },
+            crate::components::SettlementCentre,
             Position { x, y },
             Glyph {
                 ch,
                 color: GlyphColor::Orange,
             },
         ));
+        self.sync_settlement_footprint(key);
     }
 
     /// Places one chunk's worth of wild programs inside chunk `(cx, cy)`.
@@ -2062,10 +2067,11 @@ pub(crate) fn nest_components(
 ///
 /// Extracted rather than written twice: `Game::standable_near` searches from
 /// band 0 (a settlement may stand on the cell the derivation named) and a
-/// relay landing searches from band 1 (a settlement tile admits nobody, so
-/// arriving on it is arriving somewhere `move_player` would have refused).
-/// The *order* is what both depend on — the answer is "the nearest one" —
-/// and two copies of a ring walk would eventually disagree about it.
+/// relay landing searches from band `radius + 1` (a settlement's whole
+/// footprint admits nobody, so arriving on any of its cells is arriving
+/// somewhere `move_player` would have refused). The *order* is what both
+/// depend on — the answer is "the nearest one" — and two copies of a ring
+/// walk would eventually disagree about it.
 pub(crate) fn ring_tiles(from: (i32, i32), min_band: i32, max_band: i32) -> Vec<(i32, i32)> {
     let mut out = Vec::new();
     for band in min_band..max_band {

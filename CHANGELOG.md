@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.239
+
+**Ground your crew digs out in the base now stays open for good.** Before,
+a cut cell left without a tile turned back into rock after a while. That
+could cut your programs off from their posts and from anywhere to rest,
+and a crew that kept getting stranded soured into a strike nobody could
+dig them out of. Your crew now cuts marked cells even when there is no
+Blank Substrate in store. Laying the tile still needs one, and nothing can
+be built on a cell until it is tiled.
+
 ## 0.13.238
 
 **The depot has new art, drawn in its own colours.** Every depot tier now

@@ -653,6 +653,64 @@ fn the_base_anchor_under_a_growing_footprint_moves_outside_it() {
     );
 }
 
+/// `free_tile_outside` is `relay_landing`'s own search, widened with two
+/// entries `relay_landing` never checked before this feature: a trap and an
+/// outpost. Blocking the whole ring one band past the footprint with both
+/// proves the widened list, not just the wild/nest/link/settlement one it
+/// already had.
+#[test]
+fn free_tile_outside_skips_a_ring_blocked_by_traps_and_outposts() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 150, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 41, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let radius = game
+        .settlement_radius(key)
+        .expect("test premise: the fixture's own key is materialized");
+    let band = radius + 1;
+
+    let mut trap_turn = true;
+    for dy in -band..=band {
+        for dx in -band..=band {
+            if dx.abs() != band && dy.abs() != band {
+                continue; // interior of the box, not this ring
+            }
+            let (x, y) = (centre.0 + dx, centre.1 + dy);
+            if trap_turn {
+                game.world.spawn((
+                    Trap {
+                        item: ItemId::from("honeypot"),
+                        next_roll: 999,
+                        caught: None,
+                    },
+                    Position { x, y },
+                    Glyph {
+                        ch: '^',
+                        color: GlyphColor::Yellow,
+                    },
+                ));
+            } else {
+                game.world
+                    .resource_mut::<Outposts>()
+                    .0
+                    .insert((x, y), crate::outposts::Outpost::new(Biome::OpenGrid, 1));
+            }
+            trap_turn = !trap_turn;
+        }
+    }
+
+    let found = game
+        .free_tile_outside(key)
+        .expect("some tile past the blocked ring must still be free");
+    let dist = (found.0 - centre.0).abs().max((found.1 - centre.1).abs());
+    assert!(
+        dist > band,
+        "free_tile_outside picked a tile on the blocked ring: {found:?} (band {band})"
+    );
+}
+
 #[test]
 fn a_stack_entrance_under_a_growing_footprint_relocates_and_drops_its_memory() {
     let mut game = game();

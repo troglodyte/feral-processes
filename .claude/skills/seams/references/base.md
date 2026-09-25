@@ -1232,6 +1232,13 @@
   posting pool rather than standing stalled — this errand's whole difference
   from that one. The latch is **carried across the ratchet** in
   `update_disgruntled`, or a severity climb silently restarts the walk.
+  **The latch is re-asked, not permanent**: `update_disgruntled` clears
+  `stranded` every `RESPITE_RETRY_TICKS` so a route that reopens is found
+  again without waiting on recovery — a real save showed most of an
+  eleven-body roster stuck like this for tens of thousands of ticks. A
+  separate `Disgruntled::told` (never saved, `Needs::stalled_announced`'s
+  rule) survives the retry so a body still stuck after several of them does
+  not repeat the line once a period.
 - **`Game::is_on_shift` is the one predicate for "may be handed a job", and
   the scheduler asks it twice for one reason.** The `on_shift` filter and the
   free loop used to state the rule separately, each spelling out the uneven

@@ -4823,6 +4823,25 @@ pub const MORALE_RECOVERED_AT: f32 = -6.0;
 const _: () = assert!(MORALE_RECOVERED_AT > MORALE_SULKS_AT);
 const _: () = assert!(MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT);
 
+/// How often a stranded respite errand is re-asked — every this many ticks,
+/// read straight off `GameClock`, `MEMORY_POSTING_PERIOD`'s shape.
+///
+/// **The latch exists to stop a per-beat Dijkstra**: without it, a body
+/// whose amenity is unreachable would leave the posting pool, fail a step,
+/// rejoin the pool and leave again on every single beat for the rest of the
+/// run. Never re-trying at all was the other failure this shipped with — a
+/// route that reopens (a demolished wall, a rebuilt amenity) left a body
+/// stuck until its mood recovered on its own, which a real save showed
+/// taking tens of thousands of ticks for most of a roster. A period is the
+/// middle way: one fresh walk per stranded body per period, so the cost
+/// stays bounded no matter how many bodies are stuck at once.
+///
+/// Set to the same order as `MEMORY_POSTING_PERIOD` (250) rather than
+/// shorter: a wrong answer here costs one Dijkstra, not a lost tick of
+/// production, so there is no reason to ask more often than the base's other
+/// slow-period upkeep already does.
+pub const RESPITE_RETRY_TICKS: u64 = 250;
+
 // ---------------------------------------------------------------------------
 // Staff tantrums
 // ---------------------------------------------------------------------------

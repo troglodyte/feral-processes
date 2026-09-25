@@ -29,9 +29,10 @@ use crate::components::{
 };
 use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::{Amenities, in_reach};
-use crate::resources::Locale;
+use crate::resources::{GameClock, Locale};
 use crate::tuning::{
     MORALE_DOWNS_TOOLS_AT, MORALE_LASHES_OUT_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT,
+    RESPITE_RETRY_TICKS,
 };
 use bevy_ecs::prelude::Entity;
 
@@ -54,6 +55,13 @@ impl Game {
     /// `LabourDemand` — teaching a second function to do either would give
     /// the same state two writers.
     pub(crate) fn update_disgruntled(&mut self, staff: &[Entity]) {
+        // Read once for the whole pass rather than per body — the same
+        // `GameClock` read `note_postings` makes for its own period.
+        let retry = self
+            .world
+            .resource::<GameClock>()
+            .tick
+            .is_multiple_of(RESPITE_RETRY_TICKS);
         for &worker in staff {
             let morale = self.morale(worker);
             let marked = self.world.get::<Disgruntled>(worker).copied();
@@ -79,10 +87,23 @@ impl Game {
                         // **The latch is carried across the ratchet.** The
                         // severity climbing is not news about the route, and
                         // a fresh `stranded: false` here would restart the
-                        // per-beat Dijkstra the latch exists to stop.
+                        // per-beat Dijkstra the latch exists to stop — the
+                        // period below is the one place that is allowed to.
                         self.world.entity_mut(worker).insert(Disgruntled {
                             grievance: now,
                             stranded: held.stranded,
+                            told: held.told,
+                        });
+                    } else if held.stranded && retry {
+                        // **The re-ask.** `RESPITE_RETRY_TICKS` elapsed, so
+                        // the walk is worth trying again — the route that
+                        // stranded it may have reopened. `told` survives:
+                        // this is not a fresh stranding, so a walk that
+                        // fails again below must not repeat the line.
+                        self.world.entity_mut(worker).insert(Disgruntled {
+                            grievance: held.grievance,
+                            stranded: false,
+                            told: held.told,
                         });
                     }
                 }
@@ -91,6 +112,7 @@ impl Game {
                         self.world.entity_mut(worker).insert(Disgruntled {
                             grievance,
                             stranded: false,
+                            told: false,
                         });
                     }
                 }
@@ -298,15 +320,19 @@ impl Game {
     }
 
     /// Gives the errand up: the amenity exists and this body cannot walk to
-    /// it, so it goes back in the posting pool and the walk is not attempted
-    /// again until the mood recovers and takes the marker with it.
+    /// it, so it goes back in the posting pool and the walk is not retried
+    /// until `RESPITE_RETRY_TICKS` elapses (or the mood recovers and takes
+    /// the marker with it, whichever comes first).
     ///
     /// **No memory is written here**, and that is the one asymmetry with
     /// `Game::fray`. A need that goes unanswered earns a grudge because the
     /// base failed at something it could have done; deepening the mood of a
     /// body that is already low enough to have gone looking would be a loop
     /// with no floor under it — every failed walk making the next one more
-    /// certain. The player is told, because the line is the errand.
+    /// certain. The player is told, because the line is the errand — but
+    /// only the first time for this marker: `Disgruntled::told` latches
+    /// separately from `stranded` so a body still stuck several retries
+    /// later does not repeat the same sentence once a period.
     pub(crate) fn strand_respite(&mut self, worker: Entity) {
         let Some(mut marker) = self.world.get_mut::<Disgruntled>(worker) else {
             return;
@@ -315,6 +341,10 @@ impl Game {
             return;
         }
         marker.stranded = true;
+        if marker.told {
+            return;
+        }
+        marker.told = true;
         let who = self.creature_label(worker);
         self.log_base(format!(
             "{who} can't find a way to anywhere in this base worth stopping at."

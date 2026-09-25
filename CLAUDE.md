@@ -563,7 +563,8 @@ relying on one, and correct all three places if it has moved.
   *sulking* programs in the posting pool, while `has_downed_tools` leaves it
   unconditionally.
 - **No grudge is written when a respite is stranded**, `Game::fray`'s one
-  asymmetry, and `Disgruntled::stranded` latches instead.
+  asymmetry, and `Disgruntled::stranded` latches instead — re-asked every
+  `RESPITE_RETRY_TICKS` rather than held until morale recovers.
 - **`Game::is_on_shift` is the one predicate for "may be handed a job"**,
   read by `schedule_base_labour`'s filter, its free loop and its "nothing to
   do" early return alike.

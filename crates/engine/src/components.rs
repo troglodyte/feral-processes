@@ -1939,14 +1939,22 @@ pub struct Disgruntled {
     /// not for `OffShift`: `Game::step_respite` discovers it and sets this,
     /// which is what stops the leave-pool → failed step → rejoin-pool → leave
     /// flicker on every beat. One Dijkstra per newly disgruntled body, then
-    /// nothing until the mood recovers and the marker goes away with the
-    /// latch on it.
+    /// nothing until `RESPITE_RETRY_TICKS` elapses or the mood recovers and
+    /// takes the marker with it.
     ///
     /// A latched body is back in the posting pool, which is where
     /// `Game::refuses_post` governs it — so a base with nowhere to unwind
     /// still has the grudge-against-a-machine rung, rather than that rung
     /// quietly becoming unreachable.
     pub stranded: bool,
+    /// Whether `Game::strand_respite`'s line has already been said for this
+    /// marker. **Never saved**, `Needs::stalled_announced`'s rule — a reload
+    /// re-announcing a stranding already in progress is acceptable, and
+    /// `CreatureSave` carries no field for this one. Survives the retry that
+    /// clears `stranded` (only recovery clears this, by removing the whole
+    /// marker), which is what keeps a body stuck for several retries from
+    /// repeating the line once a period instead of once.
+    pub(crate) told: bool,
 }
 
 /// How far a program has gone. Ordered least to worst; see `Disgruntled`.

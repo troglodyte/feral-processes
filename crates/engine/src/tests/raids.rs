@@ -461,6 +461,7 @@ fn a_staff_program_that_downed_tools_does_not_count_toward_the_raid_minimum() {
         game.world.entity_mut(staff[0]).insert(Disgruntled {
             grievance: Grievance::DownedTools,
             stranded: false,
+            told: false,
         });
         let structure = game
             .world
@@ -500,6 +501,7 @@ fn a_sulking_staff_program_still_counts_toward_the_raid_minimum() {
         game.world.entity_mut(staff[0]).insert(Disgruntled {
             grievance: Grievance::Sulking,
             stranded: false,
+            told: false,
         });
         let structure = game
             .world

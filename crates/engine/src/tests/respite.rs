@@ -9,7 +9,7 @@
 
 use super::support::*;
 use crate::components::{Carrying, Disgruntled, Grievance, Memories, Position, Task};
-use crate::tuning::MEMORY_POSTING_PERIOD;
+use crate::tuning::{MEMORY_POSTING_PERIOD, RESPITE_RETRY_TICKS};
 use crate::*;
 
 /// A Home, a Sandbox well off to one side, and `n` staff standing on laid
@@ -44,6 +44,17 @@ fn park_staff(game: &mut Game, n: usize) -> Vec<Entity> {
         pos.y = 0;
     }
     staff
+}
+
+/// Boxes the Bay at `(4, 0)` in on all four sides — any structure blocks a
+/// tile, `hauling::blocked_tiles`' rule, so this needs no literal wall — and
+/// returns the four entities in the same order so a test can knock one down
+/// to "reopen" the route.
+fn box_in_the_amenity(game: &mut Game) -> Vec<Entity> {
+    [(3, 0), (5, 0), (4, 1), (4, -1)]
+        .into_iter()
+        .map(|(x, y)| spawn_structure_at(game, "wall", x, y))
+        .collect()
 }
 
 /// Puts `who` genuinely on the mild rung, through the meter rather than by
@@ -152,6 +163,7 @@ fn the_severe_rung_leaves_the_pool_with_or_without_somewhere_to_go() {
     game.world.entity_mut(quit).insert(Disgruntled {
         grievance: Grievance::DownedTools,
         stranded: false,
+        told: false,
     });
 
     let amenities = game.amenities_for_test();
@@ -330,6 +342,7 @@ fn the_stranded_latch_survives_a_save_round_trip() {
     game.world.entity_mut(staff[0]).insert(Disgruntled {
         grievance: Grievance::Sulking,
         stranded: true,
+        told: false,
     });
 
     let dir = scratch_assets_dir("respite_latch");
@@ -345,4 +358,84 @@ fn the_stranded_latch_survives_a_save_round_trip() {
         .next()
         .expect("the marker is saved");
     assert!(marker.stranded, "and so is the latch on it");
+}
+
+/// The latch is not permanent: it is re-asked every `RESPITE_RETRY_TICKS`,
+/// so a body stranded by a route that has since reopened is not left
+/// waiting for its mood to recover on its own to find out. A real save
+/// showed most of an eleven-body roster stuck like this for tens of
+/// thousands of ticks after the routes had reopened.
+#[test]
+fn a_reopened_route_is_retried_within_one_period() {
+    let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    let worker = staff[0];
+    sulk(&mut game, worker);
+    let walls = box_in_the_amenity(&mut game);
+
+    game.schedule_base_labour();
+    assert!(
+        game.world
+            .get::<Disgruntled>(worker)
+            .is_some_and(|d| d.stranded),
+        "the fixture must actually strand the body first"
+    );
+
+    // The route reopens: one wall comes down, same as the player clearing
+    // one.
+    game.world.despawn(walls[0]);
+
+    for _ in 0..=RESPITE_RETRY_TICKS {
+        game.tick();
+        // Held on the rung, `sulk`'s reason: this test is about the retry,
+        // not about morale recovering on its own inside one period.
+        game.remember(
+            worker,
+            "ran_down",
+            crate::components::MemorySubject::Nothing,
+        );
+    }
+
+    let amenities = game.amenities_for_test();
+    assert!(
+        game.on_respite(worker, &amenities),
+        "the latch must be re-asked on RESPITE_RETRY_TICKS rather than held \
+         until morale recovers"
+    );
+}
+
+/// **Only the first stranding per marker is news.** A body still stranded
+/// after several retries must not repeat the line once a period — summed
+/// through `repeats`, `message_history`'s condensing rule, since counting
+/// entries would hide a line logged twice as one said once.
+#[test]
+fn a_still_stranded_body_logs_the_line_once() {
+    let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    let worker = staff[0];
+    sulk(&mut game, worker);
+    box_in_the_amenity(&mut game);
+
+    for _ in 0..RESPITE_RETRY_TICKS * 3 {
+        game.tick();
+    }
+
+    assert!(
+        game.world
+            .get::<Disgruntled>(worker)
+            .is_some_and(|d| d.stranded),
+        "the fixture must stay stranded across every retry to test the guard"
+    );
+    let said = |g: &Game| {
+        g.message_history(200)
+            .into_iter()
+            .filter(|m| m.text.contains("can't find a way to anywhere"))
+            .map(|m| m.repeats)
+            .sum::<usize>()
+    };
+    assert_eq!(
+        said(&game),
+        1,
+        "still stranded after several retries — told once, not once a period"
+    );
 }

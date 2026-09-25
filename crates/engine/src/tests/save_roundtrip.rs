@@ -187,6 +187,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         Disgruntled {
             grievance: Grievance::Sulking,
             stranded: false,
+            told: false,
         },
         Downed,
     ));

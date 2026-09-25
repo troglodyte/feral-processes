@@ -972,6 +972,46 @@ fn refusing_a_footprint_cell_draws_nothing_from_the_shared_rng() {
     );
 }
 
+/// A pack's own anchor passes `try_spawn_habitat_creature`'s check, but the
+/// rest of the pack scatters around it through `scatter_open_tile`, which
+/// has to ask the same question on its own account — an anchor placed just
+/// outside a footprint's edge is well within a size-12 pack's own scatter
+/// radius.
+#[test]
+fn no_pack_member_ever_scatters_onto_a_settlement_footprint_cell() {
+    for seed in 0..40u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let centre = (300, 300);
+        carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 10);
+        let key = SettlementKey { rx: 92, ry: 92 };
+        place_settlement(&mut game, key, centre.0, centre.1);
+        game.sync_settlement_footprint(key);
+
+        let anchor = (centre.0 + SETTLEMENT_RADIUS_SERVER + 1, centre.1);
+        assert!(
+            game.find_settlement_at(anchor.0, anchor.1).is_none(),
+            "test premise: the anchor sits outside the footprint"
+        );
+
+        let pack = game.spawn_group(
+            "overseer",
+            12,
+            anchor.0,
+            anchor.1,
+            crate::game::spawning::SpawnEscalation::surface(),
+            false,
+        );
+
+        for entity in pack {
+            let pos = *game.world.get::<Position>(entity).unwrap();
+            assert!(
+                game.find_settlement_at(pos.x, pos.y).is_none(),
+                "seed {seed}: a pack member scattered onto the footprint at {pos:?}"
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Save/load
 // ---------------------------------------------------------------------------

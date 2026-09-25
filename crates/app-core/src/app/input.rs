@@ -764,8 +764,13 @@ impl App {
             // step it spends causes that same crossing, so this is the
             // path for every *other* way `mode` leaves `Playing` — Esc out
             // of a screen the map opened, say — reaching the same result.
+            //
+            // **`drag_ticks_owed` is deliberately left alone here.** A walk
+            // is intent aimed at the screen the player was just looking at,
+            // and clearing it is correct; owed drag is an incurred cost, and
+            // opening a screen must not forgive it for free. `App::
+            // install_game` is the one place that debt is allowed to clear.
             self.walk = None;
-            self.drag_ticks_owed = 0;
             return;
         }
         if self.paused {

@@ -812,6 +812,71 @@ fn drag_ground_is_paid_one_clock_tick_at_a_time_not_spent_inline() {
     );
 }
 
+/// Owed drag debt is an incurred cost, not intent — the walk clears when a
+/// screen opens (`App::install_game`'s own reasoning is about a *fresh*
+/// run, not this), but `drag_ticks_owed` must not. `App::install_game` is
+/// the one place it clears to zero; `update_realtime`'s own `mode !=
+/// Mode::Playing` guard used to zero it too, which let a step onto drag
+/// ground followed by a frame passing with any screen open — the inventory,
+/// say — skip the owed tick for free.
+#[test]
+fn opening_a_screen_does_not_forgive_owed_drag() {
+    let mut app = test_app(9001);
+    clear_the_area_around_player(&mut app);
+    override_biome_stretch_east(
+        &mut app,
+        feral_processes_engine::world::Biome::Deadlock,
+        1,
+        0,
+    );
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+
+    app.handle_key(GameKey::Right);
+    app.update_realtime(tick);
+    assert_eq!(app.drag_ticks_owed, 1, "test premise: a drag tick is owed");
+
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(
+        app.mode,
+        Mode::Inventory,
+        "test premise: the inventory opened"
+    );
+    // A frame passing while the screen is open — exactly what a real
+    // frontend's per-frame `update_realtime` call does regardless of mode.
+    // This alone is the reproducer: `update_realtime`'s own `mode !=
+    // Mode::Playing` guard must not zero `drag_ticks_owed` here, or the very
+    // next idle tick after closing the screen would be indistinguishable
+    // from the debt having been paid — the assertion has to land while the
+    // screen is still open, before anything pays a tick either way.
+    app.update_realtime(tick);
+    assert_eq!(
+        app.drag_ticks_owed, 1,
+        "opening a screen must not forgive the owed drag debt"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "test premise: back on the map");
+
+    let start_tick = tick_of(&app);
+    let start_pos = player_pos(&app);
+    app.update_realtime(tick);
+
+    assert_eq!(
+        app.drag_ticks_owed, 0,
+        "the owed drag tick is paid by this next clock tick"
+    );
+    assert_eq!(
+        tick_of(&app),
+        start_tick + 1,
+        "paying the debt spends one clock tick"
+    );
+    assert_eq!(
+        player_pos(&app),
+        start_pos,
+        "paying drag debt is not itself a step"
+    );
+}
+
 /// The player should stop moving if weather is making them take damage
 /// (task B): a step that hurts the player ends a `Walk::Travel` rather
 /// than letting the party keep walking across ground that is hurting

@@ -13,6 +13,36 @@ struct TransferOpening {
     rack_room: u32,
 }
 
+/// The shared "did the world actually move" rule behind `stepped` and
+/// `stepped_paced`: `f` performs the step and answers `(bite, drag_owed)`,
+/// and this adds the one `acted` read both need — extracted so the two
+/// can't drift on what counts as an action the way they once did, sharing
+/// this line by hand in each.
+///
+/// `Game::move_player`'s own return says whether an action happened only
+/// indirectly, and on the zone surface assuming an action was fine — every
+/// step there spends a turn, a bounce off a wall included. Base space did
+/// not work that way when it shipped: a step into solid rock was refused
+/// outright and cost nothing, so reporting it as an action would have
+/// cleared the status line explaining an earlier refusal and queued a
+/// footstep for a step that never happened. Slice 2 turned that bounce
+/// into a swing, which does spend a turn — and this function needed no
+/// edit for it, which is the whole argument for reading the clock instead
+/// of assuming per locale.
+///
+/// The clock is what all three locales agree on, so that is what this
+/// reads. The game-over clause is the one case a real action leaves the
+/// clock standing still: ground that kills you sets `GameOver` before
+/// `Game::tick` runs and `tick` then returns without advancing — but
+/// `App::after_world_action` still has to see an action, or the run would
+/// never reach the death screen.
+fn stepped_with(game: &mut Game, f: impl FnOnce(&mut Game) -> (i32, u32)) -> (bool, i32, u32) {
+    let before = game.current_tick();
+    let (bite, owed) = f(game);
+    let acted = game.current_tick() > before || game.is_game_over().is_some();
+    (acted, bite, owed)
+}
+
 /// One step, reported honestly: `true` only when the world actually moved.
 ///
 /// `bite` is an out-parameter rather than a second return value because the
@@ -20,27 +50,10 @@ struct TransferOpening {
 /// every other arm on that screen. It receives what the ground took off the
 /// party on this step — `0` for clean ground, and for a shove at a wall,
 /// which spends a turn without costing Integrity.
-///
-/// `Game::move_player`'s own return says whether an action happened only
-/// indirectly, and on the zone surface assuming an action was fine — every step there spends a turn, a bounce off a wall
-/// included. Base space did not work that way when it shipped: a step into
-/// solid rock was refused outright and cost nothing, so reporting it as an
-/// action would have cleared the status line explaining an earlier refusal
-/// and queued a footstep for a step that never happened. Slice 2 turned that
-/// bounce into a swing, which does spend a turn — and this function needed
-/// no edit for it, which is the whole argument for reading the clock instead
-/// of assuming per locale.
-///
-/// The clock is what all three locales agree on, so that is what this reads.
-/// The game-over clause is the one case a real action leaves the clock
-/// standing still: ground that kills you sets `GameOver` before
-/// `Game::tick` runs and `tick` then returns without advancing — but
-/// `App::after_world_action` still has to see an action, or the run would
-/// never reach the death screen.
 fn stepped(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> bool {
-    let before = game.current_tick();
-    *bite = game.move_player(dx, dy);
-    game.current_tick() > before || game.is_game_over().is_some()
+    let (acted, b, _drag_owed) = stepped_with(game, |g| (g.move_player(dx, dy), 0));
+    *bite = b;
+    acted
 }
 
 /// `stepped`'s own shape for the clocked walk: calls `Game::move_player_paced`
@@ -51,10 +64,8 @@ fn stepped(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> bool {
 /// stays as it is for the paused, turn-based path, where spending drag
 /// inline is still correct — `acting_while_paused_still_spends_a_turn`.
 fn stepped_paced(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> (bool, u32) {
-    let before = game.current_tick();
-    let (b, owed) = game.move_player_paced(dx, dy);
+    let (acted, b, owed) = stepped_with(game, |g| g.move_player_paced(dx, dy));
     *bite = b;
-    let acted = game.current_tick() > before || game.is_game_over().is_some();
     (acted, owed)
 }
 
@@ -950,9 +961,12 @@ impl App {
         // `mode` away from `Playing` (a fight, a settlement or outpost
         // visit), and a travel surviving that would resume wherever it
         // left off the moment the screen it opened is left.
+        //
+        // `drag_ticks_owed` is left alone even here: a step onto drag
+        // ground that also opened a fight still owes what it owes, and
+        // `App::install_game` is the one place that debt clears.
         if self.mode != Mode::Playing {
             self.walk = None;
-            self.drag_ticks_owed = 0;
         }
     }
 }

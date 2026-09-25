@@ -265,6 +265,29 @@ fn install_game_clears_a_pending_walk() {
     assert_eq!(app.walk, None, "install_game must clear a pending walk");
 }
 
+/// `App::install_game` is the *one* place `drag_ticks_owed` is allowed to
+/// clear — debt owed by a run that's about to be replaced means nothing
+/// once the party underneath it is swapped for another, exactly as a
+/// pending walk doesn't. Unlike the walk, nothing else may zero it: see
+/// `opening_a_screen_does_not_forgive_owed_drag` in `tests::playing` for
+/// the two sites that used to.
+#[test]
+fn install_game_clears_owed_drag() {
+    let mut app = test_app(2711);
+    let path = scratch_path("install_clears_drag", 2711);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    app.drag_ticks_owed = 3;
+
+    app.load_game(path.clone());
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        app.drag_ticks_owed, 0,
+        "install_game must clear debt owed by the run it's replacing"
+    );
+}
+
 /// A local helper for injecting a structure straight into a save, the way
 /// `app_inside_a_small_base_with_programs` does for its Mining Node —
 /// `save::StructureSave` has no `Default`, so every field needs a value,

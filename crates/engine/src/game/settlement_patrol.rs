@@ -296,6 +296,11 @@ impl Game {
     /// the tile it was handed, and here that is the one tile the answer may
     /// never be.
     ///
+    /// `find_settlement_at` still runs in the `find` below, though — a
+    /// Thriving town's footprint reaches radius 3, past
+    /// `SETTLEMENT_PATROL_RING_MIN`'s flat 2, so the ring can otherwise walk
+    /// straight back onto the town it is fielding a patrol for.
+    ///
     /// One draw for where in the ring to start, then the first standable
     /// tile from there — so a town hemmed in by water fields a patrol on
     /// whatever ground it does have rather than none at all.
@@ -312,6 +317,7 @@ impl Game {
                     .resource_mut::<WorldMap>()
                     .tile(x, y)
                     .open_to_hostiles()
+                    && self.find_settlement_at(x, y).is_none()
             })
     }
 }

@@ -1930,7 +1930,9 @@ impl Game {
     /// what every seeded spawn test is written against, and a variable
     /// number of draws would move all of them for a reason unrelated to
     /// what they assert. The anchor is the fallback because it is the one
-    /// tile already known to be legal.
+    /// tile already known to be legal — `try_spawn_habitat_creature` already
+    /// refused a footprint cell for it, so `find_settlement_at` here only
+    /// ever turns away the *scattered* offset, never the fallback.
     fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
         let (ox, oy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -1944,6 +1946,7 @@ impl Game {
             .resource_mut::<WorldMap>()
             .tile(ox, oy)
             .open_to_hostiles()
+            && self.find_settlement_at(ox, oy).is_none()
         {
             (ox, oy)
         } else {
@@ -1992,10 +1995,20 @@ impl Game {
     /// Attempts to spawn one habitat-appropriate wild creature (or, away
     /// from the zone's spawn point, a small pack of the same species — see
     /// `max_group_size`) at `(x, y)`, returning whether it actually spawned
-    /// anything — `false` on an unwalkable tile or a biome with no
-    /// matching species, so callers (see `spawn_initial_creatures`) can
-    /// retry elsewhere instead of silently losing that spawn slot.
+    /// anything — `false` on an unwalkable tile, a settlement footprint
+    /// cell, or a biome with no matching species, so callers (see
+    /// `spawn_initial_creatures`) can retry elsewhere instead of silently
+    /// losing that spawn slot.
+    ///
+    /// The settlement check sits ahead of `pick_habitat_species`, the same
+    /// place the unwalkable-tile check already lives, so both of
+    /// `populate_chunk` and `spawn_wild_nearby` — which pick their anchor
+    /// tile and land here without knowing whether it is free — refuse a
+    /// footprint cell at the cost of zero extra `GameRng` draws.
     pub(crate) fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
+        if self.find_settlement_at(x, y).is_some() {
+            return false;
+        }
         let Some((pick, spawn_boss)) = self.pick_habitat_species(x, y, None, true) else {
             return false;
         };

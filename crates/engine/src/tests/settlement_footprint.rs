@@ -907,6 +907,72 @@ fn settlement_displacement_draws_no_game_rng() {
 }
 
 // ---------------------------------------------------------------------------
+// Spawning
+// ---------------------------------------------------------------------------
+
+/// `Game::try_spawn_habitat_creature` is the one gate `populate_chunk` and
+/// `spawn_wild_nearby` both land in, so this covers the whole wild-spawn
+/// chain rather than one caller of it.
+#[test]
+fn no_wild_creature_ever_spawns_on_a_settlement_footprint_cell() {
+    let mut game = game();
+    let centre = (300, 300);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 2);
+    let key = SettlementKey { rx: 90, ry: 90 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    game.sync_settlement_footprint(key);
+    let footprint = game.footprint(key);
+    assert_eq!(footprint.len(), 9, "test premise: a full Server footprint");
+
+    for &(x, y) in &footprint {
+        assert!(
+            !game.try_spawn_habitat_creature(x, y),
+            "a wild creature spawned on footprint cell ({x}, {y})"
+        );
+    }
+
+    // Non-vacuous: the carved ground one tile past the footprint is exactly
+    // as walkable and habitat-matched as the cells inside it, so it spawns
+    // freely — proving the cells above were refused *because* of the
+    // footprint and not for want of open ground or a matching species.
+    let outside = (centre.0 + SETTLEMENT_RADIUS_SERVER + 1, centre.1);
+    assert!(
+        game.find_settlement_at(outside.0, outside.1).is_none(),
+        "test premise: the control tile must sit outside the footprint"
+    );
+    assert!(
+        game.try_spawn_habitat_creature(outside.0, outside.1),
+        "test premise: carved ground outside the footprint should spawn freely"
+    );
+}
+
+/// The RNG-stream trap this seam warns about: a settlement check placed
+/// *after* `pick_habitat_species` has already drawn would shift every
+/// seeded spawn test that happens to roll near a town by a different amount
+/// than one that never does. The guard sits ahead of every draw instead, the
+/// same place the unwalkable-tile check already lived.
+#[test]
+fn refusing_a_footprint_cell_draws_nothing_from_the_shared_rng() {
+    let mut game = game();
+    let centre = (400, 400);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 2);
+    let key = SettlementKey { rx: 91, ry: 91 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    game.sync_settlement_footprint(key);
+
+    reseed_rng(&mut game, 4242);
+    let control = draws(&mut game, 4);
+    reseed_rng(&mut game, 4242);
+    assert!(!game.try_spawn_habitat_creature(centre.0, centre.1));
+    let after = draws(&mut game, 4);
+
+    assert_eq!(
+        control, after,
+        "a refused footprint cell drew from the shared RNG stream"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Save/load
 // ---------------------------------------------------------------------------
 

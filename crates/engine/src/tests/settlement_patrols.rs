@@ -166,6 +166,48 @@ fn a_patrol_member_never_stands_on_its_towns_own_tile() {
     }
 }
 
+/// `SETTLEMENT_PATROL_RING_MIN`'s flat 2 only ever excludes a Server's
+/// radius-1 footprint. A Thriving Mainframe reaches radius 3 — past that
+/// floor — so the ring the patrol fields into can still land on the town's
+/// own ground unless `patrol_stand` also asks `find_settlement_at`.
+#[test]
+fn a_patrol_member_never_stands_inside_a_thriving_mainframes_wider_footprint() {
+    for seed in 0..40u32 {
+        let mut game = game(seed);
+        let (key, town, _) = town_near_player(&mut game, 4, SETTLEMENT_HOSTILE_STANDING);
+        game.world
+            .resource_mut::<crate::resources::Settlements>()
+            .0
+            .get_mut(&key)
+            .unwrap()
+            .def
+            .kind = crate::settlements::SettlementKind::Mainframe;
+        game.world
+            .resource_mut::<crate::resources::Standings>()
+            .0
+            .entry(key)
+            .or_default()
+            .commerce = SETTLEMENT_COMMERCE_MAX;
+        game.sync_settlement_footprint(key);
+        assert_eq!(
+            game.settlement_radius(key),
+            Some(SETTLEMENT_RADIUS_THRIVING),
+            "test premise: forced to Thriving"
+        );
+
+        for _ in 0..SETTLEMENT_PATROL_SIZE {
+            game.field_patrol();
+        }
+
+        for (_, pos) in patrol_of(&mut game, town) {
+            assert!(
+                game.find_settlement_at(pos.x, pos.y).is_none(),
+                "seed {seed}: a patrol member stood inside the footprint at {pos:?}"
+            );
+        }
+    }
+}
+
 /// A patrol member is a nest guardian minus the nest, and the components
 /// are where that has to be true: everything downstream — `pursuit_tick`,
 /// `wander_ai_system`, every combat path — reads them and not the tether.

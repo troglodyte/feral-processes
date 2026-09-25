@@ -804,7 +804,10 @@ impl Game {
         // on. The straight-line distance is where a trader would *like* to
         // appear; the zone map is generated and has no obligation to put
         // open ground there, and a caravan spawned inside a wall has no cell
-        // in its own walk field and gives up on its first step.
+        // in its own walk field and gives up on its first step. A
+        // settlement footprint cell is refused too — `move_player`'s
+        // settlement arm admits nobody, so a caravan spawned there could
+        // never take its own first step either.
         let Some(tile) = (1..=crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES)
             .rev()
             .map(|reach| (anchor.0 + dx * reach, anchor.1 + dy * reach))
@@ -813,6 +816,7 @@ impl Game {
                     .resource_mut::<crate::world::WorldMap>()
                     .tile(x, y)
                     .walkable
+                    && self.find_settlement_at(x, y).is_none()
             })
         else {
             return;

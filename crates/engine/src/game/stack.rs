@@ -302,6 +302,10 @@ impl Game {
     /// bump attacks the nest instead, forever. Nests are already down by the
     /// time a zone scatters its links, in both `Game::new` and
     /// `enter_next_zone`.
+    ///
+    /// A settlement's footprint is refused too — `move_player`'s settlement
+    /// arm admits nobody, so an entrance under one would be a door nothing
+    /// could ever open.
     fn link_site_free(&mut self, x: i32, y: i32) -> bool {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         tile.walkable
@@ -309,6 +313,7 @@ impl Game {
             && self.find_surface_link_at(x, y).is_none()
             && self.find_blocking_structure_at(x, y).is_none()
             && self.find_nest_at(x, y).is_none()
+            && self.find_settlement_at(x, y).is_none()
     }
 
     /// Logs what the arrival scan picks up: how many links are in the

@@ -1115,6 +1115,73 @@ fn a_caravan_walks_in_docks_and_walks_back_out() {
     );
 }
 
+/// The spawn search walks in from `CARAVAN_SPAWN_DISTANCE_TILES` on the
+/// visit's own bearing, so a settlement placed exactly on the farthest
+/// candidate — the first one the search would otherwise accept — has to be
+/// skipped for the caravan to land anywhere else.
+#[test]
+fn a_caravan_never_spawns_inside_a_settlement_footprint() {
+    use crate::game::caravan::BEARINGS;
+    use crate::settlements::SettlementKey;
+
+    let mut game = fresh();
+    based(&mut game);
+    let anchor = game
+        .anchor_position()
+        .expect("a founded base has an anchor");
+    carve_open(
+        &mut game,
+        anchor,
+        crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES + 1,
+    );
+
+    let visit = at_the_arrival(&mut game);
+    let (dx, dy) = BEARINGS[visit.bearing as usize % BEARINGS.len()];
+    let max_reach = (
+        anchor.0 + dx * crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES,
+        anchor.1 + dy * crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES,
+    );
+
+    let key = SettlementKey { rx: 77, ry: 77 };
+    place_settlement(&mut game, key, max_reach.0, max_reach.1);
+    game.sync_settlement_footprint(key);
+    assert!(
+        game.find_settlement_at(max_reach.0, max_reach.1).is_some(),
+        "test premise: the footprint covers the caravan's farthest walkable tile"
+    );
+
+    game.caravan_tick();
+
+    let pos = {
+        let mut query = game.world.query::<(&Caravan, &Position)>();
+        query.iter(&game.world).next().map(|(_, p)| (p.x, p.y))
+    }
+    .expect("a caravan should still spawn on ground just past the footprint");
+    assert!(
+        game.find_settlement_at(pos.0, pos.1).is_none(),
+        "a caravan spawned inside the settlement footprint at {pos:?}"
+    );
+}
+
+/// Open ground for `radius` around `(x, y)` — `settlement_patrols.rs`'s own
+/// fixture, repeated here rather than shared, its own doc comment's reason.
+fn carve_open(game: &mut Game, (x, y): (i32, i32), radius: i32) {
+    let mut map = game.world.resource_mut::<crate::world::WorldMap>();
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            map.set_override(
+                x + dx,
+                y + dy,
+                crate::world::Tile {
+                    biome: crate::world::Biome::OpenGrid,
+                    walkable: true,
+                    rock_shade: None,
+                },
+            );
+        }
+    }
+}
+
 /// Arrival and departure are each one line, and neither is `Raid` — a trader
 /// is not a sweep and must not read as one.
 #[test]

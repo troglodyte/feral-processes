@@ -103,7 +103,21 @@ fn a_reached_settlement_gives_its_name_and_a_distance() {
     let mut game = game();
     let (px, py) = player_at(&game);
     let key = SettlementKey { rx: 1, ry: 0 };
-    place_settlement(&mut game, key, px + 1, py);
+    // Materialized well clear of the player and fully synced immediately,
+    // then the player is walked up to its edge — `tests::settlements::
+    // settlement_east_of_player`'s own fix and reason: at one tile from a
+    // bare centre, the player's own tile sits inside the Server footprint
+    // the moment it grows to cover it, and settlement displacement shoves
+    // them off before the bump this test wants ever runs.
+    place_settlement(&mut game, key, px + 5, py);
+    game.sync_settlement_footprint(key);
+    let radius = game
+        .settlement_radius(key)
+        .expect("test premise: the fixture's own key is materialized");
+    game.world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap()
+        .x = px + 5 - radius - 1;
     game.move_player(1, 0);
 
     let row = game
@@ -112,7 +126,7 @@ fn a_reached_settlement_gives_its_name_and_a_distance() {
         .find(|r| r.target == CompassTarget::Town(key))
         .expect("the town is listed");
     assert_eq!(row.label, game.settlement_report(key).name);
-    assert_eq!(row.distance, 1);
+    assert_eq!(row.distance, radius + 1);
     assert!(row.visited);
 }
 

@@ -44,6 +44,7 @@ pub(crate) mod refactor;
 pub(crate) mod respec;
 pub(crate) mod route;
 pub(crate) mod routines;
+pub(crate) mod settlement_footprint;
 pub(crate) mod settlement_growth;
 pub(crate) mod settlement_market;
 pub(crate) mod settlement_patrol;

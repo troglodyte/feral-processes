@@ -8,14 +8,40 @@ fn game() -> Game {
     Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-/// Materializes a settlement one tile east of the player, the same offset
-/// `ground_step` (`tests/turn.rs`) uses for the same reason: it is the one
-/// step every seed's fresh spawn can always take.
+/// Materializes a settlement well clear of the player, fully syncs its
+/// footprint immediately, then sets the player down one step west of its
+/// nearest cell — so `move_player(1, 0)` still bumps it exactly as this
+/// fixture always meant to test.
+///
+/// **Doing all of that here, once, rather than leaving the footprint to
+/// grow from `place_settlement`'s bare centre on whatever tick the test's
+/// own `move_player` happens to trigger.** `place_settlement` spawns only
+/// the centre; a materializing footprint runs settlement displacement
+/// (`game/settlement_footprint.rs`) over every cell it newly covers,
+/// including the player's own tile if they were standing at distance 1 from
+/// the centre the way the old fixture placed them — which shoved the
+/// bumping player off their own tile the instant the town grew to cover it,
+/// confounding this file's bump-ladder tests with an unrelated growth
+/// event. Materializing at a safe distance and only then walking the player
+/// up to it keeps the two apart.
 fn settlement_east_of_player(game: &mut Game) -> (crate::settlements::SettlementKey, (i32, i32)) {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let target = (pos.x + 1, pos.y);
     let key = crate::settlements::SettlementKey { rx: 0, ry: 0 };
+    let target = (pos.x + 5, pos.y);
     place_settlement(game, key, target.0, target.1);
+    game.sync_settlement_footprint(key);
+    let radius = game
+        .settlement_radius(key)
+        .expect("test premise: the fixture's own key is materialized");
+    let bump_from = (target.0 - radius - 1, target.1);
+    {
+        let mut player_pos = game
+            .world
+            .get_mut::<Position>(game.player_entity())
+            .unwrap();
+        player_pos.x = bump_from.0;
+        player_pos.y = bump_from.1;
+    }
     (key, target)
 }
 
@@ -23,8 +49,10 @@ fn settlement_east_of_player(game: &mut Game) -> (crate::settlements::Settlement
 fn walking_into_a_settlement_leaves_the_players_position_unchanged() {
     let mut game = game();
     let player = game.player_entity();
-    let pos_before = *game.world.get::<Position>(player).unwrap();
     settlement_east_of_player(&mut game);
+    // Read after the fixture, which itself walks the player up beside the
+    // footprint before this test's own bump.
+    let pos_before = *game.world.get::<Position>(player).unwrap();
 
     game.move_player(1, 0);
 

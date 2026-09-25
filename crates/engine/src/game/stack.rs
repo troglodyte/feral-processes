@@ -636,16 +636,7 @@ impl Game {
             );
         }
 
-        if let Some(link) = self.find_surface_link_at(entrance.0, entrance.1) {
-            self.world.despawn(link);
-        }
-        // Keyed by `(link tile, depth)`, so this is every frame of the stack
-        // that just fell and nothing else. What it holds is the run's record
-        // of a place that no longer exists — see `resources::StackMemory`.
-        self.world
-            .resource_mut::<StackMemory>()
-            .0
-            .retain(|&(tile, _), _| tile != entrance);
+        self.erase_stack_entrance(entrance);
 
         // The entrance tile the stack stood on, not the party's — a
         // guardian beaten at depth is still news at the surface, and this
@@ -665,6 +656,28 @@ impl Game {
                 dx.abs().max(dy.abs()),
             ),
         );
+    }
+
+    /// Despawns the surface entrance standing at `entrance` and drops every
+    /// `StackMemory` record keyed to it — what "this Stack no longer exists
+    /// at this tile" means both on the surface and in the run's own memory
+    /// of what was seen underground.
+    ///
+    /// Shared by `collapse_stack` (a guardian's defeat) and settlement
+    /// displacement (a footprint growing over the entrance) — the same
+    /// erasure however it was triggered, so a third eraser cannot drift
+    /// from what "gone" means here.
+    pub(crate) fn erase_stack_entrance(&mut self, entrance: (i32, i32)) {
+        if let Some(link) = self.find_surface_link_at(entrance.0, entrance.1) {
+            self.world.despawn(link);
+        }
+        // Keyed by `(link tile, depth)`, so this is every frame of the stack
+        // that just fell and nothing else. What it holds is the run's record
+        // of a place that no longer exists — see `resources::StackMemory`.
+        self.world
+            .resource_mut::<StackMemory>()
+            .0
+            .retain(|&(tile, _), _| tile != entrance);
     }
 
     /// The nearest legal tile to `from` a replacement link may stand on, or

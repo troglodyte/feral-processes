@@ -7,14 +7,16 @@
 //! what is here is the square that latch now moves.
 
 use super::support::*;
-use crate::components::{Position, Settlement, SettlementCentre, TownPatrol};
-use crate::resources::{Outposts, Settlements, Standings, Visit};
+use crate::components::{CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap};
+use crate::resources::{FrameMemory, Outposts, Settlements, StackMemory, Standings, Visit};
 use crate::settlements::SettlementKey;
 use crate::tuning::*;
 use crate::world::{Biome, Tile, WorldMap};
 use crate::*;
 
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::{Entity, With};
+use rand::RngExt;
+use std::collections::HashSet;
 
 fn game() -> Game {
     Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -438,6 +440,411 @@ fn a_patrol_stays_tethered_through_a_footprint_shrink() {
     assert!(
         game.world.get::<Settlement>(town).is_some(),
         "the centre entity itself did not survive the shrink"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Displacement
+// ---------------------------------------------------------------------------
+
+/// Every cell `key`'s footprint covers right now, as a set — what the
+/// displacement tests below check a moved occupant landed *outside*.
+fn footprint_set(game: &mut Game, key: SettlementKey) -> HashSet<(i32, i32)> {
+    game.footprint(key).into_iter().collect()
+}
+
+/// Every `SurfaceLink`'s tile right now — a fresh zone scatters a few of
+/// its own, so the Stack-entrance displacement tests snapshot this before
+/// and after rather than counting links outright.
+fn surface_link_positions(game: &mut Game) -> HashSet<(i32, i32)> {
+    let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+    query.iter(&game.world).map(|p| (p.x, p.y)).collect()
+}
+
+/// The next `n` values off the shared RNG stream — `tests::caravans::draws`'
+/// own shape, repeated here rather than shared across a `pub(super)` seam
+/// neither module otherwise needs.
+fn draws(game: &mut Game, n: usize) -> Vec<u64> {
+    (0..n)
+        .map(|_| game.world.resource_mut::<GameRng>().0.random())
+        .collect()
+}
+
+#[test]
+fn a_wild_creature_under_a_growing_footprint_ends_up_outside_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 60, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 30, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let creature = spawn_wild_without_routine(&mut game, "scrapper", centre.0 + 1, centre.1);
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let pos = *game.world.get::<Position>(creature).unwrap();
+    assert!(
+        !footprint.contains(&(pos.x, pos.y)),
+        "the wild creature ended up inside the footprint that grew over it"
+    );
+}
+
+#[test]
+fn a_trap_under_a_growing_footprint_ends_up_outside_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 70, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 31, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let trap = game
+        .world
+        .spawn((
+            Trap {
+                item: ItemId::from("honeypot"),
+                next_roll: 999,
+                caught: None,
+            },
+            Position {
+                x: centre.0 - 1,
+                y: centre.1,
+            },
+            Glyph {
+                ch: '^',
+                color: GlyphColor::Yellow,
+            },
+        ))
+        .id();
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let pos = *game.world.get::<Position>(trap).unwrap();
+    assert!(
+        !footprint.contains(&(pos.x, pos.y)),
+        "the trap ended up inside the footprint that grew over it"
+    );
+}
+
+/// A nest tethers its guardian by entity, not by tile — see
+/// `game/settlement_footprint.rs::displace_nest_at` — so this checks the
+/// nest's own `Position` moved and that the guardian's tether still names
+/// the same entity, rather than re-deriving `pursuit_field` against it.
+#[test]
+fn a_nest_and_its_guardian_tether_survive_a_growing_footprint() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 80, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 32, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let nest = spawn_bare_nest(&mut game, centre.0, centre.1 - 1);
+    let guardian =
+        spawn_pursuing_guardian(&mut game, nest, "scrapper", centre.0 + 30, centre.1 + 30);
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let nest_pos = *game.world.get::<Position>(nest).unwrap();
+    assert!(
+        !footprint.contains(&(nest_pos.x, nest_pos.y)),
+        "the nest ended up inside the footprint that grew over it"
+    );
+    assert_eq!(
+        game.world.get::<NestGuardian>(guardian).map(|g| g.nest),
+        Some(nest),
+        "the guardian's tether must still name the nest entity after it moved"
+    );
+}
+
+#[test]
+fn a_caravan_under_a_growing_footprint_moves_and_its_arrival_tile_follows() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 90, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 33, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let visit = game.visit_index();
+    let caravan_tile = (centre.0, centre.1 + 1);
+    let caravan = game
+        .world
+        .spawn((
+            Caravan {
+                stage: CaravanStage::Approaching,
+                visit,
+                arrival_tile: caravan_tile,
+                stage_ticks: 0,
+                announced_stuck: false,
+            },
+            Position {
+                x: caravan_tile.0,
+                y: caravan_tile.1,
+            },
+            Glyph {
+                ch: 'Ω',
+                color: GlyphColor::DarkGreen,
+            },
+        ))
+        .id();
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let pos = *game.world.get::<Position>(caravan).unwrap();
+    assert!(
+        !footprint.contains(&(pos.x, pos.y)),
+        "the caravan ended up inside the footprint that grew over it"
+    );
+    let after = game.world.get::<Caravan>(caravan).unwrap();
+    assert_eq!(
+        after.arrival_tile,
+        (pos.x, pos.y),
+        "arrival_tile did not follow the caravan's new position — it would \
+         walk home into the settlement that just displaced it"
+    );
+}
+
+#[test]
+fn the_player_under_a_growing_footprint_ends_up_outside_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // One tile from the centre, same as the corner-bump fixture above: a
+    // Server's radius-1 square reaches back to cover the player's own
+    // standing tile the instant it materializes.
+    let centre = (ppos.x + 1, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 34, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert!(
+        !footprint.contains(&(pos.x, pos.y)),
+        "the player ended up inside the footprint that grew over them"
+    );
+}
+
+#[test]
+fn the_base_anchor_under_a_growing_footprint_moves_outside_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 1, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    // Founded before the settlement is placed: the anchor lands wherever the
+    // party stands at founding (`Game::move_anchor_to`'s one caller), which
+    // is `ppos` here — one tile from the centre the settlement is about to
+    // materialize at.
+    place_home(&mut game);
+    let key = SettlementKey { rx: 35, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let anchor = game.world.resource::<AnchorEntity>().0;
+    let pos = *game.world.get::<Position>(anchor).unwrap();
+    assert!(
+        !footprint.contains(&(pos.x, pos.y)),
+        "the base anchor ended up inside the footprint that grew over it"
+    );
+}
+
+#[test]
+fn a_stack_entrance_under_a_growing_footprint_relocates_and_drops_its_memory() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 100, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    // Snapshotted before this test's own entrance is spawned, since a fresh
+    // zone already scatters a few links of its own (`spawn_surface_links`)
+    // and this test cares only about the one it placed.
+    let before: HashSet<(i32, i32)> = surface_link_positions(&mut game);
+    let key = SettlementKey { rx: 36, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let entrance = (centre.0 + 1, centre.1);
+    game.spawn_entrance_at(entrance.0, entrance.1);
+    game.world
+        .resource_mut::<StackMemory>()
+        .0
+        .insert((entrance, 1), FrameMemory::default());
+
+    game.sync_settlement_footprint(key);
+
+    assert!(
+        game.find_surface_link_at(entrance.0, entrance.1).is_none(),
+        "the old entrance is still standing inside the footprint that grew over it"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<StackMemory>()
+            .0
+            .contains_key(&(entrance, 1)),
+        "the collapsed entrance's own memory was not dropped"
+    );
+    let footprint = footprint_set(&mut game, key);
+    let after = surface_link_positions(&mut game);
+    let new_ones: Vec<&(i32, i32)> = after.difference(&before).collect();
+    assert_eq!(
+        new_ones.len(),
+        1,
+        "the entrance did not reopen exactly once: {after:?}"
+    );
+    assert!(
+        !footprint.contains(new_ones[0]),
+        "the reopened entrance landed back inside the footprint"
+    );
+}
+
+#[test]
+fn a_stack_entrance_is_not_relocated_while_the_party_stands_inside_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 110, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 37, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let entrance = (centre.0 + 1, centre.1);
+    game.spawn_entrance_at(entrance.0, entrance.1);
+    {
+        let mut pos = game
+            .world
+            .get_mut::<Position>(game.player_entity())
+            .unwrap();
+        pos.x = entrance.0;
+        pos.y = entrance.1;
+    }
+    descend(&mut game);
+    assert_eq!(
+        game.stack_pos().map(|pos| pos.entrance),
+        Some(entrance),
+        "test premise: the party is inside the stack under this very entrance"
+    );
+
+    game.sync_settlement_footprint(key);
+
+    assert!(
+        game.find_surface_link_at(entrance.0, entrance.1).is_some(),
+        "the entrance under the party was relocated out from under them"
+    );
+}
+
+#[test]
+fn a_deferred_stack_entrance_relocates_once_the_party_surfaces() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 120, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 38, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let entrance = (centre.0 + 1, centre.1);
+    game.spawn_entrance_at(entrance.0, entrance.1);
+    {
+        let mut pos = game
+            .world
+            .get_mut::<Position>(game.player_entity())
+            .unwrap();
+        pos.x = entrance.0;
+        pos.y = entrance.1;
+    }
+    descend(&mut game);
+    game.sync_settlement_footprint(key);
+    assert!(
+        game.find_surface_link_at(entrance.0, entrance.1).is_some(),
+        "test premise: the entrance is still deferred while the party is inside"
+    );
+
+    game.ascend(); // from depth 1, standing on the link up: this leaves the Stack
+
+    assert_eq!(
+        game.locale(),
+        Locale::Surface,
+        "test premise: the party surfaced"
+    );
+    game.sync_settlement_footprint(key);
+
+    assert!(
+        game.find_surface_link_at(entrance.0, entrance.1).is_none(),
+        "a deferred entrance never relocated once the party surfaced"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<StackMemory>()
+            .0
+            .contains_key(&(entrance, 1)),
+        "the deferred entrance's memory was not dropped on relocation"
+    );
+    let footprint = footprint_set(&mut game, key);
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert!(
+        !footprint.contains(&(player_pos.x, player_pos.y)),
+        "the player, standing on the old entrance after surfacing, must also \
+         be shoved off the footprint"
+    );
+}
+
+/// Every mover `displace` runs writes a `Position` outright — no roll of its
+/// own — `stack::generate`'s world-generation rule extended to settlement
+/// growth. Every occupant kind stands somewhere in the footprint at once, so
+/// a mover added later that forgets this would still be exercised here.
+#[test]
+fn settlement_displacement_draws_no_game_rng() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 130, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 6);
+    let key = SettlementKey { rx: 39, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    spawn_wild_without_routine(&mut game, "scrapper", centre.0 + 1, centre.1);
+    game.world.spawn((
+        Trap {
+            item: ItemId::from("honeypot"),
+            next_roll: 999,
+            caught: None,
+        },
+        Position {
+            x: centre.0 - 1,
+            y: centre.1,
+        },
+        Glyph {
+            ch: '^',
+            color: GlyphColor::Yellow,
+        },
+    ));
+    spawn_bare_nest(&mut game, centre.0, centre.1 + 1);
+    let visit = game.visit_index();
+    game.world.spawn((
+        Caravan {
+            stage: CaravanStage::Approaching,
+            visit,
+            arrival_tile: (centre.0, centre.1 - 1),
+            stage_ticks: 0,
+            announced_stuck: false,
+        },
+        Position {
+            x: centre.0,
+            y: centre.1 - 1,
+        },
+        Glyph {
+            ch: 'Ω',
+            color: GlyphColor::DarkGreen,
+        },
+    ));
+
+    reseed_rng(&mut game, 4242);
+    let control = draws(&mut game, 6);
+    reseed_rng(&mut game, 4242);
+    game.sync_settlement_footprint(key);
+    let after = draws(&mut game, 6);
+
+    assert_eq!(
+        control, after,
+        "settlement displacement drew from the shared RNG stream"
     );
 }
 

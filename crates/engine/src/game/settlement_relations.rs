@@ -416,45 +416,18 @@ impl Game {
         Ok(())
     }
 
-    /// The tile a relay trip to `key` sets down on — the nearest walkable
-    /// cell **beside** the town's footprint, never one of its own cells.
+    /// The tile a relay trip to `key` sets down on — `Game::
+    /// free_tile_outside`'s own search, called rather than copied.
     ///
-    /// Band `radius + 1` and not band 0, and that is the whole of it: a
-    /// settlement tile admits nobody (`move_player`'s fourth arm queues the
-    /// visit and leaves `Position` untouched), so landing on one puts the
-    /// party somewhere walking could never have taken them, and the search
-    /// has to start past the whole square rather than past a single tile
-    /// once that square can be a 5x5 or a 7x7. The ring order is
-    /// `spawning::ring_tiles`, shared with `standable_near` rather than
-    /// copied.
-    ///
-    /// A tile holding a wild program, a nest, a Stack entrance or another
-    /// town is skipped too — `walkable` alone is not the same question as
-    /// "could the party have stepped here", which is the trap
-    /// `standable_near`'s own callers have hit before.
+    /// A settlement tile admits nobody (`move_player`'s fourth arm queues
+    /// the visit and leaves `Position` untouched), so landing on one puts
+    /// the party somewhere walking could never have taken them — the same
+    /// question settlement displacement asks of a displaced occupant's new
+    /// home, and widening that occupancy list once (displacement added
+    /// traps and outposts to it) widens both rather than leaving a second
+    /// copy to drift.
     fn relay_landing(&mut self, key: SettlementKey) -> Option<(i32, i32)> {
-        let tile = self
-            .world
-            .resource::<resources::Settlements>()
-            .0
-            .get(&key)?
-            .tile;
-        let radius = self.settlement_radius(key)?;
-        let candidates = crate::game::spawning::ring_tiles(
-            tile,
-            radius + 1,
-            crate::tuning::SETTLEMENT_SITE_SEARCH_TILES,
-        );
-        candidates.into_iter().find(|&(x, y)| {
-            self.world
-                .resource_mut::<crate::world::WorldMap>()
-                .tile(x, y)
-                .walkable
-                && self.find_wild_creature_at(x, y).is_none()
-                && self.find_nest_at(x, y).is_none()
-                && self.find_surface_link_at(x, y).is_none()
-                && self.find_settlement_at(x, y).is_none()
-        })
+        self.free_tile_outside(key)
     }
 
     fn place_player_at(&mut self, (x, y): (i32, i32)) {

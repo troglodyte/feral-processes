@@ -358,3 +358,20 @@
   updated without the other silently stops seeing (or starts missing) a
   whole visit kind. A fourth kind is a third `Visit` variant, never a third
   `Option` field.
+- **Walking is spent by the clock: `update_realtime` owns the step, and
+  `handle_key` never ticks on an unpaused map arrow** — a paused arrow is
+  still turn-based, and drag ground is paid as idle clock ticks
+  (`drag_ticks_owed`) rather than spent inline. **The trap**: before
+  `travel-on-the-clock`, an arrow key spent a tick straight from
+  `handle_key`, and gui's key repeat fires a held arrow every
+  `REPEAT_INTERVAL` (0.09 s) — holding one ran the world at ~11 ticks/s on
+  top of the idle clock's own rate, faster than `WorldSpeed::Fastest` (8),
+  fast-forwarding everything tuned against the clock (base production, the
+  raid clock, `WILD_SPAWN_CHANCE`, wild cooldowns) for as long as the key
+  was held. Nothing but the held-arrow regression test sees this: a new
+  walking or ticking path that spends a tick in `handle_key`, or inline
+  inside `move_player`/`move_in_base` for a clocked walk rather than
+  reporting it back as `drag_ticks_owed`, reintroduces the fast-forward
+  silently — it reads as ordinary movement code, and every other test
+  spends ticks one at a time already, so nothing else would notice the
+  rate changed.

@@ -254,6 +254,10 @@ relying on one, and correct all three places if it has moved.
   `Structure`** — `resources::Settlements`' own precedent one tile over.
 - **`Visit` is the second visit extension point after `Settlement`, and
   `resources::PendingVisit` widened rather than gaining a second field.**
+- **Walking is spent by the clock: `update_realtime` owns the step, and
+  `handle_key` never ticks on an unpaused map arrow** — a paused arrow is
+  still turn-based, and drag ground is paid as idle clock ticks
+  (`drag_ticks_owed`) rather than spent inline.
 
 ### Traps
 

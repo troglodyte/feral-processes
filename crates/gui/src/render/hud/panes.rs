@@ -35,6 +35,11 @@ const PRODUCTION_ROWS: usize = 6;
 const BUILD_ROWS: usize = 4;
 /// Roster rows listed before the count takes over.
 const CREW_ROWS: usize = 12;
+/// Cells a crew row's activity gets in its tail. The tail is right-aligned,
+/// so an over-long one grows leftward over the INTEG figure; 12 is the most
+/// that clears four-digit Integrity at 1280x720, which
+/// `a_long_crew_activity_is_clipped_clear_of_integ` holds.
+const CREW_ACTIVITY_CELLS: usize = 12;
 /// Party pips on the CREW tab's collapsed bar.
 const CREW_PIPS: usize = 5;
 /// Cells a contract's name gets before its progress tail. Wide enough for
@@ -283,6 +288,17 @@ fn clip(t: &str, w: usize) -> String {
     t.chars().take(w).collect()
 }
 
+/// [`clip`], with the last cell spent on an ellipsis when anything was cut,
+/// for free text whose end the player would otherwise take for the whole.
+fn ellipsize(t: &str, w: usize) -> String {
+    if t.chars().count() <= w {
+        return t.to_string();
+    }
+    let mut s = clip(t, w.saturating_sub(1));
+    s.push('\u{2026}');
+    s
+}
+
 /// Pads to `w` cells. The column is monospace-measured, so a fixed-width cell
 /// is what keeps a table's columns under each other.
 fn cell(t: &str, w: usize) -> String {
@@ -515,7 +531,7 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                     false,
                 ),
             ],
-            vec![label(p.activity.clone())],
+            vec![label(ellipsize(&p.activity, CREW_ACTIVITY_CELLS))],
         ));
     }
 
@@ -1158,6 +1174,43 @@ mod tests {
             palette::FAINT,
             "a benched member's row must draw FAINT regardless of rarity"
         );
+    }
+
+    /// A crew row's activity is free text — `Game::program_activity` names
+    /// whatever structure or dig target the program is on — so it is clipped
+    /// to [`CREW_ACTIVITY_CELLS`] rather than trusted to be short. Unclipped,
+    /// a long one drew leftward from the column's right edge over the INTEG
+    /// figure. Four-digit Integrity is the widest left run the row can have.
+    #[test]
+    fn a_long_crew_activity_is_clipped_clear_of_integ() {
+        let m = ui_metrics(720.0);
+        let room = column_body(&m).w - m.inset * 2.0;
+        let mut worst = pet("Grubtender Prime", Some(0));
+        worst.hp = 9999;
+        worst.max_hp = 9999;
+        worst.activity = "building Recompiled Assembly Lathe on the far wall".to_string();
+        let pets = [worst];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+        let row = crew_rows(&d)
+            .into_iter()
+            .find(|r| matches!(r, Row::Text { left, .. } if left.iter().any(|(t, _, _)| t.contains("9999/9999"))))
+            .expect("the pet's row");
+        let Row::Text { left, right } = &row else {
+            unreachable!()
+        };
+        with_painter(|p| {
+            let gap = p.measure_ui_advance(" ", m.font_size);
+            let l: String = left.iter().map(|(t, _, _)| t.as_str()).collect();
+            let r: String = right.iter().map(|(t, _, _)| t.as_str()).collect();
+            let drawn =
+                p.measure_ui_advance(&l, m.font_size) + gap + p.measure_ui_advance(&r, m.font_size);
+            assert!(
+                drawn <= room,
+                "the activity runs into INTEG by {:.0}px: {l:?} + {r:?}",
+                drawn - room
+            );
+            assert!(r.ends_with('\u{2026}'), "a clipped activity says so: {r:?}");
+        });
     }
 
     /// Every tab summarises to something, and none of them to nothing — a

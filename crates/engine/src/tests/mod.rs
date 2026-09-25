@@ -102,6 +102,7 @@ mod throw;
 mod trade;
 mod transfer;
 mod traps;
+mod travel;
 mod turn;
 mod walls;
 mod watch;

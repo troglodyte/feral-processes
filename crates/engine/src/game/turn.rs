@@ -927,6 +927,32 @@ impl Game {
         bite
     }
 
+    /// Whether stepping onto `(x, y)` would trip one of `move_player`'s
+    /// non-step ladder arms — a wild creature, a nest, the Stack's surface
+    /// link, a settlement, an outpost, or a trap — rather than actually
+    /// landing there. `Game::travel_step`'s (`game/travel.rs`) route cost
+    /// function is the one caller: a route may not cross a tile that would
+    /// start a fight, breach a nest, dive into the Stack or open a visit out
+    /// from under the player mid-walk.
+    ///
+    /// **Calls the same six `find_*_at` queries `move_player` calls above,
+    /// rather than restating what each one tests** — `move_player`'s own
+    /// arms stay exactly as written; this is those checks again under one
+    /// name, not a second copy of them. Terrain walkability is a separate
+    /// question and not this function's — see `Tile::walkable`.
+    pub(crate) fn bump_at(&mut self, x: i32, y: i32) -> bool {
+        self.find_wild_creature_at(x, y).is_some()
+            || self.find_nest_at(x, y).is_some()
+            || self.find_surface_link_at(x, y).is_some()
+            || self.find_settlement_at(x, y).is_some()
+            || self
+                .world
+                .resource::<crate::resources::Outposts>()
+                .0
+                .contains_key(&(x, y))
+            || self.find_trap_at(x, y).is_some()
+    }
+
     /// Announces weather arriving or clearing under the player, if the tick
     /// `tick_inner` just took crossed a weather epoch boundary. Called from
     /// `tick_inner` itself, once per tick, right after the clock advances —

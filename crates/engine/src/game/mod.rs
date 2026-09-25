@@ -65,6 +65,7 @@ pub(crate) mod throw;
 pub(crate) mod tools;
 pub(crate) mod trace;
 pub(crate) mod trade;
+pub(crate) mod travel;
 pub(crate) mod turn;
 pub(crate) mod unlocks;
 pub(crate) mod zone;

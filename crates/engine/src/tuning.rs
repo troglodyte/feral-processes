@@ -3463,6 +3463,19 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 pub const MAX_NEMESES: usize = 10;
 
 // ---------------------------------------------------------------------------
+// Travel
+// ---------------------------------------------------------------------------
+
+/// How far past the goal-to-player Chebyshev distance `Game::travel_step`
+/// widens its search box, on top of `pursuit::walk_field`'s own radius-as-
+/// box-not-budget rule (see that function's doc). A route that has to
+/// detour around one obstacle costs more than the raw distance, and this is
+/// the slack that keeps the detour inside the box rather than reading as
+/// `NoRoute` — `CARAVAN_SPAWN_DISTANCE_TILES`'s neighbour in spirit, an
+/// unmeasured deliberate number rather than a fitted one.
+pub const TRAVEL_ROUTE_MARGIN: i32 = 8;
+
+// ---------------------------------------------------------------------------
 // Ground conditions
 // ---------------------------------------------------------------------------
 

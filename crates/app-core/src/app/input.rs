@@ -755,7 +755,7 @@ impl App {
     ///
     /// Ends in `after_tick` once per call, for `advance_compile`'s reason.
     pub fn update_realtime(&mut self, dt: f32) {
-        if self.mode != Mode::Playing || self.paused || self.game.is_none() {
+        if self.mode != Mode::Playing || self.game.is_none() {
             self.realtime_ticks_carry = 0.0;
             // A mode left `Playing` since the last call — a fight, a
             // settlement visit, any popup — so whatever the player was
@@ -765,6 +765,15 @@ impl App {
             // path for every *other* way `mode` leaves `Playing` — Esc out
             // of a screen the map opened, say — reaching the same result.
             self.walk = None;
+            return;
+        }
+        if self.paused {
+            // **Pause is not one of the ways a walk ends.** "A travel set
+            // while paused waits for the clock" — the design's own words —
+            // so this resets the carry (a burst of ticks must not land the
+            // instant the clock resumes) but leaves `self.walk` alone,
+            // unlike the guard above.
+            self.realtime_ticks_carry = 0.0;
             return;
         }
         self.realtime_ticks_carry = (self.realtime_ticks_carry

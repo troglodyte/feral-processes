@@ -94,11 +94,15 @@ impl App {
                 return;
             }
         }
-        // A travel is intent for ticks not yet spent, and any key that
-        // isn't itself a step says the player wants this one doing
-        // something else instead. An arrow overwrites a travel rather than
-        // needing this to catch it too — see the walk-queueing arm below.
-        if !is_move_key(key) && matches!(self.walk, Some(Walk::Travel { .. })) {
+        // A queued walk — a step as much as a travel — is intent for a
+        // tick not yet spent, and any key that isn't itself a step says the
+        // player wants this one doing something else instead. An arrow
+        // overwrites a walk rather than needing this to catch it too — see
+        // the walk-queueing arm below. Matching `Walk::Travel` alone used to
+        // leave a queued `Walk::Step` behind for a following tick-spending
+        // key (an arrow, then `.` or `r`, inside one frame) to spend
+        // unasked.
+        if !is_move_key(key) && self.walk.is_some() {
             self.walk = None;
         }
         match key {
@@ -805,7 +809,8 @@ impl App {
         let mut no_route = false;
         let acted = {
             let Some(game) = &mut self.game else { return };
-            match walk {
+            let before = game.current_tick();
+            let acted = match walk {
                 Walk::Step(dx, dy) => {
                     self.walk = None;
                     stepped(game, dx, dy, &mut ground_bite)
@@ -850,7 +855,20 @@ impl App {
                         }
                     }
                 }
+            };
+            // A queued step is spent on the clock's own tick even when it
+            // moved nobody — a bounce off base rock with mining off, a
+            // barrier, or a walk that found nothing to do (`Arrived`,
+            // `Gone`, `NoRoute`, a space mismatch) all leave `GameClock`
+            // exactly where they found it, and `spend_walk_tick` runs once
+            // per clock tick. Without this, holding a direction into a wall
+            // would freeze the world instead of merely refusing to walk
+            // through it — `travel-on-the-clock`'s own "one tick, one step"
+            // promise applies to a step that goes nowhere too.
+            if game.current_tick() == before && game.is_game_over().is_none() {
+                game.idle_tick();
             }
+            acted
         };
         self.after_world_action(acted, true, ground_bite);
         if no_route {

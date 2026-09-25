@@ -163,6 +163,79 @@ fn a_paused_arrow_still_steps_immediately_and_spends_one_tick() {
     );
 }
 
+/// **The regression finding 1 exists for.** A queued step that bounces off
+/// base rock with mining off spends no world tick inside the engine at
+/// all — `Game::move_in_base` refuses it for free. `spend_walk_tick` must
+/// still spend the clock's own tick regardless, through `Game::idle_tick`,
+/// or holding a direction into a wall freezes the world rather than merely
+/// refusing to walk through it.
+#[test]
+fn a_step_that_moves_nobody_still_spends_the_clocks_tick() {
+    let mut app = test_app(2604);
+    found_the_base(&mut app);
+    // (5, 0) sits outside the starting pocket `found_the_base` lays
+    // (`tuning::STARTING_POCKET_RADIUS` is 4), so it stays solid rock and
+    // mining is off by default — every eastward bump from (4, 0) refuses
+    // for free, spending no tick of its own.
+    stand_in_base_at(&mut app, 4, 0);
+    let start_tick = tick_of(&app);
+
+    const HELD_SECONDS: u32 = 3;
+    let ticks_per_second = app.world_speed.ticks_per_second();
+    let expected_ticks = (ticks_per_second as u32) * HELD_SECONDS;
+    for _ in 0..expected_ticks {
+        app.handle_key(GameKey::Right);
+        app.update_realtime(1.0 / ticks_per_second);
+    }
+
+    assert_eq!(
+        tick_of(&app),
+        start_tick + expected_ticks as u64,
+        "a step that moved nobody must still spend exactly the clock's own ticks"
+    );
+}
+
+/// A queued `Walk::Step` is cleared by any key that isn't itself a step,
+/// exactly as a pending `Walk::Travel` already was — the player asked for
+/// something else, and a stale step spent on the *next* tick after an
+/// unrelated action would move them without being asked again.
+#[test]
+fn a_queued_step_is_cleared_by_a_following_non_move_key() {
+    let mut app = test_app(2605);
+    clear_the_area_around_player(&mut app);
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.walk,
+        Some(Walk::Step(1, 0)),
+        "test premise: a step is queued"
+    );
+
+    app.handle_key(GameKey::Char('.'));
+
+    assert_eq!(
+        app.walk, None,
+        "a non-move key must clear a queued step, not just a queued travel"
+    );
+}
+
+/// The same clearing rule, exercised through a key that opens a screen
+/// rather than one that merely waits — a popup taking the mode away from
+/// `Playing` must not leave a stale step for the clock to spend once the
+/// player is back, which the same early check in `handle_playing_key`
+/// already gives for free.
+#[test]
+fn a_popup_key_clears_a_pending_walk_before_it_opens() {
+    let mut app = test_app(2606);
+    clear_the_area_around_player(&mut app);
+    app.handle_key(GameKey::Right);
+    assert!(app.walk.is_some(), "test premise: a step is queued");
+
+    app.handle_key(GameKey::Char('i'));
+
+    assert_eq!(app.walk, None, "opening a screen must clear a pending walk");
+    assert_eq!(app.mode, Mode::Inventory);
+}
+
 /// `update_realtime` is the hook a frontend's own loop calls every frame,
 /// independent of `handle_key`, so the world keeps advancing while the
 /// player is idle. It paces against the frame's `dt` with a carry, so a

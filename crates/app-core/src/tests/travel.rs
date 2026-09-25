@@ -4,6 +4,8 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::resources::Locale;
+use feral_processes_engine::save;
 
 fn ticks_of(app: &mut App, n: u32) {
     let tick = 1.0 / app.world_speed.ticks_per_second();
@@ -191,5 +193,143 @@ fn a_travel_ends_on_a_change_of_space() {
     assert_eq!(
         app.walk, None,
         "a travel set on one side of the base boundary must not survive a crossing to the other"
+    );
+}
+
+/// **The regression finding 3 exists for.** "A travel set while paused
+/// waits for the clock" is the design's own line — `update_realtime` used
+/// to fall through its single `mode != Playing || paused || no game` guard
+/// and drop the walk on the paused branch too, exactly as it must on a
+/// mode change.
+///
+/// Pause and unpause are set on `app.paused` directly rather than through
+/// `GameKey::Char(' ')` — `handle_playing_key`'s own "any non-move key
+/// clears a walk" rule (finding 6) would otherwise end the travel on the
+/// *unpause* keypress itself, which is `update_realtime`'s own behaviour
+/// to prove, not that separate rule's.
+#[test]
+fn a_travel_set_while_paused_waits_for_the_clock() {
+    let mut app = test_app(2710);
+    clear_the_area_around_player(&mut app);
+    app.paused = true;
+    let start = player_pos(&app);
+    let start_tick = app.game.as_ref().unwrap().current_tick();
+
+    app.travel_to(start.0 + 3, start.1);
+    assert!(app.walk.is_some(), "test premise: a travel is pending");
+    ticks_of(&mut app, 3);
+
+    assert_eq!(
+        player_pos(&app),
+        start,
+        "a paused travel must not move the party"
+    );
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        start_tick,
+        "a paused travel must not spend a tick"
+    );
+    assert!(
+        app.walk.is_some(),
+        "update_realtime must not drop a walk merely because the clock is paused"
+    );
+
+    app.paused = false;
+    ticks_of(&mut app, 10);
+
+    assert_eq!(
+        player_pos(&app),
+        (start.0 + 3, start.1),
+        "unpausing must resume the travel that was waiting"
+    );
+}
+
+/// `App::install_game` — the one door a new game and a load both share —
+/// clears a pending walk: a route queued against one run means nothing
+/// once the party underneath it is swapped for another.
+#[test]
+fn install_game_clears_a_pending_walk() {
+    let mut source = test_app(2711);
+    let path = scratch_path("install_clears_walk", 2711);
+    source.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut app = test_app(2711);
+    clear_the_area_around_player(&mut app);
+    let start = player_pos(&app);
+    app.travel_to(start.0 + 3, start.1);
+    assert!(app.walk.is_some(), "test premise: a travel is pending");
+
+    app.load_game(path.clone());
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(app.walk, None, "install_game must clear a pending walk");
+}
+
+/// A local helper for injecting a structure straight into a save, the way
+/// `app_inside_a_small_base_with_programs` does for its Mining Node —
+/// `save::StructureSave` has no `Default`, so every field needs a value,
+/// and a wall and a portal both need the same harmless ones.
+fn structure_save(kind: &str, x: i32, y: i32) -> save::StructureSave {
+    save::StructureSave {
+        kind: kind.to_string(),
+        position: (x, y),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+    }
+}
+
+/// **The regression finding 8's "no-progress `Toward` clear" asks for.** A
+/// base-space Portal is the one cell `Game::base_step_blocked` admits to a
+/// route — `Game::move_in_base` breaches on it rather than refusing it —
+/// while never actually landing the party there, since `enter_next_zone`
+/// never touches `Locale::Base`. A `Toward` step onto it therefore ticks
+/// without moving anybody, and `spend_walk_tick`'s own "did this step make
+/// progress" check is what stops the very next tick asking `travel_step`
+/// the same stalled question forever.
+///
+/// The corridor is walled on both long sides (`y = ±1`) rather than left
+/// open, or the router — nothing in `Game::base_step_blocked` refuses a
+/// Portal — would just as happily route *around* one it has no reason to
+/// prefer; the walls are what force the one straight path across it.
+#[test]
+fn a_toward_step_that_makes_no_progress_clears_the_walk() {
+    let mut app = test_app(2713);
+    found_the_base(&mut app);
+    let path = scratch_path("stalled_toward", 2713);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: -4, y: 0 };
+    for x in -4..=4 {
+        data.structures.push(structure_save("wall", x, 1));
+        data.structures.push(structure_save("wall", x, -1));
+    }
+    data.structures.push(structure_save("portal", 2, 0));
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+
+    app.travel_to(4, 0);
+    ticks_of(&mut app, 8);
+
+    assert_eq!(
+        app.game.as_ref().unwrap().base_pos(),
+        Some((1, 0)),
+        "the party must have stalled one cell short of the portal, never having landed on it"
+    );
+    assert_eq!(
+        app.walk, None,
+        "a Toward step that made no progress must clear the walk"
     );
 }

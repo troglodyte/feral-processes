@@ -625,7 +625,7 @@ const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 ///
 const WORLD_SPEED_MULTIPLIER: u32 = 2;
 
-/// The player's fast-forward, stepped with `[`/`]` on the map. `Normal` is
+/// The player's fast-forward, cycled with `,` on the map. `Normal` is
 /// `WORLD_SPEED_MULTIPLIER`; the others are whole multiples of it.
 ///
 /// **A faster speed buys ticks, not a retune**, so it speeds up *everything*
@@ -655,17 +655,13 @@ impl WorldSpeed {
         }
     }
 
-    fn faster(self) -> Self {
+    /// `,` on the map, cycling rather than a pair of keys because `[`/`]`
+    /// are gui's volume and are read ahead of the game.
+    fn next(self) -> Self {
         match self {
             WorldSpeed::Normal => WorldSpeed::Fast,
-            WorldSpeed::Fast | WorldSpeed::Fastest => WorldSpeed::Fastest,
-        }
-    }
-
-    fn slower(self) -> Self {
-        match self {
-            WorldSpeed::Normal | WorldSpeed::Fast => WorldSpeed::Normal,
-            WorldSpeed::Fastest => WorldSpeed::Fast,
+            WorldSpeed::Fast => WorldSpeed::Fastest,
+            WorldSpeed::Fastest => WorldSpeed::Normal,
         }
     }
 }
@@ -2873,7 +2869,7 @@ pub struct App {
     /// `update_realtime` only: an action still spends its tick through
     /// `handle_key`'s tail, so a paused game is turn-based, not frozen.
     pub paused: bool,
-    /// How fast the idle clock runs while not `paused` — `[`/`]` on the map.
+    /// How fast the idle clock runs while not `paused` — `,` on the map.
     pub world_speed: WorldSpeed,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top

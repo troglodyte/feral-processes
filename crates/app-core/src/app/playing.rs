@@ -273,19 +273,15 @@ impl App {
                 self.log_expanded = !self.log_expanded;
                 return;
             }
-            // The idle clock: SPACE holds it, `[`/`]` step its speed. Up
+            // The idle clock: SPACE holds it, `,` cycles its speed. Up
             // here for the toggle's reason — the clock runs underground
             // too — and a `return` because none of them is an action.
             GameKey::Char(' ') => {
                 self.paused = !self.paused;
                 return;
             }
-            GameKey::Char(']') => {
-                self.world_speed = self.world_speed.faster();
-                return;
-            }
-            GameKey::Char('[') => {
-                self.world_speed = self.world_speed.slower();
+            GameKey::Char(',') => {
+                self.world_speed = self.world_speed.next();
                 return;
             }
             // The info column's three panes. A `return` for `f`'s reason:

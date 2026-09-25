@@ -111,11 +111,16 @@ fn a_long_frame_spends_at_most_the_per_frame_cap() {
     assert_eq!(tick_of(&app), start + MAX_IDLE_TICKS_PER_FRAME as u64);
 }
 
-/// The speed setting is the rate, and `Fastest` really is four times
-/// `Normal` over the same second.
+/// `Normal` is the world's own two ticks a second and `Fastest` is four
+/// times that, over the same second of frames. Literal rates, not
+/// `ticks_per_second()`, or a wrong multiple would be checked against itself.
 #[test]
 fn a_faster_speed_spends_more_ticks_per_second() {
-    for (seed, speed) in [(306, WorldSpeed::Normal), (307, WorldSpeed::Fastest)] {
+    for (seed, speed, rate) in [
+        (306, WorldSpeed::Normal, 2),
+        (307, WorldSpeed::Fast, 4),
+        (308, WorldSpeed::Fastest, 8),
+    ] {
         let mut app = test_app(seed);
         app.world_speed = speed;
         let start = tick_of(&app);
@@ -123,16 +128,12 @@ fn a_faster_speed_spends_more_ticks_per_second() {
         for _ in 0..64 {
             app.update_realtime(1.0 / 64.0);
         }
-        let spent = tick_of(&app) - start;
-        // A tick that opens a fight leaves `Playing` and holds the clock,
-        // so a seed can only ever come in under the rate, never over it.
-        assert!(
-            spent <= speed.ticks_per_second().round() as u64,
-            "{speed:?} spent {spent} ticks in a second"
+        assert_eq!(
+            app.mode,
+            Mode::Playing,
+            "seed {seed} left the map, so the second was cut short"
         );
-        if app.mode == Mode::Playing {
-            assert_eq!(spent, speed.ticks_per_second().round() as u64, "{speed:?}");
-        }
+        assert_eq!(tick_of(&app) - start, rate, "{speed:?}");
     }
 }
 
@@ -430,40 +431,33 @@ fn space_pauses_underground_too() {
     assert!(app.status_line.is_none(), "{:?}", app.status_line);
 }
 
-/// `]` steps the speed up and `[` steps it down, clamped at both ends, and
-/// neither is an action.
+/// `,` cycles the speed and wraps back to `Normal`, and is not an action.
 #[test]
-fn brackets_step_the_world_speed_within_its_bounds() {
+fn comma_cycles_the_world_speed() {
     let mut app = test_app(9107);
     let start = tick_of(&app);
     assert_eq!(app.world_speed, WorldSpeed::Normal);
 
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.world_speed, WorldSpeed::Normal, "stepped below Normal");
-
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(','));
     assert_eq!(app.world_speed, WorldSpeed::Fast);
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(','));
     assert_eq!(app.world_speed, WorldSpeed::Fastest);
-    app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.world_speed, WorldSpeed::Fastest, "stepped past Fastest");
-
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.world_speed, WorldSpeed::Fast);
+    app.handle_key(GameKey::Char(','));
+    assert_eq!(app.world_speed, WorldSpeed::Normal, "did not wrap");
     assert_eq!(tick_of(&app), start, "changing speed spent a turn");
 }
 
-/// The speed keys reach the Stack for SPACE's reason.
+/// The speed key reaches the Stack for SPACE's reason.
 #[test]
-fn brackets_step_the_world_speed_underground_too() {
+fn comma_cycles_the_world_speed_underground_too() {
     let mut app = app_underground(9108);
 
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(','));
 
     assert_eq!(
         app.world_speed,
         WorldSpeed::Fast,
-        "`]` was swallowed underground"
+        "`,` was swallowed underground"
     );
 }
 

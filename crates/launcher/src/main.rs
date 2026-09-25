@@ -11,29 +11,71 @@
 //! ```sh
 //! cargo run                          # the game
 //! cargo run -- --template extraction # ...starting from a known world
+//! cargo run -- --template stack --keys "Right Right M" --screenshot out.png
 //! ```
 
 use feral_processes::{dev_template, paths};
-use feral_processes_app_core::{App, DevTemplates};
+use feral_processes_app_core::{App, DevTemplates, GameKey};
+use feral_processes_gui::Capture;
 
 const USAGE: &str = "\
 usage:
-  feral-processes                   play
-  feral-processes --template <name> regenerate a dev-saves/ world and play it";
+  feral-processes                     play
+  feral-processes --template <name>   regenerate a dev-saves/ world and play it
+  ... --keys \"<key> <key> ...\"       press these first: GameKey names
+                                      (Right, Enter, Esc...), Space, or one
+                                      character
+  ... --screenshot <file.png>         write the screen at 1280x720 and exit";
+
+/// What the command line asked for. Each flag at most once, in any order.
+#[derive(Debug, Default, PartialEq)]
+struct Args {
+    template: Option<String>,
+    keys: Vec<GameKey>,
+    screenshot: Option<std::path::PathBuf>,
+}
+
+/// `Err` carries the message to print; `None` inside it means "print the
+/// usage".
+fn parse_args(args: &[String]) -> Result<Args, Option<String>> {
+    let mut parsed = Args::default();
+    let mut rest = args.iter().map(String::as_str);
+    while let Some(flag) = rest.next() {
+        let value = rest.next();
+        match (flag, value) {
+            ("--template", Some(name)) if parsed.template.is_none() => {
+                parsed.template = Some(name.to_string());
+            }
+            // A bare `--template` is a likely typo rather than a request to
+            // list, so it answers with the names it would have accepted.
+            ("--template", None) => {
+                return Err(Some(format!(
+                    "--template needs a name\n{}",
+                    dev_template::known()
+                )));
+            }
+            ("--keys", Some(list)) if parsed.keys.is_empty() => {
+                parsed.keys = GameKey::parse_list(list).map_err(Some)?;
+            }
+            ("--screenshot", Some(path)) if parsed.screenshot.is_none() => {
+                parsed.screenshot = Some(path.into());
+            }
+            _ => return Err(None),
+        }
+    }
+    Ok(parsed)
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let template = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [] => None,
-        ["--template", name] => Some(name.to_string()),
-        // A bare `--template` is a likely typo rather than a request to
-        // list, so it answers with the names it would have accepted.
-        ["--template"] => {
-            eprintln!("--template needs a name\n{}", dev_template::known());
-            std::process::exit(1);
-        }
-        _ => {
-            eprintln!("{USAGE}");
+    let Args {
+        template,
+        keys,
+        screenshot,
+    } = match parse_args(&args) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            eprintln!("{}", message.as_deref().unwrap_or(USAGE));
             std::process::exit(1);
         }
     };
@@ -111,7 +153,15 @@ fn main() {
         eprintln!("playing template `{name}` at {}", working_copy.display());
         app.load_game(working_copy);
     }
-    feral_processes_gui::run(app);
+    // Through the one door the keyboard uses, before the first frame — so a
+    // scripted screen is reached exactly as a player would reach it.
+    for key in keys {
+        app.handle_key(key);
+    }
+    let capture = screenshot.map(|path| Capture { path });
+    if feral_processes_gui::run(app, capture).is_error() {
+        std::process::exit(1);
+    }
 }
 
 /// The two startup failures a player can actually reach, said in both
@@ -150,5 +200,53 @@ fn graphics_available() -> bool {
     #[cfg(not(target_os = "linux"))]
     {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(line: &[&str]) -> Result<Args, Option<String>> {
+        parse_args(&line.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn no_arguments_is_play() {
+        assert_eq!(parse(&[]), Ok(Args::default()));
+    }
+
+    #[test]
+    fn the_three_flags_parse_in_any_order() {
+        let parsed = parse(&[
+            "--screenshot",
+            "out.png",
+            "--keys",
+            "Right M",
+            "--template",
+            "stack",
+        ])
+        .unwrap();
+        assert_eq!(parsed.template.as_deref(), Some("stack"));
+        assert_eq!(parsed.keys, vec![GameKey::Right, GameKey::Char('M')]);
+        assert_eq!(parsed.screenshot, Some("out.png".into()));
+    }
+
+    #[test]
+    fn a_bad_key_names_itself() {
+        let err = parse(&["--keys", "Rigth"]).unwrap_err().unwrap();
+        assert!(err.contains("Rigth"), "{err}");
+    }
+
+    #[test]
+    fn a_repeated_or_unknown_flag_prints_the_usage() {
+        assert_eq!(parse(&["--template", "a", "--template", "b"]), Err(None));
+        assert_eq!(parse(&["--fullscreen"]), Err(None));
+        assert_eq!(parse(&["--screenshot"]), Err(None));
+    }
+
+    #[test]
+    fn a_bare_template_lists_the_names() {
+        assert!(matches!(parse(&["--template"]), Err(Some(_))));
     }
 }

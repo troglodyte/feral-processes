@@ -889,6 +889,55 @@ pub enum GameKey {
     Tab,
 }
 
+impl GameKey {
+    /// Every variant but `Char`, spelled by its `Debug` name — the one
+    /// table the parser reads, so a name and its variant cannot drift.
+    pub const NAMED: [GameKey; 16] = [
+        GameKey::Up,
+        GameKey::Down,
+        GameKey::Left,
+        GameKey::Right,
+        GameKey::ShiftLeft,
+        GameKey::ShiftRight,
+        GameKey::CtrlLeft,
+        GameKey::CtrlRight,
+        GameKey::UpLeft,
+        GameKey::UpRight,
+        GameKey::DownLeft,
+        GameKey::DownRight,
+        GameKey::Enter,
+        GameKey::Esc,
+        GameKey::Backspace,
+        GameKey::Tab,
+    ];
+
+    /// A whitespace-separated key list, as the launcher's `--keys` takes
+    /// it. Whitespace rather than commas because `,` is itself a key.
+    pub fn parse_list(list: &str) -> Result<Vec<GameKey>, String> {
+        list.split_whitespace().map(str::parse).collect()
+    }
+}
+
+/// A scripted key press: a `GameKey` variant name, `Space`, or a single
+/// character standing for `Char` of itself.
+impl std::str::FromStr for GameKey {
+    type Err = String;
+
+    fn from_str(token: &str) -> Result<Self, Self::Err> {
+        if token == "Space" {
+            return Ok(GameKey::Char(' '));
+        }
+        let mut chars = token.chars();
+        if let (Some(c), None) = (chars.next(), chars.next()) {
+            return Ok(GameKey::Char(c));
+        }
+        GameKey::NAMED
+            .into_iter()
+            .find(|k| format!("{k:?}") == token)
+            .ok_or_else(|| format!("`{token}` is not a key name"))
+    }
+}
+
 /// A cue for a frontend to play a sound effect for — pushed by `App` as it
 /// handles keys, drained by whichever frontend cares (`App::take_sounds`).
 /// `App` itself never touches an audio device; this is just the same

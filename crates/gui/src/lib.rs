@@ -14,6 +14,7 @@
 //! that rule exists to prevent. Bevy is here for its window, input, audio and
 //! render pipeline; the game loop stays a loop.
 
+mod capture;
 mod fx;
 mod keys;
 mod paint;
@@ -32,6 +33,7 @@ use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
 };
 
+pub use capture::Capture;
 use feral_processes_app_core::{
     App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
 };
@@ -402,7 +404,10 @@ fn asset_plugin(app: &App) -> AssetPlugin {
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
 /// by value: the Bevy app owns it as a resource for the rest of the process,
 /// and nothing is lost by that, since the process exits once this returns.
-pub fn run(app: App) {
+///
+/// With a `Capture`, this is the dev screenshot mode instead: a fixed-size
+/// window that writes one PNG and exits — see `capture.rs`.
+pub fn run(app: App, capture: Option<Capture>) -> AppExit {
     let last_mode = app.mode;
     let assets = asset_plugin(&app);
     let mut bevy_app = bevy::app::App::new();
@@ -410,6 +415,10 @@ pub fn run(app: App) {
         .add_plugins(DefaultPlugins.set(assets).set(WindowPlugin {
             primary_window: Some(Window {
                 title: "feral-processes".to_string(),
+                resolution: match capture {
+                    Some(_) => capture::resolution(),
+                    None => default(),
+                },
                 // Windowed and maximized rather than borderless fullscreen:
                 // the window keeps its decorations so it can be dragged and
                 // resized, and starts filling the screen anyway. Every size
@@ -437,15 +446,7 @@ pub fn run(app: App) {
             map_pointer: MapPointer::default(),
         })
         .init_resource::<sprites::Sprites>()
-        .add_systems(
-            Startup,
-            (
-                setup,
-                maximize_window,
-                sprites::load,
-                sprites::install_library,
-            ),
-        )
+        .add_systems(Startup, (setup, sprites::load, sprites::install_library))
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.
@@ -464,7 +465,13 @@ pub fn run(app: App) {
         )
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
-    bevy_app.run();
+    match capture {
+        Some(capture) => capture::install(&mut bevy_app, capture),
+        None => {
+            bevy_app.add_systems(Startup, maximize_window);
+        }
+    }
+    bevy_app.run()
 }
 
 /// Keeps the player's own drawing on the GPU, one upload per change.

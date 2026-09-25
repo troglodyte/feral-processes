@@ -33,6 +33,49 @@ fn open_ground(
     }
 }
 
+/// Despawns anything already standing in `x_range`/`y_range` that could
+/// itself trip `Game::bump_at` — a wild creature, a nest, a surface link, a
+/// settlement or a trap — without touching anything else (the anchor
+/// included, which also carries a `Position`).
+///
+/// World generation stocks wild population and landmarks near the zone
+/// spawn point regardless of whether anyone has walked there (see
+/// `support::clear_creatures_along_ray`'s doc for the history), so a test
+/// that plants its own obstacle on a specific cell near `(0, 0)` has to
+/// clear whatever the seed already put there first, or the assertion is at
+/// the mercy of that seed rather than of the obstacle the test actually
+/// placed.
+fn clear_bump_ladder_entities(
+    game: &mut Game,
+    x_range: std::ops::RangeInclusive<i32>,
+    y_range: std::ops::RangeInclusive<i32>,
+) {
+    let candidates: Vec<(Entity, i32, i32)> = {
+        let mut query = game.world.query::<(Entity, &Position)>();
+        query
+            .iter(&game.world)
+            .map(|(e, p)| (e, p.x, p.y))
+            .collect()
+    };
+    let player = game.player_entity();
+    for (entity, x, y) in candidates {
+        if entity == player || !x_range.contains(&x) || !y_range.contains(&y) {
+            continue;
+        }
+        let is_bump_arm = game.world.get::<Creature>(entity).is_some()
+            || game.world.get::<Nest>(entity).is_some()
+            || game.world.get::<SurfaceLink>(entity).is_some()
+            || game
+                .world
+                .get::<crate::components::Settlement>(entity)
+                .is_some()
+            || game.world.get::<crate::components::Trap>(entity).is_some();
+        if is_bump_arm {
+            game.world.despawn(entity);
+        }
+    }
+}
+
 /// Drives `travel_step` to convergence, applying each `Toward` step to the
 /// player's actual position (surface `Position` or the base-space cell)
 /// exactly as `App::update_realtime` would through `move_player` /
@@ -110,6 +153,7 @@ fn a_hostile_goal_answers_last_when_adjacent() {
 fn first_step_breaks_a_tie_by_neighbours_order() {
     let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     open_ground(&mut game, -3..=8, -4..=4);
+    clear_bump_ladder_entities(&mut game, -3..=8, -4..=4);
     stand_player_at(&mut game, 0, 0);
     assert_eq!(
         game.travel_step(TravelGoal::Tile(5, 0)),
@@ -121,50 +165,55 @@ fn first_step_breaks_a_tie_by_neighbours_order() {
 
 /// The regression this feature exists for: a route must never cross a tile
 /// that would trip `move_player`'s bump ladder mid-walk — here, a hostile
-/// planted directly on the straight line to the goal.
+/// planted on the exact cell an unobstructed route would otherwise take.
+///
+/// **Deliberately not "somewhere on the straight line."** In open
+/// 8-directional ground, shifting a route by one row around a single point
+/// obstacle costs nothing extra (a diagonal step keeps making horizontal
+/// progress), so a test that only checks the obstacle's tile is absent from
+/// the final path can pass by coincidence — the tie-break alone might
+/// dodge it, obstacle or not, exactly as `first_step_breaks_a_tie_by_
+/// neighbours_order` computes. Planting the hostile *at* that computed tie
+/// winner and asserting the runner-up closes that hole: without `bump_at`
+/// in the cost function, this would answer `Toward(1, -1)` instead, onto
+/// the hostile.
 #[test]
-fn a_route_detours_around_a_hostile_in_the_straight_line() {
+fn a_route_never_steps_onto_a_hostile_blocking_the_favoured_cell() {
     let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     open_ground(&mut game, -3..=13, -6..=6);
+    clear_bump_ladder_entities(&mut game, -3..=13, -6..=6);
     stand_player_at(&mut game, 0, 0);
-    let wild = spawn_wild_without_routine(&mut game, "scrapper", 5, 0);
-    let wild_tile = {
-        let p = *game.world.get::<Position>(wild).unwrap();
-        (p.x, p.y)
-    };
+    // (1, -1), (1, 0) and (1, 1) are the three-way tie toward goal (5, 0);
+    // NEIGHBOURS order favours (1, -1) — see the tie-break test above.
+    spawn_wild_without_routine(&mut game, "scrapper", 1, -1);
 
-    let (visited, terminal) = walk_route(&mut game, TravelGoal::Tile(10, 0), false);
-
-    assert!(
-        !visited.contains(&wild_tile),
-        "the route stepped onto the hostile's own tile: {visited:?}"
-    );
-    assert!(
-        matches!(terminal, TravelStep::Last(..)),
-        "the route must still reach the goal's neighbourhood, not just avoid the hostile: {terminal:?}"
+    assert_eq!(
+        game.travel_step(TravelGoal::Tile(5, 0)),
+        TravelStep::Toward(1, 0),
+        "the route must fall through to the tie's runner-up rather than \
+         stepping onto the hostile occupying the favoured cell"
     );
 }
 
 /// The bump ladder's fourth arm, and its own test: a settlement must never
 /// be routed *through* — that would open a visit the player never asked
-/// for — even though the tile the ladder queues a visit at large is
-/// otherwise ordinary open ground.
+/// for. Same construction as the hostile test above and for the same
+/// reason: the obstacle sits on the cell the tie-break would otherwise
+/// favour, not merely "on the straight line", so a route that dodges it
+/// only by coincidence would still fail this.
 #[test]
-fn a_route_never_passes_a_settlement_tile() {
+fn a_route_never_steps_onto_a_settlement_blocking_the_favoured_cell() {
     let mut game = Game::new(9006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     open_ground(&mut game, -3..=13, -6..=6);
+    clear_bump_ladder_entities(&mut game, -3..=13, -6..=6);
     stand_player_at(&mut game, 0, 0);
-    place_settlement(&mut game, SettlementKey { rx: 0, ry: 0 }, 5, 0);
+    place_settlement(&mut game, SettlementKey { rx: 0, ry: 0 }, 1, -1);
 
-    let (visited, terminal) = walk_route(&mut game, TravelGoal::Tile(10, 0), false);
-
-    assert!(
-        !visited.contains(&(5, 0)),
-        "the route stepped onto the settlement's own tile: {visited:?}"
-    );
-    assert!(
-        matches!(terminal, TravelStep::Last(..)),
-        "the route must still reach the goal's neighbourhood: {terminal:?}"
+    assert_eq!(
+        game.travel_step(TravelGoal::Tile(5, 0)),
+        TravelStep::Toward(1, 0),
+        "the route must fall through to the tie's runner-up rather than \
+         stepping onto the settlement occupying the favoured cell"
     );
 }
 
@@ -258,6 +307,22 @@ fn a_base_route_avoids_solid_rock_and_bodies() {
     assert!(
         matches!(terminal, TravelStep::Last(..)),
         "the route must still reach the goal's neighbourhood: {terminal:?}"
+    );
+
+    // The broad walk above can dodge a body by the same tie-break
+    // coincidence `a_route_never_steps_onto_a_hostile_blocking_the_
+    // favoured_cell`'s doc explains — a one-row shift around a single point
+    // costs nothing extra in Chebyshev movement, obstacle or not. Standing
+    // one cell short of the rock pins the exact decision: from (3, 0),
+    // (4, -1) and (4, 1) are the cheapest walkable neighbours toward (9, 0)
+    // (the rock at (4, 0) itself is unwalkable outright), tied and both
+    // bodied — so the real runner-up is (3, -1), and without
+    // `Game::blocked_tiles` in the cost function the answer would be
+    // `Toward(1, -1)`, straight onto the body at (4, -1).
+    stand_in_base_at(&mut game, 3, 0);
+    assert_eq!(
+        game.travel_step(TravelGoal::Tile(9, 0)),
+        TravelStep::Toward(0, -1)
     );
 }
 

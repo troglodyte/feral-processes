@@ -2,10 +2,9 @@
 //! before anything is cut.
 //!
 //! A **mode, not an action**. Nothing here reaches `Game::tick`, so a player
-//! can plan a whole corridor without spending a turn on it — which matters
-//! more here than on any other screen, because `base_entropy_system` is
-//! eating the unfloored frontier by the tick and a plan that cost time to
-//! draw would be paid for in ground.
+//! can plan a whole corridor without spending a turn on it — walking a
+//! cursor around a big box costs nothing, whatever the plan turns out to
+//! mark.
 
 use crate::*;
 

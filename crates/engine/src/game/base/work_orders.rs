@@ -796,13 +796,9 @@ pub(crate) fn ingredient_depths(
     depths
 }
 
-/// Which of the three things `Game::announce_dig_dry` ran out of Blank
-/// Substrate for — the three wordings share everything but this.
+/// Which of the two things `Game::announce_dig_dry` ran out of Blank
+/// Substrate for — the two wordings share everything but this.
 enum DigDryReason {
-    /// A marked solid cell, held back because nothing is spare to floor the
-    /// cut with. Its own wording because the cell is still whole: told in
-    /// the tile job's words it reads as a cut that already happened.
-    Cut,
     Tile,
     Finish,
 }
@@ -999,13 +995,14 @@ impl Game {
         // plan is not one site. `dig_wants` already drops the boxed-in
         // interior of a marked block through `hauling::has_station`; what it
         // cannot answer is the cell with a perfectly good face that nothing
-        // can walk to, because that question needs the bodies. A pocket
-        // entropy sealed off, or a plan drawn past `haul_walk_radius`, leaves
-        // a run of those — they sort first in tile order, `continue` costs no
-        // body when their turn comes, and the one cell the crew could have
-        // been sent to is cut off the end of the list. The crew stands idle
-        // with a plan on the wall, which is the exact failure
-        // `has_station` was added to close, one refusal further along.
+        // can walk to, because that question needs the bodies. A corridor
+        // gone missing after the fact, or a plan drawn past
+        // `haul_walk_radius`, leaves a run of those — they sort first in
+        // tile order, `continue` costs no body when their turn comes, and
+        // the one cell the crew could have been sent to is cut off the end
+        // of the list. The crew stands idle with a plan on the wall, which
+        // is the exact failure `has_station` was added to close, one
+        // refusal further along.
         //
         // Asked of the staff rather than of a fixed reference point, and
         // short-circuited on the first body that routes: the answer is
@@ -1798,9 +1795,10 @@ impl Game {
     /// order too. **Finish wants sit after cut and tile wants
     /// deliberately**: under `truncate(staff.len())` a short-handed base
     /// keeps holding its floor before it decorates it. **A cell already open
-    /// outranks one still solid** for the same reason one rung down: its
-    /// entropy window is already running, so the base holds what it has cut
-    /// before it cuts more.
+    /// outranks one still solid** for the same reason one rung down: laying
+    /// the tile spends the shared substrate and cutting more does not, so a
+    /// short-handed base finishes what it has already cut before it opens
+    /// more ground it cannot yet pay to floor.
     ///
     /// **Structural only, never a stock count.** What a site can be *paid*
     /// for is `Game::drop_dry_dig_wants`, which runs over the assembled want
@@ -1850,17 +1848,12 @@ impl Game {
     /// base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
-    /// **A cut is dry when the tile that will hold it is**, which is what
-    /// makes the substrate a *budget* claimed in want order rather than a
-    /// figure each site reads for itself. Cutting spends nothing, so asked
-    /// per site the answer is always yes, and a crew holding one Blank
-    /// Substrate opens ten cells and floors one — the other nine are bare
-    /// ground on `BASE_ENTROPY_REFILL_TICKS`, and the swings that opened
-    /// them are owed again when the rock knits back over them. So a cut
-    /// claims the tile it will need (`1`), the same claim the tile job it
-    /// turns into makes, carried over unchanged because a site is only ever
-    /// one of the two; an `Apply` claims `FLOOR_FINISH_COST`; a `Strip`
-    /// claims nothing, spending nothing and leaving nothing exposed.
+    /// **Cutting itself is never dry — only what it turns into can be.**
+    /// A cut claims `0`: open ground stays open forever now, so opening a
+    /// cell with nothing in store to floor it costs nothing and loses no
+    /// ground. The tile job a cut turns into claims `1`; an `Apply` claims
+    /// `FLOOR_FINISH_COST`; a `Strip` claims nothing, spending nothing and
+    /// leaving nothing exposed.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
     /// and above the truncation**, and that placement is the budget's half
@@ -1899,15 +1892,15 @@ impl Game {
                 .and_then(|d| d.finish.clone());
             let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
             let claim = match &finish {
+                None if solid => 0,
                 None => 1,
                 Some(FinishOrder::Apply(_)) => crate::tuning::FLOOR_FINISH_COST,
                 Some(FinishOrder::Strip) => 0,
             };
             if budget < claim {
-                let reason = match (&finish, solid) {
-                    (Some(_), _) => DigDryReason::Finish,
-                    (None, true) => DigDryReason::Cut,
-                    (None, false) => DigDryReason::Tile,
+                let reason = match &finish {
+                    Some(_) => DigDryReason::Finish,
+                    None => DigDryReason::Tile,
                 };
                 self.announce_dig_dry(site, at.x, at.y, reason);
                 dry.push(site);
@@ -1927,7 +1920,7 @@ impl Game {
     /// a second function rather than a shared one because a dig site names
     /// a cell, not a bill of materials: there is no `outstanding()` to read
     /// back and format, only the one item every floor or finish job spends.
-    /// `reason` is the only difference between the three wordings; all name
+    /// `reason` is the only difference between the two wordings; both name
     /// the item.
     fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32, reason: DigDryReason) {
         if self
@@ -1946,13 +1939,6 @@ impl Game {
         // site can be dry while the base holds stock, because the units are
         // claimed by the jobs ahead of it.
         let line = match reason {
-            // Deliberately not "the marked cell at", which is the *cut off*
-            // announcement's own wording a few hundred lines up: two stalls
-            // sharing a phrase is two tests each satisfied by the other's
-            // bug.
-            DigDryReason::Cut => format!(
-                "Your crew holds off cutting ({x}, {y}) — no {name} to spare to floor the cut with, and bare ground is reclaimed."
-            ),
             DigDryReason::Tile => format!(
                 "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} to spare."
             ),
@@ -2175,14 +2161,11 @@ impl Game {
             if occupied.contains(&(tile.x, tile.y)) {
                 continue;
             }
-            // **Laid floor, not `walkable`.** `base_entropy_system` reverts
-            // a mined `Open` cell nobody is standing on, and a body holds
-            // only the cell under its own feet — so a wanderer that strolled
-            // into a fresh corridor would be sealed in behind it, and
-            // `hauling::post_field` gates its own start tile on `walkable`,
-            // which makes that body unpostable and unreachable for the rest
-            // of the run. Floor never reverts. This is the leash, and it is
-            // why there is no radius to tune.
+            // **Laid floor, not `walkable`.** Open ground is walkable but is
+            // not the base's footprint — only laid floor may take a
+            // structure — so a wanderer left to roam it would be loitering
+            // ground nothing can ever be built or posted on. This is the
+            // leash, and it is why there is no radius to tune.
             if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
                 continue;
             }

@@ -345,8 +345,7 @@ relying on one, and correct all three places if it has moved.
   longer rotates per sector — and a rock kind may not spend it.
 - **Only an *exposed* face shows its kind, and that is a display rule
   only.** `BaseGrid::is_exposed` — solid, with an **orthogonal** walkable
-  neighbour — derived per lookup because cutting, and entropy re-knitting,
-  both move it.
+  neighbour — derived per lookup because cutting a cell moves it.
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
   by default and off for any save that never said otherwise.
 - **`Tile::open_to_hostiles` is unreachable now, and is kept rather than
@@ -519,9 +518,10 @@ relying on one, and correct all three places if it has moved.
   hauler uses, over the same buffers the stock block counts.
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
   crossed over**, and `Game::drop_dry_dig_wants` is where it is asked.
-- **A cut claims the tile that will hold it**, so the substrate is one
-  budget claimed in want order — open cells before solid ones, and settled
-  *after* the unreachable drop rather than inside `Game::dig_wants`.
+- **Cutting claims nothing; only the tile a cut turns into does**, so the
+  substrate is one budget claimed in want order — open cells before solid
+  ones, and settled *after* the unreachable drop rather than inside
+  `Game::dig_wants`.
 - **What a program needs is a catalogue, and `assets/needs/` deleted is the
   pre-needs game.** `needs::NeedDb` is `MemoryDb`'s seam again — nine
   required fields, an absent directory loading silently empty, `iter` sorted

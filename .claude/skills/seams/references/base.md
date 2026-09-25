@@ -474,8 +474,8 @@
   anonymous rock.
 - **Only an *exposed* face shows its kind, and that is a display rule
   only.** `BaseGrid::is_exposed` — solid, with an **orthogonal** walkable
-  neighbour — derived per lookup because cutting, and entropy re-knitting,
-  both move it. `strike_rock` resolves the true kind regardless, so the
+  neighbour — derived per lookup because cutting a cell moves it.
+  `strike_rock` resolves the true kind regardless, so the
   "fix" to refuse: resolving unseen rock to the default kind so the two
   halves agree. The map and the examine ray are asserted against **each
   other**, never against a string.
@@ -737,7 +737,7 @@
   program you own that is not fighting beside you, not held as your weapon
   and not away on a sortie **is** base staff. There is no marker to assign
   and no verb to assign it. **The rule is `party::role_of`, a free
-  function**, for `stack::surfaced`'s reason: `base_entropy_system` has no
+  function**, for `stack::surfaced`'s reason: `haul_step_system` has no
   `Game` to ask and must not hold a second copy — its query is deliberately
   wider than the rule and narrows through `role_of`. `CreatureSave::staff`
   is still written and read nowhere, so this cost **no
@@ -808,9 +808,9 @@
   the ring it replaced was absolute. Pure, RNG-free and folded **a byte at
   a time**, `descriptions::Slot::tags`'s idiom: `derive::index` reads bit 63
   and a step counter folded whole never reaches it. **`is_floor`, never
-  `walkable`** — entropy reverts a mined `Open` cell nobody stands on, and a
-  wanderer sealed into a fresh corridor is unpostable for the rest of the
-  run, so the paving is the roam limit and there is no radius to tune. A test
+  `walkable`** — open ground is walkable but is not the base's footprint,
+  only laid floor is, so the paving is the roam limit and there is no radius
+  to tune. A test
   fixture needs an unfloored cell beside the pocket or the two predicates
   agree and it proves nothing. `park_tile` survives as **`entry_tile`**,
   asked only of a body not on floor: a tamed program's `Position` is the
@@ -1046,17 +1046,12 @@
   needs a `Structure` and `task_progress_system` a `ResourceNode` and
   `Stock`, and because `strike_rock`/`floor_cell` are the one door each to
   damaging rock and laying floor. The walk is shared —
-  `hauling::step_to_post`. **The trap is `base_entropy_system`**: the party's
-  cell is `Locale::Base`'s coordinates, never the player's `Position`, while
-  a posted program's cell *is* its `Position`, and its query excludes
-  `Player` because the player can hold a `Task` too.
+  `hauling::step_to_post`.
 - **A mark is one verb and the cell under it decides what it means** —
   marked solid means cut, marked `Open` means floor, and the mark outlives
   the cut. `toggle_mark_box` reads the **anchor cell** to decide mark versus
   clear, which is why there is no erase verb and no `Mode` field on
-  `DigSite`. `Floor` takes no mark. The trap is `Durability`: entropy
-  reverts to *solid*, not chipped, so `strike_rock` refills a spent meter or
-  the next swing opens a whole wall for free.
+  `DigSite`. `Floor` takes no mark.
 - **A dig site's two unreachable states are not symmetrical.** `BoxedIn` is
   silent (it is the normal interior of any marked block and resolves itself);
   `NoRoute` complains **once**, latched on `DigSite::announced_stuck` by
@@ -1109,28 +1104,27 @@
   holding a load for a cancelled job: `schedule_base_labour` may never free
   one, so `DigErrand::Return` walks it back and gives the post up there.
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
-  crossed over**, and **a cut is dry when the tile that will hold it is**.
-  Cutting spends nothing, so asked per site the answer is always yes: the
-  crew opens the whole plan, floors one cell of it, and
-  `BASE_ENTROPY_REFILL_TICKS` takes the rest back at full thickness with
-  every swing owed again. So the substrate is a **budget** claimed in want
-  order — a cut claims 1 (the tile it will need), the tile job it turns into
-  claims the same 1 with nothing double-counted because a site is only ever
-  one of the two, an `Apply` claims `FLOOR_FINISH_COST`, and a `Strip`
-  claims nothing. **Open cells sort ahead of solid ones** inside the
-  `finish: None` block: the exposed cell's entropy window is already
-  running, so the base holds what it cut before it buys another cut. The
-  deadlock rule still holds in the direction that matters — a dropped want
-  frees the body, which is what sends it to the Mining Node and the Lathe
-  that make the substrate — and the player's own bump is untouched, which is
-  the bootstrap out of a base with nothing on its shelves.
-  `Game::drop_dry_dig_wants` is the one writer of `DigSite::announced_dry`,
-  both the set and the clear, and it owns all three wordings: a held-off cut
-  says so in words of its own, because told in the tile job's it reads as a
-  cut that already happened, and it must not borrow the *cut off* wording
-  either (`CUT_OFF`'s rule — two stalls sharing a needle is two tests each
-  satisfied by the other's bug). **The trap that moved it out of
-  `dig_wants`**: a budget claimed there goes to sites in tile order,
+  crossed over**, and **a cut claims nothing; the tile job it turns into
+  claims 1.** Open ground stays open forever now, so cutting a marked solid
+  cell is never held back by stock — only the tile it turns into can go dry.
+  The substrate is a **budget** claimed in want order — a cut claims `0`, the
+  tile job the same cut turns into claims `1`, an `Apply` claims
+  `FLOOR_FINISH_COST`, and a `Strip` claims nothing. **Open cells sort ahead
+  of solid ones** inside the `finish: None` block: laying a tile spends the
+  shared substrate and cutting more does not, so a short-handed base
+  finishes what it has already cut before it opens ground it cannot yet pay
+  to floor. The deadlock rule still holds in the direction that matters — a
+  dropped want frees the body, which is what sends it to the Mining Node and
+  the Lathe that make the substrate — and the player's own bump is
+  untouched, which is the bootstrap out of a base with nothing on its
+  shelves. `Game::drop_dry_dig_wants` is the one writer of
+  `DigSite::announced_dry`, both the set and the clear, and it owns both
+  wordings — a cut never needs one of its own now that it never goes dry, so
+  the tile-job and finish wordings are the whole of `DigDryReason`, and it
+  must not borrow the *cut off* wording either (`CUT_OFF`'s rule — two
+  stalls sharing a needle is two tests each satisfied by the other's bug).
+  **The trap that moved it out of `dig_wants`**: a budget claimed there
+  goes to sites in tile order,
   including the sealed pocket and the plan past `haul_walk_radius` that
   `schedule_base_labour` is about to drop anyway — the unroutable-mark
   starvation, one dimension over, with the one cell a body could have cut

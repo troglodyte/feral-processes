@@ -1572,6 +1572,12 @@ cargo run --bin arena -- dev-arenas/full-group.ron --out report.ron
 # a companion Special ever fires in an authored fight. Main menu, [R] Arena.
 FERAL_DEV_ARENA=1 cargo run
 
+# See a screen without a person at the desktop: load a template, press
+# keys through App::handle_key, write a 1280x720 PNG and exit. It opens a
+# real window for ~1s, so it needs DISPLAY or WAYLAND_DISPLAY. Look at the
+# file with Read. Keys are GameKey names, `Space`, or one character.
+cargo run -- --template stack --keys "Right Right" --screenshot out.png
+
 # Draw the whole Stack frame on both maps instead of what has been walked,
 # so testing a cell kind doesn't start by walking a maze to find one. Map
 # only — see `dev-saves/README.md`.

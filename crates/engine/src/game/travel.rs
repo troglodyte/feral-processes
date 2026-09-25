@@ -6,7 +6,6 @@
 //! `resources::GameRng` — see the tests for the RNG claim, in the same
 //! shape the Predation no-draw test uses.
 
-use crate::base_grid::BaseGrid;
 use crate::game::pursuit::walk_field;
 use crate::tuning::TRAVEL_ROUTE_MARGIN;
 use crate::world::NEIGHBOURS;
@@ -87,7 +86,15 @@ impl Game {
 
         let radius = distance + TRAVEL_ROUTE_MARGIN;
         let field = if in_base {
-            let blocked = self.blocked_tiles();
+            // Bodies alone, not `Game::blocked_tiles` — that set also
+            // refuses every structure's *anchor*, which `Game::move_in_base`
+            // walks over freely; `Game::base_step_blocked` is the same
+            // solid-rock/barrier refusal `move_in_base` itself answers with.
+            let bodies: std::collections::HashSet<(i32, i32)> = self
+                .base_bodies()
+                .into_iter()
+                .map(|(_, p)| (p.x, p.y))
+                .collect();
             walk_field(goal_tile, radius, |cell| {
                 // The goal cell is exempt from both refusals below — the
                 // field is rooted there, so what it costs to enter never
@@ -97,10 +104,12 @@ impl Game {
                 if cell == goal_tile {
                     return Some(1);
                 }
-                let walkable = self.world.resource::<BaseGrid>().walkable(cell.0, cell.1);
-                (walkable && !blocked.contains(&cell)).then_some(1)
+                (!self.base_step_blocked(cell.0, cell.1) && !bodies.contains(&cell)).then_some(1)
             })
         } else {
+            // Collected once for the whole search box rather than asked per
+            // cell — `Game::bump_tiles`' own reason.
+            let obstacles = self.bump_tiles(goal_tile, radius);
             walk_field(goal_tile, radius, |cell| {
                 if cell == goal_tile {
                     return Some(1);
@@ -110,7 +119,7 @@ impl Game {
                     .resource_mut::<WorldMap>()
                     .tile(cell.0, cell.1)
                     .walkable;
-                (walkable && !self.bump_at(cell.0, cell.1)).then_some(1)
+                (walkable && !obstacles.contains(&cell)).then_some(1)
             })
         };
 

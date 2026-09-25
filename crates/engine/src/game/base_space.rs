@@ -1008,6 +1008,22 @@ impl Game {
     /// The drop sits above every branch below rather than inside one, which
     /// is why turning the refusal into a swing did not quietly stop it
     /// happening.
+    /// Whether base-space `(x, y)` refuses a step outright — solid rock
+    /// (the dead not-walkable case included, `BaseGrid` having no third
+    /// state today) or a barrier — the same two refusals `Game::move_in_base`
+    /// answers with below, before it ever writes `Locale::Base`. **Called by
+    /// both**, rather than restated: `Game::travel_step`'s base route asks
+    /// this instead of `Game::blocked_tiles`, which also refuses every
+    /// structure's own *anchor* — a machine `move_in_base` walks over
+    /// freely, only a barrier or rock actually stopping it.
+    pub(crate) fn base_step_blocked(&mut self, x: i32, y: i32) -> bool {
+        let rock_or_unfloored = {
+            let grid = self.world.resource::<BaseGrid>();
+            grid.is_solid(x, y) || !grid.walkable(x, y)
+        };
+        rock_or_unfloored || self.barrier_at(x, y).is_some()
+    }
+
     pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
         let Some((x, y)) = self.base_pos() else {
             return;
@@ -1037,19 +1053,16 @@ impl Game {
             self.tick();
             return;
         }
-        // Still the one statement of what a step lands on. Every cell state
-        // `BaseGrid` has today is walkable, so nothing reaches this return —
-        // it is what a fifth `BaseCell` variant would meet, rather than a
-        // branch play can take.
-        if !self.world.resource::<BaseGrid>().walkable(nx, ny) {
-            return;
-        }
-        // A barrier refuses the step as rock does with mining off — free,
-        // no tick — but there is nothing to cut: a Wall comes down by
+        // Solid rock already returned above, so this is either the dead
+        // not-walkable case `base_step_blocked`'s own doc names, or a
+        // barrier — which refuses the step as rock does with mining off:
+        // free, no tick — but there is nothing to cut, a Wall comes down by
         // demolition, not by a shoulder.
-        if let Some(wall) = self.barrier_at(nx, ny) {
-            let name = self.entity_label(wall);
-            self.log(format!("The {name} stops you."));
+        if self.base_step_blocked(nx, ny) {
+            if let Some(wall) = self.barrier_at(nx, ny) {
+                let name = self.entity_label(wall);
+                self.log(format!("The {name} stops you."));
+            }
             return;
         }
         // The one structure a step in here does anything with. A Portal is a

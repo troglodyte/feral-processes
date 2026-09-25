@@ -190,15 +190,22 @@ pub(crate) fn ring_offset(band: i32, along: i32) -> (i32, i32) {
 }
 
 impl Game {
+    /// Every `SurfaceLink`'s entity and tile — `find_surface_link_at`'s
+    /// single-cell answer and `Game::bump_tiles`' whole-box one both read
+    /// this rather than each building their own `QueryState`.
+    pub(crate) fn surface_link_positions(&mut self) -> Vec<(Entity, Position)> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<SurfaceLink>>();
+        query.iter(&self.world).map(|(e, p)| (e, *p)).collect()
+    }
+
     /// Finds a `SurfaceLink` at `(x, y)`, if any — checked in
     /// `move_player` before the generic blocking-structure check, so walking
     /// onto one descends instead of just bumping into it.
     pub(crate) fn find_surface_link_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<SurfaceLink>>();
-        query
-            .iter(&self.world)
+        self.surface_link_positions()
+            .into_iter()
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
     }

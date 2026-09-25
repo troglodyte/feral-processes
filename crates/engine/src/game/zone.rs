@@ -9,27 +9,53 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
-    pub(crate) fn find_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+    /// Every wild (untamed) `Creature`'s entity and tile — the one query
+    /// both `find_wild_creature_at`'s single-cell answer and
+    /// `Game::bump_tiles`' whole-box one read, so a route's cost function
+    /// and `move_player`'s own ladder arm cannot drift apart about what
+    /// counts as a wild creature.
+    pub(crate) fn wild_creature_positions(&mut self) -> Vec<(Entity, Position)> {
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position), (With<Creature>, Without<Tamed>)>();
-        query
-            .iter(&self.world)
+        query.iter(&self.world).map(|(e, p)| (e, *p)).collect()
+    }
+
+    pub(crate) fn find_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        self.wild_creature_positions()
+            .into_iter()
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
+    }
+
+    /// `wild_creature_positions`' shape for `Nest` — `find_nest_at` and
+    /// `Game::bump_tiles` both read this rather than each building their
+    /// own `QueryState`.
+    pub(crate) fn nest_positions(&mut self) -> Vec<(Entity, Position)> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Nest>>();
+        query.iter(&self.world).map(|(e, p)| (e, *p)).collect()
     }
 
     /// Finds a `Nest` at `(x, y)`, if any — checked in `move_player`
     /// before the ordinary blocking-structure check, so walking into a
     /// nest tile attacks it instead of just being blocked.
     pub(crate) fn find_nest_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<Nest>>();
-        query
-            .iter(&self.world)
+        self.nest_positions()
+            .into_iter()
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
+    }
+
+    /// `wild_creature_positions`' shape for `Trap` — `find_trap_at` and
+    /// `Game::bump_tiles` both read this rather than each building their
+    /// own `QueryState`.
+    pub(crate) fn trap_positions(&mut self) -> Vec<(Entity, Position)> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<crate::components::Trap>>();
+        query.iter(&self.world).map(|(e, p)| (e, *p)).collect()
     }
 
     /// Finds a `Trap` at `(x, y)`, if any — checked in `move_player`'s
@@ -40,11 +66,8 @@ impl Game {
     /// second place the read of `Trap` is spelled. `find_nest_at` is the
     /// precedent.
     pub(crate) fn find_trap_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<crate::components::Trap>>();
-        query
-            .iter(&self.world)
+        self.trap_positions()
+            .into_iter()
             .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
     }

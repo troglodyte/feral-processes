@@ -34,7 +34,7 @@ fn open_ground(
 }
 
 /// Despawns anything already standing in `x_range`/`y_range` that could
-/// itself trip `Game::bump_at` — a wild creature, a nest, a surface link, a
+/// itself trip `Game::bump_tiles` — a wild creature, a nest, a surface link, a
 /// settlement or a trap — without touching anything else (the anchor
 /// included, which also carries a `Position`).
 ///
@@ -174,7 +174,7 @@ fn first_step_breaks_a_tie_by_neighbours_order() {
 /// the final path can pass by coincidence — the tie-break alone might
 /// dodge it, obstacle or not, exactly as `first_step_breaks_a_tie_by_
 /// neighbours_order` computes. Planting the hostile *at* that computed tie
-/// winner and asserting the runner-up closes that hole: without `bump_at`
+/// winner and asserting the runner-up closes that hole: without `bump_tiles`
 /// in the cost function, this would answer `Toward(1, -1)` instead, onto
 /// the hostile.
 #[test]
@@ -323,6 +323,37 @@ fn a_base_route_avoids_solid_rock_and_bodies() {
     assert_eq!(
         game.travel_step(TravelGoal::Tile(9, 0)),
         TravelStep::Toward(0, -1)
+    );
+}
+
+/// A base route must cross an ordinary structure's own anchor — the way
+/// `Game::move_in_base` itself walks over a machine rather than refusing
+/// it — while a one-tile corridor still means only one way through, so a
+/// route that treated the anchor as a wall (`Game::blocked_tiles`'s old
+/// behaviour) would answer `NoRoute` here instead of routing straight
+/// across it.
+#[test]
+fn a_base_route_walks_over_a_structures_own_anchor() {
+    let mut game = Game::new(9012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, -3, 0);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in -3..=9 {
+            grid.lay_floor(x, 0);
+        }
+    }
+    spawn_structure_at(&mut game, "data_cache", 3, 0);
+
+    let (visited, terminal) = walk_route(&mut game, TravelGoal::Tile(9, 0), true);
+
+    assert!(
+        visited.contains(&(3, 0)),
+        "a route in a one-tile corridor must cross a structure's anchor, \
+         which move_in_base walks over freely: {visited:?}"
+    );
+    assert!(
+        matches!(terminal, TravelStep::Last(..)),
+        "the route must still reach the goal's neighbourhood: {terminal:?}"
     );
 }
 

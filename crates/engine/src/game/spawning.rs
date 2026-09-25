@@ -1226,6 +1226,18 @@ impl Game {
         }
     }
 
+    /// Every settlement's tile and key — `find_settlement_at`'s single-cell
+    /// answer and `Game::bump_tiles`' whole-box one both read this rather
+    /// than each building their own `QueryState`.
+    pub(crate) fn settlement_positions(
+        &mut self,
+    ) -> Vec<(Position, crate::settlements::SettlementKey)> {
+        let mut query = self
+            .world
+            .query_filtered::<(&Position, &crate::components::Settlement), ()>();
+        query.iter(&self.world).map(|(p, s)| (*p, s.key)).collect()
+    }
+
     /// Finds a settlement at `(x, y)`, if any — checked in `move_player`
     /// after the surface-link arm, so walking onto a town's tile queues a
     /// visit instead of just bumping into a blocking glyph.
@@ -1241,13 +1253,10 @@ impl Game {
         x: i32,
         y: i32,
     ) -> Option<crate::settlements::SettlementKey> {
-        let mut query = self
-            .world
-            .query_filtered::<(&Position, &crate::components::Settlement), ()>();
-        query
-            .iter(&self.world)
+        self.settlement_positions()
+            .into_iter()
             .find(|(p, _)| p.x == x && p.y == y)
-            .map(|(_, s)| s.key)
+            .map(|(_, key)| key)
     }
 
     /// Drains the landmark visit `move_player`'s door arms queued, if any —

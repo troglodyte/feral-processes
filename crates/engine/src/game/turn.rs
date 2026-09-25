@@ -927,30 +927,71 @@ impl Game {
         bite
     }
 
-    /// Whether stepping onto `(x, y)` would trip one of `move_player`'s
-    /// non-step ladder arms — a wild creature, a nest, the Stack's surface
-    /// link, a settlement, an outpost, or a trap — rather than actually
-    /// landing there. `Game::travel_step`'s (`game/travel.rs`) route cost
-    /// function is the one caller: a route may not cross a tile that would
-    /// start a fight, breach a nest, dive into the Stack or open a visit out
-    /// from under the player mid-walk.
+    /// Every tile inside the box `origin ± radius` that would trip one of
+    /// `move_player`'s non-step ladder arms — a wild creature, a nest, the
+    /// Stack's surface link, a settlement, an outpost, or a trap — rather
+    /// than actually landing there. `Game::travel_step`'s (`game/travel.rs`)
+    /// route cost function is the one caller: a route may not cross a tile
+    /// that would start a fight, breach a nest, dive into the Stack or open
+    /// a visit out from under the player mid-walk.
     ///
-    /// **Calls the same six `find_*_at` queries `move_player` calls above,
-    /// rather than restating what each one tests** — `move_player`'s own
-    /// arms stay exactly as written; this is those checks again under one
-    /// name, not a second copy of them. Terrain walkability is a separate
-    /// question and not this function's — see `Tile::walkable`.
-    pub(crate) fn bump_at(&mut self, x: i32, y: i32) -> bool {
-        self.find_wild_creature_at(x, y).is_some()
-            || self.find_nest_at(x, y).is_some()
-            || self.find_surface_link_at(x, y).is_some()
-            || self.find_settlement_at(x, y).is_some()
-            || self
-                .world
+    /// **Reads the same six per-kind position lists `move_player`'s own
+    /// arms resolve a single cell against — `wild_creature_positions`,
+    /// `nest_positions`, `surface_link_positions`, `settlement_positions`,
+    /// `trap_positions`, and the `Outposts` resource — collected once here
+    /// instead of once per cell.** A per-cell version of this question used
+    /// to run all six of those queries fresh for every cell a route's search
+    /// box touched — up to `(2*radius+1)^2` of them, every tick a travel was
+    /// live — which is the cost this collects once and hands back as a set
+    /// instead. Terrain walkability is a separate question and not this
+    /// function's — see `Tile::walkable`.
+    pub(crate) fn bump_tiles(
+        &mut self,
+        origin: (i32, i32),
+        radius: i32,
+    ) -> std::collections::HashSet<(i32, i32)> {
+        let in_box =
+            |x: i32, y: i32| (x - origin.0).abs() <= radius && (y - origin.1).abs() <= radius;
+        let mut tiles = std::collections::HashSet::new();
+        tiles.extend(
+            self.wild_creature_positions()
+                .into_iter()
+                .map(|(_, p)| (p.x, p.y))
+                .filter(|&(x, y)| in_box(x, y)),
+        );
+        tiles.extend(
+            self.nest_positions()
+                .into_iter()
+                .map(|(_, p)| (p.x, p.y))
+                .filter(|&(x, y)| in_box(x, y)),
+        );
+        tiles.extend(
+            self.surface_link_positions()
+                .into_iter()
+                .map(|(_, p)| (p.x, p.y))
+                .filter(|&(x, y)| in_box(x, y)),
+        );
+        tiles.extend(
+            self.settlement_positions()
+                .into_iter()
+                .map(|(p, _)| (p.x, p.y))
+                .filter(|&(x, y)| in_box(x, y)),
+        );
+        tiles.extend(
+            self.trap_positions()
+                .into_iter()
+                .map(|(_, p)| (p.x, p.y))
+                .filter(|&(x, y)| in_box(x, y)),
+        );
+        tiles.extend(
+            self.world
                 .resource::<crate::resources::Outposts>()
                 .0
-                .contains_key(&(x, y))
-            || self.find_trap_at(x, y).is_some()
+                .keys()
+                .filter(|&&(x, y)| in_box(x, y))
+                .copied(),
+        );
+        tiles
     }
 
     /// Announces weather arriving or clearing under the player, if the tick

@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.242
+
+**A long activity in the CREW pane is cut short with an ellipsis instead
+of covering the program's Integrity.** The activity sits at the right end
+of a crew row, so a long one — building or cutting something with a long
+name — grew leftward over the INTEG figure. It now stops at twelve
+characters and ends in `…` when anything was cut.
+
 ## 0.13.241
 
 **Marking ground to dig out now asks for the tiles to floor it, and your

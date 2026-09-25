@@ -463,6 +463,38 @@ fn a_step_onto_drag_ground_costs_the_extra_ticks() {
     assert_eq!(clock(&game) - before, 2);
 }
 
+/// `travel-on-the-clock`'s regression: the clocked walk must not
+/// fast-forward the world past the speed setting, so `move_player_paced`
+/// spends only the step's own one tick and hands drag ground's extra ticks
+/// back as a number owed rather than spending them here the way
+/// `move_player` still does.
+#[test]
+fn move_player_paced_reports_drag_owed_instead_of_spending_it() {
+    let mut plain = game_about_to_step(Biome::OpenGrid);
+    let plain_epoch = clear_epoch(&plain, Biome::OpenGrid);
+    set_tick(&mut plain, plain_epoch * STATIC_EPOCH_TICKS + 1);
+    let before = clock(&plain);
+
+    let (_, owed) = plain.move_player_paced(1, 0);
+
+    assert_eq!(clock(&plain) - before, 1, "the step itself is one tick");
+    assert_eq!(owed, 0, "clean ground owes nothing");
+
+    let mut game = game_about_to_step(Biome::Deadlock);
+    let epoch = clear_epoch(&game, Biome::Deadlock);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let before = clock(&game);
+
+    let (_, owed) = game.move_player_paced(1, 0);
+
+    assert_eq!(
+        clock(&game) - before,
+        1,
+        "the drag ticks must be reported, not spent inline"
+    );
+    assert_eq!(owed, 1, "Lock Contention's own drag figure");
+}
+
 /// The second effect kind exists precisely so the vocabulary is not all
 /// damage. Read off `Stats` rather than a downstream consequence.
 #[test]

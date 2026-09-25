@@ -692,8 +692,32 @@ impl Game {
     /// Remembering it in a `Resource` instead would shift query iteration
     /// order across the whole engine to carry one `i32` one function up.
     pub fn move_player(&mut self, dx: i32, dy: i32) -> i32 {
+        self.move_player_inner(dx, dy, true).0
+    }
+
+    /// The clocked walk's own entry point (`app-core`'s
+    /// `App::spend_walk_tick`, `travel-on-the-clock`'s whole point): spends
+    /// exactly the one world tick the step itself costs and hands back drag
+    /// ground's extra ticks as a number **owed** rather than spending them
+    /// here, so the clock can pay them one `idle_tick` a clock tick instead
+    /// of fast-forwarding the world past the speed setting the way an
+    /// inline loop driven by a held key did. The engine stays the one
+    /// source of the drag figure — app-core only ever spends what this
+    /// reports, never computes its own. Paused arrows keep calling
+    /// `move_player` untouched, so `acting_while_paused_still_spends_a_turn`
+    /// stays exactly as turn-based as it always was.
+    pub fn move_player_paced(&mut self, dx: i32, dy: i32) -> (i32, u32) {
+        self.move_player_inner(dx, dy, false)
+    }
+
+    /// Shared body behind `move_player` and `move_player_paced` — `spend_drag`
+    /// is what tells the two apart: `true` spends drag ground's extra ticks
+    /// inline exactly as this always has, `false` reports them in the second
+    /// return value instead of spending them. Returns `(bite, drag_ticks_owed)`;
+    /// `move_player` discards the second half, having already spent it.
+    fn move_player_inner(&mut self, dx: i32, dy: i32, spend_drag: bool) -> (i32, u32) {
         if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
-            return 0;
+            return (0, 0);
         }
         // Base space is its own coordinate space with its own walkability,
         // and the player's `Position` stays pinned to the anchor tile
@@ -704,7 +728,7 @@ impl Game {
             // The base slab is the one safe floor and carries no condition
             // (`environment_biome_at` refuses `Platform` outright), so there
             // is never a bite in here to report.
-            return 0;
+            return (0, 0);
         }
         let player = self.player_entity();
         // Any attempt to move ends a job you were working (see
@@ -718,19 +742,19 @@ impl Game {
             let pack = self.gather_pack(target);
             self.start_battle(pack);
             self.tick();
-            return 0;
+            return (0, 0);
         }
         if let Some(nest) = self.find_nest_at(nx, ny) {
             self.attack_nest(nest);
             self.tick();
-            return 0;
+            return (0, 0);
         }
         if self.find_surface_link_at(nx, ny).is_some() {
             // The entrance survives, unlike a zone portal — it is a place
             // you come back to, not a one-way door.
             self.enter_stack(nx, ny);
             self.tick();
-            return 0;
+            return (0, 0);
         }
         if let Some(key) = self.find_settlement_at(nx, ny) {
             // The fourth arm of the same ladder, and the one that admits
@@ -754,7 +778,7 @@ impl Game {
                 known.visited = true;
             }
             self.tick();
-            return 0;
+            return (0, 0);
         }
         if self
             .world
@@ -770,7 +794,7 @@ impl Game {
                 .resource_mut::<crate::resources::PendingVisit>()
                 .0 = Some(crate::resources::Visit::Outpost((nx, ny)));
             self.tick();
-            return 0;
+            return (0, 0);
         }
         if let Some(trap) = self.find_trap_at(nx, ny) {
             // The sixth arm of the ladder and, like the five above it, not a
@@ -803,7 +827,7 @@ impl Game {
                 }
             }
             self.tick();
-            return 0;
+            return (0, 0);
         }
         // **No structure is consulted here.** Every `Structure` stands in
         // base space — `Structure` is the space tag, and there is exactly
@@ -909,6 +933,9 @@ impl Game {
             self.maybe_ambush();
         }
         self.tick();
+        if !spend_drag {
+            return (bite, drag_ticks);
+        }
         // Slow ground is the one step that costs more than a turn. A tick
         // can start a fight — `pursuit_tick` is the precedent — so the
         // rest of them are dropped the moment one does, rather than
@@ -924,7 +951,7 @@ impl Game {
             }
             self.tick();
         }
-        bite
+        (bite, 0)
     }
 
     /// Every tile inside the box `origin ± radius` that would trip one of

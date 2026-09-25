@@ -155,6 +155,7 @@ struct Frontend {
     perf_on: bool,
     perf: perf::PerfMeter,
     sprite_pointer: SpritePointer,
+    map_pointer: MapPointer,
 }
 
 /// Frame-to-frame pointer state for `Mode::SpriteEditor` — the first mouse
@@ -253,6 +254,63 @@ fn handle_sprite_pointer(
             tracker.last_hit = None;
         }
         (None, None) => {}
+    }
+}
+
+/// Frame-to-frame pointer state for click-to-travel: the tile a primary
+/// press landed on. A release is compared against it rather than treated as
+/// a click on its own — the spec's own definition, "press+release on the
+/// same tile without drag" — so the press's tile is all this has to
+/// remember; there is no in-between phase to draw, unlike `SpritePointer`'s
+/// stroke.
+#[derive(Default)]
+struct MapPointer {
+    down_tile: Option<(i32, i32)>,
+}
+
+/// Turns a primary click on the map pane into `App::travel_to`.
+///
+/// `fx.map_click()` is `None` whenever this frame's map pane drew something
+/// other than the ordinary surface/base grid (a tactical board, a Stack
+/// corridor, or no map at all) — see `Fx::set_map_click` — so a click
+/// finds nothing to invert rather than reading a stale layout from a
+/// screen the player has since left. Everything past that is `App::
+/// travel_to`'s own gate (`Mode::Playing`, not underground): this function
+/// only has to find a tile.
+fn handle_map_pointer(app: &mut App, ctx: &egui::Context, fx: &Fx, tracker: &mut MapPointer) {
+    if ctx.egui_wants_pointer_input() {
+        tracker.down_tile = None;
+        return;
+    }
+    let Some(layout) = fx.map_click() else {
+        tracker.down_tile = None;
+        return;
+    };
+    let (pressed, released, pos) = ctx.input(|i| {
+        (
+            i.pointer.primary_pressed(),
+            i.pointer.primary_released(),
+            i.pointer.interact_pos(),
+        )
+    });
+    let Some(pos) = pos else {
+        return;
+    };
+    let inside = pos.x >= layout.pane.x
+        && pos.x < layout.pane.x + layout.pane.w
+        && pos.y >= layout.pane.y
+        && pos.y < layout.pane.y + layout.pane.h;
+    if pressed {
+        // A press that starts outside the pane opens no gesture — the same
+        // "nothing to paint yet" rule `handle_sprite_pointer` uses.
+        tracker.down_tile = inside.then(|| render::tile_at_px(pos.x, pos.y, &layout));
+    }
+    if released
+        && let Some(down) = tracker.down_tile.take()
+        && inside
+        && render::tile_at_px(pos.x, pos.y, &layout) == down
+    {
+        app.travel_to(down.0, down.1);
     }
 }
 
@@ -363,6 +421,7 @@ pub fn run(app: App) {
             perf_on: false,
             perf: perf::PerfMeter::new(),
             sprite_pointer: SpritePointer::default(),
+            map_pointer: MapPointer::default(),
         })
         .init_resource::<sprites::Sprites>()
         .add_systems(
@@ -646,6 +705,13 @@ fn frame(
         && let Some(readout) = fe.perf.readout()
     {
         draw_perf(&readout.line(), &painter);
+    }
+    // After `render::draw`, which is what stashes `fe.fx`'s `MapClickLayout`
+    // for this frame — see `handle_map_pointer`'s own doc for why reading it
+    // any earlier would find last frame's layout instead.
+    {
+        let ctx = contexts.ctx_mut()?;
+        handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
     }
     Ok(())
 }

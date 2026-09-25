@@ -95,6 +95,10 @@ use base::draw_playing_base;
 // space lives beside `App`.
 #[cfg(test)]
 pub(crate) use base::CUTTING_OUTLINE;
+// The click-to-travel geometry: `fx.rs` stores the frame's `MapClickLayout`
+// and `lib.rs`'s pointer system inverts a click through `tile_at_px` — both
+// outside `render`, so both need the path out.
+pub(crate) use base::{MapClickLayout, tile_at_px};
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_emulate_menu, draw_battle_item_menu,
     draw_battle_special_menu, draw_battle_target_menu,

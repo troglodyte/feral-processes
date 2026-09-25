@@ -358,6 +358,12 @@ pub(super) fn draw_playing_base(
     } else {
         game.tactical_view()
     };
+    // Cleared here, unconditionally, ahead of the three-way branch below:
+    // `draw_surface_map` overwrites it with `Some(..)` in the one branch
+    // that draws the ordinary grid, so a tactical board or a Stack corridor
+    // leaves it `None` rather than a click inheriting a layout from the
+    // screen the player has since left.
+    fx.set_map_click(None);
     if let Some(view) = board {
         tactical::draw_tactical_map(
             &view,
@@ -712,6 +718,18 @@ fn draw_surface_map(
         }
     }
     let shield_outline = fx.shield_outline(game.raid_defense_active());
+
+    // Stashed for the pointer system, `MapClickLayout`'s own doc: these are
+    // exactly `tile_origin_px`'s arguments for this frame, including
+    // `off_x`/`off_y` after they have already eased toward their target —
+    // a click has to invert the frame it was actually drawn against.
+    fx.set_map_click(Some(MapClickLayout {
+        pane,
+        center,
+        half: (half_w, half_h),
+        off: (off_x, off_y),
+        tile_px,
+    }));
 
     painter.rect(
         pane.x,
@@ -1627,6 +1645,37 @@ pub(super) fn tile_origin_px(
     (
         pane.x + ((world.0 - player.0 + half.0) as f32 - off.0) * tile_px,
         pane.y + ((world.1 - player.1 + half.1) as f32 - off.1) * tile_px,
+    )
+}
+
+/// The map pane's layout as `draw_surface_map` drew it this frame — pane
+/// rect, camera centre, half-extent and sub-tile offset, all of them
+/// `tile_origin_px`'s own arguments. Stashed by the draw pass into
+/// `Fx::set_map_click` and read back by the pointer system
+/// (`lib.rs::handle_map_pointer`) rather than recomputed there: the camera
+/// offset eases toward its target over time (`Fx::camera_offset`), so a
+/// second call would advance it again and answer a different frame's
+/// numbers than the one the player actually saw and clicked on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MapClickLayout {
+    pub(crate) pane: Rect,
+    pub(crate) center: (i32, i32),
+    pub(crate) half: (i32, i32),
+    pub(crate) off: (f32, f32),
+    pub(crate) tile_px: f32,
+}
+
+/// The exact inverse of `tile_origin_px`, kept in the same file so the two
+/// cannot drift apart: which world tile a pixel inside the map pane falls
+/// in. Floored rather than rounded, `tile_origin_px`'s own corner — so a
+/// point anywhere inside the cell, not just the pixel at its top-left
+/// corner, answers the same tile that corner does.
+pub(crate) fn tile_at_px(px: f32, py: f32, layout: &MapClickLayout) -> (i32, i32) {
+    let gx = ((px - layout.pane.x) / layout.tile_px + layout.off.0).floor() as i32;
+    let gy = ((py - layout.pane.y) / layout.tile_px + layout.off.1).floor() as i32;
+    (
+        gx + layout.center.0 - layout.half.0,
+        gy + layout.center.1 - layout.half.1,
     )
 }
 
@@ -5844,6 +5893,60 @@ mod tests {
             !view.wears_job_mark,
             "the staffed mark is about a posted program, and UnderStudy is not Staff"
         );
+    }
+
+    /// `tile_at_px` is `tile_origin_px`'s exact inverse — the round trip the
+    /// click-to-travel feature stands on. Two window sizes and a non-zero
+    /// `pane.y` (the status bar claiming the top row) and camera offset:
+    /// the drawing seam's "literal 0.0" trap is a term that only shows up
+    /// once one of these stops being zero, so a fixture that leaves any of
+    /// them at zero would pass with the term dropped.
+    #[test]
+    fn tile_at_px_inverts_tile_origin_px_at_the_corner_and_inside_the_cell() {
+        let cases = [
+            (
+                Rect::new(0.0, 32.0, 800.0, 560.0),
+                20.0_f32,
+                (20, 14),
+                (0.35, -0.6),
+            ),
+            (
+                Rect::new(0.0, 48.0, 1600.0, 900.0),
+                32.0_f32,
+                (26, 15),
+                (-0.2, 0.8),
+            ),
+        ];
+        for (pane, tile_px, half, off) in cases {
+            let center = (5, -3);
+            let layout = MapClickLayout {
+                pane,
+                center,
+                half,
+                off,
+                tile_px,
+            };
+            for dx in -6..=6 {
+                for dy in -6..=6 {
+                    let t = (center.0 + dx, center.1 + dy);
+                    let (ox, oy) = tile_origin_px(t, center, half, off, tile_px, pane);
+                    assert_eq!(
+                        tile_at_px(ox, oy, &layout),
+                        t,
+                        "the corner of {t:?}, drawn at ({ox}, {oy}), inverted to the wrong tile"
+                    );
+                    // Not just the corner: a point in the interior of the
+                    // cell has to answer the same tile, or a click anywhere
+                    // but the top-left pixel would miss.
+                    let (ix, iy) = (ox + tile_px * 0.5, oy + tile_px * 0.5);
+                    assert_eq!(
+                        tile_at_px(ix, iy, &layout),
+                        t,
+                        "the middle of {t:?}, at ({ix}, {iy}), inverted to the wrong tile"
+                    );
+                }
+            }
+        }
     }
 }
 

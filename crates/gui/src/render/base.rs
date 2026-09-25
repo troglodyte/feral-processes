@@ -201,6 +201,11 @@ pub(super) fn draw_playing_base(
     let status_line = refusal.map(str::to_string);
     // Read before the `game` borrow, like `status_line` above.
     let stack_zoom = app.stack_zoom;
+    let clock = if app.paused {
+        hud::status_bar::Clock::Paused
+    } else {
+        hud::status_bar::Clock::Running(app.world_speed.multiple())
+    };
     // The one derivation of the five regions this screen draws into. Reads
     // no `Game`, so it is computed before the borrow below like every other
     // value gathered here.
@@ -542,6 +547,7 @@ pub(super) fn draw_playing_base(
             zone: status.zone,
             position: game.base_pos().unwrap_or(status.position),
             tick: game.current_tick(),
+            clock,
             power: game.base_power(),
             attention: &attention,
             unread_alerts: game.unread_alerts(),

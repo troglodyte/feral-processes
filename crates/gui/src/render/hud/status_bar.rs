@@ -29,11 +29,22 @@ const SEP: &str = " · ";
 /// The share of the bar held back for the attention badge.
 const BADGE_FRAC: f32 = 0.22;
 
+/// The idle clock as the bar reads it — `App::paused` and
+/// `WorldSpeed::multiple`, folded so the bar cannot show a multiple while
+/// the clock is held.
+#[derive(Debug, Clone, Copy)]
+pub(in crate::render) enum Clock {
+    Paused,
+    Running(u32),
+}
+
 /// What the bar reads, gathered by the caller before the `Game` borrow.
 pub(in crate::render) struct StatusBarState<'a> {
     pub zone: u32,
     pub position: (i32, i32),
     pub tick: u64,
+    /// Drawn beside `tick`, which it paces.
+    pub clock: Clock,
     /// `Game::base_power`, as `(draw, supply)` — the base's grid, in the
     /// order the `B` roster's own header states it.
     ///
@@ -56,7 +67,7 @@ pub(in crate::render) struct StatusBarState<'a> {
 fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
     let (x, y) = state.position;
     let (draw, supply) = state.power;
-    vec![
+    let mut runs = vec![
         ("feral".to_string(), palette::EMPHASIS, true),
         ("-processes".to_string(), palette::LABEL, false),
         (SEP.to_string(), palette::FAINT, false),
@@ -67,10 +78,18 @@ fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
         (SEP.to_string(), palette::FAINT, false),
         ("tick ".to_string(), palette::FIELD_LABEL, false),
         (state.tick.to_string(), palette::BODY, false),
+    ];
+    match state.clock {
+        Clock::Paused => runs.push((" PAUSED".to_string(), palette::ATTENTION, true)),
+        Clock::Running(1) => {}
+        Clock::Running(n) => runs.push((format!(" x{n}"), palette::EMPHASIS, true)),
+    }
+    runs.extend([
         (SEP.to_string(), palette::FAINT, false),
         ("[GRID] ".to_string(), palette::FIELD_LABEL, false),
         (format!("{draw}/{supply}"), grid_color(state.power), false),
-    ]
+    ]);
+    runs
 }
 
 /// Spare supply at or under which the grid figure warns: one more machine
@@ -270,6 +289,7 @@ mod tests {
             zone: 16,
             position: (-9999, -9999),
             tick: 9_999_999,
+            clock: Clock::Paused,
             power: (188, 188),
             attention: &[],
             unread_alerts: 0,
@@ -282,6 +302,7 @@ mod tests {
             zone: 3,
             position: (0, 0),
             tick: 4210,
+            clock: Clock::Running(1),
             power,
             attention: &[],
             unread_alerts: 0,
@@ -297,6 +318,25 @@ mod tests {
             .expect("the identity block carries a grid segment");
         let (text, color, _) = runs[at + 1].clone();
         (text, color)
+    }
+
+    /// The clock reads beside the tick it paces: `PAUSED` while held, the
+    /// multiple while fast-forwarded, and nothing at the world's own speed,
+    /// which is the calm state and needs no word.
+    #[test]
+    fn the_clock_reads_beside_the_tick() {
+        let text_at = |clock| {
+            let mut state = grid_state((0, 0));
+            state.clock = clock;
+            identity_text(&state)
+        };
+        assert!(text_at(Clock::Paused).contains("tick 4210 PAUSED"));
+        assert!(text_at(Clock::Running(4)).contains("tick 4210 x4"));
+        let calm = text_at(Clock::Running(1));
+        assert!(
+            calm.contains("tick 4210 · "),
+            "normal speed drew a readout: {calm:?}"
+        );
     }
 
     /// The one thing this row must never do. It is a single line with no

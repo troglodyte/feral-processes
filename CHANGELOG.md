@@ -53,6 +53,15 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.240
+
+**A program that couldn't find a way to somewhere to rest now tries again.**
+A program in a bad enough mood walks off to unwind at an amenity. Before,
+if the way there was blocked even once, it gave up until its mood recovered
+on its own, which could leave a whole crew on strike long after the way was
+clear. It now tries the walk again every so often, and you are told only
+the first time it can't get there.
+
 ## 0.13.239
 
 **Ground your crew digs out in the base now stays open for good.** Before,

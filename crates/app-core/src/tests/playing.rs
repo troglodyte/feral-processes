@@ -51,44 +51,89 @@ fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
     );
 }
 
-/// `update_realtime` is the hook a frontend's own loop calls every
-/// frame, independent of `handle_key`, so the world keeps advancing
-/// while the player is idle — but only in `Mode::Playing`. Backdates
-/// `last_realtime_tick` instead of actually sleeping so the test stays
-/// fast and deterministic.
+fn tick_of(app: &App) -> u64 {
+    app.game.as_ref().unwrap().current_tick()
+}
+
+/// `update_realtime` is the hook a frontend's own loop calls every frame,
+/// independent of `handle_key`, so the world keeps advancing while the
+/// player is idle. It paces against the frame's `dt` with a carry, so a
+/// frame shorter than a tick banks its share rather than losing it.
 #[test]
-fn update_realtime_ticks_once_a_second_only_while_playing() {
+fn update_realtime_paces_idle_ticks_against_dt() {
     let mut app = test_app(303);
-    let start_tick = app.game.as_ref().unwrap().current_tick();
+    let start = tick_of(&app);
+    let tick = 1.0 / WorldSpeed::Normal.ticks_per_second();
 
-    // Not enough wall-clock time has passed yet.
-    app.last_realtime_tick = Instant::now();
-    app.update_realtime();
+    app.update_realtime(tick * 0.6);
+    assert_eq!(tick_of(&app), start, "ticked before a tick's worth of time");
+
+    app.update_realtime(tick * 0.6);
     assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        start_tick,
-        "update_realtime shouldn't tick before a full second has elapsed"
+        tick_of(&app),
+        start + 1,
+        "two short frames did not add up to the tick they bought"
     );
+}
 
-    // A full second (backdated) should fire exactly one idle tick.
-    app.last_realtime_tick = Instant::now() - Duration::from_secs(2);
-    app.update_realtime();
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        start_tick + 1,
-        "update_realtime should advance the world by one tick once a second has passed"
-    );
+/// Every mode but `Playing` holds the clock, and the carry resets rather
+/// than banking the time spent in a menu.
+#[test]
+fn update_realtime_holds_the_clock_off_the_map() {
+    let mut app = test_app(304);
+    let start = tick_of(&app);
+    let tick = 1.0 / WorldSpeed::Normal.ticks_per_second();
 
-    // Paused outside Playing (any menu, or battle via its own Mode) —
-    // no tick, and the timer resets rather than banking elapsed time.
+    app.update_realtime(tick * 0.9);
     app.mode = Mode::Inventory;
-    app.last_realtime_tick = Instant::now() - Duration::from_secs(5);
-    app.update_realtime();
+    app.update_realtime(tick * 5.0);
+    assert_eq!(tick_of(&app), start, "the world ran behind a menu");
+
+    app.mode = Mode::Playing;
+    app.update_realtime(tick * 0.2);
     assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        start_tick + 1,
-        "update_realtime shouldn't tick while paused on a non-Playing mode"
+        tick_of(&app),
+        start,
+        "time from before the menu was banked across it"
     );
+}
+
+/// A frame of seconds — the window dragged, the app backgrounded — must
+/// not come back as a burst of idle ticks the player never saw happen.
+#[test]
+fn a_long_frame_spends_at_most_the_per_frame_cap() {
+    let mut app = test_app(305);
+    let start = tick_of(&app);
+    app.world_speed = WorldSpeed::Fastest;
+
+    app.update_realtime(30.0);
+
+    assert_eq!(tick_of(&app), start + MAX_IDLE_TICKS_PER_FRAME as u64);
+}
+
+/// The speed setting is the rate, and `Fastest` really is four times
+/// `Normal` over the same second.
+#[test]
+fn a_faster_speed_spends_more_ticks_per_second() {
+    for (seed, speed) in [(306, WorldSpeed::Normal), (307, WorldSpeed::Fastest)] {
+        let mut app = test_app(seed);
+        app.world_speed = speed;
+        let start = tick_of(&app);
+        // A power-of-two frame, so the carry sums exactly in `f32`.
+        for _ in 0..64 {
+            app.update_realtime(1.0 / 64.0);
+        }
+        let spent = tick_of(&app) - start;
+        // A tick that opens a fight leaves `Playing` and holds the clock,
+        // so a seed can only ever come in under the rate, never over it.
+        assert!(
+            spent <= speed.ticks_per_second().round() as u64,
+            "{speed:?} spent {spent} ticks in a second"
+        );
+        if app.mode == Mode::Playing {
+            assert_eq!(spent, speed.ticks_per_second().round() as u64, "{speed:?}");
+        }
+    }
 }
 
 /// `c` is the transfer key, and it is bound on the map rather than being
@@ -328,89 +373,127 @@ fn n_is_refused_outside_base_space() {
     );
 }
 
-/// SPACE doubles the map screen's log pane and back — `App::log_expanded`,
-/// read by `hud::layout::regions` in the renderer. Toggling is not an
-/// action, the same as `n` above: reading a wider log must not cost a turn.
+/// SPACE pauses the idle clock and SPACE again resumes it. Neither press is
+/// an action, so neither spends a turn.
 #[test]
-fn space_toggles_the_log_pane_and_spends_no_turn() {
+fn space_pauses_the_idle_clock_and_resumes_it() {
     let mut app = test_app(9103);
-    let tick = app.game.as_ref().unwrap().current_tick();
-    assert!(!app.log_expanded, "the log pane starts collapsed");
+    let start = tick_of(&app);
+    assert!(!app.paused, "a game starts running");
 
     app.handle_key(GameKey::Char(' '));
-    assert!(app.log_expanded, "SPACE did not expand the log pane");
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        tick,
-        "expanding the log spent a turn"
-    );
+    assert!(app.paused, "SPACE did not pause");
+    assert_eq!(tick_of(&app), start, "pausing spent a turn");
+    app.update_realtime(5.0);
+    assert_eq!(tick_of(&app), start, "the world ran while paused");
 
     app.handle_key(GameKey::Char(' '));
+    assert!(!app.paused, "SPACE did not resume");
+    app.update_realtime(1.0);
     assert!(
-        !app.log_expanded,
-        "SPACE did not collapse the log pane back"
+        tick_of(&app) > start,
+        "the world did not run after resuming"
+    );
+}
+
+/// Pause holds the *idle* clock only: an action still spends its own tick
+/// through `handle_key`'s tail, so a paused game is a turn-based one rather
+/// than a frozen one.
+#[test]
+fn acting_while_paused_still_spends_a_turn() {
+    let mut app = test_app(9106);
+    app.handle_key(GameKey::Char(' '));
+    let start = tick_of(&app);
+
+    app.handle_key(GameKey::Char('.'));
+
+    assert!(app.paused);
+    assert_eq!(
+        tick_of(&app),
+        start + 1,
+        "waiting while paused spent no turn"
     );
 }
 
 /// **The load-bearing one**, `the_digits_work_underground`'s reason: this
 /// match runs before the hand-off to `handle_stack_key`, which ends in
-/// `_ => {}`, so a key that reached it instead would be a swallowed
-/// keypress with no refusal and nothing in the log — how `r` (rest) shipped
-/// broken underground. The log pane the toggle resizes is drawn on the
-/// Stack view too, so the toggle has to reach both locales.
+/// `_ => {}`, so a key that reached it instead would be swallowed with no
+/// refusal. The clock runs underground too, so pause has to reach it.
 #[test]
-fn space_toggles_the_log_pane_underground_too() {
+fn space_pauses_underground_too() {
     let mut app = app_underground(9104);
     assert!(app.game.as_ref().unwrap().is_underground());
 
     app.handle_key(GameKey::Char(' '));
 
-    assert!(app.log_expanded, "SPACE was swallowed underground");
-    assert!(
-        app.status_line.is_none(),
-        "the key was refused rather than acted on: {:?}",
-        app.status_line
-    );
+    assert!(app.paused, "SPACE was swallowed underground");
+    assert!(app.status_line.is_none(), "{:?}", app.status_line);
 }
 
-/// `REALTIME_TICK_INTERVAL` is whole milliseconds, so a `WORLD_SPEED_MULTIPLIER`
-/// that doesn't divide 1000 loses the remainder in silence — a `3` there is
-/// 333ms, which is 3.003 ticks a second rather than 3, and drifts against
-/// every wall-clock figure the constant's own doc quotes.
+/// `]` steps the speed up and `[` steps it down, clamped at both ends, and
+/// neither is an action.
 #[test]
-fn tick_rate_divides_a_real_second_exactly() {
+fn brackets_step_the_world_speed_within_its_bounds() {
+    let mut app = test_app(9107);
+    let start = tick_of(&app);
+    assert_eq!(app.world_speed, WorldSpeed::Normal);
+
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.world_speed, WorldSpeed::Normal, "stepped below Normal");
+
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.world_speed, WorldSpeed::Fast);
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.world_speed, WorldSpeed::Fastest);
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.world_speed, WorldSpeed::Fastest, "stepped past Fastest");
+
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.world_speed, WorldSpeed::Fast);
+    assert_eq!(tick_of(&app), start, "changing speed spent a turn");
+}
+
+/// The speed keys reach the Stack for SPACE's reason.
+#[test]
+fn brackets_step_the_world_speed_underground_too() {
+    let mut app = app_underground(9108);
+
+    app.handle_key(GameKey::Char(']'));
+
     assert_eq!(
-        REALTIME_TICK_INTERVAL * WORLD_SPEED_MULTIPLIER,
-        Duration::from_secs(1),
-        "WORLD_SPEED_MULTIPLIER of {WORLD_SPEED_MULTIPLIER} does not divide 1000ms evenly, \
-         so the world runs at a rate the constant does not claim"
+        app.world_speed,
+        WorldSpeed::Fast,
+        "`]` was swallowed underground"
     );
 }
 
-/// Nothing on the map screen consumes `GameKey::Tab` yet — the icon editor
-/// (Task 5) is its first reader. Pinned here so that landing this key stays
-/// additive: `handle_playing_key`'s top match falls through to `_ => {}` for
-/// it today, and `current_tick` unmoved is this codebase's own definition of
-/// "no action happened" (see `stepped`, above in this file's sibling
-/// `playing.rs` in `app-core/src/app/`).
+/// TAB doubles the map screen's log pane and back — `App::log_expanded`,
+/// read by `hud::layout::regions` in the renderer. Toggling is not an
+/// action: reading a wider log must not cost a turn.
 #[test]
-fn tab_is_inert_on_the_map_screen() {
+fn tab_toggles_the_log_pane_and_spends_no_turn() {
     let mut app = test_app(9105);
-    assert_eq!(app.mode, Mode::Playing);
-    let before_tick = app.game.as_ref().unwrap().current_tick();
+    let start = tick_of(&app);
+    assert!(!app.log_expanded, "the log pane starts collapsed");
+
+    app.handle_key(GameKey::Tab);
+    assert!(app.log_expanded, "TAB did not expand the log pane");
+    assert_eq!(app.mode, Mode::Playing, "TAB changed the mode");
+    assert_eq!(tick_of(&app), start, "expanding the log spent a turn");
+
+    app.handle_key(GameKey::Tab);
+    assert!(!app.log_expanded, "TAB did not collapse the log pane back");
+}
+
+/// The log pane is drawn on the Stack view too, so TAB has to reach it.
+#[test]
+fn tab_toggles_the_log_pane_underground_too() {
+    let mut app = app_underground(9109);
 
     app.handle_key(GameKey::Tab);
 
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "Tab must not open or change a mode"
-    );
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        before_tick,
-        "Tab must spend no tick — nothing reads it yet"
-    );
+    assert!(app.log_expanded, "TAB was swallowed underground");
+    assert!(app.status_line.is_none(), "{:?}", app.status_line);
 }
 
 /// Ground that costs Integrity has to *sound* like it. The bite is

@@ -740,28 +740,40 @@ impl App {
         };
     }
 
-    /// Advances the world by one idle tick if a real second has passed
-    /// since the last one — called every frame by a frontend's own loop
-    /// (independent of `handle_key`, which only fires on input) so the
-    /// world keeps moving while the player sits idle. Ticking only happens
-    /// in `Mode::Playing`: every other mode — battle included, since
-    /// entering one switches away from `Playing` — is treated as paused,
-    /// and the wall-clock timer resets rather than banking elapsed time,
-    /// so coming back from a menu never triggers a burst of catch-up ticks.
-    pub fn update_realtime(&mut self) {
-        if self.mode != Mode::Playing {
-            self.last_realtime_tick = Instant::now();
+    /// Spends idle ticks at `world_speed` against wall-clock `dt` — called
+    /// every frame by a frontend's own loop (independent of `handle_key`,
+    /// which only fires on input) so the world keeps moving while the player
+    /// sits idle. `advance_compile`'s accumulator, capped at
+    /// `MAX_IDLE_TICKS_PER_FRAME`.
+    ///
+    /// Only `Mode::Playing` and not `paused` runs the clock: every other mode
+    /// — battle included, since entering one switches away from `Playing` —
+    /// holds it, and the carry resets rather than banking, so coming back
+    /// never fires a burst of catch-up ticks. The loop re-checks the mode
+    /// after every tick for the same reason: a tick that opens a fight must
+    /// not be followed by another under it.
+    ///
+    /// Ends in `after_tick` once per call, for `advance_compile`'s reason.
+    pub fn update_realtime(&mut self, dt: f32) {
+        if self.mode != Mode::Playing || self.paused || self.game.is_none() {
+            self.realtime_ticks_carry = 0.0;
             return;
         }
-        let Some(game) = &mut self.game else {
-            self.last_realtime_tick = Instant::now();
-            return;
-        };
-        if self.last_realtime_tick.elapsed() < REALTIME_TICK_INTERVAL {
-            return;
+        self.realtime_ticks_carry = (self.realtime_ticks_carry
+            + dt * self.world_speed.ticks_per_second())
+        .min(MAX_IDLE_TICKS_PER_FRAME as f32);
+        let mut spent_a_tick = false;
+        while self.realtime_ticks_carry >= 1.0 && self.mode == Mode::Playing {
+            let Some(game) = &mut self.game else { break };
+            game.idle_tick();
+            self.realtime_ticks_carry -= 1.0;
+            spent_a_tick = true;
+            if game.has_active_battle() || game.is_game_over().is_some() {
+                self.realtime_ticks_carry = 0.0;
+            }
         }
-        self.last_realtime_tick = Instant::now();
-        game.idle_tick();
-        self.after_tick();
+        if spent_a_tick {
+            self.after_tick();
+        }
     }
 }

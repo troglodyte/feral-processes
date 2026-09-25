@@ -269,8 +269,23 @@ impl App {
             // locales without a second arm down there to drift from this
             // one — and the log pane it resizes is drawn on the surface and
             // in the Stack view alike.
-            GameKey::Char(' ') => {
+            GameKey::Tab => {
                 self.log_expanded = !self.log_expanded;
+                return;
+            }
+            // The idle clock: SPACE holds it, `[`/`]` step its speed. Up
+            // here for the toggle's reason — the clock runs underground
+            // too — and a `return` because none of them is an action.
+            GameKey::Char(' ') => {
+                self.paused = !self.paused;
+                return;
+            }
+            GameKey::Char(']') => {
+                self.world_speed = self.world_speed.faster();
+                return;
+            }
+            GameKey::Char('[') => {
+                self.world_speed = self.world_speed.slower();
                 return;
             }
             // The info column's three panes. A `return` for `f`'s reason:

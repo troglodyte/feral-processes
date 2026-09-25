@@ -83,7 +83,7 @@ use app::arena::{ArenaPickKind, ArenaSession};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::achievements::{AchievementDb, MainStat, Profile};
 use feral_processes_engine::battle::DamageRange;
@@ -623,17 +623,58 @@ const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 /// in the engine is the gate on the first pair; the pairing itself is
 /// prose, on both ends.
 ///
-/// Must divide 1000 evenly — `REALTIME_TICK_INTERVAL` is integer
-/// milliseconds, so a `3` here is silently 3.003 ticks a second.
-/// `tick_rate_divides_a_real_second_exactly` holds that.
 const WORLD_SPEED_MULTIPLIER: u32 = 2;
 
-/// Wall-clock spacing between idle ticks (see `App::update_realtime`) —
-/// the world keeps moving while the player just sits on `Mode::Playing`
-/// and touches nothing. Derived, so `WORLD_SPEED_MULTIPLIER` is the only
-/// number to edit.
-const REALTIME_TICK_INTERVAL: Duration =
-    Duration::from_millis(1000 / WORLD_SPEED_MULTIPLIER as u64);
+/// The player's fast-forward, stepped with `[`/`]` on the map. `Normal` is
+/// `WORLD_SPEED_MULTIPLIER`; the others are whole multiples of it.
+///
+/// **A faster speed buys ticks, not a retune**, so it speeds up *everything*
+/// the idle clock drives — the wild programs `WORLD_SPEED_MULTIPLIER`'s pins
+/// hold at a fixed wall-clock pace included. That is what fast-forward means.
+///
+/// Pause is a separate `App::paused` rather than a variant here, so SPACE
+/// resumes at the speed it paused at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldSpeed {
+    Normal,
+    Fast,
+    Fastest,
+}
+
+impl WorldSpeed {
+    pub fn ticks_per_second(self) -> f32 {
+        WORLD_SPEED_MULTIPLIER as f32 * self.multiple() as f32
+    }
+
+    /// The factor over `Normal`, which is what the HUD shows.
+    pub fn multiple(self) -> u32 {
+        match self {
+            WorldSpeed::Normal => 1,
+            WorldSpeed::Fast => 2,
+            WorldSpeed::Fastest => 4,
+        }
+    }
+
+    fn faster(self) -> Self {
+        match self {
+            WorldSpeed::Normal => WorldSpeed::Fast,
+            WorldSpeed::Fast | WorldSpeed::Fastest => WorldSpeed::Fastest,
+        }
+    }
+
+    fn slower(self) -> Self {
+        match self {
+            WorldSpeed::Normal | WorldSpeed::Fast => WorldSpeed::Normal,
+            WorldSpeed::Fastest => WorldSpeed::Fast,
+        }
+    }
+}
+
+/// The most idle ticks one frame may spend. A frame seconds long — the
+/// window dragged, the app backgrounded — would otherwise come back as a
+/// burst of world the player never saw happen. Two covers `Fastest` at any
+/// frame rate a debug build actually reaches.
+const MAX_IDLE_TICKS_PER_FRAME: u32 = 2;
 
 /// How fast battle narration scrolls into the log pane, in lines per second.
 ///
@@ -2823,11 +2864,17 @@ pub struct App {
     /// a dive spent reading the maze.
     pub stack_zoom: u16,
     /// Whether the map screen's log pane is drawn at twice its usual height
-    /// — see `SPACE` in `handle_playing_key`. Bound in the same top match
+    /// — see `TAB` in `handle_playing_key`. Bound in the same top match
     /// as `1`/`2`/`3`, which runs before the hand-off to `handle_stack_key`,
     /// so the toggle reaches both locales: the log pane it resizes is drawn
     /// on the surface and in the Stack view alike.
     pub log_expanded: bool,
+    /// Whether the idle clock is held — SPACE on the map. Holds
+    /// `update_realtime` only: an action still spends its tick through
+    /// `handle_key`'s tail, so a paused game is turn-based, not frozen.
+    pub paused: bool,
+    /// How fast the idle clock runs while not `paused` — `[`/`]` on the map.
+    pub world_speed: WorldSpeed,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
     /// of, not instead of, typing a row's own number/letter directly.
@@ -2853,10 +2900,10 @@ pub struct App {
     /// Reset by every key press, so the window belongs to the most recent
     /// message rather than the first one.
     status_age: f32,
-    /// Wall-clock time of the last idle tick (see `App::update_realtime`) —
-    /// reset whenever ticking is paused (any mode but `Playing`) so resuming
-    /// play doesn't immediately fire a burst of catch-up ticks.
-    last_realtime_tick: Instant,
+    /// Sub-tick carry against `world_speed`, `compile_ticks_carry`'s shape —
+    /// reset whenever the clock is held so leaving a menu or unpausing never
+    /// fires time banked while it was.
+    realtime_ticks_carry: f32,
     /// Where `Mode::ArenaLoad` reads scenarios from and `Mode::ArenaSave`
     /// writes them to. A constructor parameter beside `saves_dir` rather
     /// than something derived here: `App` takes its paths from the

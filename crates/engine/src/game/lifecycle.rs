@@ -2063,6 +2063,10 @@ impl Game {
                 entity.insert(crate::components::Disgruntled {
                     grievance,
                     stranded: c.disgruntled_stranded,
+                    // Never saved, `Needs::stalled_announced`'s rule — a
+                    // reload says the line again if the body is still
+                    // stranded when it loads.
+                    told: false,
                 });
             }
             entity.insert((

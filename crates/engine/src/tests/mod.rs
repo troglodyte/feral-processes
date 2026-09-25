@@ -78,6 +78,7 @@ mod routines;
 mod save_roundtrip;
 mod settlement_aid_reach;
 mod settlement_boards;
+mod settlement_footprint;
 mod settlement_growth;
 mod settlement_market;
 mod settlement_patrols;

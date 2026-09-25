@@ -64,6 +64,23 @@ fn releases_the_camera(key: GameKey) -> bool {
     )
 }
 
+/// The eight keys that step the party on this screen — arrows and their
+/// `hjkl` aliases. Shared by the walk-queueing arm below and the Stack
+/// hand-off, so the one set of keys can't drift between the two readings.
+fn is_move_key(key: GameKey) -> bool {
+    matches!(
+        key,
+        GameKey::Up
+            | GameKey::Down
+            | GameKey::Left
+            | GameKey::Right
+            | GameKey::Char('k')
+            | GameKey::Char('j')
+            | GameKey::Char('h')
+            | GameKey::Char('l')
+    )
+}
+
 impl App {
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
         // Watching is a camera, not a mode: every other key still does
@@ -76,6 +93,13 @@ impl App {
             if key == GameKey::Esc {
                 return;
             }
+        }
+        // A travel is intent for ticks not yet spent, and any key that
+        // isn't itself a step says the player wants this one doing
+        // something else instead. An arrow overwrites a travel rather than
+        // needing this to catch it too — see the walk-queueing arm below.
+        if !is_move_key(key) && matches!(self.walk, Some(Walk::Travel { .. })) {
+            self.walk = None;
         }
         match key {
             // The two group menus. Seventeen keys used to sit on this
@@ -347,23 +371,33 @@ impl App {
             _ => {}
         }
 
-        let is_move_key = matches!(
-            key,
-            GameKey::Up
-                | GameKey::Down
-                | GameKey::Left
-                | GameKey::Right
-                | GameKey::Char('k')
-                | GameKey::Char('j')
-                | GameKey::Char('h')
-                | GameKey::Char('l')
-        );
+        let is_move_key = is_move_key(key);
         // Underground the same four keys steer a party that has a facing:
         // forward, back, and turn in place. Deliberately the same keys rather
         // than a separate set — walking is walking, and the view makes which
         // one you're doing obvious.
         if self.game.as_ref().is_some_and(|g| g.is_underground()) {
             self.handle_stack_key(key, is_move_key);
+            return;
+        }
+
+        // Not paused: queue the step for the clock to spend on its next
+        // tick (`App::spend_walk_tick`) instead of moving right here — the
+        // whole of `travel-on-the-clock`'s fix, since `handle_key` used to
+        // spend a tick per press and gui's key repeat fires far faster than
+        // any `WorldSpeed`. An arrow overwrites whatever was already
+        // queued, travel included, so at most one step is ever pending.
+        // Paused leaves this alone: `acting_while_paused_still_spends_a_turn`
+        // is the turn-based path below, unchanged.
+        if is_move_key && !self.paused {
+            let delta = match key {
+                GameKey::Up | GameKey::Char('k') => (0, -1),
+                GameKey::Down | GameKey::Char('j') => (0, 1),
+                GameKey::Left | GameKey::Char('h') => (-1, 0),
+                GameKey::Right | GameKey::Char('l') => (1, 0),
+                _ => unreachable!("is_move_key guards this to the four directions"),
+            };
+            self.walk = Some(Walk::Step(delta.0, delta.1));
             return;
         }
 
@@ -746,5 +780,103 @@ impl App {
         if self.mode == Mode::GameOver {
             self.pending_sounds.push(SoundEvent::Defeat);
         }
+    }
+
+    /// `update_realtime`'s loop body: spends one clock tick on the pending
+    /// walk, or idles when there is none. Split out of that loop so the
+    /// `&mut self.game` borrow a step needs can end before `after_world_action`
+    /// and `refuse` — each `&mut self` whole — are called; that borrow-scoping
+    /// is the only reason this isn't written inline there.
+    ///
+    /// Routes every step through `after_world_action` with `is_move_key:
+    /// true`, exactly as `handle_playing_key`'s own arrow arms do — the
+    /// same call is what picks the Step/Hit/BattleStart cue, opens a
+    /// settlement or outpost visit, and switches to a fight, so a walked
+    /// step can't pick a different cue or skip one of those than a typed
+    /// one does.
+    pub(crate) fn spend_walk_tick(&mut self) {
+        let Some(walk) = self.walk else {
+            if let Some(game) = &mut self.game {
+                game.idle_tick();
+            }
+            return;
+        };
+        let mut ground_bite = 0;
+        let mut no_route = false;
+        let acted = {
+            let Some(game) = &mut self.game else { return };
+            match walk {
+                Walk::Step(dx, dy) => {
+                    self.walk = None;
+                    stepped(game, dx, dy, &mut ground_bite)
+                }
+                Walk::Travel { goal, in_base } => {
+                    // The space the travel was set in no longer matches
+                    // where the party stands — a base entrance or exit
+                    // taken by some other means since. `Game::travel_step`
+                    // has no notion of "the wrong space"; it would just
+                    // answer for whichever space it's asked about, so the
+                    // check belongs here, before it's asked at all.
+                    if game.in_base() != in_base {
+                        self.walk = None;
+                        false
+                    } else {
+                        match game.travel_step(goal) {
+                            TravelStep::Toward(dx, dy) => {
+                                let before = current_travel_tile(game, in_base);
+                                let acted = stepped(game, dx, dy, &mut ground_bite);
+                                // A route that didn't actually move anybody
+                                // — a hostile stepped onto the planned cell,
+                                // say — would otherwise be asked again next
+                                // tick and answer the same `Toward` forever.
+                                if current_travel_tile(game, in_base) == before {
+                                    self.walk = None;
+                                }
+                                acted
+                            }
+                            TravelStep::Last(dx, dy) => {
+                                self.walk = None;
+                                stepped(game, dx, dy, &mut ground_bite)
+                            }
+                            TravelStep::Arrived | TravelStep::Gone => {
+                                self.walk = None;
+                                false
+                            }
+                            TravelStep::NoRoute => {
+                                self.walk = None;
+                                no_route = true;
+                                false
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        self.after_world_action(acted, true, ground_bite);
+        if no_route {
+            self.refuse("No clear way there.");
+        }
+        // Immediate rather than waiting for `update_realtime`'s own guard
+        // to catch it next call: `after_world_action` is what switches
+        // `mode` away from `Playing` (a fight, a settlement or outpost
+        // visit), and a travel surviving that would resume wherever it
+        // left off the moment the screen it opened is left.
+        if self.mode != Mode::Playing {
+            self.walk = None;
+        }
+    }
+}
+
+/// The tile the player occupies in `in_base`'s space, `Game::travel_origin`'s
+/// own read — `pub(crate)` to the engine alone, so `spend_walk_tick` asks it
+/// through the two public doors that answer the same question: the base
+/// coordinate stays pinned in `resources::Locale::Base`, and the surface
+/// tile is the one `Position` never goes stale for once underground and
+/// base space are both ruled out (`Game::travel_step`'s own doc).
+fn current_travel_tile(game: &Game, in_base: bool) -> Option<(i32, i32)> {
+    if in_base {
+        game.base_pos()
+    } else {
+        Some(game.player_status().position)
     }
 }

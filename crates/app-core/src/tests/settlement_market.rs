@@ -42,7 +42,7 @@ fn app_at_a_settlement(seed: u32) -> (App, SettlementKey) {
 /// At the shelf, basket empty.
 fn app_at_the_market(seed: u32) -> (App, SettlementKey) {
     let (mut app, key) = app_at_a_settlement(seed);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::Settlement, "the bump should open the hub");
     app.handle_key(GameKey::Char('M'));
     assert_eq!(app.mode, Mode::SettlementMarket);

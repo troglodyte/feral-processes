@@ -264,7 +264,7 @@ fn surfacing_hands_movement_back_to_the_zone_map() {
     // Stack would do neither: it would walk the frame, leaving the surface
     // `Position` pinned to the entrance and starting no surface battle.
     for key in [GameKey::Right, GameKey::Down, GameKey::Left, GameKey::Up] {
-        app.handle_key(key);
+        walk(&mut app, key);
         if app.game.as_ref().unwrap().player_status().position != before || app.mode == Mode::Battle
         {
             return;

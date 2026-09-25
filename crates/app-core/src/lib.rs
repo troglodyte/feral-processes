@@ -80,6 +80,7 @@ pub enum TransferSource {
 }
 
 use app::arena::{ArenaPickKind, ArenaSession};
+use app::travel::Walk;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -108,7 +109,7 @@ use feral_processes_engine::{
     MESSAGE_LOG_CAP, MessageSource, OutpostReport, ProgramSaleOption, RigToolView,
     RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
     SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
-    Visit, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2871,6 +2872,16 @@ pub struct App {
     pub paused: bool,
     /// How fast the idle clock runs while not `paused` — `,` on the map.
     pub world_speed: WorldSpeed,
+    /// What the clock is about to spend its next tick on — an arrow's
+    /// queued step, or a route toward a click. `App::update_realtime`'s own
+    /// field, read and cleared nowhere else, so `handle_key`'s tail never
+    /// ticks on an unpaused arrow (`travel-on-the-clock`).
+    ///
+    /// Not saved: a walk is intent, not state, so a reload drops it rather
+    /// than resuming a route into whatever the loaded save put on that
+    /// tile. Cleared in `App::install_game`, the one door both a new game
+    /// and a load share.
+    walk: Option<Walk>,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
     /// of, not instead of, typing a row's own number/letter directly.

@@ -2,7 +2,7 @@
 //! paces the wild side.
 
 use super::support::{
-    app_with_companions_in_the_party, install_player_routines, learn_image, test_app,
+    app_with_companions_in_the_party, install_player_routines, learn_image, test_app, walk,
 };
 use crate::{
     App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
@@ -32,12 +32,15 @@ fn fighting_app(tactical: bool) -> App {
             .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
             .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
         let Some(target) = target else { continue };
-        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
-            (1, 0) => GameKey::Right,
-            (-1, 0) => GameKey::Left,
-            (0, 1) => GameKey::Down,
-            _ => GameKey::Up,
-        });
+        walk(
+            &mut app,
+            match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            },
+        );
         let opened = if tactical {
             app.mode == Mode::TacticalBattle
         } else {
@@ -95,12 +98,15 @@ fn emulating_tactical_app() -> App {
             .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
             .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
         let Some(target) = target else { continue };
-        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
-            (1, 0) => GameKey::Right,
-            (-1, 0) => GameKey::Left,
-            (0, 1) => GameKey::Down,
-            _ => GameKey::Up,
-        });
+        walk(
+            &mut app,
+            match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            },
+        );
         if app.mode == Mode::TacticalBattle {
             let _ = app.take_sounds();
             wait_for_the_player(&mut app);
@@ -1064,12 +1070,15 @@ fn taken_over_ready_app(start_seed: u32) -> App {
             .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
             .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
         let Some(target) = target else { continue };
-        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
-            (1, 0) => GameKey::Right,
-            (-1, 0) => GameKey::Left,
-            (0, 1) => GameKey::Down,
-            _ => GameKey::Up,
-        });
+        walk(
+            &mut app,
+            match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            },
+        );
         if app.mode == Mode::TacticalBattle {
             let _ = app.take_sounds();
             return app;
@@ -1195,12 +1204,15 @@ mod teleport {
                 .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
                 .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
             let Some(target) = target else { continue };
-            app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
-                (1, 0) => GameKey::Right,
-                (-1, 0) => GameKey::Left,
-                (0, 1) => GameKey::Down,
-                _ => GameKey::Up,
-            });
+            walk(
+                &mut app,
+                match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                    (1, 0) => GameKey::Right,
+                    (-1, 0) => GameKey::Left,
+                    (0, 1) => GameKey::Down,
+                    _ => GameKey::Up,
+                },
+            );
             if app.mode == Mode::TacticalBattle {
                 let _ = app.take_sounds();
                 wait_for_the_player(&mut app);

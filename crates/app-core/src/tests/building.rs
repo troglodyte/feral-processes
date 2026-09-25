@@ -739,7 +739,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     // onto what they opened. Bounded rather than counted: what this test is
     // about is the key, not the wall.
     for _ in 0..20 {
-        app.handle_key(GameKey::Char('l'));
+        walk(&mut app, GameKey::Char('l'));
         if app.game.as_ref().unwrap().base_pos() == Some(cut) {
             break;
         }

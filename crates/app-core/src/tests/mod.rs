@@ -55,4 +55,5 @@ mod tools;
 mod trade;
 mod transfer;
 mod traps;
+mod travel;
 mod watch;

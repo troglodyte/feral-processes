@@ -62,6 +62,45 @@ pub(crate) fn stand_inside_the_base(app: &mut App) {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Presses `key` and spends the one tick `update_realtime` owes it at the
+/// current `world_speed` — `travel-on-the-clock`'s replacement for a test
+/// that used to read `handle_key` alone as "the player moved." An unpaused
+/// arrow on the map only *queues* a step now; this is the shortest way for
+/// a test that doesn't care about the clock itself to still see it land.
+pub(crate) fn walk(app: &mut App, key: GameKey) {
+    app.handle_key(key);
+    app.update_realtime(1.0 / app.world_speed.ticks_per_second());
+}
+
+/// Clears a box around the player of every wild creature, nest, surface
+/// link and settlement — a movement or travel test's guarantee that a short
+/// walk can't be interrupted by whatever the seed's world generation
+/// happened to place nearby, wandering into the path included (clearing
+/// only the exact row a walk would cross is not enough: `WanderAi` and
+/// `pursuit_tick` both run every real tick, seed 2602's own reason a
+/// same-row clear alone still landed a battle three ticks into a plain
+/// eastward walk). `place_wild_program_east`'s row-clearing step, widened
+/// to a box and without the placement that follows it.
+pub(crate) fn clear_the_area_around_player(app: &mut App) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("clear_area", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    const RADIUS: i32 = 15;
+    let near = |x: i32, y: i32| (x - px).abs() <= RADIUS && (y - py).abs() <= RADIUS;
+    data.creatures.retain(|c| !near(c.position.0, c.position.1));
+    data.nests.retain(|n| !near(n.position.0, n.position.1));
+    data.link_sites.retain(|&(x, y)| !near(x, y));
+    data.settlements.0.retain(|_, s| !near(s.tile.0, s.tile.1));
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 pub(crate) fn test_app(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
@@ -328,6 +367,102 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
     app
+}
+
+/// A minimal hostile `CreatureSave` at `position` — the level-1 scrapper
+/// shape `place_wild_program_east` and `box_in_player_with_hostiles` both
+/// need, factored out so a travel test boxing the player in with eight of
+/// them doesn't retype the ~40-field literal eight times.
+fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
+    CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position,
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        tamed: false,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        study_station: None,
+        outpost: None,
+        pursuing: false,
+        carrying: None,
+        carrying_program: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        disgruntled_stranded: false,
+        memories: Vec::new(),
+        needs: Default::default(),
+        attributes: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+        siege_cell: None,
+        siege_order: None,
+        besieger: false,
+        stolen_from: None,
+    }
+}
+
+/// Surrounds the player with a hostile on all eight neighbours — `Game::
+/// travel_step`'s own `no_route_when_boxed_in_by_hostiles` fixture, built
+/// the app-core way since the engine's `World` is private to it: a route's
+/// cost function refuses every cell a hostile stands on, so no route out
+/// exists at all, whatever the goal.
+pub(crate) fn box_in_player_with_hostiles(app: &mut App) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("box_in", 0);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let ring: Vec<(i32, i32)> = [-1, 0, 1]
+        .into_iter()
+        .flat_map(|dx| [-1, 0, 1].into_iter().map(move |dy| (dx, dy)))
+        .filter(|&(dx, dy)| (dx, dy) != (0, 0))
+        .map(|(dx, dy)| (px + dx, py + dy))
+        .collect();
+    data.creatures.retain(|c| !ring.contains(&c.position));
+    for pos in ring {
+        data.creatures
+            .push(wild_creature_save(species.clone(), pos));
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
 }
 
 /// Puts one wild program exactly `east` tiles due east of the player and

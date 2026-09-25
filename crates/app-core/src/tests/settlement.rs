@@ -9,7 +9,7 @@ fn bumping_a_settlement_opens_its_page_with_the_key_set() {
     let mut app = test_app(950);
     let (key, _) = place_settlement_east_of_player(&mut app);
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     assert_eq!(app.mode, Mode::Settlement);
     assert_eq!(app.pending_settlement, Some(key));
@@ -24,7 +24,7 @@ fn bumping_a_settlement_does_not_move_the_player() {
     place_settlement_east_of_player(&mut app);
     let before = app.game.as_ref().unwrap().player_status().position;
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     let after = app.game.as_ref().unwrap().player_status().position;
     assert_eq!(before, after, "a settlement admits nobody");
@@ -34,7 +34,7 @@ fn bumping_a_settlement_does_not_move_the_player() {
 fn esc_returns_to_playing_and_clears_the_pending_settlement() {
     let mut app = test_app(952);
     place_settlement_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::Settlement);
 
     app.handle_key(GameKey::Esc);
@@ -56,7 +56,7 @@ fn esc_returns_to_playing_and_clears_the_pending_settlement() {
 fn an_unrelated_action_after_esc_does_not_reopen_the_page() {
     let mut app = test_app(953);
     place_settlement_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::Settlement);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -81,7 +81,7 @@ fn a_battle_starting_inside_the_settlement_bump_wins_the_mode() {
     let mut app = test_app(960);
     place_settlement_and_a_pursuing_guardian(&mut app);
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     assert_eq!(
         app.mode,
@@ -100,7 +100,7 @@ fn a_battle_starting_inside_the_settlement_bump_wins_the_mode() {
 fn the_settlement_cue_drains_even_when_a_battle_wins_the_bump() {
     let mut app = test_app(961);
     place_settlement_and_a_pursuing_guardian(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::Battle);
 
     for _ in 0..60 {

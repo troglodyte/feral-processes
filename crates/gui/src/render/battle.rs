@@ -1275,7 +1275,11 @@ mod tests {
         let game =
             crate::render::test_support::game_with_a_rare_party_companion(seed, Rarity::Gold);
         let mut app = crate::render::test_support::playing_app_around(game);
+        // An unpaused arrow only queues a step now (`travel-on-the-clock`);
+        // `update_realtime` is what spends the tick that actually bumps
+        // the hostile and opens the fight.
         app.handle_key(direction);
+        app.update_realtime(1.0 / app.world_speed.ticks_per_second());
         assert_eq!(
             app.mode,
             Mode::Battle,

@@ -67,12 +67,15 @@ fn app_about_to_level(seed: u32) -> App {
             .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
             .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
         let Some(target) = target else { continue };
-        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
-            (1, 0) => GameKey::Right,
-            (-1, 0) => GameKey::Left,
-            (0, 1) => GameKey::Down,
-            _ => GameKey::Up,
-        });
+        walk(
+            &mut app,
+            match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            },
+        );
         if app.mode == Mode::Battle {
             let _ = app.take_sounds();
             app.finish_reveal();

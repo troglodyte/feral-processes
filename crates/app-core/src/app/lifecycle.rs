@@ -135,6 +135,7 @@ impl App {
             log_expanded: false,
             paused: false,
             world_speed: WorldSpeed::Normal,
+            walk: None,
             menu_selected: 0,
             research_graph_view: false,
             last_autosave_tick: 0,
@@ -556,6 +557,11 @@ impl App {
             game.enable_battle_telemetry();
         }
         self.game = Some(game);
+        // A walk is intent aimed at the run that queued it — a fresh or
+        // just-loaded one has no route in progress to resume, and a stale
+        // `Travel` surviving the swap would send the party wherever that
+        // tile ended up meaning in the new run.
+        self.walk = None;
         // Forced: a fresh or just-loaded run has no prior side to compare
         // against, so it must open on the true tab rather than wait for a
         // crossing that, from this run's point of view, already happened

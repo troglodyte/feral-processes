@@ -12,7 +12,7 @@ use crate::*;
 fn at_a_board(seed: u32) -> (App, feral_processes_engine::settlements::SettlementKey) {
     let mut app = test_app(seed);
     let (key, _) = place_settlement_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::Settlement);
     app.handle_key(GameKey::Char('J'));
     (app, key)

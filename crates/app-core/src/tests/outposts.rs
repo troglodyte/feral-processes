@@ -11,7 +11,7 @@ fn bumping_an_outpost_opens_its_page_with_the_tile_set() {
     let mut app = test_app(970);
     let tile = place_outpost_east_of_player(&mut app);
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     assert_eq!(app.mode, Mode::OutpostVisit);
     assert_eq!(app.pending_outpost, Some(tile));
@@ -26,7 +26,7 @@ fn bumping_an_outpost_does_not_move_the_player() {
     place_outpost_east_of_player(&mut app);
     let before = app.game.as_ref().unwrap().player_status().position;
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     let after = app.game.as_ref().unwrap().player_status().position;
     assert_eq!(before, after, "an outpost admits nobody");
@@ -36,7 +36,7 @@ fn bumping_an_outpost_does_not_move_the_player() {
 fn esc_returns_to_playing_and_clears_the_pending_outpost() {
     let mut app = test_app(972);
     place_outpost_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::OutpostVisit);
 
     app.handle_key(GameKey::Esc);
@@ -52,7 +52,7 @@ fn esc_returns_to_playing_and_clears_the_pending_outpost() {
 fn an_unrelated_action_after_esc_does_not_reopen_the_outpost_page() {
     let mut app = test_app(973);
     place_outpost_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::OutpostVisit);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -89,7 +89,7 @@ fn examining_an_outpost_opens_the_same_page() {
 fn p_then_a_letter_posts_a_staff_program_and_returns_to_the_visit_page() {
     let mut app = test_app(974);
     place_outpost_with_a_staff_program_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::OutpostVisit);
 
     app.handle_key(GameKey::Char('P'));
@@ -111,7 +111,7 @@ fn p_then_a_letter_posts_a_staff_program_and_returns_to_the_visit_page() {
 fn esc_from_the_post_picker_posts_nobody() {
     let mut app = test_app(975);
     place_outpost_with_a_staff_program_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('P'));
 
     app.handle_key(GameKey::Esc);
@@ -126,7 +126,7 @@ fn esc_from_the_post_picker_posts_nobody() {
 fn a_letter_then_u_recalls_the_selected_crew_member() {
     let mut app = test_app(976);
     place_outpost_with_a_staff_program_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('P'));
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.outpost_report().unwrap().crew.len(), 1);
@@ -147,7 +147,7 @@ fn a_letter_then_u_recalls_the_selected_crew_member() {
 fn r_refuses_at_full_integrity() {
     let mut app = test_app(977);
     place_outpost_east_of_player(&mut app);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     app.handle_key(GameKey::Char('R'));
 
@@ -164,7 +164,7 @@ fn r_repairs_a_damaged_outpost() {
     let mut app = test_app(978);
     place_damaged_outpost_east_of_player(&mut app, 10);
     give_player_items(&mut app, &[("logic_wafer", 200), ("bytecode_block", 200)]);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     app.handle_key(GameKey::Char('R'));
 
@@ -182,7 +182,7 @@ fn r_repairs_a_damaged_outpost() {
 fn shift_c_opens_transfer_with_the_outposts_stock() {
     let mut app = test_app(978);
     let tile = place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     app.handle_key(GameKey::Char('C'));
 
@@ -203,7 +203,7 @@ fn shift_c_opens_transfer_with_the_outposts_stock() {
 fn committing_a_take_spends_through_take_from_outpost_and_returns_to_the_visit_page() {
     let mut app = test_app(979);
     place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('C'));
     assert_eq!(app.mode, Mode::Transfer);
     // Take everything on the one row.
@@ -225,7 +225,7 @@ fn committing_a_take_spends_through_take_from_outpost_and_returns_to_the_visit_p
 fn esc_from_the_outposts_transfer_picker_returns_to_the_visit_page() {
     let mut app = test_app(980);
     place_outpost_with_stock(&mut app, &[("raw_trace", 4)]);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('C'));
 
     app.handle_key(GameKey::Esc);
@@ -240,7 +240,7 @@ fn esc_from_the_outposts_transfer_picker_returns_to_the_visit_page() {
 fn lowercase_c_selects_a_crew_row_and_uppercase_c_opens_transfer() {
     let mut app = test_app(981);
     place_outpost_with_crew_and_stock(&mut app, 3, &[("raw_trace", 4)]);
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
     assert_eq!(app.mode, Mode::OutpostVisit);
     assert_eq!(app.outpost_report().unwrap().crew.len(), 3);
 

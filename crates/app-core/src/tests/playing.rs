@@ -24,7 +24,14 @@ fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
         "waiting isn't a movement key and shouldn't queue a movement sound"
     );
 
+    // Queuing a step alone fires nothing — `travel-on-the-clock` moved the
+    // cue to the tick that actually spends it (`walk`, below).
     app.handle_key(GameKey::Right);
+    assert!(
+        app.take_sounds().is_empty(),
+        "queuing a step should not itself queue a sound"
+    );
+    app.update_realtime(1.0 / app.world_speed.ticks_per_second());
     let sounds = app.take_sounds();
     assert_eq!(
         sounds.len(),
@@ -53,6 +60,107 @@ fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
 
 fn tick_of(app: &App) -> u64 {
     app.game.as_ref().unwrap().current_tick()
+}
+
+fn player_pos(app: &App) -> (i32, i32) {
+    app.game.as_ref().unwrap().player_status().position
+}
+
+/// `travel-on-the-clock`'s own claim: an unpaused arrow queues a step
+/// rather than spending one, so `handle_key` alone must not move the
+/// player or the clock — only `update_realtime` may.
+#[test]
+fn an_arrow_moves_the_player_on_the_next_tick_and_not_in_handle_key() {
+    let mut app = test_app(2601);
+    clear_the_area_around_player(&mut app);
+    let start_tick = tick_of(&app);
+    let start_pos = player_pos(&app);
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(tick_of(&app), start_tick, "handle_key alone spent a tick");
+    assert_eq!(
+        player_pos(&app),
+        start_pos,
+        "handle_key alone moved the player"
+    );
+
+    app.update_realtime(1.0 / app.world_speed.ticks_per_second());
+    assert_eq!(
+        tick_of(&app),
+        start_tick + 1,
+        "the queued step did not spend the tick it was owed"
+    );
+    assert_eq!(
+        player_pos(&app),
+        (start_pos.0 + 1, start_pos.1),
+        "the queued step did not move the player"
+    );
+}
+
+/// **The regression this feature exists to fix.** Before `travel-on-the-
+/// clock`, `handle_key` spent a tick per press and gui's key repeat fired
+/// far faster than any `WorldSpeed` (`REPEAT_INTERVAL` is 0.09s, against
+/// Normal's 0.5s tick) — holding a direction ran the world at ~11 ticks/s
+/// regardless of the speed setting. This re-sends the key several times a
+/// tick, faster than the clock itself, and checks that `N` seconds of that
+/// still spends and walks exactly `ticks_per_second * N` — the clock, not
+/// the keyboard, deciding how far the party got. A held key's repeats all
+/// overwrite the same pending `Walk::Step`, so any repeat rate is legal
+/// input for this claim; `REPEATS_PER_TICK` only has to be more than one.
+#[test]
+fn holding_an_arrow_spends_exactly_the_clocks_ticks() {
+    const REPEATS_PER_TICK: u32 = 4;
+    const SECONDS: u32 = 1;
+
+    let mut app = test_app(2602);
+    clear_the_area_around_player(&mut app);
+    let start_tick = tick_of(&app);
+    let start_pos = player_pos(&app);
+    let ticks_per_second = app.world_speed.ticks_per_second();
+    let expected_ticks = (ticks_per_second as u32) * SECONDS;
+    let frame = 1.0 / (ticks_per_second * REPEATS_PER_TICK as f32);
+
+    for _ in 0..(expected_ticks * REPEATS_PER_TICK) {
+        app.handle_key(GameKey::Right);
+        app.update_realtime(frame);
+    }
+
+    assert_eq!(
+        tick_of(&app),
+        start_tick + expected_ticks as u64,
+        "holding an arrow must spend exactly the clock's own ticks, not one per repeat"
+    );
+    assert_eq!(
+        player_pos(&app),
+        (start_pos.0 + expected_ticks as i32, start_pos.1),
+        "holding an arrow must walk exactly the clock's own cells, not one per repeat"
+    );
+}
+
+/// Pause keeps the turn-based path: an arrow still steps immediately and
+/// spends exactly one tick, `acting_while_paused_still_spends_a_turn`'s own
+/// case for a key that is now queued rather than acted on everywhere else.
+#[test]
+fn a_paused_arrow_still_steps_immediately_and_spends_one_tick() {
+    let mut app = test_app(2603);
+    clear_the_area_around_player(&mut app);
+    app.handle_key(GameKey::Char(' '));
+    assert!(app.paused);
+    let start_tick = tick_of(&app);
+    let start_pos = player_pos(&app);
+
+    app.handle_key(GameKey::Right);
+
+    assert_eq!(
+        tick_of(&app),
+        start_tick + 1,
+        "a paused arrow did not spend a turn immediately"
+    );
+    assert_eq!(
+        player_pos(&app),
+        (start_pos.0 + 1, start_pos.1),
+        "a paused arrow did not move the player immediately"
+    );
 }
 
 /// `update_realtime` is the hook a frontend's own loop calls every frame,
@@ -294,7 +402,7 @@ fn a_swing_at_rock_in_base_space_is_an_action() {
     let _ = inside.take_sounds();
     let tick = inside.game.as_ref().unwrap().current_tick();
 
-    inside.handle_key(GameKey::Up);
+    walk(&mut inside, GameKey::Up);
 
     assert_eq!(
         inside.game.as_ref().unwrap().current_tick(),
@@ -316,7 +424,7 @@ fn a_swing_at_rock_in_base_space_is_an_action() {
     outside.status_line = Some("an earlier refusal".to_string());
     let _ = outside.take_sounds();
 
-    outside.handle_key(GameKey::Up);
+    walk(&mut outside, GameKey::Up);
 
     assert_eq!(
         outside.status_line, None,

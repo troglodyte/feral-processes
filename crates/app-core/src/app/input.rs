@@ -757,6 +757,14 @@ impl App {
     pub fn update_realtime(&mut self, dt: f32) {
         if self.mode != Mode::Playing || self.paused || self.game.is_none() {
             self.realtime_ticks_carry = 0.0;
+            // A mode left `Playing` since the last call — a fight, a
+            // settlement visit, any popup — so whatever the player was
+            // walking toward ends with it, `travel-on-the-clock`'s own
+            // rule. `App::spend_walk_tick` also clears it the instant a
+            // step it spends causes that same crossing, so this is the
+            // path for every *other* way `mode` leaves `Playing` — Esc out
+            // of a screen the map opened, say — reaching the same result.
+            self.walk = None;
             return;
         }
         self.realtime_ticks_carry = (self.realtime_ticks_carry
@@ -764,10 +772,10 @@ impl App {
         .min(MAX_IDLE_TICKS_PER_FRAME as f32);
         let mut spent_a_tick = false;
         while self.realtime_ticks_carry >= 1.0 && self.mode == Mode::Playing {
-            let Some(game) = &mut self.game else { break };
-            game.idle_tick();
+            self.spend_walk_tick();
             self.realtime_ticks_carry -= 1.0;
             spent_a_tick = true;
+            let Some(game) = &self.game else { break };
             if game.has_active_battle() || game.is_game_over().is_some() {
                 self.realtime_ticks_carry = 0.0;
             }

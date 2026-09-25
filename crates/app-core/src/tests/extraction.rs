@@ -353,8 +353,8 @@ fn f_with_no_rig_beside_you_refuses_out_loud() {
     // space. Asserted rather than assumed: walking *into* the rig's cell
     // does not move the player, so a step in its direction would leave the
     // party adjacent and this test would pass for nothing.
-    app.handle_key(GameKey::Char('j'));
-    app.handle_key(GameKey::Char('j'));
+    walk(&mut app, GameKey::Char('j'));
+    walk(&mut app, GameKey::Char('j'));
     assert!(
         app.game
             .as_ref()

@@ -109,7 +109,7 @@ fn a_step_hands_the_camera_back_and_still_steps() {
     app.handle_key(GameKey::Char('w'));
     let before = app.game.as_ref().unwrap().base_pos().unwrap();
 
-    app.handle_key(GameKey::Right);
+    walk(&mut app, GameKey::Right);
 
     assert_eq!(app.watching, None);
     assert_ne!(

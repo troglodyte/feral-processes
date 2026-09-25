@@ -84,6 +84,18 @@ fn tile_of(game: &Game, key: SettlementKey) -> (i32, i32) {
         .tile
 }
 
+/// How many map entities `key` actually has right now — `footprint(key)
+/// .len()` is the *derived* size and moves the instant vitality does,
+/// whether or not `sync_settlement_footprint` has run since; this is the
+/// one way to see whether the writer actually caught up to it.
+fn entity_cells(game: &mut Game, key: SettlementKey) -> usize {
+    let mut query = game.world.query::<&Settlement>();
+    query
+        .iter(&game.world)
+        .filter(|settlement| settlement.key == key)
+        .count()
+}
+
 // ---------------------------------------------------------------------------
 // The radius table
 // ---------------------------------------------------------------------------
@@ -173,7 +185,7 @@ fn bumping_a_corner_cell_queues_the_visit_and_does_not_move_the_player() {
     place_settlement(&mut game, key, centre.0, centre.1);
     game.sync_settlement_footprint(key);
     assert_eq!(
-        game.footprint(key).len(),
+        entity_cells(&mut game, key),
         9,
         "test premise: a full 3x3 square"
     );
@@ -221,7 +233,11 @@ fn bumping_a_corner_cell_queues_the_visit_and_does_not_move_the_player() {
 fn latching_growth_moves_a_town_from_nine_cells_to_twenty_five_and_repaints_them_all() {
     let mut game = game();
     let key = a_known_server(&game);
-    assert_eq!(game.footprint(key).len(), 9, "test premise: still a town");
+    assert_eq!(
+        entity_cells(&mut game, key),
+        9,
+        "test premise: still a town"
+    );
 
     // Jumping the clock straight to `due` also hands `settle_commerce_drift`
     // however many epochs it crossed to get there, and a decay off a
@@ -278,7 +294,7 @@ fn a_thriving_citys_forty_nine_cells_shrink_to_nine_when_pushed_to_starved() {
         .or_default()
         .commerce = SETTLEMENT_COMMERCE_MAX;
     game.sync_settlement_footprint(key);
-    assert_eq!(game.footprint(key).len(), 49, "test premise: Thriving");
+    assert_eq!(entity_cells(&mut game, key), 49, "test premise: Thriving");
 
     {
         let mut standings = game.world.resource_mut::<Standings>();
@@ -288,9 +304,9 @@ fn a_thriving_citys_forty_nine_cells_shrink_to_nine_when_pushed_to_starved() {
     }
     game.sync_settlement_footprint(key);
     assert_eq!(
-        game.footprint(key).len(),
+        entity_cells(&mut game, key),
         9,
-        "pushing a Thriving city to Starved did not shrink its footprint"
+        "pushing a Thriving city to Starved did not despawn its outer cells"
     );
 }
 
@@ -329,7 +345,7 @@ fn the_player_beside_a_corner_of_a_five_by_five_city_can_trade() {
     let mut game = game();
     let key = a_known_mainframe(&game);
     // Untouched, so it reads Steady — radius 2, a 5x5 square.
-    assert_eq!(game.footprint(key).len(), 25, "test premise: a 5x5 city");
+    assert_eq!(entity_cells(&mut game, key), 25, "test premise: a 5x5 city");
     let tile = tile_of(&game, key);
     let radius = game.settlement_radius(key).unwrap();
     let beside_corner = (tile.0 - radius - 1, tile.1 - radius - 1);
@@ -370,7 +386,11 @@ fn a_patrol_stays_tethered_through_a_footprint_shrink() {
         .or_default()
         .grown = true;
     game.sync_settlement_footprint(key);
-    assert_eq!(game.footprint(key).len(), 25, "test premise: a Steady city");
+    assert_eq!(
+        entity_cells(&mut game, key),
+        25,
+        "test premise: a Steady city"
+    );
 
     game.world
         .resource_mut::<Standings>()
@@ -401,7 +421,7 @@ fn a_patrol_stays_tethered_through_a_footprint_shrink() {
     }
     game.sync_settlement_footprint(key);
     assert_eq!(
-        game.footprint(key).len(),
+        entity_cells(&mut game, key),
         9,
         "test premise: the shrink actually happened"
     );
@@ -444,13 +464,13 @@ fn a_thriving_citys_footprint_rebuilds_at_its_derived_size_after_a_load() {
         .or_default()
         .commerce = SETTLEMENT_COMMERCE_MAX;
     game.sync_settlement_footprint(key);
-    assert_eq!(game.footprint(key).len(), 49, "test premise: Thriving");
+    assert_eq!(entity_cells(&mut game, key), 49, "test premise: Thriving");
     game.save(&path).unwrap();
 
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
     assert_eq!(
-        loaded.footprint(key).len(),
+        entity_cells(&mut loaded, key),
         49,
         "a Thriving city's footprint did not rebuild at 49 cells after a load"
     );

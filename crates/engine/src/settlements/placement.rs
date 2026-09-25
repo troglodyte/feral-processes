@@ -290,6 +290,18 @@ mod tests {
         &game.world.resource::<crate::resources::Settlements>().0
     }
 
+    /// The cell count a footprint of `key`'s own radius must have —
+    /// computed independently of `Game::footprint`'s own loop, so a test
+    /// that checks the writer's output against this cannot pass by having
+    /// both sides call the same (possibly broken) derivation.
+    fn expected_cell_count(game: &crate::Game, key: SettlementKey) -> usize {
+        let radius = game
+            .settlement_radius(key)
+            .expect("a key drawn from `known` is materialized");
+        let side = (2 * radius + 1) as usize;
+        side * side
+    }
+
     /// The feature produces something, which is the assertion a derivation
     /// this indirect most needs: every part of it can be correct while
     /// nothing ever reaches the map.
@@ -360,7 +372,7 @@ mod tests {
         for key in known(&game).keys().copied().collect::<Vec<_>>() {
             assert_eq!(
                 counts.get(&key).copied().unwrap_or(0),
-                game.footprint(key).len(),
+                expected_cell_count(&game, key),
                 "{key:?}'s drawn cell count does not match its derived footprint"
             );
         }
@@ -407,7 +419,7 @@ mod tests {
         for key in before.keys() {
             assert_eq!(
                 counts.get(key).copied().unwrap_or(0),
-                loaded.footprint(*key).len(),
+                expected_cell_count(&loaded, *key),
                 "{key:?}'s footprint did not rebuild at its derived size after a load"
             );
         }

@@ -1761,6 +1761,24 @@ impl Game {
         // locale regenerates its frame from that map's seed.
         game.restore_locale(data.locale);
 
+        // After the locale, and after every occupant a footprint's growth
+        // could displace — the player, every wild creature, nest, trap,
+        // caravan and the anchor are all restored above this line.
+        // `restore_settlements` spawned only each town's centre; growing the
+        // rest of the square here, once, is what keeps a Stack entrance's
+        // deferral (`sync_settlement_footprint`'s doc) reading the party's
+        // real `Locale` instead of the constructor's default `Surface`.
+        let settlement_keys: Vec<crate::settlements::SettlementKey> = game
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        for key in settlement_keys {
+            game.sync_settlement_footprint(key);
+        }
+
         game.log("Session restored. Reconnecting to the Grid.");
         // A save from before the chain existed: file every mission as
         // finished so an established run is left alone. New runs are seeded

@@ -1284,8 +1284,15 @@ impl Game {
     /// rebuilt from it. Taking the tile and the kind off the record rather
     /// than re-deriving them is what makes a catalogue edited between
     /// sessions unable to move a town the party has already walked to.
+    ///
+    /// **Spawns each centre and stops there** — `spawn_settlement_centre`,
+    /// not `spawn_settlement_at`. `Game::load` runs this while `Locale` is
+    /// still `Surface` (the constructor's default) and calls
+    /// `sync_settlement_footprint` itself, once, after `restore_locale` — see
+    /// that function's doc for why growing the footprint here would
+    /// misfire the Stack-entrance deferral this seam depends on.
     pub(crate) fn restore_settlements(&mut self, known: crate::resources::Settlements) {
-        // The record goes in **first**: `spawn_settlement_at` asks
+        // The record goes in **first**: `spawn_settlement_centre` asks
         // `Game::settlement_kind`, which reads this resource and
         // `Standings`. Spawning first and inserting after would draw every
         // town at its authored kind, which is the exact bug this door
@@ -1294,7 +1301,7 @@ impl Game {
             known.0.iter().map(|(key, s)| (*key, s.tile)).collect();
         self.world.insert_resource(known);
         for (key, tile) in sites {
-            self.spawn_settlement_at(key, tile);
+            self.spawn_settlement_centre(key, tile);
         }
     }
 
@@ -1334,6 +1341,26 @@ impl Game {
     /// space's `BuildSite` glyph and three base structures — a coordinate
     /// space that can never share a tile with a town.
     fn spawn_settlement_at(&mut self, key: crate::settlements::SettlementKey, (x, y): (i32, i32)) {
+        self.spawn_settlement_centre(key, (x, y));
+        self.sync_settlement_footprint(key);
+    }
+
+    /// The centre entity alone, with none of `sync_settlement_footprint`'s
+    /// own work — `spawn_settlement_at`'s half `Game::load` needs on its
+    /// own, since that call reads `Locale` (still the constructor's default
+    /// `Surface` at the point every settlement record is restored) and every
+    /// occupant's `Position` to decide what a footprint's growth displaces.
+    /// Called too early, a deferred Stack entrance's own guard —
+    /// `stack_pos().entrance == cell` — reads `None` instead of `Some`, and
+    /// the load relocates the entrance the party is standing inside along
+    /// with its `StackMemory`, and shoves their pinned `Position` off it.
+    /// `restore_settlements` calls this and leaves the sync to run once,
+    /// later, after `Game::restore_locale`.
+    fn spawn_settlement_centre(
+        &mut self,
+        key: crate::settlements::SettlementKey,
+        (x, y): (i32, i32),
+    ) {
         let ch = self
             .settlement_kind(key)
             .unwrap_or(crate::settlements::SettlementKind::Server)
@@ -1347,7 +1374,6 @@ impl Game {
                 color: GlyphColor::Orange,
             },
         ));
-        self.sync_settlement_footprint(key);
     }
 
     /// Places one chunk's worth of wild programs inside chunk `(cx, cy)`.

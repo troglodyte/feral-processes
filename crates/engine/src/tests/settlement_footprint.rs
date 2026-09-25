@@ -1058,3 +1058,101 @@ fn a_thriving_citys_footprint_rebuilds_at_its_derived_size_after_a_load() {
         "the loaded footprint carries more or less than one centre"
     );
 }
+
+/// CRITICAL: `restore_settlements` used to run while `Locale` was still the
+/// default `Surface` (`restore_locale` runs last in `Game::load`), so a load
+/// taken while the party stood inside a Stack whose entrance a footprint
+/// covers saw `stack_pos()` answer `None` — the deferral this seam depends on
+/// never fired, and the load itself relocated the entrance, dropped its
+/// memory, and shoved the pinned player `Position` off the entrance tile.
+#[test]
+fn a_load_defers_a_stack_entrance_a_footprint_covers_until_the_party_surfaces() {
+    let dir = scratch_assets_dir("settlement_footprint_load_defer");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 200, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 50, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let entrance = (centre.0 + 1, centre.1);
+    game.spawn_entrance_at(entrance.0, entrance.1);
+    game.world
+        .resource_mut::<StackMemory>()
+        .0
+        .insert((entrance, 1), FrameMemory::default());
+    {
+        let mut pos = game
+            .world
+            .get_mut::<Position>(game.player_entity())
+            .unwrap();
+        pos.x = entrance.0;
+        pos.y = entrance.1;
+    }
+    descend(&mut game);
+    assert_eq!(
+        game.stack_pos().map(|pos| pos.entrance),
+        Some(entrance),
+        "test premise: the party is inside the stack under this very entrance"
+    );
+
+    // Grows the footprint over the entrance while the party stands inside it
+    // — the deferral state the design calls out.
+    game.sync_settlement_footprint(key);
+    assert!(
+        game.find_surface_link_at(entrance.0, entrance.1).is_some(),
+        "test premise: the entrance is still deferred while the party is inside"
+    );
+    let before_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.stack_pos().map(|pos| pos.entrance),
+        Some(entrance),
+        "a load relocated the deferred entrance's own locale"
+    );
+    assert!(
+        loaded
+            .find_surface_link_at(entrance.0, entrance.1)
+            .is_some(),
+        "a load relocated the Stack entrance the party is standing inside"
+    );
+    assert!(
+        loaded
+            .world
+            .resource::<StackMemory>()
+            .0
+            .contains_key(&(entrance, 1)),
+        "a load dropped the deferred entrance's own StackMemory"
+    );
+    let after_pos = *loaded
+        .world
+        .get::<Position>(loaded.player_entity())
+        .unwrap();
+    assert_eq!(
+        (after_pos.x, after_pos.y),
+        (before_pos.x, before_pos.y),
+        "a load moved the player's Position, pinned to the entrance while underground"
+    );
+
+    loaded.ascend();
+    assert_eq!(
+        loaded.locale(),
+        Locale::Surface,
+        "test premise: ascending from depth 1 on the link up surfaces the party"
+    );
+    loaded.sync_settlement_footprint(key);
+    assert!(
+        loaded
+            .find_surface_link_at(entrance.0, entrance.1)
+            .is_none(),
+        "surfacing after a load never relocated the deferred entrance"
+    );
+}
+
+// Findings 2-4's reproducers land in later commits, once each fix is green.

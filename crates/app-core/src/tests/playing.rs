@@ -877,6 +877,85 @@ fn opening_a_screen_does_not_forgive_owed_drag() {
     );
 }
 
+/// A `pursuit_tick`/`patrol_aggro_tick` battle can open on *any* tick, not
+/// only one spent on a keypress — a `Pursuing` guardian already adjacent to
+/// a player standing still starts a fight on the next plain idle tick.
+/// `spend_walk_tick`'s "no walk queued" branch spends that tick through a
+/// bare `Game::idle_tick()`, bypassing `after_world_action` entirely, so
+/// before `App::enter_battle_if_started` was pulled into
+/// `update_realtime`'s own loop, `Mode::Playing` stayed on screen over a
+/// battle nothing had opened a screen for.
+#[test]
+fn an_idle_tick_that_opens_a_battle_switches_the_mode() {
+    let mut app = test_app(202);
+    clear_the_area_around_player(&mut app);
+    place_pursuing_guardian_adjacent(&mut app, 1, 0);
+    assert_eq!(app.mode, Mode::Playing, "test premise: still on the map");
+    assert!(
+        !app.game.as_ref().unwrap().has_active_battle(),
+        "test premise: no battle yet"
+    );
+    app.take_sounds();
+
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+    app.update_realtime(tick);
+
+    assert!(
+        app.game.as_ref().unwrap().has_active_battle(),
+        "test premise: pursuit_tick started the fight"
+    );
+    assert!(
+        matches!(app.mode, Mode::Battle | Mode::TacticalBattle),
+        "an idle tick that opens a battle must switch the mode off Playing, got {:?}",
+        app.mode
+    );
+    assert!(
+        app.take_sounds().contains(&SoundEvent::BattleStart),
+        "the battle-start cue must fire even though no key was pressed"
+    );
+}
+
+/// Same gap as `an_idle_tick_that_opens_a_battle_switches_the_mode`, but on
+/// `spend_walk_tick`'s *other* bare-`idle_tick` branch — paying down an
+/// owed drag tick. Reuses `drag_ground_is_paid_one_clock_tick_at_a_time_not_spent_inline`'s
+/// own setup to get a real drag debt, then places the guardian on the tile
+/// the player just paced onto, so the tick that pays the debt is also the
+/// tick `pursuit_tick` runs under.
+#[test]
+fn an_owed_drag_tick_that_opens_a_battle_switches_the_mode() {
+    let mut app = test_app(9001);
+    clear_the_area_around_player(&mut app);
+    override_biome_stretch_east(
+        &mut app,
+        feral_processes_engine::world::Biome::Deadlock,
+        1,
+        0,
+    );
+    let tick = 1.0 / app.world_speed.ticks_per_second();
+
+    app.handle_key(GameKey::Right);
+    app.update_realtime(tick);
+    assert_eq!(app.drag_ticks_owed, 1, "test premise: a drag tick is owed");
+
+    place_pursuing_guardian_adjacent(&mut app, 1, 0);
+    assert!(
+        !app.game.as_ref().unwrap().has_active_battle(),
+        "test premise: no battle yet"
+    );
+
+    app.update_realtime(tick);
+
+    assert!(
+        app.game.as_ref().unwrap().has_active_battle(),
+        "test premise: pursuit_tick started the fight while the drag debt was being paid"
+    );
+    assert!(
+        matches!(app.mode, Mode::Battle | Mode::TacticalBattle),
+        "an owed drag tick that opens a battle must switch the mode off Playing, got {:?}",
+        app.mode
+    );
+}
+
 /// The player should stop moving if weather is making them take damage
 /// (task B): a step that hurts the player ends a `Walk::Travel` rather
 /// than letting the party keep walking across ground that is hurting

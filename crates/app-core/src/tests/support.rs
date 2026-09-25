@@ -638,6 +638,48 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         .entity
 }
 
+/// A `Pursuing` `NestGuardian` sharing the player's own tile — the
+/// `Game::pursuit_tick` fixture `travel-on-the-clock`'s idle-tick battle
+/// tests need: the "already adjacent" arm of that function calls
+/// `start_battle` with no pathing, so a plain `Game::idle_tick()` (no
+/// keypress, no queued walk) opens a fight on the very first tick this
+/// runs under. The nest shares the guardian's tile too — `pursuit_tick`'s
+/// leash check only asks that the nest's own position stay within
+/// `NEST_AGGRO_LEASH_RADIUS`, which distance zero trivially satisfies —
+/// and needs no `Nest` component beyond what `Game::load` builds from the
+/// `NestSave` entry.
+///
+/// Call `clear_the_area_around_player` first: this pushes straight into
+/// `data.creatures`/`data.nests` without clearing either, so a caller that
+/// wants the guardian to be the *only* thing `pursuit_tick` can see has to
+/// clear the area itself, before this places anything.
+pub(crate) fn place_pursuing_guardian_adjacent(app: &mut App, dx: i32, dy: i32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("pursuing_guardian", 0);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let pos = (px + dx, py + dy);
+    data.nests.push(save::NestSave {
+        species: species.clone(),
+        position: pos,
+        durability: 10,
+        pending_respawns: Vec::new(),
+    });
+    data.creatures.push(CreatureSave {
+        nest_position: Some(pos),
+        pursuing: true,
+        ..wild_creature_save(species, pos)
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 /// A settlement one tile east of the player — `test_assets_dir`'s catalogue
 /// is never consulted, since a hand-built def is all a fixture that never
 /// opens the market or job board needs.

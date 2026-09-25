@@ -790,6 +790,17 @@ impl App {
             self.spend_walk_tick();
             self.realtime_ticks_carry -= 1.0;
             spent_a_tick = true;
+            // `spend_walk_tick`'s own idle and drag-owed branches spend a
+            // tick straight through `Game::idle_tick`, skipping
+            // `after_world_action` entirely — so a `pursuit_tick`/
+            // `patrol_aggro_tick` battle opened by one of *those* is only
+            // caught here. Gated on `mode` still being `Playing`: a walked
+            // step already ran this same switch inside `after_world_action`,
+            // and calling it twice would queue a second `BattleStart` cue
+            // for the one battle that started.
+            if self.mode == Mode::Playing {
+                self.enter_battle_if_started();
+            }
             let Some(game) = &self.game else { break };
             if game.has_active_battle() || game.is_game_over().is_some() {
                 self.realtime_ticks_carry = 0.0;

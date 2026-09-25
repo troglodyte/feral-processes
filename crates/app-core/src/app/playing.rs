@@ -755,6 +755,41 @@ impl App {
         );
     }
 
+    /// Switches to whichever mode `opened_battle_mode` names, queues the
+    /// battle-start cue, and drops any pending walk, when
+    /// `Game::has_active_battle` says a fight now stands where
+    /// `Mode::Playing` did. Answers whether it did.
+    ///
+    /// **Shared rather than copied.** `after_world_action` (an acted key,
+    /// or an ordinary tick riding one of its other callers — `finish_compile`,
+    /// a caravan travel, the dev console) and `update_realtime`'s clock loop
+    /// (an idle or a drag tick, neither of which ever reaches
+    /// `after_world_action` at all) both need the identical switch:
+    /// `tick_inner`'s `pursuit_tick`/`patrol_aggro_tick` can call
+    /// `Game::start_battle` on *any* tick, not only one spent on a keypress
+    /// — a `Pursuing` guardian already adjacent to a player standing still
+    /// opens a fight on a plain idle tick exactly as it does on a walked
+    /// step. Before this was pulled out, only the walked step's mode ever
+    /// caught up, and the world sat frozen in `Mode::Playing` over a battle
+    /// nothing had opened a screen for.
+    ///
+    /// Left alone on purpose: `drag_ticks_owed`. A battle opening mid-drag
+    /// does not forgive the debt a step already incurred — the same rule
+    /// `spend_walk_tick`'s own tail holds for it.
+    pub(crate) fn enter_battle_if_started(&mut self) -> bool {
+        let entered_battle = self
+            .game
+            .as_ref()
+            .map(|g| g.has_active_battle())
+            .unwrap_or(false);
+        if entered_battle {
+            self.mode = self.opened_battle_mode();
+            self.pending_sounds.push(SoundEvent::BattleStart);
+            self.walk = None;
+        }
+        entered_battle
+    }
+
     /// The bookkeeping that follows any action that advanced the world,
     /// whichever locale it happened in: clearing the status line, dropping
     /// into `Mode::Battle` if one just started, the movement cue, and the
@@ -777,14 +812,7 @@ impl App {
             return;
         }
         self.status_line = None;
-        let entered_battle = self
-            .game
-            .as_ref()
-            .map(|g| g.has_active_battle())
-            .unwrap_or(false);
-        if entered_battle {
-            self.mode = self.opened_battle_mode();
-        }
+        let entered_battle = self.enter_battle_if_started();
         // Beside the battle check above and not folded into it: the engine
         // hands over a cue rather than a mode because it cannot see
         // app-core's `Mode` at all. The bump ladder's settlement arm
@@ -811,10 +839,10 @@ impl App {
                 }
             }
         }
-        if is_move_key {
-            self.pending_sounds.push(if entered_battle {
-                SoundEvent::BattleStart
-            } else if ground_bite > 0 {
+        // `entered_battle`'s own cue is already queued by
+        // `enter_battle_if_started`, so this only ever adds Hit or Step.
+        if is_move_key && !entered_battle {
+            self.pending_sounds.push(if ground_bite > 0 {
                 // The battle cue, not one of its own: this *is* taking
                 // damage, and a player who has fought already knows what it
                 // means. A separate clip would be a second thing to learn

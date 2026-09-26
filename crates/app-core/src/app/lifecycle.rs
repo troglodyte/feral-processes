@@ -100,6 +100,7 @@ impl App {
             pending_swap_target: None,
             pending_equip_program: None,
             pending_memory_program: None,
+            memories_origin: Mode::Companion,
             pending_settlement: None,
             pending_outpost: None,
             pending_erase: None,

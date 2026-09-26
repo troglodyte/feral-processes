@@ -76,6 +76,10 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // the player was reading down the roster is what Esc returns to.
             | (Mode::Companion, Mode::CompanionMemories)
             | (Mode::CompanionMemories, Mode::Companion)
+            // And the same page reached from a sheet, where the roster's row
+            // is parked for the same reason the dossier's pair gives below.
+            | (Mode::Manifest, Mode::CompanionMemories)
+            | (Mode::CompanionMemories, Mode::Manifest)
             // The dossier is a page of the manifest, and the manifest is
             // where the roster's row is *parked* for the duration (see this
             // function's doc). Without this pair, opening `[D]` and pressing

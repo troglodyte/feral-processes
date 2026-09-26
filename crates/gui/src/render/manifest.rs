@@ -106,7 +106,7 @@ pub(super) fn draw_manifest(
     }
 
     painter.ui(
-        footer_text(&nav),
+        footer_text(&nav, view.remembers()),
         l.footer.x,
         l.footer.y + m.font_size as f32,
         m.small(),
@@ -116,22 +116,28 @@ pub(super) fn draw_manifest(
 
 /// Every key the sheet answers, since this line is the only place any of
 /// them is advertised. `[D]` is unconditional: `Game::dossier_report`
-/// answers for any body the sheet itself can show.
-fn footer_text(nav: &ManifestNav) -> String {
+/// answers for any body the sheet itself can show. `[R]` is
+/// `ManifestView::remembers`, the answer app-core refuses on.
+fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
     let mut footer = Vec::new();
     if nav.cyclable {
-        footer.push("←/→ other programs");
+        footer.push("←/→ programs");
     }
     if nav.watchable {
         footer.push("[w] watch");
     }
     footer.push("[D] dossier");
+    if remembers {
+        footer.push("[R] memories");
+    }
     footer.push(if nav.back_to_list {
         "Esc back to list"
     } else {
         "Esc back"
     });
-    footer.join("      ")
+    // Three spaces, not six: with all five keys offered, six ran 216px past
+    // the frame at 1280x1440 (`the_fullest_footer_fits_the_narrowest_window`).
+    footer.join("   ")
 }
 
 /// One meter on the sheet.
@@ -882,7 +888,10 @@ fn post_label(kind: TaskKind) -> &'static str {
 /// property of the kind rather than of the program, and the `R` page is where
 /// it is said.
 fn mood_rows(mood: &ManifestMood) -> Vec<SectionRow> {
-    let mut rows = vec![stat("Mood", format!("{} ({:+.0})", mood.band, mood.sum))];
+    let mut rows = vec![stat(
+        "Mood",
+        format!("{} ({})", mood.band, super::party::strength(mood.sum)),
+    )];
     if mood.memories.is_empty() {
         // The same state the `R` page words for itself, kept short here
         // because this is a value column and not a page.
@@ -893,7 +902,7 @@ fn mood_rows(mood: &ManifestMood) -> Vec<SectionRow> {
             Some(subject) => format!("{} — {subject}", entry.name),
             None => entry.name.clone(),
         };
-        rows.push(stat(label, format!("{:+.0}", entry.intensity)));
+        rows.push(stat(label, super::party::strength(entry.intensity)));
     }
     rows
 }
@@ -2404,10 +2413,23 @@ mod tests {
                         back_to_list,
                         watchable,
                     };
-                    assert!(footer_text(&nav).contains("[D] dossier"));
+                    assert!(footer_text(&nav, false).contains("[D] dossier"));
                 }
             }
         }
+    }
+
+    /// `[R]` is offered exactly when `ManifestView::remembers` says there is
+    /// a page behind it, which is what app-core refuses on.
+    #[test]
+    fn the_footer_offers_memories_only_when_the_subject_remembers() {
+        let nav = ManifestNav {
+            cyclable: false,
+            back_to_list: false,
+            watchable: false,
+        };
+        assert!(footer_text(&nav, true).contains("[R] memories"));
+        assert!(!footer_text(&nav, false).contains("[R]"));
     }
 
     /// The footer is one unwrapped line, so with every key offered it has to
@@ -2422,7 +2444,8 @@ mod tests {
         for h in [720.0, 1080.0, 1440.0] {
             let m = ui_metrics(h);
             let l = manifest_layout(1280.0, h, 4, &[], &m);
-            let (width, _) = with_painter(|p| p.measure_ui_advance(footer_text(&nav), m.small()));
+            let (width, _) =
+                with_painter(|p| p.measure_ui_advance(footer_text(&nav, true), m.small()));
             assert!(
                 width <= l.footer.w,
                 "at 1280x{h} the footer is {width}px against {}px",

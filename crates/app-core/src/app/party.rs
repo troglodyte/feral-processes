@@ -251,6 +251,7 @@ impl App {
             return;
         };
         self.pending_memory_program = Some(program);
+        self.memories_origin = Mode::Companion;
         self.status_line = None;
         self.mode = Mode::CompanionMemories;
     }
@@ -262,7 +263,7 @@ impl App {
         if key == GameKey::Esc {
             self.pending_memory_program = None;
             self.status_line = None;
-            self.mode = Mode::Companion;
+            self.mode = self.memories_origin;
         }
     }
 

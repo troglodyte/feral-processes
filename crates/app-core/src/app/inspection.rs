@@ -277,6 +277,10 @@ impl App {
             self.mode = Mode::Dossier;
             return;
         }
+        if key == GameKey::Char('R') {
+            self.open_manifest_memories();
+            return;
+        }
         let step = match key {
             GameKey::Left => -1,
             GameKey::Right => 1,
@@ -297,6 +301,25 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// `R` on a sheet: the whole memories page behind its MEMORIES box.
+    /// Esc comes back here, so the sheet stays `pending_manifest`'s.
+    fn open_manifest_memories(&mut self) {
+        let subject = self.pending_manifest.filter(|&e| {
+            self.game
+                .as_ref()
+                .and_then(|g| g.manifest(e))
+                .is_some_and(|v| v.remembers())
+        });
+        let Some(program) = subject else {
+            self.refuse("Only a program you own carries memories.");
+            return;
+        };
+        self.pending_memory_program = Some(program);
+        self.memories_origin = Mode::Manifest;
+        self.status_line = None;
+        self.mode = Mode::CompanionMemories;
     }
 
     /// The dossier is a page, not a menu: nothing but Esc is bound, and Esc

@@ -162,7 +162,7 @@ pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -
         // player sees is "Mood"; `Game::morale` keeps its name, because the
         // engine's vocabulary is not the screen's.
         Row::TextColored(
-            format!("Mood {} ({morale:+.0})", morale_band(morale)),
+            format!("Mood {} ({})", morale_band(morale), strength(morale)),
             morale_color(morale),
         ),
         text_row(""),
@@ -216,8 +216,14 @@ fn morale_color(value: f32) -> Color {
 /// A memory's weight, as the row prints it: signed, so a bond and a grudge
 /// of the same size are visibly opposite, and rounded to whole points —
 /// the fractional part is decay, which the age beside it already says.
-fn strength(intensity: f32) -> String {
-    format!("{intensity:+.0}")
+///
+/// Rounded *before* formatting, and `+ 0.0` after: a small grudge rounds to
+/// `-0.0`, which `{:+.0}` prints as "-0" — a sign on nothing. Adding zero
+/// is IEEE's way to turn `-0.0` into `+0.0` and changes no other value.
+/// Shared with the manifest's MEMORIES box, whose Mood line is the case
+/// that showed it.
+pub(super) fn strength(intensity: f32) -> String {
+    format!("{:+.0}", intensity.round() + 0.0)
 }
 
 /// One program's lines on the roster: the identity and stats, then whichever
@@ -705,6 +711,16 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
+
+    /// A weight that rounds to nothing reads as unsigned nothing, never
+    /// "-0" — the manifest's Mood line printed `even (-0)`.
+    #[test]
+    fn a_weight_that_rounds_to_zero_has_no_minus_sign() {
+        assert_eq!(strength(-0.2), "+0");
+        assert_eq!(strength(-0.0), "+0");
+        assert_eq!(strength(-0.6), "-1");
+        assert_eq!(strength(3.4), "+3");
+    }
 
     /// One heading per run of a role, and — the thing that can silently
     /// break — the shortcut on the *n*th program still reads `n`.
@@ -1204,6 +1220,12 @@ mod tests {
         };
         assert_eq!(header(&sour), format!("Mood {} (-14)", morale_band(-14.0)));
         assert_eq!(header(&sweet), format!("Mood {} (+9)", morale_band(9.0)));
+        let even = memory_page_rows("Kestrel", -0.2, &[]);
+        assert_eq!(
+            header(&even),
+            format!("Mood {} (+0)", morale_band(-0.2)),
+            "a figure that rounds to nothing carries no minus sign"
+        );
         assert_ne!(
             morale_band(-14.0),
             morale_band(9.0),

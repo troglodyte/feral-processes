@@ -2515,6 +2515,16 @@ pub enum ManifestSubject {
     Program(Box<ProgramManifest>),
 }
 
+impl ManifestView {
+    /// Whether this sheet's subject has a memories page to open — true
+    /// exactly when it carries a mood, which is every program on the roster
+    /// and nothing else. The footer's `[R]` and app-core's refusal both ask
+    /// this, so the key cannot be offered where it would be refused.
+    pub fn remembers(&self) -> bool {
+        matches!(&self.subject, ManifestSubject::Program(p) if p.mood.is_some())
+    }
+}
+
 /// The player-only half of a manifest.
 pub struct PlayerManifest {
     /// See `components::PowerReserve`.

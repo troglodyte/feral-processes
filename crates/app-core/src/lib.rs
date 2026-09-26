@@ -2720,6 +2720,9 @@ pub struct App {
     /// another page's field is a distinct failure per axis, and the two are
     /// set by different keys and cleared at different times.
     pub pending_memory_program: Option<Entity>,
+    /// Where Esc on `Mode::CompanionMemories` goes: the roster when `R` was
+    /// pressed there, the manifest when it was pressed on a sheet.
+    pub memories_origin: Mode,
     /// The settlement `Mode::Settlement` is showing, set from either of the
     /// two doors onto it: `Game::take_visit`, drained in
     /// `after_world_action` the tick a bump lands on the tile, or

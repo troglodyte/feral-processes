@@ -649,6 +649,49 @@ fn the_memories_page_and_the_gear_page_hold_separate_subjects() {
     );
 }
 
+/// `R` on a program's manifest opens that program's memories — the MEMORIES
+/// box there names two, and this page is where the rest are read — and Esc
+/// comes back to the sheet rather than out to the roster, with the row the
+/// roster parked on the sheet still where it was.
+#[test]
+fn r_on_a_manifest_opens_its_memories_and_esc_returns_to_the_sheet() {
+    let mut app = app_with_companions_in_the_party(784, 2);
+    let programs = roster(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('M'));
+    assert_eq!(app.mode, Mode::Manifest);
+
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(app.mode, Mode::CompanionMemories);
+    assert_eq!(app.pending_memory_program, Some(programs[1]));
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Manifest, "back to the sheet it came from");
+    assert_eq!(app.pending_manifest, Some(programs[1]));
+    assert_eq!(app.pending_memory_program, None, "the subject is released");
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(app.menu_selected, 1, "the roster row survived the trip");
+}
+
+/// The player carries no memories, so `R` on their own sheet has no page to
+/// open — and says so rather than swallowing the press.
+#[test]
+fn r_on_the_players_manifest_is_refused() {
+    let mut app = app_with_companions_in_the_party(785, 1);
+    app.pending_manifest = Some(app.game.as_ref().unwrap().player_entity());
+    app.manifest_origin = ManifestOrigin::Map;
+    app.mode = Mode::Manifest;
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(app.mode, Mode::Manifest);
+    assert_eq!(app.pending_memory_program, None);
+    assert!(app.status_line.is_some(), "the refusal is a sentence");
+}
+
 /// `U` on the roster empties every slot the highlighted program has filled,
 /// in one press, with the gear landing back in your cargo — the same three
 /// removals `E` and the picker already offer, without the three trips.

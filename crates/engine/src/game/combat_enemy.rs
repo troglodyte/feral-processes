@@ -54,13 +54,15 @@ impl Game {
         player
     }
 
-    /// The routine `wild` will spend this round on, if it is carrying one
-    /// that is not still cooling.
+    /// Every routine `entity` is carrying that is not still cooling and could
+    /// coherently be run by *some* chooser, installed order first.
     ///
-    /// First installed wins. A carrier holds exactly one
-    /// (`Game::roll_wild_routine`), so ordering is not a real decision, and
-    /// inventing a priority scheme for a one-element list would be building
-    /// for a case that does not exist.
+    /// **The filter, not the pick** — `wild_routine_ready`'s `.next()` is the
+    /// wild side's whole policy (first installed wins, since a carrier holds
+    /// exactly one — `Game::roll_wild_routine`); `tactical/ai.rs::
+    /// tactical_intent`'s party arm (todo #103) walks the rest, since a
+    /// companion can carry more than one and the first *ready* one is not
+    /// necessarily the first *affordable* one.
     ///
     /// `Decompile` is excluded: it is resolved by group index against the
     /// *wild* side and would do nothing coherent aimed the other way. Only a
@@ -71,21 +73,21 @@ impl Game {
     /// `AbilityEffect::field_only`): none has a battle mechanic to run, so a
     /// carrier with nothing else installed falls back to a normal move
     /// instead of the `unreachable!` in `use_ability`.
-    pub(crate) fn wild_routine_ready(&self, wild: Entity) -> Option<AbilityDef> {
+    pub(crate) fn ready_routines(&self, entity: Entity) -> Vec<AbilityDef> {
         let cooling = self
             .world
-            .get::<AbilityCooldowns>(wild)
+            .get::<AbilityCooldowns>(entity)
             .map(|c| c.0.clone())
             .unwrap_or_default();
         let db = self.world.resource::<AbilityDb>();
         self.world
-            .get::<Routines>(wild)
+            .get::<Routines>(entity)
             .map(|r| r.0.as_slice())
             .unwrap_or_default()
             .iter()
             .filter(|id| !cooling.contains_key(*id))
             .filter_map(|id| db.get(id))
-            .find(|def| {
+            .filter(|def| {
                 !matches!(def.effect, AbilityEffect::Decompile)
                     && !def.effect.field_only()
                     // No AI ever chooses a tamper routine, hostile or
@@ -93,21 +95,32 @@ impl Game {
                     // own AI, and it has no scoring for one yet.
                     && !def.effect.tactical_only()
                     // Only the player emulates (`seam:only-the-player-
-                    // emulates`). `tactical/ai.rs::tactical_intent` reuses
-                    // this exact function for the battle-map hostile AI, so
-                    // this one filter is both "AI never chooses Emulate for
-                    // a wild body" doors — real content never puts Emulate
-                    // on a wild carrier (no `wild_weight`, no species kit),
-                    // but a mod's `Routines` edit should still find no seat
-                    // for it here. **Kept even though `ability_unavailable`
-                    // also refuses it**: `wild_retaliate` arms the cooldown
-                    // and runs the routine directly, never asking that gate
-                    // — the same reason `ability_unavailable`'s own doc
-                    // gives for hostiles never reaching it at all.
+                    // emulates`). `tactical/ai.rs::tactical_intent` reads
+                    // this same pool for the battle-map hostile *and* party
+                    // arms, so this one filter is both "AI never chooses
+                    // Emulate for a wild body" and "auto-attack never
+                    // invokes Emulate for a companion" doors — real content
+                    // never puts Emulate on a wild carrier (no
+                    // `wild_weight`, no species kit) and `install_disk`
+                    // already refuses it to a companion, but a mod's
+                    // `Routines` edit should still find no seat for it here.
+                    // **Kept even though `ability_unavailable` also
+                    // refuses it**: `wild_retaliate` arms the cooldown and
+                    // runs the routine directly, never asking that gate —
+                    // the same reason `ability_unavailable`'s own doc gives
+                    // for hostiles never reaching it at all.
                     && !matches!(def.effect, AbilityEffect::Emulate { .. })
                     && !def.is_passive()
             })
             .cloned()
+            .collect()
+    }
+
+    /// The routine `wild` will spend this round on, if it is carrying one
+    /// that is not still cooling — `ready_routines`' first, since a wild
+    /// carrier holds exactly one and ordering is not a real decision.
+    pub(crate) fn wild_routine_ready(&self, wild: Entity) -> Option<AbilityDef> {
+        self.ready_routines(wild).into_iter().next()
     }
 
     /// The wild creature strikes back at whoever's exposed: normally the

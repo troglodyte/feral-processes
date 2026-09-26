@@ -13,6 +13,7 @@ use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind
 use crate::components::AbilityCooldowns;
 use crate::components::{Emulation, Hostile, Player, Squad, Stats};
 use crate::game::combat_teardown::FightVerdict;
+use crate::items::ItemId;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::species::SpeciesId;
 use crate::tactical::map::{BattleSpec, generate};
@@ -727,6 +728,50 @@ impl Game {
         self.world.resource_mut::<TacticalBattle>().spend_action();
         // No reap: bracing damages nobody, and the round upkeep
         // `hand_on_turn` may spend brings its own.
+        self.hand_on_turn(actor, round_before);
+        true
+    }
+
+    /// Spends the acting body's turn on one consumable — `[U]`'s door in
+    /// phase 3, and todo #103's auto-attack party arm before that.
+    ///
+    /// `Game::consume_item`'s battle-map caller, `BattleAction::UseItem`'s
+    /// sibling for this model: it applies `id`'s effect to `actor` from the
+    /// pack the party shares, so a companion drinking a cell draws from the
+    /// same stack the player would and the charge lands on its own
+    /// `PowerReserve` exactly as `consume_item`'s own doc says.
+    ///
+    /// **Every refusal lands before anything is spent**: no fight, nobody
+    /// acting, no actions left, the acting body is neither the player nor in
+    /// `Party` (a besieger or other base-space body mid-turn on a siege
+    /// board has no pack to reach into), and whatever `consume_item` itself
+    /// refuses (no such item, none left in the pack). The last one is asked
+    /// through the same call that would spend the item, rather than
+    /// pre-checked and re-asked, so there is exactly one place that decides
+    /// "is this actually usable."
+    ///
+    /// Reports whether it ran. A run spends one action and ends the turn
+    /// through `Game::hand_on_turn`, exactly as `tactical_defend` does — no
+    /// reap, since using an item damages nobody.
+    pub fn tactical_use_item(&mut self, id: &ItemId) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.actions_left() == 0 {
+            return false;
+        }
+        let player = self.player_entity();
+        if actor != player && !self.world.resource::<Party>().0.contains(&actor) {
+            return false;
+        }
+        let round_before = battle.round;
+        if !self.consume_item(actor, id) {
+            return false;
+        }
+        self.world.resource_mut::<TacticalBattle>().spend_action();
         self.hand_on_turn(actor, round_before);
         true
     }

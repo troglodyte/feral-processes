@@ -1492,15 +1492,6 @@ impl Game {
         if remaining > 0 {
             return Some(RoutineRefusal::Cooldown(remaining));
         }
-        let cost = abilities::routine_power_cost(ability);
-        if cost > 0.0
-            && !self
-                .world
-                .get::<PowerReserve>(entity)
-                .is_some_and(|r| r.holds(cost))
-        {
-            return Some(RoutineRefusal::Power { cost });
-        }
         // Decompile is refused for two reasons no other ability has. They
         // used to live in `attempt_decompile`, which refunded the round
         // silently; here the row greys with the reason instead.
@@ -1555,7 +1546,67 @@ impl Game {
                 return Some(RoutineRefusal::NoImagesKnown);
             }
         }
+        // **Checked last, deliberately.** Every earlier arm above answers a
+        // question Power cannot fix — a routine is refused, gated on the
+        // player, or already running whatever the reserve says — so a
+        // routine that reaches this line without being refused already
+        // passed every other refusal, and `Power` being returned *is* "the
+        // reserve is the only thing standing in the way." That single-call
+        // property is what todo #103's auto-attack party arm reads: it drinks
+        // a Power cell only when this is the answer, and reordering the
+        // check to the front (as it was before #103) would make that
+        // impossible to ask without a second, Power-skipping copy of this
+        // gate.
+        let cost = abilities::routine_power_cost(ability);
+        if cost > 0.0
+            && !self
+                .world
+                .get::<PowerReserve>(entity)
+                .is_some_and(|r| r.holds(cost))
+        {
+            return Some(RoutineRefusal::Power { cost });
+        }
         None
+    }
+
+    /// The pack's own cell for a body refused `shortfall` Power and nothing
+    /// else — todo #103's auto-attack party arm, the only caller.
+    ///
+    /// **Data-driven, no id.** Any consumable whose `consume.power` restores
+    /// Power qualifies; `power_cell` is what ships, but a mod's own cell
+    /// works with no change here. **A `prebattle_buff` carrier is excluded**
+    /// — a sustain or backfeed item both restores Power and arms a buff that
+    /// outlives the fight, and auto-attack spending one to squeeze out one
+    /// more swing is not a choice the player asked for.
+    ///
+    /// The smallest cell that covers the shortfall in one drink, or the
+    /// largest carried when none does — never a random one, so watching the
+    /// pack drain during a fight reads as a policy rather than a shuffle.
+    /// The pack is shared, so a companion may drink from it exactly as the
+    /// player would.
+    pub(crate) fn power_cell_for(&self, shortfall: f32) -> Option<ItemId> {
+        let player = self.player_entity();
+        let db = self.world.resource::<ItemDb>();
+        let inv = self.world.get::<Inventory>(player)?;
+        let mut cells: Vec<(ItemId, f32)> = inv
+            .items
+            .iter()
+            .filter(|(_, count)| *count > 0)
+            .filter_map(|(id, _)| {
+                let consume = db.get(id.as_str())?.consume?;
+                (consume.power > 0.0 && consume.prebattle_buff.is_none())
+                    .then_some((id.clone(), consume.power))
+            })
+            .collect();
+        if cells.is_empty() {
+            return None;
+        }
+        cells.sort_by(|a, b| a.1.total_cmp(&b.1));
+        cells
+            .iter()
+            .find(|(_, power)| *power >= shortfall)
+            .or_else(|| cells.last())
+            .map(|(id, _)| id.clone())
     }
 
     /// The abilities party `slot` can choose between for a Special, as

@@ -23,7 +23,9 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::abilities::{AbilityDef, AbilityId, AbilityRange, AbilityTarget, TamperSlot};
-use crate::components::{Durability, Hostile, Stats, Structure, Tampered};
+use crate::components::{Durability, Hostile, PowerReserve, Stats, Structure, Summoned, Tampered};
+use crate::game::combat::RoutineRefusal;
+use crate::items::ItemId;
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
@@ -36,6 +38,27 @@ use crate::tuning::{
     TACTICAL_AI_REACTION_WEIGHT, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
     TACTICAL_MELEE_RANGE,
 };
+
+/// Whether a beat may invoke a party body's routines and drink a Power cell
+/// for one, or must hold it to the swing-only behaviour every battle-map
+/// party turn had before todo #103.
+///
+/// **The opt-in lives on the beat, not on the body.** `tactical_auto_beat`
+/// (`[A]`) and `auto_resolve_battle_with` (`[R]`) pass `Invoke` because a
+/// player who asked for one owes the party's turns to a planner that acts
+/// the way they would; `arena::run` and the tests that hold its numbers
+/// pass `SwingOnly` because `PartyPlan::AllAttack` — the group model's own
+/// arena plan — invokes nothing either, and the two models' figures stay
+/// comparable only if neither auto-invokes headless. `tactical_ai_beat`
+/// passes `SwingOnly` too, for a duller reason: it only ever reaches a
+/// `Hostile`, `Summoned` or taken-over body, and `tactical_intent`'s party
+/// arm below is gated off all three regardless of which value it is asked
+/// with — so for that door the value is inert rather than correct.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PartyTurns {
+    Invoke,
+    SwingOnly,
+}
 
 /// What the acting body means to do this turn.
 ///
@@ -53,6 +76,12 @@ enum Intent {
         range: u32,
     },
     Routine(AbilityDef),
+    /// Drinks a Power cell where the body already stands — todo #103's
+    /// party arm, chosen only when its preferred routine is refused for
+    /// Power alone and a cell in the pack covers the shortfall. Carries the
+    /// item rather than an index, `Game::tactical_use_item`'s own
+    /// vocabulary.
+    UseItem(ItemId),
 }
 
 impl Intent {
@@ -64,6 +93,14 @@ impl Intent {
                 max: *range,
             },
             Intent::Routine(def) => def.tactical_range(),
+            // Drunk where the body already stands, so no distance to a
+            // target is ever short — `run_tactical_beat` skips the walk for
+            // this intent entirely, and this arm only exists to keep the
+            // match total.
+            Intent::UseItem(_) => AbilityRange {
+                min: 0,
+                max: u32::MAX,
+            },
         }
     }
 
@@ -80,6 +117,10 @@ impl Intent {
                 def.target,
                 AbilityTarget::OneAlly | AbilityTarget::WholeParty
             ),
+            // A cell is drunk by the body that carries it, never at anyone
+            // else — see `band`'s doc for why this arm is never actually
+            // scored.
+            Intent::UseItem(_) => true,
         }
     }
 }
@@ -138,10 +179,16 @@ pub(crate) struct Forecast {
 }
 
 /// Which action a forecast names.
+///
+/// **`UseItem` is exhaustive-only.** A forecast is built for a `Profiled`
+/// *hostile* alone (`tactical_forecast`'s own gate), and `Intent::UseItem` is
+/// the party arm's — the two conditions never overlap, so this arm exists to
+/// keep the match total rather than because a forecast can ever name it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ForecastAction {
     Swing,
     Routine(AbilityId),
+    UseItem(ItemId),
 }
 
 /// How far outside `band` a body whose footprint is `from` is from `to`, in
@@ -411,10 +458,14 @@ impl Game {
         if sides.targets.is_empty() {
             return None;
         }
-        let intent = self.tactical_intent(body);
+        // `SwingOnly`: the `Hostile` check above already means the party
+        // arm's gate below never opens for this body, whichever value is
+        // passed — see `PartyTurns`'s own doc.
+        let intent = self.tactical_intent(body, PartyTurns::SwingOnly);
         let action = match &intent {
             Intent::Swing { .. } => ForecastAction::Swing,
             Intent::Routine(def) => ForecastAction::Routine(def.id.clone()),
+            Intent::UseItem(id) => ForecastAction::UseItem(id.clone()),
         };
         if self.decision_temperature(body) > 0.0 {
             return Some(Forecast {
@@ -471,7 +522,10 @@ impl Game {
         let Some(actor) = self.tactical_ai_actor() else {
             return false;
         };
-        self.run_tactical_turn(actor, temperature);
+        // `SwingOnly`: `tactical_ai_actor` only ever names a `Hostile`,
+        // `Summoned` or taken-over body, and none of those opens
+        // `tactical_intent`'s party arm regardless of this value.
+        self.run_tactical_turn(actor, temperature, PartyTurns::SwingOnly);
         true
     }
 
@@ -490,7 +544,13 @@ impl Game {
         let Some(actor) = self.tactical_ai_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, self.decision_temperature(actor))
+        // `SwingOnly` for `tactical_ai_turn_at`'s reason: this door only ever
+        // names a `Hostile`, `Summoned` or taken-over body.
+        self.run_tactical_beat(
+            actor,
+            self.decision_temperature(actor),
+            PartyTurns::SwingOnly,
+        )
     }
 
     /// Spends one beat of the acting body's turn **whichever side it is on**.
@@ -507,16 +567,18 @@ impl Game {
     /// the player's to command" true of the engine — the decision to answer
     /// for it is app-core's, taken a key at a time, and revoked the same way.
     ///
-    /// A party body driven here **swings and never invokes**, and that is
-    /// `run_tactical_beat`'s own gate rather than a second rule: the routine
-    /// branch is `Hostile`-only because `run_tactical_routine` charges Power
-    /// through a door that never asks `ability_unavailable`, so the
-    /// alternative is a party that invokes whatever it carries for free.
+    /// **A party body driven here invokes** (todo #103) — `PartyTurns::
+    /// Invoke`, so `tactical_intent`'s party arm opens for it exactly as it
+    /// would if the player had chosen Special by hand, Power cell included.
+    /// Before #103 this always swung, because the routine branch was
+    /// `Hostile`-only; that changed here and at `[R]`'s door alike, and
+    /// stayed unchanged at the arena's, which is what keeps its numbers
+    /// comparable — see `PartyTurns`'s own doc.
     pub fn tactical_auto_beat(&mut self) -> AiBeat {
         let Some(actor) = self.tactical_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, self.decision_temperature(actor))
+        self.run_tactical_beat(actor, self.decision_temperature(actor), PartyTurns::Invoke)
     }
 
     /// Whether the acting body is part-way through a walk it has committed
@@ -563,16 +625,17 @@ impl Game {
     /// asked for it, the consent the `tactical_ai_actor` gate otherwise
     /// stands in for.
     ///
-    /// A party body **swings and never invokes**, which is not a policy
-    /// invented for the tester: `PartyPlan::AllAttack` is the group model's
-    /// own arena plan and it invokes no routine either, so a number taken
-    /// on a battle map stays comparable with the one taken in front of a
-    /// group. `run_tactical_turn` is where that lands.
-    pub(crate) fn tactical_drive_turn(&mut self) -> bool {
+    /// **`turns` decides whether a party body invokes**, `PartyTurns`'s own
+    /// doc for why: `auto_resolve_battle_with` (`[R]`) passes `Invoke`, so a
+    /// number taken through this door reads as `[A]` would have produced it;
+    /// `arena::run` passes `SwingOnly`, so `PartyPlan::AllAttack` — the group
+    /// model's own arena plan, which invokes no routine either — stays the
+    /// comparable figure. `run_tactical_turn` is where that lands.
+    pub(crate) fn tactical_drive_turn(&mut self, turns: PartyTurns) -> bool {
         let Some(actor) = self.tactical_actor() else {
             return false;
         };
-        self.run_tactical_turn(actor, self.decision_temperature(actor));
+        self.run_tactical_turn(actor, self.decision_temperature(actor), turns);
         true
     }
 
@@ -582,8 +645,8 @@ impl Game {
     /// the fight a player would have watched — and **the beat loop rather
     /// than a second spelling of a turn**, so that holds for a fight paced
     /// in front of the player too.
-    fn run_tactical_turn(&mut self, actor: Entity, temperature: f32) {
-        while self.run_tactical_beat(actor, temperature) == AiBeat::Stepped {}
+    fn run_tactical_turn(&mut self, actor: Entity, temperature: f32, turns: PartyTurns) {
+        while self.run_tactical_beat(actor, temperature, turns) == AiBeat::Stepped {}
     }
 
     /// One beat of `actor`'s turn: the next cell of its walk, or one action —
@@ -592,7 +655,7 @@ impl Game {
     /// The walk is planned on the beat that takes its first step and read
     /// back off `TacticalBattle` by every beat after it, which is what holds
     /// this to **one `GameRng` draw a turn** rather than one a cell.
-    fn run_tactical_beat(&mut self, actor: Entity, temperature: f32) -> AiBeat {
+    fn run_tactical_beat(&mut self, actor: Entity, temperature: f32, turns: PartyTurns) -> AiBeat {
         // **The one hook, ahead of everything below it.** The plan's own
         // text points at `Game::tactical_ai_turn`'s top, but real play never
         // calls that door — `App::advance_tactical` drives
@@ -633,8 +696,15 @@ impl Game {
         // walk moves, so the answer is the one the walk was scored against
         // and storing an `AbilityDef` on the fight would be a second copy of
         // it.
-        let intent = self.tactical_intent(actor);
-        if !self.world.resource::<TacticalBattle>().walk_planned() {
+        let intent = self.tactical_intent(actor, turns);
+        // **No walk for `UseItem`.** A cell is drunk where the body already
+        // stands — `Intent::band`'s "any distance" is what makes every cell
+        // `scored_cells` would offer read as no better than staying put, so
+        // skipping the call outright saves the walk rather than merely
+        // getting the same answer from it the slow way.
+        if !matches!(intent, Intent::UseItem(_))
+            && !self.world.resource::<TacticalBattle>().walk_planned()
+        {
             self.walk_to_best_cell(actor, &intent, &sides, temperature);
             if self.step_along_walk(actor) {
                 return AiBeat::Stepped;
@@ -646,9 +716,12 @@ impl Game {
         // when there is another action still owed, and only one of them
         // spent anything.
         let actions_before = self.world.resource::<TacticalBattle>().actions_left();
-        match intent {
+        match &intent {
             Intent::Routine(_) => self.run_tactical_intent(actor, &intent, &sides),
             Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &intent, &sides),
+            Intent::UseItem(id) => {
+                self.tactical_use_item(id);
+            }
         }
         // **Only if the action did not already hand the turn on.** The
         // action ends the turn once no actions are left, so `tactical_attack`
@@ -678,23 +751,90 @@ impl Game {
         AiBeat::Acted
     }
 
-    /// What `actor` means to do with its turn: its ready routine, or a swing.
+    /// What `actor` means to do with its turn: its ready routine, a swing, or
+    /// (todo #103) a Power cell to afford the routine it wants.
     ///
     /// Pure, and decided before any draw — which is what lets a forecast
     /// name the action honestly at every temperature.
-    fn tactical_intent(&self, actor: Entity) -> Intent {
-        // `wild_routine_ready` and not `ability_unavailable`: a hostile holds
-        // no `PowerReserve` by design, so the player's gate refuses it every
-        // priced routine there is. See `Game::run_tactical_routine`.
-        //
-        // A party body is offered none of it — see `tactical_drive_turn`,
-        // the only way one reaches this at all.
-        match self.wild_routine_ready(actor) {
-            Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
-            _ => Intent::Swing {
-                range: self.swing_range(actor),
-            },
+    ///
+    /// **A hostile's branch is unchanged and reads `turns` nowhere.**
+    /// `wild_routine_ready`, not `ability_unavailable`: a hostile holds no
+    /// `PowerReserve` by design, so the player's gate refuses it every
+    /// priced routine there is. See `Game::run_tactical_routine`.
+    ///
+    /// **The party arm opens only for `Invoke`, and only for a body that is
+    /// nobody else's exception already.** A `Summoned` fork and a taken-over
+    /// companion both reach this function through `tactical_ai_beat`, which
+    /// always asks with `SwingOnly` — so in practice neither needs its own
+    /// check here to stay swing-only. Both are excluded anyway, because
+    /// `tactical_drive_turn` (`[R]`, and the arena with `SwingOnly`) drives
+    /// *whichever* body's turn it is with no `Hostile`/`Summoned`/taken-over
+    /// gate of its own, so a fork or a possessed companion mid-turn during
+    /// auto-resolve would otherwise fall through to this arm on `Invoke`
+    /// alone. That is a known asymmetry rather than an oversight: a fork's
+    /// own routine arm is still `Hostile`-only in `run_tactical_beat`
+    /// (unchanged by todo #103), and reusing the party arm for it — a body
+    /// with a `PowerReserve` the player never funded — is a separate
+    /// decision this phase does not make.
+    fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
+        if let Some(def) = self.wild_routine_ready(actor)
+            && self.world.get::<Hostile>(actor).is_some()
+        {
+            return Intent::Routine(def);
         }
+        if turns == PartyTurns::Invoke
+            && self.world.get::<Hostile>(actor).is_none()
+            && self.world.get::<Summoned>(actor).is_none()
+            && !self.taken_over(actor)
+            && let Some(intent) = self.party_routine_intent(actor)
+        {
+            return intent;
+        }
+        Intent::Swing {
+            range: self.swing_range(actor),
+        }
+    }
+
+    /// The party arm's own choice, once `tactical_intent` has confirmed it
+    /// applies: the first candidate routine `actor` can afford outright, or
+    /// a Power cell for the first one refused for Power and nothing else.
+    /// `None` when neither is available, which `tactical_intent` reads as
+    /// "swing".
+    ///
+    /// **Two passes over `ready_routines`, not one.** The routine that is
+    /// merely ready is not necessarily the routine that is affordable, and
+    /// the one worth drinking a cell for is whichever candidate's *only*
+    /// objection is Power — a companion carrying two routines could have its
+    /// first candidate refused for some other reason and its second short of
+    /// Power, and the swing-worthy answer is still "drink for the second."
+    ///
+    /// **`Some(RoutineRefusal::Power { .. })` already means "the only
+    /// reason"**, because `Game::ability_unavailable` checks Power last —
+    /// every earlier arm would have already returned first had it applied.
+    /// That single call is what makes this two passes over one gate rather
+    /// than a second, Power-skipping copy of it.
+    fn party_routine_intent(&self, actor: Entity) -> Option<Intent> {
+        let candidates = self.ready_routines(actor);
+        if let Some(def) = candidates
+            .iter()
+            .find(|def| self.ability_unavailable(actor, def).is_none())
+        {
+            return Some(Intent::Routine(def.clone()));
+        }
+        let (_, cost) =
+            candidates
+                .iter()
+                .find_map(|def| match self.ability_unavailable(actor, def) {
+                    Some(RoutineRefusal::Power { cost }) => Some((def, cost)),
+                    _ => None,
+                })?;
+        let current = self
+            .world
+            .get::<PowerReserve>(actor)
+            .map(PowerReserve::get)
+            .unwrap_or(0.0);
+        let id = self.power_cell_for((cost - current).max(0.0))?;
+        Some(Intent::UseItem(id))
     }
 
     /// Takes the next cell off `actor`'s committed walk and steps it there,
@@ -1069,6 +1209,10 @@ impl Game {
                 .best_aim(actor, from, def, &sides.targets)
                 .map(TurnTarget::Aim),
             Intent::Swing { range } => self.best_swing(actor, from, *range, &sides.targets),
+            // Nothing to aim: a cell is drunk by the body carrying it, and
+            // `run_tactical_beat` acts on `Intent::UseItem` directly rather
+            // than routing it through this door at all — see its own doc.
+            Intent::UseItem(_) => None,
         }
     }
 

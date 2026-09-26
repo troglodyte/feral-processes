@@ -23,7 +23,7 @@ use crate::components::{
 use crate::items::ItemId;
 use crate::resources::{DifficultyMode, Party, Sorties};
 use crate::species::{SpeciesDb, SpeciesDef};
-use crate::tactical::ai::{AiBeat, ForecastAction};
+use crate::tactical::ai::{AiBeat, ForecastAction, PartyTurns};
 use crate::tactical::map::{BattleCell, Board};
 use crate::tactical::view::{DecoyView, TamperTag};
 use crate::tactical::{Decoy, TacticalBattle, reach};
@@ -853,7 +853,7 @@ fn every_tactical_ai_door_reads_the_temperature_door() {
 
     let (mut via_drive, _) = cold_marooned();
     assert!(
-        via_drive.tactical_drive_turn(),
+        via_drive.tactical_drive_turn(PartyTurns::SwingOnly),
         "tactical_drive_turn did not run the cold hostile's turn"
     );
     assert_eq!(
@@ -2151,6 +2151,10 @@ fn a_cold_profiled_hostile_does_what_its_forecast_said() {
                     "board {i}: the routine stalled someone the forecast did not name"
                 );
             }
+            // `subject` is a hostile throughout this sweep, and a forecast
+            // is `Profiled`-hostile only — `ForecastAction::UseItem` is the
+            // party arm's, todo #103.
+            ForecastAction::UseItem(_) => unreachable!("board {i}: a hostile forecast a cell"),
         }
         if forecast.target.is_none() {
             unreachable += 1;
@@ -2398,6 +2402,9 @@ fn a_profiled_hostile_s_row_carries_its_forecast() {
     let expected_action = match &forecast.action {
         ForecastAction::Swing => "swing".to_string(),
         ForecastAction::Routine(id) => game.ability_display_name(id),
+        ForecastAction::UseItem(_) => {
+            unreachable!("`wild` is a hostile; see `ForecastAction::UseItem`'s doc")
+        }
     };
 
     let view = game.tactical_view().expect("a fight is open");

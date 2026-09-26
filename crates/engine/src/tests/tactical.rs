@@ -6,6 +6,7 @@ use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, Statu
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
+use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
@@ -237,7 +238,10 @@ fn the_arena_door_drives_a_party_body_where_the_ai_door_declines_it() {
         !game.tactical_ai_turn(),
         "the AI door drove a body the player commands"
     );
-    assert!(game.tactical_drive_turn(), "the arena door drove nobody");
+    assert!(
+        game.tactical_drive_turn(PartyTurns::SwingOnly),
+        "the arena door drove nobody"
+    );
     assert_ne!(
         game.tactical_actor(),
         Some(player),
@@ -259,7 +263,7 @@ fn a_fight_driven_from_both_sides_resolves() {
             break;
         }
         assert!(
-            game.tactical_drive_turn(),
+            game.tactical_drive_turn(PartyTurns::SwingOnly),
             "a fight open with nobody acting"
         );
     }
@@ -3427,17 +3431,14 @@ fn an_auto_driven_fight_is_won_rather_than_walked_out_of() {
     );
 }
 
-/// Auto-attack is basic attacks and nothing else, and the cooldown is how
-/// that is visible: `run_tactical_routine` arms one, a swing arms nothing,
-/// and the AI's routine picker bypasses `ability_unavailable` — so a party
-/// body driven through that branch would invoke, for free, whatever it was
-/// carrying.
-///
-/// Power is deliberately not the instrument: a round on a battle map spends a
-/// world tick, and the tick drains Power by itself.
+/// todo #103: auto-attack now invokes a party body's routines exactly as a
+/// hostile's own AI does, gated on `Game::ability_unavailable` rather than
+/// bypassing it — the cooldown and the reserve are both how that is visible,
+/// since `run_tactical_routine` arms the one and charges the other, and a
+/// swing does neither.
 #[test]
-fn an_auto_driven_party_body_swings_and_never_invokes() {
-    use crate::components::AbilityCooldowns;
+fn an_auto_driven_party_body_invokes_a_ready_affordable_routine() {
+    use crate::components::{AbilityCooldowns, PowerReserve};
     use crate::tactical::ai::AiBeat;
     use crate::tests::support::HOSTILE_SWEEP;
 
@@ -3450,6 +3451,7 @@ fn an_auto_driven_party_body_swings_and_never_invokes() {
         game.wild_routine_ready(player).is_some(),
         "the fixture left nothing to invoke, so nothing is being tested"
     );
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
     for _ in 0..=TACTICAL_MOVE_MAX {
         if game.tactical_auto_beat() == AiBeat::Acted {
@@ -3460,8 +3462,44 @@ fn an_auto_driven_party_body_swings_and_never_invokes() {
     assert!(
         game.world
             .get::<AbilityCooldowns>(player)
+            .is_some_and(|c| c.0.contains_key(HOSTILE_SWEEP)),
+        "an auto-driven turn with a ready, affordable routine swung instead of invoking"
+    );
+    assert!(
+        game.world.get::<PowerReserve>(player).unwrap().get() < power_before,
+        "the invocation charged no Power"
+    );
+}
+
+/// `PartyTurns::SwingOnly` is what `an_auto_driven_party_body_invokes_a_
+/// ready_affordable_routine` above changed away from — the arena's own
+/// door, and the tests that hold its numbers, must still get the pre-#103
+/// behaviour with the exact same fixture.
+#[test]
+fn a_swing_only_driven_party_body_never_invokes() {
+    use crate::components::AbilityCooldowns;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    assert!(
+        game.wild_routine_ready(player).is_some(),
+        "the fixture left nothing to invoke, so nothing is being tested"
+    );
+
+    assert!(
+        game.tactical_drive_turn(PartyTurns::SwingOnly),
+        "the door drove nobody"
+    );
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
             .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
-        "an auto-driven turn armed a routine's cooldown, so it invoked rather than swung"
+        "a SwingOnly-driven turn armed a routine's cooldown, so it invoked rather than swung"
     );
 }
 

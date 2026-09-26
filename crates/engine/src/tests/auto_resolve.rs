@@ -3,6 +3,7 @@
 
 use super::support::test_assets_dir;
 use super::tactical::tactical_fight;
+use crate::tactical::ai::PartyTurns;
 use crate::*;
 
 /// A weak wild program dies to the player's first swing, so the whole loop
@@ -220,7 +221,11 @@ fn the_hook_fires_once_a_round_on_a_battle_map_too() {
             break;
         }
         let round = by_hand.fight_round().unwrap_or(0);
-        if !by_hand.tactical_drive_turn() {
+        // `Invoke`, to mirror what `auto_resolve_battle_with` now asks
+        // `tactical_drive_turn` for — this loop is a by-hand rebuild of that
+        // same walk, and the round count the two sides compare only means
+        // the same thing if both take the same `PartyTurns`.
+        if !by_hand.tactical_drive_turn(PartyTurns::Invoke) {
             break;
         }
         if !by_hand.has_active_battle() || by_hand.fight_round().unwrap_or(0) != round {

@@ -583,6 +583,10 @@ impl Game {
             action: match forecast.action {
                 ForecastAction::Swing => "swing".to_string(),
                 ForecastAction::Routine(id) => self.ability_display_name(&id),
+                // Unreachable: `tactical_forecast` is `Profiled`-hostile
+                // only, and `Intent::UseItem` is the party arm's — see
+                // `ForecastAction::UseItem`'s own doc.
+                ForecastAction::UseItem(id) => self.item_name(&id).to_string(),
             },
             walk: forecast.walk,
             target: forecast.target,

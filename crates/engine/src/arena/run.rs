@@ -4,6 +4,7 @@ use super::PartyPlan;
 use super::report::RepRecord;
 use super::watch::Watch;
 use crate::battle::BattleAction;
+use crate::tactical::ai::PartyTurns;
 use crate::*;
 
 /// A fight that has not resolved in this many rounds is a stalemate, and is
@@ -96,7 +97,7 @@ pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch) -> RepRecord 
             break;
         }
         let round = game.fight_round().unwrap_or(0);
-        if !game.tactical_drive_turn() {
+        if !game.tactical_drive_turn(PartyTurns::SwingOnly) {
             break;
         }
         // The fight ending inside the turn is observed too, and counts as a

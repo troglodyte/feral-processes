@@ -1,6 +1,7 @@
 //! Playing a whole fight out with no pacing — the engine half of `[R]`.
 
 use crate::tactical::TacticalBattle;
+use crate::tactical::ai::PartyTurns;
 use crate::tuning::AUTO_RESOLVE_ROUND_CAP;
 use crate::*;
 
@@ -79,7 +80,11 @@ impl Game {
                 return AutoResolve::Stalled;
             }
             let stepped = if self.world.get_resource::<TacticalBattle>().is_some() {
-                self.tactical_drive_turn()
+                // `Invoke`: `[R]` behaves as `[A]` does — spec §"[R] auto-
+                // resolve" — so a party body reached through this loop
+                // invokes its own routines exactly as `tactical_auto_beat`
+                // would, Power cell included.
+                self.tactical_drive_turn(PartyTurns::Invoke)
             } else {
                 self.battle_auto_round()
             };

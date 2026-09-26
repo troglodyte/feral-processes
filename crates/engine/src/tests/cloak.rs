@@ -10,6 +10,7 @@ use crate::components::Cloaked;
 use crate::policy;
 use crate::resources::EnemyPolicy;
 use crate::tactical::TacticalBattle;
+use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach;
 use crate::tactical::turn::StepOutcome;
 use crate::*;
@@ -580,7 +581,7 @@ fn the_wild_sides_scoring_does_not_name_a_cloaked_body() {
 
     game.arm_cloak(player, 5);
     let hp_before = game.world.get::<Stats>(player).unwrap().hp;
-    game.tactical_drive_turn();
+    game.tactical_drive_turn(PartyTurns::SwingOnly);
     assert_eq!(
         game.world.get::<Stats>(player).unwrap().hp,
         hp_before,
@@ -595,7 +596,7 @@ fn the_wild_sides_scoring_does_not_name_a_cloaked_body() {
     let mut landed = false;
     for _ in 0..20 {
         let before = game.world.get::<Stats>(player).unwrap().hp;
-        game.tactical_drive_turn();
+        game.tactical_drive_turn(PartyTurns::SwingOnly);
         if game.world.get::<Stats>(player).unwrap().hp < before {
             landed = true;
             break;
@@ -642,7 +643,7 @@ fn a_cloaked_body_does_not_soak_the_swing_the_exposed_one_should_take() {
         }
         stand_both_beside(&mut game, hostile, pet, player);
         let player_hp = game.world.get::<Stats>(player).unwrap().hp;
-        game.tactical_drive_turn();
+        game.tactical_drive_turn(PartyTurns::SwingOnly);
         assert_eq!(
             game.world.get::<Stats>(pet).unwrap().hp,
             1,

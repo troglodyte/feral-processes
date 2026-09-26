@@ -40,8 +40,8 @@ use crate::tuning::{
 };
 
 /// Whether a beat may invoke a party body's routines and drink a Power cell
-/// for one, or must hold it to the swing-only behaviour every battle-map
-/// party turn had before todo #103.
+/// for one, or must hold it to plain swinging — the only thing a battle-map
+/// party turn could do before auto-attack and `[R]` started invoking.
 ///
 /// **The opt-in lives on the beat, not on the body.** `tactical_auto_beat`
 /// (`[A]`) and `auto_resolve_battle_with` (`[R]`) pass `Invoke` because a
@@ -567,13 +567,13 @@ impl Game {
     /// the player's to command" true of the engine — the decision to answer
     /// for it is app-core's, taken a key at a time, and revoked the same way.
     ///
-    /// **A party body driven here invokes** (todo #103) — `PartyTurns::
-    /// Invoke`, so `tactical_intent`'s party arm opens for it exactly as it
-    /// would if the player had chosen Special by hand, Power cell included.
-    /// Before #103 this always swung, because the routine branch was
-    /// `Hostile`-only; that changed here and at `[R]`'s door alike, and
-    /// stayed unchanged at the arena's, which is what keeps its numbers
-    /// comparable — see `PartyTurns`'s own doc.
+    /// **A party body driven here invokes** — `PartyTurns::Invoke`, so
+    /// `tactical_intent`'s party arm opens for it exactly as it would if the
+    /// player had chosen Special by hand, Power cell included. The routine
+    /// branch used to be `Hostile`-only, so this always swung; that changed
+    /// here and at `[R]`'s door alike, and stayed unchanged at the arena's,
+    /// which is what keeps its numbers comparable — see `PartyTurns`'s own
+    /// doc.
     pub fn tactical_auto_beat(&mut self) -> AiBeat {
         let Some(actor) = self.tactical_actor() else {
             return AiBeat::Idle;
@@ -752,7 +752,7 @@ impl Game {
     }
 
     /// What `actor` means to do with its turn: its ready routine, a swing, or
-    /// (todo #103) a Power cell to afford the routine it wants.
+    /// a Power cell to afford the routine it wants.
     ///
     /// Pure, and decided before any draw — which is what lets a forecast
     /// name the action honestly at every temperature.
@@ -772,10 +772,9 @@ impl Game {
     /// gate of its own, so a fork or a possessed companion mid-turn during
     /// auto-resolve would otherwise fall through to this arm on `Invoke`
     /// alone. That is a known asymmetry rather than an oversight: a fork's
-    /// own routine arm is still `Hostile`-only in `run_tactical_beat`
-    /// (unchanged by todo #103), and reusing the party arm for it — a body
-    /// with a `PowerReserve` the player never funded — is a separate
-    /// decision this phase does not make.
+    /// own routine arm is still `Hostile`-only in `run_tactical_beat`, and
+    /// reusing the party arm for it — a body with a `PowerReserve` the
+    /// player never funded — is a separate decision nothing here makes.
     fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
         if let Some(def) = self.wild_routine_ready(actor)
             && self.world.get::<Hostile>(actor).is_some()

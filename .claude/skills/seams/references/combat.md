@@ -1443,6 +1443,39 @@
   routine intent is still gated on `Hostile`. See
   `seam:a-body-is-spliced-into-initiative-behind-the-cursor-never-ahead`.
 
+- **Auto-attack and `[R]` invoke through `tactical_intent`'s party arm,
+  gated on `ability_unavailable`.** Before todo #103, a battle-map party
+  turn under either driver always swung — `run_tactical_beat`'s
+  routine-intent branch was `Hostile`-only — so a party body driven by the
+  player's own request never got a routine even though nothing else about
+  the fight changed shape, which made auto-attack strictly weaker than
+  playing by hand. The fix threads a `PartyTurns` enum (`Invoke` |
+  `SwingOnly`) from each driver down through `run_tactical_turn` →
+  `run_tactical_beat` → `tactical_intent`: `tactical_auto_beat` (`[A]`) and
+  `auto_resolve_battle_with` (`[R]`) pass `Invoke`; `tactical_ai_beat` (the
+  ordinary hostile/summoned/taken-over AI door) and `arena::run` pass
+  `SwingOnly` — permanently, not as a stopgap, since `PartyPlan::AllAttack`
+  invokes no routine either and the two models' numbers stay comparable
+  only if neither auto-invokes headless. The party arm opens only for
+  `Invoke` and only when the actor is not `Hostile`, `Summoned`, or taken
+  over, so a fork reached through `tactical_drive_turn` (which drives
+  whichever body is acting with no gate of its own) still falls through to
+  a swing — a body with a `PowerReserve` the player never funded invoking a
+  priced routine is a separate decision this feature does not make. The
+  party arm's own choice is the first candidate `ability_unavailable`
+  passes, else — if the *sole* refusal for some candidate is
+  `RoutineRefusal::Power` — a Power cell from the pack via
+  `power_cell_for`, else a swing: `ability_unavailable`'s Power check runs
+  *last*, after cooldown, tactical-only and the Decompile/Emulate/Teleport
+  arms, precisely so `Power` alone means every other gate already passed.
+  `power_cell_for` refuses any item whose `consume` carries a
+  `prebattle_buff` — a sustain/backfeed cell primes a long-running Trickle
+  buff meant to be spent deliberately, not drunk automatically because it
+  also restores some Power. `Game::tactical_use_item` is the one door both
+  the party arm and `[U]` on the battle map spend a cell through, every
+  refusal landing before anything is spent. See
+  `seam:auto-attack-invokes-through-tactical-intents-party-arm`.
+
 - **`Game::decision_temperature` is the one door every tactical AI entry
   point reads, and `tactical_ai_turn_at` is a test hook, not a fifth
   door.** Before this, `tuning::TACTICAL_AI_TEMPERATURE` was passed

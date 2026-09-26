@@ -46,6 +46,45 @@ fn a_winnable_tactical_fight_resolves_and_closes() {
     );
 }
 
+/// todo #103: `[R]` behaves as `[A]` does — `auto_resolve_battle_with` drives
+/// `tactical_drive_turn` with `PartyTurns::Invoke`, so a ready, affordable
+/// routine is invoked rather than swung, exactly as `tests::tactical::an_
+/// auto_driven_party_body_invokes_a_ready_affordable_routine` proves for
+/// `[A]` itself.
+#[test]
+fn auto_resolve_invokes_a_ready_affordable_routine() {
+    use super::tactical::{only_routine, wait_for_turn};
+    use crate::components::AbilityCooldowns;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Left at the fixture's own 200 HP rather than weakened to a one-hit
+    // kill: the routine's own cooldown is read from a hook fired *between*
+    // rounds, and a fight that closes on the very round it invokes would
+    // already have torn the cooldown down again before the hook runs.
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    assert!(
+        game.wild_routine_ready(player).is_some(),
+        "the fixture left nothing to invoke, so nothing is being tested"
+    );
+
+    let mut invoked = false;
+    game.auto_resolve_battle_with(|g| {
+        invoked = invoked
+            || g.world
+                .get::<AbilityCooldowns>(player)
+                .is_some_and(|c| c.0.contains_key(HOSTILE_SWEEP));
+    });
+
+    assert!(
+        invoked,
+        "auto-resolve never invoked the ready, affordable routine"
+    );
+}
+
 /// The loss path has to stop the loop rather than spin it: a Permadeath
 /// flatline ends the fight and sets `is_game_over`, and
 /// `battle_resolve_round` (through `battle_auto_round`) does nothing

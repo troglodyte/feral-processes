@@ -3503,6 +3503,420 @@ fn a_swing_only_driven_party_body_never_invokes() {
     );
 }
 
+/// A routine that is refused for something other than Power — here, still
+/// cooling — falls back to a swing exactly as an unaffordable one with
+/// nothing in the pack does: neither the cooldown nor the reserve moves.
+#[test]
+fn a_cooling_routine_falls_back_to_a_swing() {
+    use crate::components::AbilityCooldowns;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    game.world.entity_mut(player).insert(AbilityCooldowns(
+        [(HOSTILE_SWEEP.to_string(), 3)].into_iter().collect(),
+    ));
+
+    assert!(
+        game.tactical_auto_beat() != crate::tactical::ai::AiBeat::Idle,
+        "the fixture left nothing acting"
+    );
+    for _ in 0..TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    // A round wrapping while the cooldown is still up ticks it *down* by the
+    // ordinary decay (this fixture's one hostile plus the player wraps a
+    // round every player turn) — invoking would instead reset it *up* to a
+    // freshly armed value, so "still under the value it started at, still
+    // present" is what tells the two apart.
+    let remaining = game
+        .world
+        .get::<AbilityCooldowns>(player)
+        .and_then(|c| c.0.get(HOSTILE_SWEEP).copied());
+    assert!(
+        remaining.is_some_and(|r| r < 3),
+        "a cooling routine's own cooldown was reset upward, so it invoked: {remaining:?}"
+    );
+}
+
+/// An unaffordable routine with no Power cell in the pack falls back to a
+/// swing: neither the cooldown arms (no invocation) nor the reserve moves
+/// (no cell drunk).
+#[test]
+fn an_unaffordable_routine_with_no_cell_falls_back_to_a_swing() {
+    use crate::components::{AbilityCooldowns, PowerReserve};
+    use crate::tests::support::{HOSTILE_SWEEP, set_inventory};
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    game.world.entity_mut(player).insert(PowerReserve::new(5.0));
+    set_inventory(&mut game, &[]);
+
+    for _ in 0..TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "an unaffordable routine with no cell still invoked"
+    );
+    // Only ordinary tick drain moves this, not a cell (power_cell alone
+    // restores 25.0) — a turn on a battle map spends a world tick once its
+    // round wraps, which this fixture's two-body order does every player
+    // turn.
+    let power = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        power <= 5.0 && 5.0 - power < 1.0,
+        "an unaffordable routine with no cell still drank something: {power}"
+    );
+}
+
+/// The heart of todo #103's Power-cell half: refused for Power alone, and a
+/// cell in the pack covers the shortfall, so the turn drinks it instead of
+/// swinging — one action, one fewer cell, more Power, and no cooldown yet.
+/// The *next* turn is what proves the drink actually bought the invocation:
+/// once the party is due again, the routine is affordable and runs.
+#[test]
+fn a_power_only_refusal_with_a_cell_in_reach_drinks_it_and_invokes_next_turn() {
+    use crate::components::{AbilityCooldowns, PowerReserve};
+    use crate::items::ItemId;
+    use crate::items::ids::POWER_CELL;
+    use crate::tests::support::{HOSTILE_SWEEP, set_inventory};
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    // bus_fault costs 18.0; 10.0 is short by 8.0, well inside power_cell's 25.
+    game.world
+        .entity_mut(player)
+        .insert(PowerReserve::new(10.0));
+    set_inventory(&mut game, &[(POWER_CELL, 2)]);
+
+    for _ in 0..TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "the first turn already invoked, so drinking was never exercised"
+    );
+    // 10.0 + power_cell's 25.0, minus the same ordinary tick drain the
+    // no-cell test accounts for.
+    let power = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        power > 30.0,
+        "the cell's restore did not land on the reserve: {power}"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(POWER_CELL)),
+        1,
+        "drinking a cell did not spend it from the pack"
+    );
+    assert_ne!(
+        game.tactical_actor(),
+        Some(player),
+        "drinking a cell did not spend the turn"
+    );
+
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    for _ in 0..TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_some_and(|c| c.0.contains_key(HOSTILE_SWEEP)),
+        "the topped-up reserve still did not afford the routine next turn"
+    );
+}
+
+/// A consumable that restores Power but also arms a `prebattle_buff` (a
+/// sustain/backfeed-style item) is never drunk for a Power-only refusal —
+/// `Game::power_cell_for`'s own filter — so the same shortfall that would
+/// have drunk a plain cell instead falls back to a swing.
+#[test]
+fn a_prebattle_buff_cell_is_never_drunk_for_a_power_refusal() {
+    use crate::components::{AbilityCooldowns, PowerReserve};
+    use crate::tests::support::{HOSTILE_SWEEP, set_inventory};
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    game.world
+        .entity_mut(player)
+        .insert(PowerReserve::new(10.0));
+    // `backfeed_cell` restores Power and arms a `Trickle` buff — the
+    // sustain/backfeed shape `power_cell_for`'s filter exists for. Any
+    // shipped `.ron` with both `consume.power > 0` and a `prebattle_buff`
+    // would exercise the same filter; this is the fixture, not content the
+    // assertion below trusts blindly.
+    let backfeed = "backfeed_cell";
+    assert!(
+        game.world
+            .resource::<crate::items_db::ItemDb>()
+            .get(backfeed)
+            .is_some_and(|d| d
+                .consume
+                .is_some_and(|c| c.power > 0.0 && c.prebattle_buff.is_some())),
+        "fixture: {backfeed} must restore Power and carry a prebattle_buff"
+    );
+    set_inventory(&mut game, &[(backfeed, 2)]);
+
+    for _ in 0..TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "a prebattle-buff cell was drunk and then invoked"
+    );
+    let power = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        power <= 10.0 && 10.0 - power < 1.0,
+        "a prebattle-buff cell was drunk for a Power-only refusal: {power}"
+    );
+}
+
+/// `PartyTurns::SwingOnly` drinks no cell either, even when a Power-only
+/// refusal and a covering cell are both present — the arm that would drink
+/// one is nested under the same `Invoke` gate as the routine arm.
+#[test]
+fn swing_only_never_drinks_a_cell_even_when_one_would_cover_the_shortfall() {
+    use crate::components::PowerReserve;
+    use crate::items::ItemId;
+    use crate::items::ids::POWER_CELL;
+    use crate::tests::support::{HOSTILE_SWEEP, set_inventory};
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    game.world
+        .entity_mut(player)
+        .insert(PowerReserve::new(10.0));
+    set_inventory(&mut game, &[(POWER_CELL, 2)]);
+
+    assert!(
+        game.tactical_drive_turn(PartyTurns::SwingOnly),
+        "the door drove nobody"
+    );
+
+    let power = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        power <= 10.0 && 10.0 - power < 1.0,
+        "SwingOnly drank a cell: {power}"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(POWER_CELL)),
+        2,
+        "SwingOnly spent a cell from the pack"
+    );
+}
+
+mod tactical_use_item {
+    //! `Game::tactical_use_item` — `[U]`'s door in phase 3, and the door
+    //! todo #103's party arm already drives. Every refusal below is asserted
+    //! to spend nothing, `tactical_defend`'s own rule.
+
+    use super::{game, tactical_fight, wait_for_turn};
+    use crate::components::{Inventory, PowerReserve};
+    use crate::items::ItemId;
+    use crate::items::ids::POWER_CELL;
+    use crate::tactical::TacticalBattle;
+    use crate::tests::support::set_inventory;
+
+    #[test]
+    fn refused_with_no_fight_open_and_spends_nothing() {
+        let mut game = game();
+        set_inventory(&mut game, &[(POWER_CELL, 3)]);
+        let player = game.player_entity();
+
+        assert!(!game.tactical_use_item(&ItemId::from(POWER_CELL)));
+
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(POWER_CELL)),
+            3,
+            "a refusal with no fight open still spent the item"
+        );
+    }
+
+    #[test]
+    fn refused_for_a_body_that_is_not_the_player_or_in_party() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 200);
+        let wild = pack[0];
+        set_inventory(&mut game, &[(POWER_CELL, 3)]);
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+
+        assert!(!game.tactical_use_item(&ItemId::from(POWER_CELL)));
+
+        let player = game.player_entity();
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(POWER_CELL)),
+            3,
+            "a refusal for a non-party actor still spent the pack"
+        );
+        assert_eq!(
+            game.tactical_actor(),
+            Some(wild),
+            "a refusal for a non-party actor still spent its turn"
+        );
+    }
+
+    #[test]
+    fn refused_with_no_actions_left_and_spends_nothing() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 200);
+        let player = game.player_entity();
+        set_inventory(&mut game, &[(POWER_CELL, 3)]);
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+        // Spend the turn's own action first, through an ordinary door.
+        assert!(game.tactical_defend(), "the fixture could not brace");
+        assert_ne!(
+            game.tactical_actor(),
+            Some(player),
+            "fixture: bracing did not end the turn, so this test proves nothing"
+        );
+
+        assert!(!game.tactical_use_item(&ItemId::from(POWER_CELL)));
+
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(POWER_CELL)),
+            3,
+            "a refusal with no actions left still spent the pack"
+        );
+    }
+
+    #[test]
+    fn refused_for_an_item_the_pack_has_none_of_and_spends_nothing() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 200);
+        let player = game.player_entity();
+        set_inventory(&mut game, &[]);
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+        assert!(!game.tactical_use_item(&ItemId::from(POWER_CELL)));
+
+        assert_eq!(
+            game.tactical_actor(),
+            Some(player),
+            "a refusal for an absent item still spent the turn"
+        );
+    }
+
+    #[test]
+    fn refused_for_an_item_with_no_consume_effect_and_spends_nothing() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 200);
+        let player = game.player_entity();
+        // Any shipped item with no `consume:` field does — a weapon, say —
+        // and this fixture does not depend on which one so long as one
+        // ships. `ice_breaker` is a taming catalyst, not a consumable.
+        set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 3)]);
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+        assert!(!game.tactical_use_item(&ItemId::from(crate::items::ids::ICE_BREAKER)));
+
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(crate::items::ids::ICE_BREAKER)),
+            3,
+            "a refusal for an unusable item still spent it"
+        );
+        assert_eq!(
+            game.tactical_actor(),
+            Some(player),
+            "a refusal for an unusable item still spent the turn"
+        );
+    }
+
+    #[test]
+    fn a_usable_item_spends_one_action_one_unit_and_restores_power() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 200);
+        let player = game.player_entity();
+        game.world
+            .entity_mut(player)
+            .insert(PowerReserve::new(10.0));
+        set_inventory(&mut game, &[(POWER_CELL, 2)]);
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+        assert!(game.tactical_use_item(&ItemId::from(POWER_CELL)));
+
+        assert!(
+            game.world.get::<PowerReserve>(player).unwrap().get() > 30.0,
+            "a used cell did not restore Power"
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(POWER_CELL)),
+            1,
+            "a used cell was not spent from the pack"
+        );
+        assert_ne!(
+            game.tactical_actor(),
+            Some(player),
+            "a used item did not spend the turn"
+        );
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_some(),
+            "fixture: the fight should still be open"
+        );
+    }
+}
+
 /// A board with one cell of cover between the two halves, and the two bodies
 /// placed either side of it.
 ///

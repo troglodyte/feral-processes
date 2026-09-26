@@ -77,8 +77,8 @@ enum Intent {
         range: u32,
     },
     Routine(AbilityDef),
-    /// Drinks a Power cell where the body already stands — todo #103's
-    /// party arm, chosen only when its preferred routine is refused for
+    /// Drinks a Power cell where the body already stands — the party arm's
+    /// own choice, chosen only when its preferred routine is refused for
     /// Power alone and a cell in the pack covers the shortfall. Carries the
     /// item rather than an index, `Game::tactical_use_item`'s own
     /// vocabulary.

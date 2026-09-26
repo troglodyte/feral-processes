@@ -20,9 +20,9 @@ pub(crate) enum RoutineRefusal {
     BattleMapOnly,
     /// Still on cooldown; the rounds remaining.
     Cooldown(u32),
-    /// Short of Power. `cost` is what the routine costs — phase 2's
-    /// shortfall is `cost` minus the entity's current `PowerReserve`, read
-    /// by the caller rather than carried here.
+    /// Short of Power. `cost` is what the routine costs; the shortfall is
+    /// `cost` minus the entity's current `PowerReserve`, read by the caller
+    /// rather than carried here.
     Power { cost: f32 },
     /// Decompile with no taming catalyst in the pack.
     NoTamingCatalyst,
@@ -1552,11 +1552,10 @@ impl Game {
         // routine that reaches this line without being refused already
         // passed every other refusal, and `Power` being returned *is* "the
         // reserve is the only thing standing in the way." That single-call
-        // property is what todo #103's auto-attack party arm reads: it drinks
-        // a Power cell only when this is the answer, and reordering the
-        // check to the front (as it was before #103) would make that
-        // impossible to ask without a second, Power-skipping copy of this
-        // gate.
+        // property is what auto-attack's party arm reads: it drinks a Power
+        // cell only when this is the answer, and reordering the check to
+        // the front would make that impossible to ask without a second,
+        // Power-skipping copy of this gate.
         let cost = abilities::routine_power_cost(ability);
         if cost > 0.0
             && !self
@@ -1570,7 +1569,7 @@ impl Game {
     }
 
     /// The pack's own cell for a body refused `shortfall` Power and nothing
-    /// else — todo #103's auto-attack party arm, the only caller.
+    /// else — auto-attack's party arm, the only caller.
     ///
     /// **Data-driven, no id.** Any consumable whose `consume.power` restores
     /// Power qualifies; `power_cell` is what ships, but a mod's own cell

@@ -732,8 +732,8 @@ impl Game {
         true
     }
 
-    /// Spends the acting body's turn on one consumable — `[U]`'s door in
-    /// phase 3, and todo #103's auto-attack party arm before that.
+    /// Spends the acting body's turn on one consumable — `[U]`'s own door,
+    /// and the door auto-attack's party arm already drives.
     ///
     /// `Game::consume_item`'s battle-map caller, `BattleAction::UseItem`'s
     /// sibling for this model: it applies `id`'s effect to `actor` from the

@@ -176,12 +176,49 @@ impl Game {
             .resource_mut::<crate::world::WorldMap>()
             .tile(x, y)
             .walkable
-            && self.find_wild_creature_at(x, y).is_none()
+            && self.surface_wild_creature_at(x, y).is_none()
+            && self.surface_caravan_at(x, y).is_none()
             && self.find_nest_at(x, y).is_none()
             && self.find_surface_link_at(x, y).is_none()
             && self.find_settlement_at(x, y).is_none()
             && self.find_trap_at(x, y).is_none()
             && !self.world.resource::<Outposts>().0.contains_key(&(x, y))
+            && !self.player_or_anchor_at(x, y)
+    }
+
+    /// The player's `Position` is a surface tile in every locale — pinned to
+    /// the anchor in base space, to the entrance in the Stack — so it is
+    /// read without a locale check.
+    fn player_or_anchor_at(&self, x: i32, y: i32) -> bool {
+        let anchor = self.world.resource::<AnchorEntity>().0;
+        [self.player_entity(), anchor].into_iter().any(|entity| {
+            self.world
+                .get::<Position>(entity)
+                .is_some_and(|pos| pos.x == x && pos.y == y)
+        })
+    }
+
+    /// `find_wild_creature_at` less a besieger, whose `Position` is a
+    /// base-space cell a surface footprint can only collide with by number.
+    fn surface_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        self.wild_creature_positions()
+            .into_iter()
+            .find(|(e, p)| p.x == x && p.y == y && !self.stands_in_base_space(*e))
+            .map(|(e, _)| e)
+    }
+
+    /// A caravan inside base space is at a base-space cell, for
+    /// `surface_wild_creature_at`'s reason.
+    fn surface_caravan_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Caravan>>();
+        let hits: Vec<Entity> = query
+            .iter(&self.world)
+            .filter(|(_, pos)| pos.x == x && pos.y == y)
+            .map(|(entity, _)| entity)
+            .collect();
+        hits.into_iter().find(|&e| !self.stands_in_base_space(e))
     }
 
     /// The nearest free tile outside `key`'s footprint — a displaced
@@ -234,7 +271,7 @@ impl Game {
     }
 
     fn displace_wild_creature_at(&mut self, key: SettlementKey, x: i32, y: i32) {
-        let Some(entity) = self.find_wild_creature_at(x, y) else {
+        let Some(entity) = self.surface_wild_creature_at(x, y) else {
             return;
         };
         let Some((nx, ny)) = self.free_tile_outside(key) else {
@@ -279,13 +316,7 @@ impl Game {
     /// behind would send this caravan walking back into the settlement that
     /// just displaced it.
     fn displace_caravan_at(&mut self, key: SettlementKey, x: i32, y: i32) {
-        let hit: Option<Entity> = {
-            let mut query = self.world.query::<(Entity, &Position, &Caravan)>();
-            query
-                .iter(&self.world)
-                .find(|(_, pos, _)| pos.x == x && pos.y == y)
-                .map(|(entity, ..)| entity)
-        };
+        let hit = self.surface_caravan_at(x, y);
         let Some(entity) = hit else {
             return;
         };

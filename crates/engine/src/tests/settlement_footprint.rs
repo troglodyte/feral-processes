@@ -7,7 +7,9 @@
 //! what is here is the square that latch now moves.
 
 use super::support::*;
-use crate::components::{CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap};
+use crate::components::{
+    Besieger, CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap,
+};
 use crate::resources::{FrameMemory, Outposts, Settlements, StackMemory, Standings, Visit};
 use crate::settlements::SettlementKey;
 use crate::tuning::*;
@@ -1199,4 +1201,50 @@ fn a_player_inside_base_space_leaves_onto_the_anchors_new_tile_after_a_footprint
         !footprint.contains(&(player_pos.x, player_pos.y)),
         "leaving base space left the player inside the footprint that displaced the anchor"
     );
+}
+
+/// Displacement fills the nearest free ring cell, so the player standing on
+/// it must count as occupied or a displaced body lands on them.
+#[test]
+fn a_displaced_creature_never_lands_on_the_player() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 90, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 40, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let first = game
+        .free_tile_outside(key)
+        .expect("test premise: an open ring");
+    let player = game.player_entity();
+    *game.world.get_mut::<Position>(player).unwrap() = Position {
+        x: first.0,
+        y: first.1,
+    };
+    let creature = spawn_wild_without_routine(&mut game, "scrapper", centre.0 + 1, centre.1);
+
+    game.sync_settlement_footprint(key);
+
+    let pos = *game.world.get::<Position>(creature).unwrap();
+    assert_ne!((pos.x, pos.y), first, "the creature landed on the player");
+    assert!(!footprint_set(&mut game, key).contains(&(pos.x, pos.y)));
+}
+
+/// A besieger's `Position` is a base-space cell, so a footprint whose
+/// surface coordinates happen to match it must leave it alone.
+#[test]
+fn a_besieger_is_not_displaced_by_a_surface_footprint() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 100, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    let key = SettlementKey { rx: 41, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    let besieger = spawn_wild_without_routine(&mut game, "scrapper", centre.0 + 1, centre.1);
+    game.world.entity_mut(besieger).insert(Besieger);
+
+    game.sync_settlement_footprint(key);
+
+    let pos = *game.world.get::<Position>(besieger).unwrap();
+    assert_eq!((pos.x, pos.y), (centre.0 + 1, centre.1));
 }

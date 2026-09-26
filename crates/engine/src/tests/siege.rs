@@ -4147,3 +4147,90 @@ mod rereview_findings {
         );
     }
 }
+
+/// Opus review of todo #103 (2026-09-26): `tactical_intent`'s `Invoke` arm
+/// excluded only `Hostile`, `Summoned` and taken-over, so a body that is
+/// none of those but also not the player's own party — siege staff chief
+/// among them, `tactical_skippable` and seated on the board whenever
+/// something is in its reach — fell through to it too, and a routine it
+/// could not afford sent it into `Game::tactical_use_item`, which refuses
+/// anyone outside the player's party. `Game::in_party` is the fix.
+mod auto_attack_party_arm_review {
+    use super::*;
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::ai::AiBeat;
+    use crate::tactical::map::BattleCell;
+    use crate::tests::support::HOSTILE_SWEEP;
+    use crate::tests::tactical::{only_routine, tactical_fight};
+    use crate::tuning::TACTICAL_MOVE_MAX;
+
+    /// A free, open neighbour of `near` — `review_findings::free_neighbour`'s
+    /// own reason, one module over.
+    fn free_neighbour(battle: &TacticalBattle, near: (i32, i32)) -> (i32, i32) {
+        const OFFSETS: [(i32, i32); 8] = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ];
+        OFFSETS
+            .into_iter()
+            .map(|(dx, dy)| (near.0 + dx, near.1 + dy))
+            .find(|&cell| {
+                battle.board.cell(cell.0, cell.1) == BattleCell::Open
+                    && battle.occupant(cell).is_none()
+            })
+            .expect("the hostile must have at least one free neighbour")
+    }
+
+    /// A hostile and a body outside the player's party (`spawn_tamed`'s full
+    /// roster parts, not a hand-built stand-in — a fixture short a component
+    /// reads as the feature being broken rather than as the fixture being
+    /// wrong), seated beside each other in a real tactical fight.
+    fn fixture(seed: u32) -> (Game, Entity, Entity) {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let pack = tactical_fight(&mut game, 1, 200);
+        let hostile = pack[0];
+        let staff = spawn_tamed(&mut game, 200, 5);
+
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let hostile_cell = battle.cell_of(hostile).expect("the hostile must be seated");
+            free_neighbour(battle, hostile_cell)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(staff, beside),
+            "no free cell beside the hostile to seat the staff body"
+        );
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![staff]);
+        only_routine(&mut game, staff, HOSTILE_SWEEP);
+        (game, staff, hostile)
+    }
+
+    #[test]
+    fn a_body_outside_the_party_swings_under_auto_attack_instead_of_invoking() {
+        let (mut game, staff, _hostile) = fixture(220_001);
+
+        for _ in 0..=TACTICAL_MOVE_MAX {
+            if game.tactical_auto_beat() == AiBeat::Acted {
+                break;
+            }
+        }
+
+        assert!(
+            game.world
+                .get::<AbilityCooldowns>(staff)
+                .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+            "a body outside the player's party invoked a routine under \
+             auto-attack, which is the party's own to spend"
+        );
+    }
+}

@@ -763,8 +763,7 @@ impl Game {
         if battle.actions_left() == 0 {
             return false;
         }
-        let player = self.player_entity();
-        if actor != player && !self.world.resource::<Party>().0.contains(&actor) {
+        if !self.in_party(actor) {
             return false;
         }
         let round_before = battle.round;
@@ -1569,6 +1568,23 @@ impl Game {
         }
     }
 
+    /// Whether `body` is the player or a member of `Party` — the roster
+    /// that is theirs to command, on a battle map or off one.
+    ///
+    /// **The one door onto that membership question**, shared by
+    /// `tactical_use_item`'s refusal and `tactical_intent`'s `Invoke` arm
+    /// (`tactical/ai.rs`) so a body admitted to one can never be refused by
+    /// the other — before this they were two hand-written copies of the
+    /// same check, and the party arm's copy was missing entirely, which is
+    /// what let a siege-staff body (`Tamed`, never in `Party`) reach it and
+    /// try to invoke or drink a cell `tactical_use_item` would then refuse,
+    /// spending its whole turn on nothing. A `Summoned` fork rides in
+    /// `Party` too (`Game::plan_summons`), so this alone does not exclude
+    /// one — see `tactical_intent`'s own doc for what does.
+    pub(crate) fn in_party(&self, body: Entity) -> bool {
+        body == self.player_entity() || self.world.resource::<Party>().0.contains(&body)
+    }
+
     /// Whether `body` is a bystander this file's AI does not otherwise
     /// drive at all — never the player or their party (theirs to spend as
     /// they like), and never a body `tactical_ai_actor` already recognises
@@ -1583,8 +1599,7 @@ impl Game {
     /// that would otherwise sit forever as `tactical_awaits_input` waits
     /// on a key nobody can press.
     pub(crate) fn tactical_skippable(&self, body: Entity) -> bool {
-        body != self.player_entity()
-            && !self.world.resource::<Party>().0.contains(&body)
+        !self.in_party(body)
             && self.world.get::<Hostile>(body).is_none()
             && self
                 .world

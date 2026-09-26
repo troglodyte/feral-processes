@@ -50,10 +50,11 @@ use crate::tuning::{
 /// pass `SwingOnly` because `PartyPlan::AllAttack` — the group model's own
 /// arena plan — invokes nothing either, and the two models' figures stay
 /// comparable only if neither auto-invokes headless. `tactical_ai_beat`
-/// passes `SwingOnly` too, for a duller reason: it only ever reaches a
-/// `Hostile`, `Summoned` or taken-over body, and `tactical_intent`'s party
-/// arm below is gated off all three regardless of which value it is asked
-/// with — so for that door the value is inert rather than correct.
+/// passes `SwingOnly` too, for a duller reason: `tactical_ai_actor` names a
+/// `Hostile`, `Summoned`, taken-over, or — mid-siege — a skippable
+/// base-staff body, and `tactical_intent`'s party arm below requires
+/// `Game::in_party`, true of none of those — so for that door the value is
+/// inert rather than correct.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PartyTurns {
     Invoke,
@@ -523,8 +524,9 @@ impl Game {
             return false;
         };
         // `SwingOnly`: `tactical_ai_actor` only ever names a `Hostile`,
-        // `Summoned` or taken-over body, and none of those opens
-        // `tactical_intent`'s party arm regardless of this value.
+        // `Summoned`, taken-over or skippable base-staff body, and
+        // `Game::in_party` opens `tactical_intent`'s party arm for none of
+        // those regardless of this value.
         self.run_tactical_turn(actor, temperature, PartyTurns::SwingOnly);
         true
     }
@@ -545,7 +547,8 @@ impl Game {
             return AiBeat::Idle;
         };
         // `SwingOnly` for `tactical_ai_turn_at`'s reason: this door only ever
-        // names a `Hostile`, `Summoned` or taken-over body.
+        // names a `Hostile`, `Summoned`, taken-over or skippable base-staff
+        // body.
         self.run_tactical_beat(
             actor,
             self.decision_temperature(actor),
@@ -614,8 +617,9 @@ impl Game {
     /// Runs the acting body's turn **whichever side it is on**, and reports
     /// whether there was one.
     ///
-    /// `tactical_ai_actor`'s gate is `Hostile`, `Summoned` or taken-over
-    /// because every other party body is the player's to command — so a
+    /// `tactical_ai_actor`'s gate is `Hostile`, `Summoned`, taken-over or a
+    /// skippable base-staff body because every other party body is the
+    /// player's to command — so a
     /// fight with nobody at the keyboard cannot be resolved through the door
     /// above, which is the whole of why this one exists. **It has two
     /// callers, `arena::run` and `Game::auto_resolve_battle`**: called from
@@ -762,11 +766,23 @@ impl Game {
     /// `PowerReserve` by design, so the player's gate refuses it every
     /// priced routine there is. See `Game::run_tactical_routine`.
     ///
-    /// **The party arm opens only for `Invoke`, and only for a body that is
-    /// nobody else's exception already.** A `Summoned` fork and a taken-over
-    /// companion both reach this function through `tactical_ai_beat`, which
-    /// always asks with `SwingOnly` — so in practice neither needs its own
-    /// check here to stay swing-only. Both are excluded anyway, because
+    /// **The party arm opens only for `Invoke`, and only for a body
+    /// `Game::in_party` admits** — the same membership `tactical_use_item`
+    /// gates on, so a body one door would spend an item for is never
+    /// refused by the other. That excludes a hostile outright (never in
+    /// `Party`) and, for the gap this doc used to leave open, base staff
+    /// mid-siege too: a `Tamed` body standing in reach of a besieger is
+    /// neither `Hostile` nor `Summoned` nor taken-over, so before
+    /// `in_party` joined this gate it fell through to this arm and tried to
+    /// invoke or drink a cell `tactical_use_item` would then refuse,
+    /// spending the whole beat on nothing.
+    ///
+    /// **A `Summoned` fork and a taken-over companion are excluded on top
+    /// of `in_party`**, because a summon rides in `Party` itself
+    /// (`Game::plan_summons`) and a taken-over companion never leaves it.
+    /// Both reach this function through `tactical_ai_beat`, which always
+    /// asks with `SwingOnly` — so in practice neither needs its own check
+    /// here to stay swing-only. Both are excluded anyway, because
     /// `tactical_drive_turn` (`[R]`, and the arena with `SwingOnly`) drives
     /// *whichever* body's turn it is with no `Hostile`/`Summoned`/taken-over
     /// gate of its own, so a fork or a possessed companion mid-turn during
@@ -775,6 +791,17 @@ impl Game {
     /// own routine arm is still `Hostile`-only in `run_tactical_beat`, and
     /// reusing the party arm for it — a body with a `PowerReserve` the
     /// player never funded — is a separate decision nothing here makes.
+    ///
+    /// **A candidate with nothing worth aiming still wins the pick.** Once
+    /// `walk_to_best_cell` has spent the body's move, `run_tactical_intent`
+    /// asks `best_aim` for real and may find nothing — the same gap a
+    /// hostile's own routine arm has always had (`a_hostile_will_not_shoot_
+    /// through_cover`, which asserts the wasted turn as the *correct*
+    /// answer for that side). Falling through to the next candidate, or to
+    /// a swing, would need a second aim pass before the intent is even
+    /// chosen — the one this function is pure and undrawn specifically to
+    /// avoid — so this stays a known, shared limitation rather than a
+    /// party-arm-only bug.
     fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
         if let Some(def) = self.wild_routine_ready(actor)
             && self.world.get::<Hostile>(actor).is_some()
@@ -782,7 +809,7 @@ impl Game {
             return Intent::Routine(def);
         }
         if turns == PartyTurns::Invoke
-            && self.world.get::<Hostile>(actor).is_none()
+            && self.in_party(actor)
             && self.world.get::<Summoned>(actor).is_none()
             && !self.taken_over(actor)
             && let Some(intent) = self.party_routine_intent(actor)

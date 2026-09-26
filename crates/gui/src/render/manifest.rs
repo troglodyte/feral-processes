@@ -105,6 +105,19 @@ pub(super) fn draw_manifest(
         draw_section(section, *rect, painter, m);
     }
 
+    painter.ui(
+        footer_text(&nav),
+        l.footer.x,
+        l.footer.y + m.font_size as f32,
+        m.small(),
+        TEXT_DIM,
+    );
+}
+
+/// Every key the sheet answers, since this line is the only place any of
+/// them is advertised. `[D]` is unconditional: `Game::dossier_report`
+/// answers for any body the sheet itself can show.
+fn footer_text(nav: &ManifestNav) -> String {
     let mut footer = Vec::new();
     if nav.cyclable {
         footer.push("←/→ other programs");
@@ -112,18 +125,13 @@ pub(super) fn draw_manifest(
     if nav.watchable {
         footer.push("[w] watch");
     }
+    footer.push("[D] dossier");
     footer.push(if nav.back_to_list {
         "Esc back to list"
     } else {
         "Esc back"
     });
-    painter.ui(
-        footer.join("      "),
-        l.footer.x,
-        l.footer.y + m.font_size as f32,
-        m.small(),
-        TEXT_DIM,
-    );
+    footer.join("      ")
 }
 
 /// One meter on the sheet.
@@ -2381,6 +2389,46 @@ mod tests {
             !footer(false).contains("[w] watch"),
             "and must not be offered where it would be refused"
         );
+    }
+
+    /// `[D]` works on every sheet — `Game::dossier_report` answers for any
+    /// body still standing — so the footer offers it unconditionally, and
+    /// the footer is the only place a player can learn the page exists.
+    #[test]
+    fn the_footer_always_offers_the_dossier() {
+        for cyclable in [false, true] {
+            for back_to_list in [false, true] {
+                for watchable in [false, true] {
+                    let nav = ManifestNav {
+                        cyclable,
+                        back_to_list,
+                        watchable,
+                    };
+                    assert!(footer_text(&nav).contains("[D] dossier"));
+                }
+            }
+        }
+    }
+
+    /// The footer is one unwrapped line, so with every key offered it has to
+    /// fit the frame at the narrowest supported window and the largest font.
+    #[test]
+    fn the_fullest_footer_fits_the_narrowest_window() {
+        let nav = ManifestNav {
+            cyclable: true,
+            back_to_list: true,
+            watchable: true,
+        };
+        for h in [720.0, 1080.0, 1440.0] {
+            let m = ui_metrics(h);
+            let l = manifest_layout(1280.0, h, 4, &[], &m);
+            let (width, _) = with_painter(|p| p.measure_ui_advance(footer_text(&nav), m.small()));
+            assert!(
+                width <= l.footer.w,
+                "at 1280x{h} the footer is {width}px against {}px",
+                l.footer.w
+            );
+        }
     }
 
     /// The POTENTIAL box names both build rolls in full, on their own rows,

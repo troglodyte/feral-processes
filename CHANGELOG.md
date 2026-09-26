@@ -53,6 +53,22 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.244
+
+**A program's manifest lists its other pages in the footer.** `[D]` opens
+the dossier, which nothing on screen had mentioned, and `[R]` opens the
+full memories page behind the MEMORIES box — before this, that page could
+only be opened from the roster. Esc from either page comes back to the
+sheet.
+
+**The MOVES box shows a move again.** It has room for one row, and a
+"+1 more" note had been taking that row, so a program with two moves
+showed none. It now names the first move and puts the count in the
+title: "MOVES +1".
+
+**A mood that rounds to nothing reads `+0`, not `-0`**, on the manifest
+and on the memories page.
+
 ## 0.13.243
 
 **Towns and cities take up a square of the map sized by what they are.**

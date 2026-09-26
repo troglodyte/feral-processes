@@ -16,6 +16,9 @@ pub(super) struct Section {
     pub(super) rows: Vec<SectionRow>,
     /// Spans both columns, below the grid. The Moves band.
     pub(super) full_width: bool,
+    /// Rows the box had no room for, drawn as "+N" after the title — for a
+    /// box whose cap is too small to spend a row on saying so (MOVES).
+    pub(super) overflow: usize,
 }
 
 /// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
@@ -91,8 +94,10 @@ pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 /// EQUIPMENT, which is capped by its own slot count and not by this.
 /// **Lowered again, from 3 to 1, to pay for POTENTIAL's two build rolls.**
 /// That is the same trade one paragraph up, made a second time and at a real
-/// cost this time: a species with two moves now spends its second line on a
-/// "+1 more" note, where the WORK trade cost nothing shipped. Measured
+/// cost this time: a species with two moves names only the first, and its
+/// title carries the count (`Section::overflow`) — a "+1 more" *row* would
+/// have spent the box's only line and named neither, which it did until the
+/// count moved up. The WORK trade cost nothing shipped. Measured
 /// rather than guessed — `MAX_POTENTIAL_ROWS` at 7 clears the 10px floor at
 /// **1** and does not at 2, and the alternative on the table was folding the
 /// two build rolls onto one line to keep MOVES at 2. The owner took the cost
@@ -357,6 +362,7 @@ mod tests {
                 .map(|i| SectionRow::Stat(format!("label {i}"), format!("{i}")))
                 .collect(),
             full_width,
+            overflow: 0,
         }
     }
 

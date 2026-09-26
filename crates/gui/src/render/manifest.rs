@@ -270,6 +270,16 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
         m.small(),
         CYAN,
     );
+    if section.overflow > 0 {
+        let title_w = painter.measure_ui_advance(section.title, m.small());
+        painter.ui(
+            format!(" +{}", section.overflow),
+            rect.x + m.inset + title_w,
+            rect.y + m.line_height,
+            m.small(),
+            TEXT_DIM,
+        );
+    }
     let mut cy = rect.y + m.line_height + m.gap;
     for row in &section.rows {
         cy += section_row_h(m);
@@ -452,6 +462,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
         title: "COMBAT",
         rows: section_rows(combat),
         full_width: false,
+        overflow: 0,
     }];
     match &view.subject {
         ManifestSubject::Player(p) => player_sections(&mut sections, p),
@@ -476,6 +487,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
             // thing `fitted_stat_row` has to cut; across the whole frame
             // nothing a drop can roll needs cutting at all.
             full_width: matches!(&view.subject, ManifestSubject::Player(_)),
+            overflow: 0,
         });
     }
     if !view.routines.is_empty() {
@@ -500,6 +512,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
                     .collect(),
             ),
             full_width: false,
+            overflow: 0,
         });
     }
     sections
@@ -541,6 +554,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
                 .collect(),
         ),
         full_width: false,
+        overflow: 0,
     });
 
     if !p.perks.is_empty() {
@@ -553,6 +567,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
                     .collect(),
             ),
             full_width: false,
+            overflow: 0,
         });
     }
     // What this run holds, as opposed to what the player *is*. Credits and
@@ -589,6 +604,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
                     .collect(),
             ),
             full_width: false,
+            overflow: 0,
         });
     }
 
@@ -596,6 +612,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
         title: "RUN",
         rows: section_rows(run),
         full_width: false,
+        overflow: 0,
     });
 }
 
@@ -659,6 +676,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
                 MAX_POTENTIAL_ROWS,
             ),
             full_width: false,
+            overflow: 0,
         });
     }
 
@@ -673,6 +691,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
                 MAX_AFFINITY_ROWS,
             ),
             full_width: false,
+            overflow: 0,
         });
     }
 
@@ -714,6 +733,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         title: "SPECIES",
         rows: section_rows(species),
         full_width: false,
+        overflow: 0,
     });
 
     // What this program is like to *post* somewhere, as opposed to what it
@@ -768,6 +788,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         title: "WORK",
         rows: section_rows(work),
         full_width: false,
+        overflow: 0,
     });
 
     // What this program is carrying, under what it adds up to.
@@ -783,6 +804,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             title: "MEMORIES",
             rows: section_rows(mood_rows(mood)),
             full_width: false,
+            overflow: 0,
         });
     }
 
@@ -802,13 +824,17 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
                 ),
             ]),
             full_width: false,
+            overflow: 0,
         });
     }
 
     if !p.moves.is_empty() {
         sections.push(Section {
             title: "MOVES",
-            rows: section_rows_capped(p.moves.iter().map(move_row).collect(), MAX_MOVE_ROWS),
+            // The overflow rides the title rather than a "+N more" row:
+            // at `MAX_MOVE_ROWS` = 1 the note would *be* the box, and a
+            // species with two moves drew neither.
+            rows: p.moves.iter().take(MAX_MOVE_ROWS).map(move_row).collect(),
             // **Columned, and it was the page's full-width band until
             // MEMORIES arrived.** A band and two columned boxes side by side
             // occupy the same grid row, so demoting this one paid for the new
@@ -819,6 +845,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             // trade instead; `no_move_row_is_cut_to_fit_its_column` is what holds
             // that, rather than the arithmetic.
             full_width: false,
+            overflow: p.moves.len().saturating_sub(MAX_MOVE_ROWS),
         });
     }
 }
@@ -1950,6 +1977,30 @@ mod tests {
             "sections_for's real emission order — the shape the layout \
              fixture must mirror: {shape:?}"
         );
+    }
+
+    /// MOVES has one row, and a "+N more" note would spend it: a species
+    /// with two moves drew no move at all. The count rides the title so the
+    /// row can name the first move.
+    #[test]
+    fn a_program_with_more_moves_than_rows_names_the_first_and_counts_the_rest() {
+        let game = census_game();
+        let mv = |name: &str| MoveDef {
+            name: name.to_string(),
+            power: 5,
+            spread: 2,
+            effect: None,
+            ranged: false,
+        };
+        let mut program = owned_program(vec![]);
+        program.moves = vec![mv("Strike"), mv("Lunge")];
+        let view = program_view(program, vec![]);
+
+        let sections = sections_for(&game, &view);
+        let moves = sections.iter().find(|s| s.title == "MOVES").unwrap();
+
+        assert_eq!(moves.rows, vec![move_row(&mv("Strike"))]);
+        assert_eq!(moves.overflow, 1, "the second move is counted, not lost");
     }
 
     /// An unseen slot draws the concealment line — never the blanked name,

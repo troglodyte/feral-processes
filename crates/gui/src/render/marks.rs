@@ -293,16 +293,49 @@ pub(super) fn draw_unseen_marker(painter: &Painter, px: f32, py: f32, glyph_px: 
 /// site the crew has not raised yet takes its caret's orange, the slab
 /// itself being deliberately colourless.
 ///
+/// **A hurt member of staff takes the edge when no job wants it** — a body
+/// never stops on a structure, so the two meet only while a worker crosses
+/// a machine's floor, and the machine is the one staying. Staff alone: the
+/// party's Integrity is in the column, and a wild program's is the battle
+/// map's business. A body at full health wears nothing, so a bar appearing
+/// is the news.
+///
 /// Extracted rather than left inline for `staffed_mark_rect`'s reason: the
 /// map's tile loop is far too big to reach with a test, and the precedence
 /// is the half of this that a copy would get wrong.
 pub(super) fn cell_bar(
     structure: Option<&EntityView>,
     building: Option<&EntityView>,
+    actor: Option<&EntityView>,
 ) -> Option<(f32, Color)> {
     structure
         .and_then(|ev| Some((ev.job_progress?, machine_color(ev.machine_status?))))
         .or_else(|| building.and_then(|ev| Some((ev.job_progress?, ORANGE))))
+        .or_else(|| {
+            actor
+                .filter(|ev| ev.is_tamed && !ev.is_companion && !ev.is_player)
+                .and_then(|ev| ev.hp_fraction)
+                .filter(|&hp| hp < 1.0)
+                .map(|hp| (hp, health_color(hp)))
+        })
+}
+
+/// A staff health bar turns yellow at or below this share of Integrity.
+const STAFF_HURT_FRACTION: f32 = 0.5;
+
+/// A staff health bar's three roles: `HEALTHY`, then `WARN` — a Bay mends
+/// it, so waiting fixes it — then `OFFLINE` at the line where the Bay takes
+/// the body off its job. That line is the engine's
+/// `BAY_ADMISSION_HP_FRACTION`, read rather than restated, so the red starts
+/// exactly where the program stops working.
+pub(super) fn health_color(fraction: f32) -> Color {
+    if fraction <= feral_processes_engine::tuning::BAY_ADMISSION_HP_FRACTION {
+        hud::palette::OFFLINE
+    } else if fraction <= STAFF_HURT_FRACTION {
+        hud::palette::WARN
+    } else {
+        hud::palette::HEALTHY
+    }
 }
 
 /// Where a cell's progress bar sits — the full width of the tile's bottom

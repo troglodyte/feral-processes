@@ -1368,8 +1368,11 @@ fn draw_surface_map(
             //
             // Which occupant owns the bar and what hue it wears is
             // `cell_bar`, extracted so the precedence between a machine and
-            // a request standing on the same cell is testable.
-            if let Some((done, color)) = cell_bar(structure, building) {
+            // a request standing on the same cell is testable. The actor is
+            // offered in base space alone, the recovery mark's gate: staff
+            // live there, and the zone map's cells mean somewhere else.
+            let staff = actor.filter(|_| base_pos.is_some());
+            if let Some((done, color)) = cell_bar(structure, building, staff) {
                 draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
             }
             // How full a Depot is, along the top edge — after the outline for
@@ -4705,32 +4708,116 @@ mod tests {
         };
 
         assert_eq!(
-            cell_bar(Some(&running), None),
+            cell_bar(Some(&running), None, None),
             Some((0.4, hud::palette::HEALTHY)),
             "a running machine's bar wears the hue its own outline does"
         );
         assert_eq!(
-            cell_bar(Some(&starved), None),
+            cell_bar(Some(&starved), None, None),
             Some((0.4, hud::palette::WARN)),
             "a stalled cycle is frozen, not hidden, and says so in its colour"
         );
         assert_eq!(
-            cell_bar(Some(&idle), None),
+            cell_bar(Some(&idle), None, None),
             None,
             "nobody is working here, so there is no bar"
         );
         assert_eq!(
-            cell_bar(None, Some(&site)),
+            cell_bar(None, Some(&site), None),
             Some((0.25, ORANGE)),
             "a site the crew has not raised yet wears its caret's orange"
         );
         assert_eq!(
-            cell_bar(Some(&running), Some(&site)),
+            cell_bar(Some(&running), Some(&site), None),
             Some((0.4, hud::palette::HEALTHY)),
             "a machine with an upgrade on order is still producing, and the \
              cell is drawing the machine"
         );
-        assert_eq!(cell_bar(None, None), None);
+        assert_eq!(cell_bar(None, None, None), None);
+    }
+
+    /// A hurt member of staff wears its Integrity on the bottom edge, and
+    /// nobody else does: not a program at full health, not the party, not
+    /// a wild one.
+    #[test]
+    fn only_hurt_staff_wear_a_health_bar() {
+        let hurt = EntityView {
+            hp_fraction: Some(0.8),
+            ..patient_view(false)
+        };
+        let whole = EntityView {
+            hp_fraction: Some(1.0),
+            ..patient_view(false)
+        };
+        let companion = EntityView {
+            is_companion: true,
+            ..hurt.clone()
+        };
+        let player = EntityView {
+            is_player: true,
+            ..hurt.clone()
+        };
+        let wild = EntityView {
+            is_tamed: false,
+            is_hostile: true,
+            ..hurt.clone()
+        };
+
+        assert_eq!(
+            cell_bar(None, None, Some(&hurt)),
+            Some((0.8, hud::palette::HEALTHY))
+        );
+        assert_eq!(
+            cell_bar(None, None, Some(&whole)),
+            None,
+            "full health is unmarked"
+        );
+        assert_eq!(cell_bar(None, None, Some(&companion)), None);
+        assert_eq!(cell_bar(None, None, Some(&player)), None);
+        assert_eq!(cell_bar(None, None, Some(&wild)), None);
+    }
+
+    /// A worker crossing a machine's floor is passing through; the cell's
+    /// bar stays the machine's, and the request's over a bare slab.
+    #[test]
+    fn a_job_bar_outranks_a_health_bar_on_a_shared_cell() {
+        let running = machine_view(Some(MachineStatus::Running), Some(0.4));
+        let site = EntityView {
+            is_structure: false,
+            job_progress: Some(0.25),
+            ..patient_view(false)
+        };
+        let hurt = EntityView {
+            hp_fraction: Some(0.3),
+            ..patient_view(false)
+        };
+        assert_eq!(
+            cell_bar(Some(&running), None, Some(&hurt)),
+            Some((0.4, hud::palette::HEALTHY))
+        );
+        assert_eq!(
+            cell_bar(None, Some(&site), Some(&hurt)),
+            Some((0.25, ORANGE))
+        );
+        let idle = machine_view(Some(MachineStatus::Idle), None);
+        assert_eq!(
+            cell_bar(Some(&idle), None, Some(&hurt)),
+            Some((0.3, hud::palette::WARN)),
+            "an idle machine has no bar to give way to"
+        );
+    }
+
+    /// Green, then the yellow that fixes itself, then the red of a body the
+    /// Bay has taken off its job — whose line is the engine's own.
+    #[test]
+    fn a_health_bar_steps_down_at_half_and_at_the_bays_admission_line() {
+        let admission = feral_processes_engine::tuning::BAY_ADMISSION_HP_FRACTION;
+        assert_eq!(health_color(1.0), hud::palette::HEALTHY);
+        assert_eq!(health_color(0.51), hud::palette::HEALTHY);
+        assert_eq!(health_color(0.5), hud::palette::WARN);
+        assert_eq!(health_color(admission + 0.01), hud::palette::WARN);
+        assert_eq!(health_color(admission), hud::palette::OFFLINE);
+        assert_eq!(health_color(0.0), hud::palette::OFFLINE);
     }
 
     /// The plan pass draws the wash for every mark and a cut meter for the

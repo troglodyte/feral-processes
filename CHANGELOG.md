@@ -53,6 +53,22 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.243
+
+**Towns and cities take up a square of the map sized by what they are.**
+A town is 3×3; a city is 5×5, grows to 7×7 while it thrives and shrinks
+to 3×3 when it starves. Every cell is the door and none lets you in, and
+you can trade from anywhere beside it rather than one tile from its middle.
+
+**Anything standing where a town grows is moved just outside it** — wild
+programs, traps, nests, caravans, you, and your base's entrance. A Stack
+entrance it swallows moves too and becomes a new maze, but never while
+you are inside that Stack; it waits until you surface.
+
+**Outposts can't be founded within 3 tiles of a town, and a big city's
+patrols no longer stand on their own ground.** Nothing spawns inside a
+town's square either.
+
 ## 0.13.242
 
 **A long activity in the CREW pane is cut short with an ellipsis instead

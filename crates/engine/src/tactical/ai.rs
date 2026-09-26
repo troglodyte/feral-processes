@@ -827,7 +827,7 @@ impl Game {
     /// `None` when neither is available, which `tactical_intent` reads as
     /// "swing".
     ///
-    /// **Two passes over `ready_routines`, not one.** The routine that is
+    /// **Two passes over `ready_party_routines`, not one.** The routine that is
     /// merely ready is not necessarily the routine that is affordable, and
     /// the one worth drinking a cell for is whichever candidate's *only*
     /// objection is Power — a companion carrying two routines could have its
@@ -840,7 +840,7 @@ impl Game {
     /// That single call is what makes this two passes over one gate rather
     /// than a second, Power-skipping copy of it.
     fn party_routine_intent(&self, actor: Entity) -> Option<Intent> {
-        let candidates = self.ready_routines(actor);
+        let candidates = self.ready_party_routines(actor);
         if let Some(def) = candidates
             .iter()
             .find(|def| self.ability_unavailable(actor, def).is_none())
@@ -1195,6 +1195,16 @@ impl Game {
     /// The aim is a plain argmax and spends no randomness: the cell is where
     /// this turn's uncertainty lives, and a second draw on top of it would
     /// make a hostile miss aims it had already walked into position for.
+    ///
+    /// **The cooldown floor is the caller's, not this door's** —
+    /// `run_tactical_routine`'s own `cooldown_floor` doc, the one difference
+    /// between the player's door and the hostile AI's. This function serves
+    /// both: `wild_routine_ready`'s branch of `tactical_intent` only ever
+    /// names a `Hostile` actor, and the party arm only ever names one
+    /// `Game::in_party` admits, so `Hostile` is the one honest switch
+    /// between the enemy floor and the hand's own — a party-arm invocation
+    /// stands in for the player pressing Special by hand, and
+    /// `tactical_use_routine` floors that at 0.
     fn run_tactical_intent(&mut self, actor: Entity, intent: &Intent, sides: &Sides) {
         let Intent::Routine(def) = intent else {
             return;
@@ -1202,7 +1212,12 @@ impl Game {
         let Some(TurnTarget::Aim(aim)) = self.target_from_here(actor, intent, sides) else {
             return;
         };
-        self.run_tactical_routine(actor, def, aim, ENEMY_ROUTINE_MIN_COOLDOWN);
+        let floor = if self.world.get::<Hostile>(actor).is_some() {
+            ENEMY_ROUTINE_MIN_COOLDOWN
+        } else {
+            0
+        };
+        self.run_tactical_routine(actor, def, aim, floor);
     }
 
     /// `chosen_target` asked from the cell `actor` stands on now — what the

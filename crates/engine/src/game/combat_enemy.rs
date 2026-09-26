@@ -60,9 +60,40 @@ impl Game {
     /// **The filter, not the pick** — `wild_routine_ready`'s `.next()` is the
     /// wild side's whole policy (first installed wins, since a carrier holds
     /// exactly one — `Game::roll_wild_routine`); `tactical/ai.rs::
-    /// tactical_intent`'s party arm (todo #103) walks the rest, since a
-    /// companion can carry more than one and the first *ready* one is not
-    /// necessarily the first *affordable* one.
+    /// tactical_intent`'s party arm walks the rest, since a companion can
+    /// carry more than one and the first *ready* one is not necessarily the
+    /// first *affordable* one.
+    ///
+    /// **Reads `entity`'s raw `Routines` component, which is correct only
+    /// for a hostile** — a hostile has no other kit to read. The party arm
+    /// calls `ready_party_routines` instead, which asks the same filter of
+    /// `Game::actor_abilities`' pool, so an emulating player is offered what
+    /// the emulated species knows rather than what is installed underneath
+    /// it (`Game::kit_of`'s own reason: "the one answer to where a body's
+    /// kit comes from").
+    pub(crate) fn ready_routines(&self, entity: Entity) -> Vec<AbilityDef> {
+        let db = self.world.resource::<AbilityDb>();
+        let candidates = self
+            .world
+            .get::<Routines>(entity)
+            .map(|r| r.0.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|id| db.get(id).cloned())
+            .collect();
+        self.ready_from_candidates(entity, candidates)
+    }
+
+    /// `ready_routines`, scored against `Game::actor_abilities`' kit rather
+    /// than `entity`'s raw `Routines` — `tactical/ai.rs::tactical_intent`'s
+    /// party arm, the only caller, and `ready_routines`' own doc for why.
+    pub(crate) fn ready_party_routines(&self, entity: Entity) -> Vec<AbilityDef> {
+        let candidates = self.actor_abilities(entity);
+        self.ready_from_candidates(entity, candidates)
+    }
+
+    /// `ready_routines`/`ready_party_routines`'s shared filter, over
+    /// whichever pool of candidates the caller already resolved.
     ///
     /// `Decompile` is excluded: it is resolved by group index against the
     /// *wild* side and would do nothing coherent aimed the other way. Only a
@@ -73,20 +104,19 @@ impl Game {
     /// `AbilityEffect::field_only`): none has a battle mechanic to run, so a
     /// carrier with nothing else installed falls back to a normal move
     /// instead of the `unreachable!` in `use_ability`.
-    pub(crate) fn ready_routines(&self, entity: Entity) -> Vec<AbilityDef> {
+    fn ready_from_candidates(
+        &self,
+        entity: Entity,
+        candidates: Vec<AbilityDef>,
+    ) -> Vec<AbilityDef> {
         let cooling = self
             .world
             .get::<AbilityCooldowns>(entity)
             .map(|c| c.0.clone())
             .unwrap_or_default();
-        let db = self.world.resource::<AbilityDb>();
-        self.world
-            .get::<Routines>(entity)
-            .map(|r| r.0.as_slice())
-            .unwrap_or_default()
-            .iter()
-            .filter(|id| !cooling.contains_key(*id))
-            .filter_map(|id| db.get(id))
+        candidates
+            .into_iter()
+            .filter(|def| !cooling.contains_key(&def.id))
             .filter(|def| {
                 !matches!(def.effect, AbilityEffect::Decompile)
                     && !def.effect.field_only()
@@ -112,7 +142,6 @@ impl Game {
                     && !matches!(def.effect, AbilityEffect::Emulate { .. })
                     && !def.is_passive()
             })
-            .cloned()
             .collect()
     }
 

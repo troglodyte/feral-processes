@@ -3752,6 +3752,112 @@ fn swing_only_never_drinks_a_cell_even_when_one_would_cover_the_shortfall() {
     );
 }
 
+/// Opus review of todo #103 (2026-09-26): the party arm's candidates came
+/// from `ready_routines`, which reads a body's raw `Routines` component
+/// directly rather than `Game::kit_of` — "the one answer to where a body's
+/// kit comes from" (CLAUDE.md). An emulating player's `Routines` is still
+/// whatever is installed underneath the emulation, so auto-attack invoked
+/// that instead of what the emulated species actually knows.
+#[test]
+fn an_emulating_player_ignores_an_installed_routine_missing_from_the_emulated_kit() {
+    use crate::components::{AbilityCooldowns, Emulation};
+    use crate::species::SpeciesDb;
+    use crate::tactical::ai::AiBeat;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+    // A species with an empty `abilities` list, so `actor_abilities`'s
+    // `Kit::Emulated` arm offers nothing — the emulated kit HOSTILE_SWEEP is
+    // missing from, where the buggy raw-`Routines` read would still find it.
+    let species = generic_species();
+    let species_id = species.id.clone();
+    game.world.resource_mut::<SpeciesDb>().insert(species);
+    game.world.entity_mut(player).insert(Emulation {
+        species: species_id,
+        rounds_left: 3,
+    });
+
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_auto_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "an emulating player auto-invoked a routine absent from the \
+         emulated kit"
+    );
+}
+
+/// Opus review of todo #103 (2026-09-26): `run_tactical_intent` always
+/// floors an invoked routine's cooldown at `ENEMY_ROUTINE_MIN_COOLDOWN`,
+/// the hostile AI's own floor. A party-arm invocation stands in for the
+/// player's own hand, so it must cool at `tactical_use_routine`'s floor of
+/// 0 instead — the `cooldown_floor` distinction CLAUDE.md's combat seam
+/// draws between the two doors.
+///
+/// **Two hostiles, player first in initiative, is what keeps the reading
+/// honest.** With only the player and one hostile, the player's own beat
+/// can be the round's last — its own `hand_on_turn` would then tick the
+/// very cooldown it just armed before this test ever reads it. Two
+/// hostiles left to act after the player's beat rules that out, so the
+/// value read back is the armed value itself, not a post-tick remainder.
+#[test]
+fn an_auto_invoked_party_routine_cools_at_the_hand_floor_not_the_enemy_one() {
+    use crate::abilities::AbilityDb;
+    use crate::components::AbilityCooldowns;
+    use crate::tactical::ai::AiBeat;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    const ZERO_COOLDOWN: &str = "zero_cooldown_sweep";
+
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 2, 200);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0], pack[1]]);
+
+    let mut def = game
+        .world
+        .resource::<AbilityDb>()
+        .get(HOSTILE_SWEEP)
+        .expect("the fixture routine ships")
+        .clone();
+    def.id = ZERO_COOLDOWN.to_string();
+    def.cooldown = 0;
+    game.world.resource_mut::<AbilityDb>().insert(def);
+    only_routine(&mut game, player, ZERO_COOLDOWN);
+
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_auto_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+
+    assert_eq!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .and_then(|c| c.0.get(ZERO_COOLDOWN).copied()),
+        // At the hand floor (0), `Game::arm_cooldown`'s own early return
+        // arms nothing for an authored `cooldown: 0` — "spammable by
+        // design", `decompile.ron`'s own doc for the one shipped routine
+        // that authors it. At the enemy floor (`ENEMY_ROUTINE_MIN_COOLDOWN`,
+        // 1), `abilities::armed_cooldown(0, 1) + 1 == 2` arms one anyway.
+        None,
+        "an auto-invoked party routine armed the enemy AI's cooldown floor \
+         instead of the hand's own"
+    );
+}
+
 mod tactical_use_item {
     //! `Game::tactical_use_item` — `[U]`'s door in phase 3, and the door
     //! todo #103's party arm already drives. Every refusal below is asserted

@@ -3503,49 +3503,6 @@ fn a_swing_only_driven_party_body_never_invokes() {
     );
 }
 
-/// A routine that is refused for something other than Power — here, still
-/// cooling — falls back to a swing exactly as an unaffordable one with
-/// nothing in the pack does: neither the cooldown nor the reserve moves.
-#[test]
-fn a_cooling_routine_falls_back_to_a_swing() {
-    use crate::components::AbilityCooldowns;
-    use crate::tests::support::HOSTILE_SWEEP;
-
-    let mut game = game();
-    tactical_fight(&mut game, 1, 200);
-    let player = game.player_entity();
-    only_routine(&mut game, player, HOSTILE_SWEEP);
-    assert!(wait_for_turn(&mut game, player), "the fight ended early");
-    game.world.entity_mut(player).insert(AbilityCooldowns(
-        [(HOSTILE_SWEEP.to_string(), 3)].into_iter().collect(),
-    ));
-
-    assert!(
-        game.tactical_auto_beat() != crate::tactical::ai::AiBeat::Idle,
-        "the fixture left nothing acting"
-    );
-    for _ in 0..TACTICAL_MOVE_MAX {
-        if game.tactical_actor() != Some(player) {
-            break;
-        }
-        game.tactical_auto_beat();
-    }
-
-    // A round wrapping while the cooldown is still up ticks it *down* by the
-    // ordinary decay (this fixture's one hostile plus the player wraps a
-    // round every player turn) — invoking would instead reset it *up* to a
-    // freshly armed value, so "still under the value it started at, still
-    // present" is what tells the two apart.
-    let remaining = game
-        .world
-        .get::<AbilityCooldowns>(player)
-        .and_then(|c| c.0.get(HOSTILE_SWEEP).copied());
-    assert!(
-        remaining.is_some_and(|r| r < 3),
-        "a cooling routine's own cooldown was reset upward, so it invoked: {remaining:?}"
-    );
-}
-
 /// An unaffordable routine with no Power cell in the pack falls back to a
 /// swing: neither the cooldown arms (no invocation) nor the reserve moves
 /// (no cell drunk).

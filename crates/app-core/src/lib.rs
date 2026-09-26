@@ -1480,6 +1480,13 @@ pub enum Mode {
     /// an Emulate row leaves here for `Mode::TacticalEmulate` instead, since
     /// what it needs picked next is an image, not a cell.
     TacticalRoutine,
+    /// Which consumable the acting body spends, entered from
+    /// `Mode::TacticalBattle` with `[U]` — `Mode::BattleItem`'s shape one
+    /// combat model over, and the same pool, `Game::battle_usable_items`,
+    /// since the pack a tactical fight draws from is the player's own
+    /// whichever body drinks it. Esc returns to the board, spending
+    /// nothing.
+    TacticalItem,
     /// Picking which learned image to invoke, entered from
     /// `Mode::TacticalRoutine` when the chosen routine's
     /// `SpecialTargeting` is `Image` — todo #100 Task 6. Esc returns to the
@@ -2190,6 +2197,7 @@ impl Mode {
             // tactical fight is drawn on the map.
             Mode::TacticalBattle
             | Mode::TacticalRoutine
+            | Mode::TacticalItem
             | Mode::TacticalEmulate
             | Mode::TacticalAim
             | Mode::TacticalResult

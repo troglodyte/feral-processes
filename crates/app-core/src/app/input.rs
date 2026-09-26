@@ -287,6 +287,7 @@ impl App {
             Mode::FieldRoutineCell => self.handle_field_routine_cell_key(key),
             Mode::TacticalBattle => self.handle_tactical_key(key),
             Mode::TacticalRoutine => self.handle_tactical_routine_key(key),
+            Mode::TacticalItem => self.handle_tactical_item_key(key),
             Mode::TacticalEmulate => self.handle_tactical_emulate_key(key),
             Mode::TacticalAim => self.handle_tactical_aim_key(key),
             Mode::Excavate => self.handle_excavate_key(key),

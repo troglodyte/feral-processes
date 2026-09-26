@@ -89,6 +89,22 @@ impl App {
                 self.menu_selected = 0;
                 self.mode = Mode::TacticalRoutine;
             }
+            // Uppercase, `E`'s reason: the group model's own item picker is
+            // opened with lowercase `u` because it is a row on
+            // `battle_action_options`'s list, and this screen has no such
+            // list — `d`'s and `s`'s own reason for being lowercase, upside
+            // down. Hidden rather than greyed, the picker's own row that
+            // never gets built: `battle_usable_items` empty means there is
+            // nothing to show, not a row that refuses on commit.
+            GameKey::Char('U') => {
+                let Some(game) = &self.game else { return };
+                if game.battle_usable_items().is_empty() {
+                    self.refuse("Nothing to use.");
+                    return;
+                }
+                self.menu_selected = 0;
+                self.mode = Mode::TacticalItem;
+            }
             // `d`, the letter `Game::battle_action_options` has bound to
             // Defend since long before there was a board — `s`'s argument
             // again, and lowercase for the same reason `a` and `s` are:
@@ -130,6 +146,34 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Picks which consumable the acting body spends — `handle_battle_
+    /// item_key`'s shape, and the same pool, `battle_usable_items`.
+    ///
+    /// The mode is left for the board **before** the engine is asked,
+    /// `commit_battle_action`'s own "back to the roster even on failure":
+    /// every row here bails on the now-missing pending state, so a picker
+    /// left up after a refusal would strand the player with nothing left
+    /// to press but Esc.
+    pub(crate) fn handle_tactical_item_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::TacticalBattle;
+            return;
+        }
+        let Some(game) = &self.game else { return };
+        let items = game.battle_usable_items();
+        let Some(idx) = self.selected_index(key, items.len()) else {
+            return;
+        };
+        let id = items[idx].clone();
+        self.mode = Mode::TacticalBattle;
+        let Some(game) = &mut self.game else { return };
+        if !game.tactical_use_item(&id) {
+            self.refuse("Couldn't use that.");
+            return;
+        }
+        self.after_tactical_action();
     }
 
     /// Picks the routine the acting body will run, then aims it.

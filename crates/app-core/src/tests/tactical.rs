@@ -1172,6 +1172,107 @@ fn a_taken_over_companion_plays_without_a_key() {
     );
 }
 
+/// How many of `item` the player is carrying, for a test asserting a pack
+/// count before and after a spend.
+fn held(app: &App, item: &feral_processes_engine::items::ItemId) -> u32 {
+    app.game
+        .as_ref()
+        .expect("the fixture has a game")
+        .player_status()
+        .inventory
+        .iter()
+        .find(|r| &r.copy.item == item)
+        .map(|r| r.qty)
+        .unwrap_or(0)
+}
+
+/// `[U]` then a row spends one action — the turn moves on, `d_hardens_
+/// the_acting_body_and_hands_the_turn_on`'s own signal — and one unit of
+/// whatever the row named, straight out of the shared pack.
+#[test]
+fn u_then_a_row_spends_one_action_and_one_cell() {
+    let mut app = fighting(9140);
+    wait_for_the_player(&mut app);
+    let target = app.game.as_ref().unwrap().battle_usable_items()[0].clone();
+    let before = held(&app, &target);
+    assert!(before > 0, "fixture: the starting kit should hold one");
+    let acting = acting_entity(&mut app);
+
+    app.handle_key(GameKey::Char('U'));
+    assert_eq!(app.mode, Mode::TacticalItem);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(held(&app, &target), before - 1, "[U] spent the wrong count");
+    assert_ne!(
+        acting_entity(&mut app),
+        acting,
+        "[U] left the turn where it was"
+    );
+}
+
+/// Esc backs out of the picker exactly as the routine list's own Esc does —
+/// spending nothing and handing the turn to nobody.
+#[test]
+fn escaping_the_item_picker_spends_nothing() {
+    let mut app = fighting(9141);
+    wait_for_the_player(&mut app);
+    let target = app.game.as_ref().unwrap().battle_usable_items()[0].clone();
+    let before = held(&app, &target);
+    let acting = acting_entity(&mut app);
+
+    app.handle_key(GameKey::Char('U'));
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(
+        app.mode,
+        Mode::TacticalBattle,
+        "Esc did not return to the board"
+    );
+    assert_eq!(held(&app, &target), before, "Esc spent a pack item");
+    assert_eq!(acting_entity(&mut app), acting, "Esc spent the turn");
+}
+
+/// A row the engine goes on to refuse must not strand the player on a
+/// picker with nothing left to press but Esc — `a_failed_commit_still_
+/// returns_to_the_roster`'s shape one combat model over. Reached by
+/// spending the acting body's own action out from under the still-open
+/// picker: `fighting` seats no companion, so the only body in `Party` is
+/// the player, and handing the turn on lands it on a hostile —
+/// `tactical_use_item`'s "neither the player nor in `Party`" refusal —
+/// since every row on this list is drawn from `battle_usable_items` and so
+/// can never itself be an unheld item.
+#[test]
+fn a_refused_item_spends_nothing_and_leaves_the_mode_sane() {
+    let mut app = fighting(9142);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('U'));
+    assert_eq!(app.mode, Mode::TacticalItem);
+    let target = app.game.as_ref().unwrap().battle_usable_items()[0].clone();
+    let before = held(&app, &target);
+    assert!(app.game.as_mut().unwrap().tactical_defend());
+    assert!(
+        !app.tactical_player_turn(),
+        "fixture: defending should have handed the turn to the wild side"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(
+        held(&app, &target),
+        before,
+        "a refused item spent something"
+    );
+    assert_eq!(
+        app.mode,
+        Mode::TacticalBattle,
+        "a refusal must not strand the player on the picker"
+    );
+    assert!(
+        app.status_line.is_some(),
+        "the refusal must reach the player"
+    );
+}
+
 /// A relocation aims twice, and the first cell commits nothing.
 ///
 /// `emulating_tactical_app`'s shape one routine over: the routine has to be

@@ -1155,4 +1155,48 @@ fn a_load_defers_a_stack_entrance_a_footprint_covers_until_the_party_surfaces() 
     );
 }
 
-// Findings 2-4's reproducers land in later commits, once each fix is green.
+/// The player's surface `Position` is pinned to the anchor while in base
+/// space, so displacing the anchor must carry the pin with it.
+#[test]
+fn a_player_inside_base_space_leaves_onto_the_anchors_new_tile_after_a_footprint_displaces_it() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let centre = (ppos.x + 1, ppos.y);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
+    // Founded before the settlement is placed, `the_base_anchor_under_a_
+    // growing_footprint_moves_outside_it`'s own setup: the anchor lands at
+    // `ppos`, one tile from the centre the settlement is about to
+    // materialize at, so growing the footprint covers it.
+    place_home(&mut game);
+    game.enter_base()
+        .expect("test premise: founded on the anchor, Home just deployed");
+    assert!(
+        game.in_base(),
+        "test premise: the party is inside base space"
+    );
+
+    let key = SettlementKey { rx: 36, ry: 0 };
+    place_settlement(&mut game, key, centre.0, centre.1);
+    game.sync_settlement_footprint(key);
+
+    let footprint = footprint_set(&mut game, key);
+    let anchor = game.world.resource::<AnchorEntity>().0;
+    let new_anchor_pos = *game.world.get::<Position>(anchor).unwrap();
+    assert!(
+        !footprint.contains(&(new_anchor_pos.x, new_anchor_pos.y)),
+        "test premise: the anchor moved outside the footprint that grew over it"
+    );
+
+    game.leave_base()
+        .expect("test premise: still standing at BASE_EXIT_CELL");
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!(
+        (player_pos.x, player_pos.y),
+        (new_anchor_pos.x, new_anchor_pos.y),
+        "leaving base space put the player somewhere other than the anchor's new tile"
+    );
+    assert!(
+        !footprint.contains(&(player_pos.x, player_pos.y)),
+        "leaving base space left the player inside the footprint that displaced the anchor"
+    );
+}

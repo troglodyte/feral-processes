@@ -326,6 +326,11 @@ impl Game {
         }
     }
 
+    /// While the party is in base space the player's surface `Position` is
+    /// pinned to the anchor tile, and `move_anchor_to` moves only the
+    /// anchor, so the pin moves here — `leave_base` would otherwise step
+    /// them back onto covered ground. Not inside `move_anchor_to`, whose
+    /// founding caller runs before the party has ever entered base space.
     fn displace_anchor_at(&mut self, key: SettlementKey, x: i32, y: i32) {
         let anchor = self.world.resource::<AnchorEntity>().0;
         let here = self
@@ -338,6 +343,16 @@ impl Game {
         let Some((nx, ny)) = self.free_tile_outside(key) else {
             return;
         };
+        if self.in_base() {
+            let player = self.player_entity();
+            if let Some(mut pos) = self.world.get_mut::<Position>(player)
+                && pos.x == x
+                && pos.y == y
+            {
+                pos.x = nx;
+                pos.y = ny;
+            }
+        }
         self.move_anchor_to(nx, ny);
     }
 

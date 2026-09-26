@@ -6047,6 +6047,37 @@ mod teleport {
         );
     }
 
+    /// todo #103's own load-bearing property: `ability_unavailable` checks
+    /// Power *last*, so `Some(RoutineRefusal::Power { .. })` already means
+    /// every earlier refusal passed — the party arm's "is Power the sole
+    /// reason" question is one call rather than a second, Power-skipping
+    /// copy of this gate. A non-player body refused for ownership *and*
+    /// short of Power must still read as ownership, never as Power — the
+    /// mutation this guards against is Power moving back to its old spot,
+    /// ahead of the Decompile/Emulate/Teleport arms.
+    #[test]
+    fn ability_unavailable_prefers_an_earlier_refusal_over_power_when_both_apply() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 40);
+        let def = game
+            .world
+            .resource::<AbilityDb>()
+            .get("teleport")
+            .cloned()
+            .expect("teleport ships");
+        // Refused twice over: not the player, and (unlike the test above) no
+        // reserve at all to pay Teleport's cost with.
+        game.world
+            .entity_mut(pack[0])
+            .insert(PowerReserve::new(0.0));
+        assert_eq!(
+            game.ability_unavailable(pack[0], &def)
+                .map(|r| r.to_string()),
+            Some("only you can relocate".to_string()),
+            "a doubly-refused routine read as short of Power instead of the earlier refusal"
+        );
+    }
+
     /// The one-aim door refuses it, `Emulate`'s arm and its reason: there
     /// are two cells to collect and that door validates one.
     #[test]

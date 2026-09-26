@@ -104,8 +104,29 @@
   visit, a settlement's record is permanent, and a modder deleting
   `assets/settlements/` gets the pre-settlement game (an empty catalogue
   derives to `None` everywhere) rather than an error.
+- **A settlement's footprint is derived from kind and vitality on every
+  read, and `Game::sync_settlement_footprint` is its one writer.** Radius
+  is `Game::settlement_radius` (1/1/2/3 for Server and Starved/Steady/
+  Thriving Mainframe); every cell is its own `Settlement { key }` entity so
+  the renderer, examine, `find_settlement_at` and the bump ladder needed no
+  change. The sync runs once a tick for every known town, because vitality
+  moves with commerce. **Three traps.** The early return (cell count and
+  centre glyph match) must also require no surface link inside the square,
+  or a Stack entrance deferred while the party was underground is stranded
+  once its cell is no longer newly covered. `Game::load` must sync *after*
+  `restore_locale` and every occupant — `restore_settlements` spawns
+  centres only — or a load underground reads `Locale::Surface`, erases the
+  entrance the party is inside and moves their pinned `Position`. And the
+  outer cells are despawned on a shrink, so a `TownPatrol` tether and
+  `towns_by_tile` name the centre by `With<SettlementCentre>`; the radius
+  never drops below 1, so the centre always exists. Displacement moves
+  surface bodies only (`stands_in_base_space` skips a besieger or a
+  base-space caravan whose coordinates collide by number), carries the
+  player's base-space pin with a displaced anchor, draws no `GameRng`, and
+  never touches an outpost — `found_outpost` refuses within
+  `SETTLEMENT_FOOTPRINT_MAX_RADIUS` of a town instead.
 - **A settlement is the fourth arm of `move_player`'s bump ladder, and the
-  one arm that admits nobody.** Checked in `game/turn.rs` after the
+  one arm that admits nobody** — any footprint cell is the door. Checked in `game/turn.rs` after the
   surface-link arm and before the walkable read, `Game::find_settlement_at`
   (mirroring `find_surface_link_at`'s query shape — `(&Position,
   &Settlement)`, no `Entity`, no filter type) queues a cue and returns
@@ -191,9 +212,10 @@
   not power" decision. That decision is `SETTLEMENT_GIFT_STAT_MULT` alone —
   a tuning claim, not a structural one, since `ProgramRole` is derived and
   nothing stops the player fielding a gift.
-- **A relay landing searches from band 1, filters like a step, and only
-  queues the visit cue if it lands in reach.** Band 0 would set the party
-  down on the settlement tile, which admits nobody (`move_player`'s fourth
+- **A relay landing is `Game::free_tile_outside`: it searches from band
+  `radius + 1`, filters like a step, and only queues the visit cue if it
+  lands in reach.** A band inside the footprint would set the party down on
+  a settlement cell, which admits nobody (`move_player`'s fourth
   arm returns before the walkable step); `walkable` alone is not the
   question, because that ladder also turns aside for a wild program, a nest
   and a Stack entrance, and "checks walkable, not empty" has already put a
@@ -201,7 +223,9 @@
   shared with `standable_near` rather than copied. And broken terrain can
   put the nearest standable ground several tiles out, where `PendingVisit`
   would open a town page whose `[M]` and `[J]` are then refused by the
-  Chebyshev-1 `settlement_reach` — so the cue asks that same question.
+  `settlement_reach` (`radius + 1` from the centre) — so the cue asks that
+  same question. The filter is shared with displacement, so it also refuses
+  the player's tile, the anchor, a caravan, a trap and an outpost.
   **Neither travel door calls `require_surface`**: the Relay is in base
   space, so it would refuse the only place an outbound trip can start.
 - **The town page's aid sentences are `pub const` in the engine because the

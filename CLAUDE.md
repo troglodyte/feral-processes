@@ -185,11 +185,14 @@ relying on one, and correct all three places if it has moved.
   kind_at`'s rule for the zone surface; `resources::Settlements` records
   the resolved tile and def once a town is found, never the candidate cell
   the derivation answered with.
-- **A settlement is entered by walking into it, and the tile admits
+- **A settlement is entered by walking into it, and the footprint admits
   nobody.** The bump is the fourth arm of `move_player`'s ladder; it queues
   `resources::PendingVisit` and leaves the player's `Position` unchanged,
   and `Game::take_settlement_visit` is a drain, not a getter, or the screen
   it opens would reopen on the next keypress.
+- **A settlement's footprint is a square derived from kind and vitality on
+  every read, `Game::sync_settlement_footprint` is its one writer, and the
+  centre cell's `SettlementCentre` is the entity a tether names.**
 - **A settlement's buyback keys through a minted `"settlement/<id>"`
   string, not a widened `ShelfKey`.** `StructureId` is a bare `String`, so
   the mint plus its tile fits with no type change and no save bump.
@@ -219,8 +222,9 @@ relying on one, and correct all three places if it has moved.
 - **A gifted program's species is derived from `(world seed, region, gifts
   taken)`; choosing it spends no `GameRng` draw and adopting it spends what
   every adoption does.**
-- **A relay landing starts at band 1, filters the way `move_player`'s ladder
-  does, and queues the visit cue only if it lands in reach.**
+- **A relay landing is `Game::free_tile_outside` — band `radius + 1`, the
+  displacement search's own filter — and queues the visit cue only if it
+  lands in reach.**
 - **A relay trip's tick loop breaks on a fight, and both travel keys owe
   `after_world_action`** — the charge is at most the quote, never equal to it
   on an interrupted trip.

@@ -1050,8 +1050,9 @@ relying on one, and correct all three places if it has moved.
 - **Walking into a hostile is a swing, and its two gates are `Hostile` and
   `Game::tactical_awaits_input`** — neither a new predicate.
 - **Auto-attack and `[R]` invoke through `tactical_intent`'s party arm,
-  gated on `ability_unavailable`** — the arena passes
-  `PartyTurns::SwingOnly` instead, so its numbers stay comparable.
+  gated on `Game::in_party` and `ability_unavailable`** — the arena passes
+  `PartyTurns::SwingOnly` instead, so its numbers stay comparable, and
+  `App::tactical_auto` is cleared by any key and by the fight ending.
 - **`Game::decision_temperature` is the one door every tactical AI entry
   point reads**, and `tactical_ai_turn_at` is a test hook, not a fifth door.
 - **A tamper ages on the tampered body's own hand-on, never in

@@ -1457,12 +1457,22 @@
   `SwingOnly` — permanently, not as a stopgap, since `PartyPlan::AllAttack`
   invokes no routine either and the two models' numbers stay comparable
   only if neither auto-invokes headless. The party arm opens only for
-  `Invoke` and only when the actor is not `Hostile`, `Summoned`, or taken
-  over, so a fork reached through `tactical_drive_turn` (which drives
-  whichever body is acting with no gate of its own) still falls through to
-  a swing — a body with a `PowerReserve` the player never funded invoking a
-  priced routine is a separate decision this feature does not make. The
-  party arm's own choice is the first candidate `ability_unavailable`
+  `Invoke` and only when the actor is `Game::in_party` — the player or a
+  member of `Party` — and neither `Summoned` nor taken over, so a fork
+  reached through `tactical_drive_turn` (which drives whichever body is
+  acting with no gate of its own) still falls through to a swing — a body
+  with a `PowerReserve` the player never funded invoking a priced routine is
+  a separate decision this feature does not make. **`in_party` shipped a
+  round after the rest** (an opus review of the merged feature caught it):
+  the original gate excluded only `Hostile`/`Summoned`/taken-over, so base
+  staff mid-siege — `Tamed`, never in `Party`, and `tactical_skippable` —
+  fell through to it too and tried to invoke or drink a cell
+  `Game::tactical_use_item` then refused, wasting the beat every turn.
+  `in_party` is now the one membership check both doors share. The party
+  arm's own choice is the first candidate — from `Game::ready_party_routines`,
+  which asks `Game::actor_abilities` (the same kit the hand chooser offers,
+  so an emulating player is not offered whatever is installed underneath
+  the emulation) rather than a body's raw `Routines` — `ability_unavailable`
   passes, else — if the *sole* refusal for some candidate is
   `RoutineRefusal::Power` — a Power cell from the pack via
   `power_cell_for`, else a swing: `ability_unavailable`'s Power check runs
@@ -1473,7 +1483,11 @@
   buff meant to be spent deliberately, not drunk automatically because it
   also restores some Power. `Game::tactical_use_item` is the one door both
   the party arm and `[U]` on the battle map spend a cell through, every
-  refusal landing before anything is spent. See
+  refusal landing before anything is spent. An invoked routine's cooldown
+  floors at the hand's own (0, `tactical_use_routine`'s), not the hostile
+  AI's (`ENEMY_ROUTINE_MIN_COOLDOWN`) — `run_tactical_intent` switches on
+  the actor's `Hostile` marker, the one honest split between the two doors
+  that call it. See
   `seam:auto-attack-invokes-through-tactical-intents-party-arm`.
 
 - **`Game::decision_temperature` is the one door every tactical AI entry

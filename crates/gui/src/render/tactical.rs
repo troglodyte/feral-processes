@@ -15,6 +15,7 @@
 //! the fight is lit by, and dimming it would hide the one thing the screen
 //! exists to show.
 
+use feral_processes_engine::Game;
 use feral_processes_engine::tactical::map::BattleCell;
 use feral_processes_engine::tactical::view::{TacticalBody, TacticalView, TamperTag, TurnRow};
 
@@ -974,6 +975,11 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
     if acting_body(view).is_some_and(|b| b.form.is_some()) {
         rows.push(("V".to_string(), "revert".to_string()));
     }
+    // `battle_action_options`' own order again: attack, defend, special,
+    // revert, use item — last among the row-opening keys and dropped on a
+    // spent turn exactly as `a`/`d`/`s` are, since spending an item costs
+    // the action too.
+    rows.push(("U".to_string(), "use item".to_string()));
     rows.extend([
         ("E".to_string(), "end turn".to_string()),
         // Before `A`, which stays last per its own comment below.
@@ -994,6 +1000,32 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         rows.retain(|(k, _)| k == "E" || k == "R" || k == "A");
     }
     rows
+}
+
+/// Which consumable does the acting body spend? `[U]`'s picker, drawn as a
+/// popup over the battle map.
+///
+/// `draw_battle_item_menu`'s shape and the same pool, `battle_usable_
+/// items`: the pack a tactical fight draws from is the player's own
+/// whichever body drinks it, so both screens list exactly what that call
+/// says is usable and neither greys a row — everything shown here is
+/// already known to be spendable.
+pub(super) fn draw_tactical_items(
+    game: &Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let items = game.battle_usable_items();
+    let mut rows = vec![text_row("Use which item? It costs this body its action.")];
+    for (i, item) in items.iter().enumerate() {
+        rows.push(item_row(
+            format!("[{}] {}", menu_shortcut(i), game.item_name(item)),
+            i == selected,
+        ));
+    }
+    draw_popup("Use an Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The routine picker, drawn as a popup over the battle map.

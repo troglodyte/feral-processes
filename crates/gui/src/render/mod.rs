@@ -1309,6 +1309,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::TacticalResult => {
             tactical::draw_tactical_result(&game.battle_outcomes(), refusal, painter, m)
         }
+        Mode::TacticalItem => tactical::draw_tactical_items(game, selected, refusal, painter, m),
         Mode::TacticalRoutine => tactical::draw_tactical_routines(
             &game.tactical_routine_options(),
             selected,
@@ -1546,10 +1547,11 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 119] = [
+    const ALL_MODES: [Mode; 120] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
+        Mode::TacticalItem,
         Mode::TacticalEmulate,
         Mode::TacticalAim,
         Mode::TacticalResult,

@@ -984,6 +984,30 @@ fn a_hostile_runs_a_routine_the_player_s_own_gate_would_refuse_it() {
     );
 }
 
+/// `RoutineRefusal::Power` is the variant `ability_unavailable` returns when
+/// the reserve is the only thing standing in the way — Phase 1 of #103, a
+/// pure refactor from `Option<String>` to `Option<RoutineRefusal>` with no
+/// behaviour change, so this is the one new assertion the phase adds.
+#[test]
+fn an_unaffordable_routine_refuses_with_the_power_variant() {
+    let mut game = game();
+    let player = game.player_entity();
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("acid_wash")
+        .cloned()
+        .expect("acid_wash ships");
+    game.world
+        .entity_mut(player)
+        .insert(crate::components::PowerReserve::new(0.0));
+    assert_eq!(
+        game.ability_unavailable(player, &def),
+        Some(crate::game::combat::RoutineRefusal::Power { cost: 8.0 }),
+        "an empty reserve short of the routine's cost must refuse as Power"
+    );
+}
+
 /// A hostile's routine is floored at `ENEMY_ROUTINE_MIN_COOLDOWN`, so one
 /// whose file authors no cooldown cannot be run every turn of the fight.
 ///
@@ -5564,8 +5588,9 @@ mod teleport {
             .entity_mut(pack[0])
             .insert(PowerReserve::new(crate::components::POWER_MAX));
         assert_eq!(
-            game.ability_unavailable(pack[0], &def).as_deref(),
-            Some("only you can relocate"),
+            game.ability_unavailable(pack[0], &def)
+                .map(|r| r.to_string()),
+            Some("only you can relocate".to_string()),
             "a body that could afford Teleport was offered it"
         );
     }

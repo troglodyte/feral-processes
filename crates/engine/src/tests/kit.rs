@@ -1075,7 +1075,8 @@ mod emulation_tests {
             .unwrap()
             .clone();
         assert_eq!(
-            game.ability_unavailable(player, &ability),
+            game.ability_unavailable(player, &ability)
+                .map(|r| r.to_string()),
             Some("no images known".to_string())
         );
     }
@@ -1101,7 +1102,8 @@ mod emulation_tests {
             .unwrap()
             .clone();
         assert_eq!(
-            game.ability_unavailable(player, &ability),
+            game.ability_unavailable(player, &ability)
+                .map(|r| r.to_string()),
             Some("already emulating".to_string())
         );
     }
@@ -1608,7 +1610,8 @@ mod emulation_tests {
             let ability = emulate_def(&game);
 
             assert_eq!(
-                game.ability_unavailable(companion, &ability),
+                game.ability_unavailable(companion, &ability)
+                    .map(|r| r.to_string()),
                 Some("only you can emulate".to_string())
             );
         }

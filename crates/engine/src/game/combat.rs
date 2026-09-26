@@ -10,6 +10,50 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// Why `Game::ability_unavailable` refused a routine. `Display` renders
+/// exactly the strings the pickers showed before this type existed, one
+/// variant per refusal arm — every existing caller that wants a string still
+/// gets today's string via `.to_string()`, no behaviour change.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum RoutineRefusal {
+    /// A tactical-only routine invoked outside a battle map.
+    BattleMapOnly,
+    /// Still on cooldown; the rounds remaining.
+    Cooldown(u32),
+    /// Short of Power. `cost` is what the routine costs — phase 2's
+    /// shortfall is `cost` minus the entity's current `PowerReserve`, read
+    /// by the caller rather than carried here.
+    Power { cost: f32 },
+    /// Decompile with no taming catalyst in the pack.
+    NoTamingCatalyst,
+    /// Decompile with a full roster.
+    RosterFull,
+    /// Emulate invoked by anyone but the player.
+    OnlyPlayerEmulates,
+    /// Teleport invoked by anyone but the player.
+    OnlyPlayerRelocates,
+    /// Emulate while already emulating.
+    AlreadyEmulating,
+    /// Emulate with no images known.
+    NoImagesKnown,
+}
+
+impl std::fmt::Display for RoutineRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RoutineRefusal::BattleMapOnly => write!(f, "battle map only"),
+            RoutineRefusal::Cooldown(remaining) => write!(f, "{remaining} more rounds"),
+            RoutineRefusal::Power { cost } => write!(f, "needs {cost:.0} PWR"),
+            RoutineRefusal::NoTamingCatalyst => write!(f, "no taming catalyst"),
+            RoutineRefusal::RosterFull => write!(f, "roster is full"),
+            RoutineRefusal::OnlyPlayerEmulates => write!(f, "only you can emulate"),
+            RoutineRefusal::OnlyPlayerRelocates => write!(f, "only you can relocate"),
+            RoutineRefusal::AlreadyEmulating => write!(f, "already emulating"),
+            RoutineRefusal::NoImagesKnown => write!(f, "no images known"),
+        }
+    }
+}
+
 impl Game {
     /// The damage band `entity` actually swings for, given the `natural`
     /// range its move or ability authored.
@@ -1433,12 +1477,12 @@ impl Game {
         &self,
         entity: Entity,
         ability: &AbilityDef,
-    ) -> Option<String> {
+    ) -> Option<RoutineRefusal> {
         // A tactical-only routine has nothing to resolve against outside a
         // battle map — checked ahead of cooldown and Power, since neither
         // of those questions matters if the fight itself is the wrong kind.
         if ability.effect.tactical_only() && !self.in_tactical_battle() {
-            return Some("battle map only".to_string());
+            return Some(RoutineRefusal::BattleMapOnly);
         }
         let remaining = self
             .world
@@ -1446,7 +1490,7 @@ impl Game {
             .and_then(|c| c.0.get(&ability.id).copied())
             .unwrap_or(0);
         if remaining > 0 {
-            return Some(format!("{remaining} more rounds"));
+            return Some(RoutineRefusal::Cooldown(remaining));
         }
         let cost = abilities::routine_power_cost(ability);
         if cost > 0.0
@@ -1455,17 +1499,17 @@ impl Game {
                 .get::<PowerReserve>(entity)
                 .is_some_and(|r| r.holds(cost))
         {
-            return Some(format!("needs {cost:.0} PWR"));
+            return Some(RoutineRefusal::Power { cost });
         }
         // Decompile is refused for two reasons no other ability has. They
         // used to live in `attempt_decompile`, which refunded the round
         // silently; here the row greys with the reason instead.
         if matches!(ability.effect, AbilityEffect::Decompile) {
             if self.taming_catalyst().is_none() {
-                return Some("no taming catalyst".to_string());
+                return Some(RoutineRefusal::NoTamingCatalyst);
             }
             if self.roster_room() == 0 {
-                return Some("roster is full".to_string());
+                return Some(RoutineRefusal::RosterFull);
             }
         }
         // Only the player emulates (`seam:only-the-player-emulates`). This
@@ -1479,7 +1523,7 @@ impl Game {
         // (`wild_retaliate`) both go straight to `use_ability`.
         if matches!(ability.effect, AbilityEffect::Emulate { .. }) && entity != self.player_entity()
         {
-            return Some("only you can emulate".to_string());
+            return Some(RoutineRefusal::OnlyPlayerEmulates);
         }
         // Only the player relocates, and this is the gate for every chooser
         // that offers it — `Emulate`'s arm one line up, for its reason. No
@@ -1489,7 +1533,7 @@ impl Game {
         // a wielded proc and a hostile's retaliation both read
         // `AbilityEffect::tactical_only`, which is true here.
         if matches!(ability.effect, AbilityEffect::Teleport) && entity != self.player_entity() {
-            return Some("only you can relocate".to_string());
+            return Some(RoutineRefusal::OnlyPlayerRelocates);
         }
         // Emulate's own two refusals — spec §4 "Invoking". `Emulation`
         // itself would already keep it off `entity`'s `actor_abilities`
@@ -1500,7 +1544,7 @@ impl Game {
         // answer from `Kit`.
         if matches!(ability.effect, AbilityEffect::Emulate { .. }) {
             if self.world.get::<Emulation>(entity).is_some() {
-                return Some("already emulating".to_string());
+                return Some(RoutineRefusal::AlreadyEmulating);
             }
             if self
                 .world
@@ -1508,7 +1552,7 @@ impl Game {
                 .0
                 .is_empty()
             {
-                return Some("no images known".to_string());
+                return Some(RoutineRefusal::NoImagesKnown);
             }
         }
         None
@@ -1608,7 +1652,9 @@ impl Game {
                     _ => ability.target.targeting(),
                 },
                 sweeps_party: ability.target == AbilityTarget::WholeParty,
-                unavailable: self.ability_unavailable(entity, &ability),
+                unavailable: self
+                    .ability_unavailable(entity, &ability)
+                    .map(|r| r.to_string()),
                 cooldown: ability.cooldown,
                 // Filled in by `tactical_routine_options`, the only caller
                 // with a board to ask. The group model leaves it at zero.

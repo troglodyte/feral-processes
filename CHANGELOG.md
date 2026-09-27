@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.246
+
+**The Depot filter lists weapons, armor, modules and etched disks as one
+row each.** Every piece of gear and every routine's disk used to be its own
+row, which made sorting a shelf a long scroll. Now Left or Right on a
+family row denies or allows all of it at once, and the row reads allowed
+only while every member is. Saves are unchanged.
+
 ## 0.13.245
 
 **A Drop Pod Terminal fires one of your base programs into a battle-map

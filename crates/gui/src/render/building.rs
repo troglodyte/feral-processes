@@ -1502,6 +1502,15 @@ pub(super) fn structure_detail_lines(s: &StructureReport) -> Vec<(String, Color)
     if let Some(tool) = &s.standing_tool {
         lines.push((format!("  set up with the {tool}"), TEXT_DIM));
     }
+    // Dim either way: the crew reloads a spent pod on its own, so there is
+    // nothing here for the player to walk over and fix.
+    match s.pod {
+        Some(PodState::Charged) => lines.push(("  charged — ready to drop".into(), TEXT_DIM)),
+        Some(PodState::Recharging { percent }) => {
+            lines.push((format!("  recharging — {percent}% reloaded"), TEXT_DIM));
+        }
+        None => {}
+    }
     lines
 }
 
@@ -2326,7 +2335,32 @@ mod tests {
             status: Some(status),
             assignees: Vec::new(),
             standing_tool: None,
+            pod: None,
         }
+    }
+
+    /// A terminal says whether it can fire, and a structure that is not one
+    /// says nothing about pods at all.
+    #[test]
+    fn a_drop_pod_terminal_says_whether_it_is_charged() {
+        let pod_lines = |pod| {
+            let mut s = structure_report(MachineStatus::Running);
+            s.pod = pod;
+            structure_detail_lines(&s)
+                .into_iter()
+                .map(|(line, _)| line)
+                .filter(|line| line.contains("charged") || line.contains("recharging"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            pod_lines(Some(PodState::Charged)),
+            ["  charged — ready to drop"]
+        );
+        assert_eq!(
+            pod_lines(Some(PodState::Recharging { percent: 40 })),
+            ["  recharging — 40% reloaded"]
+        );
+        assert!(pod_lines(None).is_empty());
     }
 
     /// The two grid stalls, and the difference between them is the whole

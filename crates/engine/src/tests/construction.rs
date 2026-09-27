@@ -2351,6 +2351,33 @@ fn the_crew_reloads_a_spent_pod_and_stands_nothing_new_up() {
     );
 }
 
+/// The structure sheet says whether a terminal can fire: `Charged`, or
+/// `Recharging` with the request's own `BuildOrderRow::percent` — a call,
+/// so the sheet and the map's build row cannot disagree — and `None` on a
+/// structure that is not a pod.
+#[test]
+fn the_structure_sheet_says_whether_a_pod_is_charged() {
+    let mut game = base_for_drop_pod(1177);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    place_now(&mut game, "depot", 0, 1).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    let depot = structure_at(&mut game, 0, 1).unwrap();
+
+    assert_eq!(
+        game.structure_manifest(terminal).unwrap().pod,
+        Some(crate::views::PodState::Charged)
+    );
+    assert_eq!(game.structure_manifest(depot).unwrap().pod, None);
+
+    game.spend_pod(terminal);
+    let site = site_at(&mut game, 1, 0);
+    let percent = game.build_order_row(site).unwrap().percent();
+    assert_eq!(
+        game.structure_manifest(terminal).unwrap().pod,
+        Some(crate::views::PodState::Recharging { percent })
+    );
+}
+
 /// A recharge cannot be called off. Cancelling one was the only way to
 /// leave a standing terminal spent with nothing filed to reload it — a pod
 /// that would then never fire again without a screen to re-file it from —

@@ -1661,6 +1661,21 @@ pub struct StructureReport {
     /// doing. Drawn because a rig with no standing tool is the one that
     /// silently will not fetch from a rack.
     pub standing_tool: Option<String>,
+    /// A drop pod terminal's charge, `None` on every structure that is not
+    /// one (`StructureDef::drop_pod`).
+    pub pod: Option<PodState>,
+}
+
+/// Whether a drop pod terminal can fire. There is no "spent with nothing
+/// filed" state: `Game::spend_pod` files the recharge as it spends, and
+/// `cancel_build_request` refuses to call one off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PodState {
+    Charged,
+    /// `percent` is the recharge request's `BuildOrderRow::percent`.
+    Recharging {
+        percent: u32,
+    },
 }
 
 impl StructureReport {

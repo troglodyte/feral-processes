@@ -24,7 +24,7 @@ use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, DepotFill, EmulationOption, Entity,
     EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, OutpostMark,
-    OutpostReport, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState,
+    OutpostReport, PetInfo, PodState, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState,
     SettlementView, StockRow, StructureReport, morale_band,
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};

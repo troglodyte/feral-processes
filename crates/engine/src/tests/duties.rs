@@ -912,9 +912,8 @@ fn set_duty_reschedules_so_the_table_updates_without_a_tick() {
     );
 }
 
-/// The `[A]` whole-column toggle carries the same obligation, and reschedules
-/// exactly once for the whole column rather than once per row — see
-/// `Game::toggle_duty`'s doc for why a roll-per-row would matter.
+/// The `[A]` whole-column toggle carries the same obligation, and reassigns
+/// once for the whole column rather than once per row.
 #[test]
 fn set_duty_column_reschedules_so_the_table_updates_without_a_tick() {
     let (mut game, _node, worker) = a_quiet_base_with_one_post(20261025);
@@ -928,6 +927,123 @@ fn set_duty_column_reschedules_so_the_table_updates_without_a_tick() {
         1,
         "set_duty_column reschedules on its own"
     );
+}
+
+/// A second body on the tantrum rung beside `a_quiet_base_with_one_post`'s
+/// worker, so a toggle that ran the beat's clock stages would roll for it.
+/// Soured rather than only marked, or the beat's `update_disgruntled` clears
+/// the marker before `run_tantrums` sees it and the test goes vacuous —
+/// `disposition.rs`'s `sour_to`, which that file keeps private.
+fn a_quiet_base_with_a_body_lashing_out(seed: u32) -> (Game, Entity, Entity) {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(seed);
+    // `run_tantrums` does nothing on a young base, so it is made an
+    // established one: fillers with every column off, so none of them can
+    // cover the post the worker leaves, and Depots for the structure count.
+    let fillers = hire(&mut game, crate::tuning::BASE_ESTABLISHED_STAFF);
+    for &filler in &fillers {
+        restrict(&mut game, filler, &Duty::ALL);
+    }
+    let depot = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get(&crate::structures::StructureId::from("depot"))
+        .expect("a Depot ships")
+        .clone();
+    for i in 0..crate::tuning::BASE_ESTABLISHED_STRUCTURES {
+        game.spawn_structure(&depot, -20 - i as i32, 20, None);
+    }
+    assert!(game.base_is_established(), "precondition: tantrums can run");
+    let angry = fillers[0];
+    let now = game.current_tick();
+    let mut n = 0;
+    while game.morale(angry) > crate::tuning::MORALE_LASHES_OUT_AT {
+        game.world
+            .get_mut::<crate::components::Memories>(angry)
+            .expect("a roster program holds a store")
+            .0
+            .push(crate::components::Memory {
+                def: crate::memories::MemoryId::from("frayed_here"),
+                subject: crate::components::MemorySubject::BaseTile { x: n, y: 900 },
+                subject_name: None,
+                reinforced: now,
+                strikes: 1,
+            });
+        n += 1;
+        assert!(n < 400, "morale never reached the tantrum rung");
+    }
+    game.world
+        .entity_mut(angry)
+        .insert(crate::components::Disgruntled {
+            grievance: crate::components::Grievance::LashingOut,
+            stranded: false,
+            told: false,
+        });
+    (game, worker, angry)
+}
+
+fn peek_rng(game: &mut Game) -> u64 {
+    use rand::RngExt;
+    game.world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random()
+}
+
+/// A duty toggle is a keypress with the clock stopped, so it must run none
+/// of the beat's clock-driven stages: a tantrum rolled per press would let
+/// a player re-roll the base by spamming `Space`. It still refreshes the
+/// table.
+#[test]
+fn set_duty_draws_no_rng_and_rolls_no_tantrum() {
+    let (mut game, worker, _angry) = a_quiet_base_with_a_body_lashing_out(20261027);
+    reseed_rng(&mut game, 55);
+    let untouched = peek_rng(&mut game);
+
+    reseed_rng(&mut game, 55);
+    for _ in 0..50 {
+        game.set_duty(worker, Duty::Operate, false).unwrap();
+        game.set_duty(worker, Duty::Operate, true).unwrap();
+    }
+    game.set_duty(worker, Duty::Operate, false).unwrap();
+    let toggled = peek_rng(&mut game);
+
+    assert_eq!(untouched, toggled, "a toggle must not draw GameRng");
+    assert!(
+        game.world
+            .resource::<crate::resources::Brawls>()
+            .open
+            .is_empty()
+    );
+    assert_eq!(
+        game.work_table().unworked_total,
+        1,
+        "the toggle still refreshes the table"
+    );
+}
+
+/// The `[A]` column toggle carries the same obligation.
+#[test]
+fn set_duty_column_draws_no_rng_and_rolls_no_tantrum() {
+    let (mut game, _worker, _angry) = a_quiet_base_with_a_body_lashing_out(20261028);
+    reseed_rng(&mut game, 55);
+    let untouched = peek_rng(&mut game);
+
+    reseed_rng(&mut game, 55);
+    for _ in 0..50 {
+        game.set_duty_column(Duty::Operate, false).unwrap();
+        game.set_duty_column(Duty::Operate, true).unwrap();
+    }
+    game.set_duty_column(Duty::Operate, false).unwrap();
+    let toggled = peek_rng(&mut game);
+
+    assert_eq!(untouched, toggled, "a column toggle must not draw GameRng");
+    assert!(
+        game.world
+            .resource::<crate::resources::Brawls>()
+            .open
+            .is_empty()
+    );
+    assert_eq!(game.work_table().unworked_total, 1);
 }
 
 /// Right after a real `Game::load` — before any tick, and before the player

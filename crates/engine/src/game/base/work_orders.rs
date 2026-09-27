@@ -927,6 +927,78 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        let wanted = self.base_wants();
+        let staff = self.base_staff();
+        // **Before the drift and before the assignment.** The drift is what
+        // walks an off-shift body to its amenity, so the marker has to be on
+        // it by then; and the assignment reads the same marker to decide who
+        // is on shift at all.
+        let amenities = self.amenities();
+        // Built here beside the amenities and for that type's reason: once
+        // per beat rather than once per program, and never cached — a cached
+        // copy would be a new `Resource` and another iteration-order shift.
+        let bays = self.repair_bays();
+        self.update_off_shift(&staff, &amenities);
+        // Beside the needs gate and before `on_shift` is read below: a body
+        // that downs tools this tick must not also be handed a job this
+        // tick.
+        self.update_disgruntled(&staff);
+        // Between the rung and the bay, and **that ordering is what gets the
+        // Repair Bay for free**: a blow landed this beat is answered by
+        // `admit_the_badly_hurt` below, through the one writer that already
+        // owns the decision to take a body off the line.
+        self.run_tantrums(&staff);
+        // The third gate on this line, and it sits with the other two for
+        // their reason: a body that breaks off for repairs this tick must
+        // not also be handed a job this tick. It inserts `Downed`, which
+        // every stage below — the `on_shift` filter, the drift's Bay arm,
+        // the diff's unconditional free — already knows what to do with.
+        self.admit_the_badly_hurt(&staff, &bays);
+        // **The walking pool is wider than the posting pool.** A pinned
+        // subject is not `Staff` — `base_staff` excludes it the moment
+        // `role_of` reads its `components::UnderStudy` marker — so it is
+        // absent from `staff` by construction and would otherwise fall out
+        // of the only pass that walks anything, standing exactly where it
+        // was pinned for the rest of the run. `drift_idle_staff` alone reads
+        // the wider list; every reader below this line reasons about who
+        // can be handed a *job*, which a subject never can.
+        let mut walkers = staff.clone();
+        walkers.extend(self.under_study_bodies());
+        // A subject pinned at a base with no other staff still has to walk
+        // to its pen — the case the wider `walkers` list exists for, and the
+        // reason an empty `staff` does not skip the drift too.
+        if !walkers.is_empty() {
+            self.drift_idle_staff(&walkers, &amenities, &bays);
+        }
+        self.assign_base_labour(wanted, &staff, &amenities);
+    }
+
+    /// The posting half of `schedule_base_labour` alone, for a change the
+    /// player makes with the clock stopped — a duty toggle on the Base staff
+    /// screen, which spends no tick of its own.
+    ///
+    /// **None of the beat's clock-driven stages run here**: no needs, no
+    /// morale rung, no tantrum, no bay admission and no drift. Those advance
+    /// with the clock, and `run_tantrums` draws `GameRng`, so running them per
+    /// keypress would let a player re-roll the base by pressing `Space` with
+    /// the game paused. What is left — the wants, the unreachable and dry
+    /// drops, the matching, the diff and `LabourDemand` — draws nothing and
+    /// reads the markers those stages last wrote, so a second pass in the
+    /// same tick settles on the same answer.
+    pub(crate) fn reassign_base_labour(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let wanted = self.base_wants();
+        let staff = self.base_staff();
+        let amenities = self.amenities();
+        self.assign_base_labour(wanted, &staff, &amenities);
+    }
+
+    /// Every want the base holds this pass, in priority order — **the
+    /// priority is the position in this list**, and the matching fills it
+    /// front to back.
+    fn base_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         // **Build requests come first, ahead of every work order.** The
         // priority *is* the position in this list — the matching below never
         // un-seats an earlier want for a later one — so this is the whole of
@@ -981,42 +1053,19 @@ impl Game {
         for (site, kind) in self.dig_wants() {
             wanted.push((site, kind));
         }
-        let staff = self.base_staff();
-        // **Before the drift and before the assignment.** The drift is what
-        // walks an off-shift body to its amenity, so the marker has to be on
-        // it by then; and the assignment reads the same marker to decide who
-        // is on shift at all.
-        let amenities = self.amenities();
-        // Built here beside the amenities and for that type's reason: once
-        // per beat rather than once per program, and never cached — a cached
-        // copy would be a new `Resource` and another iteration-order shift.
-        let bays = self.repair_bays();
-        self.update_off_shift(&staff, &amenities);
-        // Beside the needs gate and before `on_shift` is read below: a body
-        // that downs tools this tick must not also be handed a job this
-        // tick.
-        self.update_disgruntled(&staff);
-        // Between the rung and the bay, and **that ordering is what gets the
-        // Repair Bay for free**: a blow landed this beat is answered by
-        // `admit_the_badly_hurt` below, through the one writer that already
-        // owns the decision to take a body off the line.
-        self.run_tantrums(&staff);
-        // The third gate on this line, and it sits with the other two for
-        // their reason: a body that breaks off for repairs this tick must
-        // not also be handed a job this tick. It inserts `Downed`, which
-        // every stage below — the `on_shift` filter, the drift's Bay arm,
-        // the diff's unconditional free — already knows what to do with.
-        self.admit_the_badly_hurt(&staff, &bays);
-        // **The walking pool is wider than the posting pool.** A pinned
-        // subject is not `Staff` — `base_staff` excludes it the moment
-        // `role_of` reads its `components::UnderStudy` marker — so it is
-        // absent from `staff` by construction and would otherwise fall out
-        // of the only pass that walks anything, standing exactly where it
-        // was pinned for the rest of the run. `drift_idle_staff` alone reads
-        // the wider list; every reader below this line reasons about who
-        // can be handed a *job*, which a subject never can.
-        let mut walkers = staff.clone();
-        walkers.extend(self.under_study_bodies());
+        wanted
+    }
+
+    /// Steps 3 to 5 of `schedule_base_labour`'s doc, over `wanted` and the
+    /// on-shift half of `staff`, recording `LabourDemand` on the way. Reads
+    /// the off-shift, grievance and `Downed` markers and writes none of them,
+    /// and draws no RNG — `reassign_base_labour`'s whole premise.
+    fn assign_base_labour(
+        &mut self,
+        mut wanted: Vec<(Entity, TaskKind)>,
+        staff: &[Entity],
+        amenities: &offshift::Amenities,
+    ) {
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
@@ -1026,15 +1075,8 @@ impl Game {
             // unwritten demand would read as no wants rather than no bodies.
             let unworked = self.unworked_by_duty(wanted.iter().copied());
             self.record_labour_demand(wanted.len(), 0, unworked);
-            // A subject pinned at a base with no other staff still has to
-            // walk to its pen — the case the wider `walkers` list exists
-            // for, and the reason this return does not skip the drift too.
-            if !walkers.is_empty() {
-                self.drift_idle_staff(&walkers, &amenities, &bays);
-            }
             return;
         }
-        self.drift_idle_staff(&walkers, &amenities, &bays);
         // **An off-shift program leaves the posting half of the scheduler,
         // not the drift half.** `drift_idle_staff` above keeps the whole list
         // — it is what walks a body to its amenity — while everything from
@@ -1049,7 +1091,7 @@ impl Game {
         let on_shift: Vec<Entity> = staff
             .iter()
             .copied()
-            .filter(|&w| self.is_on_shift(w, &amenities))
+            .filter(|&w| self.is_on_shift(w, amenities))
             .collect();
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
@@ -1337,7 +1379,7 @@ impl Game {
         // precisely the ones that filter just dropped.
         let a_posted_body_is_off_the_line = staff
             .iter()
-            .any(|&w| self.world.get::<Task>(w).is_some() && !self.is_on_shift(w, &amenities));
+            .any(|&w| self.world.get::<Task>(w).is_some() && !self.is_on_shift(w, amenities));
         // **And one whose column the player just unchecked**, for the same
         // reason: a base whose only instruction is a standing job would
         // otherwise never read the table at all. Read off `pool`, so a body
@@ -1372,8 +1414,8 @@ impl Game {
         // it standing at a machine would post a body the assignment never
         // named — and the `Carrying` escape it deliberately does not get
         // lives in that function rather than being restated here.
-        for &worker in &staff {
-            if !self.is_on_shift(worker, &amenities) {
+        for &worker in staff {
+            if !self.is_on_shift(worker, amenities) {
                 self.world
                     .entity_mut(worker)
                     .remove::<Task>()

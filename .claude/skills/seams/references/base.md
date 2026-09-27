@@ -731,7 +731,9 @@
   that merely reads the two fields stays green. Cached rather than derived
   because the derivation is `&mut self` and logs, so a screen cannot call
   it. The `staff.is_empty()` early return writes it too, and the header says
-  **nothing** at zero.
+  **nothing** at zero. A duty toggle writes it between ticks through
+  `reassign_base_labour` — the posting half alone, because the beat's other
+  half rolls tantrums and a paused keypress must not re-roll one.
 - **A program's role is derived, and there is no "owned but idle" state.**
   `Game::program_role` over `ProgramRole` — disjoint and exhaustive, so a
   program you own that is not fighting beside you, not held as your weapon

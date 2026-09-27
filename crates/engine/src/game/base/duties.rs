@@ -148,11 +148,9 @@ impl Game {
     }
 
     /// The toggle itself, shared by `set_duty` and `set_duty_column` so
-    /// neither restates it — and so `set_duty_column` reschedules once for
-    /// the whole column rather than once per row, `next_staff_rank`'s
-    /// reason one door over: `schedule_base_labour` can roll a tantrum, and
-    /// a roll per row would spend `GameRng` in proportion to roster size for
-    /// one keypress.
+    /// neither restates it — and so `set_duty_column` reassigns once for the
+    /// whole column rather than once per row, a matching per row being
+    /// wasted work that the last one overwrites.
     fn toggle_duty(&mut self, entity: Entity, duty: Duty, on: bool) {
         if let Some(mut duties) = self.world.get_mut::<Duties>(entity) {
             if on {
@@ -180,21 +178,23 @@ impl Game {
     /// component must see every job admitted, not a component that happens
     /// to be empty.
     ///
-    /// **Ends with a reschedule**, `cancel_build_request`'s own habit after
-    /// a change the scheduler cares about: without it the table's `N!`
-    /// counts and header are the *previous* pass's figures until the next
-    /// real tick, since `Mode::BaseStaff` spends none of its own.
+    /// **Ends with a reassignment**, `cancel_build_request`'s habit after a
+    /// change the scheduler cares about: without it the table's `N!` counts
+    /// and header are the *previous* pass's figures until the next real
+    /// tick, since `Mode::BaseStaff` spends none of its own. The posting half
+    /// alone (`reassign_base_labour`), never the whole beat — the beat rolls
+    /// tantrums, and a keypress with the clock stopped must not re-roll one.
     pub fn set_duty(&mut self, entity: Entity, duty: Duty, on: bool) -> Result<(), String> {
         self.require_owned_program(entity)?;
         self.toggle_duty(entity, duty, on);
-        self.schedule_base_labour();
+        self.reassign_base_labour();
         Ok(())
     }
 
     /// Checks or unchecks one column for every program the player owns —
     /// the `[A]` key's whole-column toggle. Never refuses: there is no
     /// single entity to be the wrong one, since it reaches every owned
-    /// program through `toggle_duty` in one pass, then reschedules once.
+    /// program through `toggle_duty` in one pass, then reassigns once.
     pub fn set_duty_column(&mut self, duty: Duty, on: bool) -> Result<(), String> {
         let entities: Vec<Entity> = self
             .owned_program_views()
@@ -204,7 +204,7 @@ impl Game {
         for entity in entities {
             self.toggle_duty(entity, duty, on);
         }
-        self.schedule_base_labour();
+        self.reassign_base_labour();
         Ok(())
     }
 

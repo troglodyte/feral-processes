@@ -36,14 +36,15 @@ impl Game {
             .is_none_or(|f| !f.denied.contains(item))
     }
 
-    /// Denies or allows one item at one Depot.
+    /// Denies or allows one row's items at one Depot — a single item, or
+    /// every member of a group row (`filter_group`).
     ///
     /// The component is inserted lazily on the first denial and **removed
     /// again** when the last one is lifted, so "this Depot takes anything"
     /// keeps exactly one representation — the same invariant
     /// `StandingJob`'s absence keeps, and what lets the save encode the
     /// common case as an empty list.
-    pub fn set_depot_filter(&mut self, depot: Entity, item: &ItemId, allowed: bool) {
+    pub fn set_depot_filter(&mut self, depot: Entity, items: &[ItemId], allowed: bool) {
         if !self.is_depot(depot) {
             return;
         }
@@ -53,10 +54,12 @@ impl Game {
             .cloned()
             .unwrap_or_default()
             .denied;
-        if allowed {
-            denied.remove(item);
-        } else {
-            denied.insert(item.clone());
+        for item in items {
+            if allowed {
+                denied.remove(item);
+            } else {
+                denied.insert(item.clone());
+            }
         }
         self.write_depot_filter(depot, denied);
     }
@@ -134,8 +137,11 @@ impl Game {
         self.adjacent_depots()
     }
 
-    /// One Depot's filter as the screen draws it — the header line and a
-    /// row per item.
+    /// One Depot's filter as the screen draws it — the header line, then a
+    /// row per `filter_group` family, then a row per ungrouped item.
+    ///
+    /// A group row reads allowed only when every member is, so a family
+    /// with any member refused shows as refused and one Right lifts it.
     ///
     /// `None` when the entity is not a standing Depot, which is what the
     /// screen reads to close itself after the building it was editing has
@@ -145,16 +151,32 @@ impl Game {
             return None;
         }
         let stock = self.world.get::<Stock>(depot);
-        let rows = self
-            .filterable_items()
+        let held = |item: &ItemId| stock.and_then(|s| s.output.get(item).copied()).unwrap_or(0);
+        let db = self.world.resource::<ItemDb>();
+        let mut groups: Vec<(&'static str, Vec<ItemId>)> =
+            filter_groups().map(|name| (name, Vec::new())).into();
+        let mut singles = Vec::new();
+        for item in self.filterable_items() {
+            match db.get(item.as_str()).and_then(filter_group) {
+                Some(name) => groups
+                    .iter_mut()
+                    .find(|(g, _)| *g == name)
+                    .expect("filter_group names only filter_groups")
+                    .1
+                    .push(item),
+                None => singles.push((self.item_name(&item).to_string(), vec![item])),
+            }
+        }
+        let rows = groups
             .into_iter()
-            .map(|item| DepotFilterRow {
-                name: self.item_name(&item).to_string(),
-                held: stock
-                    .and_then(|s| s.output.get(&item).copied())
-                    .unwrap_or(0),
-                allowed: self.depot_accepts(depot, &item),
-                item,
+            .filter(|(_, items)| !items.is_empty())
+            .map(|(name, items)| (name.to_string(), items))
+            .chain(singles)
+            .map(|(name, items)| DepotFilterRow {
+                name,
+                held: items.iter().map(held).sum(),
+                allowed: items.iter().all(|i| self.depot_accepts(depot, i)),
+                items,
             })
             .collect();
         let pos = self.world.get::<Position>(depot)?;
@@ -163,5 +185,38 @@ impl Game {
             room: stock.map(|s| s.output_room()).unwrap_or(0),
             rows,
         })
+    }
+}
+
+/// The family the synthesised `etched_*` disks fold into.
+const ETCHED_DISKS: &str = "Etched Disks";
+
+/// The families the filter screen folds into one row each, in the order
+/// they head the list. A player sorting a shelf means "gear" or "disks",
+/// never one weapon of forty, and the etched family alone is a disk per
+/// routine in the catalogue. The gear rows take `ItemCategory::heading`,
+/// the wagon's own words for the same runs.
+fn filter_groups() -> [&'static str; 4] {
+    [
+        ItemCategory::Weapon.heading(),
+        ItemCategory::Armor.heading(),
+        ItemCategory::Module.heading(),
+        ETCHED_DISKS,
+    ]
+}
+
+/// Which `filter_groups` row an item folds into, if any. Derived, never
+/// authored, so a modded weapon or a routine's synthesised disk joins its
+/// row without a field saying so. The disk test comes first: it is the id
+/// that marks the family, whatever the def's category reads.
+fn filter_group(def: &ItemDef) -> Option<&'static str> {
+    if def.id.etched_ability().is_some() {
+        return Some(ETCHED_DISKS);
+    }
+    match def.category() {
+        c @ (ItemCategory::Weapon | ItemCategory::Armor | ItemCategory::Module) => {
+            Some(c.heading())
+        }
+        _ => None,
     }
 }

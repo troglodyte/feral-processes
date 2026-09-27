@@ -1028,7 +1028,7 @@ fn the_message_does_not_claim_every_depot_is_full_when_one_merely_refuses_the_it
     let depot_a = alert_structure_at(&mut game, bx + 4, by);
     place_now(&mut game, "depot", -4, 0).unwrap();
     let depot_b = alert_structure_at(&mut game, bx - 4, by);
-    game.set_depot_filter(depot_b, &ItemId::from(ids::CORE_FRAGMENT), false);
+    game.set_depot_filter(depot_b, &[ItemId::from(ids::CORE_FRAGMENT)], false);
 
     let worker = spawn_tamed(&mut game, 500, 3);
     game.assign_cronjob(worker, node).unwrap();

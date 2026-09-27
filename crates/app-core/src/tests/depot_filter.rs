@@ -26,7 +26,7 @@ fn row_of(app: &App, id: &str) -> usize {
         .view
         .rows
         .iter()
-        .position(|r| r.item == item(id))
+        .position(|r| r.items == [item(id)])
         .unwrap_or_else(|| panic!("no row for {id}"))
 }
 

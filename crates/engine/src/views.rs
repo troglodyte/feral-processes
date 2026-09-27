@@ -3314,16 +3314,18 @@ pub struct DepotFilterView {
     pub rows: Vec<DepotFilterRow>,
 }
 
-/// One item's standing at one Depot.
+/// One row's standing at one Depot — a single item, or a whole family
+/// (`items` longer than one) that is denied and allowed together.
 ///
-/// `held` is what that Depot is holding of it right now, drawn because a
+/// `held` is what that Depot is holding of it right now, summed over a
+/// family, drawn because a
 /// filter says only what may come **in**: denying something already on the
 /// shelf leaves it there, and a row reading "denied" beside a count of
 /// twelve is the screen telling the truth rather than contradicting
 /// itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DepotFilterRow {
-    pub item: ItemId,
+    pub items: Vec<ItemId>,
     pub name: String,
     pub held: u32,
     pub allowed: bool,

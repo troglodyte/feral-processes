@@ -99,8 +99,9 @@ The rest of what a base does:
   Enter to take exactly what you have set; [A] fills every row to its maximum, so taking the lot is
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
-- From that window, [F] opens what a Depot beside you will accept. Every item in the game gets a row;
-  Left denies it and Right allows it, [A] and [D] write the whole list at once, and Tab walks to the
+- From that window, [F] opens what a Depot beside you will accept. Weapons, armor, modules and
+  etched disks each get one row for the whole family, and every other item a row of its own; Left
+  denies a row and Right allows it, [A] and [D] write the whole list at once, and Tab walks to the
   next Depot when there is more than one touching you. A Depot refuses nothing until you say so.
   What is denied simply never lands there — your crew carries it to the next Depot instead, and back
   to the machine it came from if none will take it, so two Depots with opposite lists sort the base

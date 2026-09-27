@@ -1413,7 +1413,7 @@ fn a_worker_walks_past_a_depot_that_refuses_its_load() {
     let node = deploy(&mut game, "mining_node", 0, 1);
     let far = deploy(&mut game, "depot", 4, 1);
     let near = deploy(&mut game, "depot", 2, 1);
-    game.set_depot_filter(near, &ItemId::from(ids::CORE_FRAGMENT), false);
+    game.set_depot_filter(near, &[ItemId::from(ids::CORE_FRAGMENT)], false);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
@@ -1443,7 +1443,7 @@ fn a_depot_that_refuses_the_load_is_no_reason_to_set_off() {
     let mut game = base(13);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let shelf = deploy(&mut game, "depot", 4, 0);
-    game.set_depot_filter(shelf, &ItemId::from(ids::CORE_FRAGMENT), false);
+    game.set_depot_filter(shelf, &[ItemId::from(ids::CORE_FRAGMENT)], false);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
@@ -1490,7 +1490,7 @@ fn a_load_refused_mid_walk_goes_back_and_re_clogs_the_machine() {
     });
     assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
 
-    game.set_depot_filter(shelf, &ItemId::from(ids::CORE_FRAGMENT), false);
+    game.set_depot_filter(shelf, &[ItemId::from(ids::CORE_FRAGMENT)], false);
 
     tick_until(&mut game, 300, |g| {
         g.world.get::<Carrying>(worker).is_none()

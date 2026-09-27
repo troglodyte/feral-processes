@@ -136,15 +136,15 @@ impl App {
     }
 
     fn set_selected_depot_filter(&mut self, depot: Entity, allowed: bool) {
-        let item = self
+        let items = self
             .depot_filter
             .as_ref()
             .and_then(|s| s.view.rows.get(self.menu_selected))
-            .map(|row| row.item.clone());
-        let (Some(item), Some(game)) = (item, &mut self.game) else {
+            .map(|row| row.items.clone());
+        let (Some(items), Some(game)) = (items, &mut self.game) else {
             return;
         };
-        game.set_depot_filter(depot, &item, allowed);
+        game.set_depot_filter(depot, &items, allowed);
         self.refresh_depot_filter();
     }
 

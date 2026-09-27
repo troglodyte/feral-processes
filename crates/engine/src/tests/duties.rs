@@ -339,3 +339,158 @@ fn a_save_with_neither_field_loads_all_on_and_ranked() {
         "an unranked program should be assigned one past the highest rank the file did carry"
     );
 }
+
+// ---------------------------------------------------------------------
+// Phase 2: the scheduler obeys the table
+// ---------------------------------------------------------------------
+
+/// Where `worker` is posted, as `(target, kind)`, or `None` if it is idle.
+fn post_of(game: &Game, worker: Entity) -> Option<(Entity, TaskKind)> {
+    game.world.get::<Task>(worker).map(|t| (t.target, t.kind))
+}
+
+/// `n` programs on the base staff, in table order.
+fn hire(game: &mut Game, n: usize) -> Vec<Entity> {
+    (0..n).map(|_| spawn_tamed(game, 500, 3)).collect()
+}
+
+fn put_output(game: &mut Game, machine: Entity, item: &str, qty: u32) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    *stock.output.entry(ItemId::from(item)).or_default() += qty;
+}
+
+/// Every want kind the scheduler has, at once: a build request (prepended),
+/// a burner short of fuel, a three-deep order, a standing job and two dig
+/// marks (appended last). Eight wants.
+struct MixedBase {
+    game: Game,
+    site: Entity,
+    burner: Entity,
+    mine: Entity,
+    lathe: Entity,
+    press: Entity,
+    node: Entity,
+    digs: Vec<Entity>,
+}
+
+fn mixed_base(seed: u32) -> MixedBase {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    let press = spawn_machine_at(&mut game, "disk_press", 4, 0);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, ids::BLANK_SUBSTRATE, 6);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::ROUTINE_DISK), 30))
+        .unwrap();
+    let node = spawn_machine_at(&mut game, "research_node", 2, 3);
+    game.set_standing_job(node, true, false).unwrap();
+    let burner = spawn_machine_at(&mut game, "recharger_node", -2, -2);
+    let store = spawn_machine_at(&mut game, "depot", -3, 2);
+    put_output(&mut game, store, "power_cell", 5);
+    file_build(&mut game, "depot", -2, 2).unwrap();
+    let site = game.build_site_at(-2, 2).expect("a request was filed");
+    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    game.toggle_mark_box((0, r + 1), (1, r + 1), None);
+    let mut digs: Vec<Entity> = [(0, r + 1), (1, r + 1)]
+        .into_iter()
+        .map(|(x, y)| game.dig_site_at(x, y).expect("a marked cell has a site"))
+        .collect();
+    digs.sort_by_key(|&d| {
+        let p = game.world.get::<Position>(d).unwrap();
+        (p.x, p.y)
+    });
+    MixedBase {
+        game,
+        site,
+        burner,
+        mine,
+        lathe,
+        press,
+        node,
+        digs,
+    }
+}
+
+/// **The equivalence gate**: with every column checked, the matching hands
+/// out exactly what the truncate-and-fill it replaced handed out — seven
+/// bodies against eight wants, from idle and then again from a base where
+/// most bodies already hold a post. Written against the old scheduler first.
+#[test]
+fn an_all_checked_mixed_base_schedules_as_it_did_before_the_matching() {
+    let MixedBase {
+        mut game,
+        site,
+        burner,
+        mine,
+        lathe,
+        press,
+        node,
+        digs,
+    } = mixed_base(20261001);
+    let staff = hire(&mut game, 7);
+    assert_eq!(
+        game.base_staff(),
+        staff,
+        "precondition: table order is hire order"
+    );
+
+    game.schedule_base_labour();
+
+    use TaskKind::*;
+    let posts: Vec<_> = staff.iter().map(|&w| post_of(&game, w)).collect();
+    assert_eq!(
+        posts,
+        vec![
+            Some((site, Construct)),
+            Some((burner, GatherResource)),
+            Some((mine, GatherResource)),
+            Some((lathe, GatherResource)),
+            Some((press, GatherResource)),
+            Some((node, GatherResource)),
+            Some((digs[0], Excavate)),
+        ],
+        "wants in priority order, bodies in table order; the second dig mark is cut"
+    );
+
+    // The build is withdrawn — the cancel reschedules on the spot, so the
+    // builder takes the second dig mark — and then the Lathe's body walks
+    // off by hand: one body free, one want open, six that must not move.
+    game.cancel_build_request(site).unwrap();
+    game.world.entity_mut(staff[3]).remove::<Task>();
+    game.schedule_base_labour();
+
+    let posts: Vec<_> = staff.iter().map(|&w| post_of(&game, w)).collect();
+    assert_eq!(
+        posts,
+        vec![
+            Some((digs[1], Excavate)),
+            Some((burner, GatherResource)),
+            Some((mine, GatherResource)),
+            Some((lathe, GatherResource)),
+            Some((press, GatherResource)),
+            Some((node, GatherResource)),
+            Some((digs[0], Excavate)),
+        ],
+        "every holder keeps its post; the freed body fills the open want"
+    );
+
+    // Two bodies stood down by hand: the higher want (the burner) goes to
+    // the higher row (the dig mark's old body), whoever held it last.
+    // Both set down in open floor, so each can walk to either post and the
+    // question is table order alone.
+    for (w, x) in [(staff[0], -1), (staff[1], 1)] {
+        game.world.entity_mut(w).remove::<Task>();
+        *game.world.get_mut::<Position>(w).unwrap() = Position { x, y: 1 };
+    }
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, staff[0]), Some((burner, GatherResource)));
+    assert_eq!(post_of(&game, staff[1]), Some((digs[1], Excavate)));
+    for (i, &w) in staff.iter().enumerate().skip(2) {
+        assert_eq!(post_of(&game, w), posts[i], "row {i} must not move");
+    }
+}

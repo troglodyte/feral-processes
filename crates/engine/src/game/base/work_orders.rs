@@ -1407,6 +1407,16 @@ impl Game {
         // went unstaffed.
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        // **The matching's edge and the posting's own reach question can
+        // disagree** — `crew_reach`'s box is centred on the body rather
+        // than the face, so it only agrees with `can_walk_to_post` up to a
+        // base radius of `HAUL_WALK_MAX_TILES / 2`. Past that, a want the
+        // matching seated a body on can still be refused right here, and
+        // that want was already dropped out of `unworked` above because the
+        // matching *did* find it a body. Tallied separately and folded in
+        // after the loop, so a restriction past that radius reads as work
+        // undone rather than as work the header silently claims is covered.
+        let mut walk_refused: Vec<(Entity, TaskKind)> = Vec::new();
         for (want, body) in by_want.iter().enumerate() {
             let Some(body) = *body else {
                 continue;
@@ -1424,6 +1434,7 @@ impl Game {
             if matches!(kind, TaskKind::GatherResource | TaskKind::Excavate)
                 && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
+                walk_refused.push((post, kind));
                 continue;
             }
             match kind {
@@ -1431,6 +1442,13 @@ impl Game {
                 TaskKind::Guard => self.post_guard(worker, post),
                 TaskKind::Excavate => self.post_digger(worker, post),
                 TaskKind::Construct => self.post_builder(worker, post),
+            }
+        }
+        if !walk_refused.is_empty() {
+            let extra = self.unworked_by_duty(walk_refused.into_iter());
+            let mut demand = self.world.resource_mut::<resources::LabourDemand>();
+            for (duty, count) in extra {
+                *demand.unworked.entry(duty).or_insert(0) += count;
             }
         }
     }

@@ -435,6 +435,15 @@ impl Game {
             }
             self.bench_or_dissolve(program);
         }
+        // After the dead loop, so a fallen reinforcement has already been
+        // benched (and taken out of `Party`) by the ordinary rule. Every
+        // survivor goes home the same way, living or not and whichever of
+        // the five endings this was: out of `Party`, marker stripped, so its
+        // role reads `Staff` again and the scheduler reposts it. Its
+        // base-space `Position` was never written, so it resumes where it
+        // stood. Removal is safe here where it is forbidden mid-fight —
+        // nothing indexes `Party` by slot once a fight is over.
+        self.send_reinforcements_home();
         // A Stack pack that outlived the fight — the party jacked out —
         // has nowhere to go: it stands at surface coordinates around the
         // link mouth, and would be waiting there when they climb back out.

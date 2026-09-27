@@ -172,4 +172,23 @@ impl Game {
         self.log(format!("{name} gets its bearings."));
         self.world.resource_mut::<TacticalBattle>().end_turn();
     }
+
+    /// Takes every `Reinforcement` holder out of `Party` and strips the
+    /// marker — `finish_fight`'s last word on a call, so the party is back
+    /// to its size and the trooper back to base staff.
+    pub(crate) fn send_reinforcements_home(&mut self) {
+        let troopers: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, bevy_ecs::prelude::With<Reinforcement>>();
+            query.iter(&self.world).collect()
+        };
+        for trooper in troopers {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|&e| e != trooper);
+            self.world.entity_mut(trooper).remove::<Reinforcement>();
+        }
+    }
 }

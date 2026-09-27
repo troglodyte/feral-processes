@@ -376,3 +376,90 @@ fn a_called_trooper_is_unposted() {
     assert!(call(&mut game));
     assert!(game.world.get::<Task>(trooper).is_none());
 }
+
+// ---------------------------------------------------------------------------
+// Teardown — `finish_fight` sends every reinforcement home.
+// ---------------------------------------------------------------------------
+
+/// Ends the fight by walking the player off the western edge — a jack-out,
+/// one of the five endings `finish_fight` funnels.
+fn jack_out(game: &mut Game) {
+    let player = game.player_entity();
+    assert!(wait_for_turn(game, player));
+    let edge = super::tactical::western_edge(game);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(player, edge)
+    );
+    assert_eq!(
+        game.tactical_step((-1, 0)),
+        crate::tactical::turn::StepOutcome::Departed
+    );
+    assert!(game.world.get_resource::<TacticalBattle>().is_none());
+}
+
+#[test]
+fn a_surviving_trooper_goes_back_to_base_staff() {
+    let mut game = Game::new(4411, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    terminal_at(&mut game, 10, 10);
+    let trooper = trooper_at(&mut game, 11, 10, 0);
+    let member = spawn_tamed(&mut game, 60, 3);
+    game.world.resource_mut::<Party>().0.push(member);
+    fight(&mut game);
+    assert!(call(&mut game));
+    jack_out(&mut game);
+
+    assert_eq!(game.world.resource::<Party>().0, vec![member]);
+    assert!(game.world.get::<Reinforcement>(trooper).is_none());
+    assert_eq!(game.program_role(trooper), Some(ProgramRole::Staff));
+    assert!(game.drop_troopers().contains(&trooper), "still a trooper");
+    assert_eq!(
+        game.world.get::<Position>(trooper).map(|p| (p.x, p.y)),
+        Some((11, 10)),
+        "a battle map never writes Position, so it resumes where it stood"
+    );
+}
+
+/// A reinforcement that falls is benched on Forgiving like any companion,
+/// and still leaves the party.
+#[test]
+fn a_fallen_trooper_is_benched_on_forgiving() {
+    let mut game = Game::new(4412, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    terminal_at(&mut game, 10, 10);
+    let trooper = trooper_at(&mut game, 11, 10, 0);
+    fight(&mut game);
+    assert!(call(&mut game));
+    game.world.get_mut::<Stats>(trooper).unwrap().hp = 0;
+    jack_out(&mut game);
+
+    assert!(game.world.resource::<Party>().0.is_empty());
+    assert!(
+        game.world
+            .get::<crate::components::Downed>(trooper)
+            .is_some()
+    );
+    assert!(game.world.get::<Reinforcement>(trooper).is_none());
+}
+
+/// XP a reinforcement earns is kept — it rides in `Party`, so the party's
+/// share of every kill reaches it, and going home resets nothing. Paid
+/// through `award_party_xp` directly: a real kill at these levels is worth
+/// one point to the player and so zero to the party after the divisor.
+#[test]
+fn a_trooper_keeps_the_xp_it_earned() {
+    let mut game = Game::new(4413, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    terminal_at(&mut game, 10, 10);
+    let trooper = trooper_at(&mut game, 11, 10, 0);
+    fight(&mut game);
+    let before = game.world.get::<Experience>(trooper).unwrap().xp;
+    assert!(call(&mut game));
+    game.award_party_xp(10);
+    let earned = game.world.get::<Experience>(trooper).unwrap().xp;
+    assert!(
+        earned > before,
+        "the party's share never reached the trooper"
+    );
+    jack_out(&mut game);
+    assert_eq!(game.world.get::<Experience>(trooper).unwrap().xp, earned);
+}

@@ -494,3 +494,263 @@ fn an_all_checked_mixed_base_schedules_as_it_did_before_the_matching() {
         assert_eq!(post_of(&game, w), posts[i], "row {i} must not move");
     }
 }
+
+fn restrict(game: &mut Game, worker: Entity, off: &[Duty]) {
+    game.world.entity_mut(worker).insert(Duties {
+        off: off.iter().copied().collect(),
+    });
+}
+
+/// A base with a build request and one dig mark, both workable: the two
+/// wants of the spec's stranding case, build first.
+fn build_and_dig(seed: u32) -> (Game, Entity, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    file_build(&mut game, "depot", -2, 2).unwrap();
+    let site = game.build_site_at(-2, 2).expect("a request was filed");
+    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    game.toggle_mark_box((0, r + 1), (0, r + 1), None);
+    let dig = game
+        .dig_site_at(0, r + 1)
+        .expect("a marked cell has a site");
+    (game, site, dig)
+}
+
+/// The spec's stranding case: A (every column, first in the table) and B
+/// (Build only) against `[Build, Dig]`. A greedy hand-out gives A the build
+/// and leaves the dig with nobody who may take it; the matching seats B on
+/// the build and A on the dig.
+#[test]
+fn a_restricted_body_does_not_strand_the_want_behind_it() {
+    let (mut game, site, dig) = build_and_dig(20261002);
+    let staff = hire(&mut game, 2);
+    let (a, b) = (staff[0], staff[1]);
+    restrict(&mut game, b, &[Duty::Operate, Duty::Guard, Duty::Dig]);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, b), Some((site, TaskKind::Construct)));
+    assert_eq!(post_of(&game, a), Some((dig, TaskKind::Excavate)));
+    assert!(game.labour_demand().unworked.is_empty());
+}
+
+/// A standing Research Node job and one body on it — a base with no work
+/// order at all, so the pass takes the empty-queue early return unless
+/// something forces it through.
+fn a_quiet_base_with_one_post(seed: u32) -> (Game, Entity, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 0);
+    game.set_standing_job(node, true, false).unwrap();
+    let worker = hire(&mut game, 1)[0];
+    game.schedule_base_labour();
+    assert_eq!(
+        post_of(&game, worker),
+        Some((node, TaskKind::GatherResource)),
+        "precondition: the one body is on the node"
+    );
+    (game, node, worker)
+}
+
+/// Unchecking a column takes the body off at the next pass — on the
+/// empty-queue path too, which otherwise never reads the table at all — and
+/// the want it leaves is counted under that column.
+#[test]
+fn unchecking_a_column_frees_the_body_even_on_an_empty_queue() {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(20261003);
+    assert!(
+        game.work_orders().is_empty(),
+        "precondition: nothing but the standing job"
+    );
+
+    restrict(&mut game, worker, &[Duty::Operate]);
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, worker), None);
+    let demand = game.labour_demand();
+    assert_eq!(demand.unworked.get(&Duty::Operate), Some(&1));
+    assert_eq!(demand.unworked.len(), 1, "{:?}", demand.unworked);
+
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, worker), None, "and it is not posted back");
+}
+
+/// Checking a *different* column changes nothing: the pass still takes its
+/// quiet early return and the body keeps its post and its progress.
+#[test]
+fn unchecking_an_unrelated_column_leaves_the_body_where_it_is() {
+    let (mut game, node, worker) = a_quiet_base_with_one_post(20261004);
+    game.world.get_mut::<Task>(worker).unwrap().progress = 3;
+
+    restrict(&mut game, worker, &[Duty::Dig, Duty::Build]);
+    game.schedule_base_labour();
+
+    let task = game.world.get::<Task>(worker).unwrap();
+    assert_eq!((task.target, task.progress), (node, 3));
+}
+
+/// Table order is the pick order: one want, two idle bodies — the higher
+/// row gets it, and swapping the two ranks swaps the answer.
+#[test]
+fn table_order_decides_which_idle_body_is_posted() {
+    for swap in [false, true] {
+        let mut game = Game::new(20261005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        place_home(&mut game);
+        let node = spawn_machine_at(&mut game, "research_node", 2, 0);
+        game.set_standing_job(node, true, false).unwrap();
+        let staff = hire(&mut game, 2);
+        if swap {
+            let (r0, r1) = (
+                *game.world.get::<StaffRank>(staff[0]).unwrap(),
+                *game.world.get::<StaffRank>(staff[1]).unwrap(),
+            );
+            game.world.entity_mut(staff[0]).insert(r1);
+            game.world.entity_mut(staff[1]).insert(r0);
+        }
+        let first = game.base_staff()[0];
+
+        game.schedule_base_labour();
+
+        assert_eq!(
+            post_of(&game, first).map(|p| p.0),
+            Some(node),
+            "swap {swap}"
+        );
+        let other = if first == staff[0] {
+            staff[1]
+        } else {
+            staff[0]
+        };
+        assert_eq!(post_of(&game, other), None, "swap {swap}");
+        assert_eq!(first, if swap { staff[1] } else { staff[0] });
+    }
+}
+
+/// Stability: the body at the **top** of the table, already holding the
+/// lower-priority want, keeps it and the idle body below takes the higher
+/// want. A matching that simply walked the table would hand the build to
+/// the top row and move it off the dig — the same two wants worked, and a
+/// cronjob restarted from zero for nothing.
+#[test]
+fn a_posted_body_is_not_moved_when_moving_gains_nothing() {
+    let (mut game, site, dig) = build_and_dig(20261006);
+    let staff = hire(&mut game, 2);
+    restrict(
+        &mut game,
+        staff[0],
+        &[Duty::Operate, Duty::Guard, Duty::Build],
+    );
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, staff[0]), Some((dig, TaskKind::Excavate)));
+    assert_eq!(post_of(&game, staff[1]), Some((site, TaskKind::Construct)));
+    game.world.get_mut::<Task>(staff[0]).unwrap().progress = 2;
+
+    // Every column back on for the digger, and the builder stood down by
+    // hand: either body could now take either want.
+    game.world.entity_mut(staff[0]).remove::<Duties>();
+    game.world.entity_mut(staff[1]).remove::<Task>();
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, staff[0]), Some((dig, TaskKind::Excavate)));
+    assert_eq!(game.world.get::<Task>(staff[0]).unwrap().progress, 2);
+    assert_eq!(post_of(&game, staff[1]), Some((site, TaskKind::Construct)));
+}
+
+/// The one forced keep that does not yield to the table: a body holding a
+/// load keeps its post with its column unchecked, because freeing it would
+/// destroy the load — and is freed on the first pass after it sets it down.
+#[test]
+fn a_carrying_body_delivers_before_its_unchecked_column_frees_it() {
+    let (mut game, node, worker) = a_quiet_base_with_one_post(20261007);
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 2,
+    });
+    restrict(&mut game, worker, &[Duty::Operate]);
+
+    game.schedule_base_labour();
+    assert_eq!(
+        post_of(&game, worker),
+        Some((node, TaskKind::GatherResource)),
+        "a loaded body is never freed"
+    );
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "nor is its load"
+    );
+
+    game.world.entity_mut(worker).remove::<Carrying>();
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, worker), None, "delivered, it is freed");
+}
+
+/// The other forced keep — a body on a clogged machine while a Depot stands
+/// — yields to the table: an unchecked Operate column frees it where an
+/// all-checked body is kept.
+#[test]
+fn a_clogged_machines_keep_respects_the_table() {
+    for restricted in [false, true] {
+        let mut game = Game::new(20261008, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        place_home(&mut game);
+        let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        spawn_machine_at(&mut game, "depot", -2, 2);
+        game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5000))
+            .unwrap();
+        let worker = hire(&mut game, 1)[0];
+        game.schedule_base_labour();
+        assert_eq!(
+            post_of(&game, worker).map(|p| p.0),
+            Some(mine),
+            "precondition"
+        );
+        {
+            let mut stock = game.world.get_mut::<Stock>(mine).unwrap();
+            let room = stock.output_room();
+            *stock
+                .output
+                .entry(ItemId::from(ids::CORE_FRAGMENT))
+                .or_default() += room;
+        }
+        if restricted {
+            restrict(&mut game, worker, &[Duty::Operate]);
+        }
+
+        game.schedule_base_labour();
+
+        assert_eq!(
+            post_of(&game, worker).is_some(),
+            !restricted,
+            "restricted {restricted}"
+        );
+    }
+}
+
+/// Duties narrow which jobs an *on-shift* body may take and nothing else: a
+/// downed body is freed and left out of the count exactly as it is with
+/// every column checked, and its restriction is never read as a want it
+/// could not take.
+#[test]
+fn a_downed_body_is_untouched_by_its_duties() {
+    for restricted in [false, true] {
+        let (mut game, _node, worker) = a_quiet_base_with_one_post(20261009);
+        if restricted {
+            restrict(&mut game, worker, &Duty::ALL);
+        }
+        game.world
+            .entity_mut(worker)
+            .insert(crate::components::Downed);
+
+        game.schedule_base_labour();
+
+        assert_eq!(post_of(&game, worker), None, "restricted {restricted}");
+        let demand = game.labour_demand();
+        assert_eq!(demand.staff, 0, "restricted {restricted}");
+        assert_eq!(demand.unworked.get(&Duty::Operate), Some(&1));
+    }
+}

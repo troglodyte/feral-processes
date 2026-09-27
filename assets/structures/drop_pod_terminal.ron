@@ -1,0 +1,13 @@
+(
+    id: "drop_pod_terminal",
+    name: "Drop Pod Terminal",
+    description: "Fires one of your programs into a fight you're losing. The crew reloads it after.",
+    glyph: 'V',
+    color: Cyan,
+    build_cost: [("core_fragment", 20), ("blank_substrate", 4)],
+    work: None,
+    footprint: 2,
+    drop_pod: Some((
+        recharge_cost: [("core_fragment", 2), ("cache_grain", 1)],
+    )),
+)

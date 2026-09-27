@@ -950,6 +950,11 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub staff_rank: Option<u32>,
+    /// Whether this program carries `components::DropTrooper`. Absent in
+    /// the file reads `false` — the flag is opt-in — so it earns no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub drop_trooper: bool,
 }
 
 /// `serde`'s default for an individual roll — the neutral 1.0, because a
@@ -2314,6 +2319,7 @@ mod tests {
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         }
     }
 

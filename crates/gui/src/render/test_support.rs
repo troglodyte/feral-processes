@@ -184,6 +184,7 @@ pub(super) fn game_with_a_rare_party_companion(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
@@ -265,6 +266,7 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     };
     for &(wielded, name) in programs {
         data.creatures.push(program(wielded, name));

@@ -5932,6 +5932,7 @@ mod tests {
                 stolen_from: None,
                 off_duties: Vec::new(),
                 staff_rank: None,
+                drop_trooper: false,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         let mut game = Game::load(&path, &test_assets()).unwrap();

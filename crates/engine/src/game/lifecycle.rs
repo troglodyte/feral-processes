@@ -2163,6 +2163,9 @@ impl Game {
             if !off.is_empty() {
                 entity.insert(crate::components::Duties { off });
             }
+            if c.drop_trooper {
+                entity.insert(crate::components::DropTrooper);
+            }
             match c.staff_rank {
                 Some(rank) => {
                     entity.insert(crate::components::StaffRank(rank));
@@ -2565,6 +2568,11 @@ impl Game {
                 .world
                 .get::<crate::components::StaffRank>(e)
                 .map(|r| r.0),
+
+            drop_trooper: self
+                .world
+                .get::<crate::components::DropTrooper>(e)
+                .is_some(),
         })
     }
 

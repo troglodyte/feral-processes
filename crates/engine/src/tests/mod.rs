@@ -38,6 +38,7 @@ mod depot_filter;
 mod descriptions;
 mod difficulty;
 mod disposition;
+mod drop_pods;
 mod duties;
 mod easter_eggs;
 mod environment;

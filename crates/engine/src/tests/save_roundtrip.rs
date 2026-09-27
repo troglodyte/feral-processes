@@ -398,6 +398,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         stolen_from: _,
         off_duties: _,
         staff_rank: _,
+        drop_trooper: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");

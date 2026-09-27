@@ -434,6 +434,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -507,6 +508,7 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     }
 }
 
@@ -622,6 +624,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -913,6 +916,7 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1016,6 +1020,7 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1168,6 +1173,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1307,6 +1313,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1431,6 +1438,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1555,6 +1563,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1668,6 +1677,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -2024,6 +2034,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2127,6 +2138,7 @@ pub(crate) fn app_with_companions_and_cargo(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2438,6 +2450,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     data.locale = if underground {
@@ -2889,6 +2902,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

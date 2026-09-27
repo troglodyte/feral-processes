@@ -426,6 +426,16 @@ pub struct Duties {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StaffRank(pub u32);
 
+/// A program the player has said may be called into a tactical fight by a
+/// drop pod — `Game::drop_troopers` is the one reader of who is eligible,
+/// `Game::set_drop_trooper` the one writer. **Opt-in, so not a `Duty`**:
+/// `Duties` is a denied set whose absence means every column is checked,
+/// and as a fifth `Duty` every program — and every save written before
+/// this — would be a trooper by default. It coexists with any duty,
+/// because a trooper keeps working while it waits.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DropTrooper;
+
 /// An item sitting in an `Equipment` slot: *which copy* went on, and the
 /// gear level its stat bonus was scaled for when it did.
 ///

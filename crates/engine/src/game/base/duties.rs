@@ -147,6 +147,34 @@ impl Game {
         }
     }
 
+    /// Marks or unmarks one program as a Drop Trooper. No reassignment,
+    /// unlike `set_duty`: the scheduler never reads the flag — a trooper
+    /// works exactly as it did until a pod calls it.
+    pub fn set_drop_trooper(&mut self, entity: Entity, on: bool) -> Result<(), String> {
+        self.require_owned_program(entity)?;
+        let mut program = self.world.entity_mut(entity);
+        if on {
+            program.insert(crate::components::DropTrooper);
+        } else {
+            program.remove::<crate::components::DropTrooper>();
+        }
+        Ok(())
+    }
+
+    /// The programs a drop pod may call, in the Base staff table's order —
+    /// `base_staff` filtered by the marker, so a trooper away on a sortie,
+    /// in the party or under study is not offered, by omission.
+    pub fn drop_troopers(&self) -> Vec<Entity> {
+        self.base_staff()
+            .into_iter()
+            .filter(|&e| {
+                self.world
+                    .get::<crate::components::DropTrooper>(e)
+                    .is_some()
+            })
+            .collect()
+    }
+
     /// The toggle itself, shared by `set_duty` and `set_duty_column` so
     /// neither restates it — and so `set_duty_column` reassigns once for the
     /// whole column rather than once per row, a matching per row being

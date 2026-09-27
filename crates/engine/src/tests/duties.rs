@@ -919,3 +919,41 @@ fn move_staff_row_refuses_an_entity_the_player_does_not_own() {
     let stranger = game.world.spawn(()).id();
     assert!(game.move_staff_row(stranger, 1).is_err());
 }
+
+/// The spec's interleaved case: two staff rows with an away program's rank
+/// sitting between them. `work_table` displays Staff first, then Away — the
+/// away row is not the row `<`/`>` should ever land on. Moving the raw
+/// *rank* neighbour (the away program) would land here with nothing to see
+/// move; moving the displayed neighbour (the other staff row) is the fix.
+#[test]
+fn move_staff_row_moves_within_the_displayed_order_not_raw_rank_order() {
+    let mut game = Game::new(20261020, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let s1 = hire(&mut game, 1)[0];
+    let away = hire(&mut game, 1)[0];
+    game.world.resource_mut::<Party>().0.push(away);
+    let s2 = hire(&mut game, 1)[0];
+    // Precondition: raw rank order interleaves `away` between the two staff
+    // rows, but the screen's own order does not.
+    assert_eq!(game.base_staff(), vec![s1, s2], "precondition: hire order");
+    let displayed = |game: &mut Game| -> Vec<Entity> {
+        game.work_table()
+            .rows
+            .iter()
+            .map(|r| r.program.entity)
+            .collect()
+    };
+    assert_eq!(
+        displayed(&mut game),
+        vec![s1, s2, away],
+        "precondition: Staff, Staff, then Away"
+    );
+
+    game.move_staff_row(s1, 1).unwrap();
+
+    assert_eq!(
+        displayed(&mut game),
+        vec![s2, s1, away],
+        "`>` on the top staff row swaps with the other staff row, not the \
+         away row sitting between them in raw rank order"
+    );
+}

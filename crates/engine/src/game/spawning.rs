@@ -434,13 +434,10 @@ impl Game {
         // on otherwise. `fuse_companions` is the one caller that overrides
         // this with the dominant parent's instead, since fusion keeps that
         // parent's place in line rather than joining at the back.
-        let rank = self
-            .world
-            .query::<&crate::components::StaffRank>()
-            .iter(&self.world)
-            .map(|r| r.0)
-            .max()
-            .map_or(0, |max| max + 1);
+        // `next_staff_rank` is this same formula's one copy — `refund_program`
+        // shares it rather than restating it for a pre-feature program's
+        // refund.
+        let rank = self.next_staff_rank();
         (
             Tamed {
                 owner: self.player_entity(),

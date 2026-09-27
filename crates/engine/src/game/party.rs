@@ -1779,13 +1779,22 @@ impl Game {
             .insert_resource(crate::resources::NextProgramId(next_program_id));
         // A committed program's live `StaffRank` round-trips through
         // `creature_save_for`/`spawn_creature_from_save` like any other
-        // component, so a refund never needs to mint one — every owned
-        // program has carried a rank since the door that made it, and this
-        // one is no different.
-        debug_assert!(
-            pending_ranks.is_empty(),
-            "a refunded program's rank round-trips through the snapshot"
-        );
+        // component for every owned program that has carried one since the
+        // door that made it — but a save written before ranks existed
+        // carries `staff_rank: None` for a program that was already
+        // committed to a build request when this feature landed, and that
+        // snapshot never gains one just by sitting in a `BuildSiteSave`.
+        // Minted here exactly as `Game::load` mints one for the rest of
+        // that save's roster, through the same door — one past the highest
+        // rank any live entity holds — so a pre-feature program refunded
+        // mid-run takes its place at the back of the table instead of
+        // panicking the cancel.
+        for e in pending_ranks {
+            let rank = self.next_staff_rank();
+            self.world
+                .entity_mut(e)
+                .insert(crate::components::StaffRank(rank));
+        }
         // A sortied program is refused at the commit door, so a snapshot
         // riding a build request can never carry one. Asserted rather than
         // applied: a non-empty list here means the commit guard has gone,

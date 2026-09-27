@@ -4123,6 +4123,110 @@ fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
     );
 }
 
+/// A save written before work assignments existed carries `staff_rank:
+/// None` on a program already committed to a pending build — that snapshot
+/// never gains a rank just by sitting in a `BuildSiteSave`. The refund used
+/// to `debug_assert!` that this list was always empty; a rankless snapshot
+/// must mint one instead of taking the run down.
+#[test]
+fn a_rankless_build_site_snapshot_refunds_without_panicking() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    game.world
+        .get_mut::<BuildSite>(site)
+        .unwrap()
+        .program
+        .as_mut()
+        .unwrap()
+        .staff_rank = None;
+
+    game.cancel_build_request(site)
+        .expect("a rankless snapshot refunds rather than panicking");
+
+    let back = game.owned_pets();
+    assert_eq!(back.len(), 2, "the committed program is back on the roster");
+    let refunded = back
+        .iter()
+        .find(|p| p.entity != spend)
+        .expect("the refunded program is a fresh entity");
+    assert!(
+        game.world
+            .get::<crate::components::StaffRank>(refunded.entity)
+            .is_some(),
+        "it comes back ranked, not merely alive"
+    );
+}
+
+/// Ranks are minted off the *live* count, and a committed program is
+/// despawned — so a program tamed while it is off the roster can be minted
+/// the exact number the committed one already carries in its snapshot, with
+/// no rankless snapshot involved at all: the round trip hands the original
+/// number straight back. `move_staff_row` used to swap rank *values*, which
+/// leaves a tie exactly where it was; renumbering the whole order densely
+/// by *position* is what makes the tie harmless.
+#[test]
+fn a_refunded_program_can_tie_another_programs_rank() {
+    // One baseline program that is never spent, so the base always has
+    // somebody left and committing `spend` is never refused as "your last
+    // program" — the fixture every other cancel test in this file uses.
+    let mut game = a_base_with_programs(20260907, 1);
+    let baseline = game.owned_pets()[0].entity;
+    let spend = tame_at_zone(&mut game, 1);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+
+    // Tamed while `spend` is off the roster (committed), so the live count
+    // it is minted against sees only the baseline.
+    let other = tame_at_zone(&mut game, 1);
+    let other_rank = *game
+        .world
+        .get::<crate::components::StaffRank>(other)
+        .unwrap();
+
+    game.cancel_build_request(site).expect("cancelled");
+
+    let refunded = game
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity != baseline && p.entity != other)
+        .expect("the refunded program is a third entity")
+        .entity;
+    let refunded_rank = *game
+        .world
+        .get::<crate::components::StaffRank>(refunded)
+        .unwrap();
+    assert_eq!(
+        refunded_rank, other_rank,
+        "precondition: the round-tripped rank ties `other`'s"
+    );
+
+    // A tie the old value-swap could not move: swapping equal values
+    // leaves both unchanged. The renumber-by-position fix must still
+    // reorder them. `baseline` carries the unique lowest rank, so the two
+    // tied entities are always adjacent to each other in `base_staff()`,
+    // whichever order the tie resolves in.
+    let before = game.base_staff();
+    assert_eq!(before.len(), 3);
+    let refunded_pos = before.iter().position(|&e| e == refunded).unwrap();
+    let other_pos = before.iter().position(|&e| e == other).unwrap();
+    assert_eq!(
+        (refunded_pos as i32 - other_pos as i32).abs(),
+        1,
+        "the two tied entities must sit next to each other: {before:?}"
+    );
+    let delta = if other_pos < refunded_pos { -1 } else { 1 };
+    game.move_staff_row(refunded, delta).unwrap();
+    let after = game.base_staff();
+    assert_ne!(
+        before, after,
+        "moving one of two tied ranks must change the order"
+    );
+}
+
 // ── What a demolition hands back ────────────────────────────────────────
 //
 // `remove_structure` returned the build-cost refund, the rig's tool and an

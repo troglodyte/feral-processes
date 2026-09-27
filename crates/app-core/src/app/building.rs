@@ -865,9 +865,23 @@ impl App {
                 if let Some(entity) = table.rows.get(self.menu_selected).map(|r| r.program.entity) {
                     let delta = if key == GameKey::Char('<') { -1 } else { 1 };
                     let outcome = game.move_staff_row(entity, delta);
-                    if outcome.is_ok() && rows > 0 {
-                        self.menu_selected =
-                            (self.menu_selected as i32 + delta).clamp(0, rows as i32 - 1) as usize;
+                    if outcome.is_ok() {
+                        // Re-found rather than computed: `move_staff_row`
+                        // moves within the table's own row order, which
+                        // interleaves Staff and Away, so "selected index
+                        // plus delta" is only ever right when the row
+                        // above or below the one that moved happens to be
+                        // in the same section. Refetching the table (the
+                        // move can renumber every rank) and finding the
+                        // entity's new row is exact regardless.
+                        if let Some(new_index) = self
+                            .base_staff_table()
+                            .rows
+                            .iter()
+                            .position(|r| r.program.entity == entity)
+                        {
+                            self.menu_selected = new_index;
+                        }
                     }
                     self.report(outcome);
                 }

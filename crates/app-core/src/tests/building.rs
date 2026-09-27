@@ -748,6 +748,54 @@ fn moving_a_row_keeps_the_selection_on_the_moved_program() {
     );
 }
 
+/// The spec's interleaved case: three programs hired in order, the middle
+/// one pulled into the party so raw rank order interleaves Staff and Away.
+/// `<`/`>` must move within the table's own *displayed* order — Staff
+/// first, then Away — and the selection must follow the entity that
+/// actually moved rather than assume it landed at `menu_selected + delta`,
+/// which would be the away row here.
+#[test]
+fn moving_a_row_around_an_interleaved_away_program_follows_the_displayed_order() {
+    let mut app = app_owning_distant_programs(764, 3);
+    stand_inside_the_base(&mut app);
+    let rows = app.base_staff_table().rows;
+    let (first, middle, last) = (
+        rows[0].program.entity,
+        rows[1].program.entity,
+        rows[2].program.entity,
+    );
+    app.game.as_mut().unwrap().add_companion(middle).unwrap();
+
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0; // the top staff row, `first`
+    let table = app.base_staff_table();
+    assert_eq!(
+        table
+            .rows
+            .iter()
+            .map(|r| r.program.entity)
+            .collect::<Vec<_>>(),
+        vec![first, last, middle],
+        "precondition: Staff first and last, then Away middle — raw rank \
+         order interleaves them"
+    );
+
+    app.handle_key(GameKey::Char('>'));
+
+    let table = app.base_staff_table();
+    assert_eq!(
+        table
+            .rows
+            .iter()
+            .map(|r| r.program.entity)
+            .collect::<Vec<_>>(),
+        vec![last, first, middle],
+        "`>` swaps with the next STAFF row, not the away row sitting \
+         between them in raw rank order"
+    );
+    assert_eq!(app.menu_selected, 1, "selection follows the moved program");
+}
+
 /// A program in the party is still a row on this table — away, dimmed, but
 /// no less editable than a staffed one, since a restriction it carries takes
 /// effect the moment it comes home.

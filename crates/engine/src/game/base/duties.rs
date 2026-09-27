@@ -25,10 +25,11 @@ impl Game {
         }
     }
 
-    /// Every owned program, in table order — the scheduler's pick order,
-    /// and the Base staff screen's row order across *both* sections.
-    /// `Game::base_staff`'s sort, over the wider set: that one only ever
-    /// wants the Staff half.
+    /// Every owned program, in raw rank order — `Game::base_staff`'s sort,
+    /// over the wider set: that one only ever wants the Staff half. **Not**
+    /// the screen's row order: an away program's rank can fall between two
+    /// staff ranks, so this mixes the two sections. `display_order` is the
+    /// one that doesn't.
     fn roster_order(&mut self) -> Vec<Entity> {
         let mut entities: Vec<Entity> = self
             .owned_program_views()
@@ -40,6 +41,37 @@ impl Game {
             (rank.is_none(), rank.map(|r| r.0), e)
         });
         entities
+    }
+
+    /// The Base staff screen's own row order: `roster_order` with the Staff
+    /// half pulled in front of Away, each half keeping its internal rank
+    /// order — `work_table`'s rows are built in exactly this order, and
+    /// `move_staff_row` moves within it rather than within `roster_order`,
+    /// or `<`/`>` on a staff row would sometimes swap it with an away row
+    /// sitting between it and its visible neighbour, with nothing moving
+    /// on screen.
+    fn display_order(&mut self) -> Vec<Entity> {
+        let order = self.roster_order();
+        let (staff, away): (Vec<Entity>, Vec<Entity>) = order
+            .into_iter()
+            .partition(|&e| self.program_role(e) == Some(ProgramRole::Staff));
+        let mut result = staff;
+        result.extend(away);
+        result
+    }
+
+    /// One past the highest `StaffRank` any live entity holds —
+    /// `roster_parts`'s mint, shared here so a program whose snapshot
+    /// predates ranks (`staff_rank: None`) takes exactly the place at the
+    /// back of the table a brand new program would, rather than a copy of
+    /// this formula drifting between the two doors.
+    pub(crate) fn next_staff_rank(&mut self) -> u32 {
+        self.world
+            .query::<&StaffRank>()
+            .iter(&self.world)
+            .map(|r| r.0)
+            .max()
+            .map_or(0, |max| max + 1)
     }
 
     /// The Base staff screen's one derivation: every column's unworked
@@ -58,7 +90,7 @@ impl Game {
             })
             .collect();
 
-        let order = self.roster_order();
+        let order = self.display_order();
         let mut views_by_entity: std::collections::HashMap<Entity, views::EntityView> = self
             .owned_program_views()
             .into_iter()
@@ -104,15 +136,8 @@ impl Game {
                 rank,
             });
         }
-        // `order` is already rank order, so partitioning keeps each half in
-        // the order it arrived in — Staff first, then Away, each still by
-        // rank.
-        let (staff, away): (Vec<_>, Vec<_>) = rows
-            .into_iter()
-            .partition(|r| r.section == views::WorkSection::Staff);
-        let mut rows = staff;
-        rows.extend(away);
-
+        // `order` is already `display_order` — Staff first, then Away, each
+        // still by rank — so the rows built from it need no re-partition.
         views::WorkTable {
             columns,
             rows,
@@ -186,12 +211,9 @@ impl Game {
         if target == index {
             return Ok(());
         }
-        let other = order[target];
-        let rank_a = self.world.get::<StaffRank>(entity).map(|r| r.0);
-        let rank_b = self.world.get::<StaffRank>(other).map(|r| r.0);
-        if let (Some(a), Some(b)) = (rank_a, rank_b) {
-            self.world.get_mut::<StaffRank>(entity).unwrap().0 = b;
-            self.world.get_mut::<StaffRank>(other).unwrap().0 = a;
+        order.swap(index, target);
+        for (rank, &e) in order.iter().enumerate() {
+            self.world.entity_mut(e).insert(StaffRank(rank as u32));
         }
         Ok(())
     }

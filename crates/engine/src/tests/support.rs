@@ -1965,6 +1965,10 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
                 species: species.id.clone(),
             },
             Position { x: 3, y: 3 },
+            Glyph {
+                ch: species.glyph,
+                color: species.color,
+            },
             Stats {
                 hp,
                 max_hp: hp,

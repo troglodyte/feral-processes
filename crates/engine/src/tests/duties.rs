@@ -754,3 +754,168 @@ fn a_downed_body_is_untouched_by_its_duties() {
         assert_eq!(demand.unworked.get(&Duty::Operate), Some(&1));
     }
 }
+
+// ---------------------------------------------------------------------
+// Phase 3: the engine API — `work_table`, `set_duty`, `set_duty_column`
+// and `move_staff_row`.
+// ---------------------------------------------------------------------
+
+#[test]
+fn work_table_columns_are_duty_all_in_order_with_labels() {
+    let (mut game, _node, _worker) = a_quiet_base_with_one_post(20261010);
+    let table = game.work_table();
+    let duties: Vec<Duty> = table.columns.iter().map(|c| c.duty).collect();
+    assert_eq!(duties, Duty::ALL);
+    let labels: Vec<&str> = table.columns.iter().map(|c| c.label).collect();
+    assert_eq!(labels, ["OPERATE", "GUARD", "DIG", "BUILD"]);
+}
+
+#[test]
+fn work_table_unworked_counts_match_labour_demand() {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(20261011);
+    restrict(&mut game, worker, &[Duty::Operate]);
+    game.schedule_base_labour();
+
+    let table = game.work_table();
+    let demand = game.labour_demand();
+    assert_eq!(table.on_shift, demand.staff);
+    assert_eq!(table.jobs, demand.wanted);
+    assert_eq!(
+        table.unworked_total,
+        demand.unworked.values().sum::<usize>()
+    );
+    let operate = table
+        .columns
+        .iter()
+        .find(|c| c.duty == Duty::Operate)
+        .unwrap();
+    assert_eq!(operate.unworked, 1);
+    for other in [Duty::Guard, Duty::Dig, Duty::Build] {
+        let column = table.columns.iter().find(|c| c.duty == other).unwrap();
+        assert_eq!(column.unworked, 0, "{other:?}");
+    }
+}
+
+/// Staff first, then away, each in rank order — the table's whole row
+/// order, across the one split that matters (`ProgramRole::Staff` against
+/// everything else).
+#[test]
+fn work_table_rows_are_staff_then_away_in_rank_order() {
+    let mut game = Game::new(20261012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = hire(&mut game, 2);
+    let away = hire(&mut game, 1)[0];
+    game.world.resource_mut::<Party>().0.push(away);
+
+    let table = game.work_table();
+    let entities: Vec<Entity> = table.rows.iter().map(|r| r.program.entity).collect();
+    assert_eq!(entities, vec![staff[0], staff[1], away]);
+    let sections: Vec<views::WorkSection> = table.rows.iter().map(|r| r.section).collect();
+    assert_eq!(
+        sections,
+        vec![
+            views::WorkSection::Staff,
+            views::WorkSection::Staff,
+            views::WorkSection::Away
+        ]
+    );
+    assert_eq!(table.rows[2].role, Some(ProgramRole::InParty));
+    // Rank order is preserved inside each half, not just membership.
+    assert!(table.rows[0].rank < table.rows[1].rank);
+}
+
+#[test]
+fn set_duty_toggles_one_cell_and_leaves_the_others() {
+    let mut game = Game::new(20261013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = hire(&mut game, 1)[0];
+
+    game.set_duty(worker, Duty::Dig, false).unwrap();
+    let table = game.work_table();
+    let row = table
+        .rows
+        .iter()
+        .find(|r| r.program.entity == worker)
+        .unwrap();
+    let cell = |d: Duty| row.cells[table.columns.iter().position(|c| c.duty == d).unwrap()];
+    assert!(!cell(Duty::Dig));
+    for other in [Duty::Operate, Duty::Guard, Duty::Build] {
+        assert!(cell(other), "{other:?}");
+    }
+}
+
+#[test]
+fn set_duty_removes_the_component_once_every_column_is_back_on() {
+    let mut game = Game::new(20261014, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = hire(&mut game, 1)[0];
+
+    game.set_duty(worker, Duty::Dig, false).unwrap();
+    assert!(game.world.get::<Duties>(worker).is_some());
+
+    game.set_duty(worker, Duty::Dig, true).unwrap();
+    assert!(
+        game.world.get::<Duties>(worker).is_none(),
+        "every column back on must drop the component, not leave it empty"
+    );
+}
+
+#[test]
+fn set_duty_refuses_an_entity_the_player_does_not_own() {
+    let mut game = Game::new(20261015, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let stranger = game.world.spawn(()).id();
+    assert!(game.set_duty(stranger, Duty::Dig, false).is_err());
+}
+
+#[test]
+fn set_duty_column_toggles_every_owned_program_including_away_ones() {
+    let mut game = Game::new(20261016, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = hire(&mut game, 2);
+    let away = hire(&mut game, 1)[0];
+    game.world.resource_mut::<Party>().0.push(away);
+
+    game.set_duty_column(Duty::Guard, false).unwrap();
+    for &e in staff.iter().chain(std::iter::once(&away)) {
+        assert!(
+            game.world
+                .get::<Duties>(e)
+                .is_some_and(|d| d.off.contains(&Duty::Guard)),
+            "entity should have Guard off"
+        );
+    }
+
+    game.set_duty_column(Duty::Guard, true).unwrap();
+    for &e in staff.iter().chain(std::iter::once(&away)) {
+        assert!(game.world.get::<Duties>(e).is_none());
+    }
+}
+
+#[test]
+fn move_staff_row_swaps_with_its_neighbour_and_selection_follows_the_math() {
+    let mut game = Game::new(20261017, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = hire(&mut game, 3);
+    assert_eq!(game.base_staff(), staff, "precondition: hire order");
+
+    game.move_staff_row(staff[2], -1).unwrap();
+    assert_eq!(game.base_staff(), vec![staff[0], staff[2], staff[1]]);
+}
+
+#[test]
+fn move_staff_row_at_the_top_is_a_no_op_rather_than_a_refusal() {
+    let mut game = Game::new(20261018, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = hire(&mut game, 2);
+
+    assert!(game.move_staff_row(staff[0], -1).is_ok());
+    assert_eq!(game.base_staff(), staff, "clamped at the top: unchanged");
+
+    assert!(game.move_staff_row(staff[1], 1).is_ok());
+    assert_eq!(game.base_staff(), staff, "clamped at the bottom: unchanged");
+}
+
+#[test]
+fn move_staff_row_refuses_an_entity_the_player_does_not_own() {
+    let mut game = Game::new(20261019, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let stranger = game.world.spawn(()).id();
+    assert!(game.move_staff_row(stranger, 1).is_err());
+}

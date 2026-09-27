@@ -9,6 +9,7 @@ use crate::alerts::AlertKind;
 use crate::battle::ActionOption;
 use crate::classes::PlayerClass;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
+use crate::duties::Duty;
 use crate::game::party::ProgramRole;
 use crate::icon::PlayerIcon;
 use crate::items::{GearCopy, ItemId};
@@ -1520,6 +1521,78 @@ pub struct WorkOrderMachine {
     /// How far up the recipe tree from the ordered item this sits — 0 is
     /// the machine that makes the ordered thing itself.
     pub depth: u32,
+}
+
+/// One checkbox column of the Base staff work table — one of `Duty::ALL`,
+/// generated rather than a fixed list so a later structure-kind duty needs
+/// no screen change. See `Game::work_table`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorkColumn {
+    pub duty: Duty,
+    /// The header text — `Duty::label`, decided once there rather than
+    /// `Duty::name` (the save's lowercase form) upper-cased at the call
+    /// site.
+    pub label: &'static str,
+    /// The wants this duty admits that the matching found no body for —
+    /// `resources::LabourDemand::unworked`'s per-column read, drawn as
+    /// `N!` on the header when non-zero and nothing when it is.
+    pub unworked: usize,
+}
+
+/// Which side of the party/staff split a `WorkRow` is on. Both halves are
+/// editable — an away program's restriction takes effect once it comes
+/// home, `Duties` narrowing what the scheduler may hand it whether or not
+/// it is standing on the base right now — the split only decides where the
+/// row is drawn and that the away half is dimmed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkSection {
+    Staff,
+    Away,
+}
+
+/// One row of the Base staff work table — a program you own, what it is
+/// doing, and which of `WorkTable::columns` it may currently be handed.
+#[derive(Clone)]
+pub struct WorkRow {
+    pub program: EntityView,
+    pub section: WorkSection,
+    /// `Game::program_role`'s own answer — `Some(ProgramRole::Staff)` is
+    /// exactly `section == WorkSection::Staff`; carried as the role rather
+    /// than restated as a bool so a reader that wants to know *which* away
+    /// role (sortie, wielded, under study...) doesn't need a second call.
+    pub role: Option<ProgramRole>,
+    /// What it is doing right now — `Game::staff_activity` on the Staff
+    /// half, `Game::program_activity` on the Away half, the same split
+    /// `BaseStaffRow` used to make.
+    pub doing: String,
+    /// Aligned with `WorkTable::columns` — `cells[i]` is whether this
+    /// program may currently be handed column `i`'s duty, i.e.
+    /// `!Duties::off.contains(columns[i].duty)`.
+    pub cells: Vec<bool>,
+    /// The table's own order key — `components::StaffRank`, carried so a
+    /// test can assert row order without re-deriving it from `program` or
+    /// `cells`.
+    pub rank: u32,
+}
+
+/// The Base staff screen's one derivation: every column's unworked count,
+/// every row in table order (Staff first, then Away, rank order held within
+/// each), and the header's three figures. `Game::work_table` is the one
+/// door; app-core's key handling and gui's drawing both read this rather
+/// than deriving a row list each.
+#[derive(Clone)]
+pub struct WorkTable {
+    pub columns: Vec<WorkColumn>,
+    pub rows: Vec<WorkRow>,
+    /// `resources::LabourDemand::staff` — on-shift bodies the scheduler had
+    /// to work with.
+    pub on_shift: usize,
+    /// `resources::LabourDemand::wanted` — every want the scheduler
+    /// accumulated, worked or not.
+    pub jobs: usize,
+    /// The sum of `resources::LabourDemand::unworked`'s counts — a want
+    /// with no body, whether short of bodies or short of *eligible* ones.
+    pub unworked_total: usize,
 }
 
 /// One structure on the roster screen — see `Game::structure_report`.

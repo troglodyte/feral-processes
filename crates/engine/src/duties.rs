@@ -41,6 +41,20 @@ impl Duty {
         }
     }
 
+    /// The Base staff screen's column heading — an exhaustive match rather
+    /// than [`Duty::name`] upper-cased at the call site, so the save form
+    /// and the display form are decided together and neither can drift
+    /// from the other by way of a formatting helper only one of two
+    /// callers remembers to use.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Duty::Operate => "OPERATE",
+            Duty::Guard => "GUARD",
+            Duty::Dig => "DIG",
+            Duty::Build => "BUILD",
+        }
+    }
+
     /// The inverse of [`Duty::name`]. `None` for a name this build doesn't
     /// know — a retired duty, or a hand-edited file — which is what lets the
     /// load path drop it silently rather than refuse the save.

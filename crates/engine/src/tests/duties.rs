@@ -825,6 +825,71 @@ fn work_table_rows_are_staff_then_away_in_rank_order() {
     assert!(table.rows[0].rank < table.rows[1].rank);
 }
 
+/// `Mode::BaseStaff` spends no tick of its own, so without a reschedule
+/// inside `set_duty` the table's `N!` counts would read the previous
+/// pass's figures until the next real tick — stale the moment the player
+/// presses `Space`.
+#[test]
+fn set_duty_reschedules_so_the_table_updates_without_a_tick() {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(20261024);
+    assert_eq!(
+        game.work_table().unworked_total,
+        0,
+        "precondition: everything is worked"
+    );
+
+    game.set_duty(worker, Duty::Operate, false).unwrap();
+
+    assert_eq!(
+        game.work_table().unworked_total,
+        1,
+        "set_duty reschedules on its own"
+    );
+}
+
+/// The `[A]` whole-column toggle carries the same obligation, and reschedules
+/// exactly once for the whole column rather than once per row — see
+/// `Game::toggle_duty`'s doc for why a roll-per-row would matter.
+#[test]
+fn set_duty_column_reschedules_so_the_table_updates_without_a_tick() {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(20261025);
+    let _ = worker;
+    assert_eq!(game.work_table().unworked_total, 0);
+
+    game.set_duty_column(Duty::Operate, false).unwrap();
+
+    assert_eq!(
+        game.work_table().unworked_total,
+        1,
+        "set_duty_column reschedules on its own"
+    );
+}
+
+/// Right after a real `Game::load` — before any tick, and before the player
+/// has pressed anything — the Base staff screen used to read
+/// `resources::LabourDemand`'s untouched `Default`: 0 on shift, 0 jobs, 0
+/// unworked, whatever the save actually holds. `on_shift` is now derived at
+/// load, so a save with a posted staff program reports it immediately.
+#[test]
+fn a_freshly_loaded_game_reports_nonzero_on_shift_with_no_tick() {
+    let (mut game, _node, _worker) = a_quiet_base_with_one_post(20261026);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_duties_on_shift_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.work_table().on_shift,
+        1,
+        "on-shift is derived at load rather than left at the scheduler's \
+         Default zero until the first real tick"
+    );
+}
+
 #[test]
 fn set_duty_toggles_one_cell_and_leaves_the_others() {
     let mut game = Game::new(20261013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

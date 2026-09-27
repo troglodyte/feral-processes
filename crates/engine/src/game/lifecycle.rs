@@ -1864,6 +1864,30 @@ impl Game {
                 .id = None;
             game.withdraw_research_orders();
         }
+        // **A derived fallback, not a scheduler run.** `schedule_base_labour`
+        // only runs from `tick`, so `resources::LabourDemand` is still its
+        // `Default` — every figure zero — until the first tick, and the Base
+        // staff screen reads it if the player opens it before spending one.
+        // Calling `schedule_base_labour` here instead was considered and
+        // rejected: `run_tantrums`' `open_brawls` draws `GameRng` for any
+        // body already on the rung, and nothing else runs between a load and
+        // the game's own first tick to change that body's state — so a save
+        // with a disgruntled program would draw that roll twice for the same
+        // instant, once here and once when the first real tick calls the
+        // scheduler again, an `GameRng`-stream shift the load path must not
+        // cause. `staff`/`on_shift` alone is cheap and pure to derive —
+        // `is_on_shift` reads no RNG and writes nothing — so it is filled in
+        // here and `wanted`/`unworked` are left at zero for the first tick to
+        // fill in, same as they always have been.
+        let staff = game.base_staff();
+        let amenities = game.amenities();
+        let on_shift = staff
+            .iter()
+            .filter(|&&w| game.is_on_shift(w, &amenities))
+            .count();
+        game.world
+            .resource_mut::<crate::resources::LabourDemand>()
+            .staff = on_shift;
         Ok(game)
     }
 

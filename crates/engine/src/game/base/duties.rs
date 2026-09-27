@@ -147,13 +147,13 @@ impl Game {
         }
     }
 
-    /// Checks or unchecks one program's one column. Removes `Duties`
-    /// entirely once every column is back on — `DepotFilter`'s
-    /// absent-means-unrestricted rule: a save or a mod reading no
-    /// component must see every job admitted, not a component that happens
-    /// to be empty.
-    pub fn set_duty(&mut self, entity: Entity, duty: Duty, on: bool) -> Result<(), String> {
-        self.require_owned_program(entity)?;
+    /// The toggle itself, shared by `set_duty` and `set_duty_column` so
+    /// neither restates it — and so `set_duty_column` reschedules once for
+    /// the whole column rather than once per row, `next_staff_rank`'s
+    /// reason one door over: `schedule_base_labour` can roll a tantrum, and
+    /// a roll per row would spend `GameRng` in proportion to roster size for
+    /// one keypress.
+    fn toggle_duty(&mut self, entity: Entity, duty: Duty, on: bool) {
         if let Some(mut duties) = self.world.get_mut::<Duties>(entity) {
             if on {
                 duties.off.remove(&duty);
@@ -172,13 +172,29 @@ impl Game {
         {
             self.world.entity_mut(entity).remove::<Duties>();
         }
+    }
+
+    /// Checks or unchecks one program's one column. Removes `Duties`
+    /// entirely once every column is back on — `DepotFilter`'s
+    /// absent-means-unrestricted rule: a save or a mod reading no
+    /// component must see every job admitted, not a component that happens
+    /// to be empty.
+    ///
+    /// **Ends with a reschedule**, `cancel_build_request`'s own habit after
+    /// a change the scheduler cares about: without it the table's `N!`
+    /// counts and header are the *previous* pass's figures until the next
+    /// real tick, since `Mode::BaseStaff` spends none of its own.
+    pub fn set_duty(&mut self, entity: Entity, duty: Duty, on: bool) -> Result<(), String> {
+        self.require_owned_program(entity)?;
+        self.toggle_duty(entity, duty, on);
+        self.schedule_base_labour();
         Ok(())
     }
 
     /// Checks or unchecks one column for every program the player owns —
     /// the `[A]` key's whole-column toggle. Never refuses: there is no
     /// single entity to be the wrong one, since it reaches every owned
-    /// program through `set_duty` in one pass.
+    /// program through `toggle_duty` in one pass, then reschedules once.
     pub fn set_duty_column(&mut self, duty: Duty, on: bool) -> Result<(), String> {
         let entities: Vec<Entity> = self
             .owned_program_views()
@@ -186,22 +202,34 @@ impl Game {
             .map(|v| v.entity)
             .collect();
         for entity in entities {
-            self.set_duty(entity, duty, on)?;
+            self.toggle_duty(entity, duty, on);
         }
+        self.schedule_base_labour();
         Ok(())
     }
 
-    /// Moves a program's row by `delta` places in the *whole* table order
-    /// (both sections), clamped at either end — a move that would run off
-    /// the end is a no-op rather than a refusal, since the `<`/`>` key has
-    /// no reason to know where the table ends.
+    /// Moves a program's row by `delta` places in `display_order` — the
+    /// *screen's* table order, both sections — clamped at either end: a
+    /// move that would run off the end is a no-op rather than a refusal,
+    /// since the `<`/`>` key has no reason to know where the table ends.
+    ///
+    /// **Renumbers the whole order densely, 0.. by position, after the
+    /// swap** — never by exchanging the two rows' rank *values*. Two
+    /// programs can carry the same rank (a build-site refund mints one off
+    /// the live count, which no longer includes the program it is
+    /// replacing) or a rank at all (a pre-feature save's `staff_rank:
+    /// None`, minted by `next_staff_rank` on load or on refund); swapping
+    /// values a tie shares leaves both unchanged, and swapping into a `None`
+    /// leaves one row with no rank to compare next time. Renumbering by
+    /// position instead makes every row's rank distinct and present in one
+    /// pass, whatever it inherited.
     pub fn move_staff_row(&mut self, entity: Entity, delta: i32) -> Result<(), String> {
         self.require_owned_program(entity)?;
-        let order = self.roster_order();
+        let mut order = self.display_order();
         let Some(index) = order.iter().position(|&e| e == entity) else {
             // Unreachable in practice: `require_owned_program` already
             // established this is a Tamed program the player owns, and
-            // every such program carries the `Position` `roster_order`
+            // every such program carries the `Position` `display_order`
             // (via `owned_program_views`) requires. Kept as a no-op rather
             // than a panic, since this is reached from a key press.
             return Ok(());

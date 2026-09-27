@@ -108,6 +108,11 @@ pub(crate) fn cell_centers(
 /// make the burst snappier, it makes it faster and harder to see.
 pub const DESTROYED_FLASH_SECONDS: f64 = 0.70;
 
+/// How long a drop trooper's landing washes its cell green — a
+/// destruction's span rather than a hit's, since it marks where a new body
+/// now stands and a hit-length blink is gone before the eye finds it.
+pub const LANDING_FLASH_SECONDS: f64 = DESTROYED_FLASH_SECONDS;
+
 /// How long a heal mark lives — it bounces and fades over the same span,
 /// since a bounce that outlasted its own fade would end on a visible snap
 /// rather than dying out with it.
@@ -797,6 +802,9 @@ pub struct Fx {
     flashes: Vec<TileFlash>,
     tactical_flashes: Vec<TileFlash>,
     cell_marks: Vec<CellMark>,
+    /// Board cells a drop trooper landed on, and when. Not a `TileFlash`:
+    /// that is keyed by a world `EffectKind`, and a landing is not one.
+    landings: Vec<((i32, i32), f64)>,
     walkers: Vec<Walker>,
     bolts: Vec<Bolt>,
     floats: Vec<FloatingNumber>,
@@ -818,6 +826,7 @@ impl Fx {
             flashes: Vec::new(),
             tactical_flashes: Vec::new(),
             cell_marks: Vec::new(),
+            landings: Vec::new(),
             walkers: Vec::new(),
             bolts: Vec::new(),
             floats: Vec::new(),
@@ -908,6 +917,7 @@ impl Fx {
                         kind: MarkKind::Reaction,
                         start: now,
                     }),
+                    TacticalFxKind::Landing => self.landings.push((cue.pos, now)),
                 }
             }
         }
@@ -916,6 +926,8 @@ impl Fx {
         self.tactical_flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.cell_marks.retain(|m| now - m.start < m.kind.seconds());
+        self.landings
+            .retain(|&(_, start)| now - start < LANDING_FLASH_SECONDS);
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
         self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
@@ -928,6 +940,7 @@ impl Fx {
             // paint the wrong body's cell in whatever opens next.
             self.tactical_flashes.clear();
             self.cell_marks.clear();
+            self.landings.clear();
         }
     }
 
@@ -979,8 +992,30 @@ impl Fx {
     /// `TacticalBattle` cells (`BoltCue`'s reason), and a coordinate from
     /// one space read against the other's list would answer for the wrong
     /// tile whenever the two happened to share a pair of small integers.
+    ///
+    /// A landing's green wash joins it here, newest first as `flash_in`
+    /// rules, so a trooper hit the instant it lands shows the hit.
     pub fn tactical_tile_flash(&self, pos: (i32, i32)) -> Option<Color> {
-        Self::flash_in(&self.tactical_flashes, self.now, pos)
+        let landed = self
+            .landings
+            .iter()
+            .filter(|(at, _)| *at == pos)
+            .map(|&(_, start)| start)
+            .max_by(f64::total_cmp);
+        let hit = self
+            .tactical_flashes
+            .iter()
+            .filter(|f| f.pos == pos)
+            .map(|f| f.start)
+            .max_by(f64::total_cmp);
+        match landed {
+            Some(start) if hit.is_none_or(|h| start > h) => {
+                let alpha = flash_alpha(self.now - start, LANDING_FLASH_SECONDS);
+                let c = palette::HEALTHY;
+                (alpha > 0.0).then(|| Color::new(c.r, c.g, c.b, alpha))
+            }
+            _ => Self::flash_in(&self.tactical_flashes, self.now, pos),
+        }
     }
 
     /// Draws the debris every live burst is currently throwing.
@@ -1506,6 +1541,37 @@ impl Fx {
 
 #[cfg(test)]
 mod tests {
+
+    /// A trooper's landing washes its cell green for `LANDING_FLASH_SECONDS`
+    /// and then clears — a board cell, so it reads through
+    /// `tactical_tile_flash` alone.
+    #[test]
+    fn a_landing_washes_its_cell_green_then_clears() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+        let mut fx = Fx::new();
+        let cue = TacticalFxCue {
+            pos: (2, 3),
+            kind: TacticalFxKind::Landing,
+        };
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), vec![cue], true);
+        let wash = fx
+            .tactical_tile_flash((2, 3))
+            .expect("the landing cell flashes");
+        let green = palette::HEALTHY;
+        assert_eq!((wash.r, wash.g, wash.b), (green.r, green.g, green.b));
+        assert!(fx.tactical_tile_flash((3, 3)).is_none(), "only that cell");
+        assert!(fx.tile_flash((2, 3)).is_none(), "never a world tile");
+
+        fx.begin_frame(
+            LANDING_FLASH_SECONDS + 0.01,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            true,
+        );
+        assert!(fx.tactical_tile_flash((2, 3)).is_none());
+    }
     /// **The reservation, at the one cue it was written for.** br red means
     /// hostility and inbound harm; a structure taking a hit in a raid is
     /// that, and the flash is what says so on the map. Asserted against the

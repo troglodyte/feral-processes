@@ -67,3 +67,31 @@ fn drop_troopers_are_listed_in_staff_rank_order() {
     game.set_drop_trooper(second, false).unwrap();
     assert_eq!(game.drop_troopers(), vec![first]);
 }
+
+/// The shipped routine is battle-map only — `tactical_only` is what keeps it
+/// out of the group model's pickers and the arena's `SwingOnly` party — and
+/// researchable through an ordinary synthesised node with no structure gate
+/// (decided 2026-09-27: `NoPodReady` already makes it inert without a pod).
+#[test]
+fn call_reinforcements_is_tactical_only_and_gets_an_ungated_node() {
+    let game = Game::new(20260930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("call_reinforcements")
+        .expect("the shipped routine should load")
+        .clone();
+    assert!(matches!(
+        def.effect,
+        crate::abilities::AbilityEffect::Reinforce
+    ));
+    assert!(def.effect.tactical_only());
+    let node = crate::routine_tree::node_id(&def.id);
+    assert!(
+        game.world
+            .resource::<crate::research::ResearchDb>()
+            .get(&node)
+            .is_some(),
+        "a synthesised routine node should exist"
+    );
+}

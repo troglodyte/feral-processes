@@ -1,0 +1,17 @@
+(
+    id: "call_reinforcements",
+    name: "Call Reinforcements",
+    // `target: WholeParty` is the no-picker shape, Summon's reason: the
+    // landing cell is the engine's answer, beside the invoker, so nothing
+    // reads a target and no `shape:` or `range:` is authored.
+    //
+    // Priced in Fork Cluster's band — one body where that fields two or
+    // three, but a real one: a levelled program off the base's own staff,
+    // and the drop pod it spends has to be recharged by the crew.
+    description: "Calls a Drop Trooper off base staff into the fight through a charged drop pod. It lands beside you and loses its first turn. Battle maps only.",
+    target: WholeParty,
+    effect: Reinforce,
+    cooldown: 5,
+    power_cost: 30.0,
+    research_zone: 2,
+)

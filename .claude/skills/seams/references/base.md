@@ -129,23 +129,28 @@
   staff program and one partied one, spend the staff program, and be left
   with nobody to post to the site, so zero owned is the line rather than
   zero eligible.
-- **Build wants are *prepended* in `schedule_base_labour`, the mirror of
-  dig wants being appended** — the priority is the position in that list,
-  since `truncate(staff.len())` cuts from the end. **The trap is the
-  empty-queue standdown guard**: read off `WorkOrders` alone it reasons from
-  "nobody has told this base anything" while somebody has, so it is gated on
-  build wants too.
-- **An unreachable request is dropped *above* the cut in
-  `schedule_base_labour`, and that placement is the fix.** Every other kind
-  tests reachability below the truncation, affordable only because dig wants
-  are appended *last*; a build want is prepended and so inside the cut by
-  construction, so a site nobody can walk to takes the slot and leaves the
-  base with an idle body and an unworked order every tick, silently. The
-  check asks the **staff**, short-circuiting on the first body that routes,
-  and announces once via `announced_stuck` with **no silent arm**. There is
-  deliberately **no `has_station` pre-filter** in `build_wants` — the route
-  check subsumes it. Testing it needs **two** islands: one cell with no
-  standing room, two cells with standing room and no route.
+- **Priority is a want's position in `base_wants`'s list, and the matching
+  (`assignment::assign_by_priority`) fills it front to back and never
+  un-seats an earlier want for a later one** — replacing the old
+  `truncate(staff.len())` cut and greedy hand-out, which assumed any body
+  could take any want and could strand one a `Duties` column restricts
+  (the module doc's case: A takes anything, B builds only, wants `[Build,
+  Dig]` — greedy gives A the build and stalls the dig; the matching gives
+  B→Build, A→Dig). **Build wants are *prepended*, the mirror of dig wants
+  being appended.** The trap is the empty-queue standdown guard: read off
+  `WorkOrders` alone it reasons from "nobody has told this base anything"
+  while somebody has, so it is gated on build wants too.
+- **An unreachable request is dropped from `wanted` before the matching
+  runs, build and dig alike, and that placement is the fix.** There is no
+  truncation any more for a want's position in the list to hide behind, so
+  a site nobody can walk to is announced rather than silently taking a
+  slot and leaving the base with an idle body and an unworked order every
+  tick. The check asks the **staff**, short-circuiting on the first body
+  that routes, and announces once via `announced_stuck` with **no silent
+  arm**. There is deliberately **no `has_station` pre-filter** in
+  `build_wants` — the route check subsumes it. Testing it needs **two**
+  islands: one cell with no standing room, two cells with standing room
+  and no route.
 - **A dry request is not a want, and `build_is_workable` is the one place
   in the scheduler a want is allowed to be a stock count.** Unconditionally
   listed it **deadlocks** a one-program base: the build outranks production,
@@ -677,12 +682,13 @@
 - **Every unsatisfied order is worked at once, and `settle_orders` is where
   priority lives.** It accumulates the wants of every non-stalled order in
   **queue order** and dedupes by machine keeping the **first** occurrence;
-  `schedule_base_labour`'s `truncate(staff.len())` does the rest, so there is
-  no sort and no score. The trap is that dropping the dedupe does *not* show
-  up as two bodies on one machine — `post_worker` calls
-  `displace_task_holder`, so the second posting evicts the first and the cost
-  lands somewhere else entirely: an idle program and the want the truncation
-  cut to make room for the duplicate.
+  `base_wants` appends them in that order and `assign_by_priority`'s
+  matching does the rest, so there is no sort and no score. The trap is
+  that dropping the dedupe does *not* show up as two bodies on one machine
+  — `post_worker` calls `displace_task_holder`, so the second posting
+  evicts the first and the cost lands somewhere else entirely: an idle
+  program and a lower-priority want left unworked that the matching would
+  otherwise have filled.
 - **A satisfied standing order is skipped, not removed** — `index += 1`, the
   branch a stalled order already takes. `WorkOrder::standing` makes an order
   a level the base holds rather than a batch, because a target that deletes
@@ -710,9 +716,14 @@
   and it touches nothing else — the stall latch rides inside the order. An
   old save's `priority:` field is ignored, not migrated: nothing carries
   `deny_unknown_fields`.
-- **`schedule_base_labour` decides the whole assignment by priority and then
-  diffs it.** Filling greedily around existing postings leaves a body on a
-  standing job while an order goes unworked. The diff is the anti-thrash rule.
+- **`assign_base_labour` decides the whole assignment by priority — the
+  bipartite matching in `assignment::assign_by_priority` — and then diffs
+  it against who is already posted.** Filling greedily around existing
+  postings leaves a body on a standing job while an order goes unworked,
+  which is the matching's own reason for existing; the diff on top is a
+  second, narrower anti-thrash rule, for *movement* rather than for which
+  wants get worked — a holder the matching kept on its own want is left
+  untouched even though the whole assignment was just recomputed.
   **A body holding a `Carrying` is never freed** — freeing one destroys the
   goods — and neither is one standing on a machine with **no output room
   while a Depot stands**: a clogged machine drops out of `wanted`, and that
@@ -722,18 +733,19 @@
   tick — but that guard must be **qualified**, or it also fires on a base
   whose orders are all *satisfied* and the line runs on for the rest of the
   run. It draws no RNG at all.
-- **How short of bodies the base is, is a cached figure taken *before* the
-  cut.** `resources::LabourDemand` is written once a tick by
-  `schedule_base_labour` — the wants it accumulated against `staff.len()` —
-  and read back by `Game::labour_demand` for the work order screen's header.
-  Written after `truncate` the figure is `staff.len()` by construction and
-  the shortfall is always zero, so the header never draws and every test
-  that merely reads the two fields stays green. Cached rather than derived
-  because the derivation is `&mut self` and logs, so a screen cannot call
-  it. The `staff.is_empty()` early return writes it too, and the header says
-  **nothing** at zero. A duty toggle writes it between ticks through
-  `reassign_base_labour` — the posting half alone, because the beat's other
-  half rolls tantrums and a paused keypress must not re-roll one.
+- **How short of bodies the base is, is a per-duty tally taken from the
+  matching's own leftovers — `LabourDemand::unworked`, never a
+  wanted-count minus `staff.len()`.** `unworked_by_duty` walks the wants
+  the matching left with no assigned body and resolves each to the one
+  `Duty` that `admits` its `TaskKind`; `record_labour_demand` writes that
+  tally once a tick alongside `wanted.len()` and `on_shift.len()`, read
+  back by `Game::labour_demand` for the work order screen's header. Cached
+  rather than derived because the derivation is `&mut self` and logs, so a
+  screen cannot call it. The `staff.is_empty()` early return writes it too
+  — the header says **nothing** at zero. A duty toggle writes it between
+  ticks through `reassign_base_labour` — the posting half alone, because
+  the beat's other half rolls tantrums and a paused keypress must not
+  re-roll one.
 - **A program's role is derived, and there is no "owned but idle" state.**
   `Game::program_role` over `ProgramRole` — disjoint and exhaustive, so a
   program you own that is not fighting beside you, not held as your weapon
@@ -1059,25 +1071,27 @@
   `NoRoute` complains **once**, latched on `DigSite::announced_stuck` by
   `announce_dig_cut_off`, per `set_machine_status`'s only-on-transition rule.
   The latch is not saved: a reload should say it again. **Both are answered
-  above the truncation** — see the entry below — so the announcer is only
-  ever reached with a face to stand at, and the assignment loop's own skip
-  is silent for either.
-- **Dig wants are appended last in `schedule_base_labour`, and the priority
-  *is* the position in that list** — `truncate(staff.len())` cuts from the
-  end, so anything inserted above them silently starves production.
-  `dig_wants` is structural like `feeders_for`, never a stock count, and
-  sorted by tile. **The trap is any reachability question left below the
-  cut**: unworkable cells sort first, `continue` costs no body when their
-  turn comes, and the rim the crew could have been sent to is cut off the
-  end of the list — a plan with a crew standing idle in front of it and
-  nothing said. It bit twice. `hauling::has_station` drops the boxed-in
-  interior in `dig_wants` (the half of `NoPost::BoxedIn` that does not
-  depend on who is asking, four grid lookups, no walk); `NoRoute` was left
-  below the cut on the argument that it announces itself, and a sealed
+  before the matching runs** — see the unreachable-drop entry above — so
+  the announcer is only ever reached with a face to stand at, and the
+  assignment loop's own skip is silent for either.
+- **Dig wants are appended last in `base_wants`, and priority is still the
+  position in that list** — `assign_by_priority` fills wants front to back
+  and never un-seats an earlier one, so anything inserted above them
+  silently starves production. `dig_wants` is structural like
+  `feeders_for`, never a stock count, and sorted by tile. **The trap is any
+  reachability question left for the matching to discover on its own**:
+  unworkable cells sort first, `continue` costs no body when their turn
+  comes, and the rim the crew could have been sent to would otherwise fall
+  silently out of the matching — a plan with a crew standing idle in front
+  of it and nothing said. It bit twice. `hauling::has_station` drops the
+  boxed-in interior in `dig_wants` (the half of `NoPost::BoxedIn` that does
+  not depend on who is asking, four grid lookups, no walk); `NoRoute` was
+  left to announce itself on the argument that it would, and a sealed
   pocket or a plan past `haul_walk_radius` starved the same way. Both now
-  drop in the block above the cut that already dropped unreachable build
-  requests, and `can_walk_to_dig` is gone — with the announcement moved out
-  it was `can_walk_to_post` renamed. **The trap in the fix is cost**: one
+  drop in the block, shared with build, that runs **before the matching** —
+  see the unreachable-drop entry above — and `can_walk_to_dig` is gone —
+  with the announcement moved out it was `can_walk_to_post` renamed. **The
+  trap in the fix is cost**: one
   `post_route` per want is a Dijkstra field per face times a hundred-cell
   plan, every tick, permanently. `hauling::crew_reach` builds the field from
   the *body* once and `hauling::reaches` makes each want a lookup — one walk
@@ -1140,8 +1154,8 @@
   `schedule_base_labour` is about to drop anyway — the unroutable-mark
   starvation, one dimension over, with the one cell a body could have cut
   announced dry instead. So the claim is settled over the assembled want
-  list, **after** the unreachable drop and **above** the truncation, where
-  it also keeps a job nobody can pay for out of `record_labour_demand`.
+  list, **after** the unreachable drop and **before the matching runs**,
+  where it also keeps a job nobody can pay for out of `record_labour_demand`.
   `dig_wants` keeps `hauling::has_station`, which is four grid lookups and
   answers for a cell on its own. **The trap the build side never needed**:
   `schedule_base_labour`'s "quiet base" guard tests
@@ -1173,12 +1187,48 @@
   halves share one latch and one `frayed_here` grudge but say **different
   sentences**, `BoxedIn`-versus-`NoRoute`'s rule one level up.
 - **An off-shift program leaves the *posting* half of
-  `schedule_base_labour`, not the drift half.** `drift_idle_staff` keeps the
-  whole staff list — it is what walks the body to its amenity — while
-  `record_labour_demand`, `truncate` and the standdown guard read
-  `on_shift`. The one exception is a `Carrying` holder, the existing
+  `schedule_base_labour` (`assign_base_labour`'s `on_shift` filter), not
+  the drift half.** `drift_idle_staff` keeps the whole staff list — it is
+  what walks the body to its amenity — while the matching,
+  `record_labour_demand` and the standdown guard all read `on_shift`. The
+  one exception is a `Carrying` holder, the existing
   never-free-a-`Carrying`-holder rule and not a second one. The header's
   shortfall *grows* while bodies are off shift; that is the readout.
+- **`components::Duties` is a denied-set, `DepotFilter`'s
+  absent-means-everything precedent, and `Duty::admits` is checked against
+  a `PostDesc` rather than a bare `TaskKind`.** No component, or an empty
+  one, admits every duty; `duty_admits`'s "some checked duty admits it"
+  rule (not "the one partitioning duty does") is what lets a later
+  `Duty::Structure(id)` column overlap `Operate` with no special case at
+  the call site. The trap is `Duty::admits`'s match being exhaustive on
+  **both** enums, `cell_mark`'s rule — a fifth `Duty` variant or a fifth
+  `TaskKind` fails to compile there rather than a wildcard arm silently
+  answering `false` for it.
+- **The Base staff table's row order is `StaffRank`, and `move_staff_row`
+  renumbers the whole order densely by position rather than swapping rank
+  *values*.** Two programs can share a rank (a build-site refund mints one
+  off the live count, which no longer includes the program it replaced) or
+  carry none at all (a pre-feature save's `staff_rank: None`); swapping
+  values a tie shares leaves both unchanged, and swapping into a `None`
+  strands a row with nothing to compare next time. `display_order` — Staff
+  section first, then Away, rank order held within each — is the order the
+  table is actually built and moved in, and it is **not** the same as
+  `roster_order`: an away program's rank can fall between two staff ranks,
+  so `<`/`>` moving within `roster_order` would sometimes swap a visible
+  staff row with an invisible away one, with nothing moving on screen.
+- **A duty toggle (`set_duty`/`set_duty_column`) reassigns through
+  `Game::reassign_base_labour` and never runs the beat's clock-driven
+  stages — no needs, no morale rung, no tantrum, no bay admission, no
+  drift.** Those advance with the clock, and `run_tantrums` draws
+  `GameRng`, so running them per keypress would let a player re-roll the
+  base by toggling a checkbox with the game paused. What `reassign_base_labour`
+  does run — `base_wants`, the unreachable and dry drops, the matching, the
+  diff and `LabourDemand` — draws nothing and reads the markers the last
+  real beat wrote, so a second pass in the same tick settles on the same
+  answer. Without the call at all, the table's `N!` counts and header are
+  the *previous* pass's figures until the next real tick — `Mode::BaseStaff`
+  spends none of the clock itself, unlike every screen that pages ticks
+  through `after_tick`.
 - **`idled_with` is an edge, never a period** — written when a serviced need
   reaches `content`, naming everyone else in reach of that amenity.
   `note_postings`' cost applies unchanged: a per-tick writer saturates

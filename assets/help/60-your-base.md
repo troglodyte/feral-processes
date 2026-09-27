@@ -76,6 +76,15 @@ the base works out which machines make it, who stands on each, and what has to b
 is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
 and > move the highlighted order up and down. Cancelling one unwinds nothing.
 
+The base staff row on the base menu opens a table, one row per program and one column per kind of
+job — Operate, Guard, Dig, Build. Space unchecks or rechecks the highlighted cell, [A] does the
+whole column at once, and an unchecked column is a program that will never be handed that kind of
+job, however short-handed the base gets; leave every box checked (the default for a program you
+have not touched) and it takes anything. < and > move a row up or down the table, and that order is
+who the scheduler tries first when more than one program could take the same job — it does not
+override the priority above, so a Guard-only program still waits behind a build request it cannot
+help with anyway.
+
 The rest of what a base does:
 
 - Extractors produce on a timer. Assemblers pull their input out of whatever is touching them, so a

@@ -294,12 +294,18 @@ relying on one, and correct all three places if it has moved.
   drifts — a crew-built machine missing its `MachineStatus` reads as the
   base being broken.
 - **Materials are not spent until the structure is raised.**
-- **Build wants are *prepended* in `schedule_base_labour`, the mirror of dig
-  wants being appended** — the priority is the position in that list, since
-  `truncate(staff.len())` cuts from the end.
-- **An unreachable request is dropped *above* the cut in
-  `schedule_base_labour`, build and dig alike, through one
-  `hauling::crew_reach` field per body rather than a walk per want.**
+- **Priority is a want's position in `base_wants`'s list, and
+  `assignment::assign_by_priority`'s bipartite matching never un-seats an
+  earlier want to work a later one** — it replaced `schedule_base_labour`'s
+  old `truncate(staff.len())` cut and greedy hand-out, which assumed any
+  body could take any want and could strand a restricted one.
+- **Build wants are *prepended* in `base_wants`, the mirror of dig wants
+  being appended** — priority is the position in that list, which the
+  matching fills front to back rather than a survivor list cut from the
+  end.
+- **An unreachable request is dropped from `wanted` before the matching
+  runs, build and dig alike, through one `hauling::crew_reach` field per
+  body rather than a walk per want.**
 - **A dry request is not a want, and `build_is_workable` is the one place in
   the scheduler a want is allowed to be a stock count.**
 - **A builder *walks* to its materials, and that is what the dig crew does
@@ -411,8 +417,8 @@ relying on one, and correct all three places if it has moved.
 - **Every unsatisfied order is worked at once, and `settle_orders` is where
   priority lives.** It accumulates the wants of every non-stalled order in
   **queue order** and dedupes by machine keeping the **first** occurrence;
-  `schedule_base_labour`'s `truncate(staff.len())` does the rest, so there
-  is no sort and no score.
+  `base_wants` appends them in that order and `assign_by_priority`'s
+  matching does the rest, so there is no sort and no score.
 - **A satisfied standing order is skipped, not removed** — `index += 1`, the
   branch a stalled order already takes.
 - **A work order's priority is its position in the queue, and
@@ -421,10 +427,12 @@ relying on one, and correct all three places if it has moved.
 - **`schedule_base_labour` decides the whole assignment by priority and then
   diffs it.** Filling greedily around existing postings leaves a body on a
   standing job while an order goes unworked.
-- **How short of bodies the base is, is a cached figure taken *before* the
-  cut.** `resources::LabourDemand` is written once a tick by
-  `schedule_base_labour` — the wants it accumulated against `staff.len()` —
-  and read back by `Game::labour_demand` for the work order screen's header.
+- **How short of bodies the base is, is a per-duty tally taken from the
+  matching's own leftovers, never a truncated want list.**
+  `LabourDemand::unworked` counts a want left unmatched by
+  `assign_by_priority`, tallied by `unworked_by_duty` and written once a
+  tick by `record_labour_demand`, read back by `Game::labour_demand` for
+  the work order screen's header.
 - **A program's role is derived, and there is no "owned but idle" state.**
   `Game::program_role` over `ProgramRole` — disjoint and exhaustive, so a
   program you own that is not fighting beside you, not held as your weapon
@@ -514,9 +522,10 @@ relying on one, and correct all three places if it has moved.
   itself); `NoRoute` complains **once**, latched on
   `DigSite::announced_stuck`, per `set_machine_status`'s only-on-transition
   rule.
-- **Dig wants are appended last in `schedule_base_labour`, and the priority
-  *is* the position in that list** — `truncate(staff.len())` cuts from the
-  end, so anything inserted above them silently starves production.
+- **Dig wants are appended last in `base_wants`, and priority is still the
+  position in that list** — `assign_by_priority` fills wants front to back
+  and never un-seats an earlier one, so anything inserted above them
+  silently starves production.
 - **Mining does not go through `battle::resolve_attack`**, for
   `attack_nest`'s reason: rock cannot dodge and identical swings must land
   identical damage.
@@ -544,10 +553,19 @@ relying on one, and correct all three places if it has moved.
   it *is* acting out.** Below `critical`, something services it, not
   latched.
 - **An off-shift program leaves the *posting* half of
-  `schedule_base_labour`, not the drift half.** `drift_idle_staff` keeps the
-  whole staff list — it is what walks the body to its amenity — while
-  `record_labour_demand`, `truncate` and the standdown guard read
-  `on_shift`.
+  `schedule_base_labour` (`assign_base_labour`'s `on_shift` filter), not
+  the drift half.** `drift_idle_staff` keeps the whole staff list — it is
+  what walks the body to its amenity — while the matching,
+  `record_labour_demand` and the standdown guard all read `on_shift`.
+- **`components::Duties` is a denied-set, `DepotFilter`'s
+  absent-means-everything precedent** — no component, or an empty one,
+  admits every duty — **and the Base staff table's row order is
+  `StaffRank`**, renumbered densely from 0 on every move.
+- **A duty toggle (`set_duty`/`set_duty_column`) reassigns through
+  `Game::reassign_base_labour`, the posting half of `schedule_base_labour`
+  alone, and never runs the beat's clock-driven stages** (needs, morale,
+  tantrums, bay admission, drift) — so a keypress with the game paused
+  cannot re-roll anything.
 - **`idled_with` is an edge, never a period** — written when a serviced need
   reaches `content`, naming everyone else in reach of that amenity.
 - **`needs::strain` is a free function and `need_shift` has its own cap.**

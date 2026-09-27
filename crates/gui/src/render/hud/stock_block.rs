@@ -16,10 +16,11 @@
 //! the UI font is proportional, and `Painter` clips vertically and never
 //! horizontally, so an over-wide name is drawn across the map in silence. A
 //! name wider than its column is cut with an ellipsis, and the stock rows
-//! past the height budget are **counted**, not dropped. The research and
-//! downed sections are never cut short: each is at most three lines, and
-//! their height comes out of the budget **before** the stock rows are
-//! allotted what is left. Appended last and left to compete, the downed
+//! past the height budget are **counted**, not dropped — except a stalled
+//! project's two lines, which **wrap**, because a reason cut short names
+//! nothing the player can act on. The research and downed sections are
+//! never cut short: their height comes out of the budget **before** the
+//! stock rows are allotted what is left. Appended last and left to compete, the downed
 //! readout is the section a well-stocked base silently deletes.
 //!
 //! **Every section says nothing when it has nothing to say**, which is the
@@ -100,15 +101,47 @@ fn research_lines(readout: &ResearchReadout, max_name_w: f32, size: u16, p: &Pai
             ]
         }
         // `ATTENTION`, the machine-stall rule: waiting will not pay the bill.
-        ResearchReadout::Stalled { name, short_of } => vec![
-            header,
-            Line::Text(fit(name), palette::BODY),
-            Line::Text(
-                fit_name(&format!("needs {short_of}"), note_w, size, p),
-                palette::ATTENTION,
-            ),
-        ],
+        // Both lines wrap rather than cut: they stand alone with no figure
+        // beside them, and a reason cut short names nothing the player can
+        // act on.
+        ResearchReadout::Stalled { name, short_of } => {
+            let wrap = |text: &str, ink: Color| {
+                wrap_to(text, note_w, size, p)
+                    .into_iter()
+                    .map(move |l| Line::Text(l, ink))
+            };
+            std::iter::once(header)
+                .chain(wrap(name, palette::BODY))
+                .chain(wrap(&format!("needs {short_of}"), palette::ATTENTION))
+                .collect()
+        }
     }
+}
+
+/// `text` broken at spaces into lines that each measure within `max_w`.
+/// Greedy, and measured rather than counted, for `fit_name`'s reason — the
+/// UI font is proportional. A single word wider than the column is the one
+/// thing still cut, since there is no space to break it at.
+fn wrap_to(text: &str, max_w: f32, size: u16, painter: &Painter) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let candidate = if current.is_empty() {
+            word.to_string()
+        } else {
+            format!("{current} {word}")
+        };
+        if current.is_empty() || painter.measure_ui_advance(&candidate, size) <= max_w {
+            current = candidate;
+        } else {
+            lines.push(fit_name(&current, max_w, size, painter));
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(fit_name(&current, max_w, size, painter));
+    }
+    lines
 }
 
 /// The downed store's two lines, or none at all when nothing is held.
@@ -437,6 +470,59 @@ mod tests {
         assert!(filled.is_some(), "research alone is worth the corner");
         let text = painted_text(&shapes);
         assert_eq!(text, [RESEARCH_HEADER, "Automation", "needs Cache Grain"]);
+    }
+
+    /// A reason longer than its column wraps onto further lines rather than
+    /// being cut: "needs room for another…" names no problem the player can
+    /// act on. Every word survives, in order, and every line is measured to
+    /// fit its column.
+    #[test]
+    fn a_long_stall_reason_wraps_whole_rather_than_being_cut() {
+        let m = ui_metrics(900.0);
+        let short_of = "room for another downed program";
+        let research = ResearchReadout::Stalled {
+            name: "Outpost Founding".to_string(),
+            short_of: short_of.to_string(),
+        };
+        let (filled, shapes) =
+            with_painter(|p| draw_stock_block(pane(), Some(&research), &[], (10, 10), p, &m));
+        let filled = filled.expect("a tall pane has room for the block");
+        let text = painted_text(&shapes);
+        let note: Vec<&String> = text
+            .iter()
+            .skip_while(|t| *t != "Outpost Founding")
+            .skip(1)
+            .take_while(|t| *t != DOWNED_HEADER)
+            .collect();
+        assert!(
+            note.len() > 1,
+            "the fixture must overflow one line: {text:?}"
+        );
+        assert!(
+            !note.iter().any(|t| t.ends_with(ELLIPSIS)),
+            "the reason was cut: {note:?}"
+        );
+        let joined = note
+            .iter()
+            .map(|t| t.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(joined, format!("needs {short_of}"));
+        with_painter(|p| {
+            let note_w = p.measure_ui_advance("M", m.small()) * NOTE_COLUMN_CHARS;
+            for line in &note {
+                assert!(
+                    p.measure_ui_advance(line, m.small()) <= note_w,
+                    "{line:?} is wider than its column"
+                );
+            }
+        });
+        for (_, text, ink) in painted_text_boxes(&shapes) {
+            assert!(
+                ink.y + ink.h <= filled.y + filled.h,
+                "{text:?} drew below the block {filled:?}"
+            );
+        }
     }
 
     /// An idle lab with an empty base still draws: "none" is the readout.

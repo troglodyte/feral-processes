@@ -55,6 +55,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();

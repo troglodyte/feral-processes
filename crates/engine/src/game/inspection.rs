@@ -1242,6 +1242,10 @@ impl Game {
                     Some((c, m)) => (Some(c), Some(m)),
                     None => (None, None),
                 };
+                let pod_charged = self
+                    .world
+                    .get::<crate::components::DropPod>(entity)
+                    .map(|p| p.charged);
                 let can_work = self.accepts_a_program(entity);
                 let machine_status = self.world.get::<MachineStatus>(entity).copied();
                 let can_trade = self.trade_options(entity).is_some();
@@ -1371,6 +1375,7 @@ impl Game {
                     tier,
                     ceiling,
                     max_tier,
+                    pod_charged,
                     is_boss,
                     nemesis: is_nemesis,
                     patrol: self.patrol_owner(entity),

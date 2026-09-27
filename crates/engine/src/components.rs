@@ -994,6 +994,20 @@ pub struct PowerFuel {
     pub ticks_left: u32,
 }
 
+/// Whether a `StructureDef::drop_pod` terminal has a charge ready to spend —
+/// see `structures::DropPodDef`.
+///
+/// Present exactly on a structure whose def declares `drop_pod`,
+/// `PowerFuel`'s rule one field family up: `Game::spawn_structure` is the one
+/// writer, and a hand-spawned fixture without one reads as a terminal that
+/// was never wired up rather than as a free pod. A freshly raised terminal
+/// is charged; spending it is `Game::spend_pod`, which also files the
+/// `BuildGoal::Recharge` request that flips this back.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DropPod {
+    pub charged: bool,
+}
+
 /// Serde is here for `MemorySubject::Activity`, which saves this enum
 /// directly rather than through a mirror — see that enum's doc comment for
 /// why it does not follow `save::CronjobKind`.
@@ -2519,6 +2533,15 @@ pub enum BuildGoal {
     /// destroyed underneath the request and no load-order dependency between
     /// structures and sites in the save.
     Upgrade { to_tier: u32 },
+    /// Recharge the drop pod **already standing on this cell** — see
+    /// `components::DropPod` and `structures::DropPodDef`.
+    ///
+    /// `Upgrade`'s path exactly: named by tile and never by `Entity`, for the
+    /// same reason. `BuildSite::program` is always `None` on one of these —
+    /// a recharge runs no job, so it costs no program, the Shield/shelf
+    /// rule — which is why `Game::spend_pod` files the site directly rather
+    /// than through `commit_for_build`.
+    Recharge,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -2582,6 +2605,14 @@ impl BuildSite {
     /// `to_tier`, against an already-resolved `cost`.
     pub fn upgrade(structure: StructureId, cost: Vec<(ItemId, u32)>, to_tier: u32) -> Self {
         Self::filed(structure, cost, BuildGoal::Upgrade { to_tier })
+    }
+
+    /// A request to recharge the drop pod already standing on this cell,
+    /// against its `structures::DropPodDef::recharge_cost`. `Self::upgrade`'s
+    /// shape — `filed` already defaults `program` to `None`, which is what
+    /// makes this one cost no program on its own.
+    pub fn recharge(structure: StructureId, cost: Vec<(ItemId, u32)>) -> Self {
+        Self::filed(structure, cost, BuildGoal::Recharge)
     }
 
     fn filed(structure: StructureId, cost: Vec<(ItemId, u32)>, goal: BuildGoal) -> Self {

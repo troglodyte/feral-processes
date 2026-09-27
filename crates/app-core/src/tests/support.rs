@@ -308,6 +308,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1324,6 +1325,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -1448,6 +1450,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1570,6 +1573,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1684,6 +1688,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -2371,6 +2376,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -2514,6 +2520,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -2649,6 +2656,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     data.player.inventory = pack
@@ -2716,6 +2724,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2763,6 +2772,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -2915,6 +2925,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };

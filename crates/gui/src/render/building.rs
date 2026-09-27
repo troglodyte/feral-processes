@@ -1753,6 +1753,7 @@ mod tests {
             tier: Some(tier),
             ceiling: Some(ceiling),
             max_tier: Some(max_tier),
+            pod_charged: None,
             is_boss: false,
             nemesis: false,
             patrol: None,

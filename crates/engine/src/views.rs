@@ -1116,6 +1116,11 @@ pub struct EntityView {
     /// `max_tier` means "breach first", `ceiling` equal to it means
     /// "finished". Neither value alone distinguishes those.
     pub max_tier: Option<u32>,
+    /// Whether this (structure) entity has a drop pod charge ready to
+    /// spend — `components::DropPod`, `tier`'s own shape: `None` for a
+    /// structure whose def declares no `drop_pod` at all, `Some` for the
+    /// one that does.
+    pub pod_charged: Option<bool>,
     pub is_boss: bool,
     /// Whether this (creature) entity has beaten the party or driven them
     /// off — see `components::Nemesis`. Wins the glyph colour in
@@ -3090,6 +3095,9 @@ impl BuildOrderRow {
             crate::components::BuildGoal::New => self.structure.clone(),
             crate::components::BuildGoal::Upgrade { to_tier } => {
                 format!("{} → Mk{to_tier}", self.structure)
+            }
+            crate::components::BuildGoal::Recharge => {
+                format!("{} — recharging", self.structure)
             }
         }
     }

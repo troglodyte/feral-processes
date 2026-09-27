@@ -595,6 +595,32 @@ impl Game {
                     def.name
                 ));
             }
+            BuildGoal::Recharge => {
+                // Resolved by **tile**, `Upgrade`'s own reason: the site
+                // never held an `Entity`, so there is nothing to dangle if
+                // the terminal is destroyed underneath the request.
+                let terminal = {
+                    let mut query = self
+                        .world
+                        .query_filtered::<(Entity, &Position), With<Structure>>();
+                    query
+                        .iter(&self.world)
+                        .find(|(_, p)| p.x == target.x && p.y == target.y)
+                        .map(|(e, _)| e)
+                };
+                // Left standing rather than despawned where it cannot land
+                // — the missing-def arm's precedent, extended to a terminal
+                // that is gone. The materials are still on the cell.
+                let Some(terminal) = terminal else {
+                    return;
+                };
+                if let Some(mut pod) = self.world.get_mut::<crate::components::DropPod>(terminal) {
+                    pod.charged = true;
+                }
+                self.consume_site(site);
+                self.world.entity_mut(worker).remove::<Task>();
+                self.log_base(format!("Your crew reloads the {}.", def.name));
+            }
         }
     }
 

@@ -386,6 +386,10 @@ impl Game {
         let subject = match goal {
             BuildGoal::New => def.name.clone(),
             BuildGoal::Upgrade { to_tier } => format!("Mk{to_tier} {}", def.name),
+            // Never reached: a recharge costs no program, so `Game::spend_pod`
+            // files the site directly and never calls this door — see
+            // `BuildGoal::Recharge`'s own doc.
+            BuildGoal::Recharge => unreachable!("a recharge never commits a program"),
         };
         let Some(chosen) = program else {
             return Err(match goal {
@@ -397,6 +401,7 @@ impl Game {
                     "Upgrading the {} to Mk{to_tier} costs a tamed program. Pick one first.",
                     def.name
                 ),
+                BuildGoal::Recharge => unreachable!("a recharge never commits a program"),
             });
         };
         let depth = self.zone_tier(chosen);
@@ -428,6 +433,7 @@ impl Game {
                     "Committing your last program would leave nobody to upgrade the {}.",
                     def.name
                 ),
+                BuildGoal::Recharge => unreachable!("a recharge never commits a program"),
             });
         }
         // **`None` here is a refusal, not an absence.** `commit_program`
@@ -671,6 +677,10 @@ impl Game {
         }
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
+        }
+        // A freshly raised terminal is charged — see `components::DropPod`.
+        if def.drop_pod.is_some() {
+            entity.insert(crate::components::DropPod { charged: true });
         }
         if let Some(quality) = quality {
             entity.insert(crate::components::BuildQuality(quality));
@@ -1092,6 +1102,56 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Spends the charge on `terminal` and files the `BuildGoal::Recharge`
+    /// request that earns it back.
+    ///
+    /// **`Upgrade`'s path with a different completion arm** —
+    /// `raise_one_tick`'s. The bill, the fetch, the walk, the delivery, both
+    /// latches, the reachability check and the cancel refund are inherited
+    /// unchanged; `BuildSite::recharge` already leaves `program: None`, so
+    /// this never touches `commit_for_build` and spends no roster slot.
+    ///
+    /// A no-op if a request already stands on the terminal's own cell —
+    /// `upgrade_structure`'s own guard, so calling this on an already-spent
+    /// pod (a second miss in the same fight, say) cannot stack a second
+    /// recharge on top of the first.
+    ///
+    /// `pub`, `upgrade_structure`'s own visibility: B1 has no production
+    /// caller yet (B1 tests call it directly; B2's `Game::call_reinforcement`
+    /// is the real one), and a `pub(crate)` method with none reads as dead
+    /// code to the plain `lib` build, which never compiles the tests module
+    /// that is this phase's only caller.
+    pub fn spend_pod(&mut self, terminal: Entity) {
+        let Some(pos) = self.world.get::<Position>(terminal).copied() else {
+            return;
+        };
+        if self.build_site_at(pos.x, pos.y).is_some() {
+            return;
+        }
+        let Some(kind) = self
+            .world
+            .get::<Structure>(terminal)
+            .map(|s| s.kind.clone())
+        else {
+            return;
+        };
+        let Some(def) = self.world.resource::<StructureDb>().get(&kind).cloned() else {
+            return;
+        };
+        let Some(pod_def) = def.drop_pod.clone() else {
+            return;
+        };
+        if let Some(mut pod) = self.world.get_mut::<crate::components::DropPod>(terminal) {
+            pod.charged = false;
+        }
+        self.world
+            .spawn((BuildSite::recharge(kind, pod_def.recharge_cost), pos));
+        self.log_base(format!(
+            "The {} is spent — your crew will reload it.",
+            def.name
+        ));
     }
 
     /// Despawns the pending build request standing on `(x, y)`, if one is,

@@ -934,8 +934,8 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => Vec::new(),
     };
     let base_staff = match app.mode {
-        Mode::BaseStaff => app.base_staff_rows(),
-        _ => Vec::new(),
+        Mode::BaseStaff => Some(app.base_staff_table()),
+        _ => None,
     };
     // The row's two holdings and the amount the basket is asking for, taken
     // here because `game` below borrows `&mut app.game` and these read the
@@ -1140,7 +1140,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::BaseStaff => draw_base_staff(game, &base_staff, selected, refusal, painter, m),
+        Mode::BaseStaff => {
+            if let Some(table) = &base_staff {
+                draw_base_staff(game, table, selected, app.work_column, refusal, painter, m);
+            }
+        }
         Mode::WorkStructure => draw_structure_menu(
             &scanned,
             "Work",

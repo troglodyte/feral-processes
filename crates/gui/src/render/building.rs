@@ -1,15 +1,16 @@
 //! The build, staffing, demolition, upgrade and symlink pickers.
 
-use super::manifest::base_job_label;
 use super::party::companion_rows;
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::{BaseStaffRow, PendingBuild, ProgramRole, WorkOrderRow};
+#[cfg(test)]
+use feral_processes_app_core::ProgramRole;
+use feral_processes_app_core::{PendingBuild, WorkOrderRow};
 use feral_processes_engine::components::BuildGoal;
 use feral_processes_engine::structures::StructureId;
 use feral_processes_engine::{
     BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, OrderState,
-    WorkProfile, program_tier_required,
+    WorkColumn, WorkRow, WorkSection, WorkTable, program_tier_required,
 };
 
 /// One buildable structure as the build menu needs it: everything that
@@ -1022,111 +1023,221 @@ fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<Str
     ]
 }
 
-/// The roster as the base sees it: every program the player owns, the role
-/// it is in, and what it is doing right now.
-///
-/// **Read-only.** Roles are derived — a program you own and are not fighting
-/// with is base staff — so there is nothing on this screen to toggle. The
-/// Companions screen is where a party is picked, and the base takes whatever
-/// that leaves.
+/// The key hint row — the screen's whole key list, since there is no
+/// digit/letter row-jump here (see `App::handle_base_staff_key`'s doc).
+const BASE_STAFF_KEYS: &str =
+    "Up/Down row  Left/Right column  Space toggle  < > move row  A toggle column  Esc closes";
+
+/// The roster as the base sees it, and the table the player edits: every
+/// program the player owns, the role it is in, what it is doing, and one
+/// checkbox column per `Duty` — `Game::work_table` is the one derivation
+/// both this and `App::handle_base_staff_key` read.
 pub(super) fn draw_base_staff(
     game: &mut Game,
-    staff_rows: &[BaseStaffRow],
+    table: &WorkTable,
     selected: usize,
+    column: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let pets = game.owned_pets();
-    let rows = base_staff_menu_rows(staff_rows, &pets, selected);
+    let rows = base_staff_menu_rows(table, &pets, selected, column);
     draw_popup("Base Staff", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// What a program is worth at a post, as the staff row says it.
-///
-/// The class goes through `manifest::base_job_label` rather than a second
-/// mapping of its own: that one is exhaustive on purpose so a sixth class
-/// cannot ship without deciding what it does at a post, and a copy here
-/// would be a way to dodge that.
-fn work_summary(work: Option<WorkProfile>) -> String {
-    let Some(work) = work else {
-        // The species is not in the db, so there are no numbers to quote —
-        // saying so beats printing the roster's defaults as if authored.
-        return "species not loaded".to_string();
-    };
-    let job = work
-        .class
-        .map(base_job_label)
-        .unwrap_or_else(|| "no base job".to_string());
-    format!("Spd {} · Ana {} · {job}", work.speed, work.analysis)
+/// The header line's three counts — `WorkTable::on_shift`/`jobs`/
+/// `unworked_total` — in `labour_header`'s plain-sentence shape one screen
+/// over, since a restriction that leaves work undone is exactly what this
+/// screen exists to make visible rather than silent.
+fn work_table_header(table: &WorkTable) -> String {
+    format!(
+        "{} on shift, {} job{} wanted, {} unworked",
+        table.on_shift,
+        table.jobs,
+        if table.jobs == 1 { "" } else { "s" },
+        table.unworked_total,
+    )
 }
 
-/// The Base Staff popup's rows: a shortcut line naming the program and what
-/// it brings to a post, and an indented line under it for what it is doing
-/// now.
-///
-/// Two lines because one busts the row budget. The widest realistic row — a
-/// Gold fused program of the longest species name, with a zone tag, the
-/// work summary and the longest activity — is 106 characters against
-/// `ROW_WRAP_COLUMNS`' 100. Measured against the real font that row does
-/// still *fit* the reference 1440x900 geometry, but by about two characters
-/// (1203px of 1243px including the draw prefix), and `draw_row` clamps a row
-/// vertically and never horizontally, so nothing catches the row that
-/// finally doesn't. The activity is the half that moved, because it is the
-/// half you read second.
+/// A duty column's header text — the label, plus `N!` when the matching left
+/// wants under it unworked, blank at zero.
+fn duty_heading(column: &WorkColumn) -> String {
+    if column.unworked > 0 {
+        format!("{} {}!", column.label, column.unworked)
+    } else {
+        column.label.to_string()
+    }
+}
+
+/// `s` centred inside `width`, the extra space split with the shorter side
+/// first — a checkbox cell under a wider header column.
+fn centered(s: &str, width: usize) -> String {
+    let len = s.chars().count();
+    if len >= width {
+        return s.to_string();
+    }
+    let pad = width - len;
+    let left = pad / 2;
+    format!("{}{s}{}", " ".repeat(left), " ".repeat(pad - left))
+}
+
+/// Two spaces between every column — `transfer.rs`'s `COLUMN_GAP`, the same
+/// whole-monospace-cell reasoning: a heading has no `suffix_x` pixel inset to
+/// match, so every boundary has to land on a character count both the header
+/// and the rows agree on.
+const COLUMN_GAP: &str = "  ";
+
+/// The lead every data row on this screen carries before its own text: the
+/// selection prefix (`"  "`/`"> "`, both two cells) plus the icon slot every
+/// row reserves through `with_icon`. `transfer.rs`'s `HEADER_LEAD`, widened
+/// by the icon slot this screen's rows also carry — the column header and
+/// the away divider are both `Row::Text`, which get no lead of their own,
+/// so without this they sit five cells left of the table they name.
+const ROW_LEAD: &str = "     ";
+
+/// Every duty cell is a fixed three characters wide — `[x]`, `[ ]`, or the
+/// column cursor's `<x>`/`< >` — so a duty column is never narrower than its
+/// own cell even when nothing left a `!` on the header.
+const DUTY_CELL_WIDTH: usize = 3;
+
+/// The Base staff table's column widths, measured from the rows actually
+/// listed rather than fixed — `transfer.rs`'s `Columns`, widened from three
+/// columns to `#`/`PROGRAM`/`DOING` plus one per `Duty`.
+struct Columns {
+    rank: usize,
+    program: usize,
+    doing: usize,
+    duty: Vec<usize>,
+}
+
+impl Columns {
+    fn of(table: &WorkTable) -> Self {
+        let mut cols = Columns {
+            rank: 1, // "#"
+            program: "PROGRAM".chars().count(),
+            doing: "DOING".chars().count(),
+            duty: table
+                .columns
+                .iter()
+                .map(|c| duty_heading(c).chars().count().max(DUTY_CELL_WIDTH))
+                .collect(),
+        };
+        for (i, row) in table.rows.iter().enumerate() {
+            cols.rank = cols.rank.max((i + 1).to_string().len());
+            cols.program = cols.program.max(row.program.label.chars().count());
+            cols.doing = cols.doing.max(row.doing.chars().count());
+        }
+        cols
+    }
+
+    fn total_width(&self) -> usize {
+        self.rank
+            + self.program
+            + self.doing
+            + self.duty.iter().sum::<usize>()
+            + COLUMN_GAP.len() * (2 + self.duty.len())
+    }
+
+    fn header(&self, table: &WorkTable) -> String {
+        let mut out = String::from(ROW_LEAD);
+        out.push_str(&format!("{:<1$}", "#", self.rank));
+        out.push_str(COLUMN_GAP);
+        out.push_str(&format!("{:<1$}", "PROGRAM", self.program));
+        out.push_str(COLUMN_GAP);
+        out.push_str(&format!("{:<1$}", "DOING", self.doing));
+        for (column, width) in table.columns.iter().zip(&self.duty) {
+            out.push_str(COLUMN_GAP);
+            out.push_str(&centered(&duty_heading(column), *width));
+        }
+        out
+    }
+
+    /// `cursor_column` is `Some` only on the selected row — every other row
+    /// draws a plain `[x]`/`[ ]`, since a column cursor with no row cursor
+    /// is not a cell.
+    fn row(&self, index: usize, row: &WorkRow, cursor_column: Option<usize>) -> String {
+        let mut out = format!("{:>1$}", index + 1, self.rank);
+        out.push_str(COLUMN_GAP);
+        out.push_str(&format!("{:<1$}", row.program.label, self.program));
+        out.push_str(COLUMN_GAP);
+        out.push_str(&format!("{:<1$}", row.doing, self.doing));
+        for (i, width) in self.duty.iter().enumerate() {
+            out.push_str(COLUMN_GAP);
+            let checked = row.cells.get(i).copied().unwrap_or(true);
+            let cell = match (checked, cursor_column == Some(i)) {
+                (true, true) => "<x>",
+                (true, false) => "[x]",
+                (false, true) => "< >",
+                (false, false) => "[ ]",
+            };
+            out.push_str(&centered(cell, *width));
+        }
+        out
+    }
+}
+
+/// The rule between the Staff and Away sections — `── away ──…` padded to
+/// the table's own width so it reads as a divider rather than a stray line.
+fn away_divider(cols: &Columns) -> String {
+    const LABEL: &str = "── away ";
+    let width = cols.total_width();
+    format!(
+        "{ROW_LEAD}{LABEL}{}",
+        "─".repeat(width.saturating_sub(LABEL.chars().count()))
+    )
+}
+
+/// The Base staff table's rows: the header counts, the column header, one
+/// row per program (Staff first, then an **away** divider and section), and
+/// the key hint line.
 ///
 /// Split out of `draw_base_staff` so the layout is reachable without a
-/// `Game`, which is what `every_base_staff_activity_stays_inside_the_scrollable_body`
-/// and `the_widest_base_staff_row_stays_inside_the_popup` need.
+/// `Game`, which is what the width and height censuses below need.
 pub(super) fn base_staff_menu_rows(
-    staff_rows: &[BaseStaffRow],
+    table: &WorkTable,
     pets: &[PetInfo],
     selected: usize,
+    column: usize,
 ) -> Vec<Row> {
-    let mut rows = vec![text_row(
-        "Every program you own works the base unless it is in your party. Esc to close.",
-    )];
-    if staff_rows.is_empty() {
+    let cols = Columns::of(table);
+    let mut rows = vec![
+        text_row(work_table_header(table)),
+        text_row(cols.header(table)),
+    ];
+    if table.rows.is_empty() {
         rows.push(text_row("(no compiled programs — beat one first)"));
     }
-    for (i, row) in staff_rows.iter().enumerate() {
+    let mut drew_away_divider = false;
+    for (i, row) in table.rows.iter().enumerate() {
+        if row.section == WorkSection::Away && !drew_away_divider {
+            drew_away_divider = true;
+            rows.push(text_row(away_divider(&cols)));
+        }
+        let cursor_column = (i == selected).then_some(column);
+        let text = cols.row(i, row, cursor_column);
         let pet = pets.iter().find(|p| p.entity == row.program.entity);
-        rows.push(with_icon(
+        let base_row = if row.section == WorkSection::Away {
+            // Dimmed rather than tier-coloured: away is a status, and this
+            // screen edits it exactly as it edits a staffed row (see
+            // `App::handle_base_staff_key`), so the colour must not read as
+            // "cannot be changed".
+            colored_item_row(text, i == selected, TEXT_DIM)
+        } else {
             tier_row(
-                format!(
-                    "[{}] {} — {}",
-                    menu_shortcut(i),
-                    row.program.label,
-                    work_summary(row.work)
-                ),
+                text,
                 i == selected,
                 pet.map(|p| p.fusions).unwrap_or(0),
                 pet.map(|p| p.rarity).unwrap_or_default(),
-            ),
+            )
+        };
+        rows.push(with_icon(
+            base_row,
             row.program.glyph,
             glyph_color(row.program.color),
         ));
-        let side = if row.role == Some(ProgramRole::Staff) {
-            format!("base, {}", row.doing)
-        } else {
-            row.doing.clone()
-        };
-        // Dim `Item`s that can never be selected, not `Row::Text`:
-        // `popup_layout` ends the scrollable body at the *last* `Row::Item`,
-        // so text sub-lines under the last program would be pinned into the
-        // footer alongside this screen's legend and drawn detached at the
-        // bottom. That is the bug `routines::description_row` exists for, in
-        // the same shape. `continuation_lines` rather than one `format!` so
-        // the indent is the shared one and a long activity wraps.
-        rows.extend(
-            continuation_lines(&side)
-                .into_iter()
-                .map(|line| colored_item_row(line, false, TEXT_DIM)),
-        );
     }
-    rows.push(text_row(
-        "Base staff are posted automatically by your work orders.",
-    ));
+    rows.push(text_row(BASE_STAFF_KEYS));
     rows
 }
 
@@ -3067,101 +3178,80 @@ mod base_staff_tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
-    use feral_processes_engine::species::AffinityClass;
+    use feral_processes_engine::duties::Duty;
 
-    fn staff_row(
-        label: &str,
-        work: Option<WorkProfile>,
-        doing: &str,
-        role: Option<ProgramRole>,
-    ) -> BaseStaffRow {
+    fn work_row(label: &str, doing: &str, section: WorkSection, cells: [bool; 4]) -> WorkRow {
         let mut program = super::tests::view(1, 1, 1);
         program.label = label.to_string();
         program.is_structure = false;
         program.is_tamed = true;
-        BaseStaffRow {
+        WorkRow {
             program,
-            role,
+            section,
+            role: Some(if section == WorkSection::Staff {
+                ProgramRole::Staff
+            } else {
+                ProgramRole::InParty
+            }),
             doing: doing.to_string(),
-            work,
+            cells: cells.to_vec(),
+            rank: 0,
         }
     }
 
-    /// The widest row the shipped content can produce: a Gold, thrice-fused
-    /// program of the longest species name carrying a zone tag, the widest
-    /// work summary, and the longest activity — "guarding the Contract
-    /// Broker" over the longest structure name in `assets/structures/`.
-    fn widest_staff_row() -> BaseStaffRow {
-        staff_row(
+    fn columns(unworked: [usize; 4]) -> Vec<WorkColumn> {
+        Duty::ALL
+            .iter()
+            .zip(unworked)
+            .map(|(&duty, unworked)| WorkColumn {
+                duty,
+                label: duty.label(),
+                unworked,
+            })
+            .collect()
+    }
+
+    fn table(rows: Vec<WorkRow>) -> WorkTable {
+        WorkTable {
+            columns: columns([0, 0, 2, 0]),
+            on_shift: rows
+                .iter()
+                .filter(|r| r.section == WorkSection::Staff)
+                .count(),
+            jobs: rows.len(),
+            unworked_total: 2,
+            rows,
+        }
+    }
+
+    /// The widest row the shipped content can produce: the longest species
+    /// name at a high level with a zone tag, and the longest activity —
+    /// "guarding the Contract Broker" over the longest structure name in
+    /// `assets/structures/`.
+    fn widest_row() -> WorkRow {
+        work_row(
             "Gold Sub-Process Lv18 [z9]",
-            Some(WorkProfile {
-                speed: 14,
-                analysis: 18,
-                class: Some(AffinityClass::Leech),
-            }),
             "guarding the Contract Broker",
-            Some(ProgramRole::Staff),
+            WorkSection::Staff,
+            [true, true, false, true],
         )
     }
 
-    /// `popup_layout` ends the scrollable body at the *last* `Row::Item` and
-    /// pins everything after it as a footer. This screen has a legend, so an
-    /// activity emitted as `Row::Text` would put the last program's activity
-    /// below the scroll indicator, detached from the program it describes —
-    /// the bug the `every_*_stays_inside_the_scrollable_body` family in
-    /// `popup.rs` guards for the routine and build pickers.
-    ///
-    /// Asserted on the row list rather than through `popup_layout` because
-    /// the cut is a property of where the last item sits and nothing else:
-    /// the footer is every row after it, at any window size.
-    #[test]
-    fn every_base_staff_activity_stays_inside_the_scrollable_body() {
-        for n in 1..6 {
-            for selected in [0, n - 1] {
-                let staff: Vec<BaseStaffRow> = (0..n)
-                    .map(|i| {
-                        staff_row(
-                            &format!("Program {i}"),
-                            None,
-                            "idle",
-                            Some(ProgramRole::Staff),
-                        )
-                    })
-                    .collect();
-                let rows = base_staff_menu_rows(&staff, &[], selected);
-                let last_item = rows
-                    .iter()
-                    .rposition(|r| matches!(r, Row::Item { .. }))
-                    .expect("a program is an item row");
-                assert_eq!(
-                    rows.len() - last_item - 1,
-                    1,
-                    "with {n} programs the popup pinned {} rows below the list, \
-                     not the single legend it is allowed — an activity is \
-                     detached from the program it belongs to",
-                    rows.len() - last_item - 1
-                );
-            }
-        }
-    }
-
-    /// Nothing clamps a popup row horizontally, so a staff row wider than the
-    /// Base Staff popup's body runs off its right edge and takes the work
-    /// summary with it — which is the whole reason the row carries one.
+    /// Nothing clamps a popup row horizontally, so a table row wider than the
+    /// Base Staff popup's body runs off its right edge and takes a duty
+    /// column with it.
     ///
     /// **Both budgets, because only one of them discriminates.** In pixels
     /// the widest row clears the reference geometry either way, so that half
-    /// would pass just as happily with the activity folded back onto the
-    /// shortcut line — it is here for `no_roster_row_overflows_its_popup`'s
-    /// reason, to catch the day `ROW_WRAP_COLUMNS` stops being the right
-    /// budget. The column count is the half that fails if the two lines are
-    /// rejoined, and it is the budget the rest of the file is written
-    /// against (see `no_work_order_row_runs_past_the_popup_body`).
+    /// would pass just as happily with a column dropped — it is here for
+    /// `no_roster_row_overflows_its_popup`'s reason, to catch the day
+    /// `ROW_WRAP_COLUMNS` stops being the right budget.
     #[test]
     fn the_widest_base_staff_row_stays_inside_the_popup() {
-        for row in base_staff_menu_rows(&[widest_staff_row()], &[], 0) {
+        let t = table(vec![widest_row()]);
+        for row in base_staff_menu_rows(&t, &[], 0, 0) {
             let text = match &row {
-                Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                Row::Text(text) | Row::TextColored(text, _) => text.clone(),
                 Row::Item { text, .. } => text.clone(),
             };
             assert!(
@@ -3176,10 +3266,10 @@ mod base_staff_tests {
             // 0.88 is `PopupSize::Large`'s width fraction, against the
             // 1440x900 geometry `ui_metrics` is calibrated for.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let rows = base_staff_menu_rows(&[widest_staff_row()], &[], 0);
+            let rows = base_staff_menu_rows(&t, &[], 0, 0);
             for row in &rows {
                 let text = match row {
-                    Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                    Row::Text(text) | Row::TextColored(text, _) => text.clone(),
                     Row::Item { text, .. } => format!("     {text}"),
                 };
                 let drawn = p.measure_ui_advance(&text, m.font_size);
@@ -3193,39 +3283,117 @@ mod base_staff_tests {
         });
     }
 
-    /// The three facts reach the row, and a species the db never loaded says
-    /// so rather than quoting the roster's defaults as if someone authored
-    /// them for it.
+    /// A checked cell reads `[x]`, an unchecked one `[ ]` — except under the
+    /// column cursor, on the selected row alone, where it reads `<x>`/`< >`
+    /// instead. No other row's cell changes shape.
     #[test]
-    fn a_staff_row_spells_out_the_work_profile() {
-        let rows = base_staff_menu_rows(&[widest_staff_row()], &[], 0);
-        let head = rows
-            .iter()
-            .find_map(|r| match r {
-                Row::Item { text, .. } => Some(text.clone()),
-                _ => None,
-            })
-            .expect("the program is an item row");
-        assert!(head.contains("Spd 14"), "{head}");
-        assert!(head.contains("Ana 18"), "{head}");
+    fn the_cursor_marks_exactly_the_selected_cell() {
+        let t = table(vec![
+            work_row("A", "idle", WorkSection::Staff, [true, false, true, true]),
+            work_row("B", "idle", WorkSection::Staff, [true, false, true, true]),
+        ]);
+        let rows = base_staff_menu_rows(&t, &[], 0, 1);
+        let text = |i: usize| match &rows[i + 2] {
+            // +2: the header counts line and the column header sit above row 0.
+            Row::Item { text, .. } => text.clone(),
+            _ => panic!("expected an item row"),
+        };
         assert!(
-            head.contains("Leech"),
-            "the class is the third fact that decides a posting: {head}"
+            text(0).contains("< >"),
+            "row 0's Guard cell is off and under the cursor: {}",
+            text(0)
         );
+        assert!(
+            !text(1).contains("< >") && !text(1).contains("<x>"),
+            "row 1 is not selected, so its Guard cell stays [ ]: {}",
+            text(1)
+        );
+    }
 
-        let unknown = base_staff_menu_rows(
-            &[staff_row("Modded", None, "idle", Some(ProgramRole::Staff))],
-            &[],
-            0,
+    /// A duty column's header names its unworked count and nothing when
+    /// there is none — `DIG` in `columns` above is given 2.
+    #[test]
+    fn a_duty_columns_header_shows_its_unworked_count() {
+        let t = table(vec![widest_row()]);
+        let header = match &base_staff_menu_rows(&t, &[], 0, 0)[1] {
+            Row::Text(s) => s.clone(),
+            _ => panic!("expected the column header"),
+        };
+        assert!(header.contains("DIG 2!"), "{header}");
+        assert!(
+            header.contains("OPERATE") && !header.contains("OPERATE 0"),
+            "an unworked count of zero draws nothing: {header}"
         );
-        let head = unknown
+    }
+
+    /// The away section reads dim rather than tier-coloured — it is still
+    /// editable, and a tier colour on an away row would read as "cannot be
+    /// changed" the way it does nowhere else on this screen.
+    #[test]
+    fn away_rows_follow_a_divider_and_read_dim() {
+        let t = table(vec![
+            work_row("Staffer", "idle", WorkSection::Staff, [true; 4]),
+            work_row("Traveller", "in party", WorkSection::Away, [true; 4]),
+        ]);
+        let rows = base_staff_menu_rows(&t, &[], 0, 0);
+        let dividers = rows
+            .iter()
+            .filter(|r| matches!(r, Row::Text(s) if s.contains("away")))
+            .count();
+        assert_eq!(dividers, 1, "exactly one divider between the two sections");
+
+        let away_color = rows
             .iter()
             .find_map(|r| match r {
-                Row::Item { text, .. } => Some(text.clone()),
+                Row::Item { text, color, .. } if text.contains("Traveller") => Some(*color),
                 _ => None,
             })
-            .unwrap();
-        assert!(head.contains("not loaded"), "{head}");
+            .expect("the away row is an item row");
+        assert_eq!(away_color, TEXT_DIM);
+    }
+
+    /// **The height finding.** `tuning::ROSTER_HARD_CAP` (200) is a refusal
+    /// ceiling, not a size anyone plays with — a developed base's roster is
+    /// realistically a few dozen at most. Unlike the character wizard
+    /// (`popup_scrolls`'s own doc), this screen does not promise "no
+    /// scroll" — it is a trade/deploy-shaped list, `Transfer`'s and `Work
+    /// Orders`' own precedent, and `draw_popup`'s scroll indicators already
+    /// keep the selected row visible. This asserts the two things that
+    /// really matter at a roster past what fits: the pinned header (counts
+    /// plus column names) and footer (the key legend) survive scrolling,
+    /// which `popup_layout` gives for free by ending the scrollable body at
+    /// the last `Row::Item` — there is no "+N more" row to build.
+    #[test]
+    fn a_roster_past_what_fits_at_1280x720_still_scrolls_rather_than_overflowing() {
+        let rows: Vec<WorkRow> = (0..40)
+            .map(|i| {
+                work_row(
+                    &format!("Program {i}"),
+                    "idle",
+                    if i < 30 {
+                        WorkSection::Staff
+                    } else {
+                        WorkSection::Away
+                    },
+                    [true; 4],
+                )
+            })
+            .collect();
+        let t = table(rows);
+        let body = base_staff_menu_rows(&t, &[], 0, 0);
+        let m = ui_metrics(720.0);
+        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
+        assert!(
+            body.len() > cap,
+            "the fixture should be past what fits, or this test proves nothing: \
+             {} rows against a {cap}-row cap",
+            body.len()
+        );
+        assert!(
+            popup_scrolls(720.0, PopupSize::Large, &body, None, &m),
+            "a 40-program roster must turn the popup's ordinary scroll on \
+             rather than silently dropping rows"
+        );
     }
 }
 

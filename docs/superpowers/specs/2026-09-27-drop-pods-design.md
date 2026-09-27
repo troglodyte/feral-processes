@@ -141,6 +141,11 @@ Trooper), because a trooper keeps working while it waits. If the assignments
 model is one-assignment-per-program, Drop Trooper is a separate flag beside
 it, shown as its own column.
 
+The work assignments spec settled this: its model is a set of job-kind
+checkboxes per program, and **the Drop Trooper flag, its column and
+`drop_troopers()` ship here, in drop pods phase 1** — `Duties` gains a
+`drop_trooper` field, and the column draws once a pod structure stands.
+
 ## Phases
 
 | Phase | Covers | Testable without |

@@ -2292,8 +2292,8 @@ fn spare_staff_are_put_on_the_second_order() {
 ///
 /// Counted twice, the duplicate eats a staff slot against a job that is
 /// already filled — `post_worker` displaces the body already standing
-/// there, so the base ends up with an idle program and the want the
-/// truncation dropped for it, here the second order's own bench, unstaffed.
+/// there, so the base ends up with an idle program and the want below it,
+/// here the second order's own bench, unstaffed.
 /// The body count at the shared feeder stays 1 either way, which is why the
 /// assertion that discriminates is the one below it.
 #[test]
@@ -2335,8 +2335,8 @@ fn a_machine_two_orders_want_is_posted_once() {
 }
 
 /// Concurrency is not fairness. The accumulated list is in queue order and
-/// `truncate(staff.len())` cuts from the end, so a scarce body goes to the
-/// front order and the one behind it waits.
+/// the matching fills it in that order, so a scarce body goes to the front
+/// order and the one behind it waits.
 #[test]
 fn the_front_order_still_fills_first_when_staff_are_scarce() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -3015,9 +3015,8 @@ fn a_base_with_bodies_to_spare_is_short_of_none() {
     assert_eq!(demand.shortfall(), 0);
 }
 
-/// The case the header exists for. `schedule_base_labour` cuts its want
-/// list to `staff.len()` and the posts that fall off the end vanish
-/// silently — the screen says "no one" per machine but never says how many
+/// The case the header exists for. `schedule_base_labour` finds no body for
+/// the wants past its staff and those posts go unworked silently — the screen says "no one" per machine but never says how many
 /// bodies short the base actually is.
 #[test]
 fn a_base_short_of_bodies_reports_the_difference() {
@@ -3044,7 +3043,7 @@ fn a_base_short_of_bodies_reports_the_difference() {
 
 /// The quiet state a player is most likely to have the screen open on, and
 /// the one `schedule_base_labour` early-returns out of before it ever
-/// reaches the cut: an empty roster reports the queue's wants against zero
+/// reaches the matching: an empty roster reports the queue's wants against zero
 /// rather than reading as no wants at all.
 #[test]
 fn a_base_with_nobody_in_it_reports_its_wants_against_zero() {

@@ -227,7 +227,7 @@ fn a_bill_bigger_than_one_carry_takes_several_trips() {
 /// machine to raise the request.
 ///
 /// **The priority *is* the position in `schedule_base_labour`'s want list**,
-/// since `truncate(staff.len())` cuts from the end — so with one body and
+/// since the matching fills it in that order — so with one body and
 /// two wants, which job it holds is the whole assertion. Filed *after* the
 /// order and after the body is already posted, so this cannot pass by the
 /// build simply having been there first.

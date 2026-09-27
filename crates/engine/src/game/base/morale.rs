@@ -170,23 +170,6 @@ impl Game {
         let subject = crate::components::MemorySubject::Structure(structure.kind.clone());
         self.opinion_of(worker, &subject) < crate::tuning::MEMORY_AVOIDANCE_THRESHOLD
     }
-
-    /// The index in `idle` of the last body willing to take `post`, or `None`
-    /// if every one of them refuses it.
-    ///
-    /// Scanned from the end so the deepest-first order the caller built is
-    /// preserved for everyone who is willing — a sulking body is stepped
-    /// over, not promoted past.
-    pub(crate) fn willing_index(
-        &self,
-        idle: &[Entity],
-        post: Entity,
-        kind: TaskKind,
-    ) -> Option<usize> {
-        (0..idle.len())
-            .rev()
-            .find(|&i| !self.refuses_post(idle[i], post, kind))
-    }
 }
 
 /// Which rung `morale` has reached, or `None` for a program still content.

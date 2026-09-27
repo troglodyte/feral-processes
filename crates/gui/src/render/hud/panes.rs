@@ -791,6 +791,7 @@ mod tests {
             labour: LabourDemand {
                 wanted: 12,
                 staff: 8,
+                ..Default::default()
             },
             contracts,
             shielded: true,

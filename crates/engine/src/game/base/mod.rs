@@ -13,6 +13,7 @@
 //! growing. **Do not read it as licence to nest the others** — a later
 //! `game/combat/` is its own decision, not a precedent set here.
 
+pub(crate) mod assignment;
 pub(crate) mod building;
 pub(crate) mod collect;
 pub(crate) mod construction;

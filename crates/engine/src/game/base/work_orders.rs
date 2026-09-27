@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
+use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
 use crate::game::base::offshift;
@@ -815,6 +816,61 @@ pub(crate) fn ingredient_depths(
     depths
 }
 
+/// One `hauling::crew_reach` field per body, built the first time a reach
+/// question names that body and never twice in a pass.
+///
+/// `schedule_base_labour` asks reach twice — "can anybody reach this" for the
+/// unreachable drop, and "can this body reach this" for every edge of the
+/// matching — and both are lookups in the same fields, so a connected base
+/// pays one walk per body whatever the size of its plan.
+struct CrewFields {
+    blocked: std::collections::HashSet<(i32, i32)>,
+    pocket_radius: i32,
+    fields: std::collections::HashMap<Entity, hauling::CrewReach>,
+}
+
+impl CrewFields {
+    fn new(blocked: std::collections::HashSet<(i32, i32)>, pocket_radius: i32) -> Self {
+        Self {
+            blocked,
+            pocket_radius,
+            fields: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Whether `body` could stand at `post` from the tile it is on.
+    ///
+    /// A build or dig site is always footprint 1 and never a `Structure`, so
+    /// its side is not looked up; a machine's is.
+    fn reaches(&mut self, game: &Game, body: Entity, post: Entity, kind: TaskKind) -> bool {
+        let Some(at) = game.world.get::<Position>(post).copied() else {
+            return false;
+        };
+        let side = match kind {
+            TaskKind::Construct | TaskKind::Excavate => 1,
+            TaskKind::GatherResource | TaskKind::Guard => game.structure_footprint_of(post),
+        };
+        let grid = game.world.resource::<BaseGrid>();
+        let Self {
+            blocked,
+            pocket_radius,
+            fields,
+        } = self;
+        let (from, field) = fields.entry(body).or_insert_with(|| {
+            let from = game
+                .world
+                .get::<Position>(body)
+                .copied()
+                .unwrap_or(Position { x: 0, y: 0 });
+            (
+                from,
+                hauling::crew_reach(grid, from, blocked, *pocket_radius),
+            )
+        });
+        hauling::reaches(grid, field, *from, at, side, blocked)
+    }
+}
+
 /// Which of the three things `Game::announce_dig_dry` ran out of Blank
 /// Substrate for — the three wordings share everything but this.
 enum DigDryReason {
@@ -848,27 +904,33 @@ impl Game {
     ///    not complete: it keeps its place in the queue and is skipped, so
     ///    one dead order cannot freeze a base that could still work the
     ///    three behind it.
-    /// 3. Leave in place any staff already posted where a want still exists.
-    /// 4. Unpost any staff whose machine no longer wants a body.
-    /// 5. Fill the remaining wants, deepest first, from **idle** staff only.
+    /// 3. Decide the whole assignment at once: a priority-ordered bipartite
+    ///    matching of wants to on-shift bodies (`assignment::
+    ///    assign_by_priority`), each edge the Base staff table, the sulking
+    ///    rung and reach from the body's own tile.
+    /// 4. Unpost any staff the assignment does not keep where it stands.
+    /// 5. Post the rest, in priority order.
     ///
     /// Step 2 is what makes the queue a production policy rather than a
-    /// to-do list, and it introduces no priority rule of its own: the
-    /// accumulated list is in queue order and `truncate(staff.len())` below
-    /// cuts from the end, so a scarce body still goes to the front order.
+    /// to-do list, and it introduces no priority rule of its own: **the
+    /// priority is the position in the accumulated list**, and the matching
+    /// never un-seats an earlier want to work a later one, so a scarce body
+    /// still goes to the front order.
     ///
-    /// Steps 3 and 5 together are the anti-thrash rule and are not
+    /// Steps 3 and 4 together are the anti-thrash rule and are not
     /// optional. A scheduler that rebuilt every posting each tick would walk
     /// the whole roster across the base whenever a buffer changed by one
-    /// unit — and restart every cronjob's progress from zero doing it.
+    /// unit — and restart every cronjob's progress from zero doing it. The
+    /// matching tries a want's current holder first, and a body whose match
+    /// is the post it holds is left untouched.
     pub(crate) fn schedule_base_labour(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
         // **Build requests come first, ahead of every work order.** The
-        // priority *is* the position in this list — `truncate(staff.len())`
-        // below cuts from the end — so this is the whole of "a build
-        // outranks production". Its consequence is deliberate and worth
+        // priority *is* the position in this list — the matching below never
+        // un-seats an earlier want for a later one — so this is the whole of
+        // "a build outranks production". Its consequence is deliberate and worth
         // stating: on a base with fewer bodies than posts, filing a request
         // takes somebody off a machine until the structure is up. A base
         // with a spare body never notices, because the diff below leaves
@@ -911,8 +973,8 @@ impl Game {
             wanted.push((structure, kind));
         }
         // Dig jobs, appended after the standing jobs and therefore last of
-        // all — **the priority is the position in this list**, since
-        // `truncate(staff.len())` below cuts from the end. A spare body
+        // all — **the priority is the position in this list**, since the
+        // matching below fills wants in list order. A spare body
         // digs; a needed one does not, and a plan drawn across the base can
         // never stop it running. Anything inserted above these silently
         // starves production.
@@ -962,7 +1024,8 @@ impl Game {
             // **Recorded on the way out**, because this is the state a
             // player is most likely to have the screen open on and an
             // unwritten demand would read as no wants rather than no bodies.
-            self.record_labour_demand(wanted.len(), 0);
+            let unworked = self.unworked_by_duty(wanted.iter().copied());
+            self.record_labour_demand(wanted.len(), 0, unworked);
             // A subject pinned at a base with no other staff still has to
             // walk to its pen — the case the wider `walkers` list exists
             // for, and the reason this return does not skip the drift too.
@@ -975,7 +1038,7 @@ impl Game {
         // **An off-shift program leaves the posting half of the scheduler,
         // not the drift half.** `drift_idle_staff` above keeps the whole list
         // — it is what walks a body to its amenity — while everything from
-        // here to the truncation reasons about who can actually be given a
+        // here to the matching reasons about who can actually be given a
         // job.
         //
         // **Who may be handed a job is one predicate**, `Game::is_on_shift`,
@@ -1004,80 +1067,60 @@ impl Game {
             .collect();
         wanted.retain(|post| !outsiders.contains(post));
 
-        // **An unreachable request is dropped here, above the cut**, and
-        // that placement is the whole fix rather than a tidy-up.
+        // **One walk field per body, shared by every reach question below.**
+        // `post_route` costs a walk per face and a plan can be a hundred
+        // cells, so asking it per site is a hundred walks a tick for as long
+        // as the plan stands. `hauling::crew_reach` turns the question
+        // around — the field is built from the *body*, once, the first time
+        // anything asks, and every want after that is a lookup in it. The
+        // unreachable drop and the matching's edges read the same fields.
+        let mut fields = CrewFields::new(
+            self.blocked_tiles(),
+            self.world.resource::<BaseGrid>().radius(),
+        );
+
+        // **An unreachable request is dropped here, before the matching**,
+        // and that placement is the whole fix rather than a tidy-up.
         //
-        // A build want is *prepended*, so it is inside the cut by
-        // construction — a site nobody can walk to would take the slot, be
-        // skipped when its turn came, and leave the base with an idle body
-        // and an unworked order. Every tick, for the rest of the run, in
-        // silence.
+        // A build want is *prepended*, so it outranks everything below it —
+        // a site nobody can walk to would stay in the list, go unworked
+        // every tick, and say nothing. The matching would simply find it no
+        // body; the drop is what *says* so, once.
         //
-        // **A dig want is here for the mirror-image reason.** Dig wants are
-        // appended last, so one unroutable site costs only itself — but a
-        // plan is not one site. `dig_wants` already drops the boxed-in
-        // interior of a marked block through `hauling::has_station`; what it
-        // cannot answer is the cell with a perfectly good face that nothing
-        // can walk to, because that question needs the bodies. A corridor
-        // gone missing after the fact, or a plan drawn past
-        // `haul_walk_radius`, leaves a run of those — they sort first in
-        // tile order, `continue` costs no body when their turn comes, and
-        // the one cell the crew could have been sent to is cut off the end
-        // of the list. The crew stands idle with a plan on the wall, which
-        // is the exact failure `has_station` was added to close, one
-        // refusal further along.
+        // **A dig want is here for the mirror-image reason.** `dig_wants`
+        // already drops the boxed-in interior of a marked block through
+        // `hauling::has_station`; what it cannot answer is the cell with a
+        // perfectly good face that nothing can walk to, because that
+        // question needs the bodies. A corridor gone missing after the fact,
+        // or a plan drawn past `haul_walk_radius`, leaves a run of those —
+        // and `drop_dry_dig_wants` below would spend the substrate budget on
+        // them, announcing the one cell the crew *could* cut as dry.
         //
         // Asked of the staff rather than of a fixed reference point, and
         // short-circuited on the first body that routes: the answer is
-        // "somebody could work this", which is the question the want list is
-        // asking.
-        //
-        // **One field per body, not one per want.** `post_route` costs a
-        // walk per face and a plan can be a hundred cells, so asking it per
-        // site is a hundred walks a tick for as long as the plan stands.
-        // `hauling::crew_reach` turns the question around — the field is
-        // built from the *body*, once, and every want is a lookup in it. In
-        // a connected base that is one walk for the whole scheduler.
+        // "somebody could work this", which is the question the drop asks.
+        // **Reach alone, never duties**: a site no checked column admits is
+        // not cut off, it is unworked, and `LabourDemand::unworked` is where
+        // it shows.
         //
         // **Skipped outright when nobody is on shift**, or the answer to
         // "can anybody reach this" is no for want of an *anybody* and every
         // site the base holds is announced cut off. Nothing is posted on
-        // such a tick regardless — `truncate(0)` empties the list — so the
-        // only thing the guard changes is the sentence.
+        // such a tick regardless — the matching has no bodies — so the only
+        // thing the guard changes is the sentence.
         if !on_shift.is_empty() {
-            let blocked = self.blocked_tiles();
-            let pocket_radius = self.world.resource::<BaseGrid>().radius();
-            let mut reach: Vec<hauling::CrewReach> = Vec::new();
             let mut unreachable: Vec<(Entity, TaskKind)> = Vec::new();
             for &(post, kind) in wanted.iter() {
                 if !matches!(kind, TaskKind::Construct | TaskKind::Excavate) {
                     continue;
                 }
-                let Some(at) = self.world.get::<Position>(post).copied() else {
+                if self.world.get::<Position>(post).is_none() {
                     continue;
-                };
-                let mut anyone = false;
-                for (index, &worker) in on_shift.iter().enumerate() {
-                    let from = self
-                        .world
-                        .get::<Position>(worker)
-                        .copied()
-                        .unwrap_or(Position { x: 0, y: 0 });
-                    if reach.len() == index {
-                        let grid = self.world.resource::<BaseGrid>();
-                        let field = hauling::crew_reach(grid, from, &blocked, pocket_radius);
-                        reach.push((from, field));
-                    }
-                    let (from, field) = &reach[index];
-                    let grid = self.world.resource::<BaseGrid>();
-                    // `post` is a `BuildSite` or `DigSite` here, never a
-                    // `Structure` — both are always footprint 1.
-                    if hauling::reaches(grid, field, *from, at, 1, &blocked) {
-                        anyone = true;
-                        break;
-                    }
                 }
-                if !anyone {
+                if !on_shift
+                    .iter()
+                    .any(|&worker| fields.reaches(self, worker, post, kind))
+                {
                     unreachable.push((post, kind));
                 }
             }
@@ -1113,32 +1156,110 @@ impl Game {
             }
         }
 
-        // **After the unreachable drop and before the count**, so the
+        // **After the unreachable drop and before the matching**, so the
         // substrate a plan the crew cannot walk to would have claimed goes
         // to the cell it can — see the function's own doc — and so a job
         // nobody can pay for is never counted as demand for a body.
         self.drop_dry_dig_wants(&mut wanted);
 
-        // The staff are fewer than the posts most of the time, so the list
-        // is cut to what can actually be filled — **in priority order**,
-        // which is what makes an order outrank a standing job for a scarce
-        // body. Deciding the whole assignment first and diffing against
-        // what is posted is what lets the priority rule and the anti-thrash
-        // rule both hold: filling greedily around the postings that already
-        // exist would leave a body on a standing job while an order went
-        // unworked, because the body was already somewhere "wanted".
-        // **Before the cut, not after.** The whole point of the figure is
-        // the posts that fall off the end here; taken afterwards it is
-        // `staff.len()` by construction and the shortfall is always zero.
-        // The shortfall the work-order header shows therefore *grows* while
-        // bodies are off shift, which is the intended readout and not a bug:
-        // the base is short of hands, and the reason is on the manifest.
-        self.record_labour_demand(wanted.len(), on_shift.len());
-        wanted.truncate(on_shift.len());
+        // **Forced edges, seeded before the matching sees anyone.** Two
+        // bodies hold their post whatever the assignment would say:
+        //
+        // - **A body mid-delivery is never freed.** Freeing it drops
+        //   `Carrying` along with the `Task`, and by then the units have
+        //   already been taken *out* of the machine's stock — so the goods
+        //   are destroyed rather than released. **Not even when its duties
+        //   no longer admit the post**: an unchecked column frees it at its
+        //   next unforced moment, which is after it has set the load down.
+        // - **A body about to pick a load up** — standing on a machine with
+        //   no output room while a Depot stands. A clogged machine cannot
+        //   progress, so it drops out of `wanted`, and the body on it is the
+        //   only thing that can carry the clog away and let it run again.
+        //   Freed instead, the machine has no route back into `wanted` at
+        //   all and sits full for the rest of the run. The Depot term is
+        //   what keeps a body walking the line downstream as each machine
+        //   fills up, which is the behaviour on a base with nowhere to
+        //   deliver. This one **does** yield to the table: holding a body
+        //   the player took off Operate is not worth a clog.
+        //
+        // A forced body's post, where it is still wanted, is worked by that
+        // body and leaves the list the matching fills.
+        let a_depot_stands = stock::output_buffers(self).any(|(structure, _)| {
+            self.world
+                .resource::<StructureDb>()
+                .get(&structure.kind)
+                .is_some_and(|d| d.stores)
+        });
+        let mut pool: Vec<Entity> = Vec::new();
+        let mut open = wanted.clone();
+        for &worker in &on_shift {
+            let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
+            let carrying = self.world.get::<Carrying>(worker).is_some();
+            let shedding = a_depot_stands
+                && held.is_some_and(|(target, kind)| {
+                    kind == TaskKind::GatherResource
+                        && self.duty_admits_post(worker, target, kind)
+                        && self
+                            .world
+                            .get::<Stock>(target)
+                            .is_some_and(|s| s.output_room() == 0)
+                });
+            if !(carrying || shedding) {
+                pool.push(worker);
+                continue;
+            }
+            if let Some(index) = held.and_then(|post| open.iter().position(|&p| p == post)) {
+                open.remove(index);
+            }
+        }
+
+        // **The matching** — see `assignment::assign_by_priority` for the
+        // rule and the anti-thrash half of it. What is decided here is the
+        // edge, `can_take`: the table admits the post (`duty_admits_post`),
+        // the body does not resent the machine (`refuses_post`), and it can
+        // walk there **from its own tile**, never the player's. A body
+        // already holding the post is not asked to walk to it again — once
+        // posted, reaching it is the walker's question and `Stranded` is its
+        // answer — and a guard has no station to walk to at all.
+        let held: Vec<Option<(Entity, TaskKind)>> = pool
+            .iter()
+            .map(|&w| self.world.get::<Task>(w).map(|t| (t.target, t.kind)))
+            .collect();
+        let mut holder: Vec<Option<usize>> = vec![None; open.len()];
+        for (index, post) in open.iter().enumerate() {
+            holder[index] = held.iter().position(|h| *h == Some(*post));
+        }
+        let by_want = {
+            let game: &Game = self;
+            assignment::assign_by_priority(open.len(), pool.len(), &holder, |want, body| {
+                let (post, kind) = open[want];
+                let worker = pool[body];
+                game.duty_admits_post(worker, post, kind)
+                    && !game.refuses_post(worker, post, kind)
+                    && (holder[want] == Some(body)
+                        || kind == TaskKind::Guard
+                        || fields.reaches(game, worker, post, kind))
+            })
+        };
+
+        // **After the matching, and `wanted` is the figure before it.** The
+        // whole point of `wanted` against `staff` is the posts the bodies
+        // could not cover; `unworked` says which column they were short in,
+        // which is what a restriction that leaves work undone looks like.
+        // The shortfall therefore *grows* while bodies are off shift, which
+        // is the intended readout and not a bug: the base is short of hands,
+        // and the reason is on the manifest.
+        let unworked = self.unworked_by_duty(
+            open.iter()
+                .zip(&by_want)
+                .filter(|(_, body)| body.is_none())
+                .map(|(post, _)| *post),
+        );
+        self.record_labour_demand(wanted.len(), on_shift.len(), unworked);
 
         // **The scheduler never takes a body off a post unless it has
         // somewhere better to put it — and only on a base it has been given
-        // no instructions for at all.** With every wanted post already
+        // no instructions for at all.** With every worked post already
         // filled there is no gain in moving anyone, and real harm in it: a
         // base whose queue has run dry — or one loaded from a save written
         // before work orders existed, whose workers were all posted by hand
@@ -1167,14 +1288,14 @@ impl Game {
         // and here the omission was not harmless. `dig_wants` now drops a
         // dry floor job, so a base whose only want was that one job sees
         // `wanted` go from one entry to none the tick the drought hits —
-        // and `wanted.iter().all(posted.contains)` is vacuously true against
-        // an *empty* `wanted` whatever `posted` still holds. Read off
-        // `wanted` alone, the guard would fire on exactly that tick, and
-        // the digger's stale `Task` would never be seen again: not stood
-        // down, not reassigned, just left naming a want that no longer
-        // exists. Asked of every marked site rather than only the ones
-        // still in `wanted`, because a site can be the base's only
-        // instruction precisely by having just been dropped from that list.
+        // and "every worked want is posted" is vacuously true against an
+        // *empty* list whatever `posted` still holds. Read off `wanted`
+        // alone, the guard would fire on exactly that tick, and the
+        // digger's stale `Task` would never be seen again: not stood down,
+        // not reassigned, just left naming a want that no longer exists.
+        // Asked of every marked site rather than only the ones still in
+        // `wanted`, because a site can be the base's only instruction
+        // precisely by having just been dropped from that list.
         let any_dig_marked = {
             let mut query = self.world.query::<&DigSite>();
             query.iter(&self.world).any(|dig| dig.marked)
@@ -1187,13 +1308,12 @@ impl Game {
         // **A body parked on a burner is an instruction too**, and the same
         // correction the dry-floor-job term above carries. A satisfied fuel
         // want simply vanishes from `wanted` — nothing announces it — and
-        // `wanted.iter().all(posted.contains)` is vacuously true against an
-        // empty list whatever `posted` still holds. Read off the orders
-        // alone, the guard would fire on exactly the tick the hopper filled
-        // and leave the body standing at a stocked Recharger Node for the
-        // rest of the run. Asked of `posted` rather than of `wanted`,
-        // because the want it has to see is precisely the one that has just
-        // stopped existing.
+        // "every worked want is posted" is vacuously true against an empty
+        // list whatever `posted` still holds. Read off the orders alone, the
+        // guard would fire on exactly the tick the hopper filled and leave
+        // the body standing at a stocked Recharger Node for the rest of the
+        // run. Asked of `posted` rather than of `wanted`, because the want
+        // it has to see is precisely the one that has just stopped existing.
         let a_burner_holds_a_body = posted.iter().any(|&(target, kind)| {
             kind == TaskKind::GatherResource
                 && self
@@ -1218,152 +1338,84 @@ impl Game {
         let a_posted_body_is_off_the_line = staff
             .iter()
             .any(|&w| self.world.get::<Task>(w).is_some() && !self.is_on_shift(w, &amenities));
+        // **And one whose column the player just unchecked**, for the same
+        // reason: a base whose only instruction is a standing job would
+        // otherwise never read the table at all. Read off `pool`, so a body
+        // mid-delivery — which keeps its post until it sets the load down —
+        // does not force a pass it cannot be freed by.
+        let a_posted_body_is_off_duty = pool.iter().zip(&held).any(|(&worker, held)| {
+            held.is_some_and(|(post, kind)| !self.duty_admits_post(worker, post, kind))
+        });
         if queue_is_empty
             && !a_posted_body_is_off_the_line
-            && wanted.iter().all(|post| posted.contains(post))
+            && !a_posted_body_is_off_duty
+            && open
+                .iter()
+                .zip(&by_want)
+                .filter(|(_, body)| body.is_some())
+                .all(|(post, _)| posted.contains(post))
         {
             return;
         }
 
-        // Step 3 and step 4 in one pass: anyone already standing at a post
-        // the assignment keeps stays exactly where they are (that is the
-        // anti-thrash rule, and it is what stops a cronjob's progress being
-        // restarted from zero every tick); everyone else is freed.
-        let mut idle = Vec::new();
-        let mut remaining = wanted.clone();
-        // Whether a load taken off a machine has anywhere to land, which is
-        // the whole of what `haul_step_system` asks before it starts an
-        // outbound errand: with no Depot standing there is no errand, and a
-        // body on a clogged machine is a body doing nothing.
-        let a_depot_stands = stock::output_buffers(self).any(|(structure, _)| {
-            self.world
-                .resource::<StructureDb>()
-                .get(&structure.kind)
-                .is_some_and(|d| d.stores)
-        });
+        // **The diff.** A body whose match is the post it already holds is
+        // left exactly where it is — that is the anti-thrash rule, and it is
+        // what stops a cronjob's progress being restarted from zero every
+        // tick. Everyone else posted is freed, and only then are the new
+        // postings made, so `displace_task_holder` never finds a body the
+        // matching has already moved.
+        //
+        // **The off-the-line free is the same predicate the filter above
+        // used**, so the two cannot disagree about who is in the pool. A
+        // downed program is freed by it unconditionally and ahead of every
+        // rule that could keep it posted — it is not in the pool, so leaving
+        // it standing at a machine would post a body the assignment never
+        // named — and the `Carrying` escape it deliberately does not get
+        // lives in that function rather than being restated here.
         for &worker in &staff {
-            let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
-            // **A body about to pick a load up is not freed either**, and it
-            // is the same rule as the one below rather than a second one: a
-            // clogged machine cannot progress, so it drops out of `wanted`
-            // — and the body standing on it is the only thing that can carry
-            // the clog away and let it run again. Freed instead, the machine
-            // has no route back into `wanted` at all and sits full for the
-            // rest of the run.
-            //
-            // The Depot term is what keeps a body walking the line
-            // downstream as each machine fills up, which is the behaviour on
-            // a base with nowhere to deliver.
-            // A body that has left its post for an errand of its own is
-            // freed and **not** added to `idle`: it is walking somewhere, and
-            // the post it vacated stays in `remaining` for whoever is left.
-            // A loaded one is not here at all — `is_on_shift` keeps it until
-            // it delivers.
-            //
-            // **The same predicate the filter above used**, so the two cannot
-            // disagree about who is in the pool. A downed program is freed by
-            // it unconditionally and ahead of every rule that could keep it
-            // posted — it is not in the pool, so leaving it standing at a
-            // machine would post a body the assignment never named — and the
-            // `Carrying` escape it deliberately does not get lives in that
-            // function rather than being restated here.
             if !self.is_on_shift(worker, &amenities) {
                 self.world
                     .entity_mut(worker)
                     .remove::<Task>()
                     .remove::<Carrying>();
-                continue;
             }
-            let shedding = a_depot_stands
-                && held.is_some_and(|(target, kind)| {
-                    kind == TaskKind::GatherResource
-                        && self
-                            .world
-                            .get::<Stock>(target)
-                            .is_some_and(|s| s.output_room() == 0)
-                });
-            // **A body mid-delivery is never freed.** The same rule as the
-            // one above, one case wider: a worker holding a load has
-            // somewhere to be. Freeing it drops `Carrying` along with the
-            // `Task`, and by then the units have already been taken *out* of
-            // the machine's stock — so the goods are destroyed rather than
-            // released. Rare while a worker only ever set off from a clogged
-            // machine; routine now that one sets off every cycle.
-            if shedding || self.world.get::<Carrying>(worker).is_some() {
-                if let Some(index) = held.and_then(|post| remaining.iter().position(|&p| p == post))
-                {
-                    remaining.remove(index);
-                }
-                continue;
+        }
+        let mut matched: Vec<Option<(Entity, TaskKind)>> = vec![None; pool.len()];
+        for (want, body) in by_want.iter().enumerate() {
+            if let Some(body) = body {
+                matched[*body] = Some(open[want]);
             }
-            // **A sulking body is freed from a post it resents**, and this is
-            // the one place the anti-thrash rule is deliberately not
-            // applied. Everything above keeps a body wherever the assignment
-            // still wants it, which is what stops a cronjob restarting from
-            // zero every tick — but a body that has refused this machine is
-            // not "still wanted here", it is the wrong body for this post.
-            // Left standing it works the machine it refused and the rung
-            // does nothing at all.
-            //
-            // The post stays in `remaining` rather than being consumed, so
-            // the willing body below picks it up on the same tick.
-            if let Some((target, kind)) = held
-                && self.refuses_post(worker, target, kind)
-            {
+        }
+        for (body, &worker) in pool.iter().enumerate() {
+            if held[body].is_some() && held[body] != matched[body] {
                 self.world
                     .entity_mut(worker)
                     .remove::<Task>()
                     .remove::<Carrying>();
-                idle.push(worker);
-                continue;
-            }
-            match held.and_then(|post| remaining.iter().position(|&p| p == post)) {
-                Some(index) => {
-                    remaining.remove(index);
-                }
-                None => {
-                    self.world
-                        .entity_mut(worker)
-                        .remove::<Task>()
-                        .remove::<Carrying>();
-                    idle.push(worker);
-                }
             }
         }
-        idle.reverse();
 
-        // Step 5, deepest first — and standing jobs last, since they were
-        // appended after the order's wants and the list is not re-sorted.
-        //
-        // **Every question here is asked from the body's own tile**, never
-        // from the player's. `drift_idle_staff` above has just put each free
-        // program on a real tile inside the base, and a program the
-        // scheduler freed this tick is standing at the post it just left —
-        // so the walk starts where the body is, and whether it arrives is a
-        // question about the base rather than about where you happen to be
-        // stood. Measured from the player it did both jobs wrong at once: a
-        // loitering program teleported across the map onto you, and walking
-        // out of the walk field stopped the base filling a single machine.
+        // New postings, in priority order. `hauling::post_reach` stays the
+        // authority at the posting itself: the matching's reach is a
+        // `crew_reach` filter, whose box is centred on the body rather than
+        // the face and so only agrees with the walker up to a base radius of
+        // `HAUL_WALK_MAX_TILES / 2`. A posting it refuses is skipped in
+        // silence — the want goes to nobody this tick, which is what a
+        // machine with no route has always meant — because a body sent to
+        // an unreachable machine is a body lost for the rest of the run: it
+        // would sit `Stranded` forever while the order it was meant to work
+        // went unstaffed.
         let blocked = self.blocked_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        for (post, kind) in remaining {
-            if idle.is_empty() {
-                break;
-            }
-            // **The sulking rung**, and the one refusal here that is a
-            // property of the *body* rather than of the base. Every other
-            // question below is about whether the post can be reached at
-            // all, which is very nearly the same answer for everyone — so
-            // those skip the post and keep the body. This one cannot: a
-            // machine one program resents is a machine another will happily
-            // work, and skipping the post would leave it unstaffed because
-            // of whoever happened to be last in the list. So the body is
-            // rotated instead, and only a post *nobody* left will take is
-            // skipped.
-            let Some(chosen) = self.willing_index(&idle, post, kind) else {
+        for (want, body) in by_want.iter().enumerate() {
+            let Some(body) = *body else {
                 continue;
             };
-            let worker = idle[chosen];
+            let (post, kind) = open[want];
+            if held[body] == Some((post, kind)) {
+                continue;
+            }
+            let worker = pool[body];
             let from = self
                 .world
                 .get::<Position>(worker)
@@ -1372,28 +1424,8 @@ impl Game {
             if matches!(kind, TaskKind::GatherResource | TaskKind::Excavate)
                 && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
-                // **Silent, dig sites included.** A dig want that no body can
-                // reach was dropped above the cut and said so there; what is
-                // left here is the narrower question of whether *this* body
-                // routes, and `post_reach` is the authority on it — a want
-                // the reach field kept and this refuses simply goes to
-                // nobody this tick, which is what the skip already means for
-                // a machine.
-                // A machine the base has been built around, or one with no
-                // route from where the player is standing. **Skipped rather
-                // than filled**: `hauling::post_reach` is the one predicate
-                // for "is this a posting that arrives", and it used to be
-                // `assign_cronjob`'s — a menu that offered a post the walker
-                // could never complete. The scheduler inherits the question
-                // rather than dropping it, because a body sent to an
-                // unreachable machine is a body lost for the rest of the
-                // run: it would sit `Stranded` forever while the order it
-                // was meant to work went unstaffed. Left unfilled, the
-                // machine reads as idle on the status screen and the body
-                // goes to the next want instead.
                 continue;
             }
-            idle.remove(chosen);
             match kind {
                 TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),
@@ -1403,11 +1435,63 @@ impl Game {
         }
     }
 
-    /// The one writer of `resources::LabourDemand`, so the two figures
-    /// cannot be recorded from different points in the tick.
-    fn record_labour_demand(&mut self, wanted: usize, staff: usize) {
-        *self.world.resource_mut::<resources::LabourDemand>() =
-            resources::LabourDemand { wanted, staff };
+    /// Whether `worker`'s row on the Base staff table admits `post` — the
+    /// `PostDesc` built once per question from the post itself, and
+    /// `duties::duty_admits` the one reader of the component.
+    pub(crate) fn duty_admits_post(&self, worker: Entity, post: Entity, kind: TaskKind) -> bool {
+        crate::duties::duty_admits(
+            self.world.get::<crate::components::Duties>(worker),
+            &self.post_desc(post, kind),
+        )
+    }
+
+    /// What a post is, as the table reads it: its job kind, and the
+    /// structure def it names — a machine's own kind, a build site's goal,
+    /// nothing for a dig site.
+    fn post_desc(&self, post: Entity, kind: TaskKind) -> crate::duties::PostDesc<'_> {
+        let structure = match kind {
+            TaskKind::GatherResource | TaskKind::Guard => {
+                self.world.get::<Structure>(post).map(|s| &s.kind)
+            }
+            TaskKind::Construct => self.world.get::<BuildSite>(post).map(|b| &b.structure),
+            TaskKind::Excavate => None,
+        };
+        crate::duties::PostDesc { kind, structure }
+    }
+
+    /// `posts` tallied under the column that would have to be checked to
+    /// work each — the first `Duty` that admits it, which in v1 is the only
+    /// one.
+    fn unworked_by_duty(
+        &self,
+        posts: impl Iterator<Item = (Entity, TaskKind)>,
+    ) -> std::collections::BTreeMap<crate::duties::Duty, usize> {
+        let mut tally = std::collections::BTreeMap::new();
+        for (post, kind) in posts {
+            let desc = self.post_desc(post, kind);
+            if let Some(duty) = crate::duties::Duty::ALL
+                .into_iter()
+                .find(|d| d.admits(&desc))
+            {
+                *tally.entry(duty).or_insert(0) += 1;
+            }
+        }
+        tally
+    }
+
+    /// The one writer of `resources::LabourDemand`, so the figures cannot be
+    /// recorded from different points in the tick.
+    fn record_labour_demand(
+        &mut self,
+        wanted: usize,
+        staff: usize,
+        unworked: std::collections::BTreeMap<crate::duties::Duty, usize>,
+    ) {
+        *self.world.resource_mut::<resources::LabourDemand>() = resources::LabourDemand {
+            wanted,
+            staff,
+            unworked,
+        };
     }
 
     /// Whether a program setting off from `from` could actually reach a post
@@ -1517,8 +1601,8 @@ impl Game {
     /// worker could never shelve them, and a full Conduit cannot progress so
     /// the make half named nothing either.
     /// This is `build_wants`' stock gate and it is here for that reason: a
-    /// want nothing can supply still costs a body out of the truncation
-    /// below, and on a one-program base that body is the one producing the
+    /// want nothing can supply still takes a body in the matching ahead of
+    /// every want below it, and on a one-program base that body is the one producing the
     /// cells.
     ///
     /// **And a short burner with nothing in store asks for its fuel to be
@@ -1670,12 +1754,12 @@ impl Game {
     ///
     /// **Reachability is deliberately *not* tested here**, unlike
     /// `dig_wants`, and it is not an omission — it is tested a few lines
-    /// into `schedule_base_labour`, above the truncation.
+    /// into `schedule_base_labour`, before the matching.
     ///
     /// `dig_wants` filters on `hauling::has_station` because its wants are
-    /// appended *last*, so a boxed-in one that survived to the cut would
-    /// sort ahead of nothing and cost only itself. Build wants are
-    /// *prepended*: they are inside the cut by construction, so the
+    /// appended *last*, so a boxed-in one that survived to the matching
+    /// would sort ahead of nothing and cost only itself. Build wants are
+    /// *prepended*: they are first in line by construction, so the
     /// question that matters is not "has this cell a face to stand at" but
     /// "can anybody on the roster actually get there" — and that one needs
     /// the staff list, which does not exist yet at this point in the tick.
@@ -1706,7 +1790,7 @@ impl Game {
         // to — which a dry site now always is, since it is dropped here — so
         // this is where the shortfall has to be said. `run_build_crew` is
         // silent about it for the same reason `announce_dig_cut_off` sits
-        // beside the drop above the cut: only the thing that decides not to
+        // beside the unreachable drop: only the thing that decides not to
         // staff a job knows the job went unstaffed.
         let mut workable = Vec::with_capacity(sites.len());
         for (x, y, site) in sites {
@@ -1816,7 +1900,7 @@ impl Game {
     /// Every marked dig site that wants a body — tile sites first, then cut
     /// sites, each block in tile order, then finish and strip sites in tile
     /// order too. **Finish wants sit after cut and tile wants
-    /// deliberately**: under `truncate(staff.len())` a short-handed base
+    /// deliberately**: filled in list order, a short-handed base
     /// keeps holding its floor before it decorates it. **A cell already open
     /// outranks one still solid** for the same reason one rung down: laying
     /// the tile spends the shared substrate and cutting more does not, so a
@@ -1889,7 +1973,7 @@ impl Game {
     /// on a shelf nobody is told to fill.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
-    /// and above the truncation**, and that placement is the budget's half
+    /// and before the matching**, and that placement is the budget's half
     /// of `dig_wants`' own starvation rule: claimed inside `dig_wants` the
     /// units go to sites in tile order, including the sealed pocket and the
     /// plan drawn past `haul_walk_radius` that the scheduler is about to
@@ -2447,9 +2531,9 @@ impl Game {
     /// The queue is a production policy rather than a to-do list: a base
     /// with more bodies than the front order can use works the one behind
     /// it too. Priority needs no code here — the list comes back in queue
-    /// order and `schedule_base_labour`'s `truncate(staff.len())` cuts from
-    /// the end, so order 1's machines get first refusal on every body and
-    /// order 2 fills from what is left.
+    /// order and `schedule_base_labour`'s matching fills it in that order,
+    /// so order 1's machines get first refusal on every body and order 2
+    /// fills from what is left.
     ///
     /// Returns empty when nothing is orderable — which is also what a base
     /// with an empty queue looks like, and the two are the same instruction
@@ -2532,8 +2616,9 @@ impl Game {
         }
         // **An ordering constraint, not an optimisation.** A feeder two
         // orders both want would otherwise occupy two slots in the want
-        // list against one post, eating a body the base has nowhere to put
-        // and silently shortening the truncation for everything below it.
+        // list against one post: the matching would seat a body on each, the
+        // second posting's `displace_task_holder` would evict the first, and
+        // the want it could have worked below goes unstaffed in silence.
         // The **first** occurrence is kept, so the higher-priority order is
         // what holds the position.
         let mut seen = std::collections::HashSet::new();
@@ -2735,7 +2820,7 @@ impl Game {
     /// `cost`, `systems::deliver_payout` lands nothing (see
     /// `ActiveResearch::credit`). Without the gate a base whose staff is no
     /// larger than its Research Node count held every body on a node producing
-    /// zero while `truncate(staff.len())` cut the bill it had just filed, and
+    /// zero while the bill it had just filed went unstaffed below it, and
     /// the project could never complete. `Stock`'s clog has no equivalent here
     /// to stall the cycle and hand the body on, because a banked resource never
     /// fills a buffer.
@@ -2786,7 +2871,7 @@ impl Game {
     /// Read rather than derived, because the derivation is
     /// `schedule_base_labour` itself and a screen must not run it.
     pub fn labour_demand(&self) -> resources::LabourDemand {
-        *self.world.resource::<resources::LabourDemand>()
+        self.world.resource::<resources::LabourDemand>().clone()
     }
 
     /// What every queued order is waiting on, in queue order.

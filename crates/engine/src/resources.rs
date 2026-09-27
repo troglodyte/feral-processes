@@ -1187,17 +1187,22 @@ pub struct WorkOrders(pub Vec<crate::game::base::work_orders::WorkOrder>);
 /// both figures live inside `schedule_base_labour`, which is `&mut self` and
 /// has side effects — `settle_orders` drops a completed order and announces
 /// a stall — so a screen cannot ask for them by calling it. It is written
-/// once a tick, before the cut to `staff.len()`, and read from `&self`.
+/// once a tick, after the matching, and read from `&self`.
 ///
 /// Not saved: it is rewritten on the next tick either way, and a figure
 /// restored from a save would describe a base that has since changed.
-#[derive(Resource, Default, Clone, Copy)]
+#[derive(Resource, Default, Clone, Debug)]
 pub struct LabourDemand {
     /// Posts the queue, the standing jobs and the dig plan asked for
-    /// together — what the scheduler wanted *before* it cut the list to the
-    /// bodies it had.
+    /// together — what the scheduler wanted, whether or not it found a body
+    /// for each.
     pub wanted: usize,
     pub staff: usize,
+    /// The wants the matching found no body for, under the column that
+    /// admits each. Short of bodies and short of *eligible* bodies land here
+    /// alike — this is what a restriction that leaves work undone looks like
+    /// on the Base staff screen.
+    pub unworked: std::collections::BTreeMap<crate::duties::Duty, usize>,
 }
 
 impl LabourDemand {

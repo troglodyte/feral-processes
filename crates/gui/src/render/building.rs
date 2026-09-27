@@ -2990,6 +2990,7 @@ mod work_order_tests {
         let header = labour_header(LabourDemand {
             wanted: 999,
             staff: 998,
+            ..Default::default()
         })
         .expect("a base one body short has something to say");
         assert!(
@@ -3000,6 +3001,7 @@ mod work_order_tests {
         let wide = labour_header(LabourDemand {
             wanted: 999,
             staff: 0,
+            ..Default::default()
         })
         .expect("a base with nobody in it has something to say");
         assert!(
@@ -3019,14 +3021,16 @@ mod work_order_tests {
         assert_eq!(
             labour_header(LabourDemand {
                 wanted: 2,
-                staff: 3
+                staff: 3,
+                ..Default::default()
             }),
             None
         );
         assert_eq!(
             labour_header(LabourDemand {
                 wanted: 3,
-                staff: 3
+                staff: 3,
+                ..Default::default()
             }),
             None
         );

@@ -408,6 +408,24 @@ pub struct DepotFilter {
     pub denied: std::collections::BTreeSet<ItemId>,
 }
 
+/// Which `duties::Duty` columns a base-staff program is barred from — the
+/// Base staff work table's whole state. `DepotFilter`'s precedent again: the
+/// **unchecked** set, so an absent component (every program before this
+/// shipped, and every newly tamed one) reads as every column checked rather
+/// than none. `duties::duty_admits` is the one reader.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Duties {
+    pub off: std::collections::BTreeSet<crate::duties::Duty>,
+}
+
+/// A base-staff program's position in the scheduler's pick order — the
+/// table order the Base staff screen draws and `schedule_base_labour` fills
+/// wants against. Minted by every roster door (`roster_parts`) at
+/// `max + 1`; `fuse_companions` overrides the fresh rank with the dominant
+/// parent's instead, since fusion keeps that parent's place in line.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StaffRank(pub u32);
+
 /// An item sitting in an `Equipment` slot: *which copy* went on, and the
 /// gear level its stat bonus was scaled for when it did.
 ///

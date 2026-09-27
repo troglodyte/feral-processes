@@ -229,6 +229,18 @@ pub(crate) struct CreatureRestore {
     /// deferral: `components::StolenFrom` names a structure entity, and the
     /// structures a tile has to name are rebuilt after the creature array.
     pub(crate) pending_stolen_from: Vec<(Entity, (i32, i32))>,
+    /// Owned programs whose file carried no `staff_rank`, in the order they
+    /// were spawned — a save written before ranks existed, or a hand-edited
+    /// one. Not deferred for anything to exist first, unlike every other
+    /// field here; it is deferred because the rank it gets depends on the
+    /// highest rank *any* creature in the file did carry, which isn't known
+    /// until the whole array has been read.
+    pub(crate) pending_ranks: Vec<Entity>,
+    /// The highest `staff_rank` any creature in the file named. A body in
+    /// `pending_ranks` is assigned one past this, in file order — `0` if
+    /// nothing in the file named a rank at all, so the first such body
+    /// becomes rank 1.
+    pub(crate) max_rank_seen: u32,
 }
 
 impl CreatureRestore {
@@ -257,6 +269,8 @@ impl CreatureRestore {
             pending_outpost_crew: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_stolen_from: Vec::new(),
+            pending_ranks: Vec::new(),
+            max_rank_seen: 0,
         }
     }
 }
@@ -1665,8 +1679,19 @@ impl Game {
             pending_outpost_crew,
             pending_siege_members,
             pending_stolen_from,
+            pending_ranks,
+            max_rank_seen,
             ..
         } = restore;
+        // One past the highest rank the file named, assigned in the order
+        // these programs were written — a save with no ranks at all (every
+        // file before this feature) starts every one of them at 1, in file
+        // order, since `max_rank_seen` stays 0 with nothing to raise it.
+        for (rank, e) in (max_rank_seen + 1..).zip(pending_ranks) {
+            game.world
+                .entity_mut(e)
+                .insert(crate::components::StaffRank(rank));
+        }
         game.world
             .insert_resource(crate::resources::NextProgramId(next_program_id));
         party_slots.sort_by_key(|&(slot, _)| slot);
@@ -2092,6 +2117,26 @@ impl Game {
                     told: false,
                 });
             }
+            // An unknown name (a duty retired since the file was written)
+            // is dropped silently, `latch_key`'s rule — and if every name
+            // was unknown, the resulting empty set is not inserted at all,
+            // so the program reads as unrestricted rather than as
+            // explicitly (and meaninglessly) barred from nothing.
+            let off: std::collections::BTreeSet<_> = c
+                .off_duties
+                .iter()
+                .filter_map(|name| crate::duties::Duty::from_name(name))
+                .collect();
+            if !off.is_empty() {
+                entity.insert(crate::components::Duties { off });
+            }
+            match c.staff_rank {
+                Some(rank) => {
+                    entity.insert(crate::components::StaffRank(rank));
+                    ctx.max_rank_seen = ctx.max_rank_seen.max(rank);
+                }
+                None => ctx.pending_ranks.push(creature_id),
+            }
             entity.insert((
                 ProgramId(program_id),
                 memories,
@@ -2468,6 +2513,25 @@ impl Game {
                 .get::<crate::components::StolenFrom>(e)
                 .and_then(|s| self.world.get::<Position>(s.0))
                 .map(|p| (p.x, p.y)),
+            // Sorted, `descriptions.rs`'s reason every iteration-order-
+            // sensitive write in this file follows: a `BTreeSet` already
+            // iterates in order, but naming it keeps the byte-identical-save
+            // guarantee (`savetool dump`/`pack`) from depending on that
+            // being true forever.
+            off_duties: self
+                .world
+                .get::<crate::components::Duties>(e)
+                .map(|d| {
+                    let mut names: Vec<String> =
+                        d.off.iter().map(|duty| duty.name().to_string()).collect();
+                    names.sort();
+                    names
+                })
+                .unwrap_or_default(),
+            staff_rank: self
+                .world
+                .get::<crate::components::StaffRank>(e)
+                .map(|r| r.0),
         })
     }
 

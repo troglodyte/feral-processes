@@ -1027,13 +1027,19 @@ impl Game {
         )
     }
 
-    /// Every program on the base staff, in a **stable total order**.
+    /// Every program on the base staff, in a **stable total order** — the
+    /// scheduler's pick order, and the Base staff table's row order.
     ///
-    /// Sorted rather than left in query order for the reason
-    /// `assembler_system` sorts its machines: bevy's iteration order is not
-    /// stable, and a scheduler that filled wants in a different order
-    /// between runs is a flaky test and a base that behaves differently
-    /// after a reload.
+    /// Sorted by `(StaffRank, Entity)` rather than left in query order for
+    /// the reason `assembler_system` sorts its machines: bevy's iteration
+    /// order is not stable, and a scheduler that filled wants in a
+    /// different order between runs is a flaky test and a base that
+    /// behaves differently after a reload. `Entity` is only the tiebreaker
+    /// now — every roster door mints a distinct rank, so two staff members
+    /// sharing one is not expected — and a body with no `StaffRank` at all
+    /// (unreachable once `Game::load` has run, since it assigns every
+    /// unranked owned program one) sorts last rather than panicking or
+    /// silently taking rank 0.
     pub fn base_staff(&self) -> Vec<Entity> {
         let mut staff: Vec<Entity> = self
             .world
@@ -1042,7 +1048,10 @@ impl Game {
             .map(|e| e.id())
             .filter(|&e| self.program_role(e) == Some(ProgramRole::Staff))
             .collect();
-        staff.sort();
+        staff.sort_by_key(|&e| {
+            let rank = self.world.get::<crate::components::StaffRank>(e);
+            (rank.is_none(), rank.map(|r| r.0), e)
+        });
         staff
     }
 
@@ -1406,6 +1415,20 @@ impl Game {
         };
         let fused_ring = self.world.get::<KernelRing>(dominant).copied();
         let fused_talents = self.world.get::<Talents>(dominant).cloned();
+        // The dominant parent's own place in line and job restrictions,
+        // carried across for the same reason the ring and talents are: a
+        // fused child that joined the roster fresh (`roster_parts` mints
+        // both) would silently drop whatever the better-developed parent
+        // had set, which reads as the table forgetting a choice rather than
+        // as fusion losing it.
+        let fused_duties = self
+            .world
+            .get::<crate::components::Duties>(dominant)
+            .cloned();
+        let fused_rank = self
+            .world
+            .get::<crate::components::StaffRank>(dominant)
+            .copied();
         let species = self
             .world
             .resource::<SpeciesDb>()
@@ -1489,6 +1512,18 @@ impl Game {
             PurchasedTiers(fused_purchased),
         ));
         fused.insert(parts);
+        // After `parts`, which carries a fresh rank and no `Duties`:
+        // overriding rather than folding the dominant parent's own back in.
+        // `Duties` is left uninserted (not an empty one) when the parent had
+        // none, so the fused child keeps `duty_admits`'s all-on default
+        // rather than gaining an explicit-but-empty component that means
+        // the same thing today and could drift from it later.
+        if let Some(duties) = fused_duties {
+            fused.insert(duties);
+        }
+        if let Some(rank) = fused_rank {
+            fused.insert(rank);
+        }
         // After `parts`, which carries a level-1 default: a fused child's
         // level is derived from its parents.
         fused.insert(Experience {
@@ -1737,9 +1772,20 @@ impl Game {
             pending_outpost_crew,
             pending_siege_members,
             pending_stolen_from,
+            pending_ranks,
+            max_rank_seen: _,
         } = ctx;
         self.world
             .insert_resource(crate::resources::NextProgramId(next_program_id));
+        // A committed program's live `StaffRank` round-trips through
+        // `creature_save_for`/`spawn_creature_from_save` like any other
+        // component, so a refund never needs to mint one — every owned
+        // program has carried a rank since the door that made it, and this
+        // one is no different.
+        debug_assert!(
+            pending_ranks.is_empty(),
+            "a refunded program's rank round-trips through the snapshot"
+        );
         // A sortied program is refused at the commit door, so a snapshot
         // riding a build request can never carry one. Asserted rather than
         // applied: a non-empty list here means the commit guard has gone,

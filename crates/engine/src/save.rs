@@ -918,6 +918,38 @@ pub struct CreatureSave {
     /// Additive behind `#[serde(default)]`, `siege_cell`'s reason.
     #[serde(default)]
     pub stolen_from: Option<(i32, i32)>,
+    /// This program's unchecked Base staff columns, by name — see
+    /// `components::Duties` and `duties::Duty::name`. Only meaningful when
+    /// `tamed` is true.
+    ///
+    /// Names rather than the enum directly, `NotificationKind::latch_key`'s
+    /// reason: a duty retired from a later build must load inert rather
+    /// than fail the parse. An unknown name is dropped silently on load,
+    /// and an empty list (every save written before this feature, and
+    /// every fresh program) restores no `Duties` component at all —
+    /// `duty_admits`'s absent-means-everything-checked rule.
+    ///
+    /// Additive behind `#[serde(default)]`, so it earns no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub off_duties: Vec<String>,
+    /// This program's position in the Base staff table's order — see
+    /// `components::StaffRank`. `sortie_index`'s precedent: entity ids
+    /// aren't stable across a save/load round trip, so this is a plain
+    /// number rather than a rebuilt reference.
+    ///
+    /// `None` for a save written before ranks existed (or a hand-edited
+    /// file). `Game::load` assigns ranks to every unranked owned program
+    /// after every creature has been restored, in the order they appear in
+    /// the file, starting one past the highest rank the file did carry —
+    /// so an old save loads with the same order `base_staff()` used to sort
+    /// by (entity id, which tracked spawn order in every real save) and a
+    /// mixed file keeps whatever ranks it named intact.
+    ///
+    /// Additive behind `#[serde(default)]`, so it earns no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub staff_rank: Option<u32>,
 }
 
 /// `serde`'s default for an individual roll — the neutral 1.0, because a
@@ -2267,6 +2299,8 @@ mod tests {
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         }
     }
 

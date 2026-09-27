@@ -440,6 +440,8 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -511,6 +513,8 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     }
 }
 
@@ -624,6 +628,8 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -913,6 +919,8 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1014,6 +1022,8 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1164,6 +1174,8 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1301,6 +1313,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1422,6 +1436,8 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1543,6 +1559,8 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1653,6 +1671,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -2006,6 +2026,8 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2107,6 +2129,8 @@ pub(crate) fn app_with_companions_and_cargo(
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2415,6 +2439,8 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         });
     }
     data.locale = if underground {
@@ -2860,6 +2886,8 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

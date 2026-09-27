@@ -421,6 +421,7 @@ impl Game {
         Memories,
         Needs,
         crate::disposition::Disposition,
+        crate::components::StaffRank,
     ) {
         let id = {
             let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
@@ -428,6 +429,18 @@ impl Game {
             counter.0 += 1;
             id
         };
+        // Every door mints a rank so every owned program gets one by
+        // construction — `base_staff()`'s table order has nothing to sort
+        // on otherwise. `fuse_companions` is the one caller that overrides
+        // this with the dominant parent's instead, since fusion keeps that
+        // parent's place in line rather than joining at the back.
+        let rank = self
+            .world
+            .query::<&crate::components::StaffRank>()
+            .iter(&self.world)
+            .map(|r| r.0)
+            .max()
+            .map_or(0, |max| max + 1);
         (
             Tamed {
                 owner: self.player_entity(),
@@ -442,6 +455,7 @@ impl Game {
             // in the run. Stored from here on, so editing `Disposition::ALL`
             // later cannot reshuffle an existing roster.
             crate::disposition::Disposition::seed(id),
+            crate::components::StaffRank(rank),
         )
     }
 

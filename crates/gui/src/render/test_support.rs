@@ -182,6 +182,8 @@ pub(super) fn game_with_a_rare_party_companion(
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
@@ -261,6 +263,8 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         siege_order: None,
         besieger: false,
         stolen_from: None,
+        off_duties: Vec::new(),
+        staff_rank: None,
     };
     for &(wielded, name) in programs {
         data.creatures.push(program(wielded, name));

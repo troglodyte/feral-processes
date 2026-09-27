@@ -142,8 +142,10 @@ fn every_program_on_the_roster_is_born_with_a_disposition() {
     );
 
     // The barrier itself, so a door added later that assembles its own
-    // component list still cannot ship a program without one.
-    let (.., minted) = game.roster_parts();
+    // component list still cannot ship a program without one. `StaffRank`
+    // rides the tuple's last slot now, so `minted` is named positionally
+    // rather than through `..`.
+    let (_, _, _, _, _, _, minted, _rank) = game.roster_parts();
     assert!(
         Disposition::ALL.contains(&minted),
         "roster_parts mints a real disposition, got {minted:?}"

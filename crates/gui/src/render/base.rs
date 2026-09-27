@@ -5818,6 +5818,8 @@ mod tests {
                 siege_order: None,
                 besieger: false,
                 stolen_from: None,
+                off_duties: Vec::new(),
+                staff_rank: None,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         let mut game = Game::load(&path, &test_assets()).unwrap();

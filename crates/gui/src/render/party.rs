@@ -1463,6 +1463,8 @@ mod tests {
             siege_order: None,
             besieger: false,
             stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
         };
         // The handle candidate, and its `CustomName` counterpart — a maxed
         // rename replaces the handle outright (`creature_name`), so it is a

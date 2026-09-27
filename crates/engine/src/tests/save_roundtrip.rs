@@ -163,6 +163,15 @@ fn seed_the_roster(game: &mut Game) -> Roster {
             }],
         },
     ));
+    // Separate from the big tuple above: that one is already at bevy's
+    // 15-element bundle ceiling (`spawn_player_from_save`'s own reason for
+    // nesting), so a 16th component needs its own `insert` call.
+    game.world.entity_mut(member).insert((
+        crate::components::Duties {
+            off: [crate::duties::Duty::Guard].into_iter().collect(),
+        },
+        crate::components::StaffRank(7),
+    ));
     game.world
         .get_mut::<Needs>(member)
         .unwrap()
@@ -387,6 +396,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
         siege_order: _,
         besieger: _,
         stolen_from: _,
+        off_duties: _,
+        staff_rank: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");
@@ -488,6 +499,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(saved.siege_order.is_none(), "siege_order");
     assert!(!saved.besieger, "besieger");
     assert!(saved.stolen_from.is_none(), "stolen_from");
+    assert_eq!(saved.off_duties, vec!["guard".to_string()], "off_duties");
+    assert_eq!(saved.staff_rank, Some(7), "staff_rank");
 }
 
 /// The other half of the census: the fields no party member can carry.

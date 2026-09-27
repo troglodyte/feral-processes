@@ -16,6 +16,7 @@ pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;
 pub mod disposition;
+pub mod duties;
 pub mod environment;
 pub mod floors;
 mod game;

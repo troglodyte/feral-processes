@@ -341,6 +341,12 @@ impl App {
         if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
             self.menu_selected = self.opening_row();
         }
+        // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
+        // own reset rule — no other screen reads it, so there is no
+        // `keeps_highlight` pair to preserve it across.
+        if self.mode != mode_before && self.mode == Mode::BaseStaff {
+            self.work_column = 0;
+        }
         // A group menu's origin only outlives the screen it opened. Landing
         // on the map means the errand is over — completing an action drops
         // straight here — and an origin left standing would send some later,

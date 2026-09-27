@@ -647,33 +647,6 @@ pub struct WorkOrderRow {
     pub order: Option<WorkOrderReport>,
 }
 
-/// One row on `Mode::BaseStaff`: a program you own and the role it is in.
-#[derive(Clone)]
-pub struct BaseStaffRow {
-    pub program: EntityView,
-    /// Which of `ProgramRole`'s roles this program is filling — the engine's
-    /// one derivation, not a re-decision. `None` only for an entity that is
-    /// not a program the player owns, which this screen never lists.
-    ///
-    /// Carried as the role rather than an on-staff flag because the roles are
-    /// what the screen is *about*, and a boolean cannot grow a fourth one.
-    pub role: Option<ProgramRole>,
-    /// What it is doing right now — "working the Mining Node", "guarding the
-    /// Shield", "in party", "idle".
-    ///
-    /// Total rather than `Option`: it distinguishes the post a staffer is on
-    /// from a staffer waiting between postings, which the role alone does not.
-    pub doing: String,
-    /// What this program is worth at a post — see `views::WorkProfile`. The
-    /// screen's whole decision, since the scheduler picks who stands where
-    /// and all the player chooses is who is available to it.
-    ///
-    /// `None` only for a species the db has never heard of, which in play
-    /// means a mod that failed to load. The renderer says so rather than
-    /// quoting numbers nobody authored.
-    pub work: Option<WorkProfile>,
-}
-
 impl App {
     /// The work order screen's rows: every queued order, then the row that
     /// queues another.
@@ -825,56 +798,92 @@ impl App {
         }
     }
 
-    /// Every program the player owns, with which side of the party/staff
-    /// split it is on and what it is doing.
-    pub fn base_staff_rows(&mut self) -> Vec<BaseStaffRow> {
-        let programs = self.nearby_programs();
-        let Some(game) = &self.game else {
-            return Vec::new();
-        };
-        programs
-            .into_iter()
-            .map(|program| {
-                let role = game.program_role(program.entity);
-                let on_staff = role == Some(ProgramRole::Staff);
-                // Off the staff, `Game::program_activity` is the engine's one
-                // answer to "what is this program doing" — it already tells
-                // the party, the wield and idleness apart, so this screen
-                // cannot disagree with the sale and erase screens about a
-                // program neither of them can see a `Task` on.
-                BaseStaffRow {
-                    doing: if on_staff {
-                        game.staff_activity(program.entity)
-                    } else {
-                        game.program_activity(program.entity)
-                    },
-                    work: game.work_profile(program.entity),
-                    role,
-                    program,
-                }
+    /// `Game::work_table` if a game is loaded, an empty one otherwise — the
+    /// one row source `Mode::BaseStaff`'s handler and its renderer both
+    /// read, so neither can act on a row the other one drew differently.
+    pub fn base_staff_table(&mut self) -> WorkTable {
+        self.game
+            .as_mut()
+            .map(|g| g.work_table())
+            .unwrap_or(WorkTable {
+                columns: Vec::new(),
+                rows: Vec::new(),
+                on_shift: 0,
+                jobs: 0,
+                unworked_total: 0,
             })
-            .collect()
     }
 
-    /// Scrolling and closing, and deliberately nothing else.
+    /// Up/Down moves the row cursor (`menu_selected`), Left/Right the
+    /// column cursor (`work_column`); `Space` toggles the highlighted cell,
+    /// `<`/`>` moves the highlighted row in the scheduler's own pick order
+    /// with the selection following it, and `A` toggles the highlighted
+    /// column as a whole — on if any row in it is off, else off, so the key
+    /// always reads as "make this column uniform" rather than a fixed
+    /// direction.
     ///
-    /// **This screen writes nothing.** A program you own and are not
-    /// fighting with *is* base staff — `ProgramRole` derives the roles from
-    /// the party and the wield, so there is no marker here to toggle and no
-    /// state for a key to put a row out of step with. What the player
-    /// changes is the party; the base takes whatever is left.
-    ///
-    /// Kept as its own handler rather than folded into a generic scroll,
-    /// because this is where a role the player *does* choose between would
-    /// be picked.
+    /// Deliberately **no digit or letter row-jump**: every other menu's
+    /// `selected_index` doubles a lowercase letter as a shortcut, but this
+    /// screen's only listed keys are arrows, `Space`, `<`/`>` and `A` — a
+    /// lowercase letter here does nothing, which is what keeps it from
+    /// colliding with a screen action bound to its upper-case twin.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
-        let rows = self.base_staff_rows().len();
-        if let Some(idx) = self.selected_index(key, rows) {
-            self.menu_selected = idx;
+        let table = self.base_staff_table();
+        let rows = table.rows.len();
+        let columns = table.columns.len();
+        let Some(game) = &mut self.game else { return };
+        match key {
+            GameKey::Up if rows > 0 => {
+                self.menu_selected = (self.menu_selected + rows - 1) % rows;
+            }
+            GameKey::Down if rows > 0 => {
+                self.menu_selected = (self.menu_selected + 1) % rows;
+            }
+            GameKey::Left => {
+                self.work_column = self.work_column.saturating_sub(1);
+            }
+            GameKey::Right if columns > 0 => {
+                self.work_column = (self.work_column + 1).min(columns - 1);
+            }
+            GameKey::Char(' ') => {
+                if let (Some(row), Some(column)) = (
+                    table.rows.get(self.menu_selected),
+                    table.columns.get(self.work_column),
+                ) {
+                    let entity = row.program.entity;
+                    let duty = column.duty;
+                    let on = !row.cells.get(self.work_column).copied().unwrap_or(true);
+                    let outcome = game.set_duty(entity, duty, on);
+                    self.report(outcome);
+                }
+            }
+            GameKey::Char('<') | GameKey::Char('>') => {
+                if let Some(entity) = table.rows.get(self.menu_selected).map(|r| r.program.entity) {
+                    let delta = if key == GameKey::Char('<') { -1 } else { 1 };
+                    let outcome = game.move_staff_row(entity, delta);
+                    if outcome.is_ok() && rows > 0 {
+                        self.menu_selected =
+                            (self.menu_selected as i32 + delta).clamp(0, rows as i32 - 1) as usize;
+                    }
+                    self.report(outcome);
+                }
+            }
+            GameKey::Char('A') => {
+                if let Some(column) = table.columns.get(self.work_column) {
+                    let duty = column.duty;
+                    let any_off = table
+                        .rows
+                        .iter()
+                        .any(|r| !r.cells.get(self.work_column).copied().unwrap_or(true));
+                    let outcome = game.set_duty_column(duty, any_off);
+                    self.report(outcome);
+                }
+            }
+            _ => {}
         }
     }
 }

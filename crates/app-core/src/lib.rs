@@ -10,7 +10,7 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
-pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
+pub use app::building::{StaffAction, StaffRow, Staffing, WorkOrderRow};
 pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
@@ -101,6 +101,14 @@ use feral_processes_engine::sorties::SortieId;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
+// Neither `Duty` nor `WorkSection` is named by a non-test call site — the
+// handler reads `column.duty`/`row.section` without spelling either type,
+// and only a test constructs one to compare against — so both are
+// test-only imports rather than dead code in a release build.
+#[cfg(test)]
+use feral_processes_engine::WorkSection;
+#[cfg(test)]
+use feral_processes_engine::duties::Duty;
 use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
@@ -109,7 +117,7 @@ use feral_processes_engine::{
     MESSAGE_LOG_CAP, MessageSource, OutpostReport, ProgramSaleOption, RigToolView,
     RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
     SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
-    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkTable, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1617,12 +1625,18 @@ pub enum Mode {
     WorkOrderPick,
     /// How many of it. Digits and Enter, like `Mode::CraftQuantity`.
     WorkOrderQuantity,
-    /// The roster as the base sees it: every program you own and the
-    /// `ProgramRole` it is in. **Read-only** — a program you own and are not
-    /// fighting with *is* base staff, derived rather than assigned, so there
-    /// is no marker here for a key to toggle and no limbo state to fall
-    /// into. What the player changes is the party. `BaseStaffRow::role` says
-    /// which role, `doing` says what it is doing inside it.
+    /// The roster as the base sees it, and the table the player tells it
+    /// who does what: every program you own, the `ProgramRole` it is in,
+    /// and one checkbox column per `Duty` — `Game::work_table` is the one
+    /// derivation both this screen's handler and its renderer read.
+    ///
+    /// Which *role* a program is in is still derived and untouched here —
+    /// the party is what the player edits to move a program off staff, not
+    /// this screen. What this screen writes is which *jobs* a staffed (or
+    /// away) program may be handed: `Space` toggles the highlighted cell,
+    /// `A` toggles a whole column, `<`/`>` moves the highlighted row in the
+    /// scheduler's own pick order. `App::work_column` is the column half of
+    /// the cursor; `menu_selected` is the row half, as everywhere else.
     BaseStaff,
     /// Picking a nearby structure for the *player* to work themselves rather
     /// than posting a program to it — see `Game::work_structure`. The player
@@ -2958,6 +2972,12 @@ pub struct App {
     /// of, not instead of, typing a row's own number/letter directly.
     /// Reset to 0 every time a menu mode is entered.
     pub menu_selected: usize,
+    /// The column half of `Mode::BaseStaff`'s cursor — `menu_selected` is
+    /// the row half, shared with every other menu. A second field rather
+    /// than widening `menu_selected` into a pair, since only this one
+    /// screen has a column to point at; reset to 0 whenever `BaseStaff` is
+    /// entered, `menu_selected`'s own rule.
+    pub work_column: usize,
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
     /// census stay as they are.

@@ -139,6 +139,7 @@ impl App {
             walk: None,
             drag_ticks_owed: 0,
             menu_selected: 0,
+            work_column: 0,
             research_graph_view: false,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),

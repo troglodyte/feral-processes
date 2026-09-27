@@ -2,7 +2,6 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::species::AffinityClass;
 
 #[test]
 fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
@@ -606,7 +605,7 @@ fn the_roster_does_not_staff_anything_underground() {
 fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
     let mut app = app_owning_distant_programs(742, 2);
 
-    let rows = app.base_staff_rows();
+    let rows = app.base_staff_table().rows;
     assert_eq!(rows.len(), 2, "fixture hands the player two programs");
     assert!(
         rows.iter()
@@ -620,11 +619,11 @@ fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
     // the crossing, not before: it goes through a save round trip and
     // `Entity` identity is private to the `World` that allocated it.
     stand_inside_the_base(&mut app);
-    let rows = app.base_staff_rows();
+    let rows = app.base_staff_table().rows;
     let (member, other) = (rows[0].program.entity, rows[1].program.entity);
     app.game.as_mut().unwrap().add_companion(member).unwrap();
 
-    let rows = app.base_staff_rows();
+    let rows = app.base_staff_table().rows;
     let row = |e| rows.iter().find(|r| r.program.entity == e).unwrap();
     assert_eq!(row(member).role, Some(ProgramRole::InParty));
     assert!(
@@ -636,21 +635,25 @@ fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
     assert_eq!(row(other).doing, "idle");
 }
 
-/// The screen writes nothing. It used to toggle a stored marker with Enter;
-/// the roles are derived now, so the only thing a key here moves is the
-/// selection — and Esc still closes.
+/// Roles stay derived even now that the table writes duties: nothing on
+/// this screen may move a program between `ProgramRole`s, only which jobs
+/// it may be handed. `Enter` is not one of this screen's keys (see
+/// `App::handle_base_staff_key`), so it is a no-op here and `Down` still
+/// moves the selection.
 #[test]
 fn the_staff_screen_does_not_change_a_role() {
     let mut app = app_owning_distant_programs(743, 2);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 0;
-    let before: Vec<Option<ProgramRole>> = app.base_staff_rows().iter().map(|r| r.role).collect();
+    let before: Vec<Option<ProgramRole>> =
+        app.base_staff_table().rows.iter().map(|r| r.role).collect();
 
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
 
     assert_eq!(
-        app.base_staff_rows()
+        app.base_staff_table()
+            .rows
             .iter()
             .map(|r| r.role)
             .collect::<Vec<_>>(),
@@ -658,6 +661,133 @@ fn the_staff_screen_does_not_change_a_role() {
         "no key on this screen may move a program between roles"
     );
     assert_eq!(app.menu_selected, 1, "but Down still moves the selection");
+}
+
+/// `Space` toggles exactly the cell under both cursors, and only that one —
+/// the row's other three columns stay on.
+#[test]
+fn space_toggles_the_highlighted_cell() {
+    let mut app = app_owning_distant_programs(760, 1);
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0;
+    app.work_column = 2; // Dig
+
+    app.handle_key(GameKey::Char(' '));
+
+    let table = app.base_staff_table();
+    let cells = &table.rows[0].cells;
+    assert_eq!(
+        table.columns.iter().map(|c| c.duty).collect::<Vec<_>>(),
+        Duty::ALL
+    );
+    assert!(!cells[2], "Dig should now be off");
+    for i in [0, 1, 3] {
+        assert!(cells[i], "column {i} should be untouched");
+    }
+
+    // Toggling again turns it back on.
+    app.handle_key(GameKey::Char(' '));
+    assert!(app.base_staff_table().rows[0].cells[2]);
+}
+
+/// `Right` walks the column cursor across every `Duty`, clamped at the last
+/// one — there is no wrap, unlike `Up`/`Down` on the row cursor.
+#[test]
+fn right_moves_the_column_cursor_and_clamps_at_the_end() {
+    let mut app = app_owning_distant_programs(761, 1);
+    app.mode = Mode::BaseStaff;
+    app.work_column = 0;
+
+    for _ in 0..10 {
+        app.handle_key(GameKey::Right);
+    }
+    assert_eq!(app.work_column, 3, "clamped at BUILD, the last column");
+
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.work_column, 2);
+}
+
+/// `A` toggles the whole highlighted column at once, off if every row in it
+/// was on, and back on if any row was off — "make this column uniform"
+/// rather than a fixed direction.
+#[test]
+fn a_toggles_the_whole_highlighted_column() {
+    let mut app = app_owning_distant_programs(762, 2);
+    app.mode = Mode::BaseStaff;
+    app.work_column = 1; // Guard
+
+    app.handle_key(GameKey::Char('A'));
+    let table = app.base_staff_table();
+    for row in &table.rows {
+        assert!(!row.cells[1], "every row's Guard should be off");
+    }
+
+    app.handle_key(GameKey::Char('A'));
+    let table = app.base_staff_table();
+    for row in &table.rows {
+        assert!(row.cells[1], "and back on since some were off");
+    }
+}
+
+/// `<` moves the highlighted row up the table's own order and the selection
+/// follows the program that moved, not the index that stayed put.
+#[test]
+fn moving_a_row_keeps_the_selection_on_the_moved_program() {
+    let mut app = app_owning_distant_programs(763, 2);
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 1;
+    let moved = app.base_staff_table().rows[1].program.entity;
+
+    app.handle_key(GameKey::Char('<'));
+
+    assert_eq!(app.menu_selected, 0, "selection follows the moved row");
+    assert_eq!(
+        app.base_staff_table().rows[0].program.entity,
+        moved,
+        "and the program really is the one now on top"
+    );
+}
+
+/// A program in the party is still a row on this table — away, dimmed, but
+/// no less editable than a staffed one, since a restriction it carries takes
+/// effect the moment it comes home.
+#[test]
+fn an_away_row_is_editable() {
+    let mut app = app_owning_distant_programs(764, 1);
+    stand_inside_the_base(&mut app);
+    let member = app.base_staff_table().rows[0].program.entity;
+    app.game.as_mut().unwrap().add_companion(member).unwrap();
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0;
+    app.work_column = 0;
+    assert_eq!(
+        app.base_staff_table().rows[0].section,
+        WorkSection::Away,
+        "precondition: the only row is the party member"
+    );
+
+    app.handle_key(GameKey::Char(' '));
+
+    assert!(!app.base_staff_table().rows[0].cells[0]);
+}
+
+/// Lowercase letters are row selectors everywhere else in the app, but this
+/// screen's only keys are arrows, `Space`, `<`/`>` and `A` — a lowercase `a`
+/// must not fall through to a shortcut that toggles the column its upper-case
+/// twin does.
+#[test]
+fn lowercase_a_does_nothing() {
+    let mut app = app_owning_distant_programs(765, 1);
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0;
+    app.work_column = 1;
+    let before = app.base_staff_table().rows[0].cells.clone();
+
+    app.handle_key(GameKey::Char('a'));
+
+    assert_eq!(app.base_staff_table().rows[0].cells, before);
+    assert_eq!(app.menu_selected, 0);
+    assert_eq!(app.work_column, 1);
 }
 
 /// The roster sorts the Home first and the node after it, so one Down from
@@ -671,42 +801,6 @@ fn node_row(app: &mut App) -> usize {
         .iter()
         .position(|s| s.kind == "mining_node")
         .expect("the fixture deploys one")
-}
-
-/// The Base Staff row carries what the program is worth at a post, so the
-/// player picks staff on the facts the sim actually reads rather than on the
-/// name.
-///
-/// Two species, not two copies of one: rootkit and sprite disagree on all
-/// three answers, which is what makes a screen reading row `i`'s facts off
-/// program `j` fail here instead of passing on identical numbers.
-#[test]
-fn a_staff_row_carries_what_the_program_is_worth_at_a_post() {
-    let mut app = app_owning_distant_programs_of(744, &["rootkit", "sprite"]);
-
-    let rows = app.base_staff_rows();
-    // Picked by `EntityView::sprite` (the species id, unless a def
-    // overrides it — neither of these two does) rather than `label`: a
-    // program's label is now its derived handle, not its species, so a
-    // substring match on the display text can no longer tell rootkit's row
-    // from sprite's.
-    let profile = |species_id: &str| {
-        rows.iter()
-            .find(|r| r.program.sprite.as_deref() == Some(species_id))
-            .unwrap_or_else(|| panic!("fixture spawns a {species_id}"))
-            .work
-            .expect("a shipped species has a work profile")
-    };
-
-    let rootkit = profile("rootkit");
-    let sprite = profile("sprite");
-    assert_eq!(rootkit.speed, 9);
-    assert_eq!(rootkit.analysis, 13);
-    assert_eq!(rootkit.class, Some(AffinityClass::Leech));
-    assert_ne!(
-        sprite.speed, rootkit.speed,
-        "the two rows must not be reporting the same program"
-    );
 }
 
 /// The one key slice 2 adds to the map screen, driven end to end: swing at

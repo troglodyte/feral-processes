@@ -222,15 +222,6 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     })
 }
 
-/// `app_owning_distant_programs` with the species named per program, for a
-/// test that has to tell two rows apart by something the roster decides —
-/// work speed, aptitude, class. The default fixture gives every program the
-/// same species, which cannot catch a screen that reads row `i`'s facts off
-/// program `j`.
-pub(crate) fn app_owning_distant_programs_of(seed: u32, species: &[&str]) -> App {
-    distant_programs(seed, |_| species.iter().map(|s| s.to_string()).collect())
-}
-
 /// The same program the cargo fixture gives, developed: `level` and `ring`
 /// written straight onto its save record and reloaded.
 ///

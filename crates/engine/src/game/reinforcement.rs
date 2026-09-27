@@ -138,6 +138,7 @@ impl Game {
             .remove::<(Task, Carrying)>()
             .insert(Reinforcement { reorienting: true });
         self.world.resource_mut::<Party>().0.push(trooper);
+        self.cue_tactical_fx(trooper, crate::resources::TacticalFxKind::Landing);
         let name = self.creature_label(trooper);
         self.log(format!("{name} drops in from the base, reorienting."));
         true

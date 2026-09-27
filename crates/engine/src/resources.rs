@@ -890,6 +890,8 @@ pub enum TacticalFxKind {
     /// before the blow — the swing itself sounds and streaks like any
     /// other, so this is the one thing that says it was an interrupt.
     Reaction,
+    /// A drop trooper landed on this cell (`Game::call_reinforcement`).
+    Landing,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

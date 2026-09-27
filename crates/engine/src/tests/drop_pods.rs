@@ -495,3 +495,28 @@ fn the_trooper_column_appears_once_a_terminal_stands() {
     assert!(cell(trooper));
     assert!(!cell(other), "opt-in: an unmarked program's cell is off");
 }
+
+/// A landing is cued at the cell the trooper landed on, so the board can
+/// flash it — the log line alone is easy to miss mid-fight.
+#[test]
+fn a_landing_is_cued_at_the_troopers_cell() {
+    let mut game = Game::new(4412, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    terminal_at(&mut game, 10, 10);
+    let trooper = trooper_at(&mut game, 12, 11, 0);
+    fight(&mut game);
+    game.take_tactical_fx();
+
+    assert!(call(&mut game));
+
+    let cell = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(trooper)
+        .unwrap();
+    let cues = game.take_tactical_fx();
+    assert!(
+        cues.iter()
+            .any(|c| c.kind == crate::resources::TacticalFxKind::Landing && c.pos == cell),
+        "{cues:?}"
+    );
+}

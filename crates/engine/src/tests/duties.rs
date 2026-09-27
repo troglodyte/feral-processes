@@ -829,8 +829,10 @@ fn a_downed_body_is_untouched_by_its_duties() {
 fn work_table_columns_are_duty_all_in_order_with_labels() {
     let (mut game, _node, _worker) = a_quiet_base_with_one_post(20261010);
     let table = game.work_table();
-    let duties: Vec<Duty> = table.columns.iter().map(|c| c.duty).collect();
-    assert_eq!(duties, Duty::ALL);
+    let keys: Vec<crate::views::WorkColumnKey> = table.columns.iter().map(|c| c.key).collect();
+    let duty_keys: Vec<crate::views::WorkColumnKey> =
+        Duty::ALL.map(crate::views::WorkColumnKey::Duty).to_vec();
+    assert_eq!(keys, duty_keys);
     let labels: Vec<&str> = table.columns.iter().map(|c| c.label).collect();
     assert_eq!(labels, ["OPERATE", "GUARD", "DIG", "BUILD"]);
 }
@@ -852,11 +854,15 @@ fn work_table_unworked_counts_match_labour_demand() {
     let operate = table
         .columns
         .iter()
-        .find(|c| c.duty == Duty::Operate)
+        .find(|c| c.key == crate::views::WorkColumnKey::Duty(Duty::Operate))
         .unwrap();
     assert_eq!(operate.unworked, 1);
     for other in [Duty::Guard, Duty::Dig, Duty::Build] {
-        let column = table.columns.iter().find(|c| c.duty == other).unwrap();
+        let column = table
+            .columns
+            .iter()
+            .find(|c| c.key == crate::views::WorkColumnKey::Duty(other))
+            .unwrap();
         assert_eq!(column.unworked, 0, "{other:?}");
     }
 }
@@ -1083,7 +1089,13 @@ fn set_duty_toggles_one_cell_and_leaves_the_others() {
         .iter()
         .find(|r| r.program.entity == worker)
         .unwrap();
-    let cell = |d: Duty| row.cells[table.columns.iter().position(|c| c.duty == d).unwrap()];
+    let cell = |d: Duty| {
+        row.cells[table
+            .columns
+            .iter()
+            .position(|c| c.key == crate::views::WorkColumnKey::Duty(d))
+            .unwrap()]
+    };
     assert!(!cell(Duty::Dig));
     for other in [Duty::Operate, Duty::Guard, Duty::Build] {
         assert!(cell(other), "{other:?}");

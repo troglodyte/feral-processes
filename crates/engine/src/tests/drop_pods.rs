@@ -8,6 +8,7 @@ use crate::components::{DropPod, DropTrooper, Reinforcement, StaffRank};
 use crate::game::combat::RoutineRefusal;
 use crate::resources::Party;
 use crate::tactical::TacticalBattle;
+use crate::views::WorkColumnKey;
 use crate::*;
 
 /// A real save and load, never RON alone —
@@ -462,4 +463,35 @@ fn a_trooper_keeps_the_xp_it_earned() {
     );
     jack_out(&mut game);
     assert_eq!(game.world.get::<Experience>(trooper).unwrap().xp, earned);
+}
+
+// ---------------------------------------------------------------------------
+// B3 — the Base staff table's Drop Trooper column.
+// ---------------------------------------------------------------------------
+
+/// The column is drawn only once a terminal stands, last, after every
+/// `Duty` — and it is a column of the table, not a `Duty`: its cells read
+/// the `DropTrooper` marker and it never counts anything unworked.
+#[test]
+fn the_trooper_column_appears_once_a_terminal_stands() {
+    let mut game = Game::new(20260930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let trooper = trooper_at(&mut game, 2, 2, 0);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let keys = |game: &mut Game| -> Vec<WorkColumnKey> {
+        game.work_table().columns.iter().map(|c| c.key).collect()
+    };
+    assert!(!keys(&mut game).contains(&WorkColumnKey::DropTrooper));
+
+    terminal_at(&mut game, 5, 5);
+    let table = game.work_table();
+    let last = table.columns.last().unwrap();
+    assert_eq!(last.key, WorkColumnKey::DropTrooper);
+    assert_eq!(last.label, "POD");
+    assert_eq!(last.unworked, 0);
+    let cell = |who: Entity| {
+        let row = table.rows.iter().find(|r| r.program.entity == who).unwrap();
+        *row.cells.last().unwrap()
+    };
+    assert!(cell(trooper));
+    assert!(!cell(other), "opt-in: an unmarked program's cell is off");
 }

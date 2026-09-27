@@ -3214,6 +3214,7 @@ mod base_staff_tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::duties::Duty;
+    use feral_processes_engine::views::WorkColumnKey;
 
     fn work_row(label: &str, doing: &str, section: WorkSection, cells: [bool; 4]) -> WorkRow {
         let mut program = super::tests::view(1, 1, 1);
@@ -3239,7 +3240,7 @@ mod base_staff_tests {
             .iter()
             .zip(unworked)
             .map(|(&duty, unworked)| WorkColumn {
-                duty,
+                key: WorkColumnKey::Duty(duty),
                 label: duty.label(),
                 unworked,
             })
@@ -3281,9 +3282,19 @@ mod base_staff_tests {
     /// would pass just as happily with a column dropped — it is here for
     /// `no_roster_row_overflows_its_popup`'s reason, to catch the day
     /// `ROW_WRAP_COLUMNS` stops being the right budget.
+    ///
+    /// With the Drop Trooper column drawn, since a base with a terminal is the
+    /// widest the table gets.
     #[test]
     fn the_widest_base_staff_row_stays_inside_the_popup() {
-        let t = table(vec![widest_row()]);
+        let mut row = widest_row();
+        row.cells.push(true);
+        let mut t = table(vec![row]);
+        t.columns.push(WorkColumn {
+            key: WorkColumnKey::DropTrooper,
+            label: "POD",
+            unworked: 0,
+        });
         for row in base_staff_menu_rows(&t, &[], 0, 0) {
             let text = match &row {
                 Row::Text(text) | Row::TextColored(text, _) => text.clone(),

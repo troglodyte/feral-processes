@@ -81,14 +81,30 @@ impl Game {
     /// `Vec<bool>` per row is the whole of it.
     pub fn work_table(&mut self) -> views::WorkTable {
         let demand = self.labour_demand();
-        let columns: Vec<views::WorkColumn> = Duty::ALL
+        let mut columns: Vec<views::WorkColumn> = Duty::ALL
             .iter()
             .map(|&duty| views::WorkColumn {
-                duty,
+                key: views::WorkColumnKey::Duty(duty),
                 label: duty.label(),
                 unworked: demand.unworked.get(&duty).copied().unwrap_or(0),
             })
             .collect();
+        let pod_stands = self
+            .world
+            .query::<&crate::components::DropPod>()
+            .iter(&self.world)
+            .next()
+            .is_some();
+        if pod_stands {
+            // Three letters because the widest shipped row leaves exactly
+            // that much of the Base staff popup's 100-column body
+            // (`the_widest_base_staff_row_stays_inside_the_popup`).
+            columns.push(views::WorkColumn {
+                key: views::WorkColumnKey::DropTrooper,
+                label: "POD",
+                unworked: 0,
+            });
+        }
 
         let order = self.display_order();
         let mut views_by_entity: std::collections::HashMap<Entity, views::EntityView> = self
@@ -113,13 +129,17 @@ impl Game {
             } else {
                 self.program_activity(entity)
             };
-            let cells: Vec<bool> = Duty::ALL
+            let cells: Vec<bool> = columns
                 .iter()
-                .map(|d| {
-                    !self
+                .map(|c| match c.key {
+                    views::WorkColumnKey::Duty(d) => !self
                         .world
                         .get::<Duties>(entity)
-                        .is_some_and(|o| o.off.contains(d))
+                        .is_some_and(|o| o.off.contains(&d)),
+                    views::WorkColumnKey::DropTrooper => self
+                        .world
+                        .get::<crate::components::DropTrooper>(entity)
+                        .is_some(),
                 })
                 .collect();
             let rank = self

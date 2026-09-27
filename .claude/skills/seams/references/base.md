@@ -66,6 +66,15 @@
   `build_cost_display`, the pack no longer being the store the verb reads —
   on the program picker since `Mode::UpgradeDirection` replaced the upgrade
   list, because a prompt aimed at a *tile* does not know the machine yet.
+- **A drop pod's recharge is `Upgrade`'s build request with a third goal,
+  and it cannot be cancelled.** `Game::spend_pod` files `BuildGoal::Recharge`
+  on the terminal's own tile and `raise_one_tick`'s `Recharge` arm is the
+  only writer of `DropPod::charged = true`, so every one of `Upgrade`'s five
+  traps applies. The trap is `cancel_build_request`: it was the one door that
+  left a standing terminal spent with nothing filed, and no screen re-files
+  one — a pod that silently never fires again. `views::PodState` has no
+  "spent, nothing filed" state for that reason, and its percent is a *call*
+  to `BuildOrderRow::percent`.
 - **`Game::spawn_structure` is the one place a structure's component list is
   written**, `roster_parts`' argument on the other roster: two callers with
   nothing in common, and nothing fails to compile when a hand-written copy
@@ -1229,6 +1238,15 @@
   the *previous* pass's figures until the next real tick — `Mode::BaseStaff`
   spends none of the clock itself, unlike every screen that pages ticks
   through `after_tick`.
+- **The Drop Trooper column is `WorkColumnKey::DropTrooper`, never a fifth
+  `Duty`.** `Duties` is a denied-set, so a fifth `Duty` makes every program —
+  and every old save — a trooper by default where the feature is opt-in; the
+  marker is `components::DropTrooper` and `duty_admits` never reads it. The
+  column is appended by `Game::work_table` only while a `DropPod` stands, and
+  every reader acting on a column matches `WorkColumn::key` — an index past
+  `columns.len()` meaning "trooper" is the version that drifts. Its label is
+  three letters because the widest shipped row leaves exactly that
+  (`the_widest_base_staff_row_stays_inside_the_popup`).
 - **`idled_with` is an edge, never a period** — written when a serviced need
   reaches `content`, naming everyone else in reach of that amenity.
   `note_postings`' cost applies unchanged: a per-tick writer saturates

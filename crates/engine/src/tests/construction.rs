@@ -2351,16 +2351,16 @@ fn the_crew_reloads_a_spent_pod_and_stands_nothing_new_up() {
     );
 }
 
-/// A recharge site is a first-class build request too: cancelling one
-/// refunds whatever the crew had already carried — and, the one thing that
-/// is not `Upgrade`'s rule, never hands the charge back. Only a finished
-/// recharge does that.
+/// A recharge cannot be called off. Cancelling one was the only way to
+/// leave a standing terminal spent with nothing filed to reload it — a pod
+/// that would then never fire again without a screen to re-file it from —
+/// so the refusal is the whole of "a spent pod always has its recharge
+/// filed". It lands before anything moves: the site, its delivered units
+/// and the spent charge all stand.
 #[test]
-fn cancelling_a_recharge_gives_the_delivered_units_back_and_leaves_the_pod_spent() {
+fn a_recharge_request_cannot_be_cancelled() {
     let mut game = base_for_drop_pod(1173);
     builder(&mut game);
-    place_now(&mut game, "depot", 0, 1).unwrap();
-    let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
     place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
     let terminal = structure_at(&mut game, 1, 0).unwrap();
     game.spend_pod(terminal);
@@ -2380,24 +2380,18 @@ fn cancelling_a_recharge_gives_the_delivered_units_back_and_leaves_the_pod_spent
     }
     assert!(delivered > 0, "the fixture needs a part-supplied site");
 
-    game.cancel_build_request(site).unwrap();
+    assert!(game.cancel_build_request(site).is_err());
 
-    assert!(
-        game.world.get::<BuildSite>(site).is_none(),
-        "the request is gone"
-    );
-    assert!(
-        !game.world.get::<DropPod>(terminal).unwrap().charged,
-        "a cancel does not hand the charge back — only a finished recharge does"
-    );
-    let banked: u32 = game
+    let build = game
         .world
-        .get::<Stock>(depot)
-        .unwrap()
-        .output
-        .values()
-        .sum();
-    assert_eq!(banked, delivered, "what the crew carried over comes back");
+        .get::<BuildSite>(site)
+        .expect("the request still stands");
+    assert_eq!(
+        build.delivered.iter().map(|(_, q)| q).sum::<u32>(),
+        delivered,
+        "nothing was handed back"
+    );
+    assert!(!game.world.get::<DropPod>(terminal).unwrap().charged);
 }
 
 /// A save written before `pod_charged` existed carries no such key at all —

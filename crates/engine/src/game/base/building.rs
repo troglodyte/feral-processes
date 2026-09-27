@@ -752,6 +752,11 @@ impl Game {
         let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
             return Err("That build request is already gone.".into());
         };
+        // The only door that could leave a standing terminal spent with no
+        // recharge filed, and nothing re-files one.
+        if build.goal == BuildGoal::Recharge {
+            return Err("A drop pod's recharge can't be called off.".into());
+        }
         let name = self.structure_name(&build.structure);
         self.return_build_holdings(&build);
         self.world.despawn(site);

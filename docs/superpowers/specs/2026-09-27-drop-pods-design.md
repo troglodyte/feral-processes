@@ -107,13 +107,14 @@ One door, called from `use_ability`'s `Reinforce` arm:
    `insert_after_cursor` — the summon path's two calls, not its `Summoned`
    marker, so the trooper is commanded by the player rather than handed to
    `tactical_ai_actor`.
-6. `arm_status(trooper, StatusKind::Stun, 1, 0)`. `landed_this_round`
-   guarantees it loses its very next turn.
+6. It loses its very next turn — **amended at B2**: not a `Stun`, which
+   costs no turn on a battle map, but `Reinforcement::reorienting`, passed
+   by `hand_on_turn`.
 7. Log line naming the trooper through `creature_label`, and a fx cue.
 
-Posting: the trooper's role stops reading `Staff` the instant it is in
-`Party`, so `schedule_base_labour`'s diff frees its post on the next tick —
-no unposting code.
+Posting: **amended at B2** — the role stops reading `Staff`, but the
+scheduler keeps a non-staff body's `Task` post covered and does not run
+mid-fight, so `call_reinforcement` strips `Task` and `Carrying` itself.
 
 ### 6. After the fight
 

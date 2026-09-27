@@ -38,7 +38,7 @@ fn row(game: &Game, id: &str) -> TransferRow {
 }
 
 fn deny(game: &mut Game, at: Entity, id: &str) {
-    game.set_depot_filter(at, &ItemId::from(id), false);
+    game.set_depot_filter(at, &[ItemId::from(id)], false);
 }
 
 /// The state every Depot in every existing save is in: no component, and
@@ -72,7 +72,7 @@ fn allowing_the_last_denied_item_removes_the_component() {
     deny(&mut game, shelf, ids::CORE_FRAGMENT);
     assert!(game.world.get::<DepotFilter>(shelf).is_some());
 
-    game.set_depot_filter(shelf, &ItemId::from(ids::CORE_FRAGMENT), true);
+    game.set_depot_filter(shelf, &[ItemId::from(ids::CORE_FRAGMENT)], true);
     assert!(
         game.world.get::<DepotFilter>(shelf).is_none(),
         "the last denial lifted leaves no component behind"
@@ -257,7 +257,7 @@ fn a_depot_that_refuses_everything_is_still_a_depot() {
     );
 }
 
-/// The screen's own derivation: one row per catalogue item, carrying what
+/// The screen's own derivation: a row per ungrouped item, carrying what
 /// this Depot holds of it.
 #[test]
 fn the_view_names_the_tile_and_marks_the_denied_rows() {
@@ -270,12 +270,16 @@ fn the_view_names_the_tile_and_marks_the_denied_rows() {
     let view = game.depot_filter_view(shelf).expect("a standing Depot");
     assert_eq!(view.tile, (p.x + 1, p.y));
     assert_eq!(view.room, 188);
-    assert_eq!(view.rows.len(), game.filterable_items().len());
+    assert_eq!(
+        view.rows.iter().map(|r| r.items.len()).sum::<usize>(),
+        game.filterable_items().len(),
+        "every filterable item sits on exactly one row"
+    );
 
     let fragment = view
         .rows
         .iter()
-        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .find(|r| r.items == [ItemId::from(ids::CORE_FRAGMENT)])
         .expect("the catalogue lists it");
     assert!(!fragment.allowed);
     assert_eq!(
@@ -378,4 +382,64 @@ fn the_filter_list_is_a_screenful_and_not_a_catalogue_dump() {
         (20..=200).contains(&listed),
         "the shipped catalogue offers {listed} filter rows"
     );
+}
+
+/// **A family is one row.** Every weapon, armour, module and etched disk
+/// folds into its heading's row, so the screen offers four of those and no
+/// row naming a single one.
+#[test]
+fn gear_and_disks_are_one_row_each() {
+    let mut game = Game::new(2215, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let shelf = depot(&mut game, p.x + 1, p.y, &[]);
+    let view = game.depot_filter_view(shelf).expect("a standing Depot");
+
+    let names: Vec<&str> = view.rows.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(
+        names[..4],
+        ["Weapons", "Armor", "Modules", "Etched Disks"],
+        "the four families head the list"
+    );
+    for row in &view.rows[..4] {
+        assert!(row.items.len() > 1, "{} folds a whole family", row.name);
+    }
+    for row in &view.rows[4..] {
+        assert_eq!(row.items.len(), 1, "{} is a single item", row.name);
+        let item = &row.items[0];
+        assert!(item.etched_ability().is_none(), "{item:?} is a disk");
+        assert!(
+            game.world
+                .resource::<ItemDb>()
+                .get(item.as_str())
+                .is_none_or(|d| d.equipment.is_none()),
+            "{item:?} is gear and belongs in its family's row"
+        );
+    }
+}
+
+/// Denying a family refuses every member and allowing it lifts them all,
+/// and the row reads denied while any member is.
+#[test]
+fn a_family_row_is_written_whole() {
+    let mut game = Game::new(2216, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let shelf = depot(&mut game, p.x + 1, p.y, &[]);
+    let disks = game.depot_filter_view(shelf).unwrap().rows[3].items.clone();
+
+    game.set_depot_filter(shelf, &disks, false);
+    for disk in &disks {
+        assert!(!game.depot_accepts(shelf, disk), "{disk:?} must be refused");
+    }
+    assert!(!game.depot_filter_view(shelf).unwrap().rows[3].allowed);
+
+    game.set_depot_filter(shelf, &disks[..1], true);
+    assert!(
+        !game.depot_filter_view(shelf).unwrap().rows[3].allowed,
+        "one member lifted leaves the family reading refused"
+    );
+
+    game.set_depot_filter(shelf, &disks, true);
+    assert!(game.world.get::<DepotFilter>(shelf).is_none());
 }

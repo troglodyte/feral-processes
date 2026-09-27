@@ -1,5 +1,5 @@
 //! One Depot's allow/deny list: what this shelf will take in, a row per
-//! item in the catalogue.
+//! gear or disk family and one per remaining item.
 //!
 //! The table reads `item | denied | allowed | held`, and that order is the
 //! screen's only instruction: **an arrow moves the row toward the column it
@@ -197,7 +197,7 @@ mod tests {
             .into_iter()
             .map(|def| DepotFilterRow {
                 name: game.item_name(&def.id).to_string(),
-                item: def.id.clone(),
+                items: vec![def.id.clone()],
                 held: u32::MAX,
                 allowed: false,
             })

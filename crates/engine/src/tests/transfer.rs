@@ -939,7 +939,7 @@ fn a_put_at_a_terminal_fills_distant_depots_past_a_filter() {
     let refusing = stocked(&mut game, "depot", p.x - 12, p.y, 10, &[]);
     let first = stocked(&mut game, "depot", p.x - 8, p.y, 4, &[]);
     let second = stocked(&mut game, "depot", p.x + 9, p.y, 10, &[]);
-    game.set_depot_filter(refusing, &ItemId::from(ids::CORE_FRAGMENT), false);
+    game.set_depot_filter(refusing, &[ItemId::from(ids::CORE_FRAGMENT)], false);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 9)]);
 
     assert_eq!(game.transfer_room(), Some(14));

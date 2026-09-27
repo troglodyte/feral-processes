@@ -364,8 +364,9 @@ way deleting the Currency item does.
     //     marked on the Base staff screen — into the fight through a
     //     charged drop pod (a structure declaring `drop_pod:`, see
     //     `assets/structures/README.md`). The trooper nearest its pod
-    //     drops, ties going to the table's order; it lands beside the
-    //     invoker, may exceed the party cap, loses its first turn, and goes
+    //     drops, ties going to the table's order; it lands on the free cell
+    //     nearest the invoker (`Summon`'s landing), may exceed the party
+    //     cap, loses its first turn, and goes
     //     back to base staff when the fight ends. The pod is spent and the
     //     crew files its recharge.
     //
@@ -374,7 +375,7 @@ way deleting the Currency item does.
     //     `target:` must be `WholeParty` (refused at load otherwise) and
     //     is unread — the landing cell is the engine's answer. Refused
     //     with no charged pod, no trooper on shift, in a siege, or with no
-    //     free cell beside the invoker, each before anything is spent.
+    //     free cell left on the board, each before anything is spent.
     //     This is what `call_reinforcements.ron` uses.
     //
     //   Emulate(rounds: 10)

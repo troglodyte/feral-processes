@@ -1208,7 +1208,7 @@ impl Game {
     /// Whether a free walkable cell can still be found for a body seated
     /// beside `invoker` — `seat_summon_on_board`'s question, asked ahead of
     /// the spend rather than discovered inside it.
-    fn board_has_room(&self, invoker: Entity) -> bool {
+    pub(crate) fn board_has_room(&self, invoker: Entity) -> bool {
         let battle = self.world.resource::<TacticalBattle>();
         let Some(from) = battle.cell_of(invoker) else {
             return false;
@@ -1370,6 +1370,11 @@ impl Game {
                     break;
                 }
             }
+        } else if matches!(ability.effect, AbilityEffect::Reinforce) {
+            // `Summon`'s branch: seated on this board, never resolved over
+            // recipients. Every refusal was asked above the charge, of the
+            // pairing this call makes.
+            self.call_reinforcement(actor);
         } else if let AbilityEffect::Tamper { kind, duration } = ability.effect {
             // `Decompile`'s reason and `Summon`'s: seated by the one combat
             // model that can resolve it rather than through `use_ability`'s
@@ -1513,6 +1518,7 @@ impl Game {
         if battle.actor() == Some(actor) {
             self.world.resource_mut::<TacticalBattle>().end_turn();
             self.skip_disengaged_turns();
+            self.pass_reorienting_turn();
         }
         if self.world.resource::<TacticalBattle>().round > round_before {
             self.tactical_round_upkeep();

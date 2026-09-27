@@ -41,6 +41,7 @@ pub(crate) mod party;
 pub(crate) mod passives;
 pub(crate) mod pursuit;
 pub(crate) mod refactor;
+pub(crate) mod reinforcement;
 pub(crate) mod respec;
 pub(crate) mod route;
 pub(crate) mod routines;

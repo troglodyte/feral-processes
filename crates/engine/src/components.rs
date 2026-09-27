@@ -1340,6 +1340,21 @@ pub struct TamperEntry {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Summoned;
 
+/// A Drop Trooper called into a battle map by `Game::call_reinforcement` —
+/// a real roster body riding in `Party` for this fight alone, above
+/// `MAX_PARTY_SIZE` if need be. `Game::finish_fight` takes every holder
+/// back out of `Party` and strips the marker, living or not, so it never
+/// reaches a save (an ordinary tactical fight is not saved mid-fight, and
+/// a siege refuses the call).
+///
+/// `reorienting` is its lost first turn: **a `Stun` does not cost a turn on
+/// a battle map** (it only stops a walk), so `Game::hand_on_turn` passes the
+/// holder's first turn itself and clears this.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Reinforcement {
+    pub reorienting: bool,
+}
+
 /// Several wild programs of one species folded into a single enhanced body
 /// on a battle map — `tactical::squads::plan` decides who folds, and
 /// `Game::spawn_squad` is the one place this component (and the rest of a

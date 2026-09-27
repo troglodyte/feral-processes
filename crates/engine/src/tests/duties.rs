@@ -340,6 +340,71 @@ fn a_save_with_neither_field_loads_all_on_and_ranked() {
     );
 }
 
+/// The single-program case above only ever exercises one iteration of
+/// `Game::load`'s `(max_rank_seen + 1..).zip(pending_ranks)`; several
+/// rankless programs at once is what pins the *order* — each should come
+/// back one apart and in the order the file itself lists them, not merely
+/// each individually greater than the pre-feature roster's max.
+#[test]
+fn several_rankless_programs_are_ranked_in_file_order_after_load() {
+    let dir = scratch_assets_dir("duties_legacy_save_many");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = Game::new(20260932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let workers: Vec<Entity> = (0..3).map(|_| spawn_tamed(&mut game, 10, 3)).collect();
+    let ids: Vec<u32> = workers
+        .iter()
+        .map(|&w| game.world.get::<ProgramId>(w).unwrap().0)
+        .collect();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    for c in data.creatures.iter_mut() {
+        if ids.contains(&c.program_id) {
+            c.staff_rank = None;
+        }
+    }
+    // Scoped to just these three rows: an ambient wild creature the map
+    // seeded carries no `StaffRank` of its own either — `roster_parts` is
+    // the only door that mints one — so it would already read `None` and
+    // dilute this test's signal into however many the fixture happens to
+    // spawn. The file's own order for the three — bevy's archetype order,
+    // not necessarily creation order (`Game::save`'s own doc) — is the
+    // order `Game::load` must rank them in, so it is read back off the
+    // same data rather than assumed.
+    let file_order: Vec<u32> = data
+        .creatures
+        .iter()
+        .filter(|c| ids.contains(&c.program_id))
+        .map(|c| c.program_id)
+        .collect();
+    assert_eq!(
+        file_order.len(),
+        3,
+        "precondition: all three rows are in the file"
+    );
+    save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let mut query = loaded.world.query::<(&ProgramId, &StaffRank)>();
+    let rank_by_id: std::collections::HashMap<u32, u32> = query
+        .iter(&loaded.world)
+        .filter(|(id, _)| ids.contains(&id.0))
+        .map(|(id, rank)| (id.0, rank.0))
+        .collect();
+    let ranks: Vec<u32> = file_order.iter().map(|id| rank_by_id[id]).collect();
+    assert_eq!(
+        ranks[1],
+        ranks[0] + 1,
+        "consecutive and in file order: {ranks:?}"
+    );
+    assert_eq!(
+        ranks[2],
+        ranks[1] + 1,
+        "consecutive and in file order: {ranks:?}"
+    );
+}
+
 // ---------------------------------------------------------------------
 // Phase 2: the scheduler obeys the table
 // ---------------------------------------------------------------------

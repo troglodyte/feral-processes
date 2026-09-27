@@ -53,6 +53,38 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.245
+
+**A Drop Pod Terminal fires one of your base programs into a battle-map
+fight.** Research Drop Pods (after Dispatch, zone 2), build the terminal,
+tick POD beside the programs you trust on the Base staff table, and run
+Call Reinforcements. The ticked program nearest a charged terminal lands
+beside you in a green flash, loses its first turn getting its bearings,
+and joins your party even when it is full. When the fight ends it goes
+home to work with the experience it earned. Firing spends the terminal,
+and the crew reloads it by carrying its bill over like a build — the
+terminal's sheet shows how far along it is, and a recharge cannot be
+called off, because nothing would re-file it.
+
+**The Base staff table decides who does what.** One row per program, one
+column per kind of job — Operate, Guard, Dig, Build. Space unchecks a
+cell, `[A]` the whole column, and an unchecked job is one that program is
+never handed; `<` and `>` reorder the table, which is who the scheduler
+tries first. The scheduler now fills every job by priority in one pass
+rather than cutting the list at the number of free hands, so a body that
+can only do some jobs is no longer stranded while a job it could do goes
+unworked, and a column header counts the jobs nobody could be found for.
+
+**Auto-attack on a battle map runs your routines.** It used to only
+swing; now each of your bodies runs the first routine that is ready and
+affordable, and drinks a Power cell when Power is the only thing in the
+way. `[U]` on your turn uses a consumable.
+
+**Hurt staff wear a health bar on the base map**, green, then amber below
+half, then the colour that means they are headed for the Repair Bay. A
+job bar on the same tile takes precedence, and full-health staff wear
+nothing.
+
 ## 0.13.244
 
 **A program's manifest lists its other pages in the footer.** `[D]` opens

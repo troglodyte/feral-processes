@@ -1,6 +1,6 @@
 # Drop pods — design
 
-**Status:** approved in brainstorm 2026-09-27; spec awaiting review.
+**Status:** approved in brainstorm 2026-09-27; interface amended the same day (see *Interface with work assignments*).
 **Depends on:** the work assignments deliverable (separate spec, not yet
 written). This spec assumes it has shipped and names only the one thing it
 needs from it — see *Interface with work assignments*.
@@ -143,8 +143,19 @@ it, shown as its own column.
 
 The work assignments spec settled this: its model is a set of job-kind
 checkboxes per program, and **the Drop Trooper flag, its column and
-`drop_troopers()` ship here, in drop pods phase 1** — `Duties` gains a
-`drop_trooper` field, and the column draws once a pod structure stands.
+`drop_troopers()` ship here, in drop pods phase 1**, and the column draws
+once a pod structure stands.
+
+**Amended 2026-09-27: the flag is not a `Duties` field.** Work assignments
+shipped `Duties` as a *denied* set (`DepotFilter`'s precedent — absent or
+empty means every column checked), and Drop Trooper is opt-in: as a fifth
+`Duty` every program, and every save written before this, would be a
+trooper by default. So it is its own marker, `components::DropTrooper`,
+saved as a `CreatureSave` bool behind `#[serde(default)]` (absent → not a
+trooper, no version bump), and `drop_troopers()` is a query over that
+marker ordered by `StaffRank`. The Base staff table draws it as a column
+beside the `Duty` columns but it is not one of them — `duty_admits` never
+reads it.
 
 ## Phases
 

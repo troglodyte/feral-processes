@@ -435,6 +435,21 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the same board.
     dispatches_sorties: true,
 
+    // Optional; can be left out entirely (defaults to None). If set, this
+    // structure is a Drop Pod Terminal: it holds one charged pod, and the
+    // Call Reinforcements routine spends it to drop a base program marked
+    // Drop Trooper into a battle-map fight beside the player. A spent pod is
+    // recharged by the base crew exactly like a build request — they fetch
+    // `recharge_cost` and carry it here — and the request is filed on its
+    // own the moment the pod fires. How long the recharge takes follows from
+    // the bill, as a build's does, so there is no separate time field.
+    //
+    // A structure is a pod because it declares this block, never because of
+    // its id, so a second pod structure in a mod is just another file.
+    drop_pod: Some((
+        recharge_cost: [("core_fragment", 2), ("cache_grain", 1)],
+    )),
+
     // Optional; can be left out entirely (defaults to false). If true, this
     // structure is an Index Terminal: standing beside it, the transfer window
     // (`c`) reaches every Depot in the base — to take from and to put into —

@@ -435,13 +435,13 @@ impl Game {
         restored
     }
 
-    /// Queues a hit or heal cue at `target`'s cell on a tactical battle map,
+    /// Queues a hit, heal or landing cue at `target`'s cell on a tactical battle map,
     /// if it is on one — `TacticalBattle::cell_of` answers `None` everywhere
     /// else, so a brawl, a raid defender or a Repair Bay's heal cues
     /// nothing. Both `apply_damage` and `restore_hp` call this only once
     /// they know how much actually landed, so a miss, a fumble that dealt no
     /// damage or a heal on a full-health target never reaches it.
-    fn cue_tactical_fx(&mut self, target: Entity, kind: TacticalFxKind) {
+    pub(crate) fn cue_tactical_fx(&mut self, target: Entity, kind: TacticalFxKind) {
         let Some(pos) = self
             .world
             .get_resource::<TacticalBattle>()

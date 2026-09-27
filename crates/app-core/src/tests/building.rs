@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::save;
 
 #[test]
 fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
@@ -677,8 +678,8 @@ fn space_toggles_the_highlighted_cell() {
     let table = app.base_staff_table();
     let cells = &table.rows[0].cells;
     assert_eq!(
-        table.columns.iter().map(|c| c.duty).collect::<Vec<_>>(),
-        Duty::ALL
+        table.columns.iter().map(|c| c.key).collect::<Vec<_>>(),
+        Duty::ALL.map(WorkColumnKey::Duty)
     );
     assert!(!cells[2], "Dig should now be off");
     for i in [0, 1, 3] {
@@ -688,6 +689,75 @@ fn space_toggles_the_highlighted_cell() {
     // Toggling again turns it back on.
     app.handle_key(GameKey::Char(' '));
     assert!(app.base_staff_table().rows[0].cells[2]);
+}
+
+/// `app` with a drop pod terminal standing two cells east of the Home —
+/// through the save, since nothing outside the engine can raise a
+/// structure for free.
+fn with_a_drop_pod(mut app: App, seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("drop_pod", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.structures.push(save::StructureSave {
+        kind: "drop_pod_terminal".to_string(),
+        position: (2, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: 0,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
+/// The Drop Trooper column is edited like a duty — the cursor reaches it,
+/// `Space` toggles one cell and `A` the column — but writes the marker, and
+/// is opt-in: `A` on a column of all-off turns every row on.
+#[test]
+fn space_and_a_toggle_the_drop_trooper_column() {
+    let mut app = with_a_drop_pod(app_owning_distant_programs(765, 2), 765);
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0;
+    for _ in 0..10 {
+        app.handle_key(GameKey::Right);
+    }
+    let table = app.base_staff_table();
+    assert_eq!(app.work_column, table.columns.len() - 1);
+    assert_eq!(
+        table.columns[app.work_column].key,
+        WorkColumnKey::DropTrooper
+    );
+    let trooper = app.work_column;
+
+    app.handle_key(GameKey::Char(' '));
+    let first = app.base_staff_table().rows[0].program.entity;
+    assert_eq!(app.game.as_ref().unwrap().drop_troopers(), vec![first]);
+
+    app.handle_key(GameKey::Char('A'));
+    let table = app.base_staff_table();
+    assert!(
+        table.rows.iter().all(|r| r.cells[trooper]),
+        "any off → all on"
+    );
+    app.handle_key(GameKey::Char('A'));
+    let table = app.base_staff_table();
+    assert!(
+        table.rows.iter().all(|r| !r.cells[trooper]),
+        "all on → all off"
+    );
 }
 
 /// `Right` walks the column cursor across every `Duty`, clamped at the last

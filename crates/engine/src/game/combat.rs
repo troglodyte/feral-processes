@@ -36,6 +36,14 @@ pub(crate) enum RoutineRefusal {
     AlreadyEmulating,
     /// Emulate with no images known.
     NoImagesKnown,
+    /// Reinforce with no drop pod charged.
+    NoPodReady,
+    /// Reinforce with no Drop Trooper on shift as base staff.
+    NoTrooperAvailable,
+    /// Reinforce in a siege, whose staff are already on the board.
+    InSiege,
+    /// Reinforce with no free cell left on the board to land on.
+    NoLandingCell,
 }
 
 impl std::fmt::Display for RoutineRefusal {
@@ -50,6 +58,10 @@ impl std::fmt::Display for RoutineRefusal {
             RoutineRefusal::OnlyPlayerRelocates => write!(f, "only you can relocate"),
             RoutineRefusal::AlreadyEmulating => write!(f, "already emulating"),
             RoutineRefusal::NoImagesKnown => write!(f, "no images known"),
+            RoutineRefusal::NoPodReady => write!(f, "no pod charged"),
+            RoutineRefusal::NoTrooperAvailable => write!(f, "no trooper on shift"),
+            RoutineRefusal::InSiege => write!(f, "not in a siege"),
+            RoutineRefusal::NoLandingCell => write!(f, "no room to land"),
         }
     }
 }
@@ -1545,6 +1557,14 @@ impl Game {
             {
                 return Some(RoutineRefusal::NoImagesKnown);
             }
+        }
+        // A reinforcement's four, each a question Power cannot fix —
+        // `Game::reinforcement_refusal` asks them of the same pairing the
+        // call itself then makes.
+        if matches!(ability.effect, AbilityEffect::Reinforce)
+            && let Some(refusal) = self.reinforcement_refusal(entity)
+        {
+            return Some(refusal);
         }
         // **Checked last, deliberately.** Every earlier arm above answers a
         // question Power cannot fix — a routine is refused, gated on the

@@ -666,6 +666,16 @@ pub enum AbilityEffect {
     /// and `use_ability` carries an `unreachable!` arm for it exactly as it
     /// does for `Decompile`, `Summon` and `Tamper`.
     Teleport,
+    /// Calls one Drop Trooper off base staff into the fight through a
+    /// charged drop pod — `Game::call_reinforcement` is the whole effect.
+    ///
+    /// **Not `Summon`.** A fork is a battle-scoped wild spawn that never
+    /// passes through `roster_parts`; a reinforcement is a real roster body
+    /// that goes home again, so it is commanded by the player, keeps its
+    /// XP and dies by the ordinary rules. Battle-map only (`tactical_only`)
+    /// and untargeted (`target: WholeParty`, pinned at load): the landing
+    /// cell is the engine's answer, beside the invoker.
+    Reinforce,
 }
 
 impl AbilityEffect {
@@ -707,6 +717,10 @@ impl AbilityEffect {
             // Relocating a body means nothing where there are no cells to
             // relocate it between. `Tamper`'s arm, and its reason.
             AbilityEffect::Teleport => true,
+            // A body lands on a cell, and only a battle map has cells —
+            // and the group model's `Party` slots are sized at
+            // `begin_battle`, where a body arriving later has no plan.
+            AbilityEffect::Reinforce => true,
             AbilityEffect::Damage { .. }
             | AbilityEffect::Heal { .. }
             | AbilityEffect::Buff { .. }
@@ -767,6 +781,8 @@ impl AbilityEffect {
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
             | AbilityEffect::Summon { .. }
+            // A body count of one, `Summon`'s reason.
+            | AbilityEffect::Reinforce
             | AbilityEffect::Emulate { .. }
             | AbilityEffect::Cloak { .. } => None,
             // A temperature is a temperature: nothing in a Tamper scales
@@ -807,6 +823,8 @@ impl AbilityEffect {
             // Fielding more of your own side names nobody on theirs, which
             // is the act a cloak is waiting for.
             | AbilityEffect::Summon { .. }
+            // `Summon`'s reason: more of your own side names nobody on theirs.
+            | AbilityEffect::Reinforce
             // Adopting an image tends your own kit, `Buff`'s reason exactly.
             | AbilityEffect::Emulate { .. }
             // A relocation names a *cell*, and the common case is your own
@@ -1192,6 +1210,13 @@ impl AbilityDef {
             && self.target != AbilityTarget::WholeParty
         {
             return Some("effect: Summon requires target: WholeParty");
+        }
+        // `Reinforce` for `Summon`'s reason: the landing cell is the
+        // engine's answer, so any other stated target is never honoured.
+        if matches!(self.effect, AbilityEffect::Reinforce)
+            && self.target != AbilityTarget::WholeParty
+        {
+            return Some("effect: Reinforce requires target: WholeParty");
         }
         None
     }
@@ -1775,6 +1800,9 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
             "Relocates a body at arm's length up to {} cells",
             teleport_reach(level)
         ),
+        AbilityEffect::Reinforce => {
+            "Calls a Drop Trooper off base staff through a charged drop pod".to_string()
+        }
     }
 }
 

@@ -150,6 +150,17 @@ pub struct ServiceDef {
     pub radius: i32,
 }
 
+/// A structure that holds one drop pod — see `StructureDef::drop_pod`.
+///
+/// The bill alone: how long a recharge takes is `BuildSite::required_ticks`
+/// derived from it, the same as any build request, and never authored
+/// beside it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DropPodDef {
+    /// What the crew hauls to the terminal to charge a spent pod again.
+    pub recharge_cost: Vec<(ItemId, u32)>,
+}
+
 /// What a structure does for a **downed** program — see
 /// `StructureDef::recovery` and `systems::recovery_system`.
 ///
@@ -370,6 +381,16 @@ pub struct StructureDef {
     /// building that recovers nobody — which is the pre-feature game.
     #[serde(default)]
     pub recovery: Option<RecoveryDef>,
+    /// If set, this structure is a drop pod: spending its charge drops one
+    /// Drop Trooper into a tactical fight, and the crew recharges it by
+    /// hauling `recharge_cost` to it as a `BuildGoal::Recharge` request.
+    ///
+    /// `dispatches_sorties`' rule — a structure is a pod because it declares
+    /// this, never because the engine names its id, so a mod's second pod
+    /// structure is a file. `#[serde(default)]` so every existing structure
+    /// file, including any mod, keeps parsing as a building that is not one.
+    #[serde(default)]
+    pub drop_pod: Option<DropPodDef>,
     /// What this structure needs from the base's Grid to run. Summed against
     /// every deployed structure's `power_supply` every tick; see
     /// `game::base::power`. A machine whose draw doesn't fit the base's
@@ -964,6 +985,19 @@ mod tests {
         // Same rule, same file, one field along: what `#[serde(default)]` is
         // for needs an assertion rather than an assumption.
         assert!(node.recovery.is_none());
+    }
+
+    /// A structure is a drop pod because it declares the field, never
+    /// because of its id — and every file that doesn't declare it is not one.
+    #[test]
+    fn a_drop_pod_is_declared_by_its_field() {
+        let db = test_db();
+        assert!(db.get("mining_node").unwrap().drop_pod.is_none());
+        let pod = db
+            .get("drop_pod_terminal")
+            .and_then(|def| def.drop_pod.as_ref())
+            .expect("drop_pod_terminal.ron should declare a drop_pod");
+        assert!(!pod.recharge_cost.is_empty());
     }
 
     /// `per_tick` is mod-supplied and a field named for repair must never

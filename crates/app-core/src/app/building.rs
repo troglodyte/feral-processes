@@ -855,9 +855,11 @@ impl App {
                     table.columns.get(self.work_column),
                 ) {
                     let entity = row.program.entity;
-                    let duty = column.duty;
                     let on = !row.cells.get(self.work_column).copied().unwrap_or(true);
-                    let outcome = game.set_duty(entity, duty, on);
+                    let outcome = match column.key {
+                        WorkColumnKey::Duty(duty) => game.set_duty(entity, duty, on),
+                        WorkColumnKey::DropTrooper => game.set_drop_trooper(entity, on),
+                    };
                     self.report(outcome);
                 }
             }
@@ -888,12 +890,17 @@ impl App {
             }
             GameKey::Char('A') => {
                 if let Some(column) = table.columns.get(self.work_column) {
-                    let duty = column.duty;
                     let any_off = table
                         .rows
                         .iter()
                         .any(|r| !r.cells.get(self.work_column).copied().unwrap_or(true));
-                    let outcome = game.set_duty_column(duty, any_off);
+                    let outcome = match column.key {
+                        WorkColumnKey::Duty(duty) => game.set_duty_column(duty, any_off),
+                        WorkColumnKey::DropTrooper => table
+                            .rows
+                            .iter()
+                            .try_for_each(|r| game.set_drop_trooper(r.program.entity, any_off)),
+                    };
                     self.report(outcome);
                 }
             }

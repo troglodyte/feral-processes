@@ -81,14 +81,30 @@ impl Game {
     /// `Vec<bool>` per row is the whole of it.
     pub fn work_table(&mut self) -> views::WorkTable {
         let demand = self.labour_demand();
-        let columns: Vec<views::WorkColumn> = Duty::ALL
+        let mut columns: Vec<views::WorkColumn> = Duty::ALL
             .iter()
             .map(|&duty| views::WorkColumn {
-                duty,
+                key: views::WorkColumnKey::Duty(duty),
                 label: duty.label(),
                 unworked: demand.unworked.get(&duty).copied().unwrap_or(0),
             })
             .collect();
+        let pod_stands = self
+            .world
+            .query::<&crate::components::DropPod>()
+            .iter(&self.world)
+            .next()
+            .is_some();
+        if pod_stands {
+            // Three letters because the widest shipped row leaves exactly
+            // that much of the Base staff popup's 100-column body
+            // (`the_widest_base_staff_row_stays_inside_the_popup`).
+            columns.push(views::WorkColumn {
+                key: views::WorkColumnKey::DropTrooper,
+                label: "POD",
+                unworked: 0,
+            });
+        }
 
         let order = self.display_order();
         let mut views_by_entity: std::collections::HashMap<Entity, views::EntityView> = self
@@ -113,13 +129,17 @@ impl Game {
             } else {
                 self.program_activity(entity)
             };
-            let cells: Vec<bool> = Duty::ALL
+            let cells: Vec<bool> = columns
                 .iter()
-                .map(|d| {
-                    !self
+                .map(|c| match c.key {
+                    views::WorkColumnKey::Duty(d) => !self
                         .world
                         .get::<Duties>(entity)
-                        .is_some_and(|o| o.off.contains(d))
+                        .is_some_and(|o| o.off.contains(&d)),
+                    views::WorkColumnKey::DropTrooper => self
+                        .world
+                        .get::<crate::components::DropTrooper>(entity)
+                        .is_some(),
                 })
                 .collect();
             let rank = self
@@ -145,6 +165,34 @@ impl Game {
             jobs: demand.wanted,
             unworked_total: demand.unworked.values().sum(),
         }
+    }
+
+    /// Marks or unmarks one program as a Drop Trooper. No reassignment,
+    /// unlike `set_duty`: the scheduler never reads the flag — a trooper
+    /// works exactly as it did until a pod calls it.
+    pub fn set_drop_trooper(&mut self, entity: Entity, on: bool) -> Result<(), String> {
+        self.require_owned_program(entity)?;
+        let mut program = self.world.entity_mut(entity);
+        if on {
+            program.insert(crate::components::DropTrooper);
+        } else {
+            program.remove::<crate::components::DropTrooper>();
+        }
+        Ok(())
+    }
+
+    /// The programs a drop pod may call, in the Base staff table's order —
+    /// `base_staff` filtered by the marker, so a trooper away on a sortie,
+    /// in the party or under study is not offered, by omission.
+    pub fn drop_troopers(&self) -> Vec<Entity> {
+        self.base_staff()
+            .into_iter()
+            .filter(|&e| {
+                self.world
+                    .get::<crate::components::DropTrooper>(e)
+                    .is_some()
+            })
+            .collect()
     }
 
     /// The toggle itself, shared by `set_duty` and `set_duty_column` so

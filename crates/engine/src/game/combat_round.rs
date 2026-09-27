@@ -1818,6 +1818,11 @@ impl Game {
                 AbilityEffect::Teleport => unreachable!(
                     "AbilityEffect::tactical_only; run_tactical_routine moves the subject directly"
                 ),
+                // `Tamper`'s reason: tactical-only, and seated by
+                // `run_tactical_routine` through `Game::call_reinforcement`.
+                AbilityEffect::Reinforce => unreachable!(
+                    "AbilityEffect::tactical_only; run_tactical_routine seats a reinforcement directly"
+                ),
             }
         }
         // **After the action resolves**, so the swing's own line is logged

@@ -426,6 +426,16 @@ pub struct Duties {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StaffRank(pub u32);
 
+/// A program the player has said may be called into a tactical fight by a
+/// drop pod — `Game::drop_troopers` is the one reader of who is eligible,
+/// `Game::set_drop_trooper` the one writer. **Opt-in, so not a `Duty`**:
+/// `Duties` is a denied set whose absence means every column is checked,
+/// and as a fifth `Duty` every program — and every save written before
+/// this — would be a trooper by default. It coexists with any duty,
+/// because a trooper keeps working while it waits.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DropTrooper;
+
 /// An item sitting in an `Equipment` slot: *which copy* went on, and the
 /// gear level its stat bonus was scaled for when it did.
 ///
@@ -994,6 +1004,20 @@ pub struct PowerFuel {
     pub ticks_left: u32,
 }
 
+/// Whether a `StructureDef::drop_pod` terminal has a charge ready to spend —
+/// see `structures::DropPodDef`.
+///
+/// Present exactly on a structure whose def declares `drop_pod`,
+/// `PowerFuel`'s rule one field family up: `Game::spawn_structure` is the one
+/// writer, and a hand-spawned fixture without one reads as a terminal that
+/// was never wired up rather than as a free pod. A freshly raised terminal
+/// is charged; spending it is `Game::spend_pod`, which also files the
+/// `BuildGoal::Recharge` request that flips this back.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DropPod {
+    pub charged: bool,
+}
+
 /// Serde is here for `MemorySubject::Activity`, which saves this enum
 /// directly rather than through a mirror — see that enum's doc comment for
 /// why it does not follow `save::CronjobKind`.
@@ -1315,6 +1339,21 @@ pub struct TamperEntry {
 /// `bench_or_dissolve` skip, and `Game::tactical_ai_actor`'s gate.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Summoned;
+
+/// A Drop Trooper called into a battle map by `Game::call_reinforcement` —
+/// a real roster body riding in `Party` for this fight alone, above
+/// `MAX_PARTY_SIZE` if need be. `Game::finish_fight` takes every holder
+/// back out of `Party` and strips the marker, living or not, so it never
+/// reaches a save (an ordinary tactical fight is not saved mid-fight, and
+/// a siege refuses the call).
+///
+/// `reorienting` is its lost first turn: **a `Stun` does not cost a turn on
+/// a battle map** (it only stops a walk), so `Game::hand_on_turn` passes the
+/// holder's first turn itself and clears this.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Reinforcement {
+    pub reorienting: bool,
+}
 
 /// Several wild programs of one species folded into a single enhanced body
 /// on a battle map — `tactical::squads::plan` decides who folds, and
@@ -2519,6 +2558,15 @@ pub enum BuildGoal {
     /// destroyed underneath the request and no load-order dependency between
     /// structures and sites in the save.
     Upgrade { to_tier: u32 },
+    /// Recharge the drop pod **already standing on this cell** — see
+    /// `components::DropPod` and `structures::DropPodDef`.
+    ///
+    /// `Upgrade`'s path exactly: named by tile and never by `Entity`, for the
+    /// same reason. `BuildSite::program` is always `None` on one of these —
+    /// a recharge runs no job, so it costs no program, the Shield/shelf
+    /// rule — which is why `Game::spend_pod` files the site directly rather
+    /// than through `commit_for_build`.
+    Recharge,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -2582,6 +2630,14 @@ impl BuildSite {
     /// `to_tier`, against an already-resolved `cost`.
     pub fn upgrade(structure: StructureId, cost: Vec<(ItemId, u32)>, to_tier: u32) -> Self {
         Self::filed(structure, cost, BuildGoal::Upgrade { to_tier })
+    }
+
+    /// A request to recharge the drop pod already standing on this cell,
+    /// against its `structures::DropPodDef::recharge_cost`. `Self::upgrade`'s
+    /// shape — `filed` already defaults `program` to `None`, which is what
+    /// makes this one cost no program on its own.
+    pub fn recharge(structure: StructureId, cost: Vec<(ItemId, u32)>) -> Self {
+        Self::filed(structure, cost, BuildGoal::Recharge)
     }
 
     fn filed(structure: StructureId, cost: Vec<(ItemId, u32)>, goal: BuildGoal) -> Self {

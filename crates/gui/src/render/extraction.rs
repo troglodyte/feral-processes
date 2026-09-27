@@ -317,6 +317,7 @@ mod tests {
                 hopper: Vec::new(),
                 hopper_progress: 0,
                 standing_tool: None,
+                pod_charged: None,
             });
         }
         save::save_to_file(&path, &data).unwrap();

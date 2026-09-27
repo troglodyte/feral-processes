@@ -1114,6 +1114,12 @@ pub fn program_tier_required(goal: BuildGoal) -> u32 {
     match goal {
         BuildGoal::New => 1,
         BuildGoal::Upgrade { to_tier } => to_tier,
+        // Never reached: a recharge costs no program at all, so
+        // `commit_for_build` is never called with this goal — see
+        // `Game::spend_pod`. Answered rather than left `unreachable!` so a
+        // future caller that *does* ask gets a harmless floor instead of a
+        // panic.
+        BuildGoal::Recharge => 1,
     }
 }
 

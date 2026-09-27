@@ -359,6 +359,25 @@ way deleting the Currency item does.
     //     other routine, and a reaction that cuts it off keeps both. This
     //     is what `teleport.ron` uses.
     //
+    //   Reinforce
+    //     Calls one Drop Trooper — a base staff program the player has
+    //     marked on the Base staff screen — into the fight through a
+    //     charged drop pod (a structure declaring `drop_pod:`, see
+    //     `assets/structures/README.md`). The trooper nearest its pod
+    //     drops, ties going to the table's order; it lands on the free cell
+    //     nearest the invoker (`Summon`'s landing), may exceed the party
+    //     cap, loses its first turn, and goes
+    //     back to base staff when the fight ends. The pod is spent and the
+    //     crew files its recharge.
+    //
+    //     **Battle maps only**, `Tamper`'s rule, and never in a siege,
+    //     whose staff are already on the board. Carries no fields;
+    //     `target:` must be `WholeParty` (refused at load otherwise) and
+    //     is unread — the landing cell is the engine's answer. Refused
+    //     with no charged pod, no trooper on shift, in a siege, or with no
+    //     free cell left on the board, each before anything is spent.
+    //     This is what `call_reinforcements.ron` uses.
+    //
     //   Emulate(rounds: 10)
     //     Adopts a known image's kit for `rounds` battle rounds: the
     //     image's own attack, mitigation, natural reach and routine list
@@ -653,7 +672,7 @@ appear in the battle picker at all, so "cheaper rung" is not a question that
 applies) and so is `exclusive` (it has no cheaper rung anywhere by design —
 a boss drop or a trader shelf, never a species or a research node — so the
 ladder the census protects cannot exist for it). A **tactical-only** effect
-(`AbilityEffect::tactical_only()`, true for `Tamper` and `Teleport`) joins them
+(`AbilityEffect::tactical_only()`, true for `Tamper`, `Teleport` and `Reinforce`) joins them
 for a third reason: it is reachable only by research, never by a species kit
 or the hunt pool, so `Heat Injection Group` and `Hallucination Group` may
 ship with no Single rung at all. `Teleport` is outside the naming scheme for

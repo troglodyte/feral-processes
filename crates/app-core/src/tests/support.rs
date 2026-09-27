@@ -308,6 +308,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -433,6 +434,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -506,6 +508,7 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     }
 }
 
@@ -621,6 +624,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -912,6 +916,7 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1015,6 +1020,7 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1167,6 +1173,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1306,6 +1313,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1324,6 +1332,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -1429,6 +1438,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1448,6 +1458,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1552,6 +1563,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1570,6 +1582,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1664,6 +1677,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -1684,6 +1698,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -2019,6 +2034,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2122,6 +2138,7 @@ pub(crate) fn app_with_companions_and_cargo(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2371,6 +2388,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -2432,6 +2450,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         });
     }
     data.locale = if underground {
@@ -2514,6 +2533,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -2649,6 +2669,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     data.player.inventory = pack
@@ -2716,6 +2737,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2763,6 +2785,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -2879,6 +2902,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -2915,6 +2939,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             hopper: Vec::new(),
             hopper_progress: 0,
             standing_tool: None,
+            pod_charged: None,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };

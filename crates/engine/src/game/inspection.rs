@@ -674,6 +674,21 @@ impl Game {
     /// disagreed with the roster about the same machine is exactly the drift
     /// that rule exists to stop. Building every row to return one is O(n)
     /// over a base's worth of structures, once per keypress.
+    /// A terminal's `views::PodState`. A spent pod whose request cannot be
+    /// found reads as 0% rather than as charged — only a finished recharge
+    /// writes `charged`.
+    fn pod_state(&mut self, entity: Entity, pos: Position) -> Option<crate::views::PodState> {
+        let pod = self.world.get::<crate::components::DropPod>(entity)?;
+        if pod.charged {
+            return Some(crate::views::PodState::Charged);
+        }
+        let percent = self
+            .build_site_at(pos.x, pos.y)
+            .and_then(|site| self.build_order_row(site))
+            .map_or(0, |row| row.percent());
+        Some(crate::views::PodState::Recharging { percent })
+    }
+
     pub fn structure_manifest(&mut self, entity: Entity) -> Option<StructureReport> {
         self.structure_report()
             .into_iter()
@@ -1242,6 +1257,10 @@ impl Game {
                     Some((c, m)) => (Some(c), Some(m)),
                     None => (None, None),
                 };
+                let pod_charged = self
+                    .world
+                    .get::<crate::components::DropPod>(entity)
+                    .map(|p| p.charged);
                 let can_work = self.accepts_a_program(entity);
                 let machine_status = self.world.get::<MachineStatus>(entity).copied();
                 let can_trade = self.trade_options(entity).is_some();
@@ -1371,6 +1390,7 @@ impl Game {
                     tier,
                     ceiling,
                     max_tier,
+                    pod_charged,
                     is_boss,
                     nemesis: is_nemesis,
                     patrol: self.patrol_owner(entity),
@@ -1563,6 +1583,7 @@ impl Game {
                                 .map(|def| def.name.clone())
                                 .unwrap_or_else(|| id.0.clone())
                         }),
+                    pod: self.pod_state(entity, pos),
                 }
             })
             .collect();

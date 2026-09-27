@@ -102,13 +102,14 @@ use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
 // Neither `Duty` nor `WorkSection` is named by a non-test call site — the
-// handler reads `column.duty`/`row.section` without spelling either type,
+// handler matches `column.key` and reads `row.section` without spelling either,
 // and only a test constructs one to compare against — so both are
 // test-only imports rather than dead code in a release build.
 #[cfg(test)]
 use feral_processes_engine::WorkSection;
 #[cfg(test)]
 use feral_processes_engine::duties::Duty;
+use feral_processes_engine::views::WorkColumnKey;
 use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,

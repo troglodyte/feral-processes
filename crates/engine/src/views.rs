@@ -1116,6 +1116,11 @@ pub struct EntityView {
     /// `max_tier` means "breach first", `ceiling` equal to it means
     /// "finished". Neither value alone distinguishes those.
     pub max_tier: Option<u32>,
+    /// Whether this (structure) entity has a drop pod charge ready to
+    /// spend — `components::DropPod`, `tier`'s own shape: `None` for a
+    /// structure whose def declares no `drop_pod` at all, `Some` for the
+    /// one that does.
+    pub pod_charged: Option<bool>,
     pub is_boss: bool,
     /// Whether this (creature) entity has beaten the party or driven them
     /// off — see `components::Nemesis`. Wins the glyph colour in
@@ -1523,12 +1528,25 @@ pub struct WorkOrderMachine {
     pub depth: u32,
 }
 
+/// What a Base staff column toggles. A Drop Trooper is not a `Duty` — it is
+/// opt-in where a duty is opt-out, and `duty_admits` never reads it — but it
+/// is drawn and edited as a column like one, so the table keeps one list of
+/// columns and every reader that acts on a column matches on this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkColumnKey {
+    Duty(Duty),
+    /// `components::DropTrooper`, the column drawn only once a drop pod
+    /// terminal stands.
+    DropTrooper,
+}
+
 /// One checkbox column of the Base staff work table — one of `Duty::ALL`,
 /// generated rather than a fixed list so a later structure-kind duty needs
-/// no screen change. See `Game::work_table`.
+/// no screen change, then the Drop Trooper column once a terminal stands.
+/// See `Game::work_table`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkColumn {
-    pub duty: Duty,
+    pub key: WorkColumnKey,
     /// The header text — `Duty::label`, decided once there rather than
     /// `Duty::name` (the save's lowercase form) upper-cased at the call
     /// site.
@@ -1565,9 +1583,9 @@ pub struct WorkRow {
     /// half, `Game::program_activity` on the Away half, the same split
     /// `BaseStaffRow` used to make.
     pub doing: String,
-    /// Aligned with `WorkTable::columns` — `cells[i]` is whether this
-    /// program may currently be handed column `i`'s duty, i.e.
-    /// `!Duties::off.contains(columns[i].duty)`.
+    /// Aligned with `WorkTable::columns` — for a duty column, whether this
+    /// program may currently be handed it (`!Duties::off.contains(duty)`);
+    /// for the Drop Trooper column, whether it carries the marker.
     pub cells: Vec<bool>,
     /// The table's own order key — `components::StaffRank`, carried so a
     /// test can assert row order without re-deriving it from `program` or
@@ -1656,6 +1674,21 @@ pub struct StructureReport {
     /// doing. Drawn because a rig with no standing tool is the one that
     /// silently will not fetch from a rack.
     pub standing_tool: Option<String>,
+    /// A drop pod terminal's charge, `None` on every structure that is not
+    /// one (`StructureDef::drop_pod`).
+    pub pod: Option<PodState>,
+}
+
+/// Whether a drop pod terminal can fire. There is no "spent with nothing
+/// filed" state: `Game::spend_pod` files the recharge as it spends, and
+/// `cancel_build_request` refuses to call one off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PodState {
+    Charged,
+    /// `percent` is the recharge request's `BuildOrderRow::percent`.
+    Recharging {
+        percent: u32,
+    },
 }
 
 impl StructureReport {
@@ -3090,6 +3123,9 @@ impl BuildOrderRow {
             crate::components::BuildGoal::New => self.structure.clone(),
             crate::components::BuildGoal::Upgrade { to_tier } => {
                 format!("{} → Mk{to_tier}", self.structure)
+            }
+            crate::components::BuildGoal::Recharge => {
+                format!("{} — recharging", self.structure)
             }
         }
     }

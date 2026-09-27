@@ -1155,6 +1155,15 @@ impl Game {
             // component it did not have before, which changes nothing
             // because 1.0 is the neutral the absent case already means.
             entity.insert(crate::components::BuildQuality(s.build_quality));
+            // The def decides whether a pod stands here, `strips`/`racks`'
+            // rule two arms up — a stored charge on a structure whose
+            // `drop_pod` a mod has since taken away is simply dropped.
+            // Absent reads as charged, `s.pod_charged`'s own default.
+            if def.drop_pod.is_some() {
+                entity.insert(crate::components::DropPod {
+                    charged: s.pod_charged.unwrap_or(true),
+                });
+            }
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);
                 entity.insert(StructureTier(tier));
@@ -2154,6 +2163,9 @@ impl Game {
             if !off.is_empty() {
                 entity.insert(crate::components::Duties { off });
             }
+            if c.drop_trooper {
+                entity.insert(crate::components::DropTrooper);
+            }
             match c.staff_rank {
                 Some(rank) => {
                     entity.insert(crate::components::StaffRank(rank));
@@ -2556,6 +2568,11 @@ impl Game {
                 .world
                 .get::<crate::components::StaffRank>(e)
                 .map(|r| r.0),
+
+            drop_trooper: self
+                .world
+                .get::<crate::components::DropTrooper>(e)
+                .is_some(),
         })
     }
 
@@ -2573,6 +2590,7 @@ impl Game {
             Option<&crate::components::BuildQuality>,
             Option<&crate::components::DepotFilter>,
             Option<&crate::components::Racked>,
+            Option<&crate::components::DropPod>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
@@ -2589,6 +2607,7 @@ impl Game {
             quality,
             filter,
             racked,
+            pod,
         ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -2615,6 +2634,7 @@ impl Game {
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
                 build_quality: quality.map_or(1.0, |q| q.0),
                 racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
+                pod_charged: pod.map(|p| p.charged),
             });
         }
         structures

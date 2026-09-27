@@ -288,6 +288,8 @@ relying on one, and correct all three places if it has moved.
   `build_cost` is `min_zone: 1`.**
 - **Upgrading is a build request too, and `BuildSite::goal` is the whole of
   the difference.**
+- **A drop pod's recharge is `Upgrade`'s build request with a third goal,
+  `BuildGoal::Recharge`, and `cancel_build_request` refuses it.**
 - **`Game::spawn_structure` is the one place a structure's component list is
   written**, `roster_parts`' argument on the other roster: two callers with
   nothing in common, and nothing fails to compile when a hand-written copy
@@ -566,6 +568,8 @@ relying on one, and correct all three places if it has moved.
   alone, and never runs the beat's clock-driven stages** (needs, morale,
   tantrums, bay admission, drift) — so a keypress with the game paused
   cannot re-roll anything.
+- **The Drop Trooper column is `WorkColumnKey::DropTrooper`, never a fifth
+  `Duty`**, because `Duties` is a denied-set and the marker is opt-in.
 - **`idled_with` is an edge, never a period** — written when a serviced need
   reaches `content`, naming everyone else in reach of that amenity.
 - **`needs::strain` is a free function and `need_shift` has its own cap.**
@@ -1055,6 +1059,8 @@ relying on one, and correct all three places if it has moved.
   that never asks about `Tamed`.
 - **A summon is pushed to `Party` and `planned` together**, and `plan_summons`
   fills the turn `slot_is_commanded` keeps the player's cursor off.
+- **A reinforcement's lost turn is `Reinforcement::reorienting`, never a
+  `Stun`, and `finish_fight` sends every reinforcement home.**
 - **A body is spliced into tactical initiative *behind* the cursor, never
   ahead of it** — `TacticalBattle::insert_after_cursor` takes no index
   because `turn + 1` is the only safe one.

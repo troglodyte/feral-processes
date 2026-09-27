@@ -1401,6 +1401,14 @@
   `detach_from_play` `retain`s it out of `Party` mid-teardown, which is the
   removal the slot seam forbids. See
   `seam:a-summons-containment-is-omission-not-a-check`.
+- **A reinforcement's lost turn is `Reinforcement::reorienting`, never a
+  `Stun`, and `finish_fight` sends every one home.** A `Stun` costs no turn on
+  a battle map — it only stops a walk — so `pass_reorienting_turn` passes it
+  from `hand_on_turn`. The landing is `Summon`'s (whole-board nearest free
+  cell, pushed to `Party` uncapped), `call_reinforcement` strips `Task`/
+  `Carrying` itself because the scheduler does not run mid-fight, and the
+  teardown after the dead-party loop is what returns a survivor to `Staff` by
+  omission. No save field: a non-siege battle map is never saved.
 - **A summon is pushed to `Party` and `planned` together, and the failure
   mode is silence.** `planned` is sized once at `begin_battle` as
   `Party.len() + 1` while `roll_initiative` reads `Party.0.len()` **live**,

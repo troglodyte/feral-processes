@@ -83,7 +83,8 @@ job, however short-handed the base gets; leave every box checked (the default fo
 have not touched) and it takes anything. < and > move a row up or down the table, and that order is
 who the scheduler tries first when more than one program could take the same job — it does not
 override the priority above, so a Guard-only program still waits behind a build request it cannot
-help with anyway.
+help with anyway. Once a Drop Pod Terminal stands the table grows a POD column
+too; see [drop pods](drop-pods).
 
 The rest of what a base does:
 

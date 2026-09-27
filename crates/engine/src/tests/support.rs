@@ -1025,6 +1025,21 @@ pub(super) fn raise_pending_builds(game: &mut Game) {
                     node.level = Some(to_tier);
                 }
             }
+            BuildGoal::Recharge => {
+                let terminal = {
+                    let mut query = game
+                        .world
+                        .query::<(bevy_ecs::prelude::Entity, &Position, &Structure)>();
+                    query
+                        .iter(&game.world)
+                        .find(|(_, p, _)| p.x == pos.x && p.y == pos.y)
+                        .map(|(e, ..)| e)
+                        .expect("a recharge request stands on its own terminal")
+                };
+                if let Some(mut pod) = game.world.get_mut::<crate::components::DropPod>(terminal) {
+                    pod.charged = true;
+                }
+            }
         }
         // The base's systems, without advancing the clock — which is the
         // ordering `tick_inner` gives a real crew-raised structure:

@@ -950,6 +950,11 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub staff_rank: Option<u32>,
+    /// Whether this program carries `components::DropTrooper`. Absent in
+    /// the file reads `false` — the flag is opt-in — so it earns no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub drop_trooper: bool,
 }
 
 /// `serde`'s default for an individual roll — the neutral 1.0, because a
@@ -1361,6 +1366,19 @@ pub struct StructureSave {
     /// neutral. Additive behind a default, so no `SAVE_FORMAT_VERSION` bump.
     #[serde(default = "default_build_quality")]
     pub build_quality: f32,
+    /// Whether a `components::DropPod` terminal has a charge ready to spend.
+    /// `None` for a structure whose def declares no `drop_pod` at all, and
+    /// `denied_items`' reason for `#[serde(default)]` one field family
+    /// over: a save written before drop pods existed loads with none, so
+    /// this simply carries no opinion for any of them.
+    ///
+    /// **Absent reads as charged**, not as `false`: a freshly raised
+    /// terminal is charged, so a save that never wrote this field —
+    /// whether because it predates the feature or because a mod dropped the
+    /// component between sessions — must not load every pod on the map as
+    /// spent.
+    #[serde(default)]
+    pub pod_charged: Option<bool>,
 }
 
 /// `serde`'s default for a machine's build quality — the neutral 1.0, which
@@ -2301,6 +2319,7 @@ mod tests {
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         }
     }
 

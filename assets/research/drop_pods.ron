@@ -1,0 +1,12 @@
+(
+    id: "drop_pods",
+    name: "Drop Pods",
+    description: "A terminal that fires one of your base programs into a fight already under way. The crew reloads it after.",
+    cost: 50,
+    materials: [("bytecode_block", 16), ("charge_coil", 12)],
+    min_zone: 2,
+    requires_subject: true,
+    discoverable: true,
+    requires: ["dispatch"],
+    unlocks_structures: ["drop_pod_terminal"],
+)

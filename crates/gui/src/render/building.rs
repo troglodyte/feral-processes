@@ -1502,6 +1502,15 @@ pub(super) fn structure_detail_lines(s: &StructureReport) -> Vec<(String, Color)
     if let Some(tool) = &s.standing_tool {
         lines.push((format!("  set up with the {tool}"), TEXT_DIM));
     }
+    // Dim either way: the crew reloads a spent pod on its own, so there is
+    // nothing here for the player to walk over and fix.
+    match s.pod {
+        Some(PodState::Charged) => lines.push(("  charged — ready to drop".into(), TEXT_DIM)),
+        Some(PodState::Recharging { percent }) => {
+            lines.push((format!("  recharging — {percent}% reloaded"), TEXT_DIM));
+        }
+        None => {}
+    }
     lines
 }
 
@@ -1753,6 +1762,7 @@ mod tests {
             tier: Some(tier),
             ceiling: Some(ceiling),
             max_tier: Some(max_tier),
+            pod_charged: None,
             is_boss: false,
             nemesis: false,
             patrol: None,
@@ -2325,7 +2335,32 @@ mod tests {
             status: Some(status),
             assignees: Vec::new(),
             standing_tool: None,
+            pod: None,
         }
+    }
+
+    /// A terminal says whether it can fire, and a structure that is not one
+    /// says nothing about pods at all.
+    #[test]
+    fn a_drop_pod_terminal_says_whether_it_is_charged() {
+        let pod_lines = |pod| {
+            let mut s = structure_report(MachineStatus::Running);
+            s.pod = pod;
+            structure_detail_lines(&s)
+                .into_iter()
+                .map(|(line, _)| line)
+                .filter(|line| line.contains("charged") || line.contains("recharging"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            pod_lines(Some(PodState::Charged)),
+            ["  charged — ready to drop"]
+        );
+        assert_eq!(
+            pod_lines(Some(PodState::Recharging { percent: 40 })),
+            ["  recharging — 40% reloaded"]
+        );
+        assert!(pod_lines(None).is_empty());
     }
 
     /// The two grid stalls, and the difference between them is the whole
@@ -3179,6 +3214,7 @@ mod base_staff_tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::duties::Duty;
+    use feral_processes_engine::views::WorkColumnKey;
 
     fn work_row(label: &str, doing: &str, section: WorkSection, cells: [bool; 4]) -> WorkRow {
         let mut program = super::tests::view(1, 1, 1);
@@ -3204,7 +3240,7 @@ mod base_staff_tests {
             .iter()
             .zip(unworked)
             .map(|(&duty, unworked)| WorkColumn {
-                duty,
+                key: WorkColumnKey::Duty(duty),
                 label: duty.label(),
                 unworked,
             })
@@ -3246,9 +3282,19 @@ mod base_staff_tests {
     /// would pass just as happily with a column dropped — it is here for
     /// `no_roster_row_overflows_its_popup`'s reason, to catch the day
     /// `ROW_WRAP_COLUMNS` stops being the right budget.
+    ///
+    /// With the Drop Trooper column drawn, since a base with a terminal is the
+    /// widest the table gets.
     #[test]
     fn the_widest_base_staff_row_stays_inside_the_popup() {
-        let t = table(vec![widest_row()]);
+        let mut row = widest_row();
+        row.cells.push(true);
+        let mut t = table(vec![row]);
+        t.columns.push(WorkColumn {
+            key: WorkColumnKey::DropTrooper,
+            label: "POD",
+            unworked: 0,
+        });
         for row in base_staff_menu_rows(&t, &[], 0, 0) {
             let text = match &row {
                 Row::Text(text) | Row::TextColored(text, _) => text.clone(),

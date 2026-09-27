@@ -2,6 +2,7 @@
 //! outranks what, and what a cancel gives back.
 
 use super::support::*;
+use crate::components::DropPod;
 use crate::*;
 
 /// A Home on the player's own tile, the party standing in the base, and a
@@ -2199,4 +2200,310 @@ fn a_depot_reports_no_cycle_at_all() {
             "a Depot has no rate to change"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Drop pods — `BuildGoal::Recharge`, `Upgrade`'s path with a different
+// completion arm. See the `Upgrading is a build request too` seam.
+// ---------------------------------------------------------------------------
+
+/// A base that has researched Drop Pods, with both the terminal's own bill
+/// and a recharge's already in the pack.
+fn base_for_drop_pod(seed: u32) -> Game {
+    let mut game = base(seed);
+    unlock_research_chain(&mut game, "drop_pods");
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 20);
+    give(&mut game, &ItemId::from("cache_grain"), 20);
+    game
+}
+
+/// A freshly raised terminal is charged — the neutral `DropPod::spend_pod`
+/// (below) has something to spend.
+#[test]
+fn a_raised_drop_pod_terminal_is_charged() {
+    let mut game = base_for_drop_pod(1170);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).expect("the crew stands it up");
+
+    assert_eq!(
+        game.world.get::<DropPod>(terminal).copied(),
+        Some(DropPod { charged: true })
+    );
+}
+
+/// The terminal keeps its own view while spent, `Upgrade`'s own test —
+/// `is_structure` is checked before `build.is_some()`, or a recharging
+/// terminal would draw as a bare build slab.
+#[test]
+fn a_spent_terminal_draws_as_itself_and_says_it_is_recharging() {
+    let mut game = base_for_drop_pod(1176);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    game.spend_pod(terminal);
+    let pos = *game.world.get::<Position>(terminal).unwrap();
+
+    let views = game.view_entities(20, 20);
+    let here: Vec<_> = views.iter().filter(|v| v.pos == (pos.x, pos.y)).collect();
+    assert_eq!(
+        here.len(),
+        1,
+        "one view for the cell — a recharge site carries no glyph either"
+    );
+    let view = here[0];
+    assert!(view.is_structure, "and it is still the terminal");
+    assert_eq!(view.entity, terminal);
+    let row = view
+        .build
+        .as_ref()
+        .expect("the terminal carries its own pending recharge");
+    assert_eq!(row.goal, BuildGoal::Recharge);
+    assert!(
+        row.label().contains("recharging"),
+        "a row says what is coming: {}",
+        row.label()
+    );
+}
+
+/// `Game::spend_pod` files exactly one recharge request, against the def's
+/// own bill, costing no program — and calling it again while that request
+/// still stands must not stack a second one on top of it.
+#[test]
+fn spending_a_pod_files_one_recharge_request_and_a_second_spend_files_no_more() {
+    let mut game = base_for_drop_pod(1171);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+
+    game.spend_pod(terminal);
+
+    assert!(
+        !game.world.get::<DropPod>(terminal).unwrap().charged,
+        "the pod is spent"
+    );
+    let site = site_at(&mut game, 1, 0);
+    let build = game.world.get::<BuildSite>(site).unwrap();
+    assert_eq!(build.goal, BuildGoal::Recharge);
+    assert_eq!(build.structure, "drop_pod_terminal");
+    assert_eq!(
+        build.cost,
+        vec![
+            (ItemId::from("core_fragment"), 2),
+            (ItemId::from("cache_grain"), 1),
+        ]
+    );
+    assert!(
+        build.program.is_none(),
+        "a recharge runs no job and costs no program"
+    );
+
+    game.spend_pod(terminal);
+    let sites = game
+        .world
+        .iter_entities()
+        .filter(|e| e.get::<BuildSite>().is_some())
+        .count();
+    assert_eq!(sites, 1, "spending an already-spent pod files no more");
+}
+
+/// The whole loop: a body fetches the recharge bill by hand and the pod
+/// comes back charged once the meter fills — and nothing new stands up
+/// alongside the terminal that already exists.
+#[test]
+fn the_crew_reloads_a_spent_pod_and_stands_nothing_new_up() {
+    let mut game = base_for_drop_pod(1172);
+    builder(&mut game);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    game.spend_pod(terminal);
+    let (x, y) = {
+        let p = game.world.get::<Position>(terminal).unwrap();
+        (p.x, p.y)
+    };
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    for _ in 0..2000 {
+        if game.world.get::<DropPod>(terminal).unwrap().charged {
+            break;
+        }
+        game.tick();
+    }
+
+    assert!(
+        game.world.get::<DropPod>(terminal).unwrap().charged,
+        "the crew reloads it"
+    );
+    assert!(game.build_site_at(x, y).is_none(), "the request is spent");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before - 2,
+        "the recharge's own bill was paid, once"
+    );
+    let terminals = game
+        .world
+        .iter_entities()
+        .filter(|e| {
+            e.get::<Structure>()
+                .is_some_and(|s| s.kind == "drop_pod_terminal")
+        })
+        .count();
+    assert_eq!(
+        terminals, 1,
+        "a recharge must not spawn a second structure on the cell"
+    );
+}
+
+/// The structure sheet says whether a terminal can fire: `Charged`, or
+/// `Recharging` with the request's own `BuildOrderRow::percent` — a call,
+/// so the sheet and the map's build row cannot disagree — and `None` on a
+/// structure that is not a pod.
+#[test]
+fn the_structure_sheet_says_whether_a_pod_is_charged() {
+    let mut game = base_for_drop_pod(1177);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    place_now(&mut game, "depot", 0, 1).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    let depot = structure_at(&mut game, 0, 1).unwrap();
+
+    assert_eq!(
+        game.structure_manifest(terminal).unwrap().pod,
+        Some(crate::views::PodState::Charged)
+    );
+    assert_eq!(game.structure_manifest(depot).unwrap().pod, None);
+
+    game.spend_pod(terminal);
+    let site = site_at(&mut game, 1, 0);
+    let percent = game.build_order_row(site).unwrap().percent();
+    assert_eq!(
+        game.structure_manifest(terminal).unwrap().pod,
+        Some(crate::views::PodState::Recharging { percent })
+    );
+}
+
+/// A recharge cannot be called off. Cancelling one was the only way to
+/// leave a standing terminal spent with nothing filed to reload it — a pod
+/// that would then never fire again without a screen to re-file it from —
+/// so the refusal is the whole of "a spent pod always has its recharge
+/// filed". It lands before anything moves: the site, its delivered units
+/// and the spent charge all stand.
+#[test]
+fn a_recharge_request_cannot_be_cancelled() {
+    let mut game = base_for_drop_pod(1173);
+    builder(&mut game);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    game.spend_pod(terminal);
+    let site = site_at(&mut game, 1, 0);
+
+    let mut delivered = 0;
+    for _ in 0..600 {
+        delivered = game
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.delivered.iter().map(|(_, q)| q).sum::<u32>())
+            .unwrap_or(0);
+        if delivered > 0 {
+            break;
+        }
+        game.tick();
+    }
+    assert!(delivered > 0, "the fixture needs a part-supplied site");
+
+    assert!(game.cancel_build_request(site).is_err());
+
+    let build = game
+        .world
+        .get::<BuildSite>(site)
+        .expect("the request still stands");
+    assert_eq!(
+        build.delivered.iter().map(|(_, q)| q).sum::<u32>(),
+        delivered,
+        "nothing was handed back"
+    );
+    assert!(!game.world.get::<DropPod>(terminal).unwrap().charged);
+}
+
+/// A save written before `pod_charged` existed carries no such key at all —
+/// `#[serde(default)]`'s own case, `a_save_written_before_study_stations_
+/// existed_still_loads`'s technique, and **no `SAVE_FORMAT_VERSION` bump**
+/// was spent on it.
+#[test]
+fn a_save_written_before_pod_charged_existed_still_loads_charged() {
+    let mut game = base_for_drop_pod(1174);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    structure_at(&mut game, 1, 0).expect("the crew stands it up");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_no_pod_charged_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("pod_charged"),
+        "the key must have been there to remove"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("pod_charged:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("pod_charged"),
+        "the fixture must actually remove the key or the test proves nothing"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let restored = loaded
+        .world
+        .iter_entities()
+        .find(|e| {
+            e.get::<Structure>()
+                .is_some_and(|s| s.kind == "drop_pod_terminal")
+        })
+        .expect("the terminal survives the reload");
+    assert_eq!(
+        restored.get::<DropPod>().copied(),
+        Some(DropPod { charged: true }),
+        "a save written before this field existed loads charged"
+    );
+}
+
+/// A spent pod survives a real `Game::save`/`Game::load`. A RON round trip
+/// alone cannot catch a `#[serde(skip)]` or a load path that forgets to
+/// insert the component, and either one hands a reloading player a pod
+/// charged for free.
+#[test]
+fn a_spent_pod_survives_a_save_and_load() {
+    let mut game = base_for_drop_pod(1175);
+    place_now(&mut game, "drop_pod_terminal", 1, 0).unwrap();
+    let terminal = structure_at(&mut game, 1, 0).unwrap();
+    game.spend_pod(terminal);
+    assert!(!game.world.get::<DropPod>(terminal).unwrap().charged);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_drop_pod_spent_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = loaded
+        .world
+        .iter_entities()
+        .find(|e| {
+            e.get::<Structure>()
+                .is_some_and(|s| s.kind == "drop_pod_terminal")
+        })
+        .expect("the terminal survives the reload");
+    assert!(
+        !restored
+            .get::<DropPod>()
+            .expect("a drop_pod_terminal always carries the component")
+            .charged,
+        "a reload does not hand the run its charge back for free"
+    );
 }

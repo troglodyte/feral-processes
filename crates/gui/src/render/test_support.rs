@@ -184,6 +184,7 @@ pub(super) fn game_with_a_rare_party_companion(
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
@@ -265,6 +266,7 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         stolen_from: None,
         off_duties: Vec::new(),
         staff_rank: None,
+        drop_trooper: false,
     };
     for &(wielded, name) in programs {
         data.creatures.push(program(wielded, name));
@@ -335,6 +337,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -425,6 +428,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     // And a Research Node with no project, so the same corner has a research
     // line to hide in the two places it is not drawn.
@@ -444,6 +448,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         hopper: Vec::new(),
         hopper_progress: 0,
         standing_tool: None,
+        pod_charged: None,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &assets_dir).unwrap()

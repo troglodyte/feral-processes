@@ -811,6 +811,7 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Emulate { .. }
             | E::Tamper { .. }
             // A relocation moves no Integrity at all — it moves a body.
+            | E::Reinforce
             | E::Teleport => continue,
         };
         checked += 1;
@@ -871,6 +872,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             // A relocation always lands, a tamper's reason: the refusals
             // are all in `Game::tactical_teleport`, above the charge, so
             // there is nothing left for a roll to decide.
+            | E::Reinforce
             | E::Teleport => false,
         };
         if rolls_to_hit {
@@ -1048,7 +1050,8 @@ fn without_version_tag(name: &str) -> &str {
 /// is the same no-picker shape, chosen because the effect names its own
 /// recipient (the acting body) directly rather than trusting
 /// `Game::ability_recipients` — see the variant's own doc — and "Emulate
-/// Party" would tell the player it lands on their party too.
+/// Party" would tell the player it lands on their party too. `Teleport`
+/// and `Reinforce` join them on the same no-picker shape.
 #[test]
 fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
     let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1062,6 +1065,7 @@ fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
                 crate::abilities::AbilityEffect::Summon { .. }
                     | crate::abilities::AbilityEffect::Emulate { .. }
                     | crate::abilities::AbilityEffect::Teleport
+                    | crate::abilities::AbilityEffect::Reinforce
             )
         })
     {
@@ -1112,6 +1116,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             | E::Emulate { .. }
             // A relocation names a cell; `Game::tactical_teleport` breaks
             // the cloak itself when the body it moved was a hostile.
+            | E::Reinforce
             | E::Teleport
             | E::Symlink => false,
         };
@@ -4892,8 +4897,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 29,
-        "expected the shipped base tree's 29 nodes; a count that moved means a node was \
+        checked, 30,
+        "expected the shipped base tree's 30 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5205,11 +5210,11 @@ fn deleting_the_fork_routines_leaves_the_game_as_it_was() {
 /// This repo has already been bitten by exactly that.
 ///
 /// `routine_fabrication` and `program_refactoring` are named on the other
-/// side deliberately: they carry `requires_subject` like the twenty, and
+/// side deliberately: they carry `requires_subject` like the twenty-one, and
 /// leaving them visible is what keeps the routine tree and companion fusion
 /// arriving when they do today rather than behind a dice roll.
 #[test]
-fn exactly_the_twenty_named_research_nodes_are_discoverable() {
+fn exactly_the_twenty_one_named_research_nodes_are_discoverable() {
     let game = Game::new(4118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut found: Vec<&str> = game
         .world
@@ -5231,6 +5236,7 @@ fn exactly_the_twenty_named_research_nodes_are_discoverable() {
             "cortex",
             "deep_analysis",
             "dispatch",
+            "drop_pods",
             "firewall",
             "memory_mapping",
             "model_inspection",

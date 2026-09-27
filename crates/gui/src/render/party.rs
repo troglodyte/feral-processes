@@ -1465,6 +1465,7 @@ mod tests {
             stolen_from: None,
             off_duties: Vec::new(),
             staff_rank: None,
+            drop_trooper: false,
         };
         // The handle candidate, and its `CustomName` counterpart — a maxed
         // rename replaces the handle outright (`creature_name`), so it is a

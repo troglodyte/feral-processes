@@ -854,10 +854,19 @@ fn draw_surface_map(
                 //
                 // Damage-tinted through the same call, so a battered
                 // machine still dims rather than reading box-fresh.
+                //
+                // A drop pod terminal runs no job — it carries no
+                // `MachineStatus` at all — so a spent one cannot ride the
+                // arm above; it is checked here instead, `WARN`'s own
+                // reading: the crew is already walking the bill over, so
+                // waiting is what fixes it.
                 color = match ev.machine_status {
                     Some(status) => {
                         fx.structure_condition(ev.durability, machine_color(status))
                             .0
+                    }
+                    None if ev.pod_charged == Some(false) => {
+                        fx.structure_condition(ev.durability, hud::palette::WARN).0
                     }
                     None => dimmed,
                 };
@@ -1727,6 +1736,7 @@ mod tests {
             tier: None,
             ceiling: None,
             max_tier: None,
+            pod_charged: None,
             is_boss: false,
             nemesis: false,
             patrol: None,
@@ -5615,6 +5625,7 @@ mod tests {
                 hopper: Vec::new(),
                 hopper_progress: 0,
                 standing_tool: None,
+                pod_charged: None,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
@@ -5702,6 +5713,107 @@ mod tests {
             floor_fills(&without_station),
             0,
             "a structure with no `studies` footprint draws no floor cells at all"
+        );
+    }
+
+    /// An `App` with a founded Home and a standing, footprint-2 Drop Pod
+    /// Terminal beside it — `game_with_a_research_station`'s technique:
+    /// `place_structure` would file a request rather than raise one, and
+    /// would spend a program this fixture has no need to own, so the
+    /// terminal is written straight into the save instead.
+    fn app_with_a_drop_pod_terminal(
+        seed: u32,
+        anchor: (i32, i32),
+        charged: bool,
+    ) -> feral_processes_app_core::App {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = std::env::temp_dir().join(format!(
+            "fp_gui_drop_pod_census_{seed}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut app = feral_processes_app_core::App::new(
+            root.join("assets"),
+            tmp.join("saves"),
+            tmp.join("history.log"),
+            tmp.join("profile.ron"),
+            root.join("dev-arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+
+        let path = crate::render::test_support::scratch_path("drop_pod_terminal", seed);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        data.structures
+            .push(feral_processes_engine::save::StructureSave {
+                kind: "drop_pod_terminal".to_string(),
+                position: anchor,
+                durability: None,
+                tier: None,
+                stock_input: Vec::new(),
+                stock_output: Vec::new(),
+                standing_work: false,
+                standing_guard: false,
+                denied_items: Vec::new(),
+                power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+                build_quality: 1.0,
+                racked: Vec::new(),
+                hopper: Vec::new(),
+                hopper_progress: 0,
+                standing_tool: None,
+                pod_charged: Some(charged),
+            });
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        app.game = Some(Game::load(&path, &test_assets()).unwrap());
+        app
+    }
+
+    /// A spent terminal's glyph dims toward `WARN` — the crew is already
+    /// walking the bill over, so waiting is what fixes it — while a charged
+    /// one keeps its authored cyan. The terminal carries no `MachineStatus`
+    /// at all (it runs no job), so this is the one case `machine_status`
+    /// alone cannot cover, and it must be checked ahead of the plain
+    /// `None` fallback rather than folded into `machine_color`.
+    #[test]
+    fn a_spent_drop_pod_terminal_dims_toward_warn() {
+        let anchor = (3, 0);
+        let mut spent = app_with_a_drop_pod_terminal(560_200, anchor, false);
+        let mut charged = app_with_a_drop_pod_terminal(560_201, anchor, true);
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+
+        let (_, spent_shapes) =
+            with_painter(|p| draw_playing_base(&mut spent, &mut fx, None, p, &m, false));
+        let (_, charged_shapes) =
+            with_painter(|p| draw_playing_base(&mut charged, &mut fx, None, p, &m, false));
+
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let glyph_of = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
+            crate::paint::painted_map_glyphs(shapes)
+                .into_iter()
+                .find(|(g, _)| g == "V")
+                .map(|(_, c)| c)
+                .expect("the terminal's glyph is drawn")
+        };
+        let spent_color = glyph_of(&spent_shapes);
+        let charged_color = glyph_of(&charged_shapes);
+
+        assert!(
+            dist(spent_color, hud::palette::WARN)
+                < dist(spent_color, glyph_color(GlyphColor::Cyan)),
+            "a spent terminal should read nearer WARN than its authored cyan: {spent_color:?}"
+        );
+        assert!(
+            dist(charged_color, glyph_color(GlyphColor::Cyan))
+                < dist(charged_color, hud::palette::WARN),
+            "a charged terminal keeps its authored cyan: {charged_color:?}"
         );
     }
 
@@ -5820,6 +5932,7 @@ mod tests {
                 stolen_from: None,
                 off_duties: Vec::new(),
                 staff_rank: None,
+                drop_trooper: false,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         let mut game = Game::load(&path, &test_assets()).unwrap();

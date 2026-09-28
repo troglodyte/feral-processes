@@ -64,6 +64,10 @@ struct Args {
     /// How the party plays. Defaults to the game's own All-Attack, which is
     /// what every published arena number was measured against.
     party: arena::PartyPlan,
+    /// Score this weights file against the baseline and stop, with no
+    /// search. What tells you whether a shipped policy still earns its place
+    /// after combat changes under it, before paying for a retrain.
+    eval: Option<PathBuf>,
 }
 
 /// Which of the two evaluation passes a set of records came from.
@@ -168,6 +172,29 @@ fn run() -> Result<(), String> {
         baseline.enemy_win_rate, baseline.fitness
     );
 
+    if let Some(path) = &args.eval {
+        let weights = match policy::load_file(path) {
+            Ok((Some(weights), _)) => weights,
+            Ok((None, warnings)) => {
+                return Err(format!(
+                    "{}: no usable weights {warnings:?}",
+                    path.display()
+                ));
+            }
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        };
+        let result = evaluate_set(
+            &scenarios,
+            &arena_pool,
+            &weights,
+            args.seed,
+            log(Pass::Trained),
+            args.party,
+        )?;
+        print_comparison(&baseline, &result);
+        return Ok(());
+    }
+
     let cfg = CemConfig {
         dims: policy::FEATURE_COUNT,
         population: args.pop,
@@ -241,6 +268,20 @@ fn run() -> Result<(), String> {
         println!("wrote {}", path.display());
     }
     Ok(())
+}
+
+fn print_comparison(baseline: &SetResult, evaluated: &SetResult) {
+    println!(
+        "evaluated: enemy win rate {:.3} (baseline {:.3}), fitness {:.4} (baseline {:.4})",
+        evaluated.enemy_win_rate, baseline.enemy_win_rate, evaluated.fitness, baseline.fitness
+    );
+    println!(
+        "\n{:<28} {:>14} {:>14}",
+        "scenario", "enemy win b→e", "player hp b→e"
+    );
+    for ((name, be, bh), (_, ee, eh)) in baseline.per_scenario.iter().zip(&evaluated.per_scenario) {
+        println!("{name:<28} {be:>6.3}→{ee:<6.3} {bh:>6.3}→{eh:<6.3}");
+    }
 }
 
 /// What one weight vector scored over the whole scenario set.
@@ -527,6 +568,7 @@ fn parse_args() -> Result<Args, String> {
         log_dir: None,
         label: "run".to_string(),
         party: arena::PartyPlan::default(),
+        eval: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -550,6 +592,7 @@ fn parse_args() -> Result<Args, String> {
                     other => return Err(format!("--party-plan: {other:?} is not a plan")),
                 };
             }
+            "--eval" => args.eval = Some(value()?.1.into()),
             "--label" => args.label = value()?.1,
             "--iters" => args.iters = parse(value()?)?,
             "--pop" => args.pop = parse(value()?)?,
@@ -567,7 +610,7 @@ fn parse_args() -> Result<Args, String> {
                     "train --out <path> --scenarios <dir> [--assets <dir>] [--iters 30] \
                      [--pop 40] [--reps N] [--seed 1] [--report <path>] \
                      [--pin feature,feature] [--log-dir <dir>] [--label <name>] \
-                     [--party-plan all-attack|brace|rotate]"
+                     [--party-plan all-attack|brace|rotate] [--eval <weights.ron>]"
                 );
                 std::process::exit(0);
             }

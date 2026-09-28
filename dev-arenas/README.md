@@ -452,6 +452,17 @@ format and overwrites a file of that name deliberately.
   row for the player's own kit alone, or swap the species, to reproduce
   `docs/measurements/2026-09-18-emulation-edge.md`'s sweep — the fitting
   scenario for `tuning::EMULATION_EDGE`.
+- **`respawn.ron`** — a Respawn-equipped player against a pair of ordinary
+  wild programs on a battle map. The player's own cast never fires in the
+  bin (`model: Tactical` swings only, per "What the `arena` bin does not
+  measure" below); `character.routine` here proves the fixture stages one
+  without erroring. What the file actually exercises is the **hostile**
+  side: `respawn.ron`'s `wild_weight: 4` lets any wild spawn roll it onto
+  its own kit, and a wild carrier invokes routines the same as any other
+  hostile AI turn — so 50 reps' worth of falls and spawns is what checks
+  the mechanism runs end to end without a seed-specific setup. Kept as a
+  fair fight (74% wins, 50 reps) rather than a set-piece, since nothing
+  here isolates a single delta the way the walkovers below do.
 
 The list above is short of the directory: `class-mirror`, `developed-companion`,
 `gear-passives`, `stack-depth-5` and the five `policy-*` files are also

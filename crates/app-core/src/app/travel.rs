@@ -25,6 +25,17 @@ pub(crate) enum Walk {
 }
 
 impl App {
+    /// The game, when the pointer is over a surface or base map it can act
+    /// on: `Mode::Playing` and not underground. Every map-pointer entry
+    /// point (`travel_to`, `hover_lines`) is gated through this one call,
+    /// so a click and a hover can never disagree about what is under them.
+    pub(crate) fn surface_map_game(&mut self) -> Option<&mut Game> {
+        if self.mode != Mode::Playing {
+            return None;
+        }
+        self.game.as_mut().filter(|g| !g.is_underground())
+    }
+
     /// Sets a travel toward `(x, y)` — a click on the map. `Mode::Playing`
     /// only, and refused underground: the Stack's first-person arrows have
     /// no notion of a clicked tile, and a `TravelStep` search never runs
@@ -38,13 +49,9 @@ impl App {
     /// posted program whose `Position` has gone stale does not become a
     /// chase target just because a query still turns it up there.
     pub fn travel_to(&mut self, x: i32, y: i32) {
-        if self.mode != Mode::Playing {
+        let Some(game) = self.surface_map_game() else {
             return;
-        }
-        let Some(game) = &mut self.game else { return };
-        if game.is_underground() {
-            return;
-        }
+        };
         let in_base = game.in_base();
         let goal = game
             .view_entities_at((x, y), 0, 0)

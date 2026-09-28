@@ -43,12 +43,20 @@ fn open_ground_names_only_the_ground() {
     assert_eq!(lines, vec![biome_at(&mut app, tile)]);
 }
 
-/// The same gate as `travel_to`: over a popup the map behind it is not
-/// what the pointer is pointing at.
+/// `surface_map_game`, the gate `travel_to` shares: over a popup the map
+/// behind it is not what the pointer is pointing at.
 #[test]
 fn hover_off_the_playing_screen_says_nothing() {
     let mut app = test_app(2803);
     app.mode = Mode::Inventory;
+    let start = player_pos(&app);
+
+    assert!(app.hover_lines(start.0, start.1).is_empty());
+}
+
+#[test]
+fn hover_underground_says_nothing() {
+    let mut app = app_underground(2804);
     let start = player_pos(&app);
 
     assert!(app.hover_lines(start.0, start.1).is_empty());

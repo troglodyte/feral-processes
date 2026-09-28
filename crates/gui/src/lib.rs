@@ -1279,6 +1279,75 @@ mod tests {
         });
     }
 
+    /// `map_pointer_frame` for the hover path: the pointer resting at `pos`
+    /// at egui time `time`, with the primary button pressed this frame when
+    /// `press` — answering what `handle_map_pointer` says is due.
+    fn hover_frame(
+        app: &mut App,
+        ctx: &egui::Context,
+        fx: &Fx,
+        tracker: &mut MapPointer,
+        pos: egui::Pos2,
+        time: f64,
+        press: bool,
+    ) -> Option<(egui::Pos2, (i32, i32))> {
+        let mut events = vec![egui::Event::PointerMoved(pos)];
+        if press {
+            events.push(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::default(),
+            });
+        }
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(4000.0, 4000.0),
+            )),
+            time: Some(time),
+            events,
+            ..Default::default()
+        };
+        let mut due = None;
+        let _ = ctx.run_ui(input, |_ui| {
+            due = handle_map_pointer(app, ctx, fx, &mut *tracker);
+        });
+        due
+    }
+
+    /// The whole hover path through a real egui pass: nothing until the
+    /// pointer has rested `HOVER_DELAY_SECS` on one tile, then that tile at
+    /// the pointer's pixel, and nothing again while a button is held.
+    #[test]
+    fn handle_map_pointer_answers_a_hover_after_a_rest_and_not_while_held() {
+        let mut app = app_on_the_map(6601);
+        let start = app.game.as_ref().unwrap().player_status().position;
+        let layout = test_layout(start);
+        let mut fx = Fx::new();
+        fx.set_map_click(Some(layout));
+        let mut tracker = MapPointer::default();
+        let ctx = egui::Context::default();
+        warm_up_pointer_frame(&ctx);
+        let pos = egui::pos2(2005.0, 2005.0);
+        let tile = pane_tile(pos, &layout);
+        assert!(tile.is_some());
+
+        let at = |t: f64, press, app: &mut App, tracker: &mut MapPointer| {
+            hover_frame(app, &ctx, &fx, tracker, pos, t, press)
+        };
+        assert_eq!(at(1.0, false, &mut app, &mut tracker), None);
+        assert_eq!(
+            at(1.0 + HOVER_DELAY_SECS, false, &mut app, &mut tracker),
+            Some((pos, tile.unwrap()))
+        );
+        assert_eq!(
+            at(2.0, true, &mut app, &mut tracker),
+            None,
+            "a held button kept the label"
+        );
+    }
+
     /// One `run_ui` pass with no pointer events — establishes
     /// `root_ui_available_rect` for `map_pointer_frame`'s first real call,
     /// exactly as several ordinary frames already will have by the time a

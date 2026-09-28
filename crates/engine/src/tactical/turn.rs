@@ -590,7 +590,7 @@ impl Game {
                 .get::<crate::components::Structure>(target)
                 .is_none()
             {
-                self.world.resource_mut::<TacticalBattle>().remove(target);
+                self.world.resource_mut::<TacticalBattle>().fall(target);
             }
             self.world.resource_mut::<TacticalBattle>().spend_action();
             self.hand_on_turn(actor, round_before);
@@ -1776,7 +1776,7 @@ impl Game {
             {
                 crate::game::siege::raiders::drop_besieger_cargo(self, body);
             }
-            self.world.resource_mut::<TacticalBattle>().remove(body);
+            self.world.resource_mut::<TacticalBattle>().fall(body);
             // A fallen companion is reaped at teardown, not here — the same
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.

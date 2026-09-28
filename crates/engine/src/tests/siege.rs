@@ -921,6 +921,14 @@ mod board_combat {
             None,
             "its cell must be free for anyone to stand on"
         );
+        assert_eq!(
+            battle.fallen(),
+            [crate::tactical::Fallen {
+                cell: (1, 0),
+                footprint: 1,
+            }],
+            "a destroyed structure must leave its mark on the board"
+        );
         assert!(
             game.world.get_resource::<TacticalBattle>().is_some(),
             "the fight must continue after the structure falls"

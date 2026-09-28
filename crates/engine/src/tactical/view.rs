@@ -22,10 +22,10 @@ use crate::components::{
 };
 use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
-use crate::tactical::TacticalBattle;
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
 use crate::tactical::reach;
+use crate::tactical::{Fallen, TacticalBattle};
 use crate::tuning::FORMATIONS;
 use crate::views::{FormLook, PlayerLook};
 
@@ -226,6 +226,9 @@ pub struct TacticalView {
     /// the acting body can see — built the way `provoking` is, one call per
     /// cell into the rule the roll reads.
     pub covered: Vec<(i32, i32)>,
+    /// Where every body killed on this board fell — kept on a frozen board,
+    /// since the dead are what a finished fight has most of.
+    pub fallen: Vec<Fallen>,
 }
 
 impl TacticalView {
@@ -339,6 +342,7 @@ impl Game {
         let actor = battle.actor();
         let placed: Vec<(Entity, (i32, i32))> = battle.bodies().collect();
         let initiative: Vec<Entity> = battle.initiative().to_vec();
+        let fallen = battle.fallen().to_vec();
         let decoys: Vec<DecoyView> = battle
             .decoys()
             .iter()
@@ -425,6 +429,7 @@ impl Game {
             provoking,
             decoys,
             covered,
+            fallen,
         })
     }
 

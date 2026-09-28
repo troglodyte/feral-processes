@@ -5,10 +5,10 @@ use crate::Game;
 use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, StatusEffects};
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
-use crate::tactical::TacticalBattle;
 use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
+use crate::tactical::{Fallen, TacticalBattle};
 use crate::tests::support::{
     equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
 };
@@ -427,6 +427,7 @@ fn walking_off_the_edge_leaves_the_fight() {
         game.world.get::<Stats>(leaver).is_some(),
         "breaking off is not dying"
     );
+    assert!(battle.fallen().is_empty(), "breaking off left a mark");
 }
 
 /// The player walking out is the jack-out, and it is not a win.
@@ -512,6 +513,54 @@ fn killing_the_last_hostile_ends_the_fight_and_pays_for_it() {
     assert!(
         game.world.get::<Experience>(player).unwrap().xp > before,
         "the kill paid no experience"
+    );
+    let board = game.tactical_result_view().expect("a closing board");
+    assert_eq!(
+        board.fallen.len(),
+        1,
+        "the kill that ended the fight must still be marked on the closing board"
+    );
+}
+
+/// A body killed on a battle map leaves a mark where it fell, for the rest
+/// of the fight.
+#[test]
+fn a_body_killed_on_a_battle_map_leaves_a_mark_where_it_fell() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 2, 1);
+    let player = game.player_entity();
+    let target = pack[0];
+    let mut last_seen = None;
+
+    for _ in 0..64 {
+        if !wait_for_turn(&mut game, player) {
+            break;
+        }
+        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
+            break;
+        };
+        last_seen = Some(at);
+        if let Some(beside) = beside(&game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, beside);
+        }
+        game.tactical_attack(target);
+    }
+
+    assert!(
+        game.world.get::<Stats>(target).is_none(),
+        "the target was never killed"
+    );
+    let view = game
+        .tactical_view()
+        .expect("the second hostile holds the fight open");
+    assert_eq!(
+        view.fallen,
+        vec![Fallen {
+            cell: last_seen.expect("the target stood somewhere"),
+            footprint: 1,
+        }],
     );
 }
 
@@ -827,6 +876,13 @@ fn a_capture_on_a_battle_map_turns_the_program_it_was_aimed_at() {
     assert!(
         game.world.get_resource::<TacticalBattle>().is_none(),
         "the last hostile left the board and the fight stayed open"
+    );
+    assert!(
+        game.tactical_result_view()
+            .expect("a closing board")
+            .fallen
+            .is_empty(),
+        "a captured program did not fall"
     );
 }
 

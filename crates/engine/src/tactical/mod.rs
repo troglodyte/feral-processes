@@ -87,6 +87,14 @@ impl Decoy {
 /// Bare `#[derive(Resource)]` — no `Default`, no `Serialize` — matching
 /// `BattleState` for the same reason: a fight is never saved, so nothing
 /// here appears in `save.rs` and `SAVE_FORMAT_VERSION` does not move.
+/// Where a body died on a battle map: its anchor cell and the side of the
+/// square it covered, so a squad's mark spans the squad.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fallen {
+    pub cell: (i32, i32),
+    pub footprint: u8,
+}
+
 #[derive(Resource)]
 pub struct TacticalBattle {
     pub spec: BattleSpec,
@@ -155,6 +163,10 @@ pub struct TacticalBattle {
     /// Every decoy a Hallucination has placed and nobody has struck through
     /// yet, in placement order — `bodies`' reason for a `Vec`.
     decoys: Vec<Decoy>,
+    /// Where every body killed on this board fell, in the order they fell.
+    /// A mark and nothing else: no wall, no cover, no target, and no reader
+    /// but the view — a body may stand on one.
+    fallen: Vec<Fallen>,
     /// Who has spent their reaction and not yet had it back — `bodies`'
     /// reason for a `Vec` again, and a fight holds at most thirteen.
     ///
@@ -230,6 +242,7 @@ impl TacticalBattle {
             round: 1,
             outmatched: false,
             decoys: Vec::new(),
+            fallen: Vec::new(),
             reacted: Vec::new(),
             shapes: HashMap::new(),
             screening: Vec::new(),
@@ -655,6 +668,23 @@ impl TacticalBattle {
             .iter()
             .position(|d| d.cell == cell && d.opposes(striker_hostile))?;
         Some(self.decoys.remove(idx))
+    }
+
+    /// Takes a body that died off the board, marking where it fell.
+    ///
+    /// **Death's door, not `remove`'s.** A body that walks off the edge or
+    /// is captured leaves through `remove` too, and neither of those fell.
+    pub(crate) fn fall(&mut self, body: Entity) {
+        if let Some(cell) = self.cell_of(body) {
+            let footprint = self.footprint_of(body);
+            self.fallen.push(Fallen { cell, footprint });
+        }
+        self.remove(body);
+    }
+
+    /// Every mark a death has left on this board.
+    pub fn fallen(&self) -> &[Fallen] {
+        &self.fallen
     }
 
     /// Keeps only the decoys `keep` answers `true` for.

@@ -591,10 +591,13 @@ impl Game {
                 .get::<crate::components::Structure>(target)
                 .is_none()
             {
-                let raise = self.raisable_snapshot(target);
+                // No snapshot to take: `damage_structure` has already
+                // despawned `target` by the time this destroyed branch is
+                // reached, and a structure was never raisable in the first
+                // place (`raisable_snapshot` requires a `Creature`).
                 self.world
                     .resource_mut::<TacticalBattle>()
-                    .fall(target, raise);
+                    .fall(target, None);
             }
             self.world.resource_mut::<TacticalBattle>().spend_action();
             self.hand_on_turn(actor, round_before);
@@ -1994,13 +1997,13 @@ impl Game {
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.
             //
-            // **`Summoned` is checked before `Hostile`.** A fork is never
-            // base staff — it carries no `Hostile` and is deliberately kept
-            // out of `Party` (`components::Summoned`'s containment story) —
-            // and a hostile carrier's own raised body *is* `Hostile`, so
-            // without this ordering it would fall into the branch below it
-            // instead and pay out a kill's full reward (XP, loot,
-            // `DownedProgram`, nest/patrol). Either way, left alone here
+            // **`Summoned` is checked before `Hostile`, as a guard clause.**
+            // A fork is never base staff — it carries no `Hostile` and is
+            // deliberately kept out of `Party` (`components::Summoned`'s
+            // containment story) — and a hostile carrier's own raised body
+            // *is* `Hostile`, so without this ordering it would fall into
+            // the branch below instead and pay out a kill's full reward
+            // (XP, loot, `DownedProgram`, nest/patrol). Left alone here
             // exactly as `dissolve_summons` leaves a killed fork elsewhere:
             // dead where it stands, until `finish_fight`'s unconditional
             // `Summoned` sweep despawns it at teardown.
@@ -2009,7 +2012,9 @@ impl Game {
                 .get::<crate::components::Summoned>(body)
                 .is_some()
             {
-            } else if self.world.get::<Hostile>(body).is_some() {
+                continue;
+            }
+            if self.world.get::<Hostile>(body).is_some() {
                 match self.world.get::<Squad>(body).map(|s| s.members.clone()) {
                     Some(members) => self.reap_squad(body, &members, player),
                     None => self.finish_hostile(body, player),

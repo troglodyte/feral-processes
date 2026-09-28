@@ -355,6 +355,31 @@ pub(super) fn draw_tactical_map(
         }
     }
 
+    // Where the dead fell, first of everything standing on the board: a
+    // mark is nothing a body cannot stand on, and the body is what the
+    // cell is about when one does. Scaled to the footprint the way
+    // `draw_body` is, so a squad's mark covers the squad.
+    for fallen in &view.fallen {
+        let (px, py) = tile_origin_px(
+            fallen.cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        if !on_pane(px, py) {
+            continue;
+        }
+        let footprint = fallen.footprint.max(1) as f32;
+        let cell_px = tile_px * footprint;
+        let mark_px = (glyph_px as f32 * footprint).round() as u16;
+        let dims = painter.measure_map("x", mark_px);
+        let tx = px + (cell_px - dims.width) / 2.0;
+        let ty = py + (cell_px + dims.height) / 2.0;
+        painter.map("x", tx, ty, mark_px, palette::FALLEN);
+    }
+
     // A Hallucination's fakes, **before** the bodies: a hallucinating body
     // may stand on its own decoy's cell (decision 3, "every decoy goes on a
     // free cell" — free of *other* bodies, not of the caster once it walks),
@@ -1489,6 +1514,36 @@ mod tests {
             "a decoy drew at alpha {}, not {FADED_ALPHA}",
             color.a
         );
+    }
+
+    /// Where a body fell draws a grey `x`, whatever side it was on.
+    #[test]
+    fn a_fallen_body_leaves_a_grey_x() {
+        use feral_processes_engine::tactical::Fallen;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let occupied: std::collections::HashSet<(i32, i32)> =
+            view.bodies.iter().map(|b| b.cell).collect();
+        let free = view
+            .board
+            .cells()
+            .find(|(cell, kind)| *kind != BattleCell::Blocked && !occupied.contains(cell))
+            .map(|(cell, _)| cell)
+            .expect("the board has a free cell for a mark");
+        view.fallen = vec![Fallen {
+            cell: free,
+            footprint: 1,
+        }];
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let (_, color) = crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .find(|(text, _)| text == "x")
+            .expect("the fallen mark was not drawn at all");
+        assert_eq!(color, palette::FALLEN);
     }
 
     /// A profiled hostile's forecast draws its walk as a run of `FORECAST`

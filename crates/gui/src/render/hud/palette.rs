@@ -117,6 +117,9 @@ pub(crate) const AIM: Color = rgb(0xd6c542);
 /// saturation as [`glyph`]'s table so it does not read as louder than the
 /// bodies it is drawn among.
 pub(crate) const FORECAST: Color = rgb(0xb86ad0);
+/// grey — the `x` where a body fell on a battle map. One hue for both sides:
+/// the dead are out of the fight, and whose they were is the log's to say.
+pub(crate) const FALLEN: Color = rgb(0x6b7580);
 /// br cyan — pane titles on their borders.
 pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.

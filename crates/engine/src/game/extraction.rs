@@ -889,6 +889,108 @@ impl Game {
         self.note_deed(crate::contracts::Deed::ExtractedProgram);
         Ok(())
     }
+
+    /// Why `index` can't be reinitialized right now, or `None` once every
+    /// refusal clears — `Game::reinitialize_program`'s own gate, shared so
+    /// the action row (phase 2) can grey on the same check it spends
+    /// against. Row-fragment style, `combat::RoutineRefusal`'s own tone
+    /// ("roster is full") rather than a full sentence, since a caller
+    /// appends it after the action's own label.
+    ///
+    /// In order: the run itself, then the record, then what it would cost.
+    /// A boss record and no protocol held are both checked before the
+    /// roster room, on no particular ordering the player could observe —
+    /// only the first failing check is ever shown at once. The species
+    /// check runs last because it's the one refusal `reinitialize_program`
+    /// itself cannot recover from once index and boss are already known
+    /// good — see that function's own `expect`.
+    pub fn reinitialize_blocker(&self, index: usize) -> Option<&'static str> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Some("not now");
+        }
+        let player = self.player_entity();
+        let Some(record) = self
+            .world
+            .get::<DownedPrograms>(player)
+            .and_then(|held| held.0.get(index))
+        else {
+            return Some("no such record");
+        };
+        if record.boss {
+            return Some("boss ICE won't reinitialize");
+        }
+        let held_protocols = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL)))
+            .unwrap_or(0);
+        if held_protocols == 0 {
+            return Some("no protocol held");
+        }
+        if self.roster_room() == 0 {
+            return Some("roster is full");
+        }
+        if self
+            .world
+            .resource::<SpeciesDb>()
+            .get(record.species.as_str())
+            .is_none()
+        {
+            return Some("unknown species");
+        }
+        None
+    }
+
+    /// The one door a `DownedProgram` record is resurrected through, rather
+    /// than spent for parts — `Game::extract_program`'s sibling and its
+    /// opposite trade: always succeeds, costs a crafted item instead of a
+    /// roll, and keeps the program instead of stripping it.
+    ///
+    /// Refused whole through `reinitialize_blocker` before anything spends
+    /// — same shape `extract_program`'s own refusals take. Once past it:
+    /// spend the protocol, remove the record, spawn the body with its own
+    /// rarity and carried routine pinned (`spawning::SpawnPins`, never
+    /// re-rolled), raise it to `tuning::reinit_level` capped at
+    /// `Game::level_cap`, one log line. No ticks spent — this happens at
+    /// the Fabricator's leisure, not in the field — and no `Deed`:
+    /// `Deed::Tamed` reads "Decompile a wild program", and this isn't one.
+    pub fn reinitialize_program(&mut self, index: usize) -> Result<(), String> {
+        if let Some(reason) = self.reinitialize_blocker(index) {
+            return Err(reason.to_string());
+        }
+        let player = self.player_entity();
+        self.world.get_mut::<Inventory>(player).unwrap().take(
+            ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL),
+            1,
+        );
+        let record = self
+            .world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+        // Computed before `record`'s fields are threaded into `pins` below —
+        // `downed_program_label` only reads species and level, but a struct
+        // one of whose fields was moved out can no longer be borrowed whole.
+        let label = self.downed_program_label(&record);
+        let pos = *self.world.get::<Position>(player).unwrap();
+        let pins = crate::game::spawning::SpawnPins {
+            rarity: Some(record.rarity),
+            routines: Some(record.carried.into_iter().collect()),
+        };
+        let program = self
+            .adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
+            .expect("reinitialize_blocker already confirmed SpeciesDb resolves this species");
+        let level = tuning::reinit_level(record.level, record.condition);
+        let cap = self.level_cap();
+        self.raise_to_level(program, level, cap);
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("{label} boots back up, tamed."),
+        );
+        Ok(())
+    }
+
     /// The Teardown Rig the player is standing beside, lowest tile first
     /// when a base somehow has two touching the party's cell.
     ///

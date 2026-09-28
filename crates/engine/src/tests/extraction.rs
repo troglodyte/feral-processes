@@ -23,6 +23,18 @@ fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
     }
 }
 
+/// The one program the player owns — for a fixture that just reinitialized
+/// or adopted one and wants to inspect the body, without threading the
+/// `Entity` `reinitialize_program`'s `Result<(), String>` never hands back.
+fn only_pet(game: &Game) -> Entity {
+    let player = game.player_entity();
+    game.world
+        .iter_entities()
+        .find(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+        .expect("exactly one tamed program was expected")
+        .id()
+}
+
 #[test]
 fn grade_rises_monotonically_with_each_axis_held_fixed() {
     // Condition, rarity and level fixed in turn while the other two hold
@@ -4256,4 +4268,372 @@ fn an_unpinned_spawn_still_rolls_rarity_and_routines_in_the_old_order() {
         }),
         "an unpinned spawn must still draw from GameRng for potential, routines and rarity"
     );
+}
+
+fn reinit_protocol() -> ItemId {
+    ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL)
+}
+
+/// The happy path: one protocol spent, exactly the reinitialized record
+/// removed (a neighbour keeps its place), the roster gains exactly one
+/// program, and the new body stands on the player's own tile — the shape
+/// `Game::adopt_program` already spawns at.
+#[test]
+fn reinitialize_program_spends_one_protocol_and_removes_only_that_record() {
+    let mut game = Game::new(9204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let kept = program(70, Rarity::Gold, 12);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(60, Rarity::Ordinary, 5), kept.clone()];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 2)],
+    );
+    let before_pets = game.pet_count();
+
+    game.reinitialize_program(0)
+        .expect("this record must be reinitializable");
+
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0,
+        vec![kept],
+        "the reinitialized record must be gone, its neighbour kept in place at index 0"
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "exactly one protocol must be spent"
+    );
+    assert_eq!(game.pet_count(), before_pets + 1);
+    let body = only_pet(&game);
+    assert!(
+        game.world
+            .get::<Tamed>(body)
+            .is_some_and(|t| t.owner == player),
+        "the new body must be owned staff, not a wild spawn"
+    );
+    let player_pos = *game.world.get::<Position>(player).unwrap();
+    assert_eq!(
+        *game.world.get::<Position>(body).unwrap(),
+        player_pos,
+        "must spawn on the player's own tile, the way adopt_program does"
+    );
+}
+
+/// `reinit_level` and `Game::level_cap` meet here: a record far above the
+/// zone's ceiling still boots up, but only as high as the roster is ever
+/// allowed to go.
+#[test]
+fn reinitialize_program_clamps_the_level_to_the_zone_cap() {
+    let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(100, Rarity::Ordinary, 999)];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    let cap = game.level_cap();
+    assert!(
+        tuning::reinit_level(999, 100) > cap,
+        "test premise: an unclamped level-999 record must ask for more than the zone allows"
+    );
+
+    game.reinitialize_program(0).unwrap();
+
+    let level = game.world.get::<Experience>(only_pet(&game)).unwrap().level;
+    assert_eq!(
+        level, cap,
+        "a reinitialized program must never exceed Game::level_cap()"
+    );
+}
+
+/// The record's rarity and carried routine land on the body exactly, not
+/// re-rolled — `SpawnPins` is the mechanism, this is the behaviour it is
+/// for.
+#[test]
+fn reinitialize_program_pins_the_records_rarity_and_carried_routine() {
+    let mut game = Game::new(9206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let carried = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .first()
+        .map(|(def, _)| def.id.clone())
+        .expect("some shipped routine is in the wild pool");
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![DownedProgram {
+        species: "scrapper".to_string(),
+        level: 5,
+        rarity: Rarity::Platinum,
+        boss: false,
+        condition: 80,
+        carried: Some(carried.clone()),
+    }];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+
+    game.reinitialize_program(0).unwrap();
+
+    let body = only_pet(&game);
+    assert_eq!(*game.world.get::<Rarity>(body).unwrap(), Rarity::Platinum);
+    assert!(
+        game.world
+            .get::<Routines>(body)
+            .unwrap()
+            .0
+            .contains(&carried),
+        "the record's carried routine must be installed on the new body"
+    );
+}
+
+/// A record with no carried routine must leave a body indistinguishable, on
+/// its `Routines`, from a **non-carrier** built at the same level — `None`
+/// pins an *empty* routine list, never a roll, so the kit
+/// `install_innate_routines` fills in is the only thing either body ends up
+/// carrying.
+///
+/// The comparison side pins an empty routine list too, deliberately, rather
+/// than calling plain `adopt_program`: that unpinned door still rolls its
+/// own `roll_wild_routine` (`WILD_ROUTINE_CHANCE`), and a wild-rolled
+/// carrier would install itself as the carried prize — exactly the axis
+/// this test is trying to hold equal rather than leave to a coin flip.
+#[test]
+fn reinitialize_program_with_no_carried_routine_matches_a_non_carrier_at_that_level() {
+    let level = 8;
+    let mut reinit_game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = reinit_game.player_entity();
+    // condition 100 keeps reinit_level(level, 100) == level exactly, so the
+    // two bodies below are compared at the identical level.
+    reinit_game
+        .world
+        .get_mut::<DownedPrograms>(player)
+        .unwrap()
+        .0 = vec![program(100, Rarity::Ordinary, level)];
+    set_inventory(
+        &mut reinit_game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    reinit_game.reinitialize_program(0).unwrap();
+    let reinit_routines = reinit_game
+        .world
+        .get::<Routines>(only_pet(&reinit_game))
+        .unwrap()
+        .0
+        .clone();
+
+    let mut plain_game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain_player = plain_game.player_entity();
+    let pos = *plain_game.world.get::<Position>(plain_player).unwrap();
+    let plain_body = plain_game
+        .adopt_program_pinned(
+            "scrapper",
+            pos.x,
+            pos.y,
+            1.0,
+            crate::game::spawning::SpawnPins {
+                rarity: None,
+                routines: Some(Vec::new()),
+            },
+        )
+        .unwrap();
+    let cap = plain_game.level_cap();
+    plain_game.raise_to_level(plain_body, level, cap);
+    let plain_routines = plain_game
+        .world
+        .get::<Routines>(plain_body)
+        .unwrap()
+        .0
+        .clone();
+
+    assert_eq!(
+        reinit_routines, plain_routines,
+        "no carried routine must leave the same kit a non-carrier's install would produce"
+    );
+}
+
+/// A boss record can never be reinitialized — the one exclusion the spec
+/// carves out of "any carried record". `reinitialize_blocker` is the same
+/// check the action row will grey on in phase 2.
+#[test]
+fn reinitialize_refuses_a_boss_record_and_spends_nothing() {
+    let mut game = Game::new(9208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![DownedProgram {
+        species: "scrapper".to_string(),
+        level: 10,
+        rarity: Rarity::Ordinary,
+        boss: true,
+        condition: 80,
+        carried: None,
+    }];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    let before_pets = game.pet_count();
+
+    assert!(game.reinitialize_blocker(0).is_some());
+    let result = game.reinitialize_program(0);
+
+    assert!(
+        result.is_err(),
+        "a boss record must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(game.pet_count(), before_pets);
+}
+
+#[test]
+fn reinitialize_refuses_with_no_protocol_held_and_spends_nothing() {
+    let mut game = Game::new(9209, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    set_inventory(&mut game, &[]);
+    let before_pets = game.pet_count();
+
+    assert!(game.reinitialize_blocker(0).is_some());
+    let result = game.reinitialize_program(0);
+
+    assert!(
+        result.is_err(),
+        "no protocol held must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(game.pet_count(), before_pets);
+}
+
+#[test]
+fn reinitialize_refuses_at_the_hard_roster_cap_and_spends_nothing() {
+    let mut game = Game::new(9210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for _ in 0..crate::tuning::ROSTER_HARD_CAP {
+        spawn_tamed(&mut game, 10, 3);
+    }
+    assert_eq!(
+        game.roster_room(),
+        0,
+        "test premise: the roster must be at its hard cap"
+    );
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    let before_pets = game.pet_count();
+
+    assert!(game.reinitialize_blocker(0).is_some());
+    let result = game.reinitialize_program(0);
+
+    assert!(
+        result.is_err(),
+        "a full roster must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(game.pet_count(), before_pets);
+}
+
+#[test]
+fn reinitialize_refuses_an_out_of_range_index_and_spends_nothing() {
+    let mut game = Game::new(9211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+
+    assert!(game.reinitialize_blocker(5).is_some());
+    let result = game.reinitialize_program(5);
+
+    assert!(
+        result.is_err(),
+        "an out-of-range index must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "nothing must be spent on a refusal"
+    );
+}
+
+/// A mod that removed the species after the kill: `reinitialize_blocker`
+/// must catch this before anything spends, the same rule
+/// `extract_program`'s refusals all keep.
+#[test]
+fn reinitialize_refuses_an_unresolvable_species_and_spends_nothing() {
+    let mut game = Game::new(9212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![DownedProgram {
+        species: "not_a_shipped_species".to_string(),
+        level: 10,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 80,
+        carried: None,
+    }];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    let before_pets = game.pet_count();
+
+    assert!(game.reinitialize_blocker(0).is_some());
+    let result = game.reinitialize_program(0);
+
+    assert!(
+        result.is_err(),
+        "a species SpeciesDb cannot resolve must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(game.pet_count(), before_pets);
+}
+
+/// `reinitialize_blocker` must read `None` once every refusal clears —
+/// otherwise the action row (phase 2) would grey out a record the door
+/// itself would happily reinitialize.
+#[test]
+fn reinitialize_blocker_is_none_once_every_refusal_clears() {
+    let mut game = Game::new(9213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+
+    assert_eq!(game.reinitialize_blocker(0), None);
 }

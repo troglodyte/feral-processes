@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.13.247
+
+**The policy trainer can score an existing enemy policy without training a
+new one.** `train --eval <file>` fights the named weights and the uniform
+baseline on the same seeds and prints both, scenario by scenario. Run
+against the combat changes since August, the shipped policy still roughly
+doubles the enemy's win rate over uniform play, so it stays as it is — see
+`docs/measurements/2026-09-28-enemy-policy-after-combat-changes.md`. Saves
+are unchanged.
+
 ## 0.13.246
 
 **The Depot filter lists weapons, armor, modules and etched disks as one

@@ -104,6 +104,15 @@ impl Game {
     /// `AbilityEffect::field_only`): none has a battle mechanic to run, so a
     /// carrier with nothing else installed falls back to a normal move
     /// instead of the `unreachable!` in `use_ability`.
+    ///
+    /// **`Reanimate` is the one `tactical_only` exception, and only inside a
+    /// tactical fight.** Every other tactical-only effect (`Tamper`,
+    /// `Teleport`, `Reinforce`) has no AI scoring built for it yet; Respawn
+    /// does (`tactical/ai.rs::best_aim`'s own arm), and the group model this
+    /// filter otherwise has to stay blind to has nothing for it to read
+    /// anyway (`AbilityEffect::tactical_only`'s own doc on `Reanimate`), so
+    /// admitting it there would only ever offer a routine `wild_retaliate`
+    /// could never run.
     fn ready_from_candidates(
         &self,
         entity: Entity,
@@ -114,6 +123,7 @@ impl Game {
             .get::<AbilityCooldowns>(entity)
             .map(|c| c.0.clone())
             .unwrap_or_default();
+        let in_tactical_battle = self.in_tactical_battle();
         candidates
             .into_iter()
             .filter(|def| !cooling.contains_key(&def.id))
@@ -123,7 +133,9 @@ impl Game {
                     // No AI ever chooses a tamper routine, hostile or
                     // party — a carrier's retaliation is the wild side's
                     // own AI, and it has no scoring for one yet.
-                    && !def.effect.tactical_only()
+                    && (!def.effect.tactical_only()
+                        || (in_tactical_battle
+                            && matches!(def.effect, AbilityEffect::Reanimate { .. })))
                     // Only the player emulates (`seam:only-the-player-
                     // emulates`). `tactical/ai.rs::tactical_intent` reads
                     // this same pool for the battle-map hostile *and* party

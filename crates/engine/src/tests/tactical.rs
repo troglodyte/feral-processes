@@ -3835,6 +3835,105 @@ mod respawn {
             "it must never join the roster"
         );
     }
+
+    /// The wild side's own cast: a hostile carrier chooses Respawn
+    /// unconditionally (`tactical_intent`'s hostile branch reads only
+    /// `wild_routine_ready`), so `best_aim` scoring a mark it covers is the
+    /// only thing standing between that choice and a wasted turn.
+    #[test]
+    fn a_hostile_carrier_casts_respawn_and_its_raised_body_is_hostile_and_ai_driven() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 400);
+        let hostile = pack[0];
+        only_routine(&mut game, hostile, "respawn");
+        let hostile_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(hostile)
+            .expect("the hostile is seated");
+        let mark_cell = beside(&game, hostile_at).expect("room beside the hostile");
+        drop_a_fallen_mark(
+            &mut game,
+            mark_cell,
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 5,
+                mitigation: 0,
+            },
+        );
+
+        assert!(wait_for_turn(&mut game, hostile));
+        assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("the hostile carrier must have raised the mark");
+        assert!(
+            game.world.get::<Hostile>(raised).is_some(),
+            "raised onto the caster's own, hostile side"
+        );
+        assert!(game.world.get::<Summoned>(raised).is_some());
+    }
+
+    /// A carrier with nothing to raise in reach must not spend its turn on
+    /// Respawn anyway — `best_aim` returning `None` is Reanimate's own
+    /// refusal on the AI's door, where `tactical_use_routine`'s
+    /// `NothingToRespawn` is the player's.
+    #[test]
+    fn a_hostile_carrier_with_nothing_to_raise_does_not_cast_respawn() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 400);
+        let hostile = pack[0];
+        only_routine(&mut game, hostile, "respawn");
+        assert!(wait_for_turn(&mut game, hostile));
+
+        assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+        assert!(
+            game.world
+                .get::<crate::components::AbilityCooldowns>(hostile)
+                .is_none_or(|c| !c.0.contains_key("respawn")),
+            "nothing was in reach to raise, so the routine must not have run"
+        );
+    }
+
+    /// The party side's own auto-invoke reads the same `best_aim` scoring —
+    /// `an_auto_driven_party_body_invokes_a_ready_affordable_routine`'s
+    /// pattern, with Respawn standing in for `HOSTILE_SWEEP`.
+    #[test]
+    fn a_party_body_auto_invokes_respawn_when_something_is_raisable() {
+        use crate::components::AbilityCooldowns;
+        use crate::tactical::ai::AiBeat;
+
+        let mut game = game();
+        // A second live hostile, hard to kill, so the fight stays open once
+        // the first is felled to leave a mark for the auto-invoke below.
+        let pack = tactical_fight(&mut game, 2, 400);
+        let target = pack[0];
+        game.world.get_mut::<Stats>(target).unwrap().hp = 1;
+        let player = game.player_entity();
+        kill_with_the_player(&mut game, target);
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+
+        for _ in 0..=TACTICAL_MOVE_MAX {
+            if game.tactical_auto_beat() == AiBeat::Acted {
+                break;
+            }
+        }
+
+        assert!(
+            game.world
+                .get::<AbilityCooldowns>(player)
+                .is_some_and(|c| c.0.contains_key("respawn")),
+            "an auto-driven turn with a raisable mark in reach did not invoke Respawn"
+        );
+    }
 }
 
 /// Walking into a hostile is a swing, not a refusal.

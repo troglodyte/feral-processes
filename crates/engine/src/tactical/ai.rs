@@ -22,7 +22,9 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{AbilityDef, AbilityId, AbilityRange, AbilityTarget, TamperSlot};
+use crate::abilities::{
+    AbilityDef, AbilityEffect, AbilityId, AbilityRange, AbilityTarget, TamperSlot,
+};
 use crate::components::{Durability, Hostile, PowerReserve, Stats, Structure, Summoned, Tampered};
 use crate::game::combat::RoutineRefusal;
 use crate::items::ItemId;
@@ -1370,6 +1372,29 @@ impl Game {
                     // range is: an aim it may not take is not a candidate.
                     || !reach::aim_in_sight(&battle.board, from, aim, shape)
                 {
+                    continue;
+                }
+                // **Reanimate reads marks, not bodies.** It resolves over
+                // `Game::raisable_marks`, never `reach::recipients`, so the
+                // ordinary per-body scoring below has nothing to read for it
+                // — the hallucination-decoy counting one line up is the
+                // precedent this borrows instead: worth is how many
+                // raisable marks the shape covers, and an aim covering none
+                // is not a candidate, exactly as `Game::respawn_refusal`
+                // answers the player's own door.
+                if let AbilityEffect::Reanimate { .. } = &def.effect {
+                    let worth = reach::shape_cells(&battle.board, from, aim, shape)
+                        .into_iter()
+                        .filter(|cell| {
+                            battle
+                                .fallen()
+                                .iter()
+                                .any(|f| f.cell == *cell && f.raise.is_some())
+                        })
+                        .count() as i32;
+                    if worth > 0 && best.is_none_or(|(_, seen)| worth > seen) {
+                        best = Some((aim, worth));
+                    }
                     continue;
                 }
                 let covered = reach::recipients_from(battle, actor, from, aim, shape);

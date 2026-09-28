@@ -410,23 +410,30 @@ fn handle_map_pointer(
     label
 }
 
-/// Adds `delta_y` to `acc` and spends it in whole `WHEEL_STEP_POINTS`,
-/// returning the signed number of steps (positive = wheel up = zoom in).
-/// The remainder stays in `acc`: egui smooths one notch over several
-/// frames, and a touchpad sends many small deltas.
+/// Adds `delta_y` to `acc` and spends it in `WHEEL_STEP_POINTS`, returning
+/// the signed number of steps (positive = wheel up = zoom in). The
+/// remainder stays in `acc`, since a touchpad sends many small deltas.
+///
+/// Rounded, not truncated: egui smooths one notch over several frames and
+/// its f32 pieces can sum to a hair under a whole notch, which `trunc`
+/// dropped — leaving a near-notch debt that then ate the next notch back.
 fn wheel_steps(acc: &mut f32, delta_y: f32) -> i32 {
     *acc += delta_y;
-    let steps = (*acc / WHEEL_STEP_POINTS).trunc();
+    let steps = (*acc / WHEEL_STEP_POINTS).round();
     *acc -= steps * WHEEL_STEP_POINTS;
     steps as i32
 }
 
 /// Turns the mouse wheel into `App::zoom_in`/`zoom_out`, whose own gate
-/// decides whether any map is there to zoom. Over an egui widget the wheel
-/// is egui's, and the half-spent remainder is dropped so it cannot fire a
-/// step the moment the pointer leaves.
+/// decides whether any map is there to zoom. Over an egui widget or off the
+/// map screen the half-spent remainder is dropped, so scrolling there
+/// cannot help fire a step later.
+///
+/// Unlike `+`, which is a key and so cancels a queued walk
+/// (`handle_playing_key`), the wheel calls past that: zooming out to see
+/// where a travel is going should not stop it.
 fn handle_wheel_zoom(app: &mut App, ctx: &egui::Context, acc: &mut f32) {
-    if ctx.egui_wants_pointer_input() {
+    if ctx.egui_wants_pointer_input() || app.mode != Mode::Playing {
         *acc = 0.0;
         return;
     }
@@ -978,10 +985,31 @@ mod tests {
         let mut acc = 0.0;
         assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS), 1);
         assert_eq!(wheel_steps(&mut acc, -2.0 * WHEEL_STEP_POINTS), -2);
-        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.6), 0);
-        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.6), 1);
-        assert_eq!(wheel_steps(&mut acc, -WHEEL_STEP_POINTS * 0.2), 0);
-        assert!(acc.abs() < 1e-3, "the remainder was not carried: {acc}");
+        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.3), 0);
+        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.3), 1);
+        assert!(
+            (acc + WHEEL_STEP_POINTS * 0.4).abs() < 1e-3,
+            "the remainder was not carried: {acc}"
+        );
+    }
+
+    /// egui smooths one notch over several frames and its f32 pieces can
+    /// sum to just under a whole notch — a step that must still fire, and
+    /// must not leave a near-notch debt that eats the next notch back.
+    #[test]
+    fn a_notch_summing_just_short_still_steps_and_reverses_cleanly() {
+        let mut acc = 0.0;
+        let short = WHEEL_STEP_POINTS - 4e-6;
+        let steps: i32 = [0.37, 0.25, 0.2, 0.18]
+            .iter()
+            .map(|f| wheel_steps(&mut acc, short * f))
+            .sum();
+        assert_eq!(steps, 1, "a notch 4e-6 short was dropped");
+        assert_eq!(
+            wheel_steps(&mut acc, -short),
+            -1,
+            "the reverse notch was eaten"
+        );
     }
 
     #[test]

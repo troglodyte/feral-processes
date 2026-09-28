@@ -1,0 +1,55 @@
+//! `App::hover_lines` — what the map's delayed hover label says about a
+//! tile: whatever is drawn there, then the ground under it.
+
+use super::support::*;
+use crate::*;
+
+fn player_pos(app: &App) -> (i32, i32) {
+    app.game.as_ref().unwrap().player_status().position
+}
+
+fn biome_at(app: &mut App, tile: (i32, i32)) -> String {
+    let tiles = app.game.as_mut().unwrap().view_tiles_at(tile, 0, 0);
+    tiles[0][0].biome.name().to_string()
+}
+
+#[test]
+fn a_hostiles_tile_names_the_hostile_then_the_ground() {
+    let mut app = test_app(2801);
+    place_wild_program_east(&mut app, 4);
+    let species = app.game.as_ref().unwrap().species_defs()[0].name.clone();
+    let start = player_pos(&app);
+    let tile = (start.0 + 4, start.1);
+
+    let lines = app.hover_lines(tile.0, tile.1);
+
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines[0].contains(&species),
+        "{lines:?} does not name {species}"
+    );
+    assert_eq!(lines[1], biome_at(&mut app, tile));
+}
+
+#[test]
+fn open_ground_names_only_the_ground() {
+    let mut app = test_app(2802);
+    clear_the_area_around_player(&mut app);
+    let start = player_pos(&app);
+    let tile = (start.0 + 3, start.1);
+
+    let lines = app.hover_lines(tile.0, tile.1);
+
+    assert_eq!(lines, vec![biome_at(&mut app, tile)]);
+}
+
+/// The same gate as `travel_to`: over a popup the map behind it is not
+/// what the pointer is pointing at.
+#[test]
+fn hover_off_the_playing_screen_says_nothing() {
+    let mut app = test_app(2803);
+    app.mode = Mode::Inventory;
+    let start = player_pos(&app);
+
+    assert!(app.hover_lines(start.0, start.1).is_empty());
+}

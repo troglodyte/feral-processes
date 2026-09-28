@@ -19,6 +19,7 @@ mod excavate;
 mod extraction;
 mod field;
 pub(crate) mod group_menu;
+mod hover;
 pub(crate) mod icon_editor;
 pub(crate) mod input;
 mod inspection;

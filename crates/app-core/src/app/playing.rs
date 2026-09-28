@@ -120,6 +120,33 @@ fn is_clock_key(key: GameKey) -> bool {
 }
 
 impl App {
+    /// One step closer on whichever map is on screen — `+`, or the mouse
+    /// wheel. Gated on `Mode::Playing` here rather than by the caller: a
+    /// wheel turn arrives with no mode of its own, and over a menu the map
+    /// behind it must not resize.
+    pub fn zoom_in(&mut self) {
+        if self.mode != Mode::Playing {
+            return;
+        }
+        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+            self.stack_zoom = (self.stack_zoom + 1).min(STACK_MAP_MAX_ZOOM);
+        } else {
+            self.zoom = (self.zoom + 1).min(MAX_ZOOM);
+        }
+    }
+
+    /// `zoom_in`'s inverse — `-`, or the wheel turned the other way.
+    pub fn zoom_out(&mut self) {
+        if self.mode != Mode::Playing {
+            return;
+        }
+        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+            self.stack_zoom = self.stack_zoom.saturating_sub(1).max(STACK_MAP_MIN_ZOOM);
+        } else {
+            self.zoom = self.zoom.saturating_sub(1).max(MIN_ZOOM);
+        }
+    }
+
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
         // Watching is a camera, not a mode: every other key still does
         // exactly what it does, which is what keeps this from needing a
@@ -401,19 +428,11 @@ impl App {
             // drawn at all, so resizing its tiles from down there would be
             // a keypress with nothing to show for it.
             GameKey::Char('+') | GameKey::Char('=') => {
-                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-                    self.stack_zoom = (self.stack_zoom + 1).min(STACK_MAP_MAX_ZOOM);
-                } else {
-                    self.zoom = (self.zoom + 1).min(MAX_ZOOM);
-                }
+                self.zoom_in();
                 return;
             }
             GameKey::Char('-') | GameKey::Char('_') => {
-                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-                    self.stack_zoom = self.stack_zoom.saturating_sub(1).max(STACK_MAP_MIN_ZOOM);
-                } else {
-                    self.zoom = self.zoom.saturating_sub(1).max(MIN_ZOOM);
-                }
+                self.zoom_out();
                 return;
             }
             _ => {}

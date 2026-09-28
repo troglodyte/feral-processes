@@ -1018,3 +1018,35 @@ fn a_step_that_hurts_the_player_ends_a_travel() {
         "a step that hurt the player must end the travel rather than continue it"
     );
 }
+
+/// The mouse wheel's entry point: the same step `+`/`-` take, on whichever
+/// map is on screen.
+#[test]
+fn zoom_in_and_out_step_the_surface_map() {
+    let mut app = test_app(4242);
+    let before = app.zoom;
+    app.zoom_in();
+    assert_eq!(app.zoom, before + 1);
+    app.zoom_out();
+    assert_eq!(app.zoom, before);
+}
+
+#[test]
+fn zoom_in_underground_steps_the_stack_map() {
+    let mut app = app_underground(4343);
+    let (surface, before) = (app.zoom, app.stack_zoom);
+    app.zoom_in();
+    assert_eq!(app.stack_zoom, before + 1);
+    assert_eq!(app.zoom, surface);
+}
+
+/// A wheel turn has no mode of its own, so the gate lives in `App`: over a
+/// menu the map behind it must not resize.
+#[test]
+fn zoom_in_outside_playing_does_nothing() {
+    let mut app = test_app(4444);
+    app.mode = Mode::Help;
+    let before = app.zoom;
+    app.zoom_in();
+    assert_eq!(app.zoom, before);
+}

@@ -147,6 +147,11 @@ const TOAST_SECONDS: f64 = 1.5;
 /// dropped exactly the clicks that easing caused.
 const CLICK_DRAG_TOLERANCE_PX: f32 = 6.0;
 
+/// Scroll distance, in egui points, per map zoom step: egui's native
+/// `line_scroll_speed`, so one notch of a line wheel is exactly one step,
+/// while a touchpad's pixel deltas have to add up to the same distance.
+const WHEEL_STEP_POINTS: f32 = 40.0;
+
 /// Everything the frame system carries between frames.
 ///
 /// One resource rather than several because these are all the same thing —
@@ -166,6 +171,8 @@ struct Frontend {
     perf: perf::PerfMeter,
     sprite_pointer: SpritePointer,
     map_pointer: MapPointer,
+    /// `smooth_scroll_delta` not yet spent on a zoom step — see `wheel_steps`.
+    wheel_acc: f32,
 }
 
 /// Frame-to-frame pointer state for `Mode::SpriteEditor` — the first mouse
@@ -329,6 +336,37 @@ fn handle_map_pointer(app: &mut App, ctx: &egui::Context, fx: &Fx, tracker: &mut
     }
 }
 
+/// Adds `delta_y` to `acc` and spends it in whole `WHEEL_STEP_POINTS`,
+/// returning the signed number of steps (positive = wheel up = zoom in).
+/// The remainder stays in `acc`: egui smooths one notch over several
+/// frames, and a touchpad sends many small deltas.
+fn wheel_steps(acc: &mut f32, delta_y: f32) -> i32 {
+    *acc += delta_y;
+    let steps = (*acc / WHEEL_STEP_POINTS).trunc();
+    *acc -= steps * WHEEL_STEP_POINTS;
+    steps as i32
+}
+
+/// Turns the mouse wheel into `App::zoom_in`/`zoom_out`, whose own gate
+/// decides whether any map is there to zoom. Over an egui widget the wheel
+/// is egui's, and the half-spent remainder is dropped so it cannot fire a
+/// step the moment the pointer leaves.
+fn handle_wheel_zoom(app: &mut App, ctx: &egui::Context, acc: &mut f32) {
+    if ctx.egui_wants_pointer_input() {
+        *acc = 0.0;
+        return;
+    }
+    let delta_y = ctx.input(|i| i.smooth_scroll_delta().y);
+    let steps = wheel_steps(acc, delta_y);
+    for _ in 0..steps.unsigned_abs() {
+        if steps > 0 {
+            app.zoom_in();
+        } else {
+            app.zoom_out();
+        }
+    }
+}
+
 /// Draws a brief centered readout, on top of whatever `render::draw` just
 /// drew — volume and effects are GUI-only concerns (`App` knows nothing
 /// about either), so they stay local to the frame system rather than being
@@ -444,6 +482,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             perf: perf::PerfMeter::new(),
             sprite_pointer: SpritePointer::default(),
             map_pointer: MapPointer::default(),
+            wheel_acc: 0.0,
         })
         .init_resource::<sprites::Sprites>()
         .add_systems(Startup, (setup, sprites::load, sprites::install_library))
@@ -732,6 +771,7 @@ fn frame(
     {
         let ctx = contexts.ctx_mut()?;
         handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
+        handle_wheel_zoom(&mut fe.app, ctx, &mut fe.wheel_acc);
     }
     Ok(())
 }
@@ -819,6 +859,20 @@ mod tests {
     use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
     use feral_processes_engine::{DifficultyMode, Game, save};
     use std::path::PathBuf;
+
+    /// One notch of a line wheel is one zoom step; a touchpad's trickle of
+    /// small deltas adds up to the same step rather than firing per event
+    /// or never at all. Up (positive y) zooms in.
+    #[test]
+    fn wheel_steps_count_whole_notches_and_carry_the_remainder() {
+        let mut acc = 0.0;
+        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS), 1);
+        assert_eq!(wheel_steps(&mut acc, -2.0 * WHEEL_STEP_POINTS), -2);
+        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.6), 0);
+        assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.6), 1);
+        assert_eq!(wheel_steps(&mut acc, -WHEEL_STEP_POINTS * 0.2), 0);
+        assert!(acc.abs() < 1e-3, "the remainder was not carried: {acc}");
+    }
 
     fn effect(kind: EffectKind) -> VisualEffect {
         VisualEffect { pos: (2, 3), kind }

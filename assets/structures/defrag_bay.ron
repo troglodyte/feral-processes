@@ -7,7 +7,7 @@
     build_cost: [("core_fragment", 12)],
     work: None,
     services: [
-        (need: "coherence", per_tick: 0.6, radius: 0),
+        (need: "coherence", per_tick: 0.6, radius: 1),
     ],
     power_draw: 2,
 )

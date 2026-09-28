@@ -36,7 +36,7 @@ opus, whole branch. Dispatches must forbid push.
 - **Carried routine:** no separate install call. The pinned spawn puts
   `Routines(record.carried)` on the body; `install_innate_routines` already
   keeps pre-existing routines as the carried prize and fills the kit around
-  them. `None` → empty `Routines`, identical to a non-carrier.
+  them. `None` pins an empty list; no `GameRng` draw for the routine.
 - **Contracts:** no `Deed` noted. `Deed::Tamed` reads "Decompile a wild
   program"; this isn't one.
 - **Level:** none set at all. Decided after the brainstorm — `record.level`
@@ -96,8 +96,8 @@ Files: `assets/items/reinitialization_protocol.ron` (new),
    success spends exactly one protocol, removes exactly that index (neighbours
    keep order), `pet_count` +1, body on player tile, `Tamed`, level 1
    regardless of the record's level or condition; rarity = record's; carried
-   routine present in `Routines`, and `None` carried → same `Routines` as a
-   plain `adopt_program`; refusals (boss, no protocol, roster
+   routine present in `Routines`, and `None` carried → no `GameRng` draw for
+   the routine; refusals (boss, no protocol, roster
    at cap, bad index, unknown species) each leave store + inventory + roster
    unchanged; no `GameRng` draw for rarity/routine when pinned (compare RNG
    state against an unpinned spawn, or assert the pinned path never calls the

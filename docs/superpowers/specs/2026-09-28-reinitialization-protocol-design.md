@@ -19,7 +19,7 @@ stays inside "progression is earned by fighting".
 | Cost | One protocol per use, flat — does not scale with level or rarity. |
 | Recipe | 1 `ice_breaker` + 2 `logic_wafer` + 1 `charge_coil` + 1 `cache_grain`, at the Fabricator. |
 | Which records | Any carried record in `DownedPrograms` **except `boss: true`**. Racked and hoppered records are out of scope for now. |
-| Level | Always 1 — `record.level` is really the zone the kill happened in (a wild body carries no `Experience` to restore), so condition goes unread here too. |
+| Level | Always 1 — `record.level` is really the zone the kill happened in (a wild body carries no `Experience` to restore). Condition is not read. |
 | Rarity | The record's rarity, not a fresh roll. |
 | Carried routine | Installed on the program if the record has one. |
 | Roster room | Pet slots are soft (the usual `unslotted` memory); `ROSTER_HARD_CAP` refuses. |

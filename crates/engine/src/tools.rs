@@ -1,4 +1,4 @@
-//! The extraction tool catalogue, the player's tool slots, the starter
+//! The extraction tool catalogue, the player's installed tools, the starter
 //! grant, and `knows_tool` — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 2. The act itself, `Game::extract_program`, lives in
@@ -193,23 +193,6 @@ impl ToolDb {
     }
 }
 
-/// How many tool slots the player at `level` can hold — see
-/// `tuning::TOOL_SLOT_BASE` and friends. Calls `abilities::routine_slots`
-/// rather than restating its clamp, passing `1` as the per-step grant where
-/// a routine's own wrappers pass `tuning::ROUTINE_SLOTS_PER_STEP` (2): one
-/// tool slot a step is the shape this phase's controller ruling chose, and
-/// it is not itself a tuning knob — `tuning::TOOL_SLOT_BASE`,
-/// `TOOL_SLOT_PER_LEVEL` and `TOOL_SLOT_CAP` are the three that are.
-pub fn player_tool_slots(level: u32) -> usize {
-    crate::abilities::routine_slots(
-        level,
-        crate::tuning::TOOL_SLOT_BASE,
-        1,
-        crate::tuning::TOOL_SLOT_PER_LEVEL,
-        crate::tuning::TOOL_SLOT_CAP,
-    )
-}
-
 impl Game {
     /// The player's installed tools, resolved to their full `ToolDef` and in
     /// slot order — position is what a later phase's extraction screen picks
@@ -339,34 +322,5 @@ mod tests {
                 "{category:?} has no as_str label"
             );
         }
-    }
-
-    #[test]
-    fn one_tool_slot_a_level_step_clamped_to_a_modest_cap() {
-        // Base fills exactly one slot — the starter tool and nothing more,
-        // since choosing the tool is the decision this phase's spec leans
-        // on (decision 3). Contrast `player_routine_slots(1) == 2`: a
-        // routine slot starts with one free.
-        assert_eq!(player_tool_slots(1), 1);
-        assert_eq!(
-            player_tool_slots(crate::tuning::TOOL_SLOT_PER_LEVEL - 1),
-            1,
-            "no second slot before the first per-level step"
-        );
-        assert_eq!(
-            player_tool_slots(crate::tuning::TOOL_SLOT_PER_LEVEL),
-            2,
-            "one slot, not two, at the first step — tools grow slower than routines"
-        );
-        assert_eq!(
-            player_tool_slots(crate::tuning::TOOL_SLOT_PER_LEVEL * 3),
-            crate::tuning::TOOL_SLOT_CAP as usize,
-            "cap reached at three steps past base"
-        );
-        assert_eq!(
-            player_tool_slots(9_999),
-            crate::tuning::TOOL_SLOT_CAP as usize,
-            "never above the cap, however high level climbs"
-        );
     }
 }

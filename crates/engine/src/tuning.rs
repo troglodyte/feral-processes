@@ -5101,36 +5101,21 @@ pub const GRADE_PER_LEVEL: f32 = 0.01;
 /// because the spec names it `tuning::STARTER_TOOL_ID` directly (section 2).
 pub const STARTER_TOOL_ID: &str = "salvage_clamp";
 
-/// Tool slots the player has at level 1 — one, filled by `STARTER_TOOL_ID`
-/// at `Game::new`. Unlike `PLAYER_ROUTINE_SLOT_BASE` (2, with
-/// `DECOMPILE_ABILITY_ID` occupying one and a free slot left over for a
-/// choice), a tool slot starts **full** on purpose: the spec's decision 3
-/// is that choosing the tool *is* the decision, and a level-1 player with a
-/// spare slot beside the starter has nothing yet to choose between.
-pub const TOOL_SLOT_BASE: u32 = 1;
-
-/// Levels the player needs per additional tool slot. `tools::
-/// player_tool_slots` grants **one** slot a step here, not
-/// `ROUTINE_SLOTS_PER_STEP`'s two — a second tool is a second decision to
-/// make, not a doubled kit, so the shape stays the gentler of the two on
-/// purpose rather than inheriting the routine curve's.
-pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
-
-/// Most tools the player can hold installed at once. Modest next to
-/// `PLAYER_ROUTINE_SLOT_CAP` (12): every tool slot is a standing choice
-/// about what a downed program gets reduced to, and a kit wide enough to
-/// carry one of every category stops being a choice at all.
-pub const TOOL_SLOT_CAP: u32 = 4;
+/// Most tools the player can hold installed at once — a silent backstop,
+/// never shown on screen. `Game::install_tool` already allows one tool per
+/// `ToolCategory` (a same-category install replaces rather than adds), so
+/// with six categories this cannot bind today; it bounds the slot list
+/// against a future category or a hand-edited save instead.
+pub const MAX_INSTALLED_TOOLS: usize = 10;
 
 /// How many rows `Game::tool_rows` may return — `MAX_DOWNED_PROGRAMS`'s own
 /// reason: `Mode::Tools` is a read-only row list with no scroll, so this
 /// doubles as a layout constraint that must fit at 1280x720, asserted by
 /// `the_tallest_tools_list_fits_its_popup_at_1280x720` and verified by
-/// mutation. `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// mutation. Installed tools are bounded by one per `ToolCategory`; a modded
 /// research tree can teach arbitrarily many tools with nothing forged yet,
-/// so `tool_rows` needs its own ceiling instead of inheriting the slot
-/// cap — twice it, headroom for a kit wider than the shipped one without
-/// reopening the screen to an unbounded catalogue.
+/// so `tool_rows` needs its own ceiling — headroom past the six categories
+/// without reopening the screen to an unbounded catalogue.
 pub const MAX_TOOL_ROWS: usize = 8;
 
 /// How many attribute rows `Game::dossier_report` may return —

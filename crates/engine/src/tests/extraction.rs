@@ -113,32 +113,6 @@ fn downed_programs_survive_a_save_load_round_trip() {
 }
 
 #[test]
-fn tool_slots_grow_one_a_step_from_a_full_base_slot() {
-    // `tools::player_tool_slots` has its own unit test over the raw formula;
-    // this is the shape assertion from the seat of a real save/`Game`
-    // rather than the arithmetic — the controller's ruling was one slot at
-    // base and one per step, deliberately not `abilities::
-    // ROUTINE_SLOTS_PER_STEP`'s two, since a level-1 player holding a spare
-    // slot beside the starter tool would have nothing yet to choose
-    // between.
-    assert_eq!(
-        crate::tools::player_tool_slots(1),
-        1,
-        "the starter tool fills the only slot at level 1"
-    );
-    assert_eq!(
-        crate::tools::player_tool_slots(tuning::TOOL_SLOT_PER_LEVEL),
-        2,
-        "one slot at the first step, not routines' two"
-    );
-    assert_eq!(
-        crate::tools::player_tool_slots(9_999),
-        tuning::TOOL_SLOT_CAP as usize,
-        "never above the modest cap, however high level climbs"
-    );
-}
-
-#[test]
 fn a_new_game_starts_with_the_starter_tool_in_slot_one() {
     let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let installed = game.installed_tools();
@@ -1561,7 +1535,6 @@ fn install_refuses_after_game_over_and_changes_nothing() {
     let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     hold_carrier(&mut game, "core_tap", 1);
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
     game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
     let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
     let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
@@ -1581,7 +1554,6 @@ fn install_refuses_during_an_active_battle_and_changes_nothing() {
     let mut game = Game::new(9202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     hold_carrier(&mut game, "core_tap", 1);
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
     let battle = minimal_active_battle(&game);
     game.world.insert_resource(battle);
     let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
@@ -1654,18 +1626,26 @@ fn install_refuses_a_tool_already_installed_and_changes_nothing() {
 }
 
 #[test]
-fn install_refuses_when_no_free_slot_and_changes_nothing() {
-    // Level 1 has exactly one slot, already filled by the starter — a
-    // carrier is held so the only refusal that can fire is the slot cap.
+fn install_refuses_past_the_installed_tool_cap_and_changes_nothing() {
+    // One tool per category bounds a shipped loadout below the cap, so the
+    // cap is reached by writing the slot list directly — ids `ToolDb`
+    // cannot resolve, so no category can match and the append path runs.
     let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     hold_carrier(&mut game, "core_tap", 1);
+    game.world.entity_mut(player).insert(Tools(
+        (0..tuning::MAX_INSTALLED_TOOLS)
+            .map(|i| ToolId(format!("filler_{i}")))
+            .collect(),
+    ));
     let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
     let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
 
-    let result = game.install_tool(&ToolId("core_tap".to_string()));
+    let err = game
+        .install_tool(&ToolId("core_tap".to_string()))
+        .expect_err("a loadout at the cap must refuse installing");
 
-    assert!(result.is_err(), "a full loadout must refuse installing");
+    assert_eq!(err, "You can't carry any more tools.");
     assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
     assert_eq!(
         game.world.get::<Inventory>(player).unwrap().items,
@@ -1675,10 +1655,8 @@ fn install_refuses_when_no_free_slot_and_changes_nothing() {
 
 #[test]
 fn install_refuses_when_no_carrier_is_held_and_changes_nothing() {
-    // A level step opens a second slot, but nothing was forged into it.
     let mut game = Game::new(9206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
     let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
 
     let result = game.install_tool(&ToolId("core_tap".to_string()));
@@ -1694,7 +1672,6 @@ fn install_refuses_when_no_carrier_is_held_and_changes_nothing() {
 fn installing_a_tool_burns_its_carrier_and_fills_the_slot() {
     let mut game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
     hold_carrier(&mut game, "core_tap", 1);
 
     game.install_tool(&ToolId("core_tap".to_string()))
@@ -1716,23 +1693,74 @@ fn installing_a_tool_burns_its_carrier_and_fills_the_slot() {
 }
 
 #[test]
-fn installing_a_second_tool_only_succeeds_once_a_level_step_opens_a_slot() {
+fn a_level_one_player_installs_a_second_tool_of_another_category() {
     let mut game = Game::new(9208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
+    assert_eq!(game.world.get::<Experience>(player).unwrap().level, 1);
     hold_carrier(&mut game, "core_tap", 1);
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL - 1;
 
-    assert!(
-        game.install_tool(&ToolId("core_tap".to_string())).is_err(),
-        "one level short of the step, the loadout must still be full"
+    game.install_tool(&ToolId("core_tap".to_string()))
+        .expect("tools are not gated by level");
+
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0.len(), 2);
+}
+
+#[test]
+fn installing_a_tool_replaces_the_installed_one_of_its_category_in_place() {
+    // The starter clamp is Materials; a second Materials tool is the same
+    // type at another version, so it takes the clamp's slot rather than a
+    // new one. Core Tap is installed after the clamp so "in place" is
+    // distinguishable from "appended".
+    let mut game = Game::new(9213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    let starter_ron = format!(
+        r#"(id: "{starter}", name: "Starter", description: "d", category: Materials,
+            yields: [("core_fragment", 1.0)], tier: 1, ticks: 1)"#
     );
-
-    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
-
-    assert!(
-        game.install_tool(&ToolId("core_tap".to_string())).is_ok(),
-        "at the step itself, the newly opened slot must accept the held carrier"
+    let (tool_db, warnings) = load_tools(
+        "replace_in_place",
+        &[
+            (starter.as_str(), starter_ron.as_str()),
+            (
+                "core_tap",
+                r#"(id: "core_tap", name: "Core Tap", description: "d", category: Cores,
+                    yields: [("core_fragment", 1.0)], tier: 1, ticks: 1)"#,
+            ),
+            (
+                "clamp_mk2",
+                r#"(id: "clamp_mk2", name: "Clamp Mk2", description: "d", category: Materials,
+                    yields: [("core_fragment", 1.0)], tier: 2, ticks: 1)"#,
+            ),
+        ],
     );
+    assert!(
+        warnings.is_empty(),
+        "fixture tools must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    hold_carrier(&mut game, "core_tap", 1);
+    game.install_tool(&ToolId("core_tap".to_string())).unwrap();
+    hold_carrier(&mut game, "clamp_mk2", 1);
+
+    game.install_tool(&ToolId("clamp_mk2".to_string()))
+        .expect("a same-category install replaces rather than refuses");
+
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        vec![
+            ToolId("clamp_mk2".to_string()),
+            ToolId("core_tap".to_string())
+        ],
+        "the new version takes the old one's slot; the other tool is untouched"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("clamp_mk2".to_string())), 0);
+    assert_eq!(
+        carrier_count(&game, &starter),
+        0,
+        "the replaced tool hands back no carrier, uninstall_tool's rule"
+    );
+    assert!(game.knows_tool(&starter), "the replaced tool stays known");
 }
 
 #[test]
@@ -1898,7 +1926,7 @@ fn tool_rows_drops_a_known_tool_id_the_catalogue_cannot_resolve() {
     );
 }
 
-/// Minor 9: `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// Minor 9: `MAX_INSTALLED_TOOLS` only bounds what is *installed*; a modded
 /// research tree can teach more tools than any shipped one does, so
 /// `tool_rows` needs its own ceiling — the screen has no scroll.
 #[test]

@@ -96,16 +96,21 @@ impl Game {
             .unwrap_or_else(|| id.to_string())
     }
 
-    /// Spends one carrier of `tool` to write it into the player's next free
-    /// slot. The player is the only tool holder, so there is no entity
-    /// argument and no `owns_routine_holder` rung — `install_disk`'s shape
-    /// with that one rung removed.
+    /// Spends one carrier of `tool` to install it. The player is the only
+    /// tool holder, so there is no entity argument and no
+    /// `owns_routine_holder` rung — `install_disk`'s shape with that one
+    /// rung removed.
+    ///
+    /// A tool's `category` is its type and `tier` its version: installing
+    /// a tool whose category is already installed replaces that tool in its
+    /// slot, handing back no carrier (`uninstall_tool`'s rule — the old
+    /// tool stays known). Any other tool is appended, up to the silent
+    /// `tuning::MAX_INSTALLED_TOOLS`.
     ///
     /// Refusals, in order, all before anything is spent: game-over or an
     /// active battle, an id `ToolDb` cannot resolve, the player cannot hold
-    /// tools at all, the tool is already installed, no free slot
-    /// (`installed.len() >= tools::player_tool_slots(level)`), no carrier
-    /// held.
+    /// tools at all, the tool is already installed, an append past the cap,
+    /// no carrier held.
     pub fn install_tool(&mut self, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -130,9 +135,13 @@ impl Game {
         if installed.contains(tool) {
             return Err(format!("{} is already installed.", def.name));
         }
-        let level = self.world.get::<Experience>(player).unwrap().level;
-        if installed.len() >= crate::tools::player_tool_slots(level) {
-            return Err("There's no free tool slot — pull one out first.".to_string());
+        let db = self.world.resource::<ToolDb>();
+        let same_category = installed.iter().position(|id| {
+            db.get(id.as_str())
+                .is_some_and(|t| t.category == def.category)
+        });
+        if same_category.is_none() && installed.len() >= crate::tuning::MAX_INSTALLED_TOOLS {
+            return Err("You can't carry any more tools.".to_string());
         }
         let carrier = ItemId::tool(tool);
         if self.world.get::<Inventory>(player).unwrap().count(&carrier) == 0 {
@@ -143,12 +152,18 @@ impl Game {
             .unwrap()
             .take(carrier.clone(), 1);
         self.note_consumed(&carrier, 1, crate::base_ledger::ConsumeSource::Install);
-        self.world
-            .get_mut::<Tools>(player)
-            .unwrap()
-            .0
-            .push(tool.clone());
-        self.log(format!("You install the {}.", def.name));
+        let slots = &mut self.world.get_mut::<Tools>(player).unwrap().0;
+        match same_category {
+            Some(slot) => {
+                let replaced = std::mem::replace(&mut slots[slot], tool.clone());
+                let old_name = self.tool_display_name(replaced.as_str());
+                self.log(format!("You replace the {old_name} with the {}.", def.name));
+            }
+            None => {
+                slots.push(tool.clone());
+                self.log(format!("You install the {}.", def.name));
+            }
+        }
         Ok(())
     }
 

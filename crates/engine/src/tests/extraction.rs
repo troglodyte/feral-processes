@@ -4148,3 +4148,112 @@ fn reinit_level_scales_linearly_with_condition_and_floors_at_one() {
         "a level-1 record at zero condition must still floor at 1, never 0"
     );
 }
+
+/// `spawn_wild_creature_pinned`: a pinned `Rarity` must land as the
+/// component and scale `Stats`, exactly as a rolled one does —
+/// `Rarity`'s own doc rule ("applied only at spawn and in `promote_rarity`")
+/// still holds, this is just the second door into the same write.
+#[test]
+fn a_pinned_rarity_lands_as_the_component_and_scales_stats() {
+    let mut ordinary_game = Game::new(9102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ordinary = ordinary_game
+        .spawn_wild_creature_pinned(
+            "scrapper",
+            5,
+            5,
+            1.0,
+            false,
+            crate::game::spawning::SpawnPins {
+                rarity: Some(Rarity::Ordinary),
+                routines: Some(Vec::new()),
+            },
+        )
+        .unwrap();
+
+    let mut prismatic_game =
+        Game::new(9102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let prismatic = prismatic_game
+        .spawn_wild_creature_pinned(
+            "scrapper",
+            5,
+            5,
+            1.0,
+            false,
+            crate::game::spawning::SpawnPins {
+                rarity: Some(Rarity::Prismatic),
+                routines: Some(Vec::new()),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        *ordinary_game.world.get::<Rarity>(ordinary).unwrap(),
+        Rarity::Ordinary
+    );
+    assert_eq!(
+        *prismatic_game.world.get::<Rarity>(prismatic).unwrap(),
+        Rarity::Prismatic
+    );
+    assert!(
+        prismatic_game.world.get::<Stats>(prismatic).unwrap().atk
+            > ordinary_game.world.get::<Stats>(ordinary).unwrap().atk,
+        "a pinned Prismatic rarity must scale Stats up, the same as a rolled one would"
+    );
+}
+
+/// The load-bearing half of pinning: an unpinned axis keeps rolling (so
+/// every existing caller's `GameRng` stream is untouched — the plan's own
+/// requirement), but a pinned one spends **no** draw. Compared against a
+/// game that only ever calls `roll_potential` — `Potential` is the one axis
+/// this feature never pins — rather than against an untouched game, because
+/// a pinned spawn is not RNG-silent, only silent on the two axes it pins.
+#[test]
+fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
+    let seed = 9103;
+    let mut baseline = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let _ = baseline.roll_potential();
+    let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
+
+    let mut pinned = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let carried = pinned
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .first()
+        .map(|(def, _)| def.id.clone())
+        .expect("some shipped routine is in the wild pool");
+    pinned
+        .spawn_wild_creature_pinned(
+            "scrapper",
+            5,
+            5,
+            1.0,
+            false,
+            crate::game::spawning::SpawnPins {
+                rarity: Some(Rarity::Prismatic),
+                routines: Some(vec![carried]),
+            },
+        )
+        .unwrap();
+    let after_pinned: u64 = pinned.world.resource_mut::<GameRng>().0.random();
+
+    assert_eq!(
+        after_baseline, after_pinned,
+        "a fully pinned spawn must draw exactly the potential roll and nothing for rarity or \
+         routines"
+    );
+}
+
+/// `spawn_wild_creature_scaled`'s own callers must see byte-for-byte the
+/// same stream as before pinning existed — `SpawnPins::default()` rolls
+/// both axes, so the delegate changes nothing about what it draws or in
+/// what order.
+#[test]
+fn an_unpinned_spawn_still_rolls_rarity_and_routines_in_the_old_order() {
+    assert!(
+        !rng_unadvanced_by(9104, |game| {
+            game.spawn_wild_creature_scaled("scrapper", 5, 5, 1.0, false);
+        }),
+        "an unpinned spawn must still draw from GameRng for potential, routines and rarity"
+    );
+}

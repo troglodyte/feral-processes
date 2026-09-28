@@ -73,6 +73,23 @@ impl SpawnEscalation {
     }
 }
 
+/// What `spawn_wild_creature_pinned` should pin rather than roll — see
+/// that function's doc for the whole rule. `Default` (`SpawnPins::default()`)
+/// pins nothing, which is what makes `spawn_wild_creature_scaled` a one-line
+/// delegate with today's exact `GameRng` order.
+///
+/// Rarity and the wild routine pool only, deliberately: `Potential` mints
+/// fresh on every door, including a reinitialized program, per
+/// `docs/superpowers/specs/2026-09-28-reinitialization-protocol-design.md`
+/// — a `DownedProgram` record doesn't carry it, only what it *was* (rarity,
+/// the one routine it happened to be running), never what it might roll
+/// differently the second time.
+#[derive(Default)]
+pub(crate) struct SpawnPins {
+    pub(crate) rarity: Option<Rarity>,
+    pub(crate) routines: Option<Vec<crate::abilities::AbilityId>>,
+}
+
 /// The zone's ceiling on one species group: `ZONE_ONE_GROUP_CAP` at zone 1,
 /// every level after adds `ZONE_GROUP_STEP`, and `MAX_GROUP_SIZE` is the
 /// hard stop. Saturating arithmetic because zones are unbounded — the clamp
@@ -265,6 +282,11 @@ impl Game {
     /// its potential and wild routines rolled from `GameRng` at spawn time
     /// like every other creature. Only *which species* an orphan is was ever
     /// pinned to the frame seed; what it turns out to be worth is not.
+    ///
+    /// A one-line delegate onto `spawn_wild_creature_pinned` with nothing
+    /// pinned — every real caller here still rolls both axes, in the same
+    /// order, so this stays byte-for-byte the spawn every existing `GameRng`
+    /// stream was fitted against.
     pub(crate) fn spawn_wild_creature_scaled(
         &mut self,
         species_id: &str,
@@ -272,6 +294,30 @@ impl Game {
         y: i32,
         depth_mult: f32,
         boss: bool,
+    ) -> Option<Entity> {
+        self.spawn_wild_creature_pinned(species_id, x, y, depth_mult, boss, SpawnPins::default())
+    }
+
+    /// `spawn_wild_creature_scaled`, with `Rarity` and/or the wild
+    /// `Routines` pool allowed to be pinned rather than rolled — the door
+    /// `Game::reinitialize_program` spawns a resurrected `DownedProgram`
+    /// through, so its record's own rarity and carried routine land exactly
+    /// rather than being re-rolled on top of what the kill already decided.
+    ///
+    /// **A pinned field skips its roll entirely — no `GameRng` draw.** Every
+    /// other axis (`Potential` above all — see `Game::roll_potential`'s own
+    /// doc: the record doesn't carry it, so it mints fresh) keeps rolling in
+    /// exactly its old order, which is what keeps an unpinned call
+    /// (`SpawnPins::default()`, every real caller but the reinitialize door)
+    /// byte-for-byte the stream it always was.
+    pub(crate) fn spawn_wild_creature_pinned(
+        &mut self,
+        species_id: &str,
+        x: i32,
+        y: i32,
+        depth_mult: f32,
+        boss: bool,
+        pins: SpawnPins,
     ) -> Option<Entity> {
         let species = self
             .world
@@ -282,8 +328,14 @@ impl Game {
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
         let potential = self.roll_potential();
-        let routines = self.roll_wild_routine();
-        let rarity = self.roll_rarity(&species, x, y, boss);
+        let routines = match pins.routines {
+            Some(routines) => routines,
+            None => self.roll_wild_routine(),
+        };
+        let rarity = match pins.rarity {
+            Some(rarity) => rarity,
+            None => self.roll_rarity(&species, x, y, boss),
+        };
         // An apex species is authored tough; only a rolled boss takes the
         // multiplier. The component goes on both, so a query need not ask
         // which.
@@ -552,7 +604,23 @@ impl Game {
         y: i32,
         stat_mult: f32,
     ) -> Option<Entity> {
-        let program = self.spawn_wild_creature_scaled(species_id, x, y, stat_mult, false)?;
+        self.adopt_program_pinned(species_id, x, y, stat_mult, SpawnPins::default())
+    }
+
+    /// `adopt_program`, with `pins` threaded through to
+    /// `spawn_wild_creature_pinned` — `Game::reinitialize_program`'s door in.
+    /// The becoming-a-companion half (stripping `Hostile`/`WanderAi`,
+    /// `roster_parts`, `install_innate_routines`) is identical either way;
+    /// only what the body spawns holding differs.
+    pub(crate) fn adopt_program_pinned(
+        &mut self,
+        species_id: &str,
+        x: i32,
+        y: i32,
+        stat_mult: f32,
+        pins: SpawnPins,
+    ) -> Option<Entity> {
+        let program = self.spawn_wild_creature_pinned(species_id, x, y, stat_mult, false, pins)?;
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();

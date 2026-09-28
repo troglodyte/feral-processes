@@ -152,6 +152,15 @@ const CLICK_DRAG_TOLERANCE_PX: f32 = 6.0;
 /// while a touchpad's pixel deltas have to add up to the same distance.
 const WHEEL_STEP_POINTS: f32 = 40.0;
 
+/// How long the pointer must rest on one map tile before its hover label
+/// shows — long enough that sweeping across the map to click somewhere
+/// does not flicker a label over every tile on the way.
+const HOVER_DELAY_SECS: f64 = 0.5;
+
+/// How far down-right of the pointer the hover label sits, in pixels, so
+/// the cursor does not cover its first letters.
+const HOVER_OFFSET_PX: f32 = 16.0;
+
 /// Everything the frame system carries between frames.
 ///
 /// One resource rather than several because these are all the same thing —
@@ -284,9 +293,62 @@ fn handle_sprite_pointer(
 #[derive(Default)]
 struct MapPointer {
     down_pos: Option<egui::Pos2>,
+    /// The tile the pointer is resting on and when it arrived — see
+    /// `hover_tile`.
+    hover: Option<((i32, i32), f64)>,
 }
 
-/// Turns a primary click on the map pane into `App::travel_to`.
+/// The tile under `pos`, or `None` outside the map pane. Every map gesture
+/// resolves through this one check — a click, the hover label, and a
+/// right-click menu when one exists.
+fn pane_tile(pos: egui::Pos2, layout: &render::MapClickLayout) -> Option<(i32, i32)> {
+    let inside = pos.x >= layout.pane.x
+        && pos.x < layout.pane.x + layout.pane.w
+        && pos.y >= layout.pane.y
+        && pos.y < layout.pane.y + layout.pane.h;
+    inside.then(|| render::tile_at_px(pos.x, pos.y, layout))
+}
+
+/// Advances the hover timer: `tile` is what the pointer is over this frame
+/// (`None` off the map), `now` is in seconds. Answers the tile once the
+/// pointer has rested on it for `HOVER_DELAY_SECS`; a different tile, or
+/// none, starts the wait over.
+fn hover_tile(
+    hover: &mut Option<((i32, i32), f64)>,
+    tile: Option<(i32, i32)>,
+    now: f64,
+) -> Option<(i32, i32)> {
+    let Some(tile) = tile else {
+        *hover = None;
+        return None;
+    };
+    let since = match *hover {
+        Some((held, since)) if held == tile => since,
+        _ => {
+            *hover = Some((tile, now));
+            now
+        }
+    };
+    (now - since >= HOVER_DELAY_SECS).then_some(tile)
+}
+
+/// Where a hover label of `size` goes: `offset` down-right of `cursor`,
+/// pulled back so it stays inside `screen`.
+fn hover_box_origin(
+    cursor: (f32, f32),
+    size: (f32, f32),
+    screen: (f32, f32),
+    offset: f32,
+) -> (f32, f32) {
+    let x = (cursor.0 + offset).min(screen.0 - size.0).max(0.0);
+    let y = (cursor.1 + offset).min(screen.1 - size.1).max(0.0);
+    (x, y)
+}
+
+/// Turns a primary click on the map pane into `App::travel_to`, and
+/// answers where the hover label goes, if one is due: the pointer's pixel
+/// and the tile it has rested on. Any button held hides it — a press is
+/// the start of a click, not a pause to read.
 ///
 /// `fx.map_click()` is `None` whenever this frame's map pane drew something
 /// other than the ordinary surface/base grid (a tactical board, a Stack
@@ -295,29 +357,40 @@ struct MapPointer {
 /// screen the player has since left. Everything past that is `App::
 /// travel_to`'s own gate (`Mode::Playing`, not underground): this function
 /// only has to find a tile.
-fn handle_map_pointer(app: &mut App, ctx: &egui::Context, fx: &Fx, tracker: &mut MapPointer) {
+fn handle_map_pointer(
+    app: &mut App,
+    ctx: &egui::Context,
+    fx: &Fx,
+    tracker: &mut MapPointer,
+) -> Option<(egui::Pos2, (i32, i32))> {
     if ctx.egui_wants_pointer_input() {
         tracker.down_pos = None;
-        return;
+        tracker.hover = None;
+        return None;
     }
     let Some(layout) = fx.map_click() else {
         tracker.down_pos = None;
-        return;
+        tracker.hover = None;
+        return None;
     };
-    let (pressed, released, pos) = ctx.input(|i| {
+    let (pressed, released, pos, hover_pos, any_down, now) = ctx.input(|i| {
         (
             i.pointer.primary_pressed(),
             i.pointer.primary_released(),
             i.pointer.interact_pos(),
+            i.pointer.hover_pos(),
+            i.pointer.any_down(),
+            i.time,
         )
     });
+    let hovered = hover_pos
+        .filter(|_| !any_down)
+        .and_then(|p| pane_tile(p, &layout).map(|tile| (p, tile)));
+    let label = hover_tile(&mut tracker.hover, hovered.map(|(_, t)| t), now).and(hovered);
     let Some(pos) = pos else {
-        return;
+        return label;
     };
-    let inside = pos.x >= layout.pane.x
-        && pos.x < layout.pane.x + layout.pane.w
-        && pos.y >= layout.pane.y
-        && pos.y < layout.pane.y + layout.pane.h;
+    let inside = pane_tile(pos, &layout).is_some();
     if pressed {
         // A press that starts outside the pane opens no gesture — the same
         // "nothing to paint yet" rule `handle_sprite_pointer` uses.
@@ -334,6 +407,7 @@ fn handle_map_pointer(app: &mut App, ctx: &egui::Context, fx: &Fx, tracker: &mut
         let tile = render::tile_at_px(pos.x, pos.y, &layout);
         app.travel_to(tile.0, tile.1);
     }
+    label
 }
 
 /// Adds `delta_y` to `acc` and spends it in whole `WHEEL_STEP_POINTS`,
@@ -389,6 +463,36 @@ fn draw_toast(text: &str, p: &Painter) {
         Color::new(0.06, 0.07, 0.10, 0.85),
     );
     p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+}
+
+/// Draws the map's hover label: `lines` in a box beside the pointer, in
+/// `draw_toast`'s colours so the two read as the same kind of overlay.
+fn draw_hover(lines: &[String], cursor: egui::Pos2, p: &Painter) {
+    let m = text::ui_metrics(p.screen_h());
+    let size = m.small();
+    let width = lines
+        .iter()
+        .map(|l| p.measure_ui(l, size).width)
+        .fold(0.0, f32::max);
+    let box_w = width + m.inset * 2.0;
+    let box_h = size as f32 + (lines.len() - 1) as f32 * m.line_height + m.inset * 2.0 + m.gap;
+    let (x, y) = hover_box_origin(
+        (cursor.x, cursor.y),
+        (box_w, box_h),
+        (p.screen_w(), p.screen_h()),
+        HOVER_OFFSET_PX,
+    );
+    p.rect(x, y, box_w, box_h, Color::new(0.06, 0.07, 0.10, 0.85));
+    for (i, line) in lines.iter().enumerate() {
+        let baseline = y + m.inset + size as f32 + i as f32 * m.line_height;
+        p.ui(
+            line,
+            x + m.inset,
+            baseline,
+            size,
+            Color::new(0.92, 0.92, 0.92, 1.0),
+        );
+    }
 }
 
 /// Draws the frame-timing readout, on top of everything else.
@@ -753,6 +857,20 @@ fn frame(
         f64::from(input.time.delta_secs()),
         started.elapsed().as_secs_f64(),
     );
+    // After `render::draw`, which is what stashes `fe.fx`'s `MapClickLayout`
+    // for this frame — see `handle_map_pointer`'s own doc for why reading it
+    // any earlier would find last frame's layout instead.
+    {
+        let ctx = contexts.ctx_mut()?;
+        let hover = handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
+        if let Some((cursor, tile)) = hover {
+            let lines = fe.app.hover_lines(tile.0, tile.1);
+            if !lines.is_empty() {
+                draw_hover(&lines, cursor, &painter);
+            }
+        }
+        handle_wheel_zoom(&mut fe.app, ctx, &mut fe.wheel_acc);
+    }
     if let Some(text) = &fe.toast
         && now < fe.toast_until
     {
@@ -764,14 +882,6 @@ fn frame(
         && let Some(readout) = fe.perf.readout()
     {
         draw_perf(&readout.line(), &painter);
-    }
-    // After `render::draw`, which is what stashes `fe.fx`'s `MapClickLayout`
-    // for this frame — see `handle_map_pointer`'s own doc for why reading it
-    // any earlier would find last frame's layout instead.
-    {
-        let ctx = contexts.ctx_mut()?;
-        handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
-        handle_wheel_zoom(&mut fe.app, ctx, &mut fe.wheel_acc);
     }
     Ok(())
 }
@@ -872,6 +982,63 @@ mod tests {
         assert_eq!(wheel_steps(&mut acc, WHEEL_STEP_POINTS * 0.6), 1);
         assert_eq!(wheel_steps(&mut acc, -WHEEL_STEP_POINTS * 0.2), 0);
         assert!(acc.abs() < 1e-3, "the remainder was not carried: {acc}");
+    }
+
+    #[test]
+    fn pane_tile_resolves_inside_the_pane_and_nothing_outside_it() {
+        let mut layout = test_layout((0, 0));
+        layout.pane = paint::Rect::new(100.0, 100.0, 200.0, 200.0);
+        let inside = egui::pos2(150.0, 150.0);
+        assert_eq!(
+            pane_tile(inside, &layout),
+            Some(render::tile_at_px(150.0, 150.0, &layout))
+        );
+        assert_eq!(pane_tile(egui::pos2(99.0, 150.0), &layout), None);
+        assert_eq!(pane_tile(egui::pos2(150.0, 300.0), &layout), None);
+    }
+
+    /// The label waits `HOVER_DELAY_SECS` on one tile, and moving to
+    /// another tile — or off the map — starts the wait over.
+    #[test]
+    fn hover_waits_on_one_tile_and_restarts_when_the_tile_changes() {
+        let mut hover = None;
+        let (a, b) = ((1, 1), (2, 1));
+        assert_eq!(hover_tile(&mut hover, Some(a), 10.0), None);
+        assert_eq!(
+            hover_tile(&mut hover, Some(a), 10.0 + HOVER_DELAY_SECS * 0.9),
+            None
+        );
+        assert_eq!(
+            hover_tile(&mut hover, Some(a), 10.0 + HOVER_DELAY_SECS),
+            Some(a)
+        );
+        assert_eq!(hover_tile(&mut hover, Some(b), 11.0), None);
+        assert_eq!(
+            hover_tile(&mut hover, Some(b), 11.0 + HOVER_DELAY_SECS),
+            Some(b)
+        );
+        assert_eq!(hover_tile(&mut hover, None, 12.0), None);
+        assert_eq!(
+            hover_tile(&mut hover, Some(b), 12.0),
+            None,
+            "leaving the map did not reset the wait"
+        );
+    }
+
+    /// Down-right of the cursor where it fits, pushed back on screen where
+    /// it would not.
+    #[test]
+    fn hover_box_stays_on_screen() {
+        let screen = (800.0, 600.0);
+        let size = (100.0, 40.0);
+        let (x, y) = hover_box_origin((10.0, 10.0), size, screen, 16.0);
+        assert_eq!((x, y), (26.0, 26.0));
+        let (x, y) = hover_box_origin((790.0, 590.0), size, screen, 16.0);
+        assert!(
+            x + size.0 <= screen.0 && y + size.1 <= screen.1,
+            "({x}, {y}) runs off screen"
+        );
+        assert!(x >= 0.0 && y >= 0.0);
     }
 
     fn effect(kind: EffectKind) -> VisualEffect {

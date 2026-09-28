@@ -4096,3 +4096,33 @@ fn the_rigs_report_names_its_standing_tool_and_is_silent_without_one() {
         "the report carries the display name, not the id: {named}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Reinitialization Protocol — phase 1 (engine + asset)
+// docs/superpowers/specs/2026-09-28-reinitialization-protocol-design.md
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The item itself: it must load from the real asset set, and it must never
+/// double as a decompile catalyst — `Game::taming_catalyst` reads
+/// `ItemDef::taming_potency` alone, so this is really asserting the `.ron`
+/// file authored none.
+#[test]
+fn the_reinitialization_protocol_loads_and_is_not_a_taming_catalyst() {
+    let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let id = ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL);
+    assert!(
+        game.item_defs().iter().any(|def| def.id == id),
+        "reinitialization_protocol.ron must load from the real asset set"
+    );
+    let player = game.player_entity();
+    // Wiped rather than added to: the new game's starter kit already carries
+    // an ice_breaker, so a protocol added on top would pass this assertion
+    // even if it authored a `taming_potency` of its own.
+    game.world.get_mut::<Inventory>(player).unwrap().items = vec![(id, 1)];
+    assert_eq!(
+        game.taming_catalyst(),
+        None,
+        "a protocol must never double as a decompile catalyst, holding only one must not \
+         change taming_catalyst's answer"
+    );
+}

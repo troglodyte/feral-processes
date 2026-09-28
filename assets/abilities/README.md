@@ -713,11 +713,14 @@ ability's `name` correctly is no longer only a census's opinion:
 A family is **discoverable** if any of its rungs has a carrier — a positive
 `wild_weight`, or a place in some species' kit — and stays invisible in the
 routine tree until the player extracts one of its rungs off a downed
-program. Every other family (field routines, tactical-only routines, and
-any family nothing carries) is **always visible**, gated by `research_zone`
-alone rather than by discovery. This split is computed from the shipped set
-on every read, never authored, so a family with no carrier at all cannot go
-dead behind a discovery gate nothing can ever open.
+program. Being battle-map-only (`tactical_only()`) has no bearing on this:
+Respawn is tactical-only *and* discoverable, because it carries a
+`wild_weight` like any other hunt-only routine. A family with **no**
+carrier at all — a field routine or any other family nothing carries — is
+**always visible** instead, gated by `research_zone` alone rather than by
+discovery. This split is computed from the shipped set on every read, never
+authored, so a family with no carrier at all cannot go dead behind a
+discovery gate nothing can ever open.
 
 ## Magnitudes scale with level
 

@@ -572,6 +572,33 @@ fn hyperthread_is_discoverable_and_a_field_routine_family_is_not() {
     );
 }
 
+/// Respawn's own carrier (`wild_weight: 4`) is what `family_is_discoverable`
+/// already reads generically — no classifier change, per the plan — so this
+/// pins the census the design left open: hidden until a wild carrier's own
+/// cast is extracted (discovered), listed once it is.
+#[test]
+fn respawn_stays_hidden_until_extracted() {
+    let mut game = Game::new(9114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.family_is_discoverable("Respawn"),
+        "respawn carries a positive wild_weight"
+    );
+    open_routine_tree(&mut game);
+    assert!(
+        !listed_routine_ids(&game).contains("routine/respawn"),
+        "an undiscovered hunt-only routine must stay hidden"
+    );
+
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("respawn".to_string());
+    assert!(
+        listed_routine_ids(&game).contains("routine/respawn"),
+        "extracted, Respawn's own node must be listed"
+    );
+}
+
 /// Independent derivation, so a bug in `family_is_discoverable`'s own OR of
 /// wild pool and species kit cannot mark a family discoverable that nothing
 /// in the shipped assets actually carries.

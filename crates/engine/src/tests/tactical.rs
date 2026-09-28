@@ -3884,13 +3884,24 @@ mod respawn {
     /// Respawn anyway — `best_aim` returning `None` is Reanimate's own
     /// refusal on the AI's door, where `tactical_use_routine`'s
     /// `NothingToRespawn` is the player's.
+    ///
+    /// **Not just "cooldown stays clear"** — `tactical_intent` choosing
+    /// `Intent::Routine` for a Reanimate `best_aim` will reject anyway wastes
+    /// the whole turn, since `run_tactical_intent`'s hostile branch does not
+    /// fall back to a swing the way its non-hostile one does. The player
+    /// stands adjacent (`tactical_fight`'s own placement), so a hostile that
+    /// actually falls through to `Intent::Swing` logs a swing line
+    /// regardless of whether it hits.
     #[test]
     fn a_hostile_carrier_with_nothing_to_raise_does_not_cast_respawn() {
+        use crate::resources::MessageLog;
+
         let mut game = game();
         let pack = tactical_fight(&mut game, 1, 400);
         let hostile = pack[0];
         only_routine(&mut game, hostile, "respawn");
         assert!(wait_for_turn(&mut game, hostile));
+        let lines_before = game.world.resource::<MessageLog>().lines.len();
 
         assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
 
@@ -3899,6 +3910,11 @@ mod respawn {
                 .get::<crate::components::AbilityCooldowns>(hostile)
                 .is_none_or(|c| !c.0.contains_key("respawn")),
             "nothing was in reach to raise, so the routine must not have run"
+        );
+        assert!(
+            game.world.resource::<MessageLog>().lines.len() > lines_before,
+            "with nothing to raise the hostile must swing at the adjacent \
+             player instead of wasting its turn"
         );
     }
 

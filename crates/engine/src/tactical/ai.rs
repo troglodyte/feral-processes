@@ -795,15 +795,24 @@ impl Game {
     /// player never funded — is a separate decision nothing here makes.
     ///
     /// **On the hostile arm, a candidate with nothing worth aiming still
-    /// wins the pick**, and the turn is wasted once `run_tactical_intent`
-    /// finds no aim — asserted as the *correct* answer for that side by
-    /// `a_hostile_will_not_shoot_through_cover`. The party arm pays for the
-    /// aim pass up front instead (`aimable_this_turn`), so a routine it could
-    /// only land on its own side falls through to the next candidate or to a
-    /// swing. Both passes spend no draw, so this stays pure.
+    /// wins the pick — for every routine but Reanimate**, and the turn is
+    /// wasted once `run_tactical_intent` finds no aim — asserted as the
+    /// *correct* answer for that side by `a_hostile_will_not_shoot_through_
+    /// cover`. The party arm pays for the aim pass up front instead
+    /// (`aimable_this_turn`), so a routine it could only land on its own
+    /// side falls through to the next candidate or to a swing. Both passes
+    /// spend no draw, so this stays pure.
+    ///
+    /// **Reanimate is the one hostile candidate checked before the pick,
+    /// through `hostile_routine_worth_choosing`.** A carrier with nothing
+    /// raisable in reach has nothing "wasted" about swinging instead —
+    /// unlike a blocked line of fire, there is no positioning lesson a
+    /// forfeited turn teaches here, and `a_hostile_carrier_with_nothing_to_
+    /// raise_does_not_cast_respawn` pins the fall-through to a swing.
     fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
         if let Some(def) = self.wild_routine_ready(actor)
             && self.world.get::<Hostile>(actor).is_some()
+            && self.hostile_routine_worth_choosing(actor, &def)
         {
             return Intent::Routine(def);
         }
@@ -818,6 +827,18 @@ impl Game {
         Intent::Swing {
             range: self.swing_range(actor),
         }
+    }
+
+    /// Whether a hostile's ready routine is worth picking over falling
+    /// through to `Intent::Swing` — `true` for every effect but Reanimate,
+    /// which is skipped when `best_aim` would find no aim, so a carrier with
+    /// nothing to raise swings instead of forfeiting the turn.
+    fn hostile_routine_worth_choosing(&self, actor: Entity, def: &AbilityDef) -> bool {
+        if !matches!(def.effect, AbilityEffect::Reanimate { .. }) {
+            return true;
+        }
+        let sides = self.tactical_sides(actor);
+        self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides)
     }
 
     /// The party arm's own choice, once `tactical_intent` has confirmed it

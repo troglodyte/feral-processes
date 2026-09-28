@@ -4254,24 +4254,13 @@ fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
 /// same stream as before pinning existed — `SpawnPins::default()` rolls
 /// both axes, so the delegate changes nothing about what it draws.
 ///
-/// Proves that rarity and the wild routine pool are *both* still drawn,
-/// not merely that potential is (which alone would already move the
-/// stream and make a "some draw happened" check pass trivially) — the
-/// baseline draws only `roll_potential`, `a_fully_pinned_spawn_draws_
-/// nothing_for_rarity_or_routines`'s own method, so any further movement
-/// can only be the two axes `SpawnPins::default()` leaves unpinned.
-///
-/// Does not attempt to prove the draws happen in a particular *order*:
-/// `Rarity` and the wild routine pool are both coarse, lossy outputs of
-/// their draw (most rolls land on plain `Ordinary` or no routine at all),
-/// so comparing final values — or even the final `GameRng` position, which
-/// a swap of two draws that each read a fixed number of words can leave
-/// unchanged — is not reliable evidence of sequence for an arbitrary seed.
-/// `roll_rarity`'s own I4 reason is why the site sits outside the opening
-/// ring, where a rarity draw is skipped outright rather than merely likely
-/// to look unchanged.
+/// The baseline replays the three rolls by hand, so the stream after the
+/// spawn must match it exactly: a skipped rarity or routine draw leaves it
+/// short. Not proof of *order* — two draws that each read a fixed number
+/// of words can swap without moving the final position. Outside the
+/// opening ring, where `roll_rarity` skips its draw outright.
 #[test]
-fn an_unpinned_spawn_still_draws_from_gamerng_for_rarity_and_routines() {
+fn an_unpinned_spawn_draws_potential_routine_and_rarity() {
     let seed = 9104;
     let (x, y) = (100, 100);
 
@@ -4280,7 +4269,15 @@ fn an_unpinned_spawn_still_draws_from_gamerng_for_rarity_and_routines() {
         !baseline.in_opening_ring(x, y),
         "test premise: this spawn site must be far enough out for roll_rarity to draw"
     );
+    let species = baseline
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .cloned()
+        .unwrap();
     let _ = baseline.roll_potential();
+    let _ = baseline.roll_wild_routine();
+    let _ = baseline.roll_rarity(&species, x, y, false);
     let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
 
     let mut scaled = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -4289,10 +4286,9 @@ fn an_unpinned_spawn_still_draws_from_gamerng_for_rarity_and_routines() {
         .unwrap();
     let after_scaled: u64 = scaled.world.resource_mut::<GameRng>().0.random();
 
-    assert_ne!(
+    assert_eq!(
         after_baseline, after_scaled,
-        "an unpinned spawn must still draw from GameRng for rarity and the wild routine, not \
-         only for potential"
+        "an unpinned spawn must draw exactly potential, the wild routine and rarity"
     );
 }
 
@@ -4373,6 +4369,14 @@ fn reinitialize_program_always_boots_at_level_one() {
     assert_eq!(
         level, 1,
         "a reinitialized program boots at level 1 regardless of the record's level or condition"
+    );
+    // The log names the new body, not the record — the record's level is
+    // the kill's zone, and printing it here would contradict the level-1
+    // program the player just got.
+    let line = game.message_log(1).pop().unwrap().text;
+    assert!(
+        line.contains("joins your roster") && !line.contains("999"),
+        "the success line must not print the record's level: {line}"
     );
 }
 

@@ -947,11 +947,10 @@ impl Game {
     /// — same shape `extract_program`'s own refusals take. Once past it:
     /// spend the protocol, remove the record, spawn the body with its own
     /// rarity and carried routine pinned (`spawning::SpawnPins`, never
-    /// re-rolled), one log line. Always boots at level 1 — `record.level`
-    /// is really the zone the kill happened in (wild bodies carry no
-    /// `Experience`), so it names no level worth restoring, and condition
-    /// goes unread for the same reason: neither is `Potential`, which
-    /// `roster_parts` already mints fresh through `Experience::default()`.
+    /// re-rolled), one log line. Always boots at level 1, through
+    /// `roster_parts`' fresh `Experience::default()`: `record.level` is the
+    /// kill's zone (wild bodies carry no `Experience`), not a level worth
+    /// restoring. Condition is not read.
     /// No ticks spent — this happens wherever the player is standing, not
     /// only at the Fabricator — and no `Deed`: `Deed::Tamed` reads
     /// "Decompile a wild program", and this isn't one.
@@ -970,10 +969,6 @@ impl Game {
             .unwrap()
             .0
             .remove(index);
-        // Computed before `record`'s fields are threaded into `pins` below —
-        // `downed_program_label` only reads species and level, but a struct
-        // one of whose fields was moved out can no longer be borrowed whole.
-        let label = self.downed_program_label(&record);
         let pos = *self.world.get::<Position>(player).unwrap();
         // Filtered against `AbilityDb` before pinning: a mod that pulled the
         // ability out from under an old kill must not hand the new body a
@@ -990,8 +985,12 @@ impl Game {
             rarity: Some(record.rarity),
             routines: Some(carried),
         };
-        self.adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
+        let program = self
+            .adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
             .expect("reinitialize_blocker already confirmed SpeciesDb resolves this species");
+        // The new body's label, not `downed_program_label`: that one prints
+        // `record.level`, which is the kill's zone and not this program's.
+        let label = self.creature_label(program);
         self.log_kind(
             MessageKind::Outcome,
             format!("{label} boots back up and joins your roster."),

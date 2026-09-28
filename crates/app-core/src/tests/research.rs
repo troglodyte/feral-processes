@@ -26,6 +26,13 @@ fn active_project(app: &App) -> Option<String> {
         .map(|n| n.id)
 }
 
+/// Flips the screen from its opening graph view to the list, whose row keys
+/// the list-half tests drive.
+fn to_the_list(app: &mut App) {
+    app.handle_key(GameKey::Char('G'));
+    assert!(!app.research_graph_view, "G flips the graph to the list");
+}
+
 /// Exercises the exact key sequence a player drives at the keyboard —
 /// `b` to open Build, a number to pick a structure, then a direction to
 /// place it — entirely through `App::handle_key`, to make sure the
@@ -55,6 +62,7 @@ fn the_base_menu_opens_research_and_esc_closes_it() {
 fn a_refused_selection_lands_on_the_status_line() {
     let mut app = test_app(502);
     open_via_menu(&mut app, 'b', "Research");
+    to_the_list(&mut app);
     app.handle_key(GameKey::Char('1'));
     assert!(
         matches!(app.mode, Mode::Research),
@@ -74,6 +82,7 @@ fn a_refused_selection_lands_on_the_status_line() {
 fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
     let mut app = app_in_base_with_a_research_node(503);
     open_via_menu(&mut app, 'b', "Research");
+    to_the_list(&mut app);
     app.handle_key(GameKey::Char('1'));
     let taken = active_project(&app).expect("the first row is takeable from a stocked base");
 
@@ -95,6 +104,7 @@ fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
 fn enter_selects_the_highlighted_node() {
     let mut app = app_in_base_with_a_research_node(504);
     open_via_menu(&mut app, 'b', "Research");
+    to_the_list(&mut app);
     let from_list = {
         app.handle_key(GameKey::Char('1'));
         let taken = active_project(&app).expect("the list's row key takes a project on");
@@ -119,6 +129,7 @@ fn enter_selects_the_highlighted_node() {
 fn a_refused_research_node_is_written_to_the_log_too() {
     let mut app = test_app(502);
     open_via_menu(&mut app, 'b', "Research");
+    to_the_list(&mut app);
     app.handle_key(GameKey::Char('1'));
 
     let banner = app.status_line.clone().expect("a refusal was reported");
@@ -139,11 +150,11 @@ fn a_refused_research_node_is_written_to_the_log_too() {
 fn g_toggles_the_graph_view_and_back() {
     let mut app = test_app(520);
     open_via_menu(&mut app, 'b', "Research");
-    assert!(!app.research_graph_view, "the list is the opening view");
-    app.handle_key(GameKey::Char('G'));
-    assert!(app.research_graph_view);
+    assert!(app.research_graph_view, "the graph is the opening view");
     app.handle_key(GameKey::Char('G'));
     assert!(!app.research_graph_view);
+    app.handle_key(GameKey::Char('G'));
+    assert!(app.research_graph_view);
     assert_eq!(app.mode, Mode::Research, "the toggle is not a mode change");
 }
 
@@ -161,13 +172,13 @@ fn the_toggle_preserves_the_selected_node_in_both_directions() {
     assert_eq!(
         selected_research_id(&app),
         before,
-        "flipping to the graph keeps the node"
+        "flipping to the list keeps the node"
     );
     app.handle_key(GameKey::Char('G'));
     assert_eq!(
         selected_research_id(&app),
         before,
-        "and flipping back keeps it too"
+        "and flipping back to the graph keeps it too"
     );
 }
 
@@ -178,7 +189,6 @@ fn the_toggle_preserves_the_selected_node_in_both_directions() {
 fn an_arrow_in_the_graph_view_lands_where_step_says() {
     let mut app = test_app(522);
     open_via_menu(&mut app, 'b', "Research");
-    app.handle_key(GameKey::Char('G'));
     for (key, dir) in [
         (GameKey::Down, GraphDir::Down),
         (GameKey::Right, GraphDir::Right),
@@ -208,7 +218,6 @@ fn an_arrow_in_the_graph_view_lands_where_step_says() {
 fn holding_an_arrow_at_the_edge_of_the_grid_does_nothing() {
     let mut app = test_app(523);
     open_via_menu(&mut app, 'b', "Research");
-    app.handle_key(GameKey::Char('G'));
     for _ in 0..40 {
         app.handle_key(GameKey::Up);
         app.handle_key(GameKey::Left);
@@ -228,7 +237,6 @@ fn holding_an_arrow_at_the_edge_of_the_grid_does_nothing() {
 fn enter_on_an_unreachable_node_refuses_without_filing() {
     let mut app = test_app(524);
     open_via_menu(&mut app, 'b', "Research");
-    app.handle_key(GameKey::Char('G'));
     // Walk to the deepest tier, where a fresh run can afford nothing.
     for _ in 0..10 {
         app.handle_key(GameKey::Right);
@@ -257,7 +265,6 @@ fn enter_on_an_unreachable_node_refuses_without_filing() {
 fn esc_closes_the_screen_from_the_graph_view() {
     let mut app = test_app(525);
     open_via_menu(&mut app, 'b', "Research");
-    app.handle_key(GameKey::Char('G'));
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
     assert!(
@@ -301,6 +308,7 @@ fn the_base_menu_opens_routine_research_and_esc_closes_it() {
 fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
     let mut app = app_in_base_with_routine_tree_open(561);
     open_via_menu(&mut app, 'b', "Routine research");
+    to_the_list(&mut app);
     let ids: Vec<String> = app
         .game
         .as_ref()
@@ -342,8 +350,7 @@ fn routine_research_graph_stepping_and_enter_stay_in_the_routine_tree() {
         .map(|n| n.id)
         .collect();
 
-    app.handle_key(GameKey::Char('G'));
-    assert!(app.research_graph_view, "G toggles the graph view");
+    assert!(app.research_graph_view, "the graph is the opening view");
     app.handle_key(GameKey::Right);
     let landed = ids
         .get(app.menu_selected)

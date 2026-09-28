@@ -387,9 +387,12 @@ pub(super) fn draw_research_graph(
         TEXT_DIM,
     );
 
-    // An empty `assets/research/` is a supported install: the header is
-    // drawn and nothing else.
+    // An empty tree is a supported install, and a fresh run's routine tree:
+    // the header is drawn, and a refusal, and nothing else.
     let Some(node) = nodes.get(selected.min(nodes.len().saturating_sub(1))) else {
+        if let Some(refusal) = refusal {
+            draw_refusal(refusal, painter, m);
+        }
         return;
     };
     let selected_id = node.id.clone();
@@ -528,11 +531,16 @@ pub(super) fn draw_research_graph(
     // otherwise: a refusal is transient and the more urgent of the two, and
     // two strings on one row is how a message gets overdrawn.
     if let Some(refusal) = refusal {
-        painter.ui(refusal, m.pad, screen_h - m.pad, m.font_size, RED);
+        draw_refusal(refusal, painter, m);
     } else if let Some(hint) = view_hint(geo.hidden(offset)) {
         painter.ui(hint, m.pad, screen_h - m.pad, m.small(), TEXT_DIM);
     }
 }
+
+fn draw_refusal(refusal: &str, painter: &Painter, m: &Metrics) {
+    painter.ui(refusal, m.pad, painter.screen_h() - m.pad, m.font_size, RED);
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::test_support::test_assets_dir;
@@ -1106,6 +1114,34 @@ mod tests {
                 .join("\n")
                 .contains("Requires Zone 3 first."),
             "a refusal must reach the screen the player typed into"
+        );
+    }
+
+    /// A tree with nothing listed still carries the refusal: the screen opens
+    /// on the graph, and a fresh run's routine tree lists nothing yet.
+    #[test]
+    fn a_refusal_is_drawn_on_an_empty_tree() {
+        let mut game = Game::new(937, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        assert!(
+            game.research_nodes(ResearchTree::Routines).is_empty(),
+            "a fresh run lists no routine nodes"
+        );
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(
+                &mut game,
+                ResearchTree::Routines,
+                0,
+                Some("No project to abandon."),
+                p,
+                &m,
+            )
+        });
+        assert!(
+            painted_text(&shapes)
+                .join("\n")
+                .contains("No project to abandon."),
+            "an empty tree must still say why nothing happened"
         );
     }
 

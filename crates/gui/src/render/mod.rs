@@ -1836,6 +1836,8 @@ mod tests {
         let mut app = census_app();
         let mut fx = Fx::new();
         app.mode = Mode::Research;
+        // The list's popup: the graph draws no numbered rows.
+        app.research_graph_view = false;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
         let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes);

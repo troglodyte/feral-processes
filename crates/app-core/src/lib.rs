@@ -2981,7 +2981,7 @@ pub struct App {
     pub work_column: usize,
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
-    /// census stay as they are.
+    /// census stay as they are. Opens on the graph.
     ///
     /// Session state: it survives closing and reopening the screen, which
     /// is what a player who prefers one view expects.

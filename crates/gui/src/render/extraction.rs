@@ -190,6 +190,18 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
+
+    // Shown even when blocked (a boss record, no protocol held, a full
+    // roster) rather than disappearing — `reinitialize_blocker`'s own
+    // reason appended after the label, `routine_slot_rows`' `(fixed)` tag
+    // in shape, and greyed on the whole row since `Row::Item` has no way to
+    // colour part of one line.
+    let reinit_label = "[R]einitialize — resurrect downed program";
+    rows.push(match game.reinitialize_blocker(index) {
+        Some(reason) => colored_item_row(format!("{reinit_label}  ({reason})"), false, TEXT_DIM),
+        None => item_row(reinit_label, false),
+    });
+
     rows.push(text_row(""));
     rows.push(text_row("Esc to go back"));
     rows
@@ -280,6 +292,20 @@ mod tests {
         tools: Option<Vec<ToolId>>,
         bench: Option<(String, u32, (i32, i32))>,
     ) -> Game {
+        game_with_state_and_inventory(seed, held, tools, bench, &[])
+    }
+
+    /// `game_with_state` plus items in the player's pack — the reinitialize
+    /// row's own tests need a held protocol, and every other caller here
+    /// wants none, which is why it stays a separate function rather than a
+    /// fifth positional argument on every existing call.
+    fn game_with_state_and_inventory(
+        seed: u32,
+        held: Vec<DownedProgram>,
+        tools: Option<Vec<ToolId>>,
+        bench: Option<(String, u32, (i32, i32))>,
+        inventory: &[(&str, u32)],
+    ) -> Game {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let assets = assets_dir();
@@ -293,6 +319,11 @@ mod tests {
         data.player.downed_programs = held;
         if let Some(tools) = tools {
             data.player.tools = tools;
+        }
+        for (id, qty) in inventory {
+            data.player
+                .inventory
+                .push((feral_processes_engine::items::ItemId::from(*id), *qty));
         }
         // Base space, standing on `(0, 0)`. `extraction_bench_tier` does not
         // care where the party is, but `Game::adjacent_teardown_rig` does —
@@ -593,6 +624,67 @@ mod tests {
             joined.contains(&species.name),
             "an Image tool's row should name the species it would teach {:?}: {joined:?}",
             species.name
+        );
+    }
+
+    /// The reinitialize row's own two tests — `extraction_options_rows`' new
+    /// arm — exercised through `Game::reinitialize_blocker` rather than a
+    /// hand-built expectation, so the row and the engine's own gate cannot
+    /// quietly disagree.
+    #[test]
+    fn the_reinitialize_row_is_plain_when_nothing_blocks_it() {
+        let probe = Game::new(9707, DifficultyMode::Forgiving, &assets_dir()).unwrap();
+        let species = probe.species_defs().into_iter().next().unwrap().id;
+        let held = DownedProgram {
+            boss: false,
+            ..program(&species, 5, Rarity::Ordinary)
+        };
+        let game = game_with_state_and_inventory(
+            9708,
+            vec![held],
+            None,
+            None,
+            &[(
+                feral_processes_engine::items::ids::REINITIALIZATION_PROTOCOL,
+                1,
+            )],
+        );
+        assert_eq!(
+            game.reinitialize_blocker(0),
+            None,
+            "test premise: nothing should block this record"
+        );
+
+        let rows = extraction_options_rows(&game, 0, 0);
+        let reinit_row = rows
+            .iter()
+            .map(row_label_text)
+            .find(|label| label.contains("einitialize"))
+            .expect("the action row must be present when available");
+        assert!(
+            !reinit_row.contains('('),
+            "an available action must carry no blocker parenthetical: {reinit_row:?}"
+        );
+    }
+
+    #[test]
+    fn the_reinitialize_row_names_the_blocker_when_the_record_is_a_boss() {
+        let probe = Game::new(9709, DifficultyMode::Forgiving, &assets_dir()).unwrap();
+        let held = program(&widest_species_id(&probe), 5, Rarity::Ordinary);
+        let game = game_with_state(9710, vec![held], None, None);
+        let blocker = game
+            .reinitialize_blocker(0)
+            .expect("test premise: a boss record must be blocked");
+
+        let rows = extraction_options_rows(&game, 0, 0);
+        let joined: String = rows
+            .iter()
+            .map(row_label_text)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            joined.contains(blocker),
+            "the row must show the engine's own blocker reason {blocker:?}: {joined:?}"
         );
     }
 }

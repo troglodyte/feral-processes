@@ -38,6 +38,10 @@ draw out before you commit to one. Material tools quote units. The Reader names 
 draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually
 rolls — the screen and the pull read the same figure.
 
+A record does not have to be spent on a tool at all. Forge a Reinitialization Protocol at the
+Fabricator and spend it on the record instead — it always works, no roll, and the body boots back
+up as staff at a level shaped by how cleanly it went down. A boss's record will not reinitialize.
+
 A Compiler changes both halves of that. Standing one anywhere makes every extraction quicker, and
 every tier you upgrade it past the first makes the same tool draw more out of the same body — more
 material through a material tool, better odds through the Gear Puller. It is worth building

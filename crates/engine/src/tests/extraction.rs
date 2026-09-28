@@ -4457,6 +4457,40 @@ fn reinitialize_program_with_no_carried_routine_matches_a_non_carrier_at_that_le
     );
 }
 
+/// Neither a finished run nor an open battle may spend a protocol —
+/// `extract_program`'s own first refusal, shared in spirit if not in code.
+#[test]
+fn reinitialize_refuses_during_an_active_battle_and_spends_nothing() {
+    let mut game = Game::new(9214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+    let before_pets = game.pet_count();
+
+    assert!(game.reinitialize_blocker(0).is_some());
+    let result = game.reinitialize_program(0);
+
+    assert!(
+        result.is_err(),
+        "an active battle must refuse reinitialization"
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&reinit_protocol()),
+        1,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(game.pet_count(), before_pets);
+}
+
 /// A boss record can never be reinitialized — the one exclusion the spec
 /// carves out of "any carried record". `reinitialize_blocker` is the same
 /// check the action row will grey on in phase 2.

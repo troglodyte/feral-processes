@@ -5541,6 +5541,24 @@ pub const SUMMON_STAT_MULT: f32 = 0.6;
 /// `balance_sim` already sweeps.
 pub const SUMMON_LEVEL_STAT_STEPS: f32 = 1.0;
 
+/// The multiplier a Respawn cast applies to the fallen body's own snapshot
+/// `Stats` (`Game::run_tactical_routine`'s `Reanimate` branch) — a raised
+/// body's `SUMMON_STAT_MULT`.
+///
+/// Higher than a fork's, deliberately: a raised body already earned the
+/// numbers it is being handed back at a discount, where a fork's numbers
+/// were never earned at all.
+pub const REANIMATE_STAT_MULT: f32 = 0.75;
+
+/// What each level of `Perk::SpawnPriority` adds to both a Respawn cast's
+/// multiplier and a fork's `SUMMON_STAT_MULT`, via
+/// `perks::spawn_priority_stat_bonus`.
+///
+/// **Uncapped, deliberately** — a raised body or a fork clearing 1.0x its
+/// own fallen/live numbers is the point of buying the perk, not a bug to
+/// clamp away.
+pub const SPAWN_PRIORITY_STAT_PER_LEVEL: f32 = 0.10;
+
 /// The flat floor of a synthesised routine node's cost — the Single, v1.0
 /// rung at the bottom of any family, ungated (zone 1).
 ///

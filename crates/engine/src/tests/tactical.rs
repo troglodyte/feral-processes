@@ -5,10 +5,10 @@ use crate::Game;
 use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, StatusEffects};
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
+use crate::tactical::TacticalBattle;
 use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
-use crate::tactical::TacticalBattle;
 use crate::tests::support::{
     equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
 };

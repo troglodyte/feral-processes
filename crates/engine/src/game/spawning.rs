@@ -555,8 +555,14 @@ impl Game {
         // gating it — `steps` of 1 at zone N is arithmetically zone N+1.
         let level_mult = self
             .zone_curve_ratio(self.party_band_progress() * crate::tuning::SUMMON_LEVEL_STAT_STEPS);
-        let depth_mult = level_mult * crate::tuning::SUMMON_STAT_MULT;
         let perks = self.world.get::<Perks>(self.player_entity()).cloned();
+        // `Perk::SpawnPriority` reaches a fork the same way it reaches a
+        // raised body — added to the multiplier rather than to the
+        // pre-multiplied result, so it compounds with the zone-band term
+        // exactly as `SUMMON_STAT_MULT` itself does.
+        let depth_mult = level_mult
+            * (crate::tuning::SUMMON_STAT_MULT
+                + crate::perks::spawn_priority_stat_bonus(perks.as_ref()));
         let window = crate::perks::summon_rarity_window(perks.as_ref());
         let ceiling = crate::perks::summon_tier_ceiling(perks.as_ref());
         // The ceiling a penalty leaves, floored at Ordinary: `Rarity::ALL`'s

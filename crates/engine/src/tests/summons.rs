@@ -366,6 +366,40 @@ mod strength {
             hp_at(8)
         );
     }
+
+    /// `Perk::SpawnPriority` widens `SUMMON_STAT_MULT` itself: a fork's
+    /// stats are strictly higher with 5 levels bought than with none, and
+    /// the ratio between the two matches the multiplier the perk adds —
+    /// `0.6 -> 1.1`, clearing the 1.0x an unperked fork can never reach.
+    #[test]
+    fn spawn_priority_raises_a_forks_stats_above_the_uninvested_cap() {
+        let hp_at = |spawn_priority_levels: usize| -> i32 {
+            let mut game = game(53);
+            let player = game.player_entity();
+            set_level(&mut game, player, 6);
+            game.world.entity_mut(player).insert(Perks {
+                points: 0,
+                unlocked: vec![Perk::SpawnPriority; spawn_priority_levels],
+            });
+            let body = game.fork_programs(player, 1, 0)[0];
+            game.world.get::<Stats>(body).unwrap().max_hp
+        };
+
+        let bare = hp_at(0);
+        let invested = hp_at(5);
+        assert!(
+            invested > bare,
+            "5 levels of Spawn Priority must beat none: {bare} vs {invested}"
+        );
+        // SUMMON_STAT_MULT is 0.6; 5 levels at SPAWN_PRIORITY_STAT_PER_LEVEL
+        // (0.10) add 0.5, for a multiplier of 1.1 against the base 0.6 —
+        // above the 1.0x an unperked fork's ceiling never reaches.
+        let ratio = invested as f32 / bare as f32;
+        assert!(
+            (ratio - (1.1 / 0.6)).abs() < 0.05,
+            "the ratio should track the multiplier's own ratio: {ratio}"
+        );
+    }
 }
 
 /// Seating a fork in the group model: `Party` and `planned` together, and

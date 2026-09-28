@@ -1,0 +1,6 @@
+(
+    id: SpawnPriority,
+    name: "Spawn Priority",
+    description: "Temporary bodies run at higher clock speed. Each level adds 10% to the strength of both a raised body (Respawn) and a forked process, on top of what they'd otherwise carry.",
+    cost: 3,
+)

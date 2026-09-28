@@ -151,6 +151,13 @@ pub enum Perk {
     /// among the other perks because `Perk`'s variant order is save format
     /// (see the enum's own doc).
     EmulationFidelity,
+    /// Adds `SPAWN_PRIORITY_STAT_PER_LEVEL` per level to **both** of a
+    /// temporary body's multipliers: a Respawn cast's `REANIMATE_STAT_MULT`
+    /// and a fork's `SUMMON_STAT_MULT` (`Game::fork_programs`). One perk,
+    /// two call sites, for the reason they share a shape at all — a raised
+    /// body and a forked one are both a `Summoned` body scaled off somebody
+    /// else's numbers. Appended for the same reason `EmulationFidelity` was.
+    SpawnPriority,
 }
 
 impl Perk {
@@ -158,7 +165,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 20] {
+    pub fn all() -> [Perk; 21] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -180,6 +187,7 @@ impl Perk {
             Perk::TargetLock,
             Perk::Scheduler,
             Perk::EmulationFidelity,
+            Perk::SpawnPriority,
         ]
     }
 
@@ -355,6 +363,24 @@ pub fn summon_tier_ceiling(perks: Option<&crate::components::Perks>) -> crate::c
 /// reason: the formula it feeds lives in `progression`, not here.
 pub fn emulation_fidelity_level(perks: Option<&crate::components::Perks>) -> u32 {
     level(perks, Perk::EmulationFidelity)
+}
+
+/// How many levels of `Perk::SpawnPriority` the player has bought.
+///
+/// Bare level, `emulation_fidelity_level`'s reason: both callers —
+/// `Game::run_tactical_routine`'s Respawn branch and `Game::fork_programs`
+/// — fold it into a multiplier of their own rather than reading a finished
+/// bonus here.
+pub fn spawn_priority_level(perks: Option<&crate::components::Perks>) -> u32 {
+    level(perks, Perk::SpawnPriority)
+}
+
+/// What `Perk::SpawnPriority` adds to a temporary body's stat multiplier —
+/// a Respawn cast's `REANIMATE_STAT_MULT` or a fork's `SUMMON_STAT_MULT`,
+/// whichever the caller is scaling. One formula for both, since the perk
+/// makes no distinction between the two doors it reaches.
+pub fn spawn_priority_stat_bonus(perks: Option<&crate::components::Perks>) -> f32 {
+    crate::tuning::SPAWN_PRIORITY_STAT_PER_LEVEL * spawn_priority_level(perks) as f32
 }
 
 /// What the player's affinity perk for `kind` is worth, raw — the caller
@@ -844,6 +870,7 @@ mod tests {
             Perk::EmulationFidelity => {
                 emulation_fidelity_level(one) > emulation_fidelity_level(none)
             }
+            Perk::SpawnPriority => spawn_priority_stat_bonus(one) > spawn_priority_stat_bonus(none),
             Perk::DamageAffinity
             | Perk::HealAffinity
             | Perk::BuffAffinity

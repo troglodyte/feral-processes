@@ -424,7 +424,9 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[18], Perk::Scheduler);
     // And again for the emulation perk appended after that.
     assert_eq!(all[19], Perk::EmulationFidelity);
-    assert_eq!(all.len(), 20);
+    // And again for the spawn perk appended after that.
+    assert_eq!(all[20], Perk::SpawnPriority);
+    assert_eq!(all.len(), 21);
 }
 
 /// `Perk::TargetLock` reaches the roll, and reaches the player alone.

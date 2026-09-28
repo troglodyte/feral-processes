@@ -1983,24 +1983,27 @@ impl Game {
             // A fallen companion is reaped at teardown, not here — the same
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.
-            if self.world.get::<Hostile>(body).is_some() {
-                match self.world.get::<Squad>(body).map(|s| s.members.clone()) {
-                    Some(members) => self.reap_squad(body, &members, player),
-                    None => self.finish_hostile(body, player),
-                }
-            } else if self
+            //
+            // **`Summoned` is checked before `Hostile`.** A fork is never
+            // base staff — it carries no `Hostile` and is deliberately kept
+            // out of `Party` (`components::Summoned`'s containment story) —
+            // and a hostile carrier's own raised body *is* `Hostile`, so
+            // without this ordering it would fall into the branch below it
+            // instead and pay out a kill's full reward (XP, loot,
+            // `DownedProgram`, nest/patrol). Either way, left alone here
+            // exactly as `dissolve_summons` leaves a killed fork elsewhere:
+            // dead where it stands, until `finish_fight`'s unconditional
+            // `Summoned` sweep despawns it at teardown.
+            if self
                 .world
                 .get::<crate::components::Summoned>(body)
                 .is_some()
             {
-                // **A fork is never base staff.** It carries no `Hostile`
-                // and is deliberately kept out of `Party`
-                // (`components::Summoned`'s containment story), so without
-                // this guard it fell straight into the branch below and was
-                // logged and revived as a downed companion. Left alone here
-                // exactly as `dissolve_summons` leaves a killed fork
-                // elsewhere: dead where it stands, until `finish_fight`'s
-                // unconditional `Summoned` sweep despawns it at teardown.
+            } else if self.world.get::<Hostile>(body).is_some() {
+                match self.world.get::<Squad>(body).map(|s| s.members.clone()) {
+                    Some(members) => self.reap_squad(body, &members, player),
+                    None => self.finish_hostile(body, player),
+                }
             } else if body != player && !self.world.resource::<Party>().0.contains(&body) {
                 // **Base staff, killed on a siege board.** Neither `Hostile`
                 // (that branch above) nor `Party` (`finish_fight`'s own dead

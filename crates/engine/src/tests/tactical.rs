@@ -3700,6 +3700,88 @@ mod respawn {
             "finish_fight sweeps every Summoned body, raised or forked"
         );
     }
+
+    /// A hostile carrier's own raised body is `Hostile` *and* `Summoned`, so
+    /// `reap_tactical_dead`'s `Hostile` branch — checked before the
+    /// `Summoned` guard the fork reproducer added — must not be the one
+    /// that sees it first: it pays a kill's full reward (XP, loot,
+    /// `DownedProgram`), same as any other hostile.
+    #[test]
+    fn killing_a_hostile_raised_body_pays_nothing() {
+        let mut game = game();
+        // One real hostile kept alive on a lot of hp, so the fight stays
+        // open around the hand-placed raised body below.
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let cell = beside(&game, player_at).expect("room beside the player");
+        let body = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                Summoned,
+                Respawned,
+                Stats {
+                    hp: 1,
+                    max_hp: 1,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(body, cell),
+            "the cell must be free to seat the raised body on"
+        );
+        let xp_before = game
+            .world
+            .get::<Experience>(player)
+            .map(|e| e.xp)
+            .unwrap_or(0);
+        let downed_before = game
+            .world
+            .get::<crate::components::DownedPrograms>(player)
+            .map(|d| d.0.len())
+            .unwrap_or(0);
+
+        game.world.get_mut::<Stats>(body).unwrap().hp = 0;
+        game.tactical_round_upkeep();
+
+        assert_eq!(
+            game.world.get::<Experience>(player).map(|e| e.xp),
+            Some(xp_before),
+            "a hostile raised body pays no XP"
+        );
+        assert_eq!(
+            game.world
+                .get::<crate::components::DownedPrograms>(player)
+                .map(|d| d.0.len())
+                .unwrap_or(0),
+            downed_before,
+            "a hostile raised body drops no DownedProgram"
+        );
+        assert!(
+            !log_texts(&game)
+                .iter()
+                .any(|t| t.contains("crashes and deletes itself")),
+            "a hostile raised body's death is not a paid kill"
+        );
+        assert_eq!(
+            game.world.get::<Stats>(body).map(|s| s.hp),
+            Some(0),
+            "left dead where it stands for finish_fight's own sweep, not despawned here"
+        );
+    }
 }
 
 /// Walking into a hostile is a swing, not a refusal.

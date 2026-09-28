@@ -1143,13 +1143,23 @@ impl Game {
         // a good roll hand the companion back through `roster_parts` — a
         // fresh `ProgramId`, level one, no memories, and kill XP paid to
         // the player for it. Aimed at empty ground it would spend both for
-        // nothing at all.
+        // nothing at all. **A raised body is `Hostile` too**, and
+        // `roster_parts` never asks about `Summoned`, so the same refusal
+        // excludes it explicitly rather than letting it join the roster and
+        // then be swept by `finish_fight`'s unconditional sweep out from
+        // under the player.
         if matches!(ability.effect, AbilityEffect::Decompile)
             && self
                 .world
                 .resource::<TacticalBattle>()
                 .occupant(aim)
-                .is_none_or(|body| self.world.get::<Hostile>(body).is_none())
+                .is_none_or(|body| {
+                    self.world.get::<Hostile>(body).is_none()
+                        || self
+                            .world
+                            .get::<crate::components::Summoned>(body)
+                            .is_some()
+                })
         {
             return false;
         }

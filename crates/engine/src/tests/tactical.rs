@@ -3782,6 +3782,59 @@ mod respawn {
             "left dead where it stands for finish_fight's own sweep, not despawned here"
         );
     }
+
+    /// A raised body would otherwise be a free capture — it is already
+    /// `Hostile`, so `Decompile`'s existing refusal (aimed at something
+    /// that is not `Hostile`) does not catch it, and `roster_parts` never
+    /// asks whether a body is `Summoned` before joining the roster.
+    #[test]
+    fn decompile_refuses_a_raised_body() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        only_routine(&mut game, player, "decompile");
+        crate::tests::support::set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let cell = beside(&game, player_at).expect("room beside the player");
+        let body = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                Summoned,
+                Respawned,
+                Stats {
+                    hp: 1,
+                    max_hp: 1,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(body, cell),
+            "the cell must be free to seat the raised body on"
+        );
+        assert!(wait_for_turn(&mut game, player));
+
+        assert!(
+            !game.tactical_use_routine(0, cell),
+            "Decompile must refuse a raised body"
+        );
+        assert!(
+            game.world.get::<crate::components::Tamed>(body).is_none(),
+            "it must never join the roster"
+        );
+    }
 }
 
 /// Walking into a hostile is a swing, not a refusal.

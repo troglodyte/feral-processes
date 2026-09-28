@@ -76,6 +76,14 @@ impl Decoy {
     }
 }
 
+/// Where a body died on a battle map: its anchor cell and the side of the
+/// square it covered, so a squad's mark spans the squad.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fallen {
+    pub cell: (i32, i32),
+    pub footprint: u8,
+}
+
 /// A tactical fight's spatial state: the map it is fought on and where
 /// every body stands.
 ///
@@ -87,14 +95,6 @@ impl Decoy {
 /// Bare `#[derive(Resource)]` — no `Default`, no `Serialize` — matching
 /// `BattleState` for the same reason: a fight is never saved, so nothing
 /// here appears in `save.rs` and `SAVE_FORMAT_VERSION` does not move.
-/// Where a body died on a battle map: its anchor cell and the side of the
-/// square it covered, so a squad's mark spans the squad.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Fallen {
-    pub cell: (i32, i32),
-    pub footprint: u8,
-}
-
 #[derive(Resource)]
 pub struct TacticalBattle {
     pub spec: BattleSpec,

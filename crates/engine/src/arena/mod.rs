@@ -37,72 +37,29 @@ use std::path::Path;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
-use crate::progression;
 use crate::resources::GameRng;
 use crate::telemetry::Record;
-use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, arena_level_ceiling};
+use crate::tuning::arena_level_ceiling;
 use crate::*;
 
-/// Raises `entity` to `level` the way play would.
+/// Raises `entity` to `level` the way play would, staging talent-gated
+/// fights nothing else in the game can — `Game::raise_to_level` is the one
+/// level-setting path (moved there so `Game::reinitialize_program` has it
+/// too), and this is just its arena-shaped cap.
 ///
-/// Awarding XP rather than writing `Experience.level` is the whole point:
-/// the growth curve lives in `progression::add_xp` and there is no second
-/// copy of it here to drift from it. A creature set to level 20 with
-/// level-1 stats is the failure this exists to make unreachable — an arena
-/// scenario naming a level would otherwise measure a fight nobody can have.
-///
-/// Which multiplier and which ceiling apply is the same split
-/// `award_player_xp` and `award_companion_xp` make: a `Creature` grows on
-/// its species' curve and stops at the higher of the scenario's zone cap
-/// and `tuning::arena_level_ceiling()`,
-/// the player grows on the baseline and has no ceiling.
-///
-/// The *absolute* cap rather than `Game::companion_level_cap`, and that is
-/// deliberate: an arena scenario authors its own composition and has no
-/// `KernelRing` to read. `Ability`, `Affinity` and `RoutineSlot` talents are
-/// invisible to `balance_sim`, so the arena is the only instrument that can
-/// see them, and one clamped at `TALENT_START_LEVEL` could not stage the
-/// fight the talent trees exist to change.
+/// The *absolute* cap, `level_cap().max(arena_level_ceiling())`, rather than
+/// `Game::companion_level_cap`, and that is deliberate: an arena scenario
+/// authors its own composition and has no `KernelRing` to read. `Ability`,
+/// `Affinity` and `RoutineSlot` talents are invisible to `balance_sim`, so
+/// the arena is the only instrument that can see them, and one clamped at
+/// `TALENT_START_LEVEL` could not stage the fight the talent trees exist to
+/// change.
 ///
 /// Shared with `tests/support.rs`, which re-exports it — two copies would
 /// be two answers to "what is a level-N companion".
 pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
-    let before = game
-        .world
-        .get::<Experience>(entity)
-        .map(|e| e.level)
-        .unwrap_or(1);
-    let (growth, cap) = match game.world.get::<Creature>(entity) {
-        Some(creature) => {
-            let species = creature.species.clone();
-            let growth = game
-                .world
-                .resource::<SpeciesDb>()
-                .get(&species)
-                .map(|s| s.growth_multiplier)
-                .unwrap_or(BASELINE_GROWTH_MULTIPLIER);
-            (growth, Some(game.level_cap().max(arena_level_ceiling())))
-        }
-        None => (BASELINE_GROWTH_MULTIPLIER, None),
-    };
-
-    let mut query = game.world.query::<(&mut Experience, &mut Stats)>();
-    let Ok((mut exp, mut stats)) = query.get_mut(&mut game.world, entity) else {
-        return;
-    };
-    // One level per pass, by paying exactly what the next one costs — so
-    // the XP left over at the end is zero rather than an arbitrary
-    // remainder a later kill would inherit.
-    while exp.level < level {
-        let owed = exp.xp_to_next.saturating_sub(exp.xp);
-        if progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0).levels == 0 {
-            break;
-        }
-    }
-
-    if level > before {
-        game.install_unlocked_routines(entity, before, level);
-    }
+    let cap = game.level_cap().max(arena_level_ceiling());
+    game.raise_to_level(entity, level, cap);
 }
 
 /// A companion of `species` at `level`, standing on the player's own tile.

@@ -940,7 +940,7 @@ fn the_displayed_range_scales_on_all_three_axes() {
 /// popup`; this asks the shipped assets whether the string that test
 /// measures is still the worst case, which is the same division of labour
 /// the name-column pair already uses.
-const WIDEST_MEASURED_SWAP_STATS: usize = 54;
+const WIDEST_MEASURED_SWAP_STATS: usize = 55;
 #[test]
 fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
     let mut app = test_app(932);

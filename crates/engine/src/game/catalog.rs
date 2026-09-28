@@ -686,7 +686,10 @@ impl Game {
     }
 
     pub fn equipment_of(&self, id: &ItemId) -> Option<(EquipmentSlot, EquipmentStats)> {
-        self.world.resource::<ItemDb>().get(id.as_str())?.equipment
+        self.world
+            .resource::<ItemDb>()
+            .get(id.as_str())?
+            .worn_stats()
     }
 
     pub fn is_consumable(&self, id: &ItemId) -> bool {

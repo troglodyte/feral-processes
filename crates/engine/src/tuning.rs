@@ -5321,6 +5321,21 @@ pub const TELEPORT_LEVELS_PER_CELL: u32 = 2;
 /// value.
 pub const TACTICAL_WEAPON_RANGE_MAX: u32 = 3;
 
+/// Accuracy a weapon swung at arm's length adds to its authored `accuracy`.
+///
+/// The price of reach: a weapon's range replaces its wielder's own
+/// (`Game::swing_range`), so a program that shoots two cells gives up the
+/// standoff when it takes a blade, and this is what it gets back. Added to
+/// the *base* rather than after scaling, so it grows with level, quality and
+/// fusion like the rest of the weapon — flat, it would fade to noise by the
+/// deep sectors. Rides the wielder's accuracy, so routines get it too.
+///
+/// Melee is `range` absent or `1`, read by `ItemDef::worn_stats` alone.
+pub const MELEE_WEAPON_ACCURACY: i32 = 2;
+
+/// See `MELEE_WEAPON_ACCURACY`. Zero: range is its own reward.
+pub const RANGED_WEAPON_ACCURACY: i32 = 0;
+
 /// How far a species' `ranged` basic attack reaches on a battle map.
 ///
 /// Two, and the number is load-bearing. Every shipped species carries

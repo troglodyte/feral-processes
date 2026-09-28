@@ -258,6 +258,24 @@ pub struct ItemDef {
 }
 
 impl ItemDef {
+    /// What wearing this item is worth before any copy's axes — `equipment`
+    /// with a weapon's class accuracy added. The one reader of the authored
+    /// stats: `Game::equipment_of` and `balance_sim` both call it, so the
+    /// melee edge cannot reach combat and miss the inspect screen.
+    ///
+    /// The class is derived from `range` rather than authored, so it can
+    /// never disagree with how far the weapon actually swings.
+    pub fn worn_stats(&self) -> Option<(EquipmentSlot, EquipmentStats)> {
+        let (slot, mut stats) = self.equipment?;
+        if slot == EquipmentSlot::Weapon {
+            stats.accuracy += match self.range.unwrap_or(1) {
+                1 => crate::tuning::MELEE_WEAPON_ACCURACY,
+                _ => crate::tuning::RANGED_WEAPON_ACCURACY,
+            };
+        }
+        Some((slot, stats))
+    }
+
     /// The short tag the base pane's PRODUCTION rows list this item under.
     ///
     /// Derived rather than authored, for `category`'s reason: a modded item
@@ -1316,6 +1334,34 @@ mod tests {
         )]);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(db.get("good").unwrap().range, Some(2));
+    }
+
+    #[test]
+    fn a_weapon_at_arms_length_carries_the_melee_accuracy_and_one_at_range_does_not() {
+        let (db, warnings) = load_fixture(&[
+            (
+                "blade.ron",
+                r#"(id: "blade", name: "Blade", equipment: Some((Weapon, (atk: 1, accuracy: 3))))"#,
+            ),
+            (
+                "knife.ron",
+                r#"(id: "knife", name: "Knife", equipment: Some((Weapon, (atk: 1, accuracy: 3))), range: Some(1))"#,
+            ),
+            (
+                "rifle.ron",
+                r#"(id: "rifle", name: "Rifle", equipment: Some((Weapon, (atk: 1, accuracy: 3))), range: Some(2))"#,
+            ),
+            (
+                "plate.ron",
+                r#"(id: "plate", name: "Plate", equipment: Some((Armor, (mitigation: 1, accuracy: 3))))"#,
+            ),
+        ]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let accuracy = |id: &str| db.get(id).unwrap().worn_stats().unwrap().1.accuracy;
+        assert_eq!(accuracy("blade"), 3 + crate::tuning::MELEE_WEAPON_ACCURACY);
+        assert_eq!(accuracy("knife"), 3 + crate::tuning::MELEE_WEAPON_ACCURACY);
+        assert_eq!(accuracy("rifle"), 3 + crate::tuning::RANGED_WEAPON_ACCURACY);
+        assert_eq!(accuracy("plate"), 3, "armour has no weapon class");
     }
 
     #[test]

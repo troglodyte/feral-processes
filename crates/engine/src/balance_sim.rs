@@ -218,8 +218,18 @@ pub fn best_gear_stats() -> (EquipmentStats, EquipmentStats) {
     let (abilities, _) =
         crate::abilities::AbilityDb::load_dir(&dir.with_file_name("abilities")).unwrap();
     let (db, _) = ItemDb::load_dir(&dir, &abilities).unwrap();
-    let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
-    let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
+    let weapon = db
+        .get(ids::MONOFILAMENT_WHIP)
+        .unwrap()
+        .worn_stats()
+        .unwrap()
+        .1;
+    let armor = db
+        .get(ids::ABLATIVE_PLATING)
+        .unwrap()
+        .worn_stats()
+        .unwrap()
+        .1;
     (weapon, armor)
 }
 

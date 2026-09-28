@@ -159,6 +159,16 @@ any non-finite `taming_potency`, `consume.power`, or
     // enforced — it is simply what the shipped roster does, and what makes
     // the fields worth authoring.
     //
+    // A weapon's class *is* enforced, and it comes from `range:` below
+    // rather than from a field of its own: a weapon swung at arm's length
+    // (`range` absent or `1`) is melee and has `tuning::MELEE_WEAPON_ACCURACY`
+    // added to its `accuracy`; one that reaches further is ranged and gets
+    // `RANGED_WEAPON_ACCURACY`. The bonus joins the authored figure before
+    // level, quality and fusion scale it, so author `accuracy` as the
+    // weapon's edge *within* its class. It is the price of reach — a ranged
+    // program holding a blade swings at arm's length — and it rides the
+    // wielder, so routines get it too.
+    //
     // The wearer is the player *or* any program they own — one copy is
     // interchangeable, and every copy comes out of and returns to the
     // player's own cargo whoever is wearing it. One consequence worth

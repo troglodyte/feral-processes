@@ -492,3 +492,29 @@ fn a_melee_weapons_page_states_no_range() {
         .expect("a weapon is wearable");
     assert!(worn.range.is_none());
 }
+
+/// Kinetic Edge and Interrupt Coil author the same `accuracy: 2`; only the
+/// Coil's `range: Some(2)` separates them. The melee edge must reach both the
+/// roll and the page, which is why it lives in `ItemDef::worn_stats` rather
+/// than at either reader.
+#[test]
+fn a_blade_hits_more_than_a_gun_of_the_same_authored_accuracy() {
+    let mut game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let mut wielding = |id: &str| {
+        let copy = GearCopy::plain(ItemId::from(id));
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(copy.item.clone(), 1);
+        game.equip(player, &copy).unwrap();
+        let page = game.gear_detail(&copy, player).worn.unwrap().accuracy;
+        (game.accuracy_bonus(player), page)
+    };
+
+    let (blade_roll, blade_page) = wielding("kinetic_edge");
+    let (gun_roll, gun_page) = wielding("interrupt_coil");
+
+    assert!(blade_roll > gun_roll, "roll: {blade_roll} vs {gun_roll}");
+    assert!(blade_page > gun_page, "page: {blade_page} vs {gun_page}");
+}

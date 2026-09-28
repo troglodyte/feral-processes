@@ -53,6 +53,20 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Respawn raises fallen bodies on a battle map back into the fight, on your
+own side.** Any wild program might carry it — beat one and extract the
+routine the same way as any other hunt-only move. Cast it and up to three
+of the board's grey `x` marks nearest your aim rise as temporary allies, at
+three-quarters of what they had standing when they fell, drawn in a dark
+red-grey so a raised body reads as what it is. They fight for the rest of
+that battle only: no XP, no roster slot, gone the instant it ends, and
+casting again replaces only your own side's set. A hostile carrier can
+raise its own fallen the same way, and killing one of those pays you
+nothing. **Spawn Priority**, a new perk, makes both a raised body and a
+forked program hit harder for it. Saves are unchanged.
+
 ## 0.13.247
 
 **The policy trainer can score an existing enemy policy without training a

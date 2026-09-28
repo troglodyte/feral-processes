@@ -251,6 +251,30 @@ way deleting the Currency item does.
     //     strongest things a routine can buy. This is what `fork_program.ron`
     //     and `fork_cluster.ron` use.
     //
+    //   Reanimate(count: 3)
+    //     Raises fallen bodies — the grey `x` marks a battle map leaves
+    //     where something died — onto the invoker's own side. Up to
+    //     `count` raisable marks inside `shape` rise, nearest the aim cell
+    //     first; a mark with nothing left to raise (a boss, a fork, or an
+    //     already-raised body) is skipped rather than counted against the
+    //     limit. **Battle maps only**, `Tamper`'s reason: there is no
+    //     fallen mark anywhere in the group model.
+    //
+    //     A raised body is contained exactly like a forked one — never a
+    //     companion, never the roster, no XP, no save, gone the moment the
+    //     fight ends — but it keeps the fallen program's own species and
+    //     rarity rather than rolling new ones, at `tuning::
+    //     REANIMATE_STAT_MULT` (0.75) of what its stats were the moment it
+    //     fell. A party-side cast also reads the caster's own Spawn
+    //     Priority perk, the same bonus `Summon` reads for a fork; a
+    //     hostile cast gets none. Recasting replaces only the caster's own
+    //     side's previous Respawn set — a fork, and the other side's own
+    //     raised bodies, are untouched.
+    //
+    //     Requires `target: WholeParty`, `Summon`'s reason: the marks it
+    //     raises are read off the aim and the shape, never off a picked
+    //     recipient. This is what `respawn.ron` uses.
+    //
     //   Tamper(kind: Temperature(0.0), duration: 3)
     //   Tamper(kind: Profiled, duration: 3)
     //   Tamper(kind: Injected, duration: 1)
@@ -943,14 +967,16 @@ anything a player *chooses* to carry — an item's `grants` especially —
 
 ## The hunt-only set
 
-Twenty-eight shipped abilities carry a non-zero `wild_weight` and are named by
+Thirty-five shipped abilities carry a non-zero `wild_weight` and are named by
 no species file and no research node: `kernel_panic`, `stack_smash`,
 `pipeline_stall`, `branch_hazard`, `fork_bomb`, `pid_exhaustion`,
 `packet_shred`, `bus_fault`, `hard_lock`, `heap_corruption`,
 `race_condition`, `bit_rot`, `hyperthread`, `bastion`, `clock_gate`,
 `throttle`, `brownout`, `acid_wash`, `etch`, `oxide_strip`,
 `checksum_repair`, `mirror_restore`, `cold_boot`, `siphon_cycles`,
-`leech_array`, `cycle_harvest`, `invalidate_line`, `flush_cache`.
+`leech_array`, `cycle_harvest`, `invalidate_line`, `flush_cache`,
+`row_hammer_single`, `row_hammer_group`, `row_hammer_everyone`,
+`segfault_everyone`, `skim_everyone`, `segfault_group`, `respawn`.
 
 The only way to get one is to find a wild program carrying it and decompile
 that program. Killing the carrier destroys the routine. Adding any of these

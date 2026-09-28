@@ -1705,21 +1705,18 @@ fn a_level_one_player_installs_a_second_tool_of_another_category() {
     assert_eq!(game.world.get::<Tools>(player).unwrap().0.len(), 2);
 }
 
-#[test]
-fn installing_a_tool_replaces_the_installed_one_of_its_category_in_place() {
-    // The starter clamp is Materials; a second Materials tool is the same
-    // type at another version, so it takes the clamp's slot rather than a
-    // new one. Core Tap is installed after the clamp so "in place" is
-    // distinguishable from "appended".
-    let mut game = Game::new(9213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
+/// A fresh game whose `ToolDb` holds the starter (Materials), a Core Tap
+/// (Cores) and `clamp_mk2` — a second Materials tool, the same type as the
+/// starter at another version.
+fn game_with_a_second_materials_tool(seed: u32, tag: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
     let starter_ron = format!(
         r#"(id: "{starter}", name: "Starter", description: "d", category: Materials,
             yields: [("core_fragment", 1.0)], tier: 1, ticks: 1)"#
     );
     let (tool_db, warnings) = load_tools(
-        "replace_in_place",
+        tag,
         &[
             (starter.as_str(), starter_ron.as_str()),
             (
@@ -1739,6 +1736,22 @@ fn installing_a_tool_replaces_the_installed_one_of_its_category_in_place() {
         "fixture tools must load clean: {warnings:?}"
     );
     game.world.insert_resource(tool_db);
+    game
+}
+
+#[test]
+fn installing_a_tool_replaces_the_installed_one_of_its_category_in_place() {
+    // Core Tap is installed after the starter clamp so "in place" is
+    // distinguishable from "appended".
+    let mut game = game_with_a_second_materials_tool(9213, "replace_in_place");
+    let player = game.player_entity();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    let starter_name = game
+        .tool_defs()
+        .into_iter()
+        .find(|t| t.id == starter)
+        .unwrap()
+        .name;
     hold_carrier(&mut game, "core_tap", 1);
     game.install_tool(&ToolId("core_tap".to_string())).unwrap();
     hold_carrier(&mut game, "clamp_mk2", 1);
@@ -1761,6 +1774,28 @@ fn installing_a_tool_replaces_the_installed_one_of_its_category_in_place() {
         "the replaced tool hands back no carrier, uninstall_tool's rule"
     );
     assert!(game.knows_tool(&starter), "the replaced tool stays known");
+    assert_eq!(
+        game.message_log(1)[0].text,
+        format!("You replace the {starter_name} with the Clamp Mk2.")
+    );
+}
+
+#[test]
+fn a_same_category_install_replaces_even_at_the_installed_tool_cap() {
+    // A replacement adds no slot, so the cap must not refuse it.
+    let mut game = game_with_a_second_materials_tool(9214, "replace_at_cap");
+    let player = game.player_entity();
+    let mut full = vec![ToolId(tuning::STARTER_TOOL_ID.to_string())];
+    full.extend((1..tuning::MAX_INSTALLED_TOOLS).map(|i| ToolId(format!("filler_{i}"))));
+    game.world.entity_mut(player).insert(Tools(full));
+    hold_carrier(&mut game, "clamp_mk2", 1);
+
+    game.install_tool(&ToolId("clamp_mk2".to_string()))
+        .expect("a replacement at the cap is not an append");
+
+    let tools = &game.world.get::<Tools>(player).unwrap().0;
+    assert_eq!(tools.len(), tuning::MAX_INSTALLED_TOOLS);
+    assert_eq!(tools[0], ToolId("clamp_mk2".to_string()));
 }
 
 #[test]

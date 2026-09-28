@@ -453,11 +453,10 @@ mod tests {
     /// bench, so both header lines are included, run through
     /// `MAX_INSTALLED_TOOLS` installed tools.
     ///
-    /// Verified by mutation the way the list census above was, and with the
-    /// same finding: `PopupSize::Large` at 720px holds 28 rows against this
-    /// page's 9, so a `+1` slot stays green — the fixture had to reach 40
-    /// slots (a 45-row page) before this failed, and was reverted. The cap
-    /// constant is the thing under test, not a second copy of it here.
+    /// `PopupSize::Large` at 720px holds 28 rows, well above this page at
+    /// the cap, so a `+1` stays green; when this was measured at the old
+    /// four-tool cap the fixture had to reach 40 tools before it failed. The
+    /// cap constant is the thing under test, not a second copy of it here.
     #[test]
     fn the_tallest_extraction_options_page_fits_its_popup_at_1280x720() {
         let game = tallest_and_widest_options_game();

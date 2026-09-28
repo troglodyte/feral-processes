@@ -16,8 +16,8 @@ taught by the research tree, forged from materials, and burned into a slot when 
 Pulling a tool back out does not hand the forged copy back; what is in the slot is the tool. You
 keep the knowledge, so anything you have researched can be forged again.
 
-- You have one slot at level 1 and four at most. A slot spent on one tool is a slot not holding
-  another, and that is the whole of the decision.
+- You can carry one tool of each kind. Installing a tool of a kind you already carry swaps it in
+  for the old one.
 - The Salvage Clamp prises off loose material. The Component Stripper pulls whole components. The
   Core Tap draws out the compiled core. Each reaches into a different band of what a body is worth.
 - The Routine Reader reads the program for what it was running and teaches you one, favouring the

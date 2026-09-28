@@ -689,11 +689,10 @@ pub struct Racked(pub Vec<DownedProgram>);
 /// order — position is what the extraction screen selects by, `Routines`'
 /// own reason for keeping its list ordered rather than keyed.
 ///
-/// At most one tool per `ToolCategory`, and never more than
-/// `tuning::MAX_INSTALLED_TOOLS`. `Game::new`'s starter grant fills the
-/// first slot; `Game::install_tool` is what enforces both on every write
-/// after that, `install_disk`'s own rule on the tool side of the
-/// acquisition chain.
+/// `Game::install_tool` keeps it to one tool per `ToolCategory` and at most
+/// `tuning::MAX_INSTALLED_TOOLS` — for its own writes only: a list loaded
+/// from a save is taken as written, and an install replaces just the first
+/// same-category tool it finds.
 #[derive(Component, Default, Clone)]
 pub struct Tools(pub Vec<ToolId>);
 

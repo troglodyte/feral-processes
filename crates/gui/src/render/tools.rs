@@ -6,8 +6,8 @@
 use super::popup::*;
 use super::*;
 
-/// Every row of the screen: a header naming slots used against the level
-/// cap (plan decision 3), then one row per `Game::tool_rows` entry, then the
+/// Every row of the screen: a header counting installed tools, then one row
+/// per `Game::tool_rows` entry, then the
 /// footer every read-and-act popup in this family closes with.
 ///
 /// The status column reads one of three ways depending on the row's own
@@ -65,7 +65,7 @@ mod tests {
     use feral_processes_engine::items::ItemId;
     use feral_processes_engine::save;
     use feral_processes_engine::tools::{ToolDb, ToolId};
-    use feral_processes_engine::tuning::{self, MAX_INSTALLED_TOOLS};
+    use feral_processes_engine::tuning;
 
     fn assets_dir() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -103,14 +103,14 @@ mod tests {
 
     /// A game where `tuning::MAX_TOOL_ROWS` tools have a row — the real
     /// bound (Minor 9 of the review), not "however many tools this build
-    /// ships" (three, today, well under the cap). `Game::tool_rows` trims
+    /// ships" (six, today, under the cap). `Game::tool_rows` trims
     /// to that ceiling itself, so this fixture pads the shipped catalogue
     /// with synthetic tool files up to it, on a scratch copy of the whole
     /// asset tree (`Game::new` needs every directory present to start
-    /// clean). The shipped tools fill as many slots as fit (exercising the
-    /// `slot N` status), the padding tools carry a three-digit carrier
-    /// count (exercising `N held`), so both status strings the row builder
-    /// can produce sit on screen at once alongside `not forged`.
+    /// clean). The shipped tools are installed (exercising the `slot N`
+    /// status), all but the last padding tool carry a three-digit carrier
+    /// count (exercising `N held`), and the last is known but unforged
+    /// (`not forged`), so all three status strings sit on screen at once.
     fn worst_case_game() -> Game {
         // Keyed on an atomic counter, not just the process id — the test
         // binary runs cases as concurrent threads, and every caller of this
@@ -153,6 +153,7 @@ mod tests {
                 ToolId(id)
             })
             .collect();
+        let extra_ids_len = extra_ids.len();
         let ids: Vec<ToolId> = shipped_ids.into_iter().chain(extra_ids).collect();
         assert_eq!(
             ids.len(),
@@ -169,11 +170,17 @@ mod tests {
         game.save(&path).unwrap();
         let mut data = save::load_from_file(&path).unwrap();
         data.known_tools = ids.clone();
-        let cap = MAX_INSTALLED_TOOLS;
-        data.player.tools = ids.iter().take(cap).cloned().collect();
-        data.player
-            .inventory
-            .extend(ids.iter().skip(cap).map(|id| (ItemId::tool(id), 999u32)));
+        // A fixed split rather than one read off the install cap: the cap
+        // exceeds the row count, and filling every row with `slot N` would
+        // leave `N held` unmeasured.
+        let installed = ids.len() - extra_ids_len;
+        data.player.tools = ids.iter().take(installed).cloned().collect();
+        data.player.inventory.extend(
+            ids.iter()
+                .skip(installed)
+                .take(extra_ids_len.saturating_sub(1))
+                .map(|id| (ItemId::tool(id), 999u32)),
+        );
         save::save_to_file(&path, &data).unwrap();
         let loaded = Game::load(&path, &scratch).unwrap();
         let _ = std::fs::remove_file(&path);

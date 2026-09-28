@@ -104,8 +104,9 @@ impl Game {
     /// A tool's `category` is its type and `tier` its version: installing
     /// a tool whose category is already installed replaces that tool in its
     /// slot, handing back no carrier (`uninstall_tool`'s rule — the old
-    /// tool stays known). Any other tool is appended, up to the silent
-    /// `tuning::MAX_INSTALLED_TOOLS`.
+    /// tool stays known). A lower tier may replace a higher one: which
+    /// version to carry is the player's choice. Any other tool is appended,
+    /// up to the silent `tuning::MAX_INSTALLED_TOOLS`.
     ///
     /// Refusals, in order, all before anything is spent: game-over or an
     /// active battle, an id `ToolDb` cannot resolve, the player cannot hold

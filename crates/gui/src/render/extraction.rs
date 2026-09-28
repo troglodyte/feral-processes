@@ -221,7 +221,7 @@ mod tests {
     use feral_processes_engine::items::DownedProgram;
     use feral_processes_engine::save;
     use feral_processes_engine::tools::{ToolDb, ToolId};
-    use feral_processes_engine::tuning::{self, MAX_DOWNED_PROGRAMS, TOOL_SLOT_CAP};
+    use feral_processes_engine::tuning::{self, MAX_DOWNED_PROGRAMS, MAX_INSTALLED_TOOLS};
 
     fn assets_dir() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -380,13 +380,12 @@ mod tests {
     }
 
     /// The tool page's worst case: the same widest program above, run through
-    /// `TOOL_SLOT_CAP` filled slots rather than the single starter tool a
-    /// fresh run installs — spec section 6 names that cap as the asserted
-    /// constraint, so a page that only ever sees one tool never exercises it.
-    /// Exactly `TOOL_SLOT_CAP` tools ship as of phase 3, so the wrap below
-    /// repeats nothing today; it is there so a removed tool file still
-    /// fills every slot rather than quietly shrinking the fixture the cap
-    /// is asserted against.
+    /// `MAX_INSTALLED_TOOLS` installed tools rather than the single starter
+    /// tool a fresh run installs — the cap is the asserted constraint, so a
+    /// page that only ever sees one tool never exercises it. One tool per
+    /// category keeps a real loadout below the cap; the wrap below repeats
+    /// shipped tools to reach it anyway, so the fixture measures the bound
+    /// rather than whatever ships today.
     ///
     /// A top-tier bench stands too, so the header line under test is the
     /// long one — "no bench standing" is the shorter of the two, and a
@@ -398,7 +397,7 @@ mod tests {
         let rarity = widest_rarity();
         let held = vec![program(&species, 999, rarity)];
         let shipped = every_shipped_tool_id();
-        let tools = (0..TOOL_SLOT_CAP as usize)
+        let tools = (0..MAX_INSTALLED_TOOLS)
             .map(|i| shipped[i % shipped.len()].clone())
             .collect();
         // Beside the party, so the `[Q]` hint row joins the count — and the
@@ -452,7 +451,7 @@ mod tests {
 
     /// The tool page's own worst case: the widest program and the widest
     /// bench, so both header lines are included, run through
-    /// `TOOL_SLOT_CAP` filled slots.
+    /// `MAX_INSTALLED_TOOLS` installed tools.
     ///
     /// Verified by mutation the way the list census above was, and with the
     /// same finding: `PopupSize::Large` at 720px holds 28 rows against this

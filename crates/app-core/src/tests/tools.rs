@@ -158,13 +158,10 @@ fn f_forges_a_carrier_of_the_highlighted_known_tool() {
     );
 }
 
-/// `I` installs a held carrier into the player's next free slot.
+/// `I` installs a held carrier beside the starter tool.
 #[test]
-fn i_installs_a_held_carrier_into_a_free_slot() {
-    // Level high enough for a second slot (`tuning::TOOL_SLOT_PER_LEVEL`),
-    // since slot one is already the installed starter — see
-    // `tools::player_tool_slots`.
-    let mut app = app_holding_a_carrier(9404, "core_tap", tuning::TOOL_SLOT_PER_LEVEL);
+fn i_installs_a_held_carrier_beside_the_starter() {
+    let mut app = app_holding_a_carrier(9404, "core_tap", 1);
     open_via_menu(&mut app, 'p', "Tools");
     let rows = app.game.as_ref().unwrap().tool_rows();
     let core_tap_idx = rows

@@ -13,9 +13,14 @@ loads silently empty, the pre-extraction game.
 A tool is what a downed program (`items::DownedProgram`, carried in
 `components::DownedPrograms` after a kill) is extracted with, through the
 one door, `Game::extract_program`. It sits in a player tool slot
-(`components::Tools`, sized by `tools::player_tool_slots`); the starter
-tool is forged into the first slot at creation, and a later phase adds
-research, forging and installing more.
+(`components::Tools`); the starter tool is forged into the first slot at
+creation, and research, forging and installing add more.
+
+A tool's `category` is its type and its `tier` its version: the player
+holds at most one installed tool per category, and installing a second
+replaces the first in its slot. Tools of different categories never compete
+for room — `Game::install_tool` has only a silent backstop cap,
+`tuning::MAX_INSTALLED_TOOLS`.
 
 ## Schema
 

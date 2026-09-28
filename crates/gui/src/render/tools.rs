@@ -5,7 +5,6 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::tools;
 
 /// Every row of the screen: a header naming slots used against the level
 /// cap (plan decision 3), then one row per `Game::tool_rows` entry, then the
@@ -17,12 +16,11 @@ use feral_processes_engine::tools;
 /// strings.
 pub(super) fn tools_rows(game: &Game, selected: usize) -> Vec<Row> {
     let rows_data = game.tool_rows();
-    let slots_used = game.installed_tools().len();
-    let slots_total = tools::player_tool_slots(game.player_status().level);
+    let installed = game.installed_tools().len();
     let mut rows = vec![
         text_row(format!(
-            "Tool slots: {slots_used}/{slots_total}. F forges a carrier, I installs one, X \
-             pulls a slot."
+            "Tools installed: {installed}. F forges a carrier, I installs one (replacing \
+             one of its category), X pulls one."
         )),
         text_row(""),
     ];
@@ -67,7 +65,7 @@ mod tests {
     use feral_processes_engine::items::ItemId;
     use feral_processes_engine::save;
     use feral_processes_engine::tools::{ToolDb, ToolId};
-    use feral_processes_engine::tuning::{self, TOOL_SLOT_PER_LEVEL};
+    use feral_processes_engine::tuning::{self, MAX_INSTALLED_TOOLS};
 
     fn assets_dir() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -171,8 +169,7 @@ mod tests {
         game.save(&path).unwrap();
         let mut data = save::load_from_file(&path).unwrap();
         data.known_tools = ids.clone();
-        data.player.level = TOOL_SLOT_PER_LEVEL * 3; // TOOL_SLOT_CAP reached
-        let cap = tools::player_tool_slots(data.player.level);
+        let cap = MAX_INSTALLED_TOOLS;
         data.player.tools = ids.iter().take(cap).cloned().collect();
         data.player
             .inventory

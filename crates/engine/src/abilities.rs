@@ -22,12 +22,7 @@ pub const DECOMPILE_ABILITY_ID: &str = "decompile";
 /// Slots at `level`, from one constant set: `base` plus `step` for every
 /// `per_level` levels reached, clamped to `cap`. Both routine wrappers below
 /// call this so the companion and player curves cannot drift into two
-/// different shapes — only their constants differ — and `tools::
-/// player_tool_slots` calls it too rather than restating the clamp, per
-/// CLAUDE.md's rule that a doc comment claiming to mirror another module's
-/// formula must be a call. `step` is a parameter rather than read off
-/// `tuning::ROUTINE_SLOTS_PER_STEP` internally for exactly that reason: a
-/// tool slot grows by one a step, not two.
+/// different shapes — only their constants differ.
 ///
 /// The floor of 1 is load-bearing: `COMPANION_ROUTINE_SLOT_BASE` is 0, so a
 /// level-1 companion would otherwise have nowhere to put the kit its species

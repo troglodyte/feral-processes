@@ -1171,7 +1171,7 @@ mod tests {
     /// alone; this proves it holds for a real overlong row, so a clipped
     /// row reserves exactly what a short one does and nothing drifts. The
     /// handle comes from `handles::of`, never a pasted literal — see
-    /// `handles_are_pinned` for the one test allowed to do that.
+    /// `handles_count_up_from_zero` for the one test allowed to do that.
     #[test]
     fn a_clipped_tier_tag_never_clips_the_handle_it_trails() {
         use feral_processes_engine::components::{ProgramId, Rarity};

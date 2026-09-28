@@ -654,11 +654,10 @@ impl Game {
         // extract, routines, manifest — have no slot to show and were
         // getting no order at all.
         //
-        // Not `creature_label`: that starts with a handle for anything not
-        // custom-named, and a handle is `handles::of`'s permutation —
-        // deliberately unrelated to id order, so sorting by it groups
-        // nothing and reads as arbitrary. `ProgramId` is assignment order,
-        // which at least means "the one you caught first, sorts first."
+        // Not `creature_label`: a custom name replaces the handle, so
+        // sorting by label interleaves renamed programs with the rest.
+        // `ProgramId` is assignment order, which means "the one you caught
+        // first, sorts first" whatever the player named it.
         owned.sort_by_key(|e| {
             let species = self
                 .world

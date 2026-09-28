@@ -306,9 +306,8 @@ fn owned_pets_lists_the_party_first_in_slot_order() {
 /// order at all, across the fuse, extract, routines and manifest pickers that
 /// read the same list.
 ///
-/// Not by `name`: a handle-named program's name is `handles::of`'s
-/// permutation, deliberately unrelated to id order, so sorting by it groups
-/// nothing and looked arbitrary at the keyboard. Species groups like with
+/// Not by `name`: a custom name replaces the handle, so sorting by it
+/// interleaves renamed programs with the rest. Species groups like with
 /// like instead, so a `CustomName` no longer moves a program in this list at
 /// all — see `owned_pets_sorts_everything_behind_the_party_by_species_then_
 /// id` for the species half.

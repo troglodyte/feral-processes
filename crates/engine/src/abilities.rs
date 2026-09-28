@@ -670,6 +670,21 @@ pub enum AbilityEffect {
     /// and untargeted (`target: WholeParty`, pinned at load): the landing
     /// cell is the engine's answer, beside the invoker.
     Reinforce,
+    /// Raises up to `count` raisable `Fallen` marks in the shape, nearest
+    /// the aim first, onto the caster's own side — `Game::run_tactical_
+    /// routine`'s `Reanimate` branch.
+    ///
+    /// **Battle-map only** — a fallen mark exists only on `TacticalBattle`'s
+    /// own board, `Tamper`'s reason exactly, and `use_ability` carries the
+    /// same `unreachable!` arm for it. **Not `Summon`**: what it fields is
+    /// scaled from a `tactical::FallenBody` snapshot rather than rolled
+    /// fresh, and which marks it may reach is a targeting question
+    /// (`Game::tactical_use_routine`'s refusal) that no other effect asks.
+    Reanimate {
+        /// The most marks one cast raises. Authored `count: 3` on
+        /// `respawn.ron`.
+        count: u32,
+    },
 }
 
 impl AbilityEffect {
@@ -715,6 +730,9 @@ impl AbilityEffect {
             // and the group model's `Party` slots are sized at
             // `begin_battle`, where a body arriving later has no plan.
             AbilityEffect::Reinforce => true,
+            // A fallen mark is `TacticalBattle::fallen` alone; the group
+            // model has nothing for this effect to read.
+            AbilityEffect::Reanimate { .. } => true,
             AbilityEffect::Damage { .. }
             | AbilityEffect::Heal { .. }
             | AbilityEffect::Buff { .. }
@@ -778,7 +796,12 @@ impl AbilityEffect {
             // A body count of one, `Summon`'s reason.
             | AbilityEffect::Reinforce
             | AbilityEffect::Emulate { .. }
-            | AbilityEffect::Cloak { .. } => None,
+            | AbilityEffect::Cloak { .. }
+            // `Summon`'s reason again: `count` is how many marks rise, not
+            // a magnitude, and what each rises *at* is the fallen body's own
+            // snapshot times a fixed multiplier — nothing here for an
+            // affinity to scale.
+            | AbilityEffect::Reanimate { .. } => None,
             // A temperature is a temperature: nothing in a Tamper scales
             // with the invoker's level or affinity, so there is no
             // magnitude here for one to multiply.
@@ -819,6 +842,9 @@ impl AbilityEffect {
             | AbilityEffect::Summon { .. }
             // `Summon`'s reason: more of your own side names nobody on theirs.
             | AbilityEffect::Reinforce
+            // `Summon`'s reason again: raising a fallen mark onto your own
+            // side names nobody on theirs, whichever side "your own" is.
+            | AbilityEffect::Reanimate { .. }
             // Adopting an image tends your own kit, `Buff`'s reason exactly.
             | AbilityEffect::Emulate { .. }
             // A relocation names a *cell*, and the common case is your own
@@ -1796,6 +1822,9 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
         ),
         AbilityEffect::Reinforce => {
             "Calls a Drop Trooper off base staff through a charged drop pod".to_string()
+        }
+        AbilityEffect::Reanimate { count } => {
+            format!("Raises up to {count} fallen bodies onto your own side")
         }
     }
 }

@@ -1,0 +1,20 @@
+(
+    id: "respawn",
+    name: "Respawn",
+    // `target: WholeParty` is the no-picker shape, `Teleport`'s and
+    // `Reinforce`'s reason: this routine reads no recipient list at all —
+    // which marks rise is a targeting question `Game::tactical_use_routine`
+    // and `Game::run_tactical_routine` answer directly off the aim cell and
+    // the authored `shape:`/`range:` below, never off `target`.
+    description: "Raises up to 3 fallen bodies in the area onto your own side, at a discount of their own strength. Battle maps only.",
+    target: WholeParty,
+    effect: Reanimate(count: 3),
+    cooldown: 5,
+    power_cost: 30.0,
+    shape: Some(Radius(radius: 2)),
+    range: Some((min: 0, max: 5)),
+    research_zone: 3,
+    // Joins the hunt-only set (`bit_rot`'s reason): any wild program may
+    // spawn carrying it, and no species kit names it.
+    wild_weight: 4,
+)

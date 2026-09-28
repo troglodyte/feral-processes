@@ -699,8 +699,8 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
     assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
 }
 
-/// The thirty-four hunt-only routines are reachable exactly one way: off a wild
-/// carrier. A species file naming one would quietly restore the "just
+/// The thirty-five hunt-only routines are reachable exactly one way: off a
+/// wild carrier. A species file naming one would quietly restore the "just
 /// target the species" loop this set exists to break.
 ///
 /// The count is a tripwire, not a target: the pool's size is a design
@@ -727,7 +727,7 @@ fn no_species_file_grants_a_wild_only_ability() {
         .into_iter()
         .map(|(d, _)| d.id.clone())
         .collect();
-    assert_eq!(wild_only.len(), 34, "thirty-four routines are hunt-only");
+    assert_eq!(wild_only.len(), 35, "thirty-five routines are hunt-only");
 
     for species in game.species_defs() {
         for ability in &species.abilities {
@@ -812,7 +812,10 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Tamper { .. }
             // A relocation moves no Integrity at all — it moves a body.
             | E::Reinforce
-            | E::Teleport => continue,
+            | E::Teleport
+            // `Reinforce`'s reason: what rises is scaled by a fixed
+            // multiplier off a snapshot, not by a rolled band.
+            | E::Reanimate { .. } => continue,
         };
         checked += 1;
         assert!(
@@ -873,7 +876,10 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             // are all in `Game::tactical_teleport`, above the charge, so
             // there is nothing left for a roll to decide.
             | E::Reinforce
-            | E::Teleport => false,
+            | E::Teleport
+            // `Reinforce`'s reason: a raise always lands, the refusals are
+            // all in `Game::tactical_use_routine`, above the charge.
+            | E::Reanimate { .. } => false,
         };
         if rolls_to_hit {
             aimed += 1;
@@ -1051,7 +1057,10 @@ fn without_version_tag(name: &str) -> &str {
 /// recipient (the acting body) directly rather than trusting
 /// `Game::ability_recipients` — see the variant's own doc — and "Emulate
 /// Party" would tell the player it lands on their party too. `Teleport`
-/// and `Reinforce` join them on the same no-picker shape.
+/// and `Reinforce` join them on the same no-picker shape. `Reanimate` joins
+/// them too: which marks rise is answered off the aim cell and the
+/// authored `shape:`/`range:`, never off `target`, so "Respawn Party" would
+/// tell the player it lands on their party alone, which it does not.
 #[test]
 fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
     let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1066,6 +1075,7 @@ fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
                     | crate::abilities::AbilityEffect::Emulate { .. }
                     | crate::abilities::AbilityEffect::Teleport
                     | crate::abilities::AbilityEffect::Reinforce
+                    | crate::abilities::AbilityEffect::Reanimate { .. }
             )
         })
     {
@@ -1118,7 +1128,10 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             // the cloak itself when the body it moved was a hostile.
             | E::Reinforce
             | E::Teleport
-            | E::Symlink => false,
+            | E::Symlink
+            // `Reinforce`'s reason: fielding more of your own side names
+            // nobody on the other.
+            | E::Reanimate { .. } => false,
         };
         assert_eq!(
             def.effect.breaks_cloak(),

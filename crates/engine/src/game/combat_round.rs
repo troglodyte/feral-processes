@@ -1823,6 +1823,12 @@ impl Game {
                 AbilityEffect::Reinforce => unreachable!(
                     "AbilityEffect::tactical_only; run_tactical_routine seats a reinforcement directly"
                 ),
+                // `Tamper`'s reason again: tactical-only, and which marks
+                // rise is a targeting question `run_tactical_routine`
+                // answers directly rather than through this recipient loop.
+                AbilityEffect::Reanimate { .. } => unreachable!(
+                    "AbilityEffect::tactical_only; run_tactical_routine raises the marks directly"
+                ),
             }
         }
         // **After the action resolves**, so the swing's own line is logged

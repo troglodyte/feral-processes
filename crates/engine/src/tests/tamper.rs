@@ -166,8 +166,8 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
         checked += 1;
     }
     assert_eq!(
-        checked, 7,
-        "the five tamper routines, Teleport and Call Reinforcements are what ships today"
+        checked, 8,
+        "the five tamper routines, Teleport, Call Reinforcements and Respawn are what ships today"
     );
 }
 

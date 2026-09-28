@@ -10,7 +10,8 @@ use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
-    equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
+    battle_with_a_pack_of, equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile,
+    test_assets_dir,
 };
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::{Entity, With};
@@ -608,6 +609,41 @@ fn a_boss_falls_with_no_snapshot_to_raise_it_from() {
     assert!(
         board.fallen[0].raise.is_none(),
         "a boss is not what Respawn is for"
+    );
+}
+
+/// Respawn's `tactical_only` effect has nothing to resolve against in the
+/// group model — `Game::ability_unavailable`'s first check, ahead of
+/// cooldown and Power, exactly as it is for every other tactical-only
+/// routine (`a_tamper_routine_is_refused_outside_a_battle_map`'s pattern).
+#[test]
+fn respawn_is_refused_outside_a_battle_map_and_spends_no_power() {
+    let mut game = game();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 40);
+    insert_battle(&mut game, player, enemies);
+    let respawn = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("respawn")
+        .cloned()
+        .expect("respawn ships");
+    let before = game
+        .world
+        .get::<crate::components::PowerReserve>(player)
+        .map(|r| r.get());
+
+    assert_eq!(
+        game.ability_unavailable(player, &respawn),
+        Some(crate::game::combat::RoutineRefusal::BattleMapOnly),
+        "a tactical-only routine must be refused in a group fight"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::PowerReserve>(player)
+            .map(|r| r.get()),
+        before,
+        "a refusal spends no Power"
     );
 }
 

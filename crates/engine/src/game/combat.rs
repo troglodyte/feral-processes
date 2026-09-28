@@ -44,6 +44,9 @@ pub(crate) enum RoutineRefusal {
     InSiege,
     /// Reinforce with no free cell left on the board to land on.
     NoLandingCell,
+    /// Reanimate with no raisable mark in the shape, or none of those marks'
+    /// cells free to stand on.
+    NothingToRespawn,
 }
 
 impl std::fmt::Display for RoutineRefusal {
@@ -62,6 +65,7 @@ impl std::fmt::Display for RoutineRefusal {
             RoutineRefusal::NoTrooperAvailable => write!(f, "no trooper on shift"),
             RoutineRefusal::InSiege => write!(f, "not in a siege"),
             RoutineRefusal::NoLandingCell => write!(f, "no room to land"),
+            RoutineRefusal::NothingToRespawn => write!(f, "nothing to respawn"),
         }
     }
 }

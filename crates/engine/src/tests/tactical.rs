@@ -3370,6 +3370,338 @@ mod summons {
     }
 }
 
+/// Respawn: raising fallen bodies onto the caster's own side (party-side
+/// casts only — a hostile carrier is Phase 2's).
+mod respawn {
+    use super::*;
+    use crate::components::{PowerReserve, Respawned, Routines, Summoned, WanderAi};
+
+    fn give_respawn(game: &mut Game, who: Entity) {
+        game.world
+            .entity_mut(who)
+            .insert(Routines(vec!["respawn".to_string()]));
+    }
+
+    /// Kills `target` with the player's own attacks — `a_body_killed_on_a_
+    /// battle_map_leaves_a_mark_where_it_fell`'s loop — and returns the cell
+    /// it fell on.
+    fn kill_with_the_player(game: &mut Game, target: Entity) -> (i32, i32) {
+        let player = game.player_entity();
+        let mut last_seen = None;
+        for _ in 0..64 {
+            if game.world.get::<Stats>(target).is_none() {
+                break;
+            }
+            if !wait_for_turn(game, player) {
+                break;
+            }
+            let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
+                break;
+            };
+            last_seen = Some(at);
+            if let Some(near) = beside(game, at) {
+                game.world
+                    .resource_mut::<TacticalBattle>()
+                    .move_to(player, near);
+            }
+            game.tactical_attack(target);
+        }
+        last_seen.expect("the target stood somewhere")
+    }
+
+    /// Every free, unoccupied cell within `radius` of `aim`, nearest first —
+    /// the same Chebyshev metric `Game::raisable_marks` sorts by, so a test
+    /// can place fallen marks at known distances from an aim cell.
+    fn free_cells_within(game: &Game, aim: (i32, i32), radius: i32) -> Vec<(i32, i32)> {
+        let battle = game.world.resource::<TacticalBattle>();
+        let mut cells: Vec<(i32, i32)> = (0..battle.board.side)
+            .flat_map(|x| (0..battle.board.side).map(move |y| (x, y)))
+            .filter(|&(x, y)| battle.board.walkable(x, y))
+            .filter(|&c| battle.occupant(c).is_none())
+            .filter(|&c| crate::tactical::reach::distance(c, aim) as i32 <= radius)
+            .collect();
+        cells.sort_by_key(|&c| crate::tactical::reach::distance(c, aim));
+        cells
+    }
+
+    /// Places a plain hostile `Creature` on `cell` with `stats`, kills it,
+    /// and reaps it into a `Fallen` mark — full control over where a
+    /// raisable mark ends up, without going through a real fight's own
+    /// deployment.
+    fn drop_a_fallen_mark(game: &mut Game, cell: (i32, i32), stats: Stats) {
+        let body = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                stats,
+                StatusEffects::default(),
+            ))
+            .id();
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(body, cell),
+            "the cell must be free to place a fallen-mark candidate on"
+        );
+        game.world.get_mut::<Stats>(body).unwrap().hp = 0;
+        game.tactical_round_upkeep();
+    }
+
+    #[test]
+    fn a_party_cast_raises_the_fallen_at_075x_and_removes_the_mark() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 2, 1);
+        let target = pack[0];
+        // `hp: 1` keeps the kill one-shot; the rest are set well above 1 so
+        // the multiplier's own value (0.75, not merely "less than the
+        // original") is what the assertions below actually pin down —
+        // rounding a base stat of 1 cannot distinguish 0.75 from 0.9.
+        *game.world.get_mut::<Stats>(target).unwrap() = Stats {
+            hp: 1,
+            max_hp: 40,
+            atk: 20,
+            mitigation: 12,
+        };
+        let stats_before = *game.world.get::<Stats>(target).unwrap();
+        let species = game.world.get::<Creature>(target).unwrap().species.clone();
+        let cell = kill_with_the_player(&mut game, target);
+
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(
+            game.tactical_use_routine(0, cell),
+            "respawn must land on its own mark"
+        );
+
+        assert!(
+            !game
+                .world
+                .resource::<TacticalBattle>()
+                .fallen()
+                .iter()
+                .any(|f| f.cell == cell),
+            "the mark must be removed, not merely left unraisable"
+        );
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("a raised body must be seated");
+        assert!(game.world.get::<Summoned>(raised).is_some());
+        assert!(game.world.get::<Hostile>(raised).is_none());
+        assert!(game.world.get::<WanderAi>(raised).is_none());
+        assert_eq!(game.world.get::<Creature>(raised).unwrap().species, species);
+        let stats = *game.world.get::<Stats>(raised).unwrap();
+        let expect = |v: i32| (v as f32 * 0.75).round() as i32;
+        assert_eq!(stats.max_hp, expect(stats_before.max_hp));
+        assert_eq!(stats.atk, expect(stats_before.atk));
+        assert_eq!(stats.mitigation, expect(stats_before.mitigation));
+        assert_eq!(stats.hp, stats.max_hp, "a raised body comes up at full hp");
+    }
+
+    #[test]
+    fn a_cast_raises_at_most_count_nearest_first() {
+        let mut game = game();
+        // One live hostile, hard to kill, so the fight stays open around
+        // the manually seeded marks below.
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let aim = beside(&game, player_at).expect("room beside the player");
+        let cells = free_cells_within(&game, aim, 2);
+        assert!(
+            cells.len() >= 4,
+            "the board must offer at least 4 free cells near the aim: {cells:?}"
+        );
+        let candidates = &cells[..4];
+        for &cell in candidates {
+            drop_a_fallen_mark(
+                &mut game,
+                cell,
+                Stats {
+                    hp: 20,
+                    max_hp: 20,
+                    atk: 5,
+                    mitigation: 0,
+                },
+            );
+        }
+
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, aim));
+
+        let still_marked: Vec<(i32, i32)> = game
+            .world
+            .resource::<TacticalBattle>()
+            .fallen()
+            .iter()
+            .filter(|f| f.raise.is_some())
+            .map(|f| f.cell)
+            .collect();
+        assert_eq!(
+            still_marked,
+            vec![candidates[3]],
+            "the farthest of the four must be the one left over"
+        );
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .filter(|&(e, _)| game.world.get::<Respawned>(e).is_some())
+            .count();
+        assert_eq!(raised, 3, "respawn.ron authors count: 3");
+    }
+
+    #[test]
+    fn a_cast_with_nothing_raisable_in_reach_is_refused_and_spends_no_power() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .unwrap();
+        let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+        assert!(
+            !game.tactical_use_routine(0, player_at),
+            "nothing has fallen anywhere near the player yet"
+        );
+
+        assert_eq!(
+            game.world.get::<PowerReserve>(player).unwrap().get(),
+            before,
+            "a refusal spends no Power"
+        );
+    }
+
+    #[test]
+    fn a_raised_body_that_falls_again_leaves_a_plain_mark() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 2, 1);
+        let target = pack[0];
+        let cell = kill_with_the_player(&mut game, target);
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, cell));
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("a raised body must be seated");
+
+        let raised_cell = kill_with_the_player(&mut game, raised);
+
+        let mark = game
+            .world
+            .resource::<TacticalBattle>()
+            .fallen()
+            .iter()
+            .find(|f| f.cell == raised_cell)
+            .cloned();
+        assert!(
+            mark.is_some_and(|m| m.raise.is_none()),
+            "a raised body is Summoned; its own death leaves an unraisable mark"
+        );
+    }
+
+    #[test]
+    fn recast_replaces_only_its_own_sides_set_while_a_fork_survives() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 3, 1);
+        let first_target = pack[0];
+        let cell_one = kill_with_the_player(&mut game, first_target);
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, cell_one));
+        let first_raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("the first cast must have raised a body");
+
+        let fork = game.fork_programs(player, 1, 0)[0];
+        assert!(game.seat_summon_on_board(player, fork));
+
+        let second_target = pack[1];
+        let cell_two = kill_with_the_player(&mut game, second_target);
+        assert!(wait_for_turn(&mut game, player));
+        // Off cooldown: this test is about the dissolve, not the wait.
+        game.world
+            .entity_mut(player)
+            .remove::<crate::components::AbilityCooldowns>();
+        assert!(game.tactical_use_routine(0, cell_two));
+
+        assert!(
+            !game.creature_alive(first_raised),
+            "the first cast's own raised body must be replaced"
+        );
+        assert!(
+            game.creature_alive(fork),
+            "a fork is not Respawn's to dissolve"
+        );
+        let second_raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .filter(|&(e, _)| game.world.get::<Respawned>(e).is_some())
+            .count();
+        assert_eq!(second_raised, 1, "exactly the second cast's own body");
+    }
+
+    #[test]
+    fn every_raised_body_is_gone_after_finish_fight() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 2, 1);
+        let target = pack[0];
+        let cell = kill_with_the_player(&mut game, target);
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, cell));
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("a raised body must be seated");
+        assert!(game.world.get::<Stats>(raised).is_some());
+
+        let last = pack[1];
+        kill_with_the_player(&mut game, last);
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "the last hostile's death must have closed the fight"
+        );
+        assert!(
+            game.world.get::<Stats>(raised).is_none(),
+            "finish_fight sweeps every Summoned body, raised or forked"
+        );
+    }
+}
+
 /// Walking into a hostile is a swing, not a refusal.
 ///
 /// The board's own bump, `move_player`'s ladder one space over: an occupied

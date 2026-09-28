@@ -709,6 +709,20 @@ impl TacticalBattle {
         &self.fallen
     }
 
+    /// Takes the raisable mark at `cell`, if there is one — Respawn's own
+    /// door onto `fallen`, the one mutator besides `fall` itself. Removes
+    /// the mark entirely (raised, it no longer needs one) rather than
+    /// clearing only its `raise`, which is what keeps a raised body's own
+    /// later fall (`raise: None`, unraisable — `Game::raisable_snapshot`'s
+    /// `Summoned` exclusion) from drawing two marks on the same cell.
+    pub(crate) fn take_raise(&mut self, cell: (i32, i32)) -> Option<FallenBody> {
+        let idx = self
+            .fallen
+            .iter()
+            .position(|f| f.cell == cell && f.raise.is_some())?;
+        self.fallen.remove(idx).raise
+    }
+
     /// Keeps only the decoys `keep` answers `true` for.
     pub(crate) fn retain_decoys(&mut self, keep: impl FnMut(&Decoy) -> bool) {
         self.decoys.retain(keep);

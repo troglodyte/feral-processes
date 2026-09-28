@@ -1340,6 +1340,19 @@ pub struct TamperEntry {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Summoned;
 
+/// Marks a `Summoned` body raised by the `Reanimate` effect (Respawn), on
+/// either side, rather than forked fresh by a `Summon` routine.
+///
+/// **What splits the two summon pools.** `Game::dissolve_summons` narrows
+/// to `With<Summoned>, Without<Respawned>` so a fork's own recast never
+/// touches a raised body and vice versa (`Game::dissolve_respawned`, the
+/// per-side counterpart); `tactical::view::TacticalBody::respawned` reads it
+/// for the renderer's own tint. Everything `Summoned` already covers for
+/// containment — no `Tamed`, swept unconditionally by `finish_fight` —
+/// applies here too, since this always rides alongside it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Respawned;
+
 /// A Drop Trooper called into a battle map by `Game::call_reinforcement` —
 /// a real roster body riding in `Party` for this fight alone, above
 /// `MAX_PARTY_SIZE` if need be. `Game::finish_fight` takes every holder

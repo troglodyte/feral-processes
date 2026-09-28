@@ -1271,12 +1271,36 @@ impl Game {
     /// the other.
     pub(crate) fn dissolve_summons(&mut self) {
         let standing: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<Entity, With<crate::components::Summoned>>();
+            let mut query = self.world.query_filtered::<Entity, (
+                With<crate::components::Summoned>,
+                Without<crate::components::Respawned>,
+            )>();
             query
                 .iter(&self.world)
                 .filter(|&e| self.creature_alive(e))
+                .collect()
+        };
+        for body in standing {
+            if let Some(mut stats) = self.world.get_mut::<Stats>(body) {
+                stats.hp = 0;
+            }
+        }
+    }
+
+    /// `dissolve_summons`' own counterpart for the other summon pool: kills
+    /// every living `Respawned` body **on the `hostile` side**, so a recast
+    /// replaces only that side's own set — a party-side cast never touches a
+    /// hostile carrier's raised bodies and vice versa, and neither ever
+    /// touches a fork.
+    pub(crate) fn dissolve_respawned(&mut self, hostile: bool) {
+        let standing: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, With<crate::components::Respawned>>();
+            query
+                .iter(&self.world)
+                .filter(|&e| self.creature_alive(e))
+                .filter(|&e| self.world.get::<Hostile>(e).is_some() == hostile)
                 .collect()
         };
         for body in standing {

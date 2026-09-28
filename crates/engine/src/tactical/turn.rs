@@ -11,7 +11,8 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
-use crate::components::{Emulation, Hostile, Player, Squad, Stats};
+use crate::components::{Emulation, Hostile, Perks, Player, PowerReserve, Squad, Stats, WanderAi};
+use crate::game::combat::RoutineRefusal;
 use crate::game::combat_teardown::FightVerdict;
 use crate::items::ItemId;
 use crate::resources::{GameClock, Party, ZoneLevel};
@@ -1204,6 +1205,10 @@ impl Game {
                 return false;
             }
         }
+        // The eleventh, and Respawn's own.
+        if self.respawn_refusal(actor, &ability, aim).is_some() {
+            return false;
+        }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true
     }
@@ -1378,6 +1383,12 @@ impl Game {
             // recipients. Every refusal was asked above the charge, of the
             // pairing this call makes.
             self.call_reinforcement(actor);
+        } else if let AbilityEffect::Reanimate { count } = ability.effect {
+            // `Summon`'s branch and `Decompile`'s: seated by this model
+            // directly rather than resolved over `reach::recipients`, which
+            // carries the `unreachable!` arm this branch is what makes
+            // actually unreachable.
+            self.reanimate(actor, ability, aim, count);
         } else if let AbilityEffect::Tamper { kind, duration } = ability.effect {
             // `Decompile`'s reason and `Summon`'s: seated by the one combat
             // model that can resolve it rather than through `use_ability`'s
@@ -1782,6 +1793,152 @@ impl Game {
             rarity,
             stats,
         })
+    }
+
+    /// Every raisable mark a Respawn cast at `aim` would reach, nearest the
+    /// aim first — `Game::tactical_use_routine`'s refusal and `Game::
+    /// run_tactical_routine`'s own `Reanimate` branch share this rather than
+    /// two copies of "which marks does this shape cover".
+    ///
+    /// `reach::shape_cells` is the same clipping an ordinary recipient list
+    /// gets, so a Respawn aimed through a wall reaches no further than a
+    /// Heat Injection would.
+    fn raisable_marks(
+        &self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+    ) -> Vec<((i32, i32), crate::tactical::FallenBody)> {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let cells = reach::shape_cells(&battle.board, from, aim, ability.tactical_shape());
+        let mut marks: Vec<((i32, i32), crate::tactical::FallenBody)> = battle
+            .fallen()
+            .iter()
+            .filter(|f| cells.contains(&f.cell))
+            .filter_map(|f| f.raise.clone().map(|raise| (f.cell, raise)))
+            .collect();
+        marks.sort_by_key(|(cell, _)| reach::distance(*cell, aim));
+        marks
+    }
+
+    /// `RoutineRefusal::NothingToRespawn`, for a non-`Reanimate` ability or
+    /// a fine aim `None`: no raisable mark lies in the shape at all, or
+    /// every one of those marks' own cells is already stood on. Either way
+    /// there is nothing this cast would raise, and spending the Power, the
+    /// cooldown and the turn on it is exactly what `Game::tactical_use_
+    /// routine`'s other ten refusals exist to prevent for every other
+    /// effect.
+    fn respawn_refusal(
+        &self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+    ) -> Option<RoutineRefusal> {
+        if !matches!(ability.effect, AbilityEffect::Reanimate { .. }) {
+            return None;
+        }
+        let marks = self.raisable_marks(actor, ability, aim);
+        let battle = self.world.resource::<TacticalBattle>();
+        let any_free = marks.iter().any(|(cell, _)| {
+            battle.board.walkable(cell.0, cell.1) && battle.occupant(*cell).is_none()
+        });
+        if marks.is_empty() || !any_free {
+            Some(RoutineRefusal::NothingToRespawn)
+        } else {
+            None
+        }
+    }
+
+    /// Respawn's own effect: dissolve the caster's own previous Respawn set
+    /// (`Game::dissolve_respawned`, `Summon`'s per-side counterpart), then
+    /// raise up to `count` of the aim's raisable marks, nearest first, onto
+    /// the caster's own side.
+    ///
+    /// **One multiplier, two callers.** `perks::spawn_priority_stat_bonus`
+    /// adds the same per-level amount here that `Game::fork_programs` adds
+    /// to `SUMMON_STAT_MULT` — read off the **player's** perks only for a
+    /// party-side cast (`summon_rarity_window`'s own rule: a hostile cast
+    /// reads no perks at all, since nothing hostile ever holds one).
+    ///
+    /// A raised body rolls no wild routine (`SpawnPins { routines: Some(
+    /// vec![]), .. }`) and its `Stats` are overwritten wholesale from the
+    /// snapshot afterward, so `spawn_wild_creature_pinned`'s own rolls
+    /// (`Potential`, the zone/depth multiplier) are spent on numbers this
+    /// throws away — the same waste `fork_programs` accepts for the same
+    /// reason: one spawn door, not two.
+    fn reanimate(&mut self, actor: Entity, ability: &AbilityDef, aim: (i32, i32), count: u32) {
+        let hostile = self.world.get::<Hostile>(actor).is_some();
+        self.dissolve_respawned(hostile);
+        let mult = crate::tuning::REANIMATE_STAT_MULT
+            + if hostile {
+                0.0
+            } else {
+                let player = self.player_entity();
+                let perks = self.world.get::<Perks>(player).cloned();
+                crate::perks::spawn_priority_stat_bonus(perks.as_ref())
+            };
+        let marks = self.raisable_marks(actor, ability, aim);
+        for (cell, snapshot) in marks.into_iter().take(count as usize) {
+            self.world.resource_mut::<TacticalBattle>().take_raise(cell);
+            let seat = {
+                let battle = self.world.resource::<TacticalBattle>();
+                if battle.board.walkable(cell.0, cell.1) && battle.occupant(cell).is_none() {
+                    Some(cell)
+                } else {
+                    let taken: std::collections::BTreeSet<(i32, i32)> =
+                        battle.bodies().map(|(_, at)| at).collect();
+                    crate::tactical::deploy::nearest_free(&battle.board, &taken, cell, 1)
+                }
+            };
+            let Some(seat) = seat else { continue };
+            let Some(body) = self.spawn_wild_creature_pinned(
+                &snapshot.species,
+                crate::tuning::SUMMON_SENTINEL.0,
+                crate::tuning::SUMMON_SENTINEL.1,
+                1.0,
+                false,
+                crate::game::spawning::SpawnPins {
+                    rarity: Some(snapshot.rarity),
+                    routines: Some(Vec::new()),
+                },
+            ) else {
+                continue;
+            };
+            let max_hp = ((snapshot.stats.max_hp as f32) * mult).round() as i32;
+            self.world.entity_mut(body).insert(Stats {
+                hp: max_hp,
+                max_hp,
+                atk: ((snapshot.stats.atk as f32) * mult).round() as i32,
+                mitigation: ((snapshot.stats.mitigation as f32) * mult).round() as i32,
+            });
+            if hostile {
+                self.world.entity_mut(body).remove::<WanderAi>();
+            } else {
+                self.world.entity_mut(body).remove::<(Hostile, WanderAi)>();
+            }
+            self.world.entity_mut(body).insert((
+                crate::components::Summoned,
+                crate::components::Respawned,
+                PowerReserve::default(),
+            ));
+            if !self
+                .world
+                .resource_mut::<TacticalBattle>()
+                .place(body, seat)
+            {
+                self.world.despawn(body);
+                continue;
+            }
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .insert_after_cursor(body);
+            let who = self.creature_label(actor);
+            let raised = self.creature_label(body);
+            self.log(format!("{who} raises {raised}."));
+        }
     }
 
     /// Clears the dead off the board and pays for them, then closes the

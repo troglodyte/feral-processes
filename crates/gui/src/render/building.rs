@@ -44,6 +44,7 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
         StructureCategory::Extractor => Some("── Extractors — produce on their own ──"),
         StructureCategory::Assembler => Some("── Assemblers — fed by what they touch ──"),
         StructureCategory::Utility => Some("── Utility ──"),
+        StructureCategory::EntityHealth => Some("── Entity Health ──"),
         StructureCategory::Trade => Some("── Trade ──"),
         StructureCategory::Defence => Some("── Defence ──"),
     }

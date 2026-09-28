@@ -565,12 +565,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     turret: Some((damage: 8, range: 5)),
 
     // Optional; can be left out entirely (defaults to 0). How many extra
-    // tamed-program (pet) slots this structure grants while it's deployed.
-    // The total pet limit is `3 + the sum of this across every deployed
-    // structure`, so several of them stack. This is how the Data Cache works:
-    // `pet_slot_bonus: 2` with no `work` recipe — each deployed cache lets you
-    // own two more tamed programs (across party, cronjobs, and idle pets).
-    pet_slot_bonus: 2,
+    // roster slots this structure grants while it's deployed. The total is
+    // `3 + the sum of this across every deployed structure` (plus the
+    // Process Pool perk), so several of them stack. Slots are not a limit
+    // on owning programs: a roster past its slots still grows, and each
+    // program past them (newest first) carries an `unslotted` grudge that
+    // walks it down the morale ladder. This is how the Data Cache works:
+    // `pet_slot_bonus: 5` with no `work` recipe.
+    //
+    // Setting this, `services` or `recovery` files the structure under
+    // Entity Health in the build menu.
+    pet_slot_bonus: 5,
 
     // Optional; can be left out entirely (defaults to 0, meaning no limit).
     // How many of this structure may stand at once — the build is refused

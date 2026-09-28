@@ -61,6 +61,9 @@ pub enum StructureCategory {
     /// `StructureDef::assembles`.
     Assembler,
     Utility,
+    /// Keeps programs running: refills a need, heals the downed, or adds
+    /// roster slots.
+    EntityHealth,
     Trade,
     Defence,
 }
@@ -731,7 +734,7 @@ impl StructureDef {
             return StructureCategory::Assembler;
         }
         // A rig consumes something and pays items out, given a program —
-        // which is what `Assembler` means here. Deliberately not a seventh
+        // which is what `Assembler` means here. Deliberately not an eighth
         // `StructureCategory`: the variant is a build-menu grouping, and a
         // new one is a group every menu has to learn to draw.
         if self.strips.is_some() {
@@ -739,6 +742,10 @@ impl StructureDef {
         }
         if self.trade.is_some() {
             return StructureCategory::Trade;
+        }
+        // Ahead of Defence, which `recovery` used to file the Repair Bay under.
+        if !self.services.is_empty() || self.recovery.is_some() || self.pet_slot_bonus > 0 {
+            return StructureCategory::EntityHealth;
         }
         if self.raid_defense > 0 || self.repair.is_some() || self.turret.is_some() {
             return StructureCategory::Defence;
@@ -958,6 +965,15 @@ mod tests {
                     def.id
                 );
             }
+        }
+    }
+
+    #[test]
+    fn what_keeps_programs_running_files_under_entity_health() {
+        let db = test_db();
+        for id in ["defrag_bay", "sandbox", "data_cache", "repair_bay"] {
+            let def = db.get(id).expect("shipped structure should load");
+            assert_eq!(def.category(), StructureCategory::EntityHealth, "{id}");
         }
     }
 

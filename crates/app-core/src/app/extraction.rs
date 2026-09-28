@@ -44,6 +44,27 @@ impl App {
                 }
             }
             Some(program_index) => {
+                // Above the empty-options return below, so it still works
+                // with no tool installed at all — reinitializing spends a
+                // protocol, not a tool. Uppercase, `selected_index`'s own
+                // reservation, so it cannot collide with a lowercase row key.
+                if key == GameKey::Char('R') {
+                    let Some(game) = self.game.as_mut() else {
+                        return;
+                    };
+                    let outcome = game.reinitialize_program(program_index);
+                    let succeeded = outcome.is_ok();
+                    self.report(outcome);
+                    // Back to the list on success, the record is gone — same
+                    // shape as a spent extraction. On a refusal (no
+                    // protocol, boss, roster full) stay on this page with the
+                    // reason reported, so the player can see what to fix.
+                    if succeeded {
+                        self.pending_downed_program_index = None;
+                        self.menu_selected = 0;
+                    }
+                    return;
+                }
                 let Some(options) = self
                     .game
                     .as_ref()

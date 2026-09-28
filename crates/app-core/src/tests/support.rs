@@ -270,6 +270,36 @@ pub(crate) fn app_holding_downed_programs(
     app
 }
 
+/// `app_holding_downed_programs` plus `protocols` Reinitialization Protocols
+/// in the player's pack — for the `R` key's own tests, which need both a
+/// record and the item that spends on it. Zero is a legitimate call: the
+/// refusal tests want a store holding a record and an empty pack.
+pub(crate) fn app_holding_downed_programs_and_protocols(
+    seed: u32,
+    programs: Vec<feral_processes_engine::items::DownedProgram>,
+    protocols: u32,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("downed_programs_protocols", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = programs;
+    if protocols > 0 {
+        data.player.inventory.push((
+            ItemId::from(feral_processes_engine::items::ids::REINITIALIZATION_PROTOCOL),
+            protocols,
+        ));
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// `app_holding_downed_programs` plus a Teardown Rig standing beside the
 /// party, in base space — the two preconditions the rig verbs need.
 ///

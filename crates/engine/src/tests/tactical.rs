@@ -3622,6 +3622,68 @@ mod respawn {
         );
     }
 
+    /// A squad shell (`game::squads::spawn_squad`) is a non-`Boss`,
+    /// non-`Summoned` `Creature` with every member's stats summed into one —
+    /// `raisable_snapshot`'s existing exclusions do not catch it, so without
+    /// its own guard Respawn would raise the shell as one oversized body
+    /// instead of leaving a plain mark the way a real squad death does
+    /// (`Game::reap_squad` never reads `raise` at all).
+    #[test]
+    fn a_dead_squad_shell_leaves_an_unraisable_mark() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let cell = free_cells_within(&game, player_at, 3)
+            .into_iter()
+            .next()
+            .expect("the board offers a free cell near the player");
+        let squad = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                Stats {
+                    hp: 0,
+                    max_hp: 80,
+                    atk: 20,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+                Squad {
+                    members: Vec::new(),
+                    formation: 0,
+                },
+            ))
+            .id();
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(squad, cell),
+            "the chosen cell must be free to place the shell on"
+        );
+        game.tactical_round_upkeep();
+
+        let mark = game
+            .world
+            .resource::<TacticalBattle>()
+            .fallen()
+            .iter()
+            .find(|f| f.cell == cell)
+            .cloned();
+        assert!(
+            mark.is_some_and(|m| m.raise.is_none()),
+            "a squad shell must leave a plain, unraisable mark rather than \
+             one Respawn would raise as a single oversized body"
+        );
+    }
+
     #[test]
     fn recast_replaces_only_its_own_sides_set_while_a_fork_survives() {
         let mut game = game();

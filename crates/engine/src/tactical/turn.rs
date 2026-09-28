@@ -1770,12 +1770,15 @@ impl Game {
     ///
     /// `None` for anything that is not a plain `Creature`: a structure (no
     /// `Creature` at all), a `Boss` (an apex fight is not meant to be
-    /// re-fought off its own corpse), and anything already `Summoned` (a
-    /// fork or an earlier raised body) — Respawn raises the fallen, not the
-    /// already-temporary. Read here, before the despawn either call site
-    /// leads to, which is why this takes `&self` rather than being folded
-    /// into `fall` itself: `TacticalBattle` has no `World` to read these
-    /// components from.
+    /// re-fought off its own corpse), anything already `Summoned` (a fork or
+    /// an earlier raised body) — Respawn raises the fallen, not the
+    /// already-temporary — and a `Squad` shell, whose stats are every
+    /// member's summed into one (`Game::spawn_squad`) and would otherwise
+    /// raise as a single oversized body; a real squad death never reads
+    /// `raise` at all (`Game::reap_squad`). Read here, before the despawn
+    /// either call site leads to, which is why this takes `&self` rather
+    /// than being folded into `fall` itself: `TacticalBattle` has no `World`
+    /// to read these components from.
     fn raisable_snapshot(&self, body: Entity) -> Option<crate::tactical::FallenBody> {
         let species = self
             .world
@@ -1790,6 +1793,9 @@ impl Game {
             .get::<crate::components::Summoned>(body)
             .is_some()
         {
+            return None;
+        }
+        if self.world.get::<Squad>(body).is_some() {
             return None;
         }
         let rarity = self

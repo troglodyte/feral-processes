@@ -709,12 +709,6 @@ impl TacticalBattle {
         &self.fallen
     }
 
-    /// Takes the raisable mark at `cell`, if there is one — Respawn's own
-    /// door onto `fallen`, the one mutator besides `fall` itself. Removes
-    /// the mark entirely (raised, it no longer needs one) rather than
-    /// clearing only its `raise`, which is what keeps a raised body's own
-    /// later fall (`raise: None`, unraisable — `Game::raisable_snapshot`'s
-    /// `Summoned` exclusion) from drawing two marks on the same cell.
     /// The cell a Reanimate raise aimed at `want` would actually seat a body
     /// on — `want` itself if it is free, or the nearest free cell to it
     /// otherwise, `Game::reanimate`'s own seat search. Shared so
@@ -731,6 +725,12 @@ impl TacticalBattle {
         deploy::nearest_free(&self.board, &taken, want, 1)
     }
 
+    /// Takes the raisable mark at `cell`, if there is one — Respawn's own
+    /// door onto `fallen`, the one mutator besides `fall` itself. Removes
+    /// the mark entirely (raised, it no longer needs one) rather than
+    /// clearing only its `raise`, which is what keeps a raised body's own
+    /// later fall (`raise: None`, unraisable — `Game::raisable_snapshot`'s
+    /// `Summoned` exclusion) from drawing two marks on the same cell.
     pub(crate) fn take_raise(&mut self, cell: (i32, i32)) -> Option<FallenBody> {
         let idx = self
             .fallen

@@ -3247,6 +3247,38 @@ mod summons {
                 .is_none()
         );
     }
+
+    /// **Reproducer.** A fork is never `Hostile` and never joins `Party`, so
+    /// `reap_tactical_dead`'s base-staff branch — `body != player &&
+    /// !Party.contains(body)` — is exactly what a dead fork also satisfies.
+    /// A fork killed on a battle map must be swept silently, the same as
+    /// `dissolve_summons`/`finish_fight` sweep it everywhere else, not
+    /// logged and revived as if it were a downed companion.
+    #[test]
+    fn a_fork_killed_on_a_battle_map_is_swept_not_logged_or_benched() {
+        let mut game = game();
+        let body = fight_with_a_fork(&mut game, 2);
+        game.world.get_mut::<Stats>(body).unwrap().hp = 0;
+
+        game.tactical_round_upkeep();
+
+        assert!(
+            !log_texts(&game)
+                .iter()
+                .any(|t| t.contains("falls in the siege")),
+            "a fork is not base staff: {:#?}",
+            log_texts(&game)
+        );
+        assert_eq!(
+            game.world.get::<Stats>(body).map(|s| s.hp),
+            Some(0),
+            "left dead where it stands for finish_fight's own sweep, not revived to 1 hp"
+        );
+        assert!(
+            game.world.get::<crate::components::Downed>(body).is_none(),
+            "never benched as a downed program"
+        );
+    }
 }
 
 /// Walking into a hostile is a swing, not a refusal.

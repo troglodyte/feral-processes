@@ -1785,6 +1785,19 @@ impl Game {
                     Some(members) => self.reap_squad(body, &members, player),
                     None => self.finish_hostile(body, player),
                 }
+            } else if self
+                .world
+                .get::<crate::components::Summoned>(body)
+                .is_some()
+            {
+                // **A fork is never base staff.** It carries no `Hostile`
+                // and is deliberately kept out of `Party`
+                // (`components::Summoned`'s containment story), so without
+                // this guard it fell straight into the branch below and was
+                // logged and revived as a downed companion. Left alone here
+                // exactly as `dissolve_summons` leaves a killed fork
+                // elsewhere: dead where it stands, until `finish_fight`'s
+                // unconditional `Summoned` sweep despawns it at teardown.
             } else if body != player && !self.world.resource::<Party>().0.contains(&body) {
                 // **Base staff, killed on a siege board.** Neither `Hostile`
                 // (that branch above) nor `Party` (`finish_fight`'s own dead

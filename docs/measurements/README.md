@@ -54,6 +54,12 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-28 — The enemy policy after the combat changes](2026-09-28-enemy-policy-after-combat-changes.md)
+  — the shipped `enemy_battle.ron` still roughly doubles the enemy's win
+  rate over uniform play on the training set (0.153 → 0.294) and holds on
+  the held-back `policy-*` set-pieces after slice 1, the swing loop and
+  threat ratio. No retrain needed; five of eight training scenarios are
+  enemy walkovers at baseline, which a retrain would need fixed first.
 - [2026-09-18 — Fitting `EMULATION_EDGE`](2026-09-18-emulation-edge.md) —
   rerun against a realistic player (Perk Points spent, gear worn, the
   ability's own real 10-round duration) for the final review's U4: the

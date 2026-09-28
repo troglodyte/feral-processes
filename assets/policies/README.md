@@ -11,6 +11,9 @@ and deleting the file is a supported way to play.
 
 Weights are trained offline, not learned during play. See
 `crates/launcher/src/bin/train.rs`.
+`train --eval <file>` scores an existing file against the baseline without
+searching — run it before deciding a combat change calls for a retrain
+(`docs/measurements/2026-09-28-enemy-policy-after-combat-changes.md`).
 
 ## File shape
 

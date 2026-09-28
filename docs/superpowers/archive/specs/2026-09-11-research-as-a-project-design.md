@@ -313,7 +313,8 @@ way `the_tallest_shipped_notification_fits_its_screen` is.
 
 Three entries in `CLAUDE.md`'s load-bearing list change, and each needs its
 argument written to the graph and its trap written to
-`.claude/skills/seams/references/base.md` — the three writes, in that order.
+`.claude/skills/seams/references/base-needs.md` — the three writes, in that
+order.
 
 - **New:** "Research is one project at a time, and `Game::select_research`
   is the one door — every refusal before anything is filed."

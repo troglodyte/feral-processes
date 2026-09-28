@@ -1,11 +1,12 @@
 ---
 name: seams
-description: Use before changing a load-bearing seam in feral-processes - the base and its labour scheduling, the Stack, combat/XP/balance, items and gear, sorties, memories, needs, notifications, the HUD, saves, logs or screens. Carries the trap behind each rule CLAUDE.md states in one line. Also use when a rule in CLAUDE.md's "Load-bearing seams" section reads as arbitrary, or when adding a seam to it.
+description: Use before changing a load-bearing seam in feral-processes - the base and its labour scheduling, the Stack, combat/XP/balance, items and gear, sorties, memories, needs, notifications, the HUD, saves, logs or screens. Carries the trap behind each rule `.claude/rules/seams-*.md` states in one line. Also use when one of those rules reads as arbitrary, or when adding a seam to it.
 ---
 
 # Load-bearing seams: the traps
 
-`CLAUDE.md` states each seam as **one sentence — the rule alone**. This skill
+`.claude/rules/seams-<subsystem>.md` states each seam as **one sentence — the
+rule alone**, path-scoped so it loads when a matching file is read. This skill
 holds the second half: **the trap the rule exists to close**, in the compressed
 form that used to live in `CLAUDE.md` itself. The **memory graph** is the third
 tier — the full argument, the measurement, the history, and what was tried and
@@ -15,7 +16,7 @@ Three tiers, and which one you want depends on what you are doing:
 
 | | where | read it when |
 |---|---|---|
-| the rule | `CLAUDE.md`, always in context | always |
+| the rule | `.claude/rules/seams-*.md`, loaded by path | before touching that subsystem |
 | the trap | `references/*.md` here | before changing code in that subsystem |
 | the argument | the memory graph, `seam:<slug>` | before changing **the seam itself** |
 
@@ -42,13 +43,23 @@ Three tiers, and which one you want depends on what you are doing:
 
    The slug is the entry's title, lowercased, apostrophes dropped, every other
    run of non-alphanumerics collapsed to `-`, cut to 60 characters on a word
-   boundary. Don't reconstruct it from a `CLAUDE.md` rule — the rule sentence
+   boundary. Don't reconstruct it from a rules-file rule — the rule sentence
    and the argument's title are not the same string. Search, then read.
 
 | subsystem | reference | seams |
 |---|---|---:|
-| the base, base space, labour, work orders, digging, building, needs | `references/base.md` | 85 |
-| combat, damage, XP, levels, talents, perks, balance, spawning | `references/combat.md` | 75 |
+| the base: structures, building & raids | `references/base-structures.md` | 24 |
+| the base: labour scheduling & postings (assignment, wander, one-body-per-cell) | `references/base-labour.md` | 17 |
+| the base: production chains, machines, hauling, depots & the transfer screen | `references/base-production.md` | 38 |
+| the base: digging, rock & the base grid | `references/base-digging.md` | 17 |
+| the base: needs, morale, tantrums, repair bays, pins & research | `references/base-needs.md` | 31 |
+| the base: instrumentation (the production ledger, base output) | `references/base-instrumentation.md` | 6 |
+| combat: kit, Power, routines & abilities | `references/combat-kit.md` | 15 |
+| combat: attack resolution, mitigation, XP, levels, talents & the cap | `references/combat-progression.md` | 24 |
+| combat: spawning, bosses, difficulty & the roster doors | `references/combat-spawning.md` | 13 |
+| combat: battle flow, rewards, arena, rest & pursuit | `references/combat-battle.md` | 24 |
+| combat: tactical battles — turn flow, movement & targeting | `references/combat-tactical-core.md` | 24 |
+| combat: tactical battles — reactions, fx, AI aim & squads | `references/combat-tactical-actions.md` | 18 |
 | items, gear copies, quality, crafting, the caravan, the economy | `references/items.md` | 34 |
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |
 | saves, the log, refusals, screens, the Broker board, paths | `references/screens.md` | 21 |
@@ -82,10 +93,11 @@ A new seam is **three writes, in this order**:
    arguments out of every session's opening context.
 2. The **trap** goes to the matching `references/*.md` here, as a bullet in
    the existing house style: a bold rule sentence, then the trap.
-3. The **rule** goes to `CLAUDE.md` under the same `###` heading, as a bullet
-   of **exactly one sentence**. That budget is the point — `CLAUDE.md` reached
-   151 KB by letting each seam's trap creep back in beside its rule, and it is
-   loaded on every turn.
+3. The **rule** goes to the matching `.claude/rules/seams-*.md`, as a bullet
+   of **exactly one sentence**. That budget is the point — the rules were
+   151 KB of `CLAUDE.md` once, by letting each seam's trap creep back in
+   beside its rule. Widen the file's `paths:` if the new seam lives in a file
+   it does not match.
 
 Still three writes: moving the argument into the graph changed where the third
 one lands, not how many there are. Two arrives only if the trap tier moves too.

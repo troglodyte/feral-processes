@@ -301,7 +301,7 @@
   leave. **A town cannot be destroyed**, so a patrol's leash never resolves
   to nothing, which is the case `NestGuardian`'s belt-and-braces check
   exists for and this does not need. The shared tick's own trap is in
-  `references/combat.md`.
+  `references/combat-battle.md`.
 - **A patrol is provoked by *proximity* and stood down by the *band*, and
   only the provocation half is guarded.** `Game::patrol_aggro_tick` reads
   `Standing::fields_patrols` every tick rather than caching it at spawn,

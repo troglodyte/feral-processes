@@ -17,8 +17,8 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{AbilityShape, TamperKind};
 use crate::components::{
-    Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Squad, Stats,
-    Tampered,
+    Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Respawned,
+    Squad, Stats, Tampered,
 };
 use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
@@ -86,6 +86,11 @@ pub struct TacticalBody {
     /// the cover mark and the HP bar all span the footprint rather than one
     /// cell.
     pub footprint: u8,
+    /// Whether this body is a raised body from Respawn — `components::
+    /// Respawned`'s own presence, read here rather than folded into `color`
+    /// so the renderer's palette swap stays a draw-time decision and the
+    /// authored hue underneath is never lost.
+    pub respawned: bool,
     /// `Some` exactly when this body is a folded `Squad`.
     ///
     /// **The name is not carried here.** `TacticalBody::label` already has
@@ -565,6 +570,7 @@ impl Game {
             cloaked: self.is_cloaked(entity),
             in_cover: attacker.is_some_and(|a| self.body_in_cover(a, entity)),
             footprint,
+            respawned: self.world.get::<Respawned>(entity).is_some(),
             squad,
         }
     }

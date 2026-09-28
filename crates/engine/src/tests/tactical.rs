@@ -3934,6 +3934,56 @@ mod respawn {
             "an auto-driven turn with a raisable mark in reach did not invoke Respawn"
         );
     }
+
+    /// Phase 3: `TacticalBody.respawned` is what the renderer reads to draw
+    /// the Respawn tint — `components::Respawned`'s own presence, and
+    /// nothing else, since a fork carries `Summoned` without it.
+    #[test]
+    fn tacticalbody_respawned_is_set_for_a_raised_body_and_unset_for_a_fork() {
+        let mut game = game();
+        // A second live hostile, hard to kill, stands in for a fork below.
+        let pack = tactical_fight(&mut game, 2, 400);
+        let target = pack[0];
+        game.world.get_mut::<Stats>(target).unwrap().hp = 1;
+        let cell = kill_with_the_player(&mut game, target);
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+        assert!(
+            game.tactical_use_routine(0, cell),
+            "respawn must land on its own mark"
+        );
+
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("a raised body must be seated");
+        // A fork stand-in: `Summoned` without `Respawned`, the shape
+        // `fork_programs` actually produces — the view must not confuse the
+        // two summon pools.
+        let fork = pack[1];
+        game.world.entity_mut(fork).insert(Summoned);
+
+        let view = game.tactical_view().expect("a fight is open");
+        let raised_body = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == raised)
+            .expect("the raised body is drawn");
+        assert!(
+            raised_body.respawned,
+            "a raised body's view must flag respawned"
+        );
+        let fork_body = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == fork)
+            .expect("the fork stand-in is drawn");
+        assert!(!fork_body.respawned, "a fork must not read as respawned");
+    }
 }
 
 /// Walking into a hostile is a swing, not a refusal.

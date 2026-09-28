@@ -39,22 +39,23 @@ opus, whole branch. Dispatches must forbid push.
   them. `None` → empty `Routines`, identical to a non-carrier.
 - **Contracts:** no `Deed` noted. `Deed::Tamed` reads "Decompile a wild
   program"; this isn't one.
-- **Level cap:** clamp to `Game::level_cap()` (zone cap), not the arena
-  ceiling — a resurrected program obeys the same cap as the rest of the
-  roster.
+- **Level:** none set at all. Decided after the brainstorm — `record.level`
+  is really the zone the kill happened in, not a level worth restoring, so
+  the resurrected program stays at `roster_parts`'s fresh level 1 and no
+  cap question arises.
 - **Potential** rolls fresh (the record doesn't carry it); attributes mint as
   usual. Only rarity and routines are pinned.
-- **Blocker strings** are row fragments (`ability_unavailable`'s style), shown
-  after the action label.
+- **Blocker strings:** `ReinitBlock`, an exhaustive enum with
+  `row_fragment()` (shown after the action label, `ability_unavailable`'s
+  style) and `refusal()` (the full sentence `reinitialize_program` errs
+  with) — `stack_features::AdoptBlock`'s own shape.
 
 ## Phase 1 — engine + asset
 
 Files: `assets/items/reinitialization_protocol.ron` (new),
 `assets/items/README.md` (only if it lists items by role),
-`engine/src/tuning.rs`, `engine/src/game/spawning.rs`,
-`engine/src/arena/mod.rs`, `engine/src/game/party.rs` (level fn home),
-`engine/src/game/extraction.rs`, `engine/src/tests/extraction.rs`,
-`engine/src/tests/support.rs` (re-export follows the move).
+`engine/src/game/spawning.rs`, `engine/src/game/extraction.rs`,
+`engine/src/tests/extraction.rs`.
 
 1. **Asset.** `id: "reinitialization_protocol"`, name/description per spec,
    `value: Some(..)` in line with peers, `craftable: Some((cost:
@@ -62,11 +63,10 @@ Files: `assets/items/reinitialization_protocol.ron` (new),
    requires_structure: Some("fabricator")))`. No `taming_potency`,
    `droppable`, `cache_drop`. Test: loads from real assets; `taming_catalyst`
    never returns it (inventory holding only the protocol → `None`).
-2. **`reinit_level(level: u32, condition: u8) -> u32`** pure fn (in
-   `tuning.rs` beside `REINIT_LEVEL_FLOOR: f32 = 0.5`, or the extraction
-   module if `tuning.rs` holds only constants there — follow neighbours).
-   `max(1, round(level × lerp(FLOOR, 1.0, condition/100)))`. Tests: cond 100
-   keeps, cond 0 halves (Lv10→5), Lv1 cond 0 → 1.
+2. **Level: none to set.** Decided after the brainstorm: `record.level` is
+   really the zone the kill happened in, not a level worth restoring, so
+   the resurrected program stays at the fresh `Experience::default()`
+   `roster_parts` already mints — no pure fn, no `tuning` constant.
 3. **Pinned spawn.** `pub(crate) struct SpawnPins { rarity: Option<Rarity>,
    routines: Option<Vec<AbilityId>> }`, `Default`. New
    `spawn_wild_creature_pinned(.., pins)`; `spawn_wild_creature_scaled`
@@ -76,27 +76,28 @@ Files: `assets/items/reinitialization_protocol.ron` (new),
    `adopt_program` → `adopt_program_pinned`. Tests: pinned rarity lands as the
    `Rarity` component and its `stat_mult` is in `Stats`; existing suite green
    untouched.
-4. **Level move.** `arena::set_level` → `Game::raise_to_level(entity, level,
-   creature_cap: u32)` (`pub(crate)`, `party.rs`). Arena's `set_level` becomes
-   a call passing `level_cap().max(arena_level_ceiling())` (keep the wrapper
-   so `tests/support.rs` and the ~15 test callers don't change). Body
-   unchanged, including `install_unlocked_routines`.
-5. **`reinitialize_blocker(index) -> Option<&'static str>`** (pub): in order
-   game over / active battle, no such record, `boss`, no protocol held,
-   `roster_room() == 0`. **`reinitialize_program(index) -> Result<(),
-   String>`** (pub): blocker → `Err`; else `take` one protocol, remove the
-   record, `adopt_program_pinned(species, player pos, 1.0, pins{record.rarity,
-   record.carried})`, `raise_to_level(p, reinit_level(..), level_cap())`, one
-   `MessageKind::Outcome` log line (label via `downed_program_label`). No
-   ticks spent, no deed. If the spawn returns `None` (unknown species — mod
-   removed it) refuse *before* spending: check `SpeciesDb` in the blocker.
+4. **No level move needed.** `arena::set_level` stays exactly as it was —
+   `reinitialize_program` never calls it, so there is no second caller to
+   share a level-setting path with.
+5. **`reinitialize_blocker(index) -> Option<ReinitBlock>`** (pub, an
+   exhaustive enum with `row_fragment`/`refusal`, `stack_features::
+   AdoptBlock`'s own shape): in order game over / active battle, no such
+   record, `boss`, no protocol held, `roster_room() == 0`, unknown species.
+   **`reinitialize_program(index) -> Result<(), String>`** (pub): blocker →
+   `Err(block.refusal())`; else `take` one protocol, remove the record,
+   `adopt_program_pinned(species, player pos, 1.0, pins{record.rarity,
+   record.carried})`, one `MessageKind::Outcome` log line (label via
+   `downed_program_label`). No ticks spent, no deed, no level set — the
+   pinned spawn is already level 1. If the spawn returns `None` (unknown
+   species — mod removed it) refuse *before* spending: check `SpeciesDb` in
+   the blocker.
 6. **Tests** (`tests/extraction.rs`, from a real `Game` with a record pushed
    into `DownedPrograms` — reuse whatever fixture extraction tests use):
    success spends exactly one protocol, removes exactly that index (neighbours
-   keep order), `pet_count` +1, body on player tile, `Tamed`; level =
-   `reinit_level` (and clamped by `level_cap`); rarity = record's; carried
+   keep order), `pet_count` +1, body on player tile, `Tamed`, level 1
+   regardless of the record's level or condition; rarity = record's; carried
    routine present in `Routines`, and `None` carried → same `Routines` as a
-   plain `adopt_program` at that level; refusals (boss, no protocol, roster
+   plain `adopt_program`; refusals (boss, no protocol, roster
    at cap, bad index, unknown species) each leave store + inventory + roster
    unchanged; no `GameRng` draw for rarity/routine when pinned (compare RNG
    state against an unpinned spawn, or assert the pinned path never calls the

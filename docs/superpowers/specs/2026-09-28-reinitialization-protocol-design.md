@@ -19,7 +19,7 @@ stays inside "progression is earned by fighting".
 | Cost | One protocol per use, flat — does not scale with level or rarity. |
 | Recipe | 1 `ice_breaker` + 2 `logic_wafer` + 1 `charge_coil` + 1 `cache_grain`, at the Fabricator. |
 | Which records | Any carried record in `DownedPrograms` **except `boss: true`**. Racked and hoppered records are out of scope for now. |
-| Level | `max(1, round(level × f(condition)))`, `f` linear from `REINIT_LEVEL_FLOOR` (0.5) at condition 0 to 1.0 at 100. |
+| Level | Always 1 — `record.level` is really the zone the kill happened in (a wild body carries no `Experience` to restore), so condition goes unread here too. |
 | Rarity | The record's rarity, not a fresh roll. |
 | Carried routine | Installed on the program if the record has one. |
 | Roster room | Pet slots are soft (the usual `unslotted` memory); `ROSTER_HARD_CAP` refuses. |
@@ -50,14 +50,13 @@ by role.
   (`adopt_program` → `spawn_wild_creature_scaled`) rather than adjusting
   stats afterwards. Existing callers pass "roll", so no RNG-stream change for
   them.
-- **Level.** Move `arena::set_level` into the engine proper (a `Game`
-  method or `pub(crate)` fn outside `arena/`) and have the arena call it —
-  one level-setting path, which also installs routines unlocked on the way.
+- **Level.** No level-setting call at all — `adopt_program_pinned` mints a
+  fresh `Experience::default()` (level 1) through `roster_parts`, exactly
+  the way a decompile does, so the resurrected program needs nothing raised
+  and `arena::set_level` stays the arena's own.
 - **Carried routine.** Installed via the same path extraction's routine
   reader / routine installation uses; the plan names the exact call after
   reading it.
-- **Pure level fn** `tuning`-backed: `reinit_level(level, condition) -> u32`,
-  unit-testable on its own. Constants `REINIT_LEVEL_FLOOR` in `tuning.rs`.
 - Log one `MessageKind::Outcome` line on success; note a contract `Deed` only
   if taming's `Deed::Tamed` is meant to count this (plan decides by reading
   contracts that key on it — default: it does **not**, since it isn't a
@@ -70,7 +69,7 @@ Some(_)`), an uppercase **R** action: *[R]einitialize — resurrect downed
 program*. Plan confirms `R` is free there and how uppercase actions are
 delivered as `GameKey`. When unavailable (boss, no protocol, hard cap) the
 action line shows why instead of disappearing; the engine exposes that
-reason (e.g. `reinitialize_blocker(index) -> Option<&'static str>`) so the
+reason (e.g. `reinitialize_blocker(index) -> Option<ReinitBlock>`) so the
 screen and the action share one check. After success the screen returns to
 the list (the record is gone).
 
@@ -90,8 +89,8 @@ Engine unit tests, TDD:
 
 - success spends one protocol, removes exactly that record, adds one tamed
   program on the roster;
-- `reinit_level`: condition 100 keeps level, condition 0 halves, level-1
-  floor holds;
+- the resurrected program is always level 1, whatever the record's level
+  or condition;
 - the spawned program's `Rarity` equals the record's;
 - carried routine is installed; `None` carried installs nothing extra;
 - boss record refused, nothing spent;

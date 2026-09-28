@@ -539,10 +539,12 @@ Per phase, in order:
 1. Branch. One branch per phase, per the repo's release-per-change rule.
 2. **Read the `seams` reference files for what that phase touches** — this
    spec deliberately did not read them at design time, and both phases touch
-   more than one. Phase 7a: `references/base.md` (raids, upkeep) and
+   more than one. Phase 7a: `references/base-structures.md` (raids) and
+   `references/base-production.md` (upkeep) and
    `references/screens.md` (the log, the town page) and
-   `references/notifications.md`. Phase 7b: `references/combat.md` (spawning,
-   teardown, kill rewards), `references/screens.md` (saves) and
+   `references/notifications.md`. Phase 7b: `references/combat-spawning.md`
+   (spawning, teardown) and `references/combat-battle.md` (kill rewards),
+   `references/screens.md` (saves) and
    `references/hud.md` (the fourth channel).
 3. TDD, failing test first.
 4. Version bump, `CHANGELOG.md` section, annotated tag at the merge.

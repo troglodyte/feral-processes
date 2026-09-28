@@ -146,7 +146,7 @@ pub struct PlayerIdentity {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct ZonePortal(pub u32);
 
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stats {
     pub hp: i32,
     pub max_hp: i32,

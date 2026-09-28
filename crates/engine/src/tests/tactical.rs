@@ -8,7 +8,7 @@ use crate::species::SpeciesDb;
 use crate::tactical::ai::PartyTurns;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
-use crate::tactical::{Fallen, TacticalBattle};
+use crate::tactical::TacticalBattle;
 use crate::tests::support::{
     equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
 };
@@ -531,6 +531,8 @@ fn a_body_killed_on_a_battle_map_leaves_a_mark_where_it_fell() {
     let player = game.player_entity();
     let target = pack[0];
     let mut last_seen = None;
+    let species = game.world.get::<Creature>(target).unwrap().species.clone();
+    let stats_before = *game.world.get::<Stats>(target).unwrap();
 
     for _ in 0..64 {
         if !wait_for_turn(&mut game, player) {
@@ -555,12 +557,57 @@ fn a_body_killed_on_a_battle_map_leaves_a_mark_where_it_fell() {
     let view = game
         .tactical_view()
         .expect("the second hostile holds the fight open");
-    assert_eq!(
-        view.fallen,
-        vec![Fallen {
-            cell: last_seen.expect("the target stood somewhere"),
-            footprint: 1,
-        }],
+    assert_eq!(view.fallen.len(), 1);
+    let mark = &view.fallen[0];
+    assert_eq!(mark.cell, last_seen.expect("the target stood somewhere"));
+    assert_eq!(mark.footprint, 1);
+    let raise = mark
+        .raise
+        .as_ref()
+        .expect("an ordinary hostile's death is raisable");
+    assert_eq!(raise.species, species);
+    assert_eq!(raise.stats.max_hp, stats_before.max_hp);
+    assert_eq!(raise.stats.atk, stats_before.atk);
+    assert_eq!(raise.stats.mitigation, stats_before.mitigation);
+}
+
+/// A boss's own fight is not meant to be re-fought off its corpse: it falls
+/// with a plain, unraisable mark.
+#[test]
+fn a_boss_falls_with_no_snapshot_to_raise_it_from() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 1);
+    let player = game.player_entity();
+    let target = pack[0];
+    game.world
+        .entity_mut(target)
+        .insert(crate::components::Boss);
+
+    for _ in 0..64 {
+        if game.world.get_resource::<TacticalBattle>().is_none() {
+            break;
+        }
+        if !wait_for_turn(&mut game, player) {
+            break;
+        }
+        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
+            break;
+        };
+        if let Some(beside) = beside(&game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, beside);
+        }
+        game.tactical_attack(target);
+    }
+
+    let board = game
+        .tactical_result_view()
+        .expect("the last hostile died, closing the fight");
+    assert_eq!(board.fallen.len(), 1, "the boss must still leave its mark");
+    assert!(
+        board.fallen[0].raise.is_none(),
+        "a boss is not what Respawn is for"
     );
 }
 
@@ -3277,6 +3324,12 @@ mod summons {
         assert!(
             game.world.get::<crate::components::Downed>(body).is_none(),
             "never benched as a downed program"
+        );
+        let fallen = game.world.resource::<TacticalBattle>().fallen().to_vec();
+        assert_eq!(fallen.len(), 1, "only the fork died: {fallen:#?}");
+        assert!(
+            fallen[0].raise.is_none(),
+            "a fork is already Summoned; Respawn does not raise the temporary"
         );
     }
 }

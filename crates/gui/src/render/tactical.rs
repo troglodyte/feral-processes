@@ -1534,6 +1534,7 @@ mod tests {
         view.fallen = vec![Fallen {
             cell: free,
             footprint: 1,
+            raise: None,
         }];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {

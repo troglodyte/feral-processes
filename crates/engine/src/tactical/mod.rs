@@ -76,12 +76,30 @@ impl Decoy {
     }
 }
 
+/// A fallen body's own numbers, snapshotted while it was still standing —
+/// what Respawn raises a body back up *as*.
+///
+/// Read at `TacticalBattle::fall`, before the despawn that would otherwise
+/// take these with it, so a raised body is the creature that died rather
+/// than a fresh roll off its species alone.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FallenBody {
+    pub species: String,
+    pub rarity: crate::components::Rarity,
+    pub stats: crate::components::Stats,
+}
+
 /// Where a body died on a battle map: its anchor cell and the side of the
 /// square it covered, so a squad's mark spans the squad.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Fallen {
     pub cell: (i32, i32),
     pub footprint: u8,
+    /// `Some` only for a plain `Creature` — not a `Boss`, not already
+    /// `Summoned` — so a raised body, a boss and a destroyed structure all
+    /// leave an unraisable mark. `Game::raisable_snapshot` is the one place
+    /// that decides this.
+    pub raise: Option<FallenBody>,
 }
 
 /// A tactical fight's spatial state: the map it is fought on and where
@@ -674,10 +692,14 @@ impl TacticalBattle {
     ///
     /// **Death's door, not `remove`'s.** A body that walks off the edge or
     /// is captured leaves through `remove` too, and neither of those fell.
-    pub(crate) fn fall(&mut self, body: Entity) {
+    pub(crate) fn fall(&mut self, body: Entity, raise: Option<FallenBody>) {
         if let Some(cell) = self.cell_of(body) {
             let footprint = self.footprint_of(body);
-            self.fallen.push(Fallen { cell, footprint });
+            self.fallen.push(Fallen {
+                cell,
+                footprint,
+                raise,
+            });
         }
         self.remove(body);
     }

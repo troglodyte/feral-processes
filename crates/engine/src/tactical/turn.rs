@@ -590,7 +590,10 @@ impl Game {
                 .get::<crate::components::Structure>(target)
                 .is_none()
             {
-                self.world.resource_mut::<TacticalBattle>().fall(target);
+                let raise = self.raisable_snapshot(target);
+                self.world
+                    .resource_mut::<TacticalBattle>()
+                    .fall(target, raise);
             }
             self.world.resource_mut::<TacticalBattle>().spend_action();
             self.hand_on_turn(actor, round_before);
@@ -1741,6 +1744,46 @@ impl Game {
         }
     }
 
+    /// The snapshot [`TacticalBattle::fall`] records for `body`, if Respawn
+    /// may later raise it — see [`crate::tactical::FallenBody`].
+    ///
+    /// `None` for anything that is not a plain `Creature`: a structure (no
+    /// `Creature` at all), a `Boss` (an apex fight is not meant to be
+    /// re-fought off its own corpse), and anything already `Summoned` (a
+    /// fork or an earlier raised body) — Respawn raises the fallen, not the
+    /// already-temporary. Read here, before the despawn either call site
+    /// leads to, which is why this takes `&self` rather than being folded
+    /// into `fall` itself: `TacticalBattle` has no `World` to read these
+    /// components from.
+    fn raisable_snapshot(&self, body: Entity) -> Option<crate::tactical::FallenBody> {
+        let species = self
+            .world
+            .get::<crate::components::Creature>(body)?
+            .species
+            .clone();
+        if self.world.get::<crate::components::Boss>(body).is_some() {
+            return None;
+        }
+        if self
+            .world
+            .get::<crate::components::Summoned>(body)
+            .is_some()
+        {
+            return None;
+        }
+        let rarity = self
+            .world
+            .get::<crate::components::Rarity>(body)
+            .copied()
+            .unwrap_or_default();
+        let stats = *self.world.get::<crate::components::Stats>(body)?;
+        Some(crate::tactical::FallenBody {
+            species,
+            rarity,
+            stats,
+        })
+    }
+
     /// Clears the dead off the board and pays for them, then closes the
     /// fight if that ended it.
     ///
@@ -1776,7 +1819,10 @@ impl Game {
             {
                 crate::game::siege::raiders::drop_besieger_cargo(self, body);
             }
-            self.world.resource_mut::<TacticalBattle>().fall(body);
+            let raise = self.raisable_snapshot(body);
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .fall(body, raise);
             // A fallen companion is reaped at teardown, not here — the same
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.

@@ -926,6 +926,7 @@ mod board_combat {
             [crate::tactical::Fallen {
                 cell: (1, 0),
                 footprint: 1,
+                raise: None,
             }],
             "a destroyed structure must leave its mark on the board"
         );

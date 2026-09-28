@@ -2,7 +2,7 @@
 //! bank, and moving programs between them.
 
 use crate::progression;
-use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
+use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
 /// Which of the four roles a program you own is filling.
@@ -582,70 +582,6 @@ impl Game {
     /// not because the party is let out of the cap to meet it.
     pub fn level_cap(&self) -> u32 {
         crate::tuning::zone_level_cap(self.world.resource::<ZoneLevel>().0)
-    }
-
-    /// Raises `entity` to `level` the way play would, capping a companion —
-    /// never the player — at `creature_cap`.
-    ///
-    /// Awarding XP rather than writing `Experience.level` is the whole
-    /// point: the growth curve lives in `progression::add_xp` and there is
-    /// no second copy of it here to drift from it. A creature set to level
-    /// 20 with level-1 stats is the failure this exists to make
-    /// unreachable — an arena scenario or a reinitialized program naming a
-    /// level would otherwise measure or spawn a program nobody could have
-    /// fought their way to.
-    ///
-    /// Which multiplier and which cap apply is decided by `Creature`'s
-    /// presence alone: a creature grows on its species' curve and stops at
-    /// `creature_cap`, the player grows on the baseline and has no ceiling
-    /// at all. `creature_cap` is therefore the caller's own business —
-    /// `arena::set_level` passes `level_cap().max(arena_level_ceiling())`
-    /// for its absolute-ceiling reason (an arena scenario has no
-    /// `KernelRing` to read and stages talent-gated fights nothing else
-    /// can), `Game::reinitialize_program` passes plain `level_cap()`
-    /// because a resurrected program obeys the same zone cap as the rest of
-    /// the roster.
-    ///
-    /// Originally `arena::set_level`, moved here so a second caller outside
-    /// the arena has one level-setting path to share rather than a second
-    /// copy of `progression::add_xp`'s loop.
-    pub(crate) fn raise_to_level(&mut self, entity: Entity, level: u32, creature_cap: u32) {
-        let before = self
-            .world
-            .get::<Experience>(entity)
-            .map(|e| e.level)
-            .unwrap_or(1);
-        let (growth, cap) = match self.world.get::<Creature>(entity) {
-            Some(creature) => {
-                let species = creature.species.clone();
-                let growth = self
-                    .world
-                    .resource::<SpeciesDb>()
-                    .get(&species)
-                    .map(|s| s.growth_multiplier)
-                    .unwrap_or(BASELINE_GROWTH_MULTIPLIER);
-                (growth, Some(creature_cap))
-            }
-            None => (BASELINE_GROWTH_MULTIPLIER, None),
-        };
-
-        let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
-        let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, entity) else {
-            return;
-        };
-        // One level per pass, by paying exactly what the next one costs —
-        // so the XP left over at the end is zero rather than an arbitrary
-        // remainder a later kill would inherit.
-        while exp.level < level {
-            let owed = exp.xp_to_next.saturating_sub(exp.xp);
-            if progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0).levels == 0 {
-                break;
-            }
-        }
-
-        if level > before {
-            self.install_unlocked_routines(entity, before, level);
-        }
     }
 
     /// Display string for `entity`'s rolled `Potential`, e.g.

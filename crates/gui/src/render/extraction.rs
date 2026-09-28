@@ -198,7 +198,11 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
     // colour part of one line.
     let reinit_label = "[R]einitialize — resurrect downed program";
     rows.push(match game.reinitialize_blocker(index) {
-        Some(reason) => colored_item_row(format!("{reinit_label}  ({reason})"), false, TEXT_DIM),
+        Some(block) => colored_item_row(
+            format!("{reinit_label}  ({})", block.row_fragment()),
+            false,
+            TEXT_DIM,
+        ),
         None => item_row(reinit_label, false),
     });
 
@@ -230,6 +234,7 @@ fn draw_extraction_options(
 mod tests {
     use super::*;
     use feral_processes_engine::DifficultyMode;
+    use feral_processes_engine::ReinitBlock;
     use feral_processes_engine::items::DownedProgram;
     use feral_processes_engine::save;
     use feral_processes_engine::tools::{ToolDb, ToolId};
@@ -675,6 +680,11 @@ mod tests {
         let blocker = game
             .reinitialize_blocker(0)
             .expect("test premise: a boss record must be blocked");
+        assert_eq!(
+            blocker,
+            ReinitBlock::Boss,
+            "test premise: a boss record's own block"
+        );
 
         let rows = extraction_options_rows(&game, 0, 0);
         let joined: String = rows
@@ -683,8 +693,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join(" ");
         assert!(
-            joined.contains(blocker),
-            "the row must show the engine's own blocker reason {blocker:?}: {joined:?}"
+            joined.contains("a boss won't reinitialize"),
+            "the row must show the boss fragment specifically: {joined:?}"
         );
     }
 }

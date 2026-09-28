@@ -5233,27 +5233,6 @@ pub const RICH_IN_UNITS: u32 = 1;
 /// one back nets.
 pub const TOOL_CARRIER_VALUE: u32 = 2;
 
-/// The floor `reinit_level` scales a record's level by at condition 0 — see
-/// that function. A zero-condition kill still boots up as *something*
-/// rather than a level-1 program regardless of what was recorded, and 0.5
-/// is the fit: bad enough that condition stays worth chasing, not so bad
-/// that a Reinitialization Protocol on a rough kill reads as wasted.
-pub const REINIT_LEVEL_FLOOR: f32 = 0.5;
-
-/// The level `Game::reinitialize_program` boots a record up at — linear
-/// from `REINIT_LEVEL_FLOOR` of the record's level at condition 0 to the
-/// full level at condition 100, floored at 1 so a worst-condition level-1
-/// record still yields a live program rather than nothing.
-///
-/// Pure and unit-tested on its own before `Game::reinitialize_program`
-/// spends anything against it — condition is `DownedProgram`'s only axis
-/// this feature reads twice (once for the record's grade at the kill,
-/// again here for what it's worth reinitialized).
-pub fn reinit_level(level: u32, condition: u8) -> u32 {
-    let frac = REINIT_LEVEL_FLOOR + (1.0 - REINIT_LEVEL_FLOOR) * (condition as f32 / 100.0);
-    ((level as f32 * frac).round() as u32).max(1)
-}
-
 // ─────────────────────────────────────────────────────────────────────────
 // Tactical battle grid
 // ─────────────────────────────────────────────────────────────────────────

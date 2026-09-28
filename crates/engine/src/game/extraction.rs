@@ -892,10 +892,7 @@ impl Game {
 
     /// Why `index` can't be reinitialized right now, or `None` once every
     /// refusal clears — `Game::reinitialize_program`'s own gate, shared so
-    /// the action row (phase 2) can grey on the same check it spends
-    /// against. Row-fragment style, `combat::RoutineRefusal`'s own tone
-    /// ("roster is full") rather than a full sentence, since a caller
-    /// appends it after the action's own label.
+    /// the action row can grey on the same check it spends against.
     ///
     /// In order: the run itself, then the record, then what it would cost.
     /// A boss record and no protocol held are both checked before the
@@ -904,9 +901,9 @@ impl Game {
     /// check runs last because it's the one refusal `reinitialize_program`
     /// itself cannot recover from once index and boss are already known
     /// good — see that function's own `expect`.
-    pub fn reinitialize_blocker(&self, index: usize) -> Option<&'static str> {
+    pub fn reinitialize_blocker(&self, index: usize) -> Option<ReinitBlock> {
         if self.is_game_over().is_some() || self.has_active_battle() {
-            return Some("not now");
+            return Some(ReinitBlock::NotNow);
         }
         let player = self.player_entity();
         let Some(record) = self
@@ -914,10 +911,10 @@ impl Game {
             .get::<DownedPrograms>(player)
             .and_then(|held| held.0.get(index))
         else {
-            return Some("no such record");
+            return Some(ReinitBlock::NoSuchRecord);
         };
         if record.boss {
-            return Some("boss ICE won't reinitialize");
+            return Some(ReinitBlock::Boss);
         }
         let held_protocols = self
             .world
@@ -925,10 +922,10 @@ impl Game {
             .map(|inv| inv.count(&ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL)))
             .unwrap_or(0);
         if held_protocols == 0 {
-            return Some("no protocol held");
+            return Some(ReinitBlock::NoProtocol);
         }
         if self.roster_room() == 0 {
-            return Some("roster is full");
+            return Some(ReinitBlock::RosterFull);
         }
         if self
             .world
@@ -936,7 +933,7 @@ impl Game {
             .get(record.species.as_str())
             .is_none()
         {
-            return Some("unknown species");
+            return Some(ReinitBlock::UnknownSpecies);
         }
         None
     }
@@ -950,13 +947,17 @@ impl Game {
     /// — same shape `extract_program`'s own refusals take. Once past it:
     /// spend the protocol, remove the record, spawn the body with its own
     /// rarity and carried routine pinned (`spawning::SpawnPins`, never
-    /// re-rolled), raise it to `tuning::reinit_level` capped at
-    /// `Game::level_cap`, one log line. No ticks spent — this happens at
-    /// the Fabricator's leisure, not in the field — and no `Deed`:
-    /// `Deed::Tamed` reads "Decompile a wild program", and this isn't one.
+    /// re-rolled), one log line. Always boots at level 1 — `record.level`
+    /// is really the zone the kill happened in (wild bodies carry no
+    /// `Experience`), so it names no level worth restoring, and condition
+    /// goes unread for the same reason: neither is `Potential`, which
+    /// `roster_parts` already mints fresh through `Experience::default()`.
+    /// No ticks spent — this happens wherever the player is standing, not
+    /// only at the Fabricator — and no `Deed`: `Deed::Tamed` reads
+    /// "Decompile a wild program", and this isn't one.
     pub fn reinitialize_program(&mut self, index: usize) -> Result<(), String> {
-        if let Some(reason) = self.reinitialize_blocker(index) {
-            return Err(reason.to_string());
+        if let Some(block) = self.reinitialize_blocker(index) {
+            return Err(block.refusal().to_string());
         }
         let player = self.player_entity();
         self.world.get_mut::<Inventory>(player).unwrap().take(
@@ -974,19 +975,26 @@ impl Game {
         // one of whose fields was moved out can no longer be borrowed whole.
         let label = self.downed_program_label(&record);
         let pos = *self.world.get::<Position>(player).unwrap();
+        // Filtered against `AbilityDb` before pinning: a mod that pulled the
+        // ability out from under an old kill must not hand the new body a
+        // `Routines` entry `install_innate_routines` and every other reader
+        // assumes resolves — `routine_candidate_ids`' own tolerance, applied
+        // here instead of trusted to every later reader.
+        let db = self.world.resource::<AbilityDb>();
+        let carried: Vec<AbilityId> = record
+            .carried
+            .into_iter()
+            .filter(|id| db.get(id).is_some())
+            .collect();
         let pins = crate::game::spawning::SpawnPins {
             rarity: Some(record.rarity),
-            routines: Some(record.carried.into_iter().collect()),
+            routines: Some(carried),
         };
-        let program = self
-            .adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
+        self.adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
             .expect("reinitialize_blocker already confirmed SpeciesDb resolves this species");
-        let level = tuning::reinit_level(record.level, record.condition);
-        let cap = self.level_cap();
-        self.raise_to_level(program, level, cap);
         self.log_kind(
             MessageKind::Outcome,
-            format!("{label} boots back up, tamed."),
+            format!("{label} boots back up and joins your roster."),
         );
         Ok(())
     }
@@ -1052,5 +1060,44 @@ impl Game {
             .unwrap_or(0);
         let held = self.world.get::<Hopper>(rig).map_or(0, |h| h.queue.len());
         capacity.saturating_sub(held)
+    }
+}
+
+/// Why `index` can't be reinitialized right now — `Game::
+/// reinitialize_blocker`'s exhaustive answer, `stack_features::AdoptBlock`'s
+/// own shape: `row_fragment` is the few words the action row appends after
+/// its label, `refusal` the full sentence `Game::reinitialize_program` errs
+/// with, `extract_program`'s own tone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReinitBlock {
+    NotNow,
+    NoSuchRecord,
+    Boss,
+    NoProtocol,
+    RosterFull,
+    UnknownSpecies,
+}
+
+impl ReinitBlock {
+    pub fn row_fragment(self) -> &'static str {
+        match self {
+            Self::NotNow => "not now",
+            Self::NoSuchRecord => "no such record",
+            Self::Boss => "a boss won't reinitialize",
+            Self::NoProtocol => "no protocol held",
+            Self::RosterFull => "roster is full",
+            Self::UnknownSpecies => "unknown species",
+        }
+    }
+
+    pub fn refusal(self) -> &'static str {
+        match self {
+            Self::NotNow => "Can't do that right now.",
+            Self::NoSuchRecord => "No such downed program.",
+            Self::Boss => "A boss won't reinitialize.",
+            Self::NoProtocol => "You need a Reinitialization Protocol.",
+            Self::RosterFull => "Your roster is full.",
+            Self::UnknownSpecies => "That species no longer exists.",
+        }
     }
 }

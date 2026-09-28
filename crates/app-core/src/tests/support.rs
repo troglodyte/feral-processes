@@ -300,6 +300,38 @@ pub(crate) fn app_holding_downed_programs_and_protocols(
     app
 }
 
+/// `app_holding_downed_programs_and_protocols` with every installed tool
+/// pulled, `data.player.tools` cleared — the `R` key's own "works with no
+/// tool at all" test needs a fixture with no extraction-options rows to
+/// prove `R` isn't reached through one; every other fixture here carries
+/// the starter tool, which would leave that path untested.
+pub(crate) fn app_holding_downed_programs_and_protocols_with_no_tools(
+    seed: u32,
+    programs: Vec<feral_processes_engine::items::DownedProgram>,
+    protocols: u32,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("downed_programs_protocols_no_tools", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = programs;
+    data.player.tools = Vec::new();
+    if protocols > 0 {
+        data.player.inventory.push((
+            ItemId::from(feral_processes_engine::items::ids::REINITIALIZATION_PROTOCOL),
+            protocols,
+        ));
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// `app_holding_downed_programs` plus a Teardown Rig standing beside the
 /// party, in base space — the two preconditions the rig verbs need.
 ///

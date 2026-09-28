@@ -420,12 +420,8 @@ fn pressing_r_reinitializes_the_record_and_returns_to_the_list() {
     );
 }
 
-/// `R` must work with no tool installed at all — the empty-options early
-/// return in `handle_downed_programs_key` has to sit below the `R` check, or
-/// a run with every tool pulled could never reach this action. This fixture
-/// carries no protocol either, which is enough on its own to refuse — the
-/// point under test is that the key is still live, not that this particular
-/// refusal fires.
+/// A held record with no protocol in the pack: `R` must refuse and leave
+/// the tool page (and the record) exactly as it found them.
 #[test]
 fn pressing_r_with_no_protocol_refuses_and_stays_on_the_page() {
     let mut app = app_holding_downed_programs_and_protocols(
@@ -450,9 +446,40 @@ fn pressing_r_with_no_protocol_refuses_and_stays_on_the_page() {
         "nothing was spent — the record must still be held"
     );
     let said = app.status_line.clone().expect("the refusal is reported");
+    assert_eq!(
+        said, "You need a Reinitialization Protocol.",
+        "and it is this key's own refusal, ReinitBlock::NoProtocol's exact sentence"
+    );
+}
+
+/// `R` must work with no tool installed at all — the empty-options early
+/// return in `handle_downed_programs_key` has to sit below the `R` check,
+/// or a run with every tool pulled could never reach this action. Every
+/// other fixture here carries the starter tool, so this is the one test
+/// that actually clears `data.player.tools` rather than merely claiming to.
+#[test]
+fn pressing_r_with_no_tool_installed_still_reinitializes() {
+    let mut app = app_holding_downed_programs_and_protocols_with_no_tools(
+        9203,
+        vec![program("scrapper", 70, Rarity::Gold, 5)],
+        1,
+    );
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('D'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_downed_program_index, Some(0));
     assert!(
-        said.contains("protocol"),
-        "and it is this key's own refusal: {said:?}"
+        app.game.as_ref().unwrap().extraction_options(0).is_empty(),
+        "test premise: no tool installed means no extraction-option rows"
+    );
+    let pets_before = app.game.as_ref().unwrap().pet_count();
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(
+        app.game.as_ref().unwrap().pet_count(),
+        pets_before + 1,
+        "R must still reinitialize with no tool installed at all"
     );
 }
 

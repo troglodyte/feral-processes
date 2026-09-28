@@ -100,6 +100,7 @@ pub use game::catalog::program_tier_required;
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;
+pub use game::extraction::ReinitBlock;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};

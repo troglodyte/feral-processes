@@ -28,11 +28,18 @@ fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
 /// `Entity` `reinitialize_program`'s `Result<(), String>` never hands back.
 fn only_pet(game: &Game) -> Entity {
     let player = game.player_entity();
-    game.world
+    let mut owned = game
+        .world
         .iter_entities()
-        .find(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
-        .expect("exactly one tamed program was expected")
-        .id()
+        .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player));
+    let pet = owned
+        .next()
+        .expect("exactly one tamed program was expected");
+    assert!(
+        owned.next().is_none(),
+        "only_pet found more than one tamed program"
+    );
+    pet.id()
 }
 
 #[test]
@@ -4139,28 +4146,6 @@ fn the_reinitialization_protocol_loads_and_is_not_a_taming_catalyst() {
     );
 }
 
-/// `tuning::reinit_level` — the pure formula behind the level a
-/// reinitialized program boots up at, unit-testable on its own before
-/// anything spends it.
-#[test]
-fn reinit_level_scales_linearly_with_condition_and_floors_at_one() {
-    assert_eq!(
-        tuning::reinit_level(10, 100),
-        10,
-        "full condition must keep the record's level exactly"
-    );
-    assert_eq!(
-        tuning::reinit_level(10, 0),
-        5,
-        "zero condition must halve the level, REINIT_LEVEL_FLOOR's own value"
-    );
-    assert_eq!(
-        tuning::reinit_level(1, 0),
-        1,
-        "a level-1 record at zero condition must still floor at 1, never 0"
-    );
-}
-
 /// `spawn_wild_creature_pinned`: a pinned `Rarity` must land as the
 /// component and scale `Stats`, exactly as a rolled one does —
 /// `Rarity`'s own doc rule ("applied only at spawn and in `promote_rarity`")
@@ -4227,6 +4212,15 @@ fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
     let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
 
     let mut pinned = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Outside the opening ring — `roll_rarity` already draws nothing
+    // *inside* it (`Game::in_opening_ring`'s own exclusion), which would
+    // let a pin that failed to skip the roll go unnoticed here.
+    let (x, y) = (100, 100);
+    assert!(
+        !pinned.in_opening_ring(x, y),
+        "test premise: this spawn site must be far enough out that roll_rarity would draw \
+         without the pin"
+    );
     let carried = pinned
         .world
         .resource::<AbilityDb>()
@@ -4237,8 +4231,8 @@ fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
     pinned
         .spawn_wild_creature_pinned(
             "scrapper",
-            5,
-            5,
+            x,
+            y,
             1.0,
             false,
             crate::game::spawning::SpawnPins {
@@ -4258,15 +4252,47 @@ fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
 
 /// `spawn_wild_creature_scaled`'s own callers must see byte-for-byte the
 /// same stream as before pinning existed — `SpawnPins::default()` rolls
-/// both axes, so the delegate changes nothing about what it draws or in
-/// what order.
+/// both axes, so the delegate changes nothing about what it draws.
+///
+/// Proves that rarity and the wild routine pool are *both* still drawn,
+/// not merely that potential is (which alone would already move the
+/// stream and make a "some draw happened" check pass trivially) — the
+/// baseline draws only `roll_potential`, `a_fully_pinned_spawn_draws_
+/// nothing_for_rarity_or_routines`'s own method, so any further movement
+/// can only be the two axes `SpawnPins::default()` leaves unpinned.
+///
+/// Does not attempt to prove the draws happen in a particular *order*:
+/// `Rarity` and the wild routine pool are both coarse, lossy outputs of
+/// their draw (most rolls land on plain `Ordinary` or no routine at all),
+/// so comparing final values — or even the final `GameRng` position, which
+/// a swap of two draws that each read a fixed number of words can leave
+/// unchanged — is not reliable evidence of sequence for an arbitrary seed.
+/// `roll_rarity`'s own I4 reason is why the site sits outside the opening
+/// ring, where a rarity draw is skipped outright rather than merely likely
+/// to look unchanged.
 #[test]
-fn an_unpinned_spawn_still_rolls_rarity_and_routines_in_the_old_order() {
+fn an_unpinned_spawn_still_draws_from_gamerng_for_rarity_and_routines() {
+    let seed = 9104;
+    let (x, y) = (100, 100);
+
+    let mut baseline = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(
-        !rng_unadvanced_by(9104, |game| {
-            game.spawn_wild_creature_scaled("scrapper", 5, 5, 1.0, false);
-        }),
-        "an unpinned spawn must still draw from GameRng for potential, routines and rarity"
+        !baseline.in_opening_ring(x, y),
+        "test premise: this spawn site must be far enough out for roll_rarity to draw"
+    );
+    let _ = baseline.roll_potential();
+    let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
+
+    let mut scaled = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    scaled
+        .spawn_wild_creature_scaled("scrapper", x, y, 1.0, false)
+        .unwrap();
+    let after_scaled: u64 = scaled.world.resource_mut::<GameRng>().0.random();
+
+    assert_ne!(
+        after_baseline, after_scaled,
+        "an unpinned spawn must still draw from GameRng for rarity and the wild routine, not \
+         only for potential"
     );
 }
 
@@ -4323,31 +4349,30 @@ fn reinitialize_program_spends_one_protocol_and_removes_only_that_record() {
     );
 }
 
-/// `reinit_level` and `Game::level_cap` meet here: a record far above the
-/// zone's ceiling still boots up, but only as high as the roster is ever
-/// allowed to go.
+/// A reinitialized program always boots at level 1, whatever the record's
+/// `level` and `condition` say — `DownedProgram::level` is really the zone
+/// the kill happened in (a wild body carries no `Experience` to record),
+/// so it names no level worth restoring, and condition is read nowhere
+/// here. `roster_parts` mints a fresh `Experience::default()` the same way
+/// a decompile does; a record far above the zone's own cap still boots up
+/// exactly at 1, well inside it.
 #[test]
-fn reinitialize_program_clamps_the_level_to_the_zone_cap() {
+fn reinitialize_program_always_boots_at_level_one() {
     let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
-        vec![program(100, Rarity::Ordinary, 999)];
+        vec![program(0, Rarity::Ordinary, 999)];
     set_inventory(
         &mut game,
         &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
-    );
-    let cap = game.level_cap();
-    assert!(
-        tuning::reinit_level(999, 100) > cap,
-        "test premise: an unclamped level-999 record must ask for more than the zone allows"
     );
 
     game.reinitialize_program(0).unwrap();
 
     let level = game.world.get::<Experience>(only_pet(&game)).unwrap().level;
     assert_eq!(
-        level, cap,
-        "a reinitialized program must never exceed Game::level_cap()"
+        level, 1,
+        "a reinitialized program boots at level 1 regardless of the record's level or condition"
     );
 }
 
@@ -4392,68 +4417,80 @@ fn reinitialize_program_pins_the_records_rarity_and_carried_routine() {
     );
 }
 
-/// A record with no carried routine must leave a body indistinguishable, on
-/// its `Routines`, from a **non-carrier** built at the same level — `None`
-/// pins an *empty* routine list, never a roll, so the kit
-/// `install_innate_routines` fills in is the only thing either body ends up
-/// carrying.
-///
-/// The comparison side pins an empty routine list too, deliberately, rather
-/// than calling plain `adopt_program`: that unpinned door still rolls its
-/// own `roll_wild_routine` (`WILD_ROUTINE_CHANCE`), and a wild-rolled
-/// carrier would install itself as the carried prize — exactly the axis
-/// this test is trying to hold equal rather than leave to a coin flip.
+/// A mod that pulled an ability out from under an old kill: the record's
+/// `carried` still names it, but `AbilityDb` no longer resolves it. Pinning
+/// it anyway would hand the new body a `Routines` entry nothing else in the
+/// engine expects to fail resolving — `routine_candidate_ids`'s own
+/// tolerance, applied here at the source instead.
 #[test]
-fn reinitialize_program_with_no_carried_routine_matches_a_non_carrier_at_that_level() {
-    let level = 8;
-    let mut reinit_game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = reinit_game.player_entity();
-    // condition 100 keeps reinit_level(level, 100) == level exactly, so the
-    // two bodies below are compared at the identical level.
-    reinit_game
-        .world
-        .get_mut::<DownedPrograms>(player)
-        .unwrap()
-        .0 = vec![program(100, Rarity::Ordinary, level)];
+fn reinitialize_program_drops_a_carried_routine_ability_db_no_longer_resolves() {
+    let mut game = Game::new(9215, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let stale = "not_a_shipped_ability".to_string();
+    assert!(
+        game.world.resource::<AbilityDb>().get(&stale).is_none(),
+        "test premise: this id must not resolve"
+    );
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![DownedProgram {
+        species: "scrapper".to_string(),
+        level: 5,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 80,
+        carried: Some(stale.clone()),
+    }];
     set_inventory(
-        &mut reinit_game,
+        &mut game,
         &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
     );
-    reinit_game.reinitialize_program(0).unwrap();
-    let reinit_routines = reinit_game
-        .world
-        .get::<Routines>(only_pet(&reinit_game))
-        .unwrap()
-        .0
-        .clone();
 
-    let mut plain_game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let plain_player = plain_game.player_entity();
-    let pos = *plain_game.world.get::<Position>(plain_player).unwrap();
-    let plain_body = plain_game
-        .adopt_program_pinned(
-            "scrapper",
-            pos.x,
-            pos.y,
-            1.0,
-            crate::game::spawning::SpawnPins {
-                rarity: None,
-                routines: Some(Vec::new()),
-            },
-        )
-        .unwrap();
-    let cap = plain_game.level_cap();
-    plain_game.raise_to_level(plain_body, level, cap);
-    let plain_routines = plain_game
-        .world
-        .get::<Routines>(plain_body)
-        .unwrap()
-        .0
-        .clone();
+    game.reinitialize_program(0).unwrap();
+
+    let body = only_pet(&game);
+    assert!(
+        !game.world.get::<Routines>(body).unwrap().0.contains(&stale),
+        "an unresolvable carried routine must be dropped, not installed"
+    );
+}
+
+/// A record with no carried routine must pin an **empty** routine list
+/// rather than falling through to a roll — `SpawnPins { routines:
+/// Some(Vec::new()), .. }`, never `None`, which `spawn_wild_creature_pinned`
+/// would read as "roll `roll_wild_routine`" and spend a `GameRng` draw on.
+///
+/// Checked against the `GameRng` stream rather than the installed
+/// `Routines` set: comparing final routine content instead would only catch
+/// a mutation that dropped the pin (`record.carried.map(|c| vec![c])`,
+/// `None -> None` rather than `None -> Some(Vec::new())`) on the fraction of
+/// seeds where the fallback roll happens to miss too — roughly
+/// `1 - WILD_ROUTINE_CHANCE`, the gap that let the mutation through most of
+/// the time. `a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines`'s
+/// own method — compared against a baseline that draws only
+/// `roll_potential` — is deterministic regardless of what any fallback roll
+/// would have landed on.
+#[test]
+fn reinitialize_program_with_no_carried_routine_draws_nothing_for_routines() {
+    let seed = 9207;
+    let mut baseline = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let _ = baseline.roll_potential();
+    let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
+
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(100, Rarity::Ordinary, 8)];
+    set_inventory(
+        &mut game,
+        &[(crate::items::ids::REINITIALIZATION_PROTOCOL, 1)],
+    );
+
+    game.reinitialize_program(0).unwrap();
+    let after_reinit: u64 = game.world.resource_mut::<GameRng>().0.random();
 
     assert_eq!(
-        reinit_routines, plain_routines,
-        "no carried routine must leave the same kit a non-carrier's install would produce"
+        after_baseline, after_reinit,
+        "a record with no carried routine must draw nothing from GameRng for it — the pinned \
+         empty list, not a fallback roll"
     );
 }
 
@@ -4493,7 +4530,7 @@ fn reinitialize_refuses_during_an_active_battle_and_spends_nothing() {
 
 /// A boss record can never be reinitialized — the one exclusion the spec
 /// carves out of "any carried record". `reinitialize_blocker` is the same
-/// check the action row will grey on in phase 2.
+/// check the action row greys on.
 #[test]
 fn reinitialize_refuses_a_boss_record_and_spends_nothing() {
     let mut game = Game::new(9208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -4657,8 +4694,8 @@ fn reinitialize_refuses_an_unresolvable_species_and_spends_nothing() {
 }
 
 /// `reinitialize_blocker` must read `None` once every refusal clears —
-/// otherwise the action row (phase 2) would grey out a record the door
-/// itself would happily reinitialize.
+/// otherwise the action row would grey out a record the door itself would
+/// happily reinitialize.
 #[test]
 fn reinitialize_blocker_is_none_once_every_refusal_clears() {
     let mut game = Game::new(9213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

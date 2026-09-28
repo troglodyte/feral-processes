@@ -17,7 +17,23 @@
     "web-design-guidelines": "off",
     "dataviz": "off",
     "claude-in-chrome": "off",
-    "claude-api": "user-invocable-only"
+    "claude-api": "user-invocable-only",
+    "anthropic-skills:docx": "off",
+    "anthropic-skills:pptx": "off",
+    "anthropic-skills:xlsx": "off",
+    "anthropic-skills:pdf": "off",
+    "anthropic-skills:google-workspace": "off",
+    "anthropic-skills:morning": "off",
+    "anthropic-skills:import-memory": "off",
+    "anthropic-skills:computer-use": "off",
+    "anthropic-skills:built-in-browser": "off",
+    "anthropic-skills:chrome-browser": "off",
+    "anthropic-skills:deep-research": "off",
+    "anthropic-skills:docs": "off",
+    "find-skills": "off",
+    "refactor": "off",
+    "improve-codebase-architecture": "off",
+    "writing-guidelines": "off"
   },
   "hooks": {
     "PreToolUse": [

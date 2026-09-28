@@ -792,16 +792,13 @@ impl Game {
     /// reusing the party arm for it — a body with a `PowerReserve` the
     /// player never funded — is a separate decision nothing here makes.
     ///
-    /// **A candidate with nothing worth aiming still wins the pick.** Once
-    /// `walk_to_best_cell` has spent the body's move, `run_tactical_intent`
-    /// asks `best_aim` for real and may find nothing — the same gap a
-    /// hostile's own routine arm has always had (`a_hostile_will_not_shoot_
-    /// through_cover`, which asserts the wasted turn as the *correct*
-    /// answer for that side). Falling through to the next candidate, or to
-    /// a swing, would need a second aim pass before the intent is even
-    /// chosen — the one this function is pure and undrawn specifically to
-    /// avoid — so this stays a known, shared limitation rather than a
-    /// party-arm-only bug.
+    /// **On the hostile arm, a candidate with nothing worth aiming still
+    /// wins the pick**, and the turn is wasted once `run_tactical_intent`
+    /// finds no aim — asserted as the *correct* answer for that side by
+    /// `a_hostile_will_not_shoot_through_cover`. The party arm pays for the
+    /// aim pass up front instead (`aimable_this_turn`), so a routine it could
+    /// only land on its own side falls through to the next candidate or to a
+    /// swing. Both passes spend no draw, so this stays pure.
     fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
         if let Some(def) = self.wild_routine_ready(actor)
             && self.world.get::<Hostile>(actor).is_some()
@@ -839,8 +836,17 @@ impl Game {
     /// every earlier arm would have already returned first had it applied.
     /// That single call is what makes this two passes over one gate rather
     /// than a second, Power-skipping copy of it.
+    ///
+    /// **A candidate with no aim anywhere this turn is not a candidate** —
+    /// `aimable_this_turn` — so neither pass invokes, or drinks a cell for,
+    /// a routine that could only land on the party's own side or on nobody.
     fn party_routine_intent(&self, actor: Entity) -> Option<Intent> {
-        let candidates = self.ready_party_routines(actor);
+        let sides = self.tactical_sides(actor);
+        let candidates: Vec<AbilityDef> = self
+            .ready_party_routines(actor)
+            .into_iter()
+            .filter(|def| self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides))
+            .collect();
         if let Some(def) = candidates
             .iter()
             .find(|def| self.ability_unavailable(actor, def).is_none())
@@ -861,6 +867,23 @@ impl Game {
             .unwrap_or(0.0);
         let id = self.power_cell_for((cost - current).max(0.0))?;
         Some(Intent::UseItem(id))
+    }
+
+    /// Whether `intent` has an aim from somewhere `actor` can stand this
+    /// turn: where it is, or any cell of its movement field.
+    ///
+    /// The same `chosen_target` the walk (`scored_cells`) and the act
+    /// (`target_from_here`) read, so a routine chosen here always has a cell
+    /// to walk to that the act will then accept.
+    fn aimable_this_turn(&self, actor: Entity, intent: &Intent, sides: &Sides) -> bool {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        let field = reach::movement_field(battle, actor, self.movement_allowance(actor));
+        std::iter::once(from)
+            .chain(field.into_keys())
+            .any(|cell| self.chosen_target(actor, cell, intent, sides).is_some())
     }
 
     /// Takes the next cell off `actor`'s committed walk and steps it there,
@@ -1081,6 +1104,16 @@ impl Game {
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
         let standing = cell_merit(&battle.board, &block(from), band, &sides.targets);
+        // **A party routine walks only where it can be aimed.** Band alone
+        // would hold a body whose every aim from here covers a companion;
+        // `party_routine_intent` chose the routine because some cell in reach
+        // has an aim, so this narrows to those cells. When the cell it stands
+        // on has one, nothing changes. The hostile side keeps the band alone.
+        let party_routine =
+            matches!(intent, Intent::Routine(_)) && self.world.get::<Hostile>(actor).is_none();
+        let aimable =
+            |cell| !party_routine || self.chosen_target(actor, cell, intent, sides).is_some();
+        let hold_is_aimable = aimable(from);
         // **The reaction cost rides merit, not just the score**, so it is
         // read by the candidate filter as well as by the draw: a cell worth
         // one step of closing that costs three Integrity on the way out is
@@ -1094,9 +1127,11 @@ impl Game {
             .keys()
             .copied()
             .filter(|&cell| {
-                cell_merit(&battle.board, &block(cell), band, &sides.targets)
-                    - self.walk_risk(actor, cell)
-                    > standing
+                aimable(cell)
+                    && (!hold_is_aimable
+                        || cell_merit(&battle.board, &block(cell), band, &sides.targets)
+                            - self.walk_risk(actor, cell)
+                            > standing)
             })
             .collect();
         if cells.is_empty() {
@@ -1210,6 +1245,17 @@ impl Game {
             return;
         };
         let Some(TurnTarget::Aim(aim)) = self.target_from_here(actor, intent, sides) else {
+            // A party body's routine is only chosen when an aim exists, so
+            // this is the walk having ended somewhere it did not plan — a
+            // refused step. It swings from there rather than waste the
+            // turn; a hostile keeps the wasted turn
+            // (`a_hostile_will_not_shoot_through_cover`).
+            if self.world.get::<Hostile>(actor).is_none() {
+                let swing = Intent::Swing {
+                    range: self.swing_range(actor),
+                };
+                self.swing_at_best_neighbour(actor, &swing, sides);
+            }
             return;
         };
         let floor = if self.world.get::<Hostile>(actor).is_some() {
@@ -1266,6 +1312,11 @@ impl Game {
     /// `reach::recipients` never reads `Hostile` and a blast aimed through a
     /// packmate lands on the packmate.
     ///
+    /// **Acting for the party, its own side is a veto rather than a −1**: an
+    /// aggressive aim that covers any party body, the invoker included, is
+    /// not a candidate at all. The hostile side keeps the net score, so a
+    /// pack still trades a packmate for two of the party.
+    ///
     /// **"Wanted" is read through `acts_for_hostiles`, actor-relative like
     /// `tactical_sides`.** A helpful routine wants the actor itself or a body
     /// on the actor's own side; an aggressive one wants a body on the other
@@ -1306,6 +1357,7 @@ impl Game {
             i32::try_from(band.max).unwrap_or(0) + i32::from(battle.footprint_of(actor)) - 1;
         let acting_side = self.acts_for_hostiles(actor);
         let hallucinating = !helpful && self.is_hallucinating(actor);
+        let spares_own_side = !helpful && !acting_side;
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {
@@ -1320,6 +1372,18 @@ impl Game {
                 {
                     continue;
                 }
+                let covered = reach::recipients_from(battle, actor, from, aim, shape);
+                // **The party's side vetoes, it does not merely subtract.**
+                // Net scoring fired a blast through a companion whenever two
+                // hostiles stood with it; a body fighting for the party does
+                // not trade its own side's Integrity for the other's.
+                if spares_own_side
+                    && covered
+                        .iter()
+                        .any(|&body| self.world.get::<Hostile>(body).is_some() == acting_side)
+                {
+                    continue;
+                }
                 let mut worth = 0;
                 if hallucinating {
                     worth += reach::shape_cells(&battle.board, from, aim, shape)
@@ -1327,7 +1391,7 @@ impl Game {
                         .filter(|&cell| self.sees_decoy_at(actor, cell))
                         .count() as i32;
                 }
-                for body in reach::recipients_from(battle, actor, from, aim, shape) {
+                for body in covered {
                     let body_is_hostile = self.world.get::<Hostile>(body).is_some();
                     worth += if helpful {
                         if body == actor || body_is_hostile == acting_side {

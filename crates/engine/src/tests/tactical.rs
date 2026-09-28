@@ -3471,6 +3471,126 @@ fn an_auto_driven_party_body_invokes_a_ready_affordable_routine() {
     );
 }
 
+/// `bus_fault` reshaped and installed as `body`'s only routine: an
+/// aggressive, affordable routine whose footprint the test chooses.
+fn shaped_sweep(
+    game: &mut Game,
+    body: Entity,
+    shape: crate::abilities::AbilityShape,
+    range: crate::abilities::AbilityRange,
+) -> &'static str {
+    use crate::abilities::AbilityDb;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut def = game
+        .world
+        .resource::<AbilityDb>()
+        .get(HOSTILE_SWEEP)
+        .expect("the shipped routine is loaded")
+        .clone();
+    def.id = "shaped_sweep".to_string();
+    def.shape = Some(shape);
+    def.range = Some(range);
+    game.world.resource_mut::<AbilityDb>().insert(def);
+    only_routine(game, body, "shaped_sweep");
+    "shaped_sweep"
+}
+
+/// An auto-driven party body never lands an aggressive routine on its own
+/// side, however many hostiles the blast would also catch — and a routine it
+/// may not fire is not a wasted turn: it swings instead.
+///
+/// Three hostiles against the invoker and one companion is the count the
+/// old net scoring fired at (+3 −2). The blast covers the whole board, so
+/// there is no aim that spares the party. Two actions and a pinned walk are
+/// the instrument: a swing spends one and leaves the player acting
+/// (`Stepped`), where a turn that found nothing to do hands it on.
+#[test]
+fn an_auto_driven_party_body_swings_rather_than_blast_a_companion() {
+    use crate::abilities::{AbilityRange, AbilityShape};
+    use crate::components::AbilityCooldowns;
+    use crate::tactical::ai::AiBeat;
+
+    let mut game = game();
+    let companion = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, companion);
+    let pack = tactical_fight(&mut game, 3, 10_000);
+    let player = game.player_entity();
+    let bodies = [pack[0], pack[1], pack[2], companion];
+    open_ground(&mut game, &bodies, &[(3, 4), (5, 4), (4, 5), (4, 3)]);
+    let routine = shaped_sweep(
+        &mut game,
+        player,
+        AbilityShape::Radius { radius: 20 },
+        AbilityRange { min: 0, max: 6 },
+    );
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    assert!(
+        game.wild_routine_ready(player).is_some(),
+        "the fixture left nothing to invoke, so nothing is being tested"
+    );
+    let companion_hp = hp_of(&game, companion);
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        battle.set_actions_left(2);
+        battle.commit_walk(Vec::new());
+    }
+
+    let beat = game.tactical_auto_beat();
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(routine)),
+        "the auto-driven player blasted its own companion"
+    );
+    assert_eq!(hp_of(&game, companion), companion_hp);
+    assert_eq!(
+        beat,
+        AiBeat::Stepped,
+        "the refused routine wasted the turn instead of swinging"
+    );
+}
+
+/// Refusing the aim from where it stands is not refusing the routine: a line
+/// the companion blocks from here is clear from a cell a short walk away,
+/// and the auto-driven body walks there and fires.
+#[test]
+fn an_auto_driven_party_body_walks_to_a_clear_line_of_fire() {
+    use crate::abilities::{AbilityRange, AbilityShape};
+    use crate::components::AbilityCooldowns;
+
+    let mut game = game();
+    let companion = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, companion);
+    let pack = tactical_fight(&mut game, 1, 10_000);
+    let player = game.player_entity();
+    open_ground(&mut game, &[pack[0], companion], &[(4, 1), (4, 3)]);
+    let routine = shaped_sweep(
+        &mut game,
+        player,
+        AbilityShape::Line { length: 6 },
+        AbilityRange { min: 0, max: 6 },
+    );
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    let companion_hp = hp_of(&game, companion);
+
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_actor() != Some(player) {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_some_and(|c| c.0.contains_key(routine)),
+        "the player never fired, though a clear line was a few steps away"
+    );
+    assert_eq!(hp_of(&game, companion), companion_hp);
+}
+
 /// `PartyTurns::SwingOnly` is what `an_auto_driven_party_body_invokes_a_
 /// ready_affordable_routine` above changed away from — the arena's own
 /// door, and the tests that hold its numbers, must still get the pre-#103

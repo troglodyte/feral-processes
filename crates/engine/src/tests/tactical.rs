@@ -3589,6 +3589,66 @@ mod respawn {
         );
     }
 
+    /// `respawn_refusal` and `best_aim`/`reanimate` must read "raisable"
+    /// off one predicate. A mark whose own cell is occupied is still
+    /// raisable when a neighbour is free — `Game::reanimate`'s own
+    /// `nearest_free` fallback — so the player's refusal must not be
+    /// stricter than what a cast would actually do.
+    #[test]
+    fn a_mark_behind_a_live_blocker_with_a_free_neighbour_is_still_raisable() {
+        let mut game = game();
+        tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let aim = beside(&game, player_at).expect("room beside the player");
+        drop_a_fallen_mark(
+            &mut game,
+            aim,
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 5,
+                mitigation: 0,
+            },
+        );
+        let blocker = game
+            .world
+            .spawn((
+                Creature {
+                    species: "scrapper".to_string(),
+                },
+                Hostile,
+                Stats {
+                    hp: 1,
+                    max_hp: 1,
+                    atk: 0,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(blocker, aim),
+            "the mark's own cell must be free to plant the blocker on it"
+        );
+
+        give_respawn(&mut game, player);
+        assert!(wait_for_turn(&mut game, player));
+
+        assert!(
+            game.tactical_use_routine(0, aim),
+            "a mark whose own cell is blocked but has a free neighbour is \
+             still raisable, the same room reanimate's own nearest_free \
+             fallback would seat it on"
+        );
+    }
+
     #[test]
     fn a_raised_body_that_falls_again_leaves_a_plain_mark() {
         let mut game = game();

@@ -1403,6 +1403,13 @@ impl Game {
                 // raisable marks the shape covers, and an aim covering none
                 // is not a candidate, exactly as `Game::respawn_refusal`
                 // answers the player's own door.
+                //
+                // **`TacticalBattle::raise_seat` is the same call that
+                // door and `Game::reanimate`'s own seat search read** — a
+                // mark counts here only when something would actually be
+                // raised onto it, not merely when its cell still carries
+                // one, so this cannot score an aim the player's door would
+                // refuse or credit one `reanimate` would raise nothing from.
                 if let AbilityEffect::Reanimate { .. } = &def.effect {
                     let worth = reach::shape_cells(&battle.board, from, aim, shape)
                         .into_iter()
@@ -1411,6 +1418,7 @@ impl Game {
                                 .fallen()
                                 .iter()
                                 .any(|f| f.cell == *cell && f.raise.is_some())
+                                && battle.raise_seat(*cell).is_some()
                         })
                         .count() as i32;
                     if worth > 0 && best.is_none_or(|(_, seen)| worth > seen) {

@@ -715,6 +715,22 @@ impl TacticalBattle {
     /// clearing only its `raise`, which is what keeps a raised body's own
     /// later fall (`raise: None`, unraisable — `Game::raisable_snapshot`'s
     /// `Summoned` exclusion) from drawing two marks on the same cell.
+    /// The cell a Reanimate raise aimed at `want` would actually seat a body
+    /// on — `want` itself if it is free, or the nearest free cell to it
+    /// otherwise, `Game::reanimate`'s own seat search. Shared so
+    /// `Game::respawn_refusal` (the player's door) and `tactical/ai.rs::
+    /// best_aim`'s Reanimate scoring (the AI's) answer "is this mark
+    /// actually raisable" through the one call rather than two readings of
+    /// "occupied" that can disagree with what a cast would really do.
+    pub(crate) fn raise_seat(&self, want: (i32, i32)) -> Option<(i32, i32)> {
+        if self.board.walkable(want.0, want.1) && self.occupant(want).is_none() {
+            return Some(want);
+        }
+        let taken: std::collections::BTreeSet<(i32, i32)> =
+            self.bodies().map(|(_, at)| at).collect();
+        deploy::nearest_free(&self.board, &taken, want, 1)
+    }
+
     pub(crate) fn take_raise(&mut self, cell: (i32, i32)) -> Option<FallenBody> {
         let idx = self
             .fallen

@@ -1841,12 +1841,15 @@ impl Game {
     }
 
     /// `RoutineRefusal::NothingToRespawn`, for a non-`Reanimate` ability or
-    /// a fine aim `None`: no raisable mark lies in the shape at all, or
-    /// every one of those marks' own cells is already stood on. Either way
-    /// there is nothing this cast would raise, and spending the Power, the
-    /// cooldown and the turn on it is exactly what `Game::tactical_use_
-    /// routine`'s other ten refusals exist to prevent for every other
-    /// effect.
+    /// a fine aim `None`: no raisable mark lies in the shape at all, or none
+    /// of those marks has anywhere `TacticalBattle::raise_seat` would seat
+    /// it — the same predicate `reanimate` seats through and `tactical/
+    /// ai.rs::best_aim` scores by, so a mark whose own cell is occupied but
+    /// has a free neighbour is not refused here even though `reanimate`
+    /// would still raise it there. Either way there is nothing this cast
+    /// would raise, and spending the Power, the cooldown and the turn on it
+    /// is exactly what `Game::tactical_use_routine`'s other ten refusals
+    /// exist to prevent for every other effect.
     fn respawn_refusal(
         &self,
         actor: Entity,
@@ -1858,9 +1861,9 @@ impl Game {
         }
         let marks = self.raisable_marks(actor, ability, aim);
         let battle = self.world.resource::<TacticalBattle>();
-        let any_free = marks.iter().any(|(cell, _)| {
-            battle.board.walkable(cell.0, cell.1) && battle.occupant(*cell).is_none()
-        });
+        let any_free = marks
+            .iter()
+            .any(|(cell, _)| battle.raise_seat(*cell).is_some());
         if marks.is_empty() || !any_free {
             Some(RoutineRefusal::NothingToRespawn)
         } else {
@@ -1899,16 +1902,7 @@ impl Game {
         let marks = self.raisable_marks(actor, ability, aim);
         for (cell, snapshot) in marks.into_iter().take(count as usize) {
             self.world.resource_mut::<TacticalBattle>().take_raise(cell);
-            let seat = {
-                let battle = self.world.resource::<TacticalBattle>();
-                if battle.board.walkable(cell.0, cell.1) && battle.occupant(cell).is_none() {
-                    Some(cell)
-                } else {
-                    let taken: std::collections::BTreeSet<(i32, i32)> =
-                        battle.bodies().map(|(_, at)| at).collect();
-                    crate::tactical::deploy::nearest_free(&battle.board, &taken, cell, 1)
-                }
-            };
+            let seat = self.world.resource::<TacticalBattle>().raise_seat(cell);
             let Some(seat) = seat else { continue };
             let Some(body) = self.spawn_wild_creature_pinned(
                 &snapshot.species,

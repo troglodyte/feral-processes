@@ -120,6 +120,13 @@ pub(crate) const FORECAST: Color = rgb(0xb86ad0);
 /// grey — the `x` where a body fell on a battle map. One hue for both sides:
 /// the dead are out of the fight, and whose they were is the log's to say.
 pub(crate) const FALLEN: Color = rgb(0x6b7580);
+/// dark red-grey — a body Respawn raised, glyph and sprite tint alike, on
+/// either side. Replaces `glyph_color(body.color)` rather than sitting
+/// beside it: a raised body has already given up what it was, and this
+/// says so at a glance the way [`FALLEN`]'s `x` does for a body that never
+/// got up. The design doc's starting value, ≈ `(0.42, 0.24, 0.24)`, tuned
+/// by screenshot.
+pub(crate) const RESPAWNED: Color = rgb(0x6b3d3d);
 /// br cyan — pane titles on their borders.
 pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.

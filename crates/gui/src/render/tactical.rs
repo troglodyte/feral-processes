@@ -627,7 +627,15 @@ fn draw_body(
     let footprint = body.footprint.max(1) as f32;
     let cell_px = tile_px * footprint;
     let body_glyph_px = (glyph_px as f32 * footprint).round() as u16;
-    let authored = super::glyph_color(body.color);
+    // A raised body has already given up what it was — `palette::RESPAWNED`
+    // stands in for its authored hue on both the glyph and the sprite tint,
+    // since `ink` below is built from this on every path that isn't the
+    // player's own role colour or an emulated form.
+    let authored = if body.respawned {
+        palette::RESPAWNED
+    } else {
+        super::glyph_color(body.color)
+    };
     // The player's `@` is a role, read off `is_player` and never off the
     // hue they happen to have spawned with.
     //
@@ -1545,6 +1553,46 @@ mod tests {
             .find(|(text, _)| text == "x")
             .expect("the fallen mark was not drawn at all");
         assert_eq!(color, palette::FALLEN);
+    }
+
+    /// A raised body draws in `palette::RESPAWNED` instead of its authored
+    /// hue — `draw_body`'s replacement of `authored` rather than a colour
+    /// drawn beside it.
+    ///
+    /// **A party-side body with no sprite**, deliberately: a hostile's own
+    /// difficulty rung is a *con read*, which `ConRead::of` puts on the
+    /// glyph itself whenever no sprite drew — unrelated to Respawn, and the
+    /// design doc says it stays "unchanged" under a hostile raised body. A
+    /// `None` difficulty and no sprite is what isolates this test to the
+    /// one path Respawn actually changes.
+    #[test]
+    fn a_raised_body_draws_in_the_respawned_tint() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let template = view
+            .bodies
+            .iter()
+            .find(|b| !b.is_player)
+            .expect("a hostile stands on the board")
+            .clone();
+        let raised = TacticalBody {
+            respawned: true,
+            is_hostile: false,
+            difficulty: None,
+            sprite: None,
+            ..template
+        };
+        let glyph = raised.glyph.to_string();
+        view.bodies = vec![raised];
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let (_, color) = crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .find(|(text, _)| text == &glyph)
+            .expect("the raised body was not drawn at all");
+        assert_eq!(color, palette::RESPAWNED);
     }
 
     /// A profiled hostile's forecast draws its walk as a run of `FORECAST`

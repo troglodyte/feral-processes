@@ -4126,3 +4126,25 @@ fn the_reinitialization_protocol_loads_and_is_not_a_taming_catalyst() {
          change taming_catalyst's answer"
     );
 }
+
+/// `tuning::reinit_level` — the pure formula behind the level a
+/// reinitialized program boots up at, unit-testable on its own before
+/// anything spends it.
+#[test]
+fn reinit_level_scales_linearly_with_condition_and_floors_at_one() {
+    assert_eq!(
+        tuning::reinit_level(10, 100),
+        10,
+        "full condition must keep the record's level exactly"
+    );
+    assert_eq!(
+        tuning::reinit_level(10, 0),
+        5,
+        "zero condition must halve the level, REINIT_LEVEL_FLOOR's own value"
+    );
+    assert_eq!(
+        tuning::reinit_level(1, 0),
+        1,
+        "a level-1 record at zero condition must still floor at 1, never 0"
+    );
+}

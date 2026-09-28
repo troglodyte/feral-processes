@@ -3505,6 +3505,104 @@ mod respawn {
         assert_eq!(stats.hp, stats.max_hp, "a raised body comes up at full hp");
     }
 
+    /// `Perk::SpawnPriority`'s bonus is added on top of `REANIMATE_STAT_MULT`
+    /// for a party-side cast, the same per-level amount `fork_programs` adds
+    /// to `SUMMON_STAT_MULT` — three levels clears 1.0x, which the spec
+    /// states is intended rather than capped.
+    #[test]
+    fn spawn_priority_raises_a_party_cast_above_075x() {
+        use crate::components::Perks;
+        use crate::perks::Perk;
+
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 2, 1);
+        let target = pack[0];
+        *game.world.get_mut::<Stats>(target).unwrap() = Stats {
+            hp: 1,
+            max_hp: 40,
+            atk: 20,
+            mitigation: 12,
+        };
+        let stats_before = *game.world.get::<Stats>(target).unwrap();
+        let cell = kill_with_the_player(&mut game, target);
+
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        game.world.entity_mut(player).insert(Perks {
+            points: 0,
+            unlocked: vec![Perk::SpawnPriority; 3],
+        });
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, cell));
+
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("a raised body must be seated");
+        let stats = *game.world.get::<Stats>(raised).unwrap();
+        // 0.75 + 3 * 0.10 = 1.05.
+        let expect = |v: i32| (v as f32 * 1.05).round() as i32;
+        assert_eq!(stats.max_hp, expect(stats_before.max_hp));
+        assert!(
+            stats.max_hp as f32 > stats_before.max_hp as f32 * 0.75,
+            "three levels of Spawn Priority must raise the multiplier past 0.75x"
+        );
+    }
+
+    /// A hostile cast reads no perks at all — `summon_rarity_window`'s own
+    /// rule, borrowed here — so a hostile carrier's raise is unaffected by
+    /// Spawn Priority levels the *player* holds.
+    #[test]
+    fn a_hostile_raise_ignores_the_players_perk() {
+        use crate::components::Perks;
+        use crate::perks::Perk;
+
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 400);
+        let carrier = pack[0];
+        only_routine(&mut game, carrier, "respawn");
+        let carrier_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(carrier)
+            .expect("the carrier is seated");
+        let mark_cell = beside(&game, carrier_at).expect("room beside the carrier");
+        let mark_stats = Stats {
+            hp: 20,
+            max_hp: 40,
+            atk: 20,
+            mitigation: 12,
+        };
+        drop_a_fallen_mark(&mut game, mark_cell, mark_stats);
+
+        let player = game.player_entity();
+        game.world.entity_mut(player).insert(Perks {
+            points: 0,
+            unlocked: vec![Perk::SpawnPriority; 3],
+        });
+
+        assert!(wait_for_turn(&mut game, carrier));
+        assert!(game.tactical_ai_turn(), "the carrier's turn was not run");
+
+        let raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("the carrier must have raised the mark");
+        let stats = *game.world.get::<Stats>(raised).unwrap();
+        let expect = |v: i32| (v as f32 * 0.75).round() as i32;
+        assert_eq!(
+            stats.max_hp,
+            expect(mark_stats.max_hp),
+            "the player's Spawn Priority levels must not reach a hostile's own raise"
+        );
+    }
+
     #[test]
     fn a_cast_raises_at_most_count_nearest_first() {
         let mut game = game();
@@ -3955,6 +4053,92 @@ mod respawn {
         assert!(
             game.world.get::<crate::components::Tamed>(body).is_none(),
             "it must never join the roster"
+        );
+    }
+
+    /// `dissolve_respawned`'s `Hostile` filter is what keeps a recast to
+    /// `Summoned` set per side — without it, a party-side recast would also
+    /// dissolve a hostile carrier's own raised body, and vice versa.
+    #[test]
+    fn a_recast_on_one_side_leaves_the_opposing_sides_raised_body_alive() {
+        let mut game = game();
+        // Two live hostiles: the carrier, and a second kept alive on a lot
+        // of hp so the fight stays open once the carrier's raised body
+        // stands beside it.
+        let pack = tactical_fight(&mut game, 2, 400);
+        let carrier = pack[0];
+        only_routine(&mut game, carrier, "respawn");
+        let carrier_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(carrier)
+            .expect("the carrier is seated");
+        let hostile_mark = beside(&game, carrier_at).expect("room beside the carrier");
+        drop_a_fallen_mark(
+            &mut game,
+            hostile_mark,
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 5,
+                mitigation: 0,
+            },
+        );
+        assert!(wait_for_turn(&mut game, carrier));
+        assert!(game.tactical_ai_turn(), "the carrier's turn was not run");
+        let hostile_raised = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .find(|&e| game.world.get::<Respawned>(e).is_some())
+            .expect("the carrier must have raised a hostile-side body");
+        assert!(game.world.get::<Hostile>(hostile_raised).is_some());
+
+        // Now the player raises its own, party-side body.
+        let player = game.player_entity();
+        give_respawn(&mut game, player);
+        let player_at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player is seated");
+        let party_mark = beside(&game, player_at).expect("room beside the player");
+        drop_a_fallen_mark(
+            &mut game,
+            party_mark,
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 5,
+                mitigation: 0,
+            },
+        );
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, party_mark));
+
+        // Recast on the player's own side: off cooldown and against a fresh
+        // mark, this test is about the per-side dissolve, not the wait.
+        game.world
+            .entity_mut(player)
+            .remove::<crate::components::AbilityCooldowns>();
+        let second_party_mark = beside(&game, player_at).expect("more room beside the player");
+        drop_a_fallen_mark(
+            &mut game,
+            second_party_mark,
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 5,
+                mitigation: 0,
+            },
+        );
+        assert!(wait_for_turn(&mut game, player));
+        assert!(game.tactical_use_routine(0, second_party_mark));
+
+        assert!(
+            game.creature_alive(hostile_raised),
+            "a party-side recast must not touch the hostile side's own raised body"
         );
     }
 

@@ -357,8 +357,9 @@ pub enum SpendError {
 }
 
 /// The spend that reproduces the old automatic per-level growth: 4 Parity and
-/// 2 Analysis a level, which `tuning`'s compile-time assert ties to
-/// `HP_PER_LEVEL`, `ATK_PER_LEVEL` and the retired Decompiler grant.
+/// 2 Analysis a level, which `canonical_spend_is_the_old_per_level_growth`
+/// holds equal to `HP_PER_LEVEL`, `ATK_PER_LEVEL` and the retired Decompiler
+/// grant against the real assets.
 /// `balance_sim` models the player with this.
 pub fn canonical_spend(levels: u32) -> BTreeMap<AttributeId, u32> {
     BTreeMap::from([

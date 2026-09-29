@@ -11,7 +11,9 @@
 //! **The preview is `progression::derive` called**, once on the opening
 //! attributes and once on those plus the spend, with the player's perk and
 //! gear bonus (`Game::player_stat_bonus`) added to both - so a
-//! before->after figure is what the HUD reads now and will read after.
+//! before->after figure is the player's base stat now and after. It is not
+//! the HUD's effective figure: low-Power, program, buff and emulation
+//! adjustments and the mitigation cap apply on top, outside a spend.
 
 use std::collections::BTreeMap;
 

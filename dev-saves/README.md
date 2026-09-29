@@ -18,8 +18,9 @@ cargo run --bin savetool -- template # what's available
 the player and added `stat_points`. Each template was hand-edited to drop the
 four keys, bank no points, and carry the canonical spend for its level
 (`progression::canonical_spend`, on top of the attribute baselines; `siege`'s
-old minted spread was replaced too, since it derived to 1 max HP), so the player derives to roughly
-what the old growth gave rather than to level-1 stats.
+old minted spread was replaced too, since it derived to 1 max HP), so the
+player derives to roughly what the old growth gave rather than to level-1
+stats.
 
 ## The templates carry stale mitigation values
 

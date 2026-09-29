@@ -64,7 +64,8 @@ fn surfaced_with_routines_from(seed: u32, mode: DifficultyMode) -> Game {
         .insert(Routines(vec![PHASE.to_string(), JUMP.to_string()]));
     // Full Power, so an unrelated drain can never be what refuses an invocation
     // these tests expect to run.
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(100.0, crate::components::POWER_MAX);
     game
 }
 
@@ -572,7 +573,7 @@ fn a_routine_the_player_cannot_pay_for_is_greyed_rather_than_hidden() {
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
-        .unwrap() = PowerReserve::new(1.0);
+        .unwrap() = PowerReserve::new(1.0, crate::components::POWER_MAX);
     let rows = game.field_routines();
     assert_eq!(rows.len(), 2, "an unaffordable routine must not vanish");
     assert!(

@@ -20,7 +20,6 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::{StackCellView, StackView};
 
 /// How much narrower each successive slice is. Tuned by eye: much above this
@@ -122,15 +121,16 @@ fn column_slice(depth: usize, lateral: i32, pane: Rect) -> (f32, f32, f32, f32) 
     (l + dx, t, r + dx, b)
 }
 
-/// How thick the fog is at a given Power reserve. See `FOG_FULL`.
-fn fog(power: f32) -> f32 {
-    let fraction = (power / POWER_MAX).clamp(0.0, 1.0);
+/// How thick the fog is at a given Power reserve, against that reserve's
+/// own maximum. See `FOG_FULL`.
+fn fog(power: f32, max_power: f32) -> f32 {
+    let fraction = (power / max_power).clamp(0.0, 1.0);
     FOG_EMPTY + (FOG_FULL - FOG_EMPTY) * fraction
 }
 
 /// How bright a surface `depth` cells away is drawn, at a given reserve.
-fn shade(depth: usize, power: f32) -> f32 {
-    NEAR_SHADE * fog(power).powi(depth as i32)
+fn shade(depth: usize, power: f32, max_power: f32) -> f32 {
+    NEAR_SHADE * fog(power, max_power).powi(depth as i32)
 }
 
 /// How bright the mark on a cell `depth` cells away is drawn — see
@@ -209,7 +209,14 @@ fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color
 /// window's, because the status bar claims a row above it. Every
 /// piece of the projection derives from `slice`, so that origin is stated
 /// once here and the whole corridor follows it.
-pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics, power: f32) {
+pub(super) fn draw_stack(
+    view: &StackView,
+    painter: &Painter,
+    pane: Rect,
+    m: &Metrics,
+    power: f32,
+    max_power: f32,
+) {
     painter.rect(pane.x, pane.y, pane.w, pane.h, VOID);
     // Floored before any geometry, so nothing inside the corridor's own band
     // can come out as hard `VOID`. Two places need it and neither is a bug in
@@ -234,7 +241,7 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Me
         for depth in (0..view.cells.len()).rev() {
             let row = &view.cells[depth];
             for i in 0..row.len() {
-                draw_cell(painter, row, i, depth, pane, m, power);
+                draw_cell(painter, row, i, depth, pane, m, power, max_power);
             }
         }
     });
@@ -283,12 +290,13 @@ fn draw_cell(
     pane: Rect,
     m: &Metrics,
     power: f32,
+    max_power: f32,
 ) {
     let cell = row[i];
     let lateral = i as i32 - (row.len() / 2) as i32;
     let (nl, nt, nr, nb) = column_slice(depth, lateral, pane);
     let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, pane);
-    let s = shade(depth, power);
+    let s = shade(depth, power, max_power);
 
     let face = draws_as_face(depth, cell);
     if face {
@@ -421,6 +429,7 @@ pub(super) fn draw_cell_describe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::components::POWER_MAX;
 
     #[test]
     fn slices_shrink_monotonically_with_distance() {
@@ -559,7 +568,7 @@ mod tests {
     /// drawn is three cells out.
     #[test]
     fn the_unlit_fill_is_lighter_than_void_and_darker_than_the_far_wall() {
-        let far_wall = dim(WALL, shade(3, POWER_MAX));
+        let far_wall = dim(WALL, shade(3, POWER_MAX, POWER_MAX));
         for (fill, void, wall) in [
             (UNLIT.r, VOID.r, far_wall.r),
             (UNLIT.g, VOID.g, far_wall.g),
@@ -574,7 +583,7 @@ mod tests {
     fn distance_darkens_and_never_brightens() {
         let mut last = f32::MAX;
         for depth in 0..6 {
-            let s = shade(depth, POWER_MAX);
+            let s = shade(depth, POWER_MAX, POWER_MAX);
             assert!(s < last, "depth {depth} is not darker than the one before");
             assert!(s > 0.0, "fog must never reach pure black");
             last = s;
@@ -731,7 +740,14 @@ mod tests {
         ];
         crate::paint::with_painter(|p| {
             for case in &cases {
-                draw_stack(case, p, Rect::new(0.0, 0.0, 1000.0, 640.0), &m, POWER_MAX);
+                draw_stack(
+                    case,
+                    p,
+                    Rect::new(0.0, 0.0, 1000.0, 640.0),
+                    &m,
+                    POWER_MAX,
+                    POWER_MAX,
+                );
             }
         });
     }
@@ -759,13 +775,13 @@ mod tests {
             let s = mark_shade(depth);
             assert!(s <= last, "depth {depth} marks brighten with distance");
             assert!(
-                s >= shade(depth, POWER_MAX),
+                s >= shade(depth, POWER_MAX, POWER_MAX),
                 "depth {depth} marks fade faster than the geometry"
             );
             last = s;
         }
         assert!(
-            mark_shade(3) > shade(3, POWER_MAX) * 2.0,
+            mark_shade(3) > shade(3, POWER_MAX, POWER_MAX) * 2.0,
             "the far end of the view is where the fog was eating the marks"
         );
     }
@@ -775,12 +791,12 @@ mod tests {
     /// this view's "edge" is.
     #[test]
     fn a_drained_reserve_thickens_the_fog() {
-        assert_eq!(fog(POWER_MAX), FOG_FULL);
-        assert_eq!(fog(0.0), FOG_EMPTY);
+        assert_eq!(fog(POWER_MAX, POWER_MAX), FOG_FULL);
+        assert_eq!(fog(0.0, POWER_MAX), FOG_EMPTY);
 
         let mut previous = f32::MAX;
         for i in 0..=10 {
-            let f = fog(POWER_MAX * (10 - i) as f32 / 10.0);
+            let f = fog(POWER_MAX * (10 - i) as f32 / 10.0, POWER_MAX);
             assert!(
                 f <= previous,
                 "the fog thinned at step {i}: {f} after {previous}"
@@ -788,7 +804,7 @@ mod tests {
             previous = f;
         }
         assert!(
-            shade(3, 0.0) < shade(3, POWER_MAX),
+            shade(3, 0.0, POWER_MAX) < shade(3, POWER_MAX, POWER_MAX),
             "the far end must darken"
         );
     }
@@ -799,9 +815,9 @@ mod tests {
     /// uniformly would read as the renderer having faulted.
     #[test]
     fn the_nearest_cell_is_untouched_by_the_reserve() {
-        assert_eq!(shade(0, 0.0), shade(0, POWER_MAX));
+        assert_eq!(shade(0, 0.0, POWER_MAX), shade(0, POWER_MAX, POWER_MAX));
         assert!(
-            shade(1, 0.0) < shade(1, POWER_MAX),
+            shade(1, 0.0, POWER_MAX) < shade(1, POWER_MAX, POWER_MAX),
             "and the next one is not"
         );
     }
@@ -814,12 +830,12 @@ mod tests {
     fn a_mark_still_outshines_the_geometry_at_an_empty_reserve() {
         for depth in 0..6 {
             assert!(
-                mark_shade(depth) >= shade(depth, 0.0),
+                mark_shade(depth) >= shade(depth, 0.0, POWER_MAX),
                 "depth {depth}: a drained reserve ate the mark"
             );
         }
         assert!(
-            mark_shade(3) > shade(3, 0.0) * 2.0,
+            mark_shade(3) > shade(3, 0.0, POWER_MAX) * 2.0,
             "the far end is where a thickening fog would eat the marks first"
         );
     }
@@ -829,8 +845,8 @@ mod tests {
     /// the depth cue or drive the corridor to black.
     #[test]
     fn the_fog_is_clamped_at_both_ends() {
-        assert_eq!(fog(POWER_MAX * 4.0), FOG_FULL);
-        assert_eq!(fog(-40.0), FOG_EMPTY);
+        assert_eq!(fog(POWER_MAX * 4.0, POWER_MAX), FOG_FULL);
+        assert_eq!(fog(-40.0, POWER_MAX), FOG_EMPTY);
     }
 
     /// A renderer must survive whatever the engine hands it, including the
@@ -858,8 +874,22 @@ mod tests {
             standing_on: None,
         };
         crate::paint::with_painter(|p| {
-            draw_stack(&empty, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m, POWER_MAX);
-            draw_stack(&single, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m, POWER_MAX);
+            draw_stack(
+                &empty,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                &m,
+                POWER_MAX,
+                POWER_MAX,
+            );
+            draw_stack(
+                &single,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                &m,
+                POWER_MAX,
+                POWER_MAX,
+            );
         });
     }
 

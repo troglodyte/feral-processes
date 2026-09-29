@@ -296,6 +296,9 @@ pub struct PlayerStatus {
     /// What the player has left to spend on routine calls — see
     /// `components::PowerReserve`.
     pub power: f32,
+    /// The ceiling `power` is read against: derived from Bandwidth, so the
+    /// bar must never assume `POWER_MAX`. See `Game::max_power`.
+    pub max_power: f32,
     /// The player's cargo, and the one list every "what does the player
     /// have" screen reads. Banked items (`ItemDef::banked`) are **not** in
     /// it: a bank is not something carried and not something a trader
@@ -1890,6 +1893,8 @@ pub struct PartySlotView {
     /// field routines are charged against — so this is `Some` for the whole
     /// party, and `None` only for a body that was never taken onto it.
     pub power: Option<f32>,
+    /// The ceiling `power` is read against - see `Game::max_power`.
+    pub max_power: f32,
     /// This round's chosen action rendered for the roster, or `None` if the
     /// slot is still awaiting one.
     pub planned: Option<String>,
@@ -2640,6 +2645,8 @@ impl ManifestView {
 pub struct PlayerManifest {
     /// See `components::PowerReserve`.
     pub power: f32,
+    /// See `PlayerStatus::max_power`.
+    pub max_power: f32,
     pub decompiler: i32,
     pub perk_points: u32,
     /// Every perk bought at least once, as (display name, level).

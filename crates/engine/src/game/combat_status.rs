@@ -373,8 +373,9 @@ impl Game {
                 }
             }
             FieldBuffKind::Trickle => {
+                let max = self.max_power(entity);
                 if let Some(mut needs) = self.world.get_mut::<PowerReserve>(entity) {
-                    needs.restore(power as f32);
+                    needs.restore(power as f32, max);
                 }
             }
             FieldBuffKind::Atk

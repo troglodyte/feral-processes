@@ -2194,6 +2194,7 @@ impl Game {
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Player(PlayerManifest {
                 power: needs.get(),
+                max_power: self.max_power(entity),
                 decompiler: self
                     .world
                     .get::<Decompiler>(entity)

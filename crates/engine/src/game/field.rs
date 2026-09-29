@@ -49,7 +49,7 @@ impl Game {
                 .world
                 .get::<PowerReserve>(holder.entity)
                 .copied()
-                .unwrap_or(PowerReserve::new(POWER_MIN));
+                .unwrap_or(PowerReserve::new(POWER_MIN, POWER_MAX));
             for id in &installed.0 {
                 let Some(def) = db.get(id) else { continue };
                 // `field_runnable`, not `field_only`: a priced `Heal` runs

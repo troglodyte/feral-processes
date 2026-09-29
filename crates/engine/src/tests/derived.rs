@@ -336,3 +336,50 @@ fn a_loaded_player_is_rederived_rather_than_trusted() {
     assert_eq!((stats.max_hp, stats.atk), (90 + 24, 6));
     assert_eq!(loaded.max_power(player), 104.0);
 }
+
+#[test]
+fn rest_fills_the_reserve_to_the_derived_maximum() {
+    let mut game = Game::new(7010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    set_attribute(&mut game, "bandwidth", 60);
+    game.recompute_derived(player);
+    assert_eq!(game.max_power(player), 120.0, "max Power follows Bandwidth");
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(70.0);
+
+    game.rest().unwrap();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        120.0,
+        "a rest fills to the entity's own maximum, past the old constant"
+    );
+}
+
+#[test]
+fn a_power_item_restores_only_up_to_the_derived_maximum() {
+    let mut game = Game::new(7011, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let cell = ItemId::from("power_cell");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(cell.clone(), 2);
+    set_attribute(&mut game, "bandwidth", 30);
+    game.recompute_derived(player);
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(50.0);
+
+    assert!(game.consume_item(player, &cell));
+    assert!(game.consume_item(player, &cell));
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        60.0,
+        "restores stop at the narrowed maximum"
+    );
+}

@@ -291,7 +291,8 @@ fn resting_is_free_in_base_space_and_priced_outside_it() {
             At::Stack => descend(&mut game),
         }
         let player = game.player_entity();
-        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+        *game.world.get_mut::<PowerReserve>(player).unwrap() =
+            PowerReserve::new(10.0, crate::components::POWER_MAX);
         let held = |g: &Game| {
             g.world
                 .get::<Inventory>(player)

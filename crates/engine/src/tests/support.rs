@@ -1852,7 +1852,10 @@ pub(super) fn clear_creatures_along_ray(
 /// refused for a reason the test is not about.
 pub(super) fn fill_power(game: &mut Game) {
     let player = game.player_entity();
-    game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .fill(crate::components::POWER_MAX);
 }
 
 pub(super) fn set_inventory(game: &mut Game, stock: &[(&str, u32)]) {
@@ -2237,7 +2240,8 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
     // Start off the cap. Power drains per tick, and both arms
     // of the comparison are supposed to absorb one tick's worth identically
     // — which they only do if neither is clamped at either end.
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
     companion_uses_special(
         &mut game,

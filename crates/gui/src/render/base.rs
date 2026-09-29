@@ -397,7 +397,14 @@ pub(super) fn draw_playing_base(
         tactical::draw_turn_strip(&view, regions.map_pane, painter, m);
         tactical::draw_round_banner(fx, regions.map_pane, painter, m);
     } else if let Some(view) = game.stack_view() {
-        draw_stack(&view, painter, regions.map_pane, m, status.power);
+        draw_stack(
+            &view,
+            painter,
+            regions.map_pane,
+            m,
+            status.power,
+            status.max_power,
+        );
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
@@ -635,7 +642,7 @@ fn draw_surface_map(
     let show_effects = base_pos.is_some();
     // Hoisted out of the tile loop: it is one reading of one reserve, and the
     // whole grid is drawn against the same one.
-    let floor = vignette_floor(status.power);
+    let floor = vignette_floor(status.power, status.max_power);
     let (off_x, off_y) = fx.camera_offset(center, painter.delta(), Some(crate::fx::CAMERA_MAX_LAG));
     let tiles = game.view_tiles_at(center, hw, hh);
     // Same indexing as `tiles`, `Game::view_finishes_at`'s own guarantee —
@@ -4472,12 +4479,12 @@ mod tests {
     /// else.
     #[test]
     fn the_vignette_floor_deepens_as_the_reserve_drains() {
-        assert_eq!(vignette_floor(POWER_MAX), VIGNETTE_FLOOR_FULL);
-        assert_eq!(vignette_floor(0.0), VIGNETTE_FLOOR_EMPTY);
+        assert_eq!(vignette_floor(POWER_MAX, POWER_MAX), VIGNETTE_FLOOR_FULL);
+        assert_eq!(vignette_floor(0.0, POWER_MAX), VIGNETTE_FLOOR_EMPTY);
 
         let mut previous = f32::MAX;
         for i in 0..=10 {
-            let f = vignette_floor(POWER_MAX * (10 - i) as f32 / 10.0);
+            let f = vignette_floor(POWER_MAX * (10 - i) as f32 / 10.0, POWER_MAX);
             assert!(
                 f <= previous,
                 "brightened at step {i}: {f} after {previous}"
@@ -4486,13 +4493,24 @@ mod tests {
         }
     }
 
+    /// A wide reserve at 100 is not full: the fraction is against the
+    /// entity's own maximum, never the constant.
+    #[test]
+    fn the_vignette_floor_reads_the_reserve_against_its_own_maximum() {
+        assert!(vignette_floor(100.0, 200.0) < VIGNETTE_FLOOR_FULL);
+        assert_eq!(vignette_floor(60.0, 60.0), VIGNETTE_FLOOR_FULL);
+    }
+
     /// `PowerReserve` clamps itself, but this reads a `PlayerStatus` field
     /// rather than the type, and a floor that ran past either constant would
     /// either blow out the centre or drive the corners toward black.
     #[test]
     fn the_vignette_floor_is_clamped_at_both_ends() {
-        assert_eq!(vignette_floor(POWER_MAX * 4.0), VIGNETTE_FLOOR_FULL);
-        assert_eq!(vignette_floor(-40.0), VIGNETTE_FLOOR_EMPTY);
+        assert_eq!(
+            vignette_floor(POWER_MAX * 4.0, POWER_MAX),
+            VIGNETTE_FLOOR_FULL
+        );
+        assert_eq!(vignette_floor(-40.0, POWER_MAX), VIGNETTE_FLOOR_EMPTY);
     }
 
     /// It stays a *vignette* at every reserve: the pane's middle is untouched
@@ -4502,8 +4520,8 @@ mod tests {
     /// rather than as the reserve running down.
     #[test]
     fn a_drained_reserve_darkens_the_pane_edge_and_not_its_centre() {
-        let full = vignette_floor(POWER_MAX);
-        let empty = vignette_floor(0.0);
+        let full = vignette_floor(POWER_MAX, POWER_MAX);
+        let empty = vignette_floor(0.0, POWER_MAX);
 
         assert_eq!(vignette(0.0, 0.0, 400.0, 300.0, full), 1.0);
         assert_eq!(vignette(0.0, 0.0, 400.0, 300.0, empty), 1.0);

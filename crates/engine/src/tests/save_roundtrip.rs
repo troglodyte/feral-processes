@@ -128,7 +128,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
     game.world.entity_mut(member).insert((
         CustomName("Sable".to_string()),
         ZonePortal(4),
-        PowerReserve::new(41.5),
+        PowerReserve::new(41.5, crate::components::POWER_MAX),
         Potential {
             hp_roll: 1.11,
             atk_roll: 1.22,

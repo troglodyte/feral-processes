@@ -300,7 +300,9 @@ fn spawn_player_from_save(
                 atk: player_save.atk,
                 mitigation: player_save.mitigation,
             },
-            PowerReserve::new(player_save.power),
+            // Unbounded until `recompute_derived` below trims it to the
+            // derived maximum: the file's Bandwidth is not known yet.
+            PowerReserve::new(player_save.power, f32::MAX),
             Experience {
                 level: player_save.level,
                 xp: player_save.xp,
@@ -2192,7 +2194,7 @@ impl Game {
                 c.disposition
                     .unwrap_or_else(|| crate::disposition::Disposition::seed(program_id)),
                 Tamed { owner: ctx.player },
-                PowerReserve::new(c.power),
+                PowerReserve::new(c.power, POWER_MAX),
                 Experience {
                     level: c.level,
                     xp: c.xp,

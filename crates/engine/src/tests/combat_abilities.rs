@@ -404,7 +404,8 @@ fn a_player_out_of_power_can_still_command_a_companions_routine() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(0.0, crate::components::POWER_MAX);
 
     let options = game.battle_special_options(1);
     assert_eq!(
@@ -447,7 +448,8 @@ fn the_battle_view_carries_a_reserve_for_every_party_member() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(62.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(62.0, crate::components::POWER_MAX);
 
     let view = game.battle_view().expect("the pack opened a battle");
     assert_eq!(
@@ -658,7 +660,8 @@ fn a_player_special_spends_its_authored_power_cost() {
 
         // Start off the cap: a round's own drain is meant to cancel between
         // the two measurements, and only does when neither is clamped.
-        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+        *game.world.get_mut::<PowerReserve>(player).unwrap() =
+            PowerReserve::new(50.0, crate::components::POWER_MAX);
         let before = game.world.get::<PowerReserve>(player).unwrap().get();
         resolve_round_with(&mut game, action);
         before - game.world.get::<PowerReserve>(player).unwrap().get()
@@ -2313,7 +2316,8 @@ fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right
 fn an_empty_reserve_greys_a_special_and_refuses_the_same_plan() {
     let (mut game, sweeper) = game_with_a_sweeper();
     battle_with_a_pack_of(&mut game, 2, 500);
-    *game.world.get_mut::<PowerReserve>(sweeper).unwrap() = PowerReserve::new(0.0);
+    *game.world.get_mut::<PowerReserve>(sweeper).unwrap() =
+        PowerReserve::new(0.0, crate::components::POWER_MAX);
 
     let options = game.battle_special_options(1);
     // Index 0 is cascade_overflow — see `game_with_a_sweeper`'s kit order.

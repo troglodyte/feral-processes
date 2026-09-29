@@ -4,10 +4,10 @@ use rand::RngExt;
 
 use crate::alerts::{self, AlertBoard, AlertKind};
 use crate::components::{
-    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
-    Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerFuel,
+    Carrying, Creature, Derived, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus,
+    Memories, Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerFuel,
     PowerReserve, Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed,
-    Task, TaskKind, WanderAi, field_buff_power_of,
+    Task, TaskKind, WanderAi, field_buff_power_of, max_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
@@ -2102,7 +2102,7 @@ pub fn assembler_system(
 /// and, for the surface arm, by
 /// `tests::base_space::a_recharger_does_not_reach_the_party_genuinely_on_the_surface`.
 pub fn power_regen_system(
-    mut player: Query<&mut PowerReserve, With<Player>>,
+    mut player: Query<(&mut PowerReserve, Option<&Derived>), With<Player>>,
     structures: Query<(&Structure, &Position, Option<&PowerFuel>)>,
     structure_db: Res<StructureDb>,
     locale: Res<Locale>,
@@ -2111,7 +2111,7 @@ pub fn power_regen_system(
         return;
     };
     let scan_pos = Position { x, y };
-    for mut needs in &mut player {
+    for (mut needs, derived) in &mut player {
         for (structure, pos, fuel) in &structures {
             let Some(def) = structure_db.get(&structure.kind) else {
                 continue;
@@ -2140,7 +2140,7 @@ pub fn power_regen_system(
             if !regen.per_tick.is_finite() {
                 continue;
             }
-            needs.restore(regen.per_tick.max(0.0));
+            needs.restore(regen.per_tick.max(0.0), max_power_of(derived));
         }
     }
 }
@@ -2362,7 +2362,7 @@ mod tests {
             .spawn((
                 Player,
                 Position { x: 0, y: 0 },
-                PowerReserve::new(hunger),
+                PowerReserve::new(hunger, crate::components::POWER_MAX),
                 PLAYER_BASE_STATS,
             ))
             .id();
@@ -2439,6 +2439,27 @@ mod tests {
             power[2], 50.0,
             "and must not reach a party underground either"
         );
+    }
+
+    /// The cap is the player's own derived maximum, not `POWER_MAX`: a wide
+    /// Bandwidth reserve keeps filling past 100, and a narrow one stops short.
+    #[test]
+    fn power_regen_caps_at_the_players_derived_maximum() {
+        for (start, max) in [(129.0, 130.0), (59.0, 60.0)] {
+            let (mut world, player) =
+                power_regen_world(load_test_recharger(), "test_recharger", 0.0, &[(0, 0)]);
+            world.entity_mut(player).insert((
+                Derived {
+                    max_power: max,
+                    ..Derived::default()
+                },
+                PowerReserve::new(start, max),
+            ));
+            let mut schedule = Schedule::default();
+            schedule.add_systems(power_regen_system);
+            schedule.run(&mut world);
+            assert_eq!(world.get::<PowerReserve>(player).unwrap().get(), max);
+        }
     }
 
     #[test]
@@ -2585,7 +2606,7 @@ mod tests {
     /// asserted through the type rather than through the drain function.
     #[test]
     fn power_never_goes_negative() {
-        let mut reserve = PowerReserve::new(0.05);
+        let mut reserve = PowerReserve::new(0.05, crate::components::POWER_MAX);
         reserve.spend(power_drain_per_tick(1.0));
         assert_eq!(reserve.get(), POWER_MIN);
     }

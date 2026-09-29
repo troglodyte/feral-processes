@@ -170,9 +170,9 @@ fn meter_rows(view: &ManifestView) -> Vec<Meter> {
     if let ManifestSubject::Player(p) = &view.subject {
         meters.push(Meter {
             label: "POWER",
-            readout: format!("{:.0}/100", p.power),
+            readout: format!("{:.0}/{:.0}", p.power, p.max_power),
             value: p.power,
-            max: 100.0,
+            max: p.max_power,
             color: YELLOW,
         });
     }
@@ -2211,6 +2211,7 @@ mod tests {
     fn plain_player() -> PlayerManifest {
         PlayerManifest {
             power: 60.0,
+            max_power: 100.0,
             decompiler: 3,
             perk_points: 1,
             perks: Vec::new(),

@@ -9,9 +9,7 @@ impl Game {
     /// `entity`'s maximum Power: its derived figure when it has one,
     /// `POWER_MAX` otherwise.
     pub fn max_power(&self, entity: Entity) -> f32 {
-        self.world
-            .get::<Derived>(entity)
-            .map_or(POWER_MAX, |d| d.max_power)
+        crate::components::max_power_of(self.world.get::<Derived>(entity))
     }
 
     /// Spends banked stat points on attributes, then recomputes. The whole
@@ -113,7 +111,7 @@ impl Game {
         }
         self.apply_equipment_delta(entity, gear, 1);
         if let Some(mut power) = self.world.get_mut::<PowerReserve>(entity) {
-            power.clamp_to(derived.max_power);
+            power.restore(0.0, derived.max_power);
         }
         self.world.entity_mut(entity).insert(Derived {
             max_power: derived.max_power,

@@ -1,7 +1,8 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{
-    BaseAnchor, Experience, FieldBuff, Player, Position, PowerReserve, Stats, drop_until_rest_buffs,
+    BaseAnchor, Derived, Experience, FieldBuff, Player, Position, PowerReserve, Stats,
+    drop_until_rest_buffs, max_power_of,
 };
 use crate::game::stack::StackLocale;
 use crate::progression;
@@ -98,6 +99,7 @@ pub(crate) fn death_handling_system(
             &mut PowerReserve,
             &mut Position,
             &mut Experience,
+            Option<&Derived>,
         ),
         With<Player>,
     >,
@@ -110,7 +112,7 @@ pub(crate) fn death_handling_system(
     if report.run_already_over() {
         return;
     }
-    for (player, mut stats, mut needs, mut pos, mut exp) in &mut player_query {
+    for (player, mut stats, mut needs, mut pos, mut exp, derived) in &mut player_query {
         if stats.hp > 0 {
             continue;
         }
@@ -118,7 +120,7 @@ pub(crate) fn death_handling_system(
             DifficultyMode::Permadeath => report.flatline(),
             DifficultyMode::Forgiving => {
                 stats.hp = (stats.max_hp / FORGIVING_RESPAWN_HP_DIVISOR).max(1);
-                needs.raise_to_at_least(FORGIVING_RESPAWN_NEED_FLOOR);
+                needs.raise_to_at_least(FORGIVING_RESPAWN_NEED_FLOOR, max_power_of(derived));
                 // Before the warp, not after: `Position` is the entrance
                 // tile until the locale drops, and the line below overwrites
                 // it. Unconditional on a structure being found — a reboot
@@ -199,7 +201,7 @@ mod tests {
                     atk: 1,
                     mitigation: 1,
                 },
-                PowerReserve::new(0.0),
+                PowerReserve::new(0.0, crate::components::POWER_MAX),
                 Experience {
                     level: 2,
                     xp: 10,
@@ -259,7 +261,7 @@ mod tests {
                     atk: 1,
                     mitigation: 1,
                 },
-                PowerReserve::new(0.0),
+                PowerReserve::new(0.0, crate::components::POWER_MAX),
                 Experience {
                     level: 2,
                     xp: 10,
@@ -303,7 +305,7 @@ mod tests {
                     atk: 1,
                     mitigation: 1,
                 },
-                PowerReserve::new(0.0),
+                PowerReserve::new(0.0, crate::components::POWER_MAX),
                 Experience {
                     level: 2,
                     xp: 10,

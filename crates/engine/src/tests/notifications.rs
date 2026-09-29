@@ -542,7 +542,7 @@ fn crossing_the_low_power_threshold_notifies_once() {
     let above = crate::tuning::LOW_POWER_ATTACK_THRESHOLD + 5.0;
     game.world
         .entity_mut(player)
-        .insert(PowerReserve::new(above));
+        .insert(PowerReserve::new(above, crate::components::POWER_MAX));
 
     game.tick();
     assert_eq!(
@@ -555,6 +555,7 @@ fn crossing_the_low_power_threshold_notifies_once() {
     // next tick and the crossing is the only thing that changed.
     game.world.entity_mut(player).insert(PowerReserve::new(
         crate::tuning::LOW_POWER_ATTACK_THRESHOLD + 0.1,
+        crate::components::POWER_MAX,
     ));
     game.tick();
     assert_eq!(

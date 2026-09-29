@@ -1539,7 +1539,10 @@ mod emulation_tests {
             game.world.entity_mut(player).remove::<Emulation>();
             game.world.entity_mut(player).remove::<AbilityCooldowns>();
             game.world.get_mut::<Stats>(player).unwrap().hp = 1;
-            game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+            game.world
+                .get_mut::<PowerReserve>(player)
+                .unwrap()
+                .fill(crate::components::POWER_MAX);
 
             let index = game
                 .actor_abilities(player)

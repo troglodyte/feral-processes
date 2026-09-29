@@ -134,7 +134,7 @@ fn rest_fully_heals_and_restores_power() {
     }
     {
         let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
-        *needs = PowerReserve::new(10.0);
+        *needs = PowerReserve::new(10.0, crate::components::POWER_MAX);
     }
     stand_in_base_beside_home(&mut game);
 
@@ -168,7 +168,7 @@ fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
     }
     {
         let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
-        *needs = PowerReserve::new(10.0);
+        *needs = PowerReserve::new(10.0, crate::components::POWER_MAX);
     }
 
     // Standing on the anchor's own doorstep, which is where the player's
@@ -250,7 +250,8 @@ fn resting_repairs_the_party_and_leaves_base_staff_to_the_repair_bay() {
     for e in [companion, staff] {
         game.world.get_mut::<Stats>(e).unwrap().hp = 1;
     }
-    *game.world.get_mut::<PowerReserve>(staff).unwrap() = PowerReserve::new(3.0);
+    *game.world.get_mut::<PowerReserve>(staff).unwrap() =
+        PowerReserve::new(3.0, crate::components::POWER_MAX);
     stand_in_base_beside_home(&mut game);
     assert_eq!(
         game.program_role(staff),
@@ -913,7 +914,7 @@ fn a_full_tick_applies_trickle_on_top_of_that_ticks_decay() {
     let player = game.player_entity();
     let hunger_before = {
         let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
-        *needs = PowerReserve::new(90.0);
+        *needs = PowerReserve::new(90.0, crate::components::POWER_MAX);
         needs.get()
     };
     game.arm_field_buff(
@@ -1056,7 +1057,8 @@ fn field_buffs_survive_a_save_load_round_trip() {
 fn use_item_applies_a_power_restore_and_consumes_one() {
     let mut game = Game::new(500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     // The player already starts holding Power Cells (see `Game::new`);
     // drain the default stock first so the stack is exactly 2 below.
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
@@ -1088,7 +1090,8 @@ fn use_item_applies_a_power_restore_and_consumes_one() {
 fn use_item_clamps_power_at_full() {
     let mut game = Game::new(501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(90.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(90.0, crate::components::POWER_MAX);
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
@@ -1326,7 +1329,8 @@ fn a_prebattle_buff_survives_a_save_load_round_trip() {
 fn use_power_source_restores_power_and_consumes_one() {
     let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     // The player already starts holding Power Cells (see `Game::new`);
     // drain the default stock first so the stack is exactly 2 below.
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
@@ -1399,7 +1403,8 @@ fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
 fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     let mut game = Game::new(506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     // Drain all four starting stacks (see `Game::new`: Ice Breaker, Power
     // Cell, Core Fragment, Power Outlet) and rebuild the inventory with the
     // non-power item (Core Fragment) added *first*, so it's ahead of
@@ -1707,7 +1712,8 @@ fn resting_in_base_space_spends_nothing() {
         let held = inv.count(&ItemId::from(ids::OUTLET));
         inv.take(ItemId::from(ids::OUTLET), held);
     }
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
     stand_in_base(&mut game);
 
     game.rest().unwrap();
@@ -1735,7 +1741,8 @@ fn resting_in_base_space_spends_nothing() {
 fn a_rest_in_base_space_does_not_advance_the_clock() {
     let mut game = Game::new(3211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
     stand_in_base(&mut game);
     let before = game.current_tick();
 
@@ -1759,7 +1766,8 @@ fn a_rest_in_base_space_does_not_advance_the_clock() {
 fn resting_on_the_surface_spends_one_outlet() {
     let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
     let before = game.current_tick();
 
     game.rest().unwrap();
@@ -1792,7 +1800,8 @@ fn resting_underground_spends_one_outlet() {
     let mut game = Game::new(3213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     descend(&mut game);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
 
     game.rest().unwrap();
 
@@ -1822,7 +1831,8 @@ fn resting_outside_the_base_with_no_outlet_is_refused() {
         let held = inv.count(&ItemId::from(ids::OUTLET));
         inv.take(ItemId::from(ids::OUTLET), held);
     }
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
 
     let refusal = game
         .rest()
@@ -1869,7 +1879,8 @@ fn any_item_flagged_enables_rest_can_buy_a_field_rest() {
         inv.take(ItemId::from(ids::OUTLET), held);
         inv.add(ItemId::from("spare_battery"), 1);
     }
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
 
     game.rest().unwrap();
 
@@ -1931,7 +1942,8 @@ fn an_empty_rest_charge_slot_is_not_a_charge() {
         // The state the silent return needs: the slot is present and empty.
         inv.add(ItemId::from(ids::OUTLET), 0);
     }
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
 
     let refusal = game.rest().expect_err("an empty slot cannot buy a rest");
 
@@ -2115,7 +2127,7 @@ fn a_hurt_player_holding_one_outlet() -> Game {
     }
     {
         let mut reserve = game.world.get_mut::<PowerReserve>(player).unwrap();
-        *reserve = PowerReserve::new(10.0);
+        *reserve = PowerReserve::new(10.0, crate::components::POWER_MAX);
     }
     game
 }

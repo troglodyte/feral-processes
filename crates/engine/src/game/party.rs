@@ -304,6 +304,7 @@ impl Game {
             .power(),
             decompiler,
             power: needs.get(),
+            max_power: self.max_power(player),
             inventory,
             inventory_used: self.inventory_used(),
             pet_count,

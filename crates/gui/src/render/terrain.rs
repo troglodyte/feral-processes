@@ -2,7 +2,6 @@
 //! tile is drawn with, independent of what drives the map.
 
 use super::*;
-use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::floors::FloorShade;
 use feral_processes_engine::views::FinishView;
 
@@ -89,8 +88,8 @@ pub(super) fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32, floor: 
 /// axis, and the two are deliberately *not* a shared function: a floor on a
 /// radial falloff and a per-cell fog rate are different quantities that
 /// happen to be driven by the same reserve.
-pub(super) fn vignette_floor(power: f32) -> f32 {
-    let fraction = (power / POWER_MAX).clamp(0.0, 1.0);
+pub(super) fn vignette_floor(power: f32, max_power: f32) -> f32 {
+    let fraction = (power / max_power).clamp(0.0, 1.0);
     VIGNETTE_FLOOR_EMPTY + (VIGNETTE_FLOOR_FULL - VIGNETTE_FLOOR_EMPTY) * fraction
 }
 

@@ -5,7 +5,7 @@
     game_over: None,
     player: (
         position: (0, 0),
-        hp: 509,
+        hp: 930,
         power: 99.85,
         stat_points: 0,
         inventory: [
@@ -133,11 +133,12 @@
         colour: None,
         icon: None,
         attributes: {
-            "bandwidth": 52,
-            "entropy": 46,
-            "footprint": 29,
-            "parity": 37,
-            "persistence": 38,
+            "analysis": 80,
+            "bandwidth": 50,
+            "entropy": 40,
+            "footprint": 45,
+            "parity": 190,
+            "persistence": 50,
         },
     ),
     creatures: [

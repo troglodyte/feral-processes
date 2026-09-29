@@ -137,8 +137,8 @@ impl Game {
                 swings_to(player_ehp_before, foe_per_swing_before),
                 swings_to(player_ehp_after, foe_per_swing_after),
             ),
-            // `current − snapshot`, not `PERK_POINTS_PER_LEVEL * levels` or
-            // `DECOMPILER_SKILL_PER_LEVEL * levels` — correction 6. An
+            // `current − snapshot`, not `PERK_POINTS_PER_LEVEL * levels` —
+            // correction 6. An
             // overflow point banked by the same award that levelled is then
             // counted too, which is correct: it really was earned between
             // the two snapshots.

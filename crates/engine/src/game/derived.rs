@@ -55,9 +55,17 @@ impl Game {
                 .map_or(0, |d| d.base);
             attrs.set(id, attrs.get(id).unwrap_or(base) + *points as i32);
         }
+        let max_hp_before = self.world.get::<Stats>(entity).map_or(0, |s| s.max_hp);
         self.world.entity_mut(entity).insert(attrs);
         self.world.get_mut::<StatPoints>(entity).unwrap().0 = banked - total;
         self.recompute_derived(entity);
+        // Current HP rises by what the maximum rose by, so a level-up's full
+        // heal is not undone by spending the points it paid, and a wounded
+        // player is not healed by spending either.
+        if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+            let raised = (stats.max_hp - max_hp_before).max(0);
+            stats.hp = (stats.hp + raised).min(stats.max_hp);
+        }
         Ok(self.derived_stats(entity))
     }
 

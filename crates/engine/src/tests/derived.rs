@@ -274,3 +274,65 @@ fn attention_flags_unspent_stat_points() {
     assert!(row.text.contains('S'), "{}", row.text);
     assert!(!row.threat);
 }
+
+#[test]
+fn spending_raises_current_hp_by_what_the_maximum_rose_by() {
+    let mut game = Game::new(7015, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    bank(&mut game, 4);
+    game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 2)]))
+        .unwrap();
+    let stats = stats_of(&game, player);
+    assert_eq!(
+        (stats.hp, stats.max_hp),
+        (102, 102),
+        "a full player stays full"
+    );
+
+    game.world.get_mut::<Stats>(player).unwrap().hp = 50;
+    game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 2)]))
+        .unwrap();
+    let stats = stats_of(&game, player);
+    assert_eq!(
+        (stats.hp, stats.max_hp),
+        (62, 114),
+        "a wounded one is not healed"
+    );
+}
+
+#[test]
+fn a_level_up_banks_points_into_the_component_and_grants_no_decompiler() {
+    let mut game = Game::new(7016, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let two_levels = crate::progression::xp_for_level(1) + crate::progression::xp_for_level(2);
+    game.award_player_xp(player, two_levels);
+    assert_eq!(game.world.get::<Experience>(player).unwrap().level, 3);
+    assert_eq!(banked(&game), 2 * crate::tuning::STAT_POINTS_PER_LEVEL);
+    assert_eq!(game.world.get::<Decompiler>(player).unwrap().skill, 0);
+    assert_eq!(stats_of(&game, player), crate::tuning::PLAYER_BASE_STATS);
+}
+
+#[test]
+fn a_loaded_player_is_rederived_rather_than_trusted() {
+    let dir = scratch_assets_dir("derived_load");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = Game::new(7017, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    bank(&mut game, 6);
+    game.spend_stat_points(
+        StatOwner::Player,
+        &spend(&[("parity", 4), ("bandwidth", 2)]),
+    )
+    .unwrap();
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.player.max_hp = 5;
+    data.player.atk = 500;
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let player = loaded.player_entity();
+    let stats = stats_of(&loaded, player);
+    assert_eq!((stats.max_hp, stats.atk), (90 + 24, 6));
+    assert_eq!(loaded.max_power(player), 104.0);
+}

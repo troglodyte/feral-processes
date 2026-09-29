@@ -1507,7 +1507,9 @@ pub fn task_progress_system(
                 &mut exp,
                 &mut stats,
                 WORK_XP_PER_CYCLE,
-                growth_multiplier,
+                progression::Growth::Auto {
+                    multiplier: growth_multiplier,
+                },
                 // The zone cap, like every other XP site. `WORK_XP_LEVEL_CAP`
                 // above is a *separate* and lower gate and is not folded into
                 // it: that one is what stops a developed program being ground

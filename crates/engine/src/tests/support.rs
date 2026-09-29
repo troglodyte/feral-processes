@@ -548,6 +548,10 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // silently, since an empty pool is a supported state and not a
         // warning.
         "affixes",
+        // The player's stats derive from their attributes, and a level-up
+        // banks points that only an attribute with effects can absorb. An
+        // install without them levels a player who never grows.
+        "attributes",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();

@@ -28,6 +28,12 @@ pub struct Scenario {
     /// `Fresh` only — who the player was made as. A save or a template
     /// already carries its own answer.
     pub character: CharacterSpec,
+    /// `Fresh` only. The **per-level** pattern the player spends their stat
+    /// points in as they level: attribute id to points, summing to
+    /// `STAT_POINTS_PER_LEVEL` and naming only buyable attributes, or the
+    /// scenario is refused. `None` is `progression::canonical_spend`, the
+    /// spend that reproduces the old automatic growth.
+    pub player_spend: Option<std::collections::BTreeMap<crate::attributes::AttributeId, u32>>,
     /// `Fresh` only. Applied after the zone is set, since gear locks in the
     /// zone level it was equipped at.
     pub equip: Vec<EquipSpec>,
@@ -77,6 +83,7 @@ impl Default for Scenario {
         Self {
             player: PlayerSource::default(),
             character: CharacterSpec::default(),
+            player_spend: None,
             equip: Vec::new(),
             inventory: Vec::new(),
             party: Vec::new(),

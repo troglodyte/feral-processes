@@ -4,8 +4,8 @@ use crate::species::SpeciesDef;
 use crate::tuning::{
     ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, DIFFICULTY_EASY_MAX,
     EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL, HP_PER_LEVEL, MIN_MAX_POWER,
-    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STATUS_RESIST_MAX,
-    STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
+    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL,
+    STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 use std::collections::BTreeMap;
 
@@ -40,6 +40,20 @@ pub struct LevelGain {
     /// went in, not a second store, which is what lets a breach spend the
     /// same pile on real levels.
     pub overflow: u32,
+    /// Attribute points banked by `Growth::Points`, to spend on the Points
+    /// screen. Zero for `Growth::Auto`.
+    pub stat_points: u32,
+}
+
+/// How a level-up changes the levelled body's stats.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Growth {
+    /// Flat per-level growth scaled by `multiplier` (a species' rate) -
+    /// companions, workers, sorties and the arena's opponents.
+    Auto { multiplier: f32 },
+    /// No stat changes: the player banks `STAT_POINTS_PER_LEVEL` a level and
+    /// spends them, and `Game::recompute_derived` does the rest.
+    Points,
 }
 
 impl LevelGain {
@@ -55,6 +69,7 @@ impl LevelGain {
         self.max_hp += other.max_hp;
         self.atk += other.atk;
         self.overflow += other.overflow;
+        self.stat_points += other.stat_points;
     }
 
     /// The two rows a level-up's stat block always has, measured against
@@ -349,9 +364,8 @@ pub fn apply_setback_xp_penalty(exp: &mut Experience) -> u32 {
 /// `Some(Game::level_cap())`, which is one number for the player and every
 /// companion. XP arriving at the cap is **banked into `exp.xp` and reported
 /// as `LevelGain::overflow`**, not discarded. Each level-up grows max HP/attack/defense
-/// (scaled by `growth_multiplier` — see `SpeciesDef::growth_multiplier`;
-/// pass `BASELINE_GROWTH_MULTIPLIER` for the player, who has no species)
-/// and fully heals. Returns a `LevelGain` — how many levels, and the growth
+/// (`Growth::Auto`, scaled by a species' `growth_multiplier`) or banks stat
+/// points (`Growth::Points`, the player) and fully heals. Returns a `LevelGain` — how many levels, and the growth
 /// they came with — so callers can both decide whether to log a "level up"
 /// message and say what it gave.
 ///
@@ -364,7 +378,7 @@ pub fn add_xp(
     exp: &mut Experience,
     stats: &mut Stats,
     gained: u32,
-    growth_multiplier: f32,
+    growth: Growth,
     level_cap: Option<u32>,
     xp_boost_pct: i32,
 ) -> LevelGain {
@@ -389,16 +403,21 @@ pub fn add_xp(
         exp.xp -= exp.xp_to_next;
         exp.level += 1;
         exp.xp_to_next = xp_for_level(exp.level);
-        let (hp, atk) = (
-            scaled_growth(HP_PER_LEVEL, growth_multiplier),
-            scaled_growth(ATK_PER_LEVEL, growth_multiplier),
-        );
-        stats.max_hp += hp;
-        stats.hp = stats.max_hp;
-        stats.atk += atk;
         gain.levels += 1;
-        gain.max_hp += hp;
-        gain.atk += atk;
+        match growth {
+            Growth::Auto { multiplier } => {
+                let (hp, atk) = (
+                    scaled_growth(HP_PER_LEVEL, multiplier),
+                    scaled_growth(ATK_PER_LEVEL, multiplier),
+                );
+                stats.max_hp += hp;
+                stats.atk += atk;
+                gain.max_hp += hp;
+                gain.atk += atk;
+            }
+            Growth::Points => gain.stat_points += STAT_POINTS_PER_LEVEL,
+        }
+        stats.hp = stats.max_hp;
     }
     gain
 }
@@ -407,7 +426,6 @@ pub fn add_xp(
 mod tests {
     use super::*;
     use crate::attributes::AttributeDb;
-    use crate::tuning::STAT_POINTS_PER_LEVEL;
 
     fn shipped_db() -> AttributeDb {
         AttributeDb::load_dir(&crate::tests::support::test_assets_dir().join("attributes"))
@@ -664,7 +682,9 @@ mod tests {
             &mut exp,
             &mut stats,
             two_levels,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         );
@@ -683,7 +703,14 @@ mod tests {
         // "everything is zero". The window is narrower than it was at 1 point
         // a level: 1.25x now genuinely moves ATK, which is the granularity
         // `HP_PER_LEVEL`'s `K = 2` was meant to buy back.
-        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.1, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.1 },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.max_hp, 26);
         assert_eq!(gain.atk, ATK_PER_LEVEL, "1.1 * 2 rounds back to 2");
@@ -691,16 +718,65 @@ mod tests {
         // 0.2x rounds ATK away entirely: 0.4 rounds to 0.
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 0.2, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 0.2 },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.atk, 0, "0.2 * 2 rounds to no attack gain");
+    }
+
+    #[test]
+    fn points_growth_banks_six_a_level_and_grows_nothing() {
+        let mut exp = Experience::default();
+        let mut stats = Stats {
+            hp: 3,
+            ..base_stats()
+        };
+        let two_levels = xp_for_level(1) + xp_for_level(2);
+        let gain = add_xp(&mut exp, &mut stats, two_levels, Growth::Points, None, 0);
+        assert_eq!(gain.levels, 2);
+        assert_eq!(gain.stat_points, 2 * STAT_POINTS_PER_LEVEL);
+        assert_eq!((gain.max_hp, gain.atk), (0, 0));
+        assert_eq!((stats.max_hp, stats.atk, stats.mitigation), (10, 5, 5));
+        assert_eq!(stats.hp, stats.max_hp, "a level still full-heals");
+    }
+
+    #[test]
+    fn auto_growth_banks_no_points() {
+        let mut exp = Experience::default();
+        let mut stats = base_stats();
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.0 },
+            None,
+            0,
+        );
+        assert_eq!(gain.levels, 1);
+        assert_eq!(gain.stat_points, 0);
+        assert!(stats.max_hp > 10);
     }
 
     #[test]
     fn a_gain_that_levels_nothing_reports_no_growth() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let gain = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            5,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 0);
         assert_eq!(gain.max_hp, 0);
         assert_eq!(gain.atk, 0);
@@ -737,7 +813,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1),
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         );
@@ -756,7 +834,17 @@ mod tests {
     fn xp_below_threshold_does_not_level_up() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let levels = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None, 0).levels;
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            5,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
+            None,
+            0,
+        )
+        .levels;
         assert_eq!(levels, 0);
         assert_eq!(exp.level, 1);
         assert_eq!(exp.xp, 5);
@@ -771,7 +859,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1),
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -797,7 +887,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1) + xp_for_level(2) + 5,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -814,7 +906,15 @@ mod tests {
         // 1.5x rounds HP_PER_LEVEL (24) to 36 and ATK_PER_LEVEL (2) to 3,
         // crossing the rounding boundary scaled_growth's doc comment warns
         // about — a smaller multiplier like 1.1 wouldn't move ATK at all.
-        let levels = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.5, None, 0).levels;
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.5 },
+            None,
+            0,
+        )
+        .levels;
         assert_eq!(levels, 1);
         assert_eq!(
             stats.max_hp,
@@ -838,7 +938,14 @@ mod tests {
         let mut stats = base_stats();
         for _ in 0..3 {
             let needed = exp.xp_to_next;
-            add_xp(&mut exp, &mut stats, needed, 1.5, None, 0);
+            add_xp(
+                &mut exp,
+                &mut stats,
+                needed,
+                Growth::Auto { multiplier: 1.5 },
+                None,
+                0,
+            );
         }
         let projected = stats_after_levels(base_stats(), 3, 1.5);
         assert_eq!(stats.max_hp, projected.max_hp);
@@ -859,7 +966,9 @@ mod tests {
             &mut exp,
             &mut stats,
             10_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             Some(TALENT_START_LEVEL),
             0,
         );
@@ -898,7 +1007,9 @@ mod tests {
             &mut exp,
             &mut stats,
             100_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             Some(TALENT_START_LEVEL),
             0,
         )
@@ -926,7 +1037,9 @@ mod tests {
             &mut exp,
             &mut stats,
             100_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -957,7 +1070,9 @@ mod tests {
             &mut unboosted_exp,
             &mut unboosted_stats,
             three_quarters,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -974,7 +1089,9 @@ mod tests {
             &mut boosted_exp,
             &mut boosted_stats,
             three_quarters,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             50,
         )

@@ -7,9 +7,9 @@ use crate::progression::StatRow;
 use crate::tactical::TacticalBattle;
 use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE};
 use crate::tuning::{
-    DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
-    STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
-    SURFACE_BOSS_LOOT_RARITY_FLOOR, SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
+    NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL, STACK_BOSS_PORTAL_FRAGMENT_DROP,
+    SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
+    SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
 use crate::*;
 
@@ -451,13 +451,16 @@ impl Game {
                 now,
             ));
         }
-        if tally.decompiler != 0 {
+        if tally.stat_points > 0 {
             let now = self
                 .world
-                .get::<Decompiler>(player)
-                .map(|d| d.skill)
-                .unwrap_or(0);
-            rows.push(StatRow::new("Decompiler", now - tally.decompiler, now));
+                .get::<crate::components::StatPoints>(player)
+                .map_or(0, |p| p.0) as i32;
+            rows.push(StatRow::new(
+                "Stat Points",
+                now - tally.stat_points as i32,
+                now,
+            ));
         }
         let level = self
             .world
@@ -1016,7 +1019,7 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
+                progression::Growth::Points,
                 // The player is capped too now, and at the same number as
                 // every companion — `Game::level_cap`.
                 Some(level_cap),
@@ -1047,16 +1050,16 @@ impl Game {
                 self.world.resource_mut::<PendingLevelUp>().0 = Some(snapshot);
             }
             // The player's tally runs longer than a companion's: a level also
-            // pays a Perk Point and a point of Decompiler skill, and neither
-            // was announced anywhere before this, so a player could bank
-            // points for a run without learning they had any.
+            // pays a Perk Point and stat points, and neither was announced
+            // anywhere before this, so a player could bank points for a run
+            // without learning they had any.
             if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
                 tally.perk_points = PERK_POINTS_PER_LEVEL * gain.levels;
                 perks.points += tally.perk_points;
             }
-            if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
-                tally.decompiler = DECOMPILER_SKILL_PER_LEVEL * gain.levels as i32;
-                decompiler.skill += tally.decompiler;
+            if let Some(mut points) = self.world.get_mut::<crate::components::StatPoints>(player) {
+                tally.stat_points = gain.stat_points;
+                points.0 += gain.stat_points;
             }
             // Landing *on* the ceiling is news, and it needs no "was this
             // already announced?" guard: `add_xp` stops levelling at the cap,
@@ -1158,7 +1161,9 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                growth_multiplier,
+                progression::Growth::Auto {
+                    multiplier: growth_multiplier,
+                },
                 Some(level_cap),
                 xp_boost_pct,
             )

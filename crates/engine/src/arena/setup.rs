@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use super::scenario::{OpponentSpec, PlayerSource, Scenario};
-use super::{set_level, spawn_companion};
+use super::{set_player_level, spawn_companion};
 use crate::battle::EnemyGroup;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
@@ -62,8 +62,7 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             // `GEAR_LEVEL_STEP` per level, so equipping first under-scales
             // every weapon — the party's as well as the player's.
             game.world.resource_mut::<ZoneLevel>().0 = *zone;
-            let player = game.player_entity();
-            set_level(&mut game, player, *level);
+            set_player_level(&mut game, *level, scenario.player_spend.as_ref())?;
 
             for row in &scenario.inventory {
                 known_item(&game, &row.item)?;

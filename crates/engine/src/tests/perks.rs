@@ -3,9 +3,9 @@
 use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::tuning::{
-    ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
-    DEFENDER_BONUS_PER_LEVEL, DIFFICULTY_EVEN_MAX, KEEN_SCAVENGER_BONUS_PER_LEVEL,
-    LEAN_COMPILER_DISCOUNT_PER_LEVEL, OVERFLOW_XP_BASE, OVERFLOW_XP_STEP,
+    ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DEFENDER_BONUS_PER_LEVEL,
+    DIFFICULTY_EVEN_MAX, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
+    OVERFLOW_XP_BASE, OVERFLOW_XP_STEP,
 };
 use crate::*;
 
@@ -18,7 +18,7 @@ fn perk_cost(game: &Game, perk: Perk) -> u32 {
 }
 
 #[test]
-fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
+fn player_decompiler_skill_comes_from_analysis_and_survives_save_load() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
 
@@ -36,8 +36,19 @@ fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
     );
     assert_eq!(
         game.player_status().decompiler,
-        DECOMPILER_SKILL_PER_LEVEL,
-        "one level gained should grant one level's decompiler skill"
+        0,
+        "a level-up no longer grants decompiler skill on its own"
+    );
+
+    game.spend_stat_points(
+        crate::StatOwner::Player,
+        &[(crate::attributes::AttributeId::from("analysis"), 2)],
+    )
+    .unwrap();
+    assert_eq!(
+        game.player_status().decompiler,
+        2,
+        "Analysis pays 1 a point"
     );
 
     let path = std::env::temp_dir().join(format!(
@@ -50,7 +61,7 @@ fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
 
     assert_eq!(
         loaded.player_status().decompiler,
-        DECOMPILER_SKILL_PER_LEVEL,
+        2,
         "decompiler skill should survive a save/load round trip"
     );
 }

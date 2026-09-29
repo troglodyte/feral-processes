@@ -1484,10 +1484,11 @@ pub struct BattleRewards {
 pub struct XpTally {
     pub xp: u32,
     pub gain: crate::progression::LevelGain,
-    /// Perk Points and Decompiler skill are the player's alone, and neither
-    /// is anything `add_xp` computes — see `Game::award_player_xp`.
+    /// Perk Points are the player's alone, and nothing `add_xp` computes -
+    /// see `Game::award_player_xp`. `stat_points` mirrors `gain.stat_points`
+    /// for the player, so a tally row can name what was banked.
     pub perk_points: u32,
-    pub decompiler: i32,
+    pub stat_points: u32,
 }
 
 impl XpTally {
@@ -1496,7 +1497,7 @@ impl XpTally {
         self.xp += other.xp;
         self.gain.absorb(other.gain);
         self.perk_points += other.perk_points;
-        self.decompiler += other.decompiler;
+        self.stat_points += other.stat_points;
     }
 
     pub fn is_empty(&self) -> bool {

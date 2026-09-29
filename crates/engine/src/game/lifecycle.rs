@@ -1603,6 +1603,10 @@ impl Game {
         let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
+        // Derived values are not trusted from the file: gear, `BoughtStats`
+        // and the attributes are, and the stats are rebuilt from them.
+        let player = game.player_entity();
+        game.recompute_derived(player);
         for warning in load_warnings {
             game.log(warning);
         }

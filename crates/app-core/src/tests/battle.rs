@@ -140,8 +140,14 @@ fn make_both_sides_unkillable(app: &mut App) {
     let path = scratch_path("auto_resolve_unkillable", 0);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
+    // Stats are derived on load, so the player's size is raised through the
+    // attribute that feeds it: 90 + 6 * (parity - 50) is just over ten
+    // million.
     data.player.hp = 10_000_000;
-    data.player.max_hp = 10_000_000;
+    data.player.attributes.insert(
+        feral_processes_engine::attributes::AttributeId::from("parity"),
+        1_666_700,
+    );
     for creature in data.creatures.iter_mut().filter(|c| !c.tamed) {
         creature.hp = 10_000_000;
         creature.max_hp = 10_000_000;

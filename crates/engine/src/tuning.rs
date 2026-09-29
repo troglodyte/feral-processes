@@ -175,7 +175,7 @@ pub const CREATION_SHELF_ROWS: usize = 26;
 ///
 /// These are `K = 2` times what they were, along with every other constant
 /// denominated in entity level (`PERK_POINTS_PER_LEVEL`,
-/// `DECOMPILER_SKILL_PER_LEVEL`, the two `ABILITY_*_SCALE_PER_LEVEL` rates)
+/// the two `ABILITY_*_SCALE_PER_LEVEL` rates)
 /// and the reciprocal of every constant denominated in *levels per*
 /// something (`PLAYER_ROUTINE_SLOT_PER_LEVEL`,
 /// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `TALENT_START_LEVEL`,
@@ -203,7 +203,8 @@ pub const STAT_POINTS_PER_LEVEL: u32 = 6;
 
 /// The canonical spend per level: 4 Parity (6 max HP each) and 2 Analysis
 /// (1 Atk and 1 Decompiler each). Equals `HP_PER_LEVEL`, `ATK_PER_LEVEL`
-/// and `DECOMPILER_SKILL_PER_LEVEL` exactly, which the assert below holds
+/// and the retired automatic Decompiler grant (2 a level) exactly, which
+/// the assert below holds
 /// so `balance_sim`'s curves cannot drift from the shipped effect values
 /// without a build failure.
 pub const CANONICAL_PARITY_PER_LEVEL: u32 = 4;
@@ -212,7 +213,6 @@ const _: () = {
     assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_ANALYSIS_PER_LEVEL == STAT_POINTS_PER_LEVEL);
     assert!(CANONICAL_PARITY_PER_LEVEL as i32 * 6 == HP_PER_LEVEL);
     assert!(CANONICAL_ANALYSIS_PER_LEVEL as i32 == ATK_PER_LEVEL);
-    assert!(CANONICAL_ANALYSIS_PER_LEVEL as i32 == DECOMPILER_SKILL_PER_LEVEL);
 };
 
 /// The floor on a derived max Power, so a low Bandwidth cannot leave a
@@ -471,11 +471,6 @@ pub const PARTY_LEVEL_COUNT_STEPS: u32 = 1;
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes
 /// progress toward the next level, never the level or stats themselves.
 pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
-
-/// How much the player's `Decompiler` skill grows per level gained.
-/// Carries `HP_PER_LEVEL`'s `K = 2`, so skill still tracks total power
-/// rather than level count.
-pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 2;
 
 /// Perk Points (see `perks::Perk`) awarded per player level gained.
 /// Carries `HP_PER_LEVEL`'s `K = 2`: perks are bought out of total progress,
@@ -3174,8 +3169,8 @@ pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.01;
 /// floored at a penalty of 0.
 ///
 /// Deliberately *not* effective Decompiler skill, which is what this perk
-/// used to grant. That stat already grows `DECOMPILER_SKILL_PER_LEVEL` per
-/// player level for free, so the perk was buying one level's worth of
+/// used to grant. That stat already grew 2 per player level for free (now it
+/// comes from Analysis, at 1 a point), so the perk was buying one level's worth of
 /// automatic growth for `PERK_COST_EXPLOIT_FOCUS` levels' worth of points —
 /// strictly dominated, and invisible next to the free growth. The HP penalty
 /// is a separate axis: it decides how far a target must be worn down before

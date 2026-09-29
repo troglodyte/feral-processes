@@ -318,9 +318,24 @@ fn the_name_step_commits_the_choice() {
     assert_eq!(data.player.glyph, CREATION_ICONS[1].0);
     assert_eq!(data.player.sprite, CREATION_ICONS[1].1);
     assert_eq!(data.player.colour, Some(2));
+    // The class's own Parity and Footprint, plus a point of Parity per unit
+    // bought: stats are derived from attributes now, and a class authors its
+    // own. Parity pays 6 HP a point over 50, Footprint 2 over 45.
+    let class = app
+        .game
+        .as_ref()
+        .unwrap()
+        .class_defs()
+        .iter()
+        .find(|c| c.class == wanted_class)
+        .unwrap()
+        .attributes
+        .clone();
     assert_eq!(
         data.player.max_hp,
-        PLAYER_BASE_STATS.max_hp + (bought * CREATION_GAIN_INTEGRITY) as i32
+        PLAYER_BASE_STATS.max_hp
+            + (class["parity"] - 50 + bought as i32) * 6
+            + (class["footprint"] - 45) * 2
     );
     assert_eq!(
         data.player.hp, data.player.max_hp,

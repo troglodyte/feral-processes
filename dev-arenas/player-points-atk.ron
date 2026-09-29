@@ -25,7 +25,7 @@
 //     cargo run --bin arena -- dev-arenas/player-points-integrity.ron
 //
 // Run both, in the same build, and compare. A control is
-// `character: (stats: (0, 0, 0, 0))` — or just deleting the `character` row,
+// `character: (stats: {})` — or just deleting the `character` row,
 // which is the same player. Never compare a number here against one written
 // in an older report: a moved baseline across builds is a reshuffled RNG
 // stream, not a difficulty change.
@@ -45,7 +45,7 @@
 (
     player: Fresh(level: 5, zone: 1),
     character: (
-        stats: (9, 0, 0, 0),
+        stats: {"analysis": 9},
     ),
     party: [
         (species: "glitch", level: 5),

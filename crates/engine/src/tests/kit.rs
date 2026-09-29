@@ -427,7 +427,7 @@ mod emulation_tests {
     #[test]
     fn the_creation_stat_pool_writes_no_bought_stats_receipt() {
         let choice = crate::CharacterChoice {
-            stats: [1, 0, 0, 0],
+            stats: [("analysis".into(), 1)].into(),
             ..crate::CharacterChoice::default()
         };
         let game = Game::new_with(4, DifficultyMode::Forgiving, &test_assets_dir(), &choice)

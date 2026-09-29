@@ -225,13 +225,13 @@ impl Default for PlayerSource {
 #[serde(default)]
 pub struct CharacterSpec {
     pub class: Option<PlayerClass>,
-    /// Units *bought* per axis, in `MainStat::all()` order — Atk, Def,
-    /// Integrity, Decompiler — never points spent.
+    /// Points *bought* per attribute id, never points spent.
     /// `CharacterChoice::cost()` prices them, and `build_player` refuses a
-    /// spend the pool cannot cover rather than applying none of it: fail
+    /// spend the pool cannot cover, or one naming an attribute that is
+    /// unknown or not buyable, rather than applying none of it: fail
     /// closed is right inside a run and wrong in an instrument, where a
     /// silently ignored input reads as the axis being worthless.
-    pub stats: [u32; 4],
+    pub stats: std::collections::BTreeMap<crate::attributes::AttributeId, u32>,
     pub routine: Option<AbilityId>,
     /// Perk Points the player starts with, spent by `perks` below —
     /// final review F10 (U4): a scenario had no way to give the staged
@@ -255,7 +255,7 @@ impl CharacterSpec {
     pub fn choice(&self) -> CharacterChoice {
         CharacterChoice {
             class: self.class,
-            stats: self.stats,
+            stats: self.stats.clone(),
             routine: self.routine.clone(),
             perk_points: self.perk_points,
             perks: self.perks.clone(),

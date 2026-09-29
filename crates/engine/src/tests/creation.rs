@@ -4,7 +4,6 @@
 //! ~1,600 `Game::new` call sites across the suite from a regression here.
 
 use super::support::*;
-use crate::achievements::MainStat;
 use crate::classes::PlayerClass;
 use crate::tuning;
 use crate::*;
@@ -16,11 +15,8 @@ fn save_path(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("feral_creation_{name}_{}.sav", std::process::id()))
 }
 
-fn stats_at(index: MainStat, points: u32) -> [u32; 4] {
-    let mut stats = [0u32; 4];
-    let i = MainStat::all().iter().position(|s| *s == index).unwrap();
-    stats[i] = points;
-    stats
+fn spend(id: &str, points: u32) -> std::collections::BTreeMap<crate::attributes::AttributeId, u32> {
+    [(id.into(), points)].into()
 }
 
 #[test]
@@ -77,14 +73,14 @@ fn the_default_choice_keeps_the_shipped_player_sprite() {
 
 #[test]
 fn creation_points_are_additive_over_the_baseline() {
-    let points = tuning::CREATION_STAT_POINTS; // Integrity costs 1, so this fits exactly.
+    let points = tuning::CREATION_STAT_POINTS; // a point costs 1, so this fits exactly.
     let choice = CharacterChoice {
-        stats: stats_at(MainStat::Integrity, points),
+        stats: spend("parity", points),
         ..CharacterChoice::default()
     };
     assert_eq!(
         choice.cost(),
-        Some(points * tuning::CREATION_COST_INTEGRITY)
+        Some(points * tuning::CREATION_COST_PER_ATTRIBUTE_POINT)
     );
 
     let game = Game::new_with(
@@ -96,14 +92,14 @@ fn creation_points_are_additive_over_the_baseline() {
     .unwrap();
     let stats = game.world.get::<Stats>(game.player_entity()).unwrap();
 
-    let expected_max_hp =
-        tuning::PLAYER_BASE_STATS.max_hp + (points * tuning::CREATION_GAIN_INTEGRITY) as i32;
+    // Parity is worth 6 max HP a point.
+    let expected_max_hp = tuning::PLAYER_BASE_STATS.max_hp + (points * 6) as i32;
     assert_eq!(stats.max_hp, expected_max_hp);
-    // A run must not start damaged — `MainStat::Integrity`'s own trap.
+    // A run must not start damaged.
     assert_eq!(stats.hp, stats.max_hp);
 }
 
-/// **Def is priced like the other three axes now**, and this is what says
+/// **Footprint is priced like every other attribute**, and this is what says
 /// the whole pool put on it actually reaches `Stats::mitigation`.
 ///
 /// It replaces `mitigation_costs_more_than_a_point`, which held the axis at
@@ -120,9 +116,9 @@ fn creation_points_are_additive_over_the_baseline() {
 #[test]
 fn the_whole_pool_on_def_reaches_mitigation() {
     let pool = tuning::CREATION_STAT_POINTS;
-    let units = pool / tuning::CREATION_COST_DEF;
+    let units = pool / tuning::CREATION_COST_PER_ATTRIBUTE_POINT;
     let choice = CharacterChoice {
-        stats: stats_at(MainStat::Def, units),
+        stats: spend("footprint", units),
         ..CharacterChoice::default()
     };
     assert!(choice.cost().is_some());
@@ -155,7 +151,7 @@ fn an_overspent_choice_is_refused() {
     // One point over the pool at Atk's 1-for-1 rate — cheapest possible
     // overspend.
     let overspent = CharacterChoice {
-        stats: stats_at(MainStat::Atk, tuning::CREATION_STAT_POINTS + 1),
+        stats: spend("analysis", tuning::CREATION_STAT_POINTS + 1),
         ..CharacterChoice::default()
     };
     assert_eq!(overspent.cost(), None);
@@ -220,7 +216,7 @@ fn a_created_player_round_trips_through_a_real_save() {
 fn loading_does_not_re_apply_the_choice() {
     let choice = CharacterChoice {
         class: Some(PlayerClass::Striker),
-        stats: stats_at(MainStat::Atk, tuning::CREATION_STAT_POINTS),
+        stats: spend("analysis", tuning::CREATION_STAT_POINTS),
         ..CharacterChoice::default()
     };
     let mut game = Game::new_with(
@@ -808,4 +804,69 @@ fn a_class_row_says_what_it_trades_in_words() {
             row.trade
         );
     }
+}
+
+/// Creation commits the spend as attributes: the value moves by the points
+/// bought, each attribute by its own, and a second attribute is untouched.
+#[test]
+fn creation_commits_the_bought_points_as_attributes() {
+    let choice = CharacterChoice {
+        stats: [("parity".into(), 4), ("bandwidth".into(), 3)].into(),
+        ..CharacterChoice::default()
+    };
+    let base = Game::new(90_020, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let game = Game::new_with(
+        90_020,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+    let value = |g: &Game, id: &str| {
+        g.world
+            .get::<crate::components::Attributes>(g.player_entity())
+            .unwrap()
+            .get(&id.into())
+            .unwrap()
+    };
+    assert_eq!(value(&game, "parity"), value(&base, "parity") + 4);
+    assert_eq!(value(&game, "bandwidth"), value(&base, "bandwidth") + 3);
+    assert_eq!(value(&game, "footprint"), value(&base, "footprint"));
+    // Bandwidth raised the max, and the run opens with the reserve full.
+    let player = game.player_entity();
+    assert!(game.max_power(player) > base.max_power(base.player_entity()));
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        game.max_power(player)
+    );
+}
+
+/// An overspent choice is refused whole: no attribute moves at all, not
+/// even the ones inside the pool.
+#[test]
+fn an_overspent_choice_moves_no_attribute() {
+    let choice = CharacterChoice {
+        stats: [
+            ("parity".into(), 2),
+            ("analysis".into(), tuning::CREATION_STAT_POINTS),
+        ]
+        .into(),
+        ..CharacterChoice::default()
+    };
+    assert_eq!(choice.cost(), None);
+    let base = Game::new(90_021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let game = Game::new_with(
+        90_021,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+    let attrs = |g: &Game| {
+        g.world
+            .get::<crate::components::Attributes>(g.player_entity())
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(attrs(&game), attrs(&base));
 }

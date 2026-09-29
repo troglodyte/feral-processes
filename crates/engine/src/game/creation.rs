@@ -13,11 +13,12 @@
 //! `Game::new` call sites construct.
 
 use crate::abilities::AbilityId;
-use crate::achievements::MainStat;
+use crate::attributes::AttributeId;
 use crate::classes::PlayerClass;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::*;
+use std::collections::BTreeMap;
 
 /// The sprite name every player carried before the wizard could choose
 /// one, and the name `assets/sprites/player.png` is loaded under. Named
@@ -44,13 +45,12 @@ pub struct CharacterChoice {
     /// `None` is `CharacterChoice::default()`'s own value, same as
     /// `components::PlayerIdentity::icon`.
     pub icon: Option<crate::icon::PlayerIcon>,
-    /// Units *bought* per axis, indexed as `MainStat::all()` — not points
-    /// spent. `cost()` is what prices a unit, at that axis's own
-    /// `tuning::CREATION_COST_*` rate; pricing at conversion time instead
-    /// (storing the spend and dividing it back out per axis on read) would
-    /// let 4 points on Def buy the same +1 mitigation as 3, silently
-    /// eating a point the player chose to spend.
-    pub stats: [u32; 4],
+    /// Points *bought* per attribute, on top of the class's values, out of
+    /// `tuning::CREATION_STAT_POINTS`. Keyed by attribute because the
+    /// attribute set is open (a mod adds one by adding a file). Units, not
+    /// pool points spent: `cost()` prices them, so a per-attribute rate can
+    /// return without the stored spend changing meaning.
+    pub stats: BTreeMap<AttributeId, u32>,
     pub routine: Option<AbilityId>,
     /// The starting kit picked off `items_db::creation_shelf`, priced
     /// against `tuning::CREATION_CREDITS`.
@@ -101,7 +101,7 @@ impl Default for CharacterChoice {
             sprite: DEFAULT_PLAYER_SPRITE.to_string(),
             colour: None,
             icon: None,
-            stats: [0; 4],
+            stats: BTreeMap::new(),
             routine: None,
             items: Vec::new(),
             perks: Vec::new(),
@@ -121,27 +121,14 @@ impl CharacterChoice {
         }
     }
 
-    /// Pool points this spend costs, priced per axis through
-    /// `crate::tuning::CREATION_COST_*` — `stats[i]` is how many points of axis
-    /// `MainStat::all()[i]` are bought, each at that axis's own rate. `None`
-    /// above `crate::tuning::CREATION_STAT_POINTS`; `Game::apply_character_choice`
-    /// fails closed on that, applying no spend at all rather than a
-    /// clamped one.
+    /// Pool points this spend costs, at
+    /// `tuning::CREATION_COST_PER_ATTRIBUTE_POINT` a point. `None` above
+    /// `tuning::CREATION_STAT_POINTS`; `Game::apply_character_choice` fails
+    /// closed on that, applying no spend at all rather than a clamped one.
     pub fn cost(&self) -> Option<u32> {
-        // Order matches `MainStat::all()`: Atk, Def, Integrity, Decompiler.
-        let costs = [
-            crate::tuning::CREATION_COST_ATK,
-            crate::tuning::CREATION_COST_DEF,
-            crate::tuning::CREATION_COST_INTEGRITY,
-            crate::tuning::CREATION_COST_DECOMPILER,
-        ];
-        let total = self
-            .stats
-            .iter()
-            .zip(costs)
-            .try_fold(0u32, |sum, (&points, cost)| {
-                sum.checked_add(points.checked_mul(cost)?)
-            })?;
+        let total = self.stats.values().try_fold(0u32, |sum, &points| {
+            sum.checked_add(points.checked_mul(crate::tuning::CREATION_COST_PER_ATTRIBUTE_POINT)?)
+        })?;
         (total <= crate::tuning::CREATION_STAT_POINTS).then_some(total)
     }
 
@@ -218,14 +205,11 @@ impl Game {
     }
 
     /// Raises the attributes `choice`'s spend buys, then derives the
-    /// player's stats from them and starts the run at full health. Fails
-    /// closed: `cost()` is the one gate, checked once here, and an
-    /// overspent choice gets no spend at all rather than a clamped or
-    /// partial one.
-    ///
-    /// The four creation axes still map onto attributes one-for-one, Atk
-    /// and Decompiler onto Analysis, Def onto Footprint and Integrity onto
-    /// Parity, until the creation screen spends on attributes directly.
+    /// player's stats from them and starts the run at full health and full
+    /// Power. Fails closed: `cost()` is the one gate, checked once here, and
+    /// an overspent choice gets no spend at all rather than a clamped or
+    /// partial one. An attribute the catalogue does not hold, or one with no
+    /// effects, buys nothing.
     fn apply_creation_stats(&mut self, choice: &CharacterChoice) {
         let player = self.player_entity();
         if choice.cost().is_some() {
@@ -234,22 +218,24 @@ impl Game {
                 .get::<crate::components::Attributes>(player)
                 .cloned()
                 .unwrap_or_default();
-            for (axis, &points) in MainStat::all().iter().zip(choice.stats.iter()) {
-                let id = crate::attributes::AttributeId::from(match axis {
-                    MainStat::Atk | MainStat::Decompiler => "analysis",
-                    MainStat::Def => "footprint",
-                    MainStat::Integrity => "parity",
-                });
-                if let Some(value) = attrs.get(&id) {
-                    attrs.set(&id, value + points as i32);
+            let db = self.world.resource::<crate::attributes::AttributeDb>();
+            for (id, &points) in &choice.stats {
+                let buyable = db.get(id).is_some_and(|def| def.buyable());
+                if let (true, Some(value)) = (buyable, attrs.get(id)) {
+                    attrs.set(id, value + points as i32);
                 }
             }
             self.world.entity_mut(player).insert(attrs);
         }
         self.recompute_derived(player);
-        // The run must not start damaged - `MainStat::Integrity`'s trap.
+        // The run must not start damaged, and Power starts full:
+        // `recompute_derived` clamps and never refills.
+        let max_power = self.max_power(player);
         if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
             stats.hp = stats.max_hp;
+        }
+        if let Some(mut power) = self.world.get_mut::<PowerReserve>(player) {
+            power.fill(max_power);
         }
     }
 

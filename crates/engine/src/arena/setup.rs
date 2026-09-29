@@ -43,6 +43,17 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             }
             let mut game = Game::new_with(0, DifficultyMode::Forgiving, assets_dir, &choice)
                 .map_err(|e| format!("{}: {e}", assets_dir.display()))?;
+            // An attribute the catalogue lacks, or one with no effects,
+            // buys nothing in `apply_creation_stats`: refuse it here, the
+            // same fail-loud rule.
+            let attribute_db = game.world.resource::<crate::attributes::AttributeDb>();
+            if let Some(id) = choice
+                .stats
+                .keys()
+                .find(|id| !attribute_db.get(id).is_some_and(|def| def.buyable()))
+            {
+                return Err(format!("character: `{id}` is not a buyable attribute"));
+            }
             // Same fail-loud rule as the stat check above, for the perk
             // basket — `apply_creation_perks` already ran silently inside
             // `Game::new_with` and applied nothing if this is `None`, so an
@@ -718,41 +729,37 @@ mod tests {
     #[test]
     fn a_character_spec_stat_spend_reaches_the_players_stats() {
         use crate::arena::scenario::CharacterSpec;
-        let atk_pool = |stats: [u32; 4]| {
+        let pool = |spend: &[(&str, u32)]| {
             let mut s = fresh(1, 1);
             s.character = CharacterSpec {
-                stats,
+                stats: spend.iter().map(|&(id, n)| (id.into(), n)).collect(),
                 ..CharacterSpec::default()
             };
             let game = build_player(&s, &test_assets_dir()).unwrap();
             *game.world.get::<Stats>(game.player_entity()).unwrap()
         };
+        let pool_points = crate::tuning::CREATION_STAT_POINTS;
 
-        let plain = atk_pool([0; 4]);
-        // `MainStat::all()` order: Atk, Def, Integrity, Decompiler.
-        let all_atk = atk_pool([crate::tuning::CREATION_STAT_POINTS, 0, 0, 0]);
-        let all_int = atk_pool([0, 0, crate::tuning::CREATION_STAT_POINTS, 0]);
-        let one_def = atk_pool([0, 1, 0, 0]);
+        let plain = pool(&[]);
+        let all_analysis = pool(&[("analysis", pool_points)]);
+        let all_parity = pool(&[("parity", pool_points)]);
+        let one_footprint = pool(&[("footprint", 1)]);
 
+        assert_eq!(all_analysis.atk, plain.atk + pool_points as i32);
+        assert_eq!(all_analysis.max_hp, plain.max_hp);
+        assert_eq!(all_parity.max_hp, plain.max_hp + 6 * pool_points as i32);
         assert_eq!(
-            all_atk.atk,
-            plain.atk + crate::tuning::CREATION_STAT_POINTS as i32
+            all_parity.hp, all_parity.max_hp,
+            "a fight must not open damaged"
         );
-        assert_eq!(all_atk.max_hp, plain.max_hp);
-        assert_eq!(
-            all_int.max_hp,
-            plain.max_hp
-                + (crate::tuning::CREATION_STAT_POINTS * crate::tuning::CREATION_GAIN_INTEGRITY)
-                    as i32
-        );
-        assert_eq!(all_int.hp, all_int.max_hp, "a fight must not open damaged");
-        assert_eq!(all_int.atk, plain.atk);
-        // Asserted separately because a Def row is what a measurement of the
-        // axes reads as *doing nothing*: one point of mitigation on a base
-        // of two moves a fight's numbers so little that a sweep can report
-        // outcomes identical to the control. That is the axis being weak,
-        // not the field being ignored, and this is what tells the two apart.
-        assert_eq!(one_def.mitigation, plain.mitigation + 1);
+        assert_eq!(all_parity.atk, plain.atk);
+        // Asserted separately because a Footprint row is what a measurement
+        // of the axes reads as *doing nothing*: one point of mitigation on a
+        // base of two moves a fight's numbers so little that a sweep can
+        // report outcomes identical to the control. That is the axis being
+        // weak, not the field being ignored, and this is what tells the two
+        // apart.
+        assert_eq!(one_footprint.mitigation, plain.mitigation + 1);
     }
 
     /// Final review F10 (U4): a scenario needed a way to spend Perk
@@ -796,13 +803,31 @@ mod tests {
         use crate::arena::scenario::CharacterSpec;
         let mut s = fresh(1, 1);
         s.character = CharacterSpec {
-            stats: [crate::tuning::CREATION_STAT_POINTS + 1, 0, 0, 0],
+            stats: [("analysis".into(), crate::tuning::CREATION_STAT_POINTS + 1)].into(),
             ..CharacterSpec::default()
         };
         let err = build_player(&s, &test_assets_dir())
             .err()
             .expect("should refuse");
         assert!(err.contains("CREATION_STAT_POINTS"), "{err}");
+    }
+
+    /// The attribute-keyed spend's own fail-silent hazard: an id nothing
+    /// buys (a typo, or Entropy with no effects) would report the control.
+    #[test]
+    fn a_character_spec_naming_a_non_buyable_attribute_is_an_err() {
+        use crate::arena::scenario::CharacterSpec;
+        for id in ["entropy", "no_such_attribute"] {
+            let mut s = fresh(1, 1);
+            s.character = CharacterSpec {
+                stats: [(id.into(), 1)].into(),
+                ..CharacterSpec::default()
+            };
+            let err = build_player(&s, &test_assets_dir())
+                .err()
+                .expect("should refuse");
+            assert!(err.contains(id), "{err}");
+        }
     }
 
     /// The perk basket's own overspend rule, `an_overspent_character_spec_

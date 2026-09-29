@@ -43,8 +43,8 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
 /// modelled floor stays valid no matter how the pool is spent.
 ///
-/// **The pool size is the all-Atk offense ceiling**, because Atk is priced
-/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). At 20 the
+/// **The pool size is the all-Analysis offense ceiling**, because a point
+/// is priced 1-for-1 (`CREATION_COST_PER_ATTRIBUTE_POINT`). At 20 the
 /// widest offensive build opens on 26 atk against the baseline 6, and the
 /// widest defensive one on 210 `max_hp` against 90.
 ///
@@ -63,38 +63,12 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// the `const` assertion below fails otherwise.
 pub const CREATION_STAT_POINTS: u32 = 20;
 
-/// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
-/// for what a point buys.
-pub const CREATION_COST_INTEGRITY: u32 = 1;
-
-/// Pool points one point of Atk costs — priced 1-for-1.
-pub const CREATION_COST_ATK: u32 = 1;
-
-/// Pool points one point of Decompiler (`Decompiler::skill`) costs — priced
-/// 1-for-1, like Atk.
-pub const CREATION_COST_DECOMPILER: u32 = 1;
-
-/// Pool points one point of Def (`Stats::mitigation`) costs — priced
-/// 1-for-1 like the other three axes.
-///
-/// **Three was the argument, and the instrument refuted it.** The claim
-/// was that mitigation is the one axis levelling never raises (see
-/// `HP_PER_LEVEL`'s doc comment on why there is no mitigation-per-level
-/// constant at all), so pricing it like the rest would make it dominant on
-/// a screen where the player chooses rather than a roll. It was not
-/// dominant at any price: a unit is **one percentage point** on a base of
-/// 2, and `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`
-/// measured the whole 5-point pool spent on Def as **byte-identical to the
-/// control** over 200 fights — same win rate, same round count, same HP
-/// left. Priced at three it was a trap row: the dearest axis and the only
-/// one that moved nothing. At one, a full-Def build reaches 11%
-/// mitigation, which is the first spend on this axis a fight can see.
-pub const CREATION_COST_DEF: u32 = 1;
-
-/// `Stats::max_hp` granted per point of Integrity bought on the creation
-/// stat screen — and `Stats::hp` with it, unconditionally: a run must not
-/// start damaged, the trap `MainStat::Integrity`'s own doc comment records.
-pub const CREATION_GAIN_INTEGRITY: u32 = 6;
+/// Pool points one point of any attribute costs at creation - priced
+/// 1-for-1, so the pool is a count of attribute points. What a point *buys*
+/// is each attribute's own `effects`, and `docs/measurements/2026-09-01-
+/// creation-stat-pool-exchange-rates.md` is the record of how the four old
+/// axes compared when they were priced separately.
+pub const CREATION_COST_PER_ATTRIBUTE_POINT: u32 = 1;
 
 /// Ceiling on `CREATION_STAT_POINTS`, asserted rather than trusted —
 /// `MAX_PROFILE_STAT_POINTS`'s reason: a permanent buff with no ceiling is a

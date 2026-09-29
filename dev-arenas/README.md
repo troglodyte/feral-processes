@@ -137,7 +137,7 @@ therefore an **error** on a save or template rather than being ignored —
 ```ron
 character: (
     class: Some(Medic),                 // one of the eight PlayerClass variants
-    stats: (0, 0, 9, 0),                // units bought: Atk, Def, Integrity, Decompiler
+    stats: {"parity": 9},               // points bought per attribute id
     routine: Some("checksum_repair"),   // the starter routine
 ),
 ```
@@ -147,11 +147,12 @@ save or a template already carries its own. Every field defaults, so
 omitting `character` entirely is the unaligned, unspent, no-starter player
 every scenario written before this field described, and still describes.
 
-`stats` is **units bought**, in `MainStat::all()` order, never points spent:
-every axis costs one point today (`tuning::CREATION_COST_*`), so `(0, 1, 0,
-0)` spends one of the nine-point pool for one point of Mitigation — but the
-costs are a tuning question and the bin reads units, so a repriced axis
-changes what a row here spends without changing the row. A spend the pool cannot
+`stats` is **points bought** per attribute id, never pool points spent:
+every point costs one today (`tuning::CREATION_COST_PER_ATTRIBUTE_POINT`),
+so `{"footprint": 1}` spends one of the pool for one point of Mitigation -
+but the cost is a tuning question and the bin reads points, so a repriced
+point changes what a row here spends without changing the row. An attribute
+id that is unknown or has no effects (Entropy) is an **error** too. A spend the pool cannot
 cover is an **error** rather than a dropped spend — inside a run an
 overspent choice fails closed and applies nothing, which in an instrument
 would report the baseline and read as the axis being worthless.

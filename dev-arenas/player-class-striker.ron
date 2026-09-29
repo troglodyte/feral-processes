@@ -51,7 +51,7 @@
 // above. `[N]` steps to the next seed; 5, 9 and 12 are 20, 17 and 19 rounds
 // and also wins, 3 and 10 are losses.
 //
-// The stat pool is left unspent (`stats: (0, 0, 0, 0)`) deliberately: the
+// The stat pool is left unspent (`stats: {}`) deliberately: the
 // pool *is* visible to the bin, so spending it here would move the floor and
 // mix the two questions. `player-points-atk.ron` and
 // `player-points-integrity.ron` are where the pool is asked about.
@@ -70,7 +70,7 @@
     player: Fresh(level: 5, zone: 1),
     character: (
         class: Some(Striker),
-        stats: (0, 0, 0, 0),
+        stats: {},
         routine: Some("stack_smash"),
     ),
     party: [

@@ -1,10 +1,13 @@
-use crate::components::{Experience, Stats};
+use crate::attributes::{AttributeDb, AttributeId, DerivedStat};
+use crate::components::{Attributes, Experience, POWER_MAX, Stats};
 use crate::species::SpeciesDef;
 use crate::tuning::{
-    ATK_PER_LEVEL, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
-    HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
-    XP_PER_LEVEL_STEP,
+    ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, DIFFICULTY_EASY_MAX,
+    EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL, HP_PER_LEVEL, MIN_MAX_POWER,
+    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL,
+    STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
+use std::collections::BTreeMap;
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
 /// rounded to the nearest whole point. With `ATK_PER_LEVEL`
@@ -224,6 +227,93 @@ pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f3
     }
 }
 
+/// The stats an entity derives from before any attribute moves them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedBase {
+    pub max_hp: i32,
+    pub atk: i32,
+    pub mitigation: i32,
+    pub decompiler: i32,
+    pub max_power: f32,
+    pub status_resist: i32,
+    pub extraction: f32,
+}
+
+impl DerivedBase {
+    /// The player's level-1 numbers, from the tuning constants.
+    pub fn player() -> Self {
+        DerivedBase {
+            max_hp: PLAYER_BASE_STATS.max_hp,
+            atk: PLAYER_BASE_STATS.atk,
+            mitigation: PLAYER_BASE_STATS.mitigation,
+            decompiler: 0,
+            max_power: POWER_MAX,
+            status_resist: 0,
+            extraction: 0.0,
+        }
+    }
+}
+
+/// What `derive` answers: every stat an attribute can feed, already clamped
+/// to its range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedStats {
+    pub max_hp: i32,
+    pub atk: i32,
+    pub mitigation: i32,
+    pub decompiler: i32,
+    pub max_power: f32,
+    pub status_resist: i32,
+    pub extraction: f32,
+}
+
+/// The one formula. For each stat, `base + sum(per_point * (value - the
+/// attribute's catalogue base))`, rounded once per stat and then clamped to
+/// that stat's range. An attribute the store does not hold counts as its
+/// base and contributes nothing. Nothing else computes a derived stat: the
+/// game, the Points preview and `balance_sim` all call this.
+pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+    let mut sums = BTreeMap::<DerivedStat, f32>::new();
+    for def in db.iter() {
+        let delta = attrs.get(&def.id).map_or(0, |v| v - def.base) as f32;
+        for effect in &def.effects {
+            *sums.entry(effect.stat).or_insert(0.0) += effect.per_point * delta;
+        }
+    }
+    let sum = |stat: DerivedStat| sums.get(&stat).copied().unwrap_or(0.0);
+    let rounded = |base: i32, stat: DerivedStat| (base as f32 + sum(stat)).round() as i32;
+    DerivedStats {
+        max_hp: rounded(base.max_hp, DerivedStat::MaxHp).max(1),
+        atk: rounded(base.atk, DerivedStat::Atk).max(1),
+        mitigation: rounded(base.mitigation, DerivedStat::Mitigation).max(0),
+        decompiler: rounded(base.decompiler, DerivedStat::Decompiler).max(0),
+        max_power: (base.max_power + sum(DerivedStat::MaxPower))
+            .round()
+            .max(MIN_MAX_POWER),
+        status_resist: rounded(base.status_resist, DerivedStat::StatusResist)
+            .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
+        extraction: (base.extraction + sum(DerivedStat::Extraction))
+            .clamp(0.0, MINING_EXTRACTION_CAP),
+    }
+}
+
+/// The spend that reproduces the old automatic per-level growth: 4 Parity and
+/// 2 Analysis a level, which `tuning`'s compile-time assert ties to
+/// `HP_PER_LEVEL`, `ATK_PER_LEVEL` and the retired Decompiler grant.
+/// `balance_sim` models the player with this.
+pub fn canonical_spend(levels: u32) -> BTreeMap<AttributeId, u32> {
+    BTreeMap::from([
+        (
+            AttributeId::from("parity"),
+            CANONICAL_PARITY_PER_LEVEL * levels,
+        ),
+        (
+            AttributeId::from("analysis"),
+            CANONICAL_ANALYSIS_PER_LEVEL * levels,
+        ),
+    ])
+}
+
 /// Docks `exp` a mild fraction (`SETBACK_XP_PENALTY_FRACTION`) of its
 /// current in-level XP as a death/jack-out penalty, returning how much was
 /// lost (0 if there was none to lose). Never drops `xp` below 0 and never
@@ -298,6 +388,163 @@ pub fn add_xp(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attributes::AttributeDb;
+
+    fn shipped_db() -> AttributeDb {
+        AttributeDb::load_dir(&crate::tests::support::test_assets_dir().join("attributes"))
+            .unwrap()
+            .0
+    }
+
+    /// An attribute store holding every catalogue base, with `moves` added.
+    fn attrs_at_base(db: &AttributeDb, moves: &[(&str, i32)]) -> Attributes {
+        let mut attrs = Attributes::default();
+        for def in db.iter() {
+            attrs.set(&def.id, def.base);
+        }
+        for (id, delta) in moves {
+            let id = AttributeId::from(*id);
+            attrs.set(&id, attrs.get(&id).unwrap() + delta);
+        }
+        attrs
+    }
+
+    #[test]
+    fn derive_at_catalogue_bases_is_the_players_base_stats() {
+        let db = shipped_db();
+        let d = derive(&DerivedBase::player(), &attrs_at_base(&db, &[]), &db);
+        assert_eq!(d.max_hp, PLAYER_BASE_STATS.max_hp);
+        assert_eq!(d.atk, PLAYER_BASE_STATS.atk);
+        assert_eq!(d.mitigation, PLAYER_BASE_STATS.mitigation);
+        assert_eq!(d.decompiler, 0);
+        assert_eq!(d.max_power, POWER_MAX);
+        assert_eq!(d.status_resist, 0);
+        assert_eq!(d.extraction, 0.0);
+    }
+
+    #[test]
+    fn an_absent_attribute_counts_as_its_base() {
+        let db = shipped_db();
+        let d = derive(&DerivedBase::player(), &Attributes::default(), &db);
+        assert_eq!(d.max_hp, PLAYER_BASE_STATS.max_hp);
+        assert_eq!(d.max_power, POWER_MAX);
+    }
+
+    #[test]
+    fn each_effect_moves_only_its_own_stats() {
+        let db = shipped_db();
+        let base = DerivedBase::player();
+        let at = derive(&base, &attrs_at_base(&db, &[]), &db);
+        let parity = derive(&base, &attrs_at_base(&db, &[("parity", 3)]), &db);
+        assert_eq!(parity.max_hp, at.max_hp + 18);
+        assert_eq!((parity.atk, parity.mitigation), (at.atk, at.mitigation));
+        assert_eq!(parity.max_power, at.max_power);
+        let footprint = derive(&base, &attrs_at_base(&db, &[("footprint", 4)]), &db);
+        assert_eq!(footprint.mitigation, at.mitigation + 4);
+        assert_eq!(footprint.max_hp, at.max_hp + 8);
+        assert_eq!(footprint.atk, at.atk);
+        let analysis = derive(&base, &attrs_at_base(&db, &[("analysis", 2)]), &db);
+        assert_eq!(analysis.atk, at.atk + 2);
+        assert_eq!(analysis.decompiler, 2);
+        assert!((analysis.extraction - 0.01).abs() < 1e-6);
+        assert_eq!(analysis.max_hp, at.max_hp);
+        let bandwidth = derive(&base, &attrs_at_base(&db, &[("bandwidth", 5)]), &db);
+        assert_eq!(bandwidth.max_power, POWER_MAX + 10.0);
+        assert_eq!(bandwidth.max_hp, at.max_hp);
+        let persistence = derive(&base, &attrs_at_base(&db, &[("persistence", 7)]), &db);
+        assert_eq!(persistence.status_resist, 7);
+        assert_eq!(persistence.atk, at.atk);
+        let entropy = derive(&base, &attrs_at_base(&db, &[("entropy", 9)]), &db);
+        assert_eq!(entropy, at);
+    }
+
+    /// Two half-point terms sum to a whole point: rounding each term first
+    /// would give 1 + 1 = 2 (or 0 + 0), rounding the sum gives 1.
+    #[test]
+    fn the_sum_is_rounded_once_per_stat() {
+        let dir = crate::tests::support::scratch_assets_dir("derive_rounding");
+        std::fs::create_dir_all(&*dir).unwrap();
+        for (id, per_point) in [("a", 0.5), ("b", 0.5)] {
+            std::fs::write(
+                dir.join(format!("{id}.ron")),
+                format!(
+                    "(id: \"{id}\", name: \"{id}\", legacy: \"x\", short: \"s\", \
+                     meaning: \"m\", base: 10, spread: 0, \
+                     effects: [(stat: Atk, per_point: {per_point})], does: \"d\")"
+                ),
+            )
+            .unwrap();
+        }
+        let (db, warnings) = AttributeDb::load_dir(&dir).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let d = derive(
+            &DerivedBase::player(),
+            &attrs_at_base(&db, &[("a", 1), ("b", 1)]),
+            &db,
+        );
+        assert_eq!(d.atk, PLAYER_BASE_STATS.atk + 1);
+    }
+
+    #[test]
+    fn the_clamps_hold() {
+        let db = shipped_db();
+        let base = DerivedBase::player();
+        let low = derive(
+            &base,
+            &attrs_at_base(
+                &db,
+                &[
+                    ("parity", -1000),
+                    ("analysis", -1000),
+                    ("footprint", -1000),
+                    ("bandwidth", -1000),
+                    ("persistence", -1000),
+                ],
+            ),
+            &db,
+        );
+        assert_eq!(low.max_hp, 1);
+        assert_eq!(low.atk, 1);
+        assert_eq!(low.mitigation, 0);
+        assert_eq!(low.decompiler, 0);
+        assert_eq!(low.max_power, MIN_MAX_POWER);
+        assert_eq!(low.status_resist, STATUS_RESIST_MIN);
+        assert_eq!(low.extraction, 0.0);
+        let high = derive(
+            &base,
+            &attrs_at_base(&db, &[("analysis", 1000), ("persistence", 1000)]),
+            &db,
+        );
+        assert_eq!(high.status_resist, STATUS_RESIST_MAX);
+        assert_eq!(high.extraction, MINING_EXTRACTION_CAP);
+    }
+
+    #[test]
+    fn canonical_spend_is_the_old_per_level_growth() {
+        let db = shipped_db();
+        for n in 0..=40u32 {
+            let mut attrs = attrs_at_base(&db, &[]);
+            for (id, points) in canonical_spend(n) {
+                attrs.set(&id, attrs.get(&id).unwrap() + points as i32);
+            }
+            let d = derive(&DerivedBase::player(), &attrs, &db);
+            let old = stats_after_levels(
+                PLAYER_BASE_STATS,
+                n,
+                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
+            );
+            assert_eq!(
+                (d.max_hp, d.atk, d.mitigation),
+                (old.max_hp, old.atk, old.mitigation),
+                "level {n}"
+            );
+            assert_eq!(d.decompiler, 2 * n as i32, "level {n}");
+        }
+        assert_eq!(
+            canonical_spend(3).values().sum::<u32>(),
+            STAT_POINTS_PER_LEVEL * 3
+        );
+    }
     use crate::tuning::{
         BASELINE_GROWTH_MULTIPLIER, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, TALENT_START_LEVEL,
         XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,

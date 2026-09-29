@@ -196,6 +196,39 @@ pub const CREATION_SHELF_ROWS: usize = 26;
 pub const HP_PER_LEVEL: i32 = 24;
 pub const ATK_PER_LEVEL: i32 = 2;
 
+/// Attribute points banked per player level-up, to spend on the Points
+/// screen. See `progression::canonical_spend` for the split that
+/// reproduces the old automatic growth.
+pub const STAT_POINTS_PER_LEVEL: u32 = 6;
+
+/// The canonical spend per level: 4 Parity (6 max HP each) and 2 Analysis
+/// (1 Atk and 1 Decompiler each). Equals `HP_PER_LEVEL`, `ATK_PER_LEVEL`
+/// and `DECOMPILER_SKILL_PER_LEVEL` exactly, which the assert below holds
+/// so `balance_sim`'s curves cannot drift from the shipped effect values
+/// without a build failure.
+pub const CANONICAL_PARITY_PER_LEVEL: u32 = 4;
+pub const CANONICAL_ANALYSIS_PER_LEVEL: u32 = 2;
+const _: () = {
+    assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_ANALYSIS_PER_LEVEL == STAT_POINTS_PER_LEVEL);
+    assert!(CANONICAL_PARITY_PER_LEVEL as i32 * 6 == HP_PER_LEVEL);
+    assert!(CANONICAL_ANALYSIS_PER_LEVEL as i32 == ATK_PER_LEVEL);
+    assert!(CANONICAL_ANALYSIS_PER_LEVEL as i32 == DECOMPILER_SKILL_PER_LEVEL);
+};
+
+/// The floor on a derived max Power, so a low Bandwidth cannot leave a
+/// reserve too small to cast anything.
+pub const MIN_MAX_POWER: f32 = 20.0;
+
+/// The range a derived status resist is clamped to, in percent. Negative
+/// lengthens a status.
+pub const STATUS_RESIST_MIN: i32 = -50;
+pub const STATUS_RESIST_MAX: i32 = 75;
+
+/// Ceiling on the player's derived Extraction term in
+/// `systems::mining_success_chance`, so Analysis never out-mines the
+/// sharpest species.
+pub const MINING_EXTRACTION_CAP: f32 = 0.10;
+
 /// Growth-rate multiplier for anything with no species-specific rate of
 /// its own. The player (who has no species at all) always levels at this
 /// rate; it's also `SpeciesDef::growth_multiplier`'s default, so a species

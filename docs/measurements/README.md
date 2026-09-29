@@ -54,6 +54,14 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-29 — What a level's six stat points buy, and where each class starts](2026-09-29-level-up-stat-spend.md)
+  — all-Parity beats the canonical 4 Parity + 2 Analysis by 23pp at level 15
+  and 15pp at 20 (46.5% vs 23.5%, 81.0% vs 66.2%), any Parity-free spend
+  wipes, and swapping Analysis for Bandwidth *raises* the win rate for a
+  reason not found. Class starts now differ wildly: at level 1 Bastion and
+  Medic win 98% of a fight the baseline wins 24% of and Saboteur wins none.
+  Nothing retuned; the dominance is reported.
+
 - [2026-09-28 — The enemy policy after the combat changes](2026-09-28-enemy-policy-after-combat-changes.md)
   — the shipped `enemy_battle.ron` still roughly doubles the enemy's win
   rate over uniform play on the training set (0.153 → 0.294) and holds on

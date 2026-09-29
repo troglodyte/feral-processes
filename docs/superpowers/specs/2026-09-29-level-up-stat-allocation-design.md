@@ -1,6 +1,6 @@
 # Level-up stat allocation on derived attributes
 
-**Status:** spec, awaiting review. Not built. This is project 1 of 3, and
+**Status:** built, shipped in `v0.14.0`. This is project 1 of 3, and
 the later two are recorded at the end of this file.
 
 ## Intent

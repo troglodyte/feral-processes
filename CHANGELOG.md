@@ -53,7 +53,19 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.14.0
+
+**Levelling up now gives you six stat points to spend yourself.** Your stats
+come from your attributes: Parity sets max HP, Analysis sets Atk and
+Decompiler, Footprint gives HP and mitigation, Bandwidth sets max Power,
+and Persistence resists status effects. A level-up banks six points, and
+the new Points screen, reached from the level-up page or with `S` on the
+Perks screen, previews what each point buys before you commit. Creation
+spends its pool on the same screen. Four Parity and two Analysis a level
+match the old automatic growth exactly; that spend also raises Extraction
+by 0.01 a level, up to its 0.10 cap at level 11, which the old growth did
+not. Arena fights no longer level anyone, so a staged build is measured as
+built. **Saves from 0.13 do not load** (save format 33).
 
 **Respawn raises fallen bodies on a battle map back into the fight, on your
 own side.** Any wild program might carry it — beat one and extract the
@@ -65,7 +77,7 @@ that battle only: no XP, no roster slot, gone the instant it ends, and
 casting again replaces only your own side's set. A hostile carrier can
 raise its own fallen the same way, and killing one of those pays you
 nothing. **Spawn Priority**, a new perk, makes both a raised body and a
-forked program hit harder for it. Saves are unchanged.
+forked program hit harder for it.
 
 ## 0.13.247
 

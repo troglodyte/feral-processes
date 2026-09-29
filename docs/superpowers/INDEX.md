@@ -7,20 +7,21 @@ answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not — with four named
+**`archive/specs/` is implemented. `specs/` is not — with five named
 exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-**The four exceptions are built and stay in `specs/` anyway**, because source
+**The five exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
 `2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations),
 `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and a seam
 argument in the memory graph), `2026-09-16-routine-research-tree-design`
-(`routine_tree.rs`, `tuning.rs` and its tests) and
+(`routine_tree.rs`, `tuning.rs` and its tests),
 `2026-09-21-program-attributes-design` (`attributes.rs`'s module doc, which
 sends a reader to §2 for why no attribute carries a sentence saying what it
-does).
+does) and
+`2026-09-29-level-up-stat-allocation-design` (the same module doc).
 
 **The debt this section recorded is paid.** There was a third —
 `2026-09-06-settlement-growth-design`, one `//!` line in
@@ -85,7 +86,7 @@ historical, and git history is where its 62 lines live.
 ## Do not move these
 
 Cited from source doc comments, so their paths are load-bearing. Four live in
-`specs/` despite being built — the invariant's four exceptions above.
+`specs/` despite being built — the invariant's five exceptions above.
 The other twelve are already in `archive/specs/`:
 `2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
 `2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
@@ -400,6 +401,18 @@ the other two had no source citation.
 | `2026-09-16-player-emulation-design` | The player fights as a species they have learned: one answer to where a body's kit comes from, and an emulated kit and stat block that replace the player's own | `v0.13.204` (Part A) and `v0.13.205` (Part B). `Game::kit_of`, `components::Emulation`, `Kit::Emulated`, `progression::emulated_stats`, `resources::EmulationImages` and `ToolCategory::Image` resolve in `crates/engine`; `dev-arenas/emulation.ron` and `dev-saves/emulation.ron` are the instruments. Not yet played at the keyboard |
 | `2026-09-21-research-discovery-design` | A discoverable research node is hidden until the base finds it by study | `v0.13.213`. Not yet played at the keyboard |
 | `2026-09-23-alert-board-design` | An alert board listing what is blocking the base, opened with `N` | `v0.13.228`; `crates/engine/src/alerts.rs`. Not yet played at the keyboard |
+
+## The spec that landed on 2026-09-29
+
+Built in `v0.14.0`, and **staying in `specs/`** for the same reason as the
+2026-09-21 one: `crates/engine/src/attributes.rs`'s module doc cites its
+path. It is the fifth standing exception to the invariant at the top. Its
+plan stays in `plans/` beside the others; clearing that directory is a
+change of its own.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-29-level-up-stat-allocation-design` | Attributes carry derived effects (Parity -> max HP, Analysis -> Atk and Decompiler, Bandwidth -> max Power, ...); the player levels by banking six stat points spent on a shared Points screen instead of automatic growth | `AttributeDef::effects`, `progression::derive`/`canonical_spend`, `Game::spend_stat_points`, `Mode::AllocateStats`, `crates/gui/src/render/points.rs`, save format 33, `docs/measurements/2026-09-29-level-up-stat-spend.md` |
 
 ## Four rows that need a footnote
 

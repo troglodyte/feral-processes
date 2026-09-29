@@ -56,7 +56,7 @@ review gates are off. The final review is opus, over the whole branch.
    `arm_status` only.
 2. **`Reward::RandomMainStat` writes player `Stats`/`Decompiler` directly**
    at new-run start (`game/lifecycle.rs:3276-3295`). Recompute would erase it.
-   **This needs the user's decision (see D1).** The spec does not mention it.
+   Decided in D1. The spec does not mention it.
 3. **Player attributes are minted *with* spread** (`creation.rs:283`, and
    the load fallback). The spec says the player gets no spread. Add
    `attributes::authored_or_base(db, authored) -> Attributes` and use it at
@@ -79,9 +79,9 @@ review gates are off. The final review is opus, over the whole branch.
    scenario **error**, never silently ignored (the arena-fields-fail-silently
    trap).
 
-### D1: what `RandomMainStat` becomes (needs the user's decision)
+### D1: what `RandomMainStat` becomes (decided: (a), 2026-09-29)
 
-- **(a) Recommended: bank `n` stat points** at run start. This fits the
+- **(a) Chosen: bank `n` stat points** at run start. This fits the
   feature, because the player chooses. The profile's rolled `MainStat` is
   then dead, so delete the roll, `roll_main_stat`, the views field
   (`views.rs:2971`) and `MainStat` if nothing else uses it.
@@ -91,7 +91,7 @@ review gates are off. The final review is opus, over the whole branch.
   `n`. Integrity→Parity then pays 6n HP instead of n, so the values need
   retuning.
 
-The plan assumes (a). Only phase 1 task 1.7 changes if (b) is chosen.
+The user chose (a).
 
 ## Phase 1: engine derive, recompute, levelling (sonnet)
 
@@ -143,7 +143,7 @@ Result<DerivedStats, SpendError>`** (spec §Spending). `StatOwner` lives in
 `BoughtStats` is untouched; a perk respec does not refund a spend; attention
 flags unspent points.
 
-1.7 **D1** (as decided).
+1.7 **D1 (a):** `RandomMainStat(n)` banks `n` into `StatPoints` at run start; delete the dead roll.
 
 1.8 **`balance_sim`:** the player sites use `PLAYER_BASE_STATS` plus
 `derive(canonical_spend(n))`. Add the equality test against the old

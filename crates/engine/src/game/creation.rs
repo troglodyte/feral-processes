@@ -260,23 +260,10 @@ impl Game {
         if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
             self.world.entity_mut(player).insert(CustomName(name));
         }
-        // The class's authored bases, or the catalogue's own where the run
-        // has no class — `CharacterChoice::default()`'s supported state.
-        // Here rather than in `spawn_player` because that function is a
-        // free fn over `&mut World` with no class and no `ClassDb`, and its
-        // bundle is already at bevy's 15-element ceiling.
-        let authored = choice
-            .class
-            .and_then(|class| {
-                self.world
-                    .resource::<crate::classes::ClassDb>()
-                    .get(class)
-                    .map(|def| def.attributes.clone())
-            })
-            .unwrap_or_default();
-        let attrs = crate::attributes::authored_or_base(
+        let attrs = starting_attributes(
+            self.world.resource::<crate::classes::ClassDb>(),
             self.world.resource::<crate::attributes::AttributeDb>(),
-            &authored,
+            choice.class,
         );
         self.world.entity_mut(player).insert((
             attrs,
@@ -332,7 +319,27 @@ impl Game {
     }
 }
 
-/// The three databases the creation wizard reads, loaded on their own.
+/// The class's authored bases, or the catalogue's own where the run has no
+/// class - `CharacterChoice::default()`'s supported state. **No spread**: the
+/// player's numbers are chosen, not rolled. The one derivation both the run
+/// and the wizard's Points preview call, so the screen cannot open on
+/// numbers the run then disagrees with.
+///
+/// Called from `apply_creation_identity` rather than `spawn_player` because
+/// that function is a free fn over `&mut World` with no class and no
+/// `ClassDb`, and its bundle is already at bevy's 15-element ceiling.
+fn starting_attributes(
+    classes: &crate::classes::ClassDb,
+    attributes: &crate::attributes::AttributeDb,
+    class: Option<PlayerClass>,
+) -> crate::components::Attributes {
+    let authored = class
+        .and_then(|class| classes.get(class).map(|def| def.attributes.clone()))
+        .unwrap_or_default();
+    crate::attributes::authored_or_base(attributes, &authored)
+}
+
+/// The databases the creation wizard reads, loaded on their own.
 ///
 /// The wizard runs **before any `Game` exists** — the difficulty it picks is
 /// a `Game::new_with` argument — so it cannot ask a `World` for its rows.
@@ -356,6 +363,7 @@ pub struct CreationCatalogue {
     items: crate::items_db::ItemDb,
     abilities: crate::abilities::AbilityDb,
     perks: crate::perks::PerkDb,
+    attributes: crate::attributes::AttributeDb,
 }
 
 impl CreationCatalogue {
@@ -373,12 +381,26 @@ impl CreationCatalogue {
         // leaves the class step with no rows, which is the pre-class game.
         let (classes, _) = crate::classes::ClassDb::load_dir(&assets_dir.join("classes"))?;
         let (perks, _) = crate::perks::PerkDb::load_dir(&assets_dir.join("perks"))?;
+        let (attributes, _) =
+            crate::attributes::AttributeDb::load_dir(&assets_dir.join("attributes"))?;
         Ok(Self {
             classes,
             items,
             abilities,
             perks,
+            attributes,
         })
+    }
+
+    /// The attribute catalogue, for the Points step's before/after preview.
+    pub fn attribute_db(&self) -> crate::attributes::AttributeDb {
+        self.attributes.clone()
+    }
+
+    /// What the player's attributes open on for `class`, before any point
+    /// is bought - `starting_attributes` called, as the run calls it.
+    pub fn start_attributes(&self, class: Option<PlayerClass>) -> crate::components::Attributes {
+        starting_attributes(&self.classes, &self.attributes, class)
     }
 
     /// One row per loaded class — `Game::class_rows`' own derivation.

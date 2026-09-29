@@ -942,8 +942,14 @@ fn every_figure_on_the_report_equals_a_direct_battle_call() {
     );
     assert_eq!(report.perk_points_unspent, after.perk_points);
     assert_eq!(
-        report.decompiler_gained,
-        after.decompiler - before.decompiler
+        report.stat_points_gained,
+        after.stat_points - before.stat_points
+    );
+    assert_eq!(report.stat_points_unspent, after.stat_points);
+    assert_eq!(
+        report.stat_points_gained,
+        crate::tuning::STAT_POINTS_PER_LEVEL,
+        "one level banks the per-level allowance, and grows nothing itself"
     );
 }
 

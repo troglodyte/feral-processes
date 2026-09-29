@@ -1018,7 +1018,7 @@ pub struct LevelSnapshot {
     pub max_hp: i32,
     pub mitigation: i32,
     pub perk_points: u32,
-    pub decompiler: i32,
+    pub stat_points: u32,
     pub combatant: Combatant,
 }
 

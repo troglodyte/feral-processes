@@ -137,7 +137,7 @@ pub struct AttributeEffect {
 ///
 /// See the module doc for why an empty database is a supported state rather
 /// than an install fault.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct AttributeDb {
     defs: BTreeMap<AttributeId, AttributeDef>,
 }

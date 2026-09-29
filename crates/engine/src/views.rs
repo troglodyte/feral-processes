@@ -3590,9 +3590,10 @@ pub struct AlertView {
 /// The four duel figures are measured against `zone`'s typical foe (see
 /// `Game::typical_foe`), which does not itself change between the two
 /// columns — only the player does. `perk_points_gained` and
-/// `decompiler_gained` are `current − snapshot`, not
+/// `stat_points_gained` are `current − snapshot`, not
 /// `PERK_POINTS_PER_LEVEL * levels`, so an overflow point earned in the
-/// same award counts too.
+/// same award counts too. A level-up grows no stats on its own: the
+/// banked stat points are what it earned, spent on the Points screen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LevelUpReport {
     pub from_level: u32,
@@ -3605,5 +3606,6 @@ pub struct LevelUpReport {
     pub swings_to_down_you: (u32, u32),
     pub perk_points_gained: u32,
     pub perk_points_unspent: u32,
-    pub decompiler_gained: i32,
+    pub stat_points_gained: u32,
+    pub stat_points_unspent: u32,
 }

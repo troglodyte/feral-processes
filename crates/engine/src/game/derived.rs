@@ -67,6 +67,22 @@ impl Game {
         Ok(self.derived_stats(entity))
     }
 
+    /// The catalogue as the Points screen previews against - a clone, so a
+    /// frontend holds no borrow on `Game`, `attribute_defs`' reason.
+    pub fn attribute_db(&self) -> crate::attributes::AttributeDb {
+        self.world
+            .resource::<crate::attributes::AttributeDb>()
+            .clone()
+    }
+
+    /// The player's attributes as they stand, the Points screen's "before".
+    pub fn player_attributes(&self) -> Attributes {
+        self.world
+            .get::<Attributes>(self.player_entity())
+            .cloned()
+            .unwrap_or_default()
+    }
+
     /// What `progression::derive` answers for `entity` right now.
     fn derived_stats(&self, entity: Entity) -> crate::progression::DerivedStats {
         crate::progression::derive(

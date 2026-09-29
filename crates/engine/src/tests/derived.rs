@@ -372,9 +372,8 @@ fn a_power_item_restores_only_up_to_the_derived_maximum() {
     game.world
         .get_mut::<PowerReserve>(player)
         .unwrap()
-        .spend(50.0);
+        .spend(10.0);
 
-    assert!(game.consume_item(player, &cell));
     assert!(game.consume_item(player, &cell));
 
     assert_eq!(

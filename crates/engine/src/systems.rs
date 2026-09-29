@@ -23,8 +23,8 @@ use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
     BUILD_QUALITY_TICK_WEIGHT, DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS,
-    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
-    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_EXTRACTION_CAP, MINING_SUCCESS_BASE,
+    MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
     WANDER_COOLDOWN_MAX_TICKS, WANDER_COOLDOWN_MIN_TICKS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
@@ -254,13 +254,15 @@ pub(crate) fn mining_success_chance(
     base_int: i32,
     morale: f32,
     strain: f32,
+    extraction: f64,
 ) -> f64 {
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
         + crate::perks::mining_roll_bonus(keen_scavenger_level)
         + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT
         + morale_shift(morale)
-        + need_shift(strain))
+        + need_shift(strain)
+        + extraction.clamp(0.0, f64::from(MINING_EXTRACTION_CAP)))
     .clamp(0.0, 1.0)
 }
 
@@ -374,6 +376,11 @@ pub(crate) struct CycleModifiers {
     /// `assets/needs/` all contribute exactly nothing, without a branch here
     /// or at the call site.
     pub need_strain: f32,
+    /// The player's `Derived::extraction`: a capped extra chance from
+    /// Analysis, standing in for the aptitude term the player does not have.
+    /// `0.0` for every program, and for the player before they have spent
+    /// anything - the baseline, not a missing value.
+    pub extraction: f64,
 }
 
 /// Whether the structure `node_entity` belongs to declares
@@ -425,6 +432,7 @@ pub(crate) fn resolve_gather_cycle(
             worker.base_int,
             worker.morale,
             worker.need_strain,
+            worker.extraction,
         ))
     {
         return None;
@@ -1416,6 +1424,7 @@ pub fn task_progress_system(
                 need_strain: worker_needs
                     .map(|n| crate::needs::strain(n, &need_db))
                     .unwrap_or(0.0),
+                extraction: 0.0,
             },
             &item_db,
             &mut rng,
@@ -1590,7 +1599,7 @@ pub struct PlayerGatherLookups<'w> {
 /// handle yourself is the largest hole there is in that. See the guard itself
 /// for the second, independent reason.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, Option<&Perks>, &mut Inventory), With<Player>>,
+    mut player: Query<(&mut Task, Option<&Perks>, &mut Inventory, Option<&Derived>), With<Player>>,
     mut nodes: Query<WorkedNode>,
     db: PlayerGatherLookups,
     mut log: ResMut<MessageLog>,
@@ -1609,7 +1618,7 @@ pub fn player_gather_system(
     } = db;
     let tick_now = clock.tick;
     let zone_now = zone.0;
-    for (mut task, perks, mut inventory) in &mut player {
+    for (mut task, perks, mut inventory, derived) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -1702,6 +1711,7 @@ pub fn player_gather_system(
                 // is a different game.
                 morale: 0.0,
                 need_strain: 0.0,
+                extraction: derived.map_or(0.0, |d| d.extraction as f64),
             },
             &item_db,
             &mut rng,
@@ -2208,6 +2218,7 @@ mod tests {
                 class,
                 morale: 0.0,
                 need_strain: 0.0,
+                extraction: 0.0,
             },
             &shipped_items(),
             &mut rng,
@@ -2625,7 +2636,7 @@ mod tests {
             for keen in [0, 1, 4] {
                 for int_offset in [-4, 0, 3] {
                     let base_int = DEFAULT_BASE_INT + int_offset;
-                    let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0);
+                    let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0, 0.0);
                     let without = (MINING_SUCCESS_BASE
                         + level as f64 * MINING_SUCCESS_PER_LEVEL
                         + crate::perks::mining_roll_bonus(keen)
@@ -2648,9 +2659,9 @@ mod tests {
     /// rises-with-morale test just as well.
     #[test]
     fn morale_moves_the_rate_both_ways_and_by_the_same_amount() {
-        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0);
-        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0, 0.0);
-        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0, 0.0);
+        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0, 0.0, 0.0);
+        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0, 0.0, 0.0);
         assert!(
             content > baseline,
             "a program that remembers good things should extract more reliably"
@@ -2682,14 +2693,41 @@ mod tests {
         // And the finished chance stays inside what `random_bool` accepts,
         // which is the outer clamp's job and is asserted here so the two
         // cannot both be assumed.
-        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0, 0.0);
+        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0, 0.0, 0.0);
         assert!((0.0..=1.0).contains(&floored));
+    }
+
+    /// Extraction is the player's Analysis term: it raises the chance, and
+    /// only up to `MINING_EXTRACTION_CAP`, so the player never out-mines the
+    /// sharpest species however much they spend.
+    #[test]
+    fn extraction_raises_the_chance_and_is_capped() {
+        let none = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let some = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.05);
+        let capped = mining_success_chance(
+            1,
+            0,
+            DEFAULT_BASE_INT,
+            0.0,
+            0.0,
+            f64::from(MINING_EXTRACTION_CAP),
+        );
+        let beyond = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 5.0);
+        assert!((some - none - 0.05).abs() < 1e-9, "{none} -> {some}");
+        assert!(capped > some);
+        assert_eq!(beyond, capped, "past the cap adds nothing");
+        assert!(
+            (capped - none - f64::from(MINING_EXTRACTION_CAP)).abs() < 1e-9,
+            "the cap is the tuning constant"
+        );
+        let negative = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, -1.0);
+        assert_eq!(negative, none, "extraction never subtracts");
     }
 
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
-        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -2699,7 +2737,7 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0, 0.0),
+            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0),
             1.0,
             "chance should never exceed a sure thing"
         );
@@ -2707,14 +2745,14 @@ mod tests {
 
     #[test]
     fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
-        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
-        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0, 0.0);
+        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
         assert!(
             (boosted - (plain + crate::perks::mining_roll_bonus(3))).abs() < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(
-            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0, 0.0),
+            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0, 0.0, 0.0),
             1.0,
             "the perk must not push the roll past a sure thing either"
         );
@@ -2732,7 +2770,7 @@ mod tests {
             let expected = crate::tuning::MINING_SUCCESS_BASE
                 + level as f64 * crate::tuning::MINING_SUCCESS_PER_LEVEL;
             assert!(
-                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0, 0.0) - expected).abs()
+                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0) - expected).abs()
                     < f64::EPSILON,
                 "a baseline worker must contribute exactly nothing at level {level}"
             );
@@ -2741,9 +2779,9 @@ mod tests {
 
     #[test]
     fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
-        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
-        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0, 0.0);
-        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0, 0.0);
+        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0, 0.0, 0.0);
+        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0, 0.0, 0.0);
         assert!(
             (sharp - (baseline + 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
             "each point above the baseline should add exactly its tuning constant"
@@ -2760,12 +2798,12 @@ mod tests {
     #[test]
     fn base_int_cannot_push_the_roll_outside_a_probability() {
         assert_eq!(
-            mining_success_chance(1, 0, 10_000, 0.0, 0.0),
+            mining_success_chance(1, 0, 10_000, 0.0, 0.0, 0.0),
             1.0,
             "aptitude must not push the roll past a sure thing"
         );
         assert_eq!(
-            mining_success_chance(4, 0, -10_000, 0.0, 0.0),
+            mining_success_chance(4, 0, -10_000, 0.0, 0.0, 0.0),
             0.0,
             "nor below an impossibility, which would panic the roll"
         );

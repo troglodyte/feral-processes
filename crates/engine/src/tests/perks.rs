@@ -538,7 +538,7 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// working the node passes `DEFAULT_BASE_INT`, being the baseline by
 /// definition; a posted program passes its own species'.
 fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i32) {
-    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int, 0.0, 0.0))
+    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int, 0.0, 0.0, 0.0))
         / KEEN_SCAVENGER_BONUS_PER_LEVEL)
         .ceil() as usize;
     let player = game.player_entity();
@@ -611,6 +611,77 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
         fizzles, 0,
         "a roll the perk has capped at a certainty must never fizzle: {log:?}"
     );
+}
+
+/// Extraction is wired from `Derived` into the player's own roll and nowhere
+/// else. Keen Scavenger is stacked until a level-1 node fizzles only a few
+/// percent of the time - a shortfall inside `MINING_EXTRACTION_CAP` - so full
+/// Extraction closes the gap to a certainty while none leaves it open.
+#[test]
+fn extraction_reaches_the_roll_when_you_work_a_node_yourself() {
+    fn fizzles_over_a_long_job(seed: u32, extraction: f32) -> usize {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let node = deploy_upgradeable_node(&mut game);
+        keep_the_sweep_off(&mut game, node);
+        let player = game.player_entity();
+        let base_int = crate::tuning::DEFAULT_BASE_INT;
+        let levels = (1..)
+            .find(|&l| {
+                crate::systems::mining_success_chance(1, l, base_int, 0.0, 0.0, 0.0) >= 1.0 - 0.09
+            })
+            .unwrap();
+        let shortfall =
+            1.0 - crate::systems::mining_success_chance(1, levels, base_int, 0.0, 0.0, 0.0);
+        assert!(
+            shortfall > 0.0 && shortfall < f64::from(crate::tuning::MINING_EXTRACTION_CAP),
+            "the fixture needs a gap Extraction can close: {shortfall}"
+        );
+        game.world
+            .get_mut::<Perks>(player)
+            .unwrap()
+            .unlocked
+            .extend(std::iter::repeat_n(Perk::KeenScavenger, levels as usize));
+        game.world
+            .get_mut::<crate::components::Derived>(player)
+            .unwrap()
+            .extraction = extraction;
+
+        game.work_structure(node)
+            .expect("a deployed node is workable");
+        for _ in 0..1000 {
+            game.wait();
+        }
+        let log = game.message_log(MESSAGE_LOG_CAP);
+        let extractions = log
+            .iter()
+            .filter(|e| e.text.starts_with("You extract"))
+            .count();
+        assert!(
+            extractions >= 15,
+            "too few cycles to measure: {extractions}"
+        );
+        log.iter()
+            .filter(|e| e.text.contains("fails to compile"))
+            .count()
+    }
+
+    // Seeds, not one run: a node's buffer clogs after about twenty cycles, so
+    // a single control run fizzles with only ~85% odds. Over eight seeds the
+    // control failing to fizzle even once is not a thing that happens.
+    let seeds = 4210..4218;
+    let control: usize = seeds.clone().map(|s| fizzles_over_a_long_job(s, 0.0)).sum();
+    assert!(
+        control > 0,
+        "the control must fizzle or the test proves nothing"
+    );
+    for seed in seeds {
+        assert_eq!(
+            fizzles_over_a_long_job(seed, crate::tuning::MINING_EXTRACTION_CAP),
+            0,
+            "full Extraction closes the gap to a certainty (seed {seed})"
+        );
+    }
 }
 
 /// The other half of the same wiring: a cronjob's roll runs inside a system

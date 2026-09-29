@@ -1204,6 +1204,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                     class: None,
                     morale: 0.0,
                     need_strain: 0.0,
+                    extraction: 0.0,
                 },
                 world.resource::<ItemDb>(),
                 &mut rng,

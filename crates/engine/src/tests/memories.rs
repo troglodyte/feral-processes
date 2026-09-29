@@ -1033,6 +1033,7 @@ fn mining_morale_is_game_morale() {
                 crate::tuning::DEFAULT_BASE_INT,
                 0.0,
                 0.0,
+                0.0,
             )
         });
 

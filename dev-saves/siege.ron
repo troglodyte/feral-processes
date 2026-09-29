@@ -6,10 +6,8 @@
     player: (
         position: (0, 0),
         hp: 509,
-        max_hp: 510,
-        atk: 47,
-        mitigation: 46,
         power: 99.85,
+        stat_points: 0,
         inventory: [
             ("ice_breaker", 200),
             ("credits", 5000),
@@ -39,7 +37,6 @@
         level: 36,
         xp: 430,
         xp_to_next: 2880,
-        decompiler: 41,
         weapon: Some("shiv_routine"),
         weapon_level: 2,
         weapon_fusion_tier: 4,

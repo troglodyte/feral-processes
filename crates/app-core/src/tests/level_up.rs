@@ -189,8 +189,9 @@ fn an_arena_session_never_opens_the_page() {
     let mut data = save::load_from_file(&path).unwrap();
     // Unkillable so the fight cannot end any other way than a win, and
     // primed to level on the first kill, `about_to_level`'s reason.
+    // Max HP is derived from Parity now, so the headroom is bought there.
+    data.player.attributes.insert("parity".into(), 200_000);
     data.player.hp = 1_000_000;
-    data.player.max_hp = 1_000_000;
     data.player.xp = xp_for_level(data.player.level).saturating_sub(1);
     save::save_to_file(&path, &data).unwrap();
 

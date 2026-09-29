@@ -117,10 +117,6 @@ fn a_new_game_starts_from_the_profile_on_disk() {
 /// The trap's end-to-end form: a save already holds its bonus, so a load that
 /// paid again would double it on every reload. Task 5's engine tests only
 /// cover the halves.
-///
-/// `<=` rather than `==` until the save carries `stat_points` (the v33 save
-/// work): today the banked point does not survive a load at all, and what
-/// this holds is that a load never pays *more*.
 #[test]
 fn loading_a_save_does_not_re_apply_rewards() {
     let path = scratch_profile("noload");
@@ -138,7 +134,7 @@ fn loading_a_save_does_not_re_apply_rewards() {
     let _ = std::fs::remove_file(&path);
 
     assert!(
-        player_stat_points(&app) <= paid,
+        player_stat_points(&app) == paid,
         "a load must not pay a second time for what the save already holds"
     );
 }

@@ -326,15 +326,21 @@ fn a_loaded_player_is_rederived_rather_than_trusted() {
     .unwrap();
     game.save(&path).unwrap();
     let mut data = crate::save::load_from_file(&path).unwrap();
-    data.player.max_hp = 5;
-    data.player.atk = 500;
+    data.player.hp = 5_000;
+    data.player.power = 5_000.0;
     crate::save::save_to_file(&path, &data).unwrap();
 
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let player = loaded.player_entity();
     let stats = stats_of(&loaded, player);
     assert_eq!((stats.max_hp, stats.atk), (90 + 24, 6));
+    assert_eq!(stats.hp, stats.max_hp, "an out-of-range hp is clamped");
     assert_eq!(loaded.max_power(player), 104.0);
+    assert_eq!(
+        loaded.world.get::<PowerReserve>(player).unwrap().get(),
+        104.0,
+        "so is power"
+    );
 }
 
 #[test]
@@ -381,4 +387,60 @@ fn a_power_item_restores_only_up_to_the_derived_maximum() {
         60.0,
         "restores stop at the narrowed maximum"
     );
+}
+
+#[test]
+fn a_save_keeps_attributes_points_and_derived_values_with_gear_and_a_perk() {
+    use crate::components::StatPoints;
+    let assets = test_assets_dir();
+    let mut game = Game::new(7012, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(player, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .unwrap();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Attacker).unwrap();
+    set_attribute(&mut game, "parity", 60);
+    set_attribute(&mut game, "analysis", 14);
+    set_attribute(&mut game, "bandwidth", 30);
+    game.recompute_derived(player);
+    game.world.get_mut::<StatPoints>(player).unwrap().0 = 3;
+    game.world.get_mut::<Stats>(player).unwrap().hp -= 7;
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(10.0);
+
+    let stats = stats_of(&game, player);
+    let derived = *game.world.get::<Derived>(player).unwrap();
+    let attrs = game.world.get::<Attributes>(player).unwrap().clone();
+    let power = game.world.get::<PowerReserve>(player).unwrap().get();
+    let receipt = *game.world.get::<BoughtStats>(player).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_derived_save_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let lp = loaded.player_entity();
+    assert_eq!(
+        loaded
+            .world
+            .get::<Attributes>(lp)
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        attrs.iter().collect::<Vec<_>>()
+    );
+    assert_eq!(loaded.world.get::<StatPoints>(lp).unwrap().0, 3);
+    assert_eq!(stats_of(&loaded, lp), stats, "hp and every derived stat");
+    assert_eq!(*loaded.world.get::<Derived>(lp).unwrap(), derived);
+    assert_eq!(loaded.world.get::<PowerReserve>(lp).unwrap().get(), power);
+    assert_eq!(*loaded.world.get::<BoughtStats>(lp).unwrap(), receipt);
 }

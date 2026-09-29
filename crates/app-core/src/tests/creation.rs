@@ -330,16 +330,19 @@ fn the_name_step_commits_the_choice() {
         .unwrap()
         .attributes
         .clone();
+    let saved = |id: &str| {
+        data.player.attributes[&feral_processes_engine::attributes::AttributeId::from(id)]
+    };
+    assert_eq!(saved("parity"), class["parity"] + bought as i32);
+    assert_eq!(saved("footprint"), class["footprint"]);
+    let max_hp = app.game.as_ref().unwrap().player_status().max_hp;
     assert_eq!(
-        data.player.max_hp,
+        max_hp,
         PLAYER_BASE_STATS.max_hp
             + (class["parity"] - 50 + bought as i32) * 6
             + (class["footprint"] - 45) * 2
     );
-    assert_eq!(
-        data.player.hp, data.player.max_hp,
-        "a run must not start damaged"
-    );
+    assert_eq!(data.player.hp, max_hp, "a run must not start damaged");
     assert!(
         data.player.routines.contains(&wanted_routine),
         "the starter routine reached the player: {:?}",

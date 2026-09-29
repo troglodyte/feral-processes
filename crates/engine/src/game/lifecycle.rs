@@ -295,10 +295,13 @@ fn spawn_player_from_save(
                 color: GlyphColor::Cyan,
             },
             Stats {
+                // Placeholders but for `hp`: `recompute_derived` in
+                // `Game::load` writes the rest and clamps `hp` to the new
+                // maximum, so the file carries none of them.
                 hp: player_save.hp,
-                max_hp: player_save.max_hp,
-                atk: player_save.atk,
-                mitigation: player_save.mitigation,
+                max_hp: player_save.hp,
+                atk: 0,
+                mitigation: 0,
             },
             // Unbounded until `recompute_derived` below trims it to the
             // derived maximum: the file's Bandwidth is not known yet.
@@ -314,9 +317,7 @@ fn spawn_player_from_save(
                 // `SAVE_FORMAT_VERSION` bump) and is simply not trusted.
                 xp_to_next: crate::progression::xp_for_level(player_save.level),
             },
-            Decompiler {
-                skill: player_save.decompiler,
-            },
+            Decompiler { skill: 0 },
             Equipment {
                 weapon: worn_from_save(
                     player_save.weapon,
@@ -1532,6 +1533,7 @@ impl Game {
         let saved_routes = std::mem::take(&mut data.player.routes);
         let tutorial_seeded = data.player.tutorial_seeded;
         let saved_attributes = std::mem::take(&mut data.player.attributes);
+        let saved_stat_points = data.player.stat_points;
         let player_class = data.player.class;
         let player =
             spawn_player_from_save(&mut world, data.player, player_routines, player_perk_levels);
@@ -1566,7 +1568,7 @@ impl Game {
         world.entity_mut(player).insert((
             player_attributes,
             crate::components::Derived::default(),
-            crate::components::StatPoints::default(),
+            crate::components::StatPoints(saved_stat_points),
         ));
 
         if let Some(name) = CustomName::sanitize(Some(player_name)) {
@@ -2736,7 +2738,6 @@ impl Game {
         let stats = *self.world.get::<Stats>(player).unwrap();
         let needs = *self.world.get::<PowerReserve>(player).unwrap();
         let exp = *self.world.get::<Experience>(player).unwrap();
-        let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = self.world.get::<Equipment>(player).unwrap().clone();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
         let gear_copies = self
@@ -2847,15 +2848,15 @@ impl Game {
         save::PlayerSave {
             position: (pos.x, pos.y),
             hp: stats.hp,
-            max_hp: stats.max_hp,
-            atk: stats.atk,
-            mitigation: stats.mitigation,
             power: needs.get(),
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(player)
+                .map_or(0, |p| p.0),
             inventory,
             level: exp.level,
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
-            decompiler,
             weapon: equipment.weapon.as_ref().map(|e| e.copy.item.clone()),
             weapon_level: equipment.weapon.as_ref().map(|e| e.level).unwrap_or(1),
             weapon_fusion_tier: equipment.weapon.as_ref().map(|e| e.copy.tier).unwrap_or(0),

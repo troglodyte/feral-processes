@@ -20,6 +20,7 @@
     abilities: [(id: "skim_group", level: 2), (id: "skim_v2", level: 4)],
     affinities: (buff: 0.85, drain: 1.3),
     attributes: {
+        "analysis": 11,
         "persistence": 52,
         "entropy": 54,
         "bandwidth": 68,

@@ -225,8 +225,8 @@ impl Default for PowerReserve {
 impl PowerReserve {
     /// Clamps, because both callers are load paths: a save file and a mod's
     /// numbers are equally outside this crate's control.
-    pub fn new(value: f32) -> Self {
-        Self(value.clamp(POWER_MIN, POWER_MAX))
+    pub fn new(value: f32, max: f32) -> Self {
+        Self(value.clamp(POWER_MIN, max))
     }
 
     pub fn get(&self) -> f32 {
@@ -244,13 +244,16 @@ impl PowerReserve {
         self.0 = (self.0 - cost).max(POWER_MIN);
     }
 
-    pub fn restore(&mut self, amount: f32) {
-        self.0 = (self.0 + amount).min(POWER_MAX);
+    /// Adds, capped at `max`. `restore(0.0, max)` is also how a lowered
+    /// maximum trims the reserve (`Game::recompute_derived`): a raised one
+    /// leaves it where it was, and neither ever refills.
+    pub fn restore(&mut self, amount: f32, max: f32) {
+        self.0 = (self.0 + amount).min(max);
     }
 
     /// `Game::rest`, which sets outright rather than adding.
-    pub fn fill(&mut self) {
-        self.0 = POWER_MAX;
+    pub fn fill(&mut self, max: f32) {
+        self.0 = max;
     }
 
     /// `difficulty.rs`'s Forgiving reboot — the one site that raises *to* a
@@ -258,9 +261,16 @@ impl PowerReserve {
     /// with enough to keep going, and a player who died holding more than the
     /// floor does not get docked for it. Delete this if that call ever
     /// becomes an additive top-up.
-    pub fn raise_to_at_least(&mut self, floor: f32) {
-        self.0 = self.0.max(floor).min(POWER_MAX);
+    pub fn raise_to_at_least(&mut self, floor: f32, max: f32) {
+        self.0 = self.0.max(floor).min(max);
     }
+}
+
+/// An entity's maximum Power from its (optional) `Derived`: the one rule
+/// `Game::max_power` and every system without a `Game` share. No `Derived`
+/// means not derived, so the fallback is `POWER_MAX`.
+pub fn max_power_of(derived: Option<&Derived>) -> f32 {
+    derived.map_or(POWER_MAX, |d| d.max_power)
 }
 
 #[cfg(test)]
@@ -269,29 +279,43 @@ mod power_reserve_tests {
 
     #[test]
     fn spend_floors_at_empty_rather_than_going_negative() {
-        let mut r = PowerReserve::new(5.0);
+        let mut r = PowerReserve::new(5.0, POWER_MAX);
         r.spend(50.0);
         assert_eq!(r.get(), POWER_MIN);
     }
 
     #[test]
-    fn restore_caps_at_full() {
-        let mut r = PowerReserve::new(POWER_MAX - 1.0);
-        r.restore(50.0);
+    fn restore_caps_at_the_given_maximum() {
+        let mut r = PowerReserve::new(POWER_MAX - 1.0, POWER_MAX);
+        r.restore(50.0, POWER_MAX);
         assert_eq!(r.get(), POWER_MAX);
+
+        let mut wide = PowerReserve::new(POWER_MAX, 140.0);
+        wide.restore(50.0, 140.0);
+        assert_eq!(wide.get(), 140.0);
+    }
+
+    #[test]
+    fn restore_of_nothing_trims_a_reserve_above_a_lowered_maximum() {
+        let mut r = PowerReserve::new(120.0, 140.0);
+        r.restore(0.0, 80.0);
+        assert_eq!(r.get(), 80.0);
+        r.restore(0.0, 200.0);
+        assert_eq!(r.get(), 80.0, "a raised maximum never refills");
     }
 
     #[test]
     fn new_clamps_a_wild_input_at_both_ends() {
-        assert_eq!(PowerReserve::new(-40.0).get(), POWER_MIN);
-        assert_eq!(PowerReserve::new(4000.0).get(), POWER_MAX);
+        assert_eq!(PowerReserve::new(-40.0, POWER_MAX).get(), POWER_MIN);
+        assert_eq!(PowerReserve::new(4000.0, POWER_MAX).get(), POWER_MAX);
+        assert_eq!(PowerReserve::new(4000.0, 130.0).get(), 130.0);
     }
 
     /// The boundary is where a refusal and a charge would disagree if they
     /// were written twice, so it is pinned on both sides of exact.
     #[test]
     fn holds_is_true_at_exactly_the_cost_and_false_one_short() {
-        let r = PowerReserve::new(10.0);
+        let r = PowerReserve::new(10.0, POWER_MAX);
         assert!(r.holds(10.0), "a reserve holding exactly the cost may pay");
         assert!(!r.holds(10.1));
         assert!(r.holds(9.9));
@@ -302,20 +326,32 @@ mod power_reserve_tests {
     /// help them.
     #[test]
     fn raise_to_at_least_never_lowers_a_reserve_already_above_the_floor() {
-        let mut r = PowerReserve::new(90.0);
-        r.raise_to_at_least(40.0);
+        let mut r = PowerReserve::new(90.0, POWER_MAX);
+        r.raise_to_at_least(40.0, POWER_MAX);
         assert_eq!(r.get(), 90.0);
 
-        let mut drained = PowerReserve::new(5.0);
-        drained.raise_to_at_least(40.0);
+        let mut drained = PowerReserve::new(5.0, POWER_MAX);
+        drained.raise_to_at_least(40.0, POWER_MAX);
         assert_eq!(drained.get(), 40.0);
     }
 
     #[test]
-    fn fill_sets_outright() {
-        let mut r = PowerReserve::new(1.0);
-        r.fill();
+    fn fill_sets_outright_to_the_given_maximum() {
+        let mut r = PowerReserve::new(1.0, POWER_MAX);
+        r.fill(POWER_MAX);
         assert_eq!(r.get(), POWER_MAX);
+        r.fill(130.0);
+        assert_eq!(r.get(), 130.0);
+    }
+
+    #[test]
+    fn max_power_of_falls_back_to_the_constant() {
+        assert_eq!(max_power_of(None), POWER_MAX);
+        let d = Derived {
+            max_power: 120.0,
+            ..Derived::default()
+        };
+        assert_eq!(max_power_of(Some(&d)), 120.0);
     }
 }
 
@@ -1903,6 +1939,35 @@ impl Attributes {
         self.0.is_empty()
     }
 }
+
+/// The player's derived figures that have no `Stats` field: what
+/// `progression::derive` answers beyond hp, attack, mitigation and
+/// Decompiler. Written only by `Game::recompute_derived`, and its absence
+/// means "not derived" - a companion reads the defaults (`POWER_MAX`, no
+/// resist, no extraction).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Derived {
+    pub max_power: f32,
+    /// Percent shortening of an armed status; negative lengthens.
+    pub status_resist: i32,
+    /// The player's capped extra mining chance.
+    pub extraction: f32,
+}
+
+impl Default for Derived {
+    fn default() -> Self {
+        Derived {
+            max_power: POWER_MAX,
+            status_resist: 0,
+            extraction: 0.0,
+        }
+    }
+}
+
+/// Attribute points earned by levelling and not yet spent. Banked by
+/// `award_player_xp`, spent by `Game::spend_stat_points`.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StatPoints(pub u32);
 
 /// What one owned program's reserves stand at. Minted empty at
 /// `Game::roster_parts` beside `Memories`, so the absence of this component

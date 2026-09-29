@@ -7,7 +7,7 @@ use super::support::*;
 use crate::balance_sim::{
     best_gear_stats, median_ordinary_species, min_level_to_clear_zone, toughest_ordinary_species,
 };
-use crate::components::{Decompiler, Experience, Stats};
+use crate::components::{Experience, Stats};
 use crate::game::level_up::{LEVEL_UP_SWINGS_UNREACHABLE, swings_to};
 use crate::progression::{StatRow, stat_block};
 use crate::resources::{CONDENSE_LOOKBACK, LogLine, MessageSource, condense};
@@ -15,8 +15,8 @@ use crate::species::SpeciesDb;
 use crate::stack::Dir;
 use crate::tactical::TacticalBattle;
 use crate::tuning::{
-    BASE_PET_CAPACITY, DECOMPILER_SKILL_PER_LEVEL, KERNEL_RING_MAX, LEVELS_PER_RING,
-    PERK_POINTS_PER_LEVEL, TALENT_START_LEVEL, ZONE_LEVEL_CAP_FLOOR, arena_level_ceiling,
+    BASE_PET_CAPACITY, KERNEL_RING_MAX, LEVELS_PER_RING, PERK_POINTS_PER_LEVEL,
+    STAT_POINTS_PER_LEVEL, TALENT_START_LEVEL, ZONE_LEVEL_CAP_FLOOR, arena_level_ceiling,
 };
 use crate::*;
 
@@ -32,7 +32,7 @@ fn stat_lines(game: &Game) -> Vec<String> {
 }
 
 #[test]
-fn a_player_level_up_lists_what_each_stat_grew_to() {
+fn a_player_level_up_lists_the_points_it_banked_and_grows_nothing() {
     let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Experience>(player).unwrap().xp_to_next = 5;
@@ -40,22 +40,19 @@ fn a_player_level_up_lists_what_each_stat_grew_to() {
 
     game.award_player_xp(player, 5);
 
-    let after = *game.world.get::<Stats>(player).unwrap();
+    assert_eq!(
+        *game.world.get::<Stats>(player).unwrap(),
+        before,
+        "levelling banks points and grows no stat"
+    );
     assert_eq!(
         stat_lines(&game),
         vec![
-            format!("  Max HP {} → {}", before.max_hp, after.max_hp),
-            format!("  ATK {} → {}", before.atk, after.atk),
-            // No mitigation row: levelling never raises it, so there is
-            // nothing to draw — see `components::Stats::mitigation`.
+            // No Max HP or ATK row: nothing moved, so there is nothing to draw.
             format!("  Perk Points 0 → {PERK_POINTS_PER_LEVEL}"),
-            format!(
-                "  Decompiler {} → {}",
-                game.world.get::<Decompiler>(player).unwrap().skill - DECOMPILER_SKILL_PER_LEVEL,
-                game.world.get::<Decompiler>(player).unwrap().skill
-            ),
+            format!("  Stat Points 0 → {STAT_POINTS_PER_LEVEL}"),
         ],
-        "the player's block also reports the Perk Point and Decompiler skill a level pays"
+        "the player's block reports the Perk and stat points a level pays"
     );
 }
 
@@ -471,6 +468,12 @@ fn shipped_species_db() -> crate::species::SpeciesDb {
         .0
 }
 
+fn shipped_attribute_db() -> crate::attributes::AttributeDb {
+    crate::attributes::AttributeDb::load_dir(&test_assets_dir().join("attributes"))
+        .unwrap()
+        .0
+}
+
 fn cap_at_zone(zone: u32) -> u32 {
     let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.insert_resource(ZoneLevel(zone));
@@ -506,15 +509,15 @@ fn the_zone_level_cap_rises_linearly() {
 fn zone_one_is_capped_at_the_floor() {
     assert_eq!(cap_at_zone(1), ZONE_LEVEL_CAP_FLOOR);
     let db = shipped_species_db();
-    let (weapon, armor) = best_gear_stats();
+    let attrs = shipped_attribute_db();
     let (needed, _) = min_level_to_clear_zone(
         toughest_ordinary_species(&db),
         median_ordinary_species(&db),
         1,
         200,
         BASE_PET_CAPACITY,
-        false,
-        (weapon, armor),
+        None,
+        &attrs,
     )
     .expect("zone 1 is clearable");
     assert!(
@@ -544,6 +547,7 @@ fn the_zone_level_cap_is_bounded_by_both_clear_curves() {
     let db = shipped_species_db();
     let (toughest, party) = (toughest_ordinary_species(&db), median_ordinary_species(&db));
     let (weapon, armor) = best_gear_stats();
+    let attrs = shipped_attribute_db();
     let required = |zone: u32, with_gear: bool| {
         min_level_to_clear_zone(
             toughest,
@@ -551,8 +555,8 @@ fn the_zone_level_cap_is_bounded_by_both_clear_curves() {
             zone,
             400,
             BASE_PET_CAPACITY,
-            with_gear,
-            (weapon, armor),
+            with_gear.then_some((weapon, armor)),
+            &attrs,
         )
         .map(|(level, _)| level)
     };
@@ -938,8 +942,14 @@ fn every_figure_on_the_report_equals_a_direct_battle_call() {
     );
     assert_eq!(report.perk_points_unspent, after.perk_points);
     assert_eq!(
-        report.decompiler_gained,
-        after.decompiler - before.decompiler
+        report.stat_points_gained,
+        after.stat_points - before.stat_points
+    );
+    assert_eq!(report.stat_points_unspent, after.stat_points);
+    assert_eq!(
+        report.stat_points_gained,
+        crate::tuning::STAT_POINTS_PER_LEVEL,
+        "one level banks the per-level allowance, and grows nothing itself"
     );
 }
 

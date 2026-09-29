@@ -65,6 +65,7 @@ use std::path::Path;
 pub use base_ledger::LootSource;
 pub use bevy_ecs::prelude::Entity;
 use bevy_ecs::prelude::*;
+pub use progression::{SpendError, StatOwner};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
@@ -126,9 +127,9 @@ pub use research::{ResearchId, ResearchRecipe, ResearchTree};
 use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BoltQueue, BuybackLedger,
     ClosingRoster, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines,
-    KnownTools, LevelSnapshot, Locale, MessageLog, Party, PendingLevelUp, PlayerEntity, Research,
-    RosterFrame, StackMemory, TacticalFxQueue, TransitQueue, WieldedProgram, XpTally, ZoneLevel,
-    ZoneSpawnPoint,
+    KnownTools, LevelSnapshot, LevellingFrozen, Locale, MessageLog, Party, PendingLevelUp,
+    PlayerEntity, Research, RosterFrame, StackMemory, TacticalFxQueue, TransitQueue,
+    WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,

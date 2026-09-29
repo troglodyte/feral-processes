@@ -209,26 +209,10 @@ fn row_line(row: &CreationRow) -> String {
             false => "Draw your own…".to_string(),
         },
         CreationRow::Colour { index } => format!("Colour {}", index + 1),
-        CreationRow::Stat {
-            stat,
-            spent,
-            value,
-            cost,
-        } => {
-            // The bar's width is this axis's own ceiling if the *whole*
-            // pool went to it — not what the other axes have already
-            // spent, which changes row to row and would make the bar's
-            // length itself a second, unlabelled figure to read.
-            let width = (CREATION_STAT_POINTS / (*cost).max(1)).max(*spent);
-            let bar: String = (0..width)
-                .map(|u| if u < *spent { '#' } else { '-' })
-                .collect();
-            format!(
-                "{:<12} {value:>4}  [{bar}] {spent} bought @ {cost}",
-                stat.label()
-            )
-        }
-        // No bar, unlike the Stat row above: at 1 Credit an item's own
+        // Shared with `Mode::AllocateStats` - one drawing of the Points
+        // screen's row.
+        CreationRow::Attribute { .. } => points::attribute_line(row).unwrap_or_default(),
+        // No bar: at 1 Credit an item's own
         // ceiling is the whole allowance, so a bar would be 25 cells wide on
         // most of two dozen rows. The remaining allowance rides the footer
         // instead, where it is read once rather than inferred per row.
@@ -283,13 +267,7 @@ fn footer(app: &App, step: CreationStep) -> String {
             app.creation_credits_left()
         ),
         CreationStep::Points => {
-            let left = app.creation_points_left();
-            format!(
-                "{}/{CREATION_STAT_POINTS} points spent, {left} left - \
-                 Left/Right spends (Shift: all, Ctrl: half); \
-                 Enter moves on once it is spent",
-                CREATION_STAT_POINTS - left
-            )
+            points::footer(CREATION_STAT_POINTS, app.creation_points_left(), true)
         }
         CreationStep::Perks => {
             // What the achievement ladder is about to add is named here
@@ -528,7 +506,6 @@ mod tests {
                 id: id.as_str().into(),
                 first_tick: 1,
                 permadeath: false,
-                rolled_stat: Some(feral_processes_engine::achievements::MainStat::Atk),
             });
         };
         for i in 0..MAX_PROFILE_STAT_POINTS {
@@ -937,9 +914,9 @@ mod tests {
             "the rolled spread spends the whole pool and the footer must say so: {fresh:?}"
         );
 
-        // Clear every axis — which axes the roll landed on is not fixed,
-        // so walking all four is what keeps this off the roll's luck.
-        for _ in 0..4 {
+        // Clear every row — which the roll landed on is not fixed, so
+        // walking all of them is what keeps this off the roll's luck.
+        for _ in 0..app.creation_rows().len() {
             app.handle_key(GameKey::ShiftLeft);
             app.handle_key(GameKey::Down);
         }

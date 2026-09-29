@@ -1116,7 +1116,7 @@ fn reaching_a_level_is_announced_while_the_fight_runs() {
         "the XP total should wait for the tally: {mid:#?}"
     );
     assert!(
-        !mid.iter().any(|t| t.starts_with("  Max HP")),
+        !mid.iter().any(|t| t.starts_with("  Stat Points")),
         "the stat block should wait for the tally: {mid:#?}"
     );
 
@@ -1139,7 +1139,7 @@ fn reaching_a_level_is_announced_while_the_fight_runs() {
         "expected one XP line summing the fight: {end:#?}"
     );
     assert!(
-        end.iter().any(|t| t.starts_with("    Max HP")),
+        end.iter().any(|t| t.starts_with("    Stat Points")),
         "expected the tally to carry the fight's stat block: {end:#?}"
     );
 }

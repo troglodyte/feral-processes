@@ -42,7 +42,7 @@
     player: Fresh(level: 5, zone: 1),
     character: (
         class: Some(Saboteur),
-        stats: (0, 0, 0, 0),
+        stats: {},
         routine: Some("hard_lock"),
     ),
     party: [

@@ -438,7 +438,8 @@ impl Game {
                 .map(|s| s.base_int)
                 .unwrap_or(DEFAULT_BASE_INT);
             let level = tier_now as u32 + 1;
-            let chance = mining_success_chance(level, keen_scavenger_level, base_int, 0.0, 0.0);
+            let chance =
+                mining_success_chance(level, keen_scavenger_level, base_int, 0.0, 0.0, 0.0);
             let ok = self.world.resource_mut::<GameRng>().0.random_bool(chance);
             if !ok {
                 continue;

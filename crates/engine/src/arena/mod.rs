@@ -55,7 +55,7 @@ use crate::*;
 /// `award_player_xp` and `award_companion_xp` make: a `Creature` grows on
 /// its species' curve and stops at the higher of the scenario's zone cap
 /// and `tuning::arena_level_ceiling()`,
-/// the player grows on the baseline and has no ceiling.
+/// the player banks stat points and has no ceiling (`set_player_level`).
 ///
 /// The *absolute* cap rather than `Game::companion_level_cap`, and that is
 /// deliberate: an arena scenario authors its own composition and has no
@@ -67,6 +67,11 @@ use crate::*;
 /// Shared with `tests/support.rs`, which re-exports it — two copies would
 /// be two answers to "what is a level-N companion".
 pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
+    if game.world.get::<Player>(entity).is_some() {
+        set_player_level(game, level, None)
+            .expect("the canonical spend is valid against the shipped attributes");
+        return;
+    }
     let before = game
         .world
         .get::<Experience>(entity)
@@ -95,7 +100,17 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     // remainder a later kill would inherit.
     while exp.level < level {
         let owed = exp.xp_to_next.saturating_sub(exp.xp);
-        if progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0).levels == 0 {
+        if progression::add_xp(
+            &mut exp,
+            &mut stats,
+            owed,
+            progression::Growth::Auto { multiplier: growth },
+            cap,
+            0,
+        )
+        .levels
+            == 0
+        {
             break;
         }
     }
@@ -103,6 +118,79 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     if level > before {
         game.install_unlocked_routines(entity, before, level);
     }
+}
+
+/// Raises the player to `level` by banking stat points and spending them
+/// every level in `per_level`'s pattern - `None` is `canonical_spend`, which
+/// reproduces the old automatic growth. A pattern that does not sum to
+/// `STAT_POINTS_PER_LEVEL`, or names an attribute that is not buyable
+/// (`spend_stat_points` refuses it, even at zero points), is an error rather
+/// than a quiet fallback: a sweep that silently ignored its
+/// spend would report identical numbers and read as the attribute being
+/// worthless.
+pub(crate) fn set_player_level(
+    game: &mut Game,
+    level: u32,
+    per_level: Option<&std::collections::BTreeMap<crate::attributes::AttributeId, u32>>,
+) -> Result<(), String> {
+    let player = game.player_entity();
+    let pattern = match per_level {
+        Some(pattern) => pattern.clone(),
+        None => progression::canonical_spend(1),
+    };
+    let per_level_total: u32 = pattern.values().sum();
+    if per_level_total != crate::tuning::STAT_POINTS_PER_LEVEL {
+        return Err(format!(
+            "player_spend: {pattern:?} spends {per_level_total} points a level, not {}",
+            crate::tuning::STAT_POINTS_PER_LEVEL
+        ));
+    }
+    let before = game.world.get::<Experience>(player).map_or(1, |e| e.level);
+    let mut levels = 0;
+    {
+        let mut query = game.world.query::<(&mut Experience, &mut Stats)>();
+        let Ok((mut exp, mut stats)) = query.get_mut(&mut game.world, player) else {
+            return Ok(());
+        };
+        while exp.level < level {
+            let owed = exp.xp_to_next.saturating_sub(exp.xp);
+            let gain = progression::add_xp(
+                &mut exp,
+                &mut stats,
+                owed,
+                progression::Growth::Points,
+                None,
+                0,
+            );
+            if gain.levels == 0 {
+                break;
+            }
+            levels += gain.levels;
+        }
+    }
+    if let Some(mut points) = game.world.get_mut::<components::StatPoints>(player) {
+        points.0 += crate::tuning::STAT_POINTS_PER_LEVEL * levels;
+    }
+    let spend: Vec<_> = pattern
+        .into_iter()
+        .map(|(id, points)| (id, points * levels))
+        .collect();
+    game.spend_stat_points(StatOwner::Player, &spend)
+        .map_err(|e| format!("player_spend: {e:?}"))?;
+    // The spend never refills Power (HP is full from `add_xp`'s heal), and
+    // a build that bought Bandwidth must open on the reserve it bought.
+    let max_power = game.max_power(player);
+    if let Some(mut power) = game.world.get_mut::<PowerReserve>(player) {
+        power.fill(max_power);
+    }
+    let after = game
+        .world
+        .get::<Experience>(player)
+        .map_or(before, |e| e.level);
+    if after > before {
+        game.install_unlocked_routines(player, before, after);
+    }
+    Ok(())
 }
 
 /// A companion of `species` at `level`, standing on the player's own tile.
@@ -189,6 +277,7 @@ pub fn stage(
     // both from `Game::new(0)`'s stream and hand every rep the same pack.
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
+    game.world.insert_resource(LevellingFrozen);
 
     let (groups, warnings) = match &scenario.encounter {
         // A rolled encounter warns about nothing: nothing was asked for past
@@ -378,6 +467,73 @@ pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    fn player_spend(pairs: &[(&str, u32)]) -> BTreeMap<crate::attributes::AttributeId, u32> {
+        pairs
+            .iter()
+            .map(|(id, n)| (crate::attributes::AttributeId::from(*id), *n))
+            .collect()
+    }
+
+    fn staged_player(spend: Option<BTreeMap<crate::attributes::AttributeId, u32>>) -> Game {
+        let s = Scenario {
+            player: PlayerSource::Fresh { level: 6, zone: 1 },
+            player_spend: spend,
+            ..Scenario::default()
+        };
+        setup::build_player(&s, &crate::tests::support::test_assets_dir()).unwrap()
+    }
+
+    /// `None` is the canonical spend, so a fresh arena player matches the
+    /// old automatic growth: five levels of 24 HP and 2 ATK.
+    #[test]
+    fn an_arena_player_with_no_spend_takes_the_canonical_one() {
+        let game = staged_player(None);
+        let stats = *game.world.get::<Stats>(game.player_entity()).unwrap();
+        assert_eq!((stats.max_hp, stats.atk), (90 + 5 * 24, 6 + 5 * 2));
+        assert_eq!(stats.hp, stats.max_hp, "and starts the fight healthy");
+    }
+
+    /// Bandwidth raises max Power, and a staged fight must open on the
+    /// reserve the build bought, as it opens on full HP.
+    #[test]
+    fn an_arena_player_starts_the_fight_on_full_power() {
+        let game = staged_player(Some(player_spend(&[("bandwidth", 6)])));
+        let player = game.player_entity();
+        let max = game.max_power(player);
+        assert!(max > crate::components::POWER_MAX, "{max}");
+        assert_eq!(game.world.get::<PowerReserve>(player).unwrap().get(), max);
+    }
+
+    #[test]
+    fn an_arena_players_spend_pattern_is_applied_every_level() {
+        let game = staged_player(Some(player_spend(&[("footprint", 6)])));
+        let stats = *game.world.get::<Stats>(game.player_entity()).unwrap();
+        assert_eq!(stats.mitigation, 2 + 5 * 6);
+        assert_eq!(stats.max_hp, 90 + 5 * 12);
+        assert_eq!(stats.atk, 6);
+    }
+
+    #[test]
+    fn a_spend_pattern_that_does_not_sum_or_is_not_buyable_is_refused() {
+        for bad in [
+            player_spend(&[("parity", 5)]),
+            player_spend(&[("parity", 7)]),
+            player_spend(&[("parity", 5), ("entropy", 1)]),
+            player_spend(&[("parity", 5), ("nonesuch", 1)]),
+        ] {
+            let s = Scenario {
+                player_spend: Some(bad.clone()),
+                ..Scenario::default()
+            };
+            let err = setup::build_player(&s, &crate::tests::support::test_assets_dir())
+                .err()
+                .unwrap_or_else(|| panic!("{bad:?} should be refused"));
+            assert!(err.contains("player_spend"), "{err}");
+        }
+    }
+
     use super::*;
     use crate::tests::support::test_assets_dir;
 

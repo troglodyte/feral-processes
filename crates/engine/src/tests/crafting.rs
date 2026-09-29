@@ -1119,7 +1119,8 @@ fn the_reserve_floor_is_a_margin_and_not_zero() {
         let mut game = Game::new(322, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST)]);
         let player = game.player_entity();
-        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(reserve);
+        *game.world.get_mut::<PowerReserve>(player).unwrap() =
+            PowerReserve::new(reserve, crate::components::POWER_MAX);
         game
     };
     let ice = ItemId::from(ids::ICE_BREAKER);

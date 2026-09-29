@@ -566,7 +566,8 @@ fn home_then_descend(game: &mut Game) -> (Entity, Position) {
 fn arm_symlink(game: &mut Game) {
     let player = game.player_entity();
     install_routine_for_test(game, player, SYMLINK);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(POWER_MAX);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(POWER_MAX, crate::components::POWER_MAX);
 }
 
 /// Runs the Symlink routine off the player's own slot.
@@ -617,7 +618,8 @@ fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
     let player = game.player_entity();
     // Drained below the routine's own price, which is the only thing that
     // can refuse a run the picker offered.
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(POWER_MIN);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(POWER_MIN, crate::components::POWER_MAX);
     let before = locale(&game);
 
     assert!(run_symlink(&mut game).is_err());
@@ -669,7 +671,8 @@ fn resting_underground_is_bought_with_an_outlet() {
     stand_in_base_beside_home(&mut game);
     descend(&mut game);
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
     let outlets_before = game
         .world
         .get::<Inventory>(player)

@@ -6,7 +6,6 @@ use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
-use feral_processes_engine::components::POWER_MAX;
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
@@ -157,9 +156,9 @@ fn party_name_cell(name: &str, rarity: Rarity) -> String {
 /// The POWER cell: what this member has left to spend on routines, or a dash
 /// for one holding no reserve at all. A dash rather than a copy of the
 /// player's number, which would read as five slots drawing on one pool.
-fn power_cell(power: Option<f32>) -> String {
+fn power_cell(power: Option<f32>, max_power: f32) -> String {
     match power {
-        Some(f) => format!("{f:.0}/{POWER_MAX:.0}"),
+        Some(f) => format!("{f:.0}/{max_power:.0}"),
         None => "—".to_string(),
     }
 }
@@ -465,7 +464,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 // empty on almost every row.
                 &party_tail(
                     &p.gear,
-                    &power_cell(p.power),
+                    &power_cell(p.power, p.max_power),
                     &format!(
                         "{}{}",
                         p.planned.as_deref().unwrap_or("—"),
@@ -709,6 +708,7 @@ pub(super) fn draw_battle_item_menu(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::components::POWER_MAX;
 
     /// A refused menu pick ("Requires Automation first.") only reaches the
     /// player through `App::status_line`, and every gameplay menu draws a
@@ -761,7 +761,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &power_cell(Some(62.0), POWER_MAX), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -770,7 +770,7 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail("w|.|.", &power_cell(None), "Defend"),
+                &party_tail("w|.|.", &power_cell(None, POWER_MAX), "Defend"),
             ),
         ];
         for line in &lines {
@@ -846,7 +846,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &power_cell(Some(62.0), POWER_MAX), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -855,7 +855,7 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail("w|.|.", &power_cell(None), "Defend"),
+                &party_tail("w|.|.", &power_cell(None, POWER_MAX), "Defend"),
             ),
         ]
         .join("\n");
@@ -948,7 +948,7 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
+            &party_tail("w|a|m", &power_cell(Some(62.0), POWER_MAX), "Attack A"),
         );
         let bare = roster_row(
             " 2 ",
@@ -957,7 +957,7 @@ mod tests {
             7,
             3,
             "FRONT",
-            &party_tail(".|.|.", &power_cell(None), "Defend"),
+            &party_tail(".|.|.", &power_cell(None, POWER_MAX), "Defend"),
         );
         assert_eq!(
             at(&geared, TAIL_COL)
@@ -988,7 +988,11 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail("w|a|m", &power_cell(Some(POWER_MAX)), "Special: Null Route"),
+            &party_tail(
+                "w|a|m",
+                &power_cell(Some(POWER_MAX), POWER_MAX),
+                "Special: Null Route",
+            ),
         );
         let pet = roster_row(
             " 2 ",
@@ -997,9 +1001,12 @@ mod tests {
             7,
             3,
             "FRONT",
-            &party_tail("w|.|.", &power_cell(None), "Defend"),
+            &party_tail("w|.|.", &power_cell(None, POWER_MAX), "Defend"),
         );
-        assert_eq!(power_cell(Some(POWER_MAX)).chars().count(), POWER_W);
+        assert_eq!(
+            power_cell(Some(POWER_MAX), POWER_MAX).chars().count(),
+            POWER_W
+        );
         assert_eq!(
             at(&you, POWER_COL)
                 .chars()
@@ -1075,18 +1082,23 @@ mod tests {
     /// them omits a component, so a dash in this column is the visible
     /// symptom of a door that skipped `Game::roster_parts`.
     #[test]
+    fn the_power_cell_reads_the_members_own_maximum() {
+        assert_eq!(power_cell(Some(74.0), 130.0), "74/130");
+    }
+
+    #[test]
     fn a_companions_power_cell_shows_its_own_reserve() {
-        assert_eq!(power_cell(Some(74.0)), "74/100");
-        assert_eq!(power_cell(Some(0.0)), "0/100");
+        assert_eq!(power_cell(Some(74.0), POWER_MAX), "74/100");
+        assert_eq!(power_cell(Some(0.0), POWER_MAX), "0/100");
         assert_eq!(
-            power_cell(None),
+            power_cell(None, POWER_MAX),
             "—",
             "a dash is now a bug report, not a companion"
         );
         // Rounded, not truncated toward a reading the player can't act on:
         // decay leaves fractions, and `4.6` left of a 5.0-cost routine is
         // nearer 5 than 4.
-        assert_eq!(power_cell(Some(61.5)), "62/100");
+        assert_eq!(power_cell(Some(61.5), POWER_MAX), "62/100");
     }
 
     /// An over-long name is clipped rather than allowed to shove the stats

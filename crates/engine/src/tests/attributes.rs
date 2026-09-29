@@ -77,7 +77,7 @@ fn the_player_has_attributes_from_its_class() {
         .world
         .get::<crate::components::Attributes>(player)
         .expect("the player mints attributes at creation");
-    assert_eq!(attrs.iter().count(), 5);
+    assert_eq!(attrs.iter().count(), 6);
 }
 
 /// Taming does not rewrite who a program is. A captured body keeps the
@@ -197,7 +197,7 @@ fn an_old_save_mints_on_load_rather_than_staying_blank() {
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         creature_attributes_at(&loaded, (90, 90)).map(|a| a.iter().count()),
-        Some(5),
+        Some(6),
         "an old save's creature stayed blank instead of minting"
     );
     assert_eq!(
@@ -205,7 +205,7 @@ fn an_old_save_mints_on_load_rather_than_staying_blank() {
             .world
             .get::<crate::components::Attributes>(loaded.player_entity())
             .map(|a| a.iter().count()),
-        Some(5),
+        Some(6),
         "an old save's player stayed blank instead of minting"
     );
 }
@@ -260,7 +260,7 @@ fn the_dossier_reports_every_attribute_with_both_its_names() {
         let report = game
             .dossier_report(subject)
             .expect("a live body has a dossier");
-        assert_eq!(report.rows.len(), 5);
+        assert_eq!(report.rows.len(), 6);
         for row in &report.rows {
             assert!(!row.name.is_empty());
             assert!(
@@ -324,11 +324,7 @@ fn the_dossier_is_trimmed_to_its_row_ceiling() {
     // `Game::new` against the shipped five and a row is skipped when the
     // store has no value for it.
     let player = game.player_entity();
-    let attrs = crate::attributes::mint(
-        &db,
-        crate::attributes::player_seed(7),
-        &std::collections::BTreeMap::new(),
-    );
+    let attrs = crate::attributes::authored_or_base(&db, &std::collections::BTreeMap::new());
     game.world.entity_mut(player).insert(attrs);
     game.world.insert_resource(db);
     let report = game.dossier_report(player).unwrap();

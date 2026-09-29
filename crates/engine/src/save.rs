@@ -18,21 +18,15 @@ use crate::world::Tile;
 pub struct PlayerSave {
     pub position: (i32, i32),
     pub hp: i32,
-    pub max_hp: i32,
-    pub atk: i32,
-    /// Percentage points — see `components::Stats::mitigation`. **Not**
-    /// `#[serde(default)]`: this was `def`, a subtractive absorption number,
-    /// and a v30 file's value would load into a percentage slot and mean
-    /// something else entirely. A changed meaning under a name it keeps is
-    /// exactly the case field-named RON does not cover, so the file is
-    /// refused by version instead.
-    pub mitigation: i32,
     pub power: f32,
+    /// Banked, unspent level-up points. The one derived-stat input that is
+    /// not an attribute: `hp` and `power` are restored clamped, and every
+    /// other figure is rebuilt from `attributes`, gear and the perk receipt.
+    pub stat_points: u32,
     pub inventory: Vec<(ItemId, u32)>,
     pub level: u32,
     pub xp: u32,
     pub xp_to_next: u32,
-    pub decompiler: i32,
     pub weapon: Option<ItemId>,
     /// Gear level `weapon` was equipped at — see `components::EquippedItem`.
     pub weapon_level: u32,
@@ -1915,7 +1909,12 @@ pub struct SaveData {
 /// only bump the whole migration needs: later tasks in the same slice add
 /// further save fields (an anchor's position, among them) behind
 /// `#[serde(default)]`, which is additive and free.
-pub const SAVE_FORMAT_VERSION: u32 = 32;
+/// 32 → 33: `PlayerSave::{max_hp, atk, mitigation, decompiler}` removed and
+/// `stat_points` added. The player's stats are now the derivation of their
+/// attributes, gear and perk receipt (`Game::recompute_derived`), so the
+/// stored numbers are a second copy that a retune would leave stale. A
+/// removed field is the case field-named RON does not excuse from a bump.
+pub const SAVE_FORMAT_VERSION: u32 = 33;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2158,15 +2157,12 @@ mod tests {
             player: PlayerSave {
                 position: (0, 0),
                 hp: 30,
-                max_hp: 30,
-                atk: 6,
-                mitigation: 2,
                 power: 100.0,
+                stat_points: 0,
                 inventory: Vec::new(),
                 level: 1,
                 xp: 0,
                 xp_to_next: 20,
-                decompiler: 0,
                 weapon: None,
                 weapon_level: 1,
                 weapon_fusion_tier: 0,

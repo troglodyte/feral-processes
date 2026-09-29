@@ -975,7 +975,8 @@ fn dropping_below_half_power_weakens_the_players_attack() {
     let full_atk = game.player_status().atk;
 
     // At and above the threshold, no penalty at all.
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     assert_eq!(
         game.player_status().atk,
         full_atk,
@@ -985,14 +986,16 @@ fn dropping_below_half_power_weakens_the_players_attack() {
     // Below it, a linear falloff — checked at a couple of points rather
     // than re-deriving the formula, since `battle::power_attack_multiplier`
     // already has its own dedicated unit tests for the exact curve.
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(25.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(25.0, crate::components::POWER_MAX);
     let quarter_power_atk = game.player_status().atk;
     assert!(
         quarter_power_atk < full_atk,
         "attack should be weaker at 25 power than at full power"
     );
 
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(0.0, crate::components::POWER_MAX);
     let zero_power_atk = game.player_status().atk;
     assert!(
         zero_power_atk < quarter_power_atk,
@@ -2161,7 +2164,8 @@ fn a_companions_reserve_does_not_drain_passively() {
 fn a_companion_at_zero_power_loses_no_integrity_over_many_ticks() {
     let mut game = Game::new(7405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(0.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(0.0, crate::components::POWER_MAX);
     let before = game.world.get::<Stats>(companion).unwrap().hp;
 
     for _ in 0..200 {
@@ -2183,7 +2187,8 @@ fn a_companion_at_zero_power_loses_no_integrity_over_many_ticks() {
 fn rest_refills_a_drained_companions_reserve() {
     let mut game = Game::new(7406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(3.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(3.0, crate::components::POWER_MAX);
     stand_in_base_beside_home(&mut game);
 
     game.rest().unwrap();
@@ -2199,7 +2204,8 @@ fn a_companions_reserve_survives_a_save_and_load() {
     let mut game = Game::new(7407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, companion);
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(41.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(41.0, crate::components::POWER_MAX);
 
     let path = std::env::temp_dir().join(format!(
         "feral_companion_reserve_{}.bin",

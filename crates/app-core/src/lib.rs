@@ -26,6 +26,7 @@ pub use app::sprite_forge::{
 };
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
+pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::telemetry::append_records;
 pub use feral_processes_engine::ProgramRole;
 
@@ -86,7 +87,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::achievements::{AchievementDb, MainStat, Profile};
+use feral_processes_engine::achievements::{AchievementDb, Profile};
 use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
@@ -1390,17 +1391,22 @@ pub enum CreationRow {
     Colour {
         index: u8,
     },
-    /// One per `MainStat::all()` axis. `spent` is units *bought* on it,
-    /// `value` what the player will actually open on, `cost` what one more
-    /// unit costs.
-    Stat {
-        stat: MainStat,
+    /// One per attribute a point can buy (`StatAllocation::rows`), on the
+    /// Points step and on `Mode::AllocateStats`. `spent` is points bought on
+    /// it, `value` what the attribute reads once they land, `cost` what one
+    /// more point costs, and `effects` each stat it feeds as `(stat, before,
+    /// after)` - both from `progression::derive`, never a copy of it.
+    Attribute {
+        id: feral_processes_engine::attributes::AttributeId,
+        name: String,
+        legacy: String,
         spent: u32,
         value: i32,
+        effects: Vec<(feral_processes_engine::attributes::DerivedStat, f32, f32)>,
         cost: u32,
     },
     /// One shelf item on the Kit step. `taken` is how many units the
-    /// basket holds of it and `price` what one more costs — the Stat row's
+    /// basket holds of it and `price` what one more costs — the Attribute row's
     /// shape, in Credits instead of pool points.
     Item {
         row: feral_processes_engine::StartingItemRow,
@@ -2132,11 +2138,23 @@ pub enum Mode {
     /// does, and a notification queued behind it is not dropped, only
     /// delayed one screen further.
     ///
-    /// `Esc` closes to `Mode::Playing` and lets the next notification
-    /// through; uppercase `P` closes the page and opens `Mode::Perks`
-    /// instead, since the page exists to answer "what do I do with what I
-    /// just earned."
+    /// `Enter` opens `Mode::AllocateStats` on the points just banked, since
+    /// a level-up grows nothing by itself. `Esc` closes to `Mode::Playing`
+    /// and lets the next notification through; uppercase `P` closes the
+    /// page and opens `Mode::Perks` instead, since the page exists to
+    /// answer "what do I do with what I just earned."
     LevelUp,
+    /// Spending banked stat points on attributes: the creation Points
+    /// screen, generalised. `App::stat_allocation` is the subject and
+    /// `App::allocation_spent` the pending spend - `Mode` is `Copy` with
+    /// unit variants, so neither can ride the variant.
+    ///
+    /// `Enter` commits through `Game::spend_stat_points` and `Esc` leaves
+    /// without spending; unspent points stay banked either way. Reached
+    /// from `Mode::LevelUp` (`Enter`) and from `Mode::Perks` (uppercase
+    /// `S`, refused at no points); `AllocationOrigin` decides where it
+    /// returns.
+    AllocateStats,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
     /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
@@ -2358,7 +2376,8 @@ impl Mode {
             // Only ever entered from `Mode::Playing`, so it never layers
             // over a fight.
             | Mode::Notification
-            | Mode::LevelUp => false,
+            | Mode::LevelUp
+            | Mode::AllocateStats => false,
         }
     }
 }
@@ -2587,6 +2606,15 @@ pub struct App {
     /// and it is checked first, so a level earned in the same tick a
     /// notification queued takes the screen before the notification does.
     pub pending_level_up: Option<LevelUpReport>,
+    /// The Points screen on show in `Mode::AllocateStats`. Its **one**
+    /// writer is `App::open_stat_allocation`.
+    pub stat_allocation: Option<StatAllocation>,
+    /// The spend pending on `stat_allocation`, per attribute. Empty when
+    /// the screen opens; the allocation's methods take it as an argument.
+    pub allocation_spent:
+        std::collections::BTreeMap<feral_processes_engine::attributes::AttributeId, u32>,
+    /// Where `Mode::AllocateStats` was opened from, and so where it returns.
+    pub allocation_origin: AllocationOrigin,
     /// Which screen `Mode::Manifest` was opened from, and so where Esc goes
     /// back to. See `ManifestOrigin`.
     pub manifest_origin: ManifestOrigin,

@@ -52,7 +52,8 @@ fn every_screen_that_consumes_a_modifier_is_named_in_the_fold() {
             "crafting",
             "creation",
             "dispatch",
-            "settlement_market"
+            "settlement_market",
+            "stat_allocation"
         ],
         "a screen gained modifier arms; add its Mode to `handle_key`'s \
          fold in app/input.rs or the four keys never reach it"

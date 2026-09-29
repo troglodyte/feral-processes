@@ -34,7 +34,7 @@ pub(crate) fn swings_to(ehp: f64, per_swing: f64) -> u32 {
 
 impl Game {
     /// `player`'s level-up "before"/"now" state: level, the two stats a
-    /// level-up can move, Perk Points, Decompiler skill, and the swing
+    /// level-up can move, Perk Points, stat points, and the swing
     /// profile `Game::duel_damage` itself builds — `combatant_profile`'s
     /// attacker side, whose `evasion` field the report also reads for the
     /// defender side (see `resources::LevelSnapshot`).
@@ -59,7 +59,10 @@ impl Game {
             max_hp: self.world.get::<Stats>(player).map_or(0, |s| s.max_hp),
             mitigation: self.effective_mitigation(player),
             perk_points: self.world.get::<Perks>(player).map_or(0, |p| p.points),
-            decompiler: self.world.get::<Decompiler>(player).map_or(0, |d| d.skill),
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(player)
+                .map_or(0, |p| p.0),
             combatant: self.combatant_profile(player, swing),
         }
     }
@@ -137,14 +140,15 @@ impl Game {
                 swings_to(player_ehp_before, foe_per_swing_before),
                 swings_to(player_ehp_after, foe_per_swing_after),
             ),
-            // `current − snapshot`, not `PERK_POINTS_PER_LEVEL * levels` or
-            // `DECOMPILER_SKILL_PER_LEVEL * levels` — correction 6. An
+            // `current − snapshot`, not `PERK_POINTS_PER_LEVEL * levels` —
+            // correction 6. An
             // overflow point banked by the same award that levelled is then
             // counted too, which is correct: it really was earned between
             // the two snapshots.
             perk_points_gained: now.perk_points.saturating_sub(snapshot.perk_points),
             perk_points_unspent: now.perk_points,
-            decompiler_gained: now.decompiler - snapshot.decompiler,
+            stat_points_gained: now.stat_points.saturating_sub(snapshot.stat_points),
+            stat_points_unspent: now.stat_points,
         })
     }
 }

@@ -3,17 +3,18 @@
 //!
 //! One def per attribute: its name in this setting's words, the old-school
 //! word beside it, two lengths of player-facing prose, and the base and
-//! spread a body's own value is minted within. **Nothing reads these
-//! numbers.** They are what the dossier page shows, and each one's eventual
-//! mechanic is designed for the number rather than around it — see
-//! `docs/superpowers/specs/2026-09-21-program-attributes-design.md` §2.
+//! spread a body's own value is minted within, and the `effects` that make
+//! a point above the base worth something. The dossier page shows them, and
+//! `progression::derive` turns the player's into combat stats. Programs
+//! keep stored stats until they are derived too — see
+//! `docs/superpowers/specs/2026-09-29-level-up-stat-allocation-design.md`.
 //!
 //! **Data where `disposition.rs` is Rust, and that line is the whole
 //! reason this directory exists.** A `Disposition` ships no name, no blurb
 //! and no glyph, only multipliers on numbers the sim already computes,
 //! which puts it with `tuning.rs` on the not-moddable side. An attribute is
-//! the inverse: a name, a legacy name and two lines of prose, and today no
-//! multiplier at all. That is content by the same test that put species,
+//! the inverse: a name, a legacy name and two lines of prose, and for most
+//! attributes a list of per-point effects. That is content by the same test that put species,
 //! needs, memories and the perk catalogue in `assets/`.
 //!
 //! **An empty database is valid and inert**, exactly like `NeedDb`: nothing
@@ -70,10 +71,9 @@ impl std::fmt::Display for AttributeId {
 /// `SpeciesDef`/`StructureDef`/`ItemDef`, so a mod's existing files keep
 /// parsing untouched — but do not retroactively default these.
 ///
-/// The field that is deliberately **absent** is the one saying what the
-/// attribute *does*. It lands with the mechanic that does it, as a second
-/// authored field, because a gloss promising an effect is a claim the
-/// player will test and find false.
+/// `effects` and `does` came later and default. `meaning` still may not
+/// promise a mechanic: `does` is the one sentence that says what the
+/// effects do, so it is a claim made where the mechanic lives.
 #[derive(Clone, Debug, Deserialize)]
 pub struct AttributeDef {
     pub id: AttributeId,
@@ -93,13 +93,66 @@ pub struct AttributeDef {
     /// How far either side of the base a body's own value may land. `0` is
     /// legal and means every body reads the same number.
     pub spread: i32,
+    /// What one point above `base` does to the derived stats. Empty means
+    /// the attribute is flavour only and is not offered for spending.
+    #[serde(default)]
+    pub effects: Vec<AttributeEffect>,
+    /// The sentence saying what the effects do, in the player's words.
+    /// Authored beside `effects`, because `meaning` may not promise a
+    /// mechanic.
+    #[serde(default)]
+    pub does: String,
+}
+
+impl AttributeDef {
+    /// Whether spending a point here changes anything, which is the rule
+    /// for being listed on a Points screen.
+    pub fn buyable(&self) -> bool {
+        !self.effects.is_empty()
+    }
+}
+
+/// The derived stats an attribute can feed. A closed enum, because each
+/// variant needs a reader; the attributes themselves stay open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+pub enum DerivedStat {
+    MaxHp,
+    Atk,
+    Mitigation,
+    Decompiler,
+    MaxPower,
+    StatusResist,
+    Extraction,
+}
+
+impl DerivedStat {
+    /// How the stat reads on the Points screen, in the log's own labels.
+    pub fn label(self) -> &'static str {
+        match self {
+            DerivedStat::MaxHp => "Max HP",
+            DerivedStat::Atk => "ATK",
+            DerivedStat::Mitigation => "Mitigation",
+            DerivedStat::Decompiler => "Decompiler",
+            DerivedStat::MaxPower => "Max Power",
+            DerivedStat::StatusResist => "Status resist",
+            DerivedStat::Extraction => "Extraction",
+        }
+    }
+}
+
+/// One line of an attribute's effect: each point above the catalogue
+/// `base` moves `stat` by `per_point`.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+pub struct AttributeEffect {
+    pub stat: DerivedStat,
+    pub per_point: f32,
 }
 
 /// Every attribute the game knows about, loaded from `assets/attributes/`.
 ///
 /// See the module doc for why an empty database is a supported state rather
 /// than an install fault.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone, Debug)]
 pub struct AttributeDb {
     defs: BTreeMap<AttributeId, AttributeDef>,
 }
@@ -138,6 +191,11 @@ impl AttributeDb {
 
     pub fn get(&self, id: &AttributeId) -> Option<&AttributeDef> {
         self.defs.get(id)
+    }
+
+    /// Only the attributes a point can be spent on, in id order.
+    pub fn buyable(&self) -> impl Iterator<Item = &AttributeDef> {
+        self.iter().filter(|d| d.buyable())
     }
 
     /// **Sorted by id.** Every caller iterates this, and the dossier page
@@ -195,11 +253,6 @@ pub fn program_seed(program_id: u32) -> u64 {
     derive::fold(derive::FNV_BASIS, &[ATTRIBUTE_SALT, program_id as u64])
 }
 
-/// The player, who has no species and no spawn tile worth folding.
-pub fn player_seed(world_seed: u32) -> u64 {
-    derive::fold(derive::FNV_BASIS, &[ATTRIBUTE_SALT, world_seed as u64])
-}
-
 /// Every attribute the catalogue knows about, minted for one body.
 ///
 /// `authored` is the body's own base per attribute — a species' or a
@@ -226,6 +279,19 @@ pub fn mint(db: &AttributeDb, seed: u64, authored: &BTreeMap<String, i32>) -> At
         let span = (2 * def.spread + 1).max(1) as usize;
         let offset = derive::index(derive::fold_bytes(seed, def.id.as_str().as_bytes()), span);
         out.set(&def.id, base - def.spread + offset as i32);
+    }
+    out
+}
+
+/// The player's attributes: the class's authored value for each attribute,
+/// or the catalogue `base` where it authors none. **No spread** - the
+/// player's numbers are chosen, not rolled, and `progression::derive` reads
+/// them against the catalogue base.
+pub fn authored_or_base(db: &AttributeDb, authored: &BTreeMap<String, i32>) -> Attributes {
+    let mut out = Attributes::default();
+    for def in db.iter() {
+        let value = authored.get(def.id.as_str()).copied().unwrap_or(def.base);
+        out.set(&def.id, value);
     }
     out
 }
@@ -290,6 +356,82 @@ mod tests {
             );
             assert!(!def.legacy.is_empty(), "{id} must name its old-school word");
         }
+    }
+
+    fn shipped() -> AttributeDb {
+        let (db, warnings) =
+            AttributeDb::load_dir(&crate::tests::support::test_assets_dir().join("attributes"))
+                .unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        db
+    }
+
+    fn effects_of(db: &AttributeDb, id: &str) -> Vec<(DerivedStat, f32)> {
+        db.get(&AttributeId::from(id))
+            .unwrap_or_else(|| panic!("{id}"))
+            .effects
+            .iter()
+            .map(|e| (e.stat, e.per_point))
+            .collect()
+    }
+
+    #[test]
+    fn the_shipped_effects_are_the_specs_table() {
+        let db = shipped();
+        assert_eq!(effects_of(&db, "parity"), vec![(DerivedStat::MaxHp, 6.0)]);
+        assert_eq!(
+            effects_of(&db, "bandwidth"),
+            vec![(DerivedStat::MaxPower, 2.0)]
+        );
+        assert_eq!(
+            effects_of(&db, "footprint"),
+            vec![(DerivedStat::Mitigation, 1.0), (DerivedStat::MaxHp, 2.0)]
+        );
+        assert_eq!(
+            effects_of(&db, "analysis"),
+            vec![
+                (DerivedStat::Atk, 1.0),
+                (DerivedStat::Decompiler, 1.0),
+                (DerivedStat::Extraction, 0.005)
+            ]
+        );
+        assert_eq!(
+            effects_of(&db, "persistence"),
+            vec![(DerivedStat::StatusResist, 1.0)]
+        );
+        let analysis = db.get(&AttributeId::from("analysis")).unwrap();
+        assert_eq!((analysis.base, analysis.spread), (10, 3));
+        assert_eq!(analysis.legacy, "Intelligence");
+    }
+
+    #[test]
+    fn entropy_is_not_buyable_and_every_buyable_attribute_says_what_it_does() {
+        let db = shipped();
+        assert!(!db.get(&AttributeId::from("entropy")).unwrap().buyable());
+        let buyable: Vec<&str> = db.buyable().map(|d| d.id.as_str()).collect();
+        assert_eq!(
+            buyable,
+            vec![
+                "analysis",
+                "bandwidth",
+                "footprint",
+                "parity",
+                "persistence"
+            ]
+        );
+        for def in db.buyable() {
+            assert!(!def.does.is_empty(), "{} has effects but no `does`", def.id);
+        }
+    }
+
+    #[test]
+    fn a_file_with_no_effects_still_parses_and_is_not_buyable() {
+        let (db, warnings) = load(&[("a.ron", def_text("parity", "Parity"))]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let def = db.get(&AttributeId::from("parity")).unwrap();
+        assert!(def.effects.is_empty());
+        assert!(def.does.is_empty());
+        assert!(!def.buyable());
     }
 
     #[test]

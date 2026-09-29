@@ -28,6 +28,12 @@ pub struct Scenario {
     /// `Fresh` only — who the player was made as. A save or a template
     /// already carries its own answer.
     pub character: CharacterSpec,
+    /// `Fresh` only. The **per-level** pattern the player spends their stat
+    /// points in as they level: attribute id to points, summing to
+    /// `STAT_POINTS_PER_LEVEL` and naming only buyable attributes, or the
+    /// scenario is refused. `None` is `progression::canonical_spend`, the
+    /// spend that reproduces the old automatic growth.
+    pub player_spend: Option<std::collections::BTreeMap<crate::attributes::AttributeId, u32>>,
     /// `Fresh` only. Applied after the zone is set, since gear locks in the
     /// zone level it was equipped at.
     pub equip: Vec<EquipSpec>,
@@ -77,6 +83,7 @@ impl Default for Scenario {
         Self {
             player: PlayerSource::default(),
             character: CharacterSpec::default(),
+            player_spend: None,
             equip: Vec::new(),
             inventory: Vec::new(),
             party: Vec::new(),
@@ -218,13 +225,13 @@ impl Default for PlayerSource {
 #[serde(default)]
 pub struct CharacterSpec {
     pub class: Option<PlayerClass>,
-    /// Units *bought* per axis, in `MainStat::all()` order — Atk, Def,
-    /// Integrity, Decompiler — never points spent.
+    /// Points *bought* per attribute id, never points spent.
     /// `CharacterChoice::cost()` prices them, and `build_player` refuses a
-    /// spend the pool cannot cover rather than applying none of it: fail
+    /// spend the pool cannot cover, or one naming an attribute that is
+    /// unknown or not buyable, rather than applying none of it: fail
     /// closed is right inside a run and wrong in an instrument, where a
     /// silently ignored input reads as the axis being worthless.
-    pub stats: [u32; 4],
+    pub stats: std::collections::BTreeMap<crate::attributes::AttributeId, u32>,
     pub routine: Option<AbilityId>,
     /// Perk Points the player starts with, spent by `perks` below —
     /// final review F10 (U4): a scenario had no way to give the staged
@@ -248,7 +255,7 @@ impl CharacterSpec {
     pub fn choice(&self) -> CharacterChoice {
         CharacterChoice {
             class: self.class,
-            stats: self.stats,
+            stats: self.stats.clone(),
             routine: self.routine.clone(),
             perk_points: self.perk_points,
             perks: self.perks.clone(),

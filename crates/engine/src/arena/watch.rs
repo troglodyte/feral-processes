@@ -2,9 +2,10 @@
 //!
 //! Both non-obvious parts of reading an outcome live here rather than in
 //! whoever is driving the rounds, so the played fight and the measured one
-//! cannot disagree about what they saw: HP is sampled per round and a round
-//! that granted a level is skipped, and "won" is read off the opponents
-//! rather than off the player.
+//! cannot disagree about what they saw: HP is sampled per round, and "won"
+//! is read off the opponents rather than off the player. No round can grant
+//! a level and heal the sample away — `stage` freezes levelling
+//! (`LevellingFrozen`).
 
 use super::report::RepRecord;
 use crate::battle::EnemyGroup;
@@ -17,7 +18,6 @@ pub struct Watch {
     party: Vec<Entity>,
     opponents: Vec<Entity>,
     composition: Vec<(String, u32)>,
-    level: u32,
     hp_fraction: f32,
     rounds: u32,
     transcript: Vec<String>,
@@ -50,7 +50,6 @@ impl Watch {
                 .iter()
                 .map(|g| (g.species.clone(), g.members.len() as u32))
                 .collect(),
-            level: level_of(game, player),
             hp_fraction: hp_fraction_of(game, player),
             rounds: 0,
             transcript: Vec::new(),
@@ -62,16 +61,7 @@ impl Watch {
     /// Call once after each resolved round.
     pub fn observe(&mut self, game: &Game) {
         self.rounds += 1;
-        // A level-up full-heals (`progression::add_xp`), and the kill that
-        // ends a fight is usually the one that grants it — so a reading
-        // taken after that round says the fight cost nothing. Skipping the
-        // sample keeps the last honest one, which is worth a round of
-        // damage in accuracy against being off by the whole fight.
-        let now = level_of(game, self.player);
-        if now == self.level {
-            self.hp_fraction = hp_fraction_of(game, self.player);
-        }
-        self.level = now;
+        self.hp_fraction = hp_fraction_of(game, self.player);
         // After every round, never at the end: `end_battle` calls
         // `retain_outcomes_since_battle`, which deletes the blow-by-blow and
         // keeps only Outcome/Loot/LevelUp/Raid. `MESSAGE_LOG_CAP` is the
@@ -153,13 +143,6 @@ fn hp_fraction_of(game: &Game, entity: Entity) -> f32 {
         .get::<Stats>(entity)
         .map(|s| (s.hp as f32 / s.max_hp.max(1) as f32).clamp(0.0, 1.0))
         .unwrap_or(0.0)
-}
-
-fn level_of(game: &Game, entity: Entity) -> u32 {
-    game.world
-        .get::<Experience>(entity)
-        .map(|e| e.level)
-        .unwrap_or(1)
 }
 
 #[cfg(test)]
@@ -256,28 +239,6 @@ mod tests {
             record.composition,
             vec![("glitch".to_string(), 2), ("sprite".to_string(), 1)],
             "in formation order, as staged"
-        );
-    }
-
-    /// The killing blow usually grants the level that heals the player back
-    /// to full, so a fraction read after the fight reports a hard-won win as
-    /// costing nothing at all.
-    #[test]
-    fn a_level_up_on_the_killing_blow_does_not_report_the_fight_as_free() {
-        let s = scenario(1, 1, &[], &[("sub_process", 1)]);
-        let record = test_fight(&s, 1);
-        assert!(record.won, "{record:?}");
-        assert!(
-            record
-                .transcript
-                .iter()
-                .any(|l| l.contains("reach level") || l.contains("XP")),
-            "the fixture must actually level up: {:?}",
-            record.transcript
-        );
-        assert!(
-            record.player_hp_fraction < 1.0,
-            "eight rounds of damage read back as untouched: {record:?}"
         );
     }
 }

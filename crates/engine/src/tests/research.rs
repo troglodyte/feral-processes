@@ -1870,7 +1870,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
 fn save_format_version_is_unchanged_by_research_projects() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        32,
+        33,
         "two additive fields under field-named RON must not cost a version \
          bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

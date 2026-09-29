@@ -95,11 +95,6 @@ pub(super) fn draw_achievements(app: &App, refusal: Option<&str>, painter: &Pain
         let selected = i == app.menu_selected;
         match &entry.earned {
             Some(summary) => {
-                let stat = summary
-                    .rolled_stat
-                    .as_deref()
-                    .map(|s| format!(" -> {s}"))
-                    .unwrap_or_default();
                 let mode = if summary.permadeath {
                     " [permadeath]"
                 } else {
@@ -107,7 +102,7 @@ pub(super) fn draw_achievements(app: &App, refusal: Option<&str>, painter: &Pain
                 };
                 rows.push(colored_item_row(
                     format!(
-                        "{} - {} - cycle {}{mode}{stat}",
+                        "{} - {} - cycle {}{mode}",
                         entry.name, entry.reward, summary.tick
                     ),
                     selected,

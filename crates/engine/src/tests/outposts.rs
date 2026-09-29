@@ -154,7 +154,7 @@ fn a_pre_outposts_save_loads_with_none_standing() {
 fn save_format_version_is_unchanged_by_outposts() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        32,
+        33,
         "adding an outpost field is additive under field-named RON and must \
          not cost a version bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
@@ -348,7 +348,7 @@ fn run_outposts_draws_no_extra_rng_when_the_union_has_one_item() {
     let after_real = peek(&mut real);
 
     reseed_rng(&mut reference, rng_seed);
-    let chance = crate::systems::mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+    let chance = crate::systems::mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
     let _ = reference
         .world
         .resource_mut::<GameRng>()
@@ -402,7 +402,7 @@ fn run_outposts_draws_an_extra_rng_value_when_the_union_has_two_items_and_the_ro
         reseed_rng(&mut game, rng_seed);
         (game, tile)
     };
-    let chance = crate::systems::mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+    let chance = crate::systems::mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
     let mut found_seed = None;
     for rng_seed in 0..64u64 {
         let (mut probe, tile) = build(rng_seed);

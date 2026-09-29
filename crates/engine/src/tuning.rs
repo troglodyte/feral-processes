@@ -43,8 +43,8 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
 /// modelled floor stays valid no matter how the pool is spent.
 ///
-/// **The pool size is the all-Atk offense ceiling**, because Atk is priced
-/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). At 20 the
+/// **The pool size is the all-Analysis offense ceiling**, because a point
+/// is priced 1-for-1 (`CREATION_COST_PER_ATTRIBUTE_POINT`). At 20 the
 /// widest offensive build opens on 26 atk against the baseline 6, and the
 /// widest defensive one on 210 `max_hp` against 90.
 ///
@@ -63,39 +63,12 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// the `const` assertion below fails otherwise.
 pub const CREATION_STAT_POINTS: u32 = 20;
 
-/// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
-/// for what a point buys.
-pub const CREATION_COST_INTEGRITY: u32 = 1;
-
-/// Pool points one point of Atk costs — priced 1-for-1, the same rate
-/// `Reward::RandomMainStat` already grants it at.
-pub const CREATION_COST_ATK: u32 = 1;
-
-/// Pool points one point of Decompiler (`Decompiler::skill`) costs — priced
-/// 1-for-1, like Atk.
-pub const CREATION_COST_DECOMPILER: u32 = 1;
-
-/// Pool points one point of Def (`Stats::mitigation`) costs — priced
-/// 1-for-1 like the other three axes.
-///
-/// **Three was the argument, and the instrument refuted it.** The claim
-/// was that mitigation is the one axis levelling never raises (see
-/// `HP_PER_LEVEL`'s doc comment on why there is no mitigation-per-level
-/// constant at all), so pricing it like the rest would make it dominant on
-/// a screen where the player chooses rather than a roll. It was not
-/// dominant at any price: a unit is **one percentage point** on a base of
-/// 2, and `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`
-/// measured the whole 5-point pool spent on Def as **byte-identical to the
-/// control** over 200 fights — same win rate, same round count, same HP
-/// left. Priced at three it was a trap row: the dearest axis and the only
-/// one that moved nothing. At one, a full-Def build reaches 11%
-/// mitigation, which is the first spend on this axis a fight can see.
-pub const CREATION_COST_DEF: u32 = 1;
-
-/// `Stats::max_hp` granted per point of Integrity bought on the creation
-/// stat screen — and `Stats::hp` with it, unconditionally: a run must not
-/// start damaged, the trap `MainStat::Integrity`'s own doc comment records.
-pub const CREATION_GAIN_INTEGRITY: u32 = 6;
+/// Pool points one point of any attribute costs at creation - priced
+/// 1-for-1, so the pool is a count of attribute points. What a point *buys*
+/// is each attribute's own `effects`, and `docs/measurements/2026-09-01-
+/// creation-stat-pool-exchange-rates.md` is the record of how the four old
+/// axes compared when they were priced separately.
+pub const CREATION_COST_PER_ATTRIBUTE_POINT: u32 = 1;
 
 /// Ceiling on `CREATION_STAT_POINTS`, asserted rather than trusted —
 /// `MAX_PROFILE_STAT_POINTS`'s reason: a permanent buff with no ceiling is a
@@ -175,7 +148,7 @@ pub const CREATION_SHELF_ROWS: usize = 26;
 ///
 /// These are `K = 2` times what they were, along with every other constant
 /// denominated in entity level (`PERK_POINTS_PER_LEVEL`,
-/// `DECOMPILER_SKILL_PER_LEVEL`, the two `ABILITY_*_SCALE_PER_LEVEL` rates)
+/// the two `ABILITY_*_SCALE_PER_LEVEL` rates)
 /// and the reciprocal of every constant denominated in *levels per*
 /// something (`PLAYER_ROUTINE_SLOT_PER_LEVEL`,
 /// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `TALENT_START_LEVEL`,
@@ -195,6 +168,36 @@ pub const CREATION_SHELF_ROWS: usize = 26;
 /// mitigation — see `components::Stats::mitigation`.
 pub const HP_PER_LEVEL: i32 = 24;
 pub const ATK_PER_LEVEL: i32 = 2;
+
+/// Attribute points banked per player level-up, to spend on the Points
+/// screen. See `progression::canonical_spend` for the split that
+/// reproduces the old automatic growth.
+pub const STAT_POINTS_PER_LEVEL: u32 = 6;
+
+/// The canonical spend per level: 4 Parity (6 max HP each) and 2 Analysis
+/// (1 Atk and 1 Decompiler each). Equals `HP_PER_LEVEL`, `ATK_PER_LEVEL`
+/// and the retired automatic Decompiler grant (2 a level) exactly. The
+/// per-point values live in `assets/attributes/`, so that equality is held
+/// by `progression::canonical_spend_is_the_old_per_level_growth` against
+/// the real assets, not here; only the pool size is a build failure.
+pub const CANONICAL_PARITY_PER_LEVEL: u32 = 4;
+pub const CANONICAL_ANALYSIS_PER_LEVEL: u32 = 2;
+const _: () =
+    assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_ANALYSIS_PER_LEVEL == STAT_POINTS_PER_LEVEL);
+
+/// The floor on a derived max Power, so a low Bandwidth cannot leave a
+/// reserve too small to cast anything.
+pub const MIN_MAX_POWER: f32 = 20.0;
+
+/// The range a derived status resist is clamped to, in percent. Negative
+/// lengthens a status.
+pub const STATUS_RESIST_MIN: i32 = -50;
+pub const STATUS_RESIST_MAX: i32 = 75;
+
+/// Ceiling on the player's derived Extraction term in
+/// `systems::mining_success_chance`, so Analysis never out-mines the
+/// sharpest species.
+pub const MINING_EXTRACTION_CAP: f32 = 0.10;
 
 /// Growth-rate multiplier for anything with no species-specific rate of
 /// its own. The player (who has no species at all) always levels at this
@@ -438,11 +441,6 @@ pub const PARTY_LEVEL_COUNT_STEPS: u32 = 1;
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes
 /// progress toward the next level, never the level or stats themselves.
 pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
-
-/// How much the player's `Decompiler` skill grows per level gained.
-/// Carries `HP_PER_LEVEL`'s `K = 2`, so skill still tracks total power
-/// rather than level count.
-pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 2;
 
 /// Perk Points (see `perks::Perk`) awarded per player level gained.
 /// Carries `HP_PER_LEVEL`'s `K = 2`: perks are bought out of total progress,
@@ -3141,8 +3139,8 @@ pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.01;
 /// floored at a penalty of 0.
 ///
 /// Deliberately *not* effective Decompiler skill, which is what this perk
-/// used to grant. That stat already grows `DECOMPILER_SKILL_PER_LEVEL` per
-/// player level for free, so the perk was buying one level's worth of
+/// used to grant. That stat already grew 2 per player level for free (now it
+/// comes from Analysis, at 1 a point), so the perk was buying one level's worth of
 /// automatic growth for `PERK_COST_EXPLOIT_FOCUS` levels' worth of points —
 /// strictly dominated, and invisible next to the free growth. The HP penalty
 /// is a separate axis: it decides how far a target must be worn down before
@@ -3426,8 +3424,8 @@ pub const ENEMY_ROUTINE_MIN_COOLDOWN: u32 = 1;
 // Achievement profile ceilings
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Most main-stat points a fully-cleared `assets/achievements/` ladder may
-/// hand a new run, summed across every `Reward::RandomMainStat`.
+/// Most stat points a fully-cleared `assets/achievements/` ladder may
+/// hand a new run to bank, summed across every `Reward::RandomMainStat`.
 ///
 /// `balance_sim` simulates a run's own curve and deliberately does not model
 /// the cross-run profile, so this bound — asserted over the real assets by

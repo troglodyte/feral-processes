@@ -7,13 +7,15 @@
 //!
 //! Three things are subtle enough to say twice:
 //!
-//! **`CharacterChoice::stats[i]` is units *bought* on that axis, never
-//! points spent.** `CharacterChoice::cost()` prices them, per axis, at
-//! `tuning::CREATION_COST_*`. All four axes cost one point today, so the
-//! two readings happen to agree — which is exactly why the distinction has
-//! to be held here rather than left to the numbers: repricing any axis is
-//! a `tuning.rs` edit, and every reader that treats the array as a point
-//! tally would silently start handing that axis out free.
+//! **`CharacterChoice::stats` holds points *bought* per attribute, never
+//! pool points spent.** `CharacterChoice::cost()` prices them, at
+//! `tuning::CREATION_COST_PER_ATTRIBUTE_POINT`. That is one point today, so
+//! the two readings happen to agree - which is exactly why the distinction
+//! has to be held here rather than left to the numbers: repricing is a
+//! `tuning.rs` edit, and every reader that treats the map as a point tally
+//! would silently start handing an attribute out free. The Points step's
+//! rows, ceiling rule and preview are `StatAllocation`'s, shared with
+//! `Mode::AllocateStats`.
 //!
 //! **`[r]` rerolls the kit, and only the kit.** It used to roll every
 //! choice the player had not made by hand and jump to the summary, which
@@ -43,13 +45,11 @@
 //! stomp the player's own spread.
 
 use crate::app::icon_editor::{IconEditor, IconEditorOutcome};
+use crate::app::stat_allocation::{AllocationFor, StatAllocation, spend_adjustment, spent_cost};
 use crate::*;
 use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::items::ItemId;
-use feral_processes_engine::tuning::{
-    CREATION_COST_ATK, CREATION_COST_DECOMPILER, CREATION_COST_DEF, CREATION_COST_INTEGRITY,
-    CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
-};
+use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS};
 
 /// The (glyph, sprite name) pairs the Icon step offers.
 ///
@@ -110,31 +110,6 @@ impl Decided {
     }
 }
 
-/// What one unit of `stat` costs out of the pool.
-fn stat_cost(stat: MainStat) -> u32 {
-    match stat {
-        MainStat::Atk => CREATION_COST_ATK,
-        MainStat::Def => CREATION_COST_DEF,
-        MainStat::Integrity => CREATION_COST_INTEGRITY,
-        MainStat::Decompiler => CREATION_COST_DECOMPILER,
-    }
-}
-
-/// What the player opens on for `stat` after buying `units` of it —
-/// `PLAYER_BASE_STATS` plus the spend, never a redistribution of it.
-/// Mirrors `Game::apply_creation_stats`, which is the one that actually
-/// writes the numbers.
-fn stat_value(stat: MainStat, units: u32) -> i32 {
-    let units = units as i32;
-    match stat {
-        MainStat::Atk => PLAYER_BASE_STATS.atk + units,
-        MainStat::Def => PLAYER_BASE_STATS.mitigation + units,
-        MainStat::Integrity => PLAYER_BASE_STATS.max_hp + units * CREATION_GAIN_INTEGRITY as i32,
-        // `Decompiler::default()` is 0, so the base is the spend.
-        MainStat::Decompiler => units,
-    }
-}
-
 /// A xorshift64* stream for `[R]`.
 ///
 /// Its own rather than the engine's `resources::GameRng`: there is no
@@ -167,30 +142,6 @@ impl Roll {
     fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
-}
-
-/// A random spread that spends **exactly** `CREATION_STAT_POINTS`: one unit
-/// bought at a time from whichever axes are still affordable, so the loop
-/// can only halt once nothing affordable is left. That makes the pool
-/// invariant (`cost() == Some(CREATION_STAT_POINTS)`) a consequence of the
-/// construction rather than something checked after the fact — there is no
-/// path through this loop that can under- or over-spend. Shared by the
-/// step's own entry seed and by `roll_the_rest`'s `[R]`, so the two can
-/// never quote different odds for the same pool.
-fn roll_points_spread(roll: &mut Roll) -> [u32; 4] {
-    let mut stats = [0u32; 4];
-    let costs: Vec<u32> = MainStat::all().iter().map(|s| stat_cost(*s)).collect();
-    let mut left = CREATION_STAT_POINTS;
-    loop {
-        let affordable: Vec<usize> = (0..costs.len()).filter(|i| costs[*i] <= left).collect();
-        if affordable.is_empty() {
-            break;
-        }
-        let axis = affordable[roll.below(affordable.len())];
-        stats[axis] += 1;
-        left -= costs[axis];
-    }
-    stats
 }
 
 /// A random basket that spends **as much of `CREATION_CREDITS` as the
@@ -270,11 +221,21 @@ impl App {
     /// What the current spend costs, unclamped by the pool — `cost()`
     /// refuses above it, and nothing here is ever allowed to get there.
     fn creation_spend(&self) -> u32 {
-        MainStat::all()
-            .iter()
-            .zip(self.creation_choice.stats.iter())
-            .map(|(stat, units)| units.saturating_mul(stat_cost(*stat)))
-            .sum()
+        spent_cost(AllocationFor::Creation, &self.creation_choice.stats)
+    }
+
+    /// The Points step's allocation, built off the class picked on the step
+    /// before - the values the run will open on. Built on demand rather than
+    /// held: the class can change between two visits to the step, and a
+    /// held copy would then preview the old class's numbers.
+    fn creation_allocation(&self) -> StatAllocation {
+        StatAllocation::new(
+            AllocationFor::Creation,
+            CREATION_STAT_POINTS,
+            self.creation_catalogue.attribute_db(),
+            self.creation_catalogue
+                .start_attributes(self.creation_choice.class),
+        )
     }
 
     /// The rows of whichever step is showing, in draw order.
@@ -342,16 +303,7 @@ impl App {
             CreationStep::Colour => (0..CREATION_COLOURS)
                 .map(|index| CreationRow::Colour { index })
                 .collect(),
-            CreationStep::Points => MainStat::all()
-                .iter()
-                .zip(self.creation_choice.stats.iter())
-                .map(|(stat, units)| CreationRow::Stat {
-                    stat: *stat,
-                    spent: *units,
-                    value: stat_value(*stat, *units),
-                    cost: stat_cost(*stat),
-                })
-                .collect(),
+            CreationStep::Points => self.creation_allocation().rows(&self.creation_choice.stats),
             CreationStep::Perks => self
                 .creation_catalogue
                 .perk_rows()
@@ -408,8 +360,8 @@ impl App {
             glyph: choice.glyph,
             colour: choice.colour,
         });
-        for (stat, units) in MainStat::all().iter().zip(choice.stats.iter()) {
-            rows.push(line(stat.label(), format!("{}", stat_value(*stat, *units))));
+        for (name, value) in self.creation_allocation().values(&choice.stats) {
+            rows.push(line(&name, value.to_string()));
         }
         rows.push(line(
             "Kit",
@@ -568,7 +520,8 @@ impl App {
             .then(|| "Choose a class first.".to_string()),
             CreationStep::Points => {
                 let left = self.creation_points_left();
-                (MainStat::all().iter().any(|s| stat_cost(*s) <= left))
+                self.creation_allocation()
+                    .can_spend_more(&self.creation_choice.stats)
                     .then(|| format!("{left} points still to spend."))
             }
             CreationStep::Kit => {
@@ -615,7 +568,8 @@ impl App {
         self.menu_selected = 0;
         self.status_line = None;
         if step == CreationStep::Points && !self.creation_decided.stats {
-            self.creation_choice.stats = roll_points_spread(&mut Roll::new());
+            let mut roll = Roll::new();
+            self.creation_choice.stats = self.creation_allocation().roll_spread(|n| roll.below(n));
         }
         if step == CreationStep::Icon && !self.creation_icon_seeded {
             self.creation_icon_seeded = true;
@@ -862,56 +816,30 @@ impl App {
     /// that end. Enter takes the spend as it stands, whether or not the
     /// pool is empty.
     fn handle_creation_points_key(&mut self, key: GameKey) {
-        let len = MainStat::all().len();
+        let len = self.creation_allocation().len();
         match key {
             GameKey::Enter => self.try_advance_creation(),
             GameKey::Up | GameKey::Down => self.scroll(key, len),
-            GameKey::Left => self.spend_on_row(|units, _| units.saturating_sub(1)),
-            GameKey::Right => self.spend_on_row(|units, max| (units + 1).min(max)),
-            GameKey::ShiftLeft => self.spend_on_row(|_, _| 0),
-            GameKey::ShiftRight => self.spend_on_row(|_, max| max),
-            GameKey::CtrlLeft => self.spend_on_row(|units, _| super::basket::halve(units, 0)),
-            GameKey::CtrlRight => self.spend_on_row(super::basket::halve),
-            _ => {}
+            _ => {
+                if let Some(f) = spend_adjustment(key) {
+                    self.spend_on_row(f);
+                }
+            }
         }
     }
 
-    /// Applies `f` to the highlighted axis's unit count, where `max` is the
-    /// most that axis could hold given what the *other* rows have already
-    /// spent — `App::put_available`'s rule, and for its reason: counting
-    /// the row's own units against its own ceiling would make it
-    /// unloweranble once the pool ran out.
-    ///
-    /// A request that would overspend is not silently clamped — the arrow
-    /// keys clamp by construction, so reaching this refusal means the pool
-    /// is empty and the player pressed Right anyway, which is worth
-    /// saying.
+    /// Applies `f` to the highlighted attribute's point count - see
+    /// `StatAllocation::spend_on_row`, which owns the ceiling rule and the
+    /// refusal.
     fn spend_on_row(&mut self, f: impl FnOnce(u32, u32) -> u32) {
-        let stats = MainStat::all();
-        let Some(stat) = stats.get(self.menu_selected).copied() else {
-            return;
-        };
-        let cost = stat_cost(stat);
-        let others: u32 = stats
-            .iter()
-            .zip(self.creation_choice.stats.iter())
-            .enumerate()
-            .filter(|(i, _)| *i != self.menu_selected)
-            .map(|(_, (s, units))| units.saturating_mul(stat_cost(*s)))
-            .sum();
-        let max = CREATION_STAT_POINTS.saturating_sub(others) / cost;
-        let before = self.creation_choice.stats[self.menu_selected];
-        let after = f(before, max).min(max);
-        if after == before && before == max {
-            self.refuse(format!(
-                "No points left — {} costs {cost} a point.",
-                stat.label()
-            ));
-            return;
+        let allocation = self.creation_allocation();
+        match allocation.spend_on_row(&mut self.creation_choice.stats, self.menu_selected, f) {
+            Ok(()) => {
+                self.creation_decided.stats = true;
+                self.status_line = None;
+            }
+            Err(why) => self.refuse(why),
         }
-        self.creation_choice.stats[self.menu_selected] = after;
-        self.creation_decided.stats = true;
-        self.status_line = None;
     }
 
     /// The Kit step's key table in Perk Points: Up/Down moves the cursor,
@@ -1124,7 +1052,7 @@ impl App {
     pub fn profile_perk_points(&self) -> u32 {
         feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
             .into_iter()
-            .map(|(reward, _)| match reward {
+            .map(|reward| match reward {
                 feral_processes_engine::achievements::Reward::PerkPoints(n) => n,
                 _ => 0,
             })

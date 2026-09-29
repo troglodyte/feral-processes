@@ -122,6 +122,13 @@ pub struct GameClock {
 /// off — which is both the new default and the safe reading of a save that
 /// never expressed a preference. Additive, so it costs no
 /// `SAVE_FORMAT_VERSION` bump.
+/// Present only in an arena-staged `Game`: XP awards are dropped, so no one
+/// levels mid-fight. A level-up refills HP, and kill XP grows as the
+/// player's Atk shrinks, so a fight that could level would score a weaker
+/// build as a stronger one — the arena measures the build it staged.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct LevellingFrozen;
+
 #[derive(Resource, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MiningMode(pub bool);
 
@@ -1018,7 +1025,7 @@ pub struct LevelSnapshot {
     pub max_hp: i32,
     pub mitigation: i32,
     pub perk_points: u32,
-    pub decompiler: i32,
+    pub stat_points: u32,
     pub combatant: Combatant,
 }
 
@@ -1484,10 +1491,11 @@ pub struct BattleRewards {
 pub struct XpTally {
     pub xp: u32,
     pub gain: crate::progression::LevelGain,
-    /// Perk Points and Decompiler skill are the player's alone, and neither
-    /// is anything `add_xp` computes — see `Game::award_player_xp`.
+    /// Perk Points are the player's alone, and nothing `add_xp` computes -
+    /// see `Game::award_player_xp`. `stat_points` mirrors `gain.stat_points`
+    /// for the player, so a tally row can name what was banked.
     pub perk_points: u32,
-    pub decompiler: i32,
+    pub stat_points: u32,
 }
 
 impl XpTally {
@@ -1496,7 +1504,7 @@ impl XpTally {
         self.xp += other.xp;
         self.gain.absorb(other.gain);
         self.perk_points += other.perk_points;
-        self.decompiler += other.decompiler;
+        self.stat_points += other.stat_points;
     }
 
     pub fn is_empty(&self) -> bool {

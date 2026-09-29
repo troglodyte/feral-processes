@@ -98,12 +98,22 @@ pub(super) fn draw_perks_menu(
 ) {
     let status = game.player_status();
     let quote = game.respec_quote(RespecSubject::Perks);
-    let rows = perks_menu_rows(
+    let mut rows = perks_menu_rows(
         status.perk_points,
         &game.perk_groups(),
         &status.unlocked_perks,
         selected,
         quote.cost,
+    );
+    // Named beside the Perk Points line rather than in the help line: that
+    // one is already near the popup's width, and `[S]` is only useful with
+    // points to spend.
+    rows.insert(
+        1,
+        Row::TextColored(
+            format!("Stat points: {}  [S] spends them", status.stat_points),
+            CYAN,
+        ),
     );
     draw_popup("Perks", PopupSize::Large, &rows, refusal, painter, m);
 }

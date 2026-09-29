@@ -78,7 +78,8 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     let start = game.current_tick();
 
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(4.0, crate::components::POWER_MAX);
     let refused = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
     assert!(refused.is_err(), "4.0 Power can't cover a 5.0 cost");
     assert_eq!(
@@ -87,7 +88,8 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
         "a refused run spends nothing, so it must cost no time"
     );
 
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(100.0, crate::components::POWER_MAX);
     game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .expect("100.0 Power covers a 5.0 cost");
     assert_eq!(
@@ -104,7 +106,8 @@ fn insufficient_power_returns_err_and_leaves_state_untouched() {
     game.world
         .entity_mut(player)
         .insert(Routines(vec!["test_field_regen".to_string()]));
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(4.0, crate::components::POWER_MAX);
 
     let result = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
 
@@ -186,7 +189,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
-        .unwrap() = PowerReserve::new(100.0);
+        .unwrap() = PowerReserve::new(100.0, crate::components::POWER_MAX);
 
     let routines = game.field_routines();
     let low_index = routines
@@ -199,7 +202,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
-        .unwrap() = PowerReserve::new(100.0);
+        .unwrap() = PowerReserve::new(100.0, crate::components::POWER_MAX);
     let routines = game.field_routines();
     let high_index = routines
         .iter()
@@ -242,7 +245,8 @@ fn buff_affinity_maxed_player(game: &mut Game) -> Entity {
         points: 0,
         unlocked: vec![Perk::BuffAffinity; levels_to_max],
     });
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(100.0, crate::components::POWER_MAX);
     player
 }
 
@@ -752,7 +756,7 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
-        .unwrap() = PowerReserve::new(100.0);
+        .unwrap() = PowerReserve::new(100.0, crate::components::POWER_MAX);
 
     let routines = game.field_routines();
     let index = routines
@@ -781,7 +785,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
-        .unwrap() = PowerReserve::new(100.0);
+        .unwrap() = PowerReserve::new(100.0, crate::components::POWER_MAX);
 
     let routines = game.field_routines();
     let index = routines
@@ -876,8 +880,10 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
 
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(4.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(100.0, crate::components::POWER_MAX);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(4.0, crate::components::POWER_MAX);
     assert_eq!(
         game.field_routines()[0].unavailable.as_deref(),
         Some("not enough PWR"),
@@ -889,8 +895,10 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
         "and the invocation must refuse it too"
     );
 
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(1.0);
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(100.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(1.0, crate::components::POWER_MAX);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(100.0, crate::components::POWER_MAX);
     assert_eq!(
         game.field_routines()[0].unavailable,
         None,

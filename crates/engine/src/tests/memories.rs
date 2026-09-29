@@ -737,7 +737,7 @@ fn every_door_into_the_roster_hands_out_a_memory_store() {
     );
     let mut game = Game::new(38, DifficultyMode::Forgiving, &dir).unwrap();
     unlock_research_chain(&mut game, "program_refactoring");
-    game.install_profile(super::achievements::profile_of("remembering_program", None));
+    game.install_profile(super::achievements::profile_of("remembering_program"));
     game.grant_profile_rewards();
 
     let granted = *owned_programs(&mut game)
@@ -1031,6 +1031,7 @@ fn mining_morale_is_game_morale() {
                 level,
                 0,
                 crate::tuning::DEFAULT_BASE_INT,
+                0.0,
                 0.0,
                 0.0,
             )

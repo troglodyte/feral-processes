@@ -304,6 +304,7 @@ impl Game {
             .power(),
             decompiler,
             power: needs.get(),
+            max_power: self.max_power(player),
             inventory,
             inventory_used: self.inventory_used(),
             pet_count,
@@ -326,6 +327,10 @@ impl Game {
             companions: self.party_info(),
             zone: self.world.resource::<ZoneLevel>().0,
             perk_points: perks.map(|p| p.points).unwrap_or(0),
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(player)
+                .map_or(0, |p| p.0),
             unlocked_perks: perks.map(|p| p.unlocked.clone()).unwrap_or_default(),
         }
     }

@@ -1143,7 +1143,10 @@ fn an_unaffordable_routine_refuses_with_the_power_variant() {
         .expect("acid_wash ships");
     game.world
         .entity_mut(player)
-        .insert(crate::components::PowerReserve::new(0.0));
+        .insert(crate::components::PowerReserve::new(
+            0.0,
+            crate::components::POWER_MAX,
+        ));
     assert_eq!(
         game.ability_unavailable(player, &def),
         Some(crate::game::combat::RoutineRefusal::Power { cost: 8.0 }),
@@ -4751,7 +4754,9 @@ fn an_unaffordable_routine_with_no_cell_falls_back_to_a_swing() {
     let player = game.player_entity();
     only_routine(&mut game, player, HOSTILE_SWEEP);
     assert!(wait_for_turn(&mut game, player), "the fight ended early");
-    game.world.entity_mut(player).insert(PowerReserve::new(5.0));
+    game.world
+        .entity_mut(player)
+        .insert(PowerReserve::new(5.0, crate::components::POWER_MAX));
     set_inventory(&mut game, &[]);
 
     for _ in 0..TACTICAL_MOVE_MAX {
@@ -4798,7 +4803,7 @@ fn a_power_only_refusal_with_a_cell_in_reach_drinks_it_and_invokes_next_turn() {
     // bus_fault costs 18.0; 10.0 is short by 8.0, well inside power_cell's 25.
     game.world
         .entity_mut(player)
-        .insert(PowerReserve::new(10.0));
+        .insert(PowerReserve::new(10.0, crate::components::POWER_MAX));
     set_inventory(&mut game, &[(POWER_CELL, 2)]);
 
     for _ in 0..TACTICAL_MOVE_MAX {
@@ -4866,7 +4871,7 @@ fn a_prebattle_buff_cell_is_never_drunk_for_a_power_refusal() {
     assert!(wait_for_turn(&mut game, player), "the fight ended early");
     game.world
         .entity_mut(player)
-        .insert(PowerReserve::new(10.0));
+        .insert(PowerReserve::new(10.0, crate::components::POWER_MAX));
     // `backfeed_cell` restores Power and arms a `Trickle` buff — the
     // sustain/backfeed shape `power_cell_for`'s filter exists for. Any
     // shipped `.ron` with both `consume.power > 0` and a `prebattle_buff`
@@ -4921,7 +4926,7 @@ fn swing_only_never_drinks_a_cell_even_when_one_would_cover_the_shortfall() {
     assert!(wait_for_turn(&mut game, player), "the fight ended early");
     game.world
         .entity_mut(player)
-        .insert(PowerReserve::new(10.0));
+        .insert(PowerReserve::new(10.0, crate::components::POWER_MAX));
     set_inventory(&mut game, &[(POWER_CELL, 2)]);
 
     assert!(
@@ -5185,7 +5190,7 @@ mod tactical_use_item {
         let player = game.player_entity();
         game.world
             .entity_mut(player)
-            .insert(PowerReserve::new(10.0));
+            .insert(PowerReserve::new(10.0, crate::components::POWER_MAX));
         set_inventory(&mut game, &[(POWER_CELL, 2)]);
         assert!(wait_for_turn(&mut game, player), "the fight ended early");
 
@@ -7334,9 +7339,10 @@ mod teleport {
         // hostile holds no `PowerReserve` by design, so *every* priced
         // routine is already refused it and an assertion made without this
         // line passes with the player-only gate deleted.
-        game.world
-            .entity_mut(pack[0])
-            .insert(PowerReserve::new(crate::components::POWER_MAX));
+        game.world.entity_mut(pack[0]).insert(PowerReserve::new(
+            crate::components::POWER_MAX,
+            crate::components::POWER_MAX,
+        ));
         assert_eq!(
             game.ability_unavailable(pack[0], &def)
                 .map(|r| r.to_string()),
@@ -7367,7 +7373,7 @@ mod teleport {
         // reserve at all to pay Teleport's cost with.
         game.world
             .entity_mut(pack[0])
-            .insert(PowerReserve::new(0.0));
+            .insert(PowerReserve::new(0.0, crate::components::POWER_MAX));
         assert_eq!(
             game.ability_unavailable(pack[0], &def)
                 .map(|r| r.to_string()),

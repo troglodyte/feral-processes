@@ -11,7 +11,7 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::achievements::{AchievementDb, Earned, Profile, Reward, Trigger, roll_main_stat};
+use crate::achievements::{AchievementDb, Earned, Profile, Trigger};
 use crate::notifications::Notification;
 use crate::resources::{
     DifficultyMode, GameClock, Locale, MessageKind, MessageLog, PendingProfileWrites, RunFeats,
@@ -79,15 +79,10 @@ pub fn achievement_system(
             continue;
         }
 
-        let rolled_stat = match def.reward {
-            Reward::RandomMainStat(_) => Some(roll_main_stat(&def.id)),
-            _ => None,
-        };
         profile.record(Earned {
             id: def.id.clone(),
             first_tick: clock.tick,
             permadeath,
-            rolled_stat,
         });
         pending.earned.push(def.id.clone());
         // **A second source, not a second door.** The notification is built

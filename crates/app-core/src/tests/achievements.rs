@@ -1,7 +1,7 @@
 //! The profile's file: app-core owns the path, writes on every earn, and
 //! never pays a loaded save for what its stats already hold.
 
-use feral_processes_engine::achievements::{Earned, MainStat, Profile};
+use feral_processes_engine::achievements::{Earned, Profile};
 use feral_processes_engine::tuning::PLAYER_BASE_STATS;
 
 use crate::tests::support::{dismiss_notifications, test_assets_dir};
@@ -33,21 +33,24 @@ fn app_with_profile(seed: u32, profile_path: PathBuf) -> App {
     )
 }
 
-/// A profile holding one stat rung with a known roll, written to `path` — the
-/// state a previous run would have left behind.
+/// A profile holding one stat rung, written to `path` - the state a previous
+/// run would have left behind.
 fn seed_profile(path: &Path) {
     let mut profile = Profile::default();
     profile.record(Earned {
         id: "breach_zone_2".into(),
         first_tick: 3,
         permadeath: false,
-        rolled_stat: Some(MainStat::Atk),
     });
     profile.save(path).unwrap();
 }
 
 fn player_atk(app: &App) -> i32 {
     app.game.as_ref().unwrap().player_status().atk
+}
+
+fn player_stat_points(app: &App) -> u32 {
+    app.game.as_ref().unwrap().player_status().stat_points
 }
 
 /// Breaches to zone 2 through the real breach and lets one tick land, which
@@ -103,12 +106,17 @@ fn a_new_game_starts_from_the_profile_on_disk() {
     app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     let _ = std::fs::remove_file(&path);
 
-    assert_eq!(player_atk(&app), PLAYER_BASE_STATS.atk + 1);
+    assert_eq!(player_stat_points(&app), 1, "a stat rung banks a point");
+    assert_eq!(
+        player_atk(&app),
+        PLAYER_BASE_STATS.atk,
+        "and grows nothing by itself"
+    );
 }
 
-/// The trap's end-to-end form: a save already has its bonus baked into
-/// `Stats`, so a load that paid again would double it on every reload.
-/// Task 5's engine tests only cover the halves.
+/// The trap's end-to-end form: a save already holds its bonus, so a load that
+/// paid again would double it on every reload. Task 5's engine tests only
+/// cover the halves.
 #[test]
 fn loading_a_save_does_not_re_apply_rewards() {
     let path = scratch_profile("noload");
@@ -116,12 +124,8 @@ fn loading_a_save_does_not_re_apply_rewards() {
 
     let mut app = app_with_profile(44, path.clone());
     app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
-    let paid = player_atk(&app);
-    assert_eq!(
-        paid,
-        PLAYER_BASE_STATS.atk + 1,
-        "the new game should be paid"
-    );
+    let paid = player_stat_points(&app);
+    assert_eq!(paid, 1, "the new game should be paid");
 
     let save_path = scratch_profile("noload_save").with_extension("bin");
     app.game.as_mut().unwrap().save(&save_path).unwrap();
@@ -129,9 +133,8 @@ fn loading_a_save_does_not_re_apply_rewards() {
     let _ = std::fs::remove_file(&save_path);
     let _ = std::fs::remove_file(&path);
 
-    assert_eq!(
-        player_atk(&app),
-        paid,
+    assert!(
+        player_stat_points(&app) == paid,
         "a load must not pay a second time for what the save already holds"
     );
 }

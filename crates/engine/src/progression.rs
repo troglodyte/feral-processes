@@ -1,10 +1,13 @@
-use crate::components::{Experience, Stats};
+use crate::attributes::{AttributeDb, AttributeId, DerivedStat};
+use crate::components::{Attributes, Experience, POWER_MAX, Stats};
 use crate::species::SpeciesDef;
 use crate::tuning::{
-    ATK_PER_LEVEL, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
-    HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
-    XP_PER_LEVEL_STEP,
+    ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, DIFFICULTY_EASY_MAX,
+    EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL, HP_PER_LEVEL, MIN_MAX_POWER,
+    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL,
+    STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
+use std::collections::BTreeMap;
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
 /// rounded to the nearest whole point. With `ATK_PER_LEVEL`
@@ -37,6 +40,20 @@ pub struct LevelGain {
     /// went in, not a second store, which is what lets a breach spend the
     /// same pile on real levels.
     pub overflow: u32,
+    /// Attribute points banked by `Growth::Points`, to spend on the Points
+    /// screen. Zero for `Growth::Auto`.
+    pub stat_points: u32,
+}
+
+/// How a level-up changes the levelled body's stats.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Growth {
+    /// Flat per-level growth scaled by `multiplier` (a species' rate) -
+    /// companions, workers, sorties and the arena's opponents.
+    Auto { multiplier: f32 },
+    /// No stat changes: the player banks `STAT_POINTS_PER_LEVEL` a level and
+    /// spends them, and `Game::recompute_derived` does the rest.
+    Points,
 }
 
 impl LevelGain {
@@ -52,6 +69,7 @@ impl LevelGain {
         self.max_hp += other.max_hp;
         self.atk += other.atk;
         self.overflow += other.overflow;
+        self.stat_points += other.stat_points;
     }
 
     /// The two rows a level-up's stat block always has, measured against
@@ -224,6 +242,138 @@ pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f3
     }
 }
 
+/// The stats an entity derives from before any attribute moves them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedBase {
+    pub max_hp: i32,
+    pub atk: i32,
+    pub mitigation: i32,
+    pub decompiler: i32,
+    pub max_power: f32,
+    pub status_resist: i32,
+    pub extraction: f32,
+}
+
+impl DerivedBase {
+    /// The player's level-1 numbers, from the tuning constants.
+    pub fn player() -> Self {
+        DerivedBase {
+            max_hp: PLAYER_BASE_STATS.max_hp,
+            atk: PLAYER_BASE_STATS.atk,
+            mitigation: PLAYER_BASE_STATS.mitigation,
+            decompiler: 0,
+            max_power: POWER_MAX,
+            status_resist: 0,
+            extraction: 0.0,
+        }
+    }
+}
+
+/// What `derive` answers: every stat an attribute can feed, already clamped
+/// to its range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DerivedStats {
+    pub max_hp: i32,
+    pub atk: i32,
+    pub mitigation: i32,
+    pub decompiler: i32,
+    pub max_power: f32,
+    pub status_resist: i32,
+    pub extraction: f32,
+}
+
+impl DerivedStats {
+    /// The figure for `stat` as a float, so a screen can list any stat an
+    /// attribute feeds without naming each field.
+    pub fn get(&self, stat: crate::attributes::DerivedStat) -> f32 {
+        use crate::attributes::DerivedStat as S;
+        match stat {
+            S::MaxHp => self.max_hp as f32,
+            S::Atk => self.atk as f32,
+            S::Mitigation => self.mitigation as f32,
+            S::Decompiler => self.decompiler as f32,
+            S::MaxPower => self.max_power,
+            S::StatusResist => self.status_resist as f32,
+            S::Extraction => self.extraction,
+        }
+    }
+}
+
+/// How many rounds a status armed for `duration` lasts on a body with
+/// `status_resist` percent Persistence: shortened by that share, lengthened
+/// when it is negative, and never below one round. No RNG - resist changes
+/// how long a condition lasts, not whether it lands.
+pub fn resisted_duration(duration: u32, status_resist: i32) -> u32 {
+    let scaled = duration as f32 * (1.0 - status_resist as f32 / 100.0);
+    (scaled.round() as u32).max(1)
+}
+
+/// The one formula. For each stat, `base + sum(per_point * (value - the
+/// attribute's catalogue base))`, rounded once per stat and then clamped to
+/// that stat's range. An attribute the store does not hold counts as its
+/// base and contributes nothing. Nothing else computes a derived stat: the
+/// game, the Points preview and `balance_sim` all call this.
+pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+    let mut sums = BTreeMap::<DerivedStat, f32>::new();
+    for def in db.iter() {
+        let delta = attrs.get(&def.id).map_or(0, |v| v - def.base) as f32;
+        for effect in &def.effects {
+            *sums.entry(effect.stat).or_insert(0.0) += effect.per_point * delta;
+        }
+    }
+    let sum = |stat: DerivedStat| sums.get(&stat).copied().unwrap_or(0.0);
+    let rounded = |base: i32, stat: DerivedStat| (base as f32 + sum(stat)).round() as i32;
+    DerivedStats {
+        max_hp: rounded(base.max_hp, DerivedStat::MaxHp).max(1),
+        atk: rounded(base.atk, DerivedStat::Atk).max(1),
+        mitigation: rounded(base.mitigation, DerivedStat::Mitigation).max(0),
+        decompiler: rounded(base.decompiler, DerivedStat::Decompiler).max(0),
+        max_power: (base.max_power + sum(DerivedStat::MaxPower))
+            .round()
+            .max(MIN_MAX_POWER),
+        status_resist: rounded(base.status_resist, DerivedStat::StatusResist)
+            .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
+        extraction: (base.extraction + sum(DerivedStat::Extraction))
+            .clamp(0.0, MINING_EXTRACTION_CAP),
+    }
+}
+
+/// Whose attributes a spend raises. A companion variant joins it when
+/// programs are derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatOwner {
+    Player,
+}
+
+/// Why `Game::spend_stat_points` wrote nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpendError {
+    /// The spend costs more than the owner has banked.
+    InsufficientPoints,
+    /// The owner has no banked points or no such attribute in the catalogue.
+    NoSuchTarget,
+    /// The attribute exists but has no effects, so a point buys nothing.
+    NotBuyable,
+}
+
+/// The spend that reproduces the old automatic per-level growth: 4 Parity and
+/// 2 Analysis a level, which `canonical_spend_is_the_old_per_level_growth`
+/// holds equal to `HP_PER_LEVEL`, `ATK_PER_LEVEL` and the retired Decompiler
+/// grant against the real assets.
+/// `balance_sim` models the player with this.
+pub fn canonical_spend(levels: u32) -> BTreeMap<AttributeId, u32> {
+    BTreeMap::from([
+        (
+            AttributeId::from("parity"),
+            CANONICAL_PARITY_PER_LEVEL * levels,
+        ),
+        (
+            AttributeId::from("analysis"),
+            CANONICAL_ANALYSIS_PER_LEVEL * levels,
+        ),
+    ])
+}
+
 /// Docks `exp` a mild fraction (`SETBACK_XP_PENALTY_FRACTION`) of its
 /// current in-level XP as a death/jack-out penalty, returning how much was
 /// lost (0 if there was none to lose). Never drops `xp` below 0 and never
@@ -241,9 +391,8 @@ pub fn apply_setback_xp_penalty(exp: &mut Experience) -> u32 {
 /// `Some(Game::level_cap())`, which is one number for the player and every
 /// companion. XP arriving at the cap is **banked into `exp.xp` and reported
 /// as `LevelGain::overflow`**, not discarded. Each level-up grows max HP/attack/defense
-/// (scaled by `growth_multiplier` — see `SpeciesDef::growth_multiplier`;
-/// pass `BASELINE_GROWTH_MULTIPLIER` for the player, who has no species)
-/// and fully heals. Returns a `LevelGain` — how many levels, and the growth
+/// (`Growth::Auto`, scaled by a species' `growth_multiplier`) or banks stat
+/// points (`Growth::Points`, the player) and fully heals. Returns a `LevelGain` — how many levels, and the growth
 /// they came with — so callers can both decide whether to log a "level up"
 /// message and say what it gave.
 ///
@@ -256,7 +405,7 @@ pub fn add_xp(
     exp: &mut Experience,
     stats: &mut Stats,
     gained: u32,
-    growth_multiplier: f32,
+    growth: Growth,
     level_cap: Option<u32>,
     xp_boost_pct: i32,
 ) -> LevelGain {
@@ -281,16 +430,21 @@ pub fn add_xp(
         exp.xp -= exp.xp_to_next;
         exp.level += 1;
         exp.xp_to_next = xp_for_level(exp.level);
-        let (hp, atk) = (
-            scaled_growth(HP_PER_LEVEL, growth_multiplier),
-            scaled_growth(ATK_PER_LEVEL, growth_multiplier),
-        );
-        stats.max_hp += hp;
-        stats.hp = stats.max_hp;
-        stats.atk += atk;
         gain.levels += 1;
-        gain.max_hp += hp;
-        gain.atk += atk;
+        match growth {
+            Growth::Auto { multiplier } => {
+                let (hp, atk) = (
+                    scaled_growth(HP_PER_LEVEL, multiplier),
+                    scaled_growth(ATK_PER_LEVEL, multiplier),
+                );
+                stats.max_hp += hp;
+                stats.atk += atk;
+                gain.max_hp += hp;
+                gain.atk += atk;
+            }
+            Growth::Points => gain.stat_points += STAT_POINTS_PER_LEVEL,
+        }
+        stats.hp = stats.max_hp;
     }
     gain
 }
@@ -298,6 +452,163 @@ pub fn add_xp(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attributes::AttributeDb;
+
+    fn shipped_db() -> AttributeDb {
+        AttributeDb::load_dir(&crate::tests::support::test_assets_dir().join("attributes"))
+            .unwrap()
+            .0
+    }
+
+    /// An attribute store holding every catalogue base, with `moves` added.
+    fn attrs_at_base(db: &AttributeDb, moves: &[(&str, i32)]) -> Attributes {
+        let mut attrs = Attributes::default();
+        for def in db.iter() {
+            attrs.set(&def.id, def.base);
+        }
+        for (id, delta) in moves {
+            let id = AttributeId::from(*id);
+            attrs.set(&id, attrs.get(&id).unwrap() + delta);
+        }
+        attrs
+    }
+
+    #[test]
+    fn derive_at_catalogue_bases_is_the_players_base_stats() {
+        let db = shipped_db();
+        let d = derive(&DerivedBase::player(), &attrs_at_base(&db, &[]), &db);
+        assert_eq!(d.max_hp, PLAYER_BASE_STATS.max_hp);
+        assert_eq!(d.atk, PLAYER_BASE_STATS.atk);
+        assert_eq!(d.mitigation, PLAYER_BASE_STATS.mitigation);
+        assert_eq!(d.decompiler, 0);
+        assert_eq!(d.max_power, POWER_MAX);
+        assert_eq!(d.status_resist, 0);
+        assert_eq!(d.extraction, 0.0);
+    }
+
+    #[test]
+    fn an_absent_attribute_counts_as_its_base() {
+        let db = shipped_db();
+        let d = derive(&DerivedBase::player(), &Attributes::default(), &db);
+        assert_eq!(d.max_hp, PLAYER_BASE_STATS.max_hp);
+        assert_eq!(d.max_power, POWER_MAX);
+    }
+
+    #[test]
+    fn each_effect_moves_only_its_own_stats() {
+        let db = shipped_db();
+        let base = DerivedBase::player();
+        let at = derive(&base, &attrs_at_base(&db, &[]), &db);
+        let parity = derive(&base, &attrs_at_base(&db, &[("parity", 3)]), &db);
+        assert_eq!(parity.max_hp, at.max_hp + 18);
+        assert_eq!((parity.atk, parity.mitigation), (at.atk, at.mitigation));
+        assert_eq!(parity.max_power, at.max_power);
+        let footprint = derive(&base, &attrs_at_base(&db, &[("footprint", 4)]), &db);
+        assert_eq!(footprint.mitigation, at.mitigation + 4);
+        assert_eq!(footprint.max_hp, at.max_hp + 8);
+        assert_eq!(footprint.atk, at.atk);
+        let analysis = derive(&base, &attrs_at_base(&db, &[("analysis", 2)]), &db);
+        assert_eq!(analysis.atk, at.atk + 2);
+        assert_eq!(analysis.decompiler, 2);
+        assert!((analysis.extraction - 0.01).abs() < 1e-6);
+        assert_eq!(analysis.max_hp, at.max_hp);
+        let bandwidth = derive(&base, &attrs_at_base(&db, &[("bandwidth", 5)]), &db);
+        assert_eq!(bandwidth.max_power, POWER_MAX + 10.0);
+        assert_eq!(bandwidth.max_hp, at.max_hp);
+        let persistence = derive(&base, &attrs_at_base(&db, &[("persistence", 7)]), &db);
+        assert_eq!(persistence.status_resist, 7);
+        assert_eq!(persistence.atk, at.atk);
+        let entropy = derive(&base, &attrs_at_base(&db, &[("entropy", 9)]), &db);
+        assert_eq!(entropy, at);
+    }
+
+    /// Two half-point terms sum to a whole point: rounding each term first
+    /// would give 1 + 1 = 2 (or 0 + 0), rounding the sum gives 1.
+    #[test]
+    fn the_sum_is_rounded_once_per_stat() {
+        let dir = crate::tests::support::scratch_assets_dir("derive_rounding");
+        std::fs::create_dir_all(&*dir).unwrap();
+        for (id, per_point) in [("a", 0.5), ("b", 0.5)] {
+            std::fs::write(
+                dir.join(format!("{id}.ron")),
+                format!(
+                    "(id: \"{id}\", name: \"{id}\", legacy: \"x\", short: \"s\", \
+                     meaning: \"m\", base: 10, spread: 0, \
+                     effects: [(stat: Atk, per_point: {per_point})], does: \"d\")"
+                ),
+            )
+            .unwrap();
+        }
+        let (db, warnings) = AttributeDb::load_dir(&dir).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let d = derive(
+            &DerivedBase::player(),
+            &attrs_at_base(&db, &[("a", 1), ("b", 1)]),
+            &db,
+        );
+        assert_eq!(d.atk, PLAYER_BASE_STATS.atk + 1);
+    }
+
+    #[test]
+    fn the_clamps_hold() {
+        let db = shipped_db();
+        let base = DerivedBase::player();
+        let low = derive(
+            &base,
+            &attrs_at_base(
+                &db,
+                &[
+                    ("parity", -1000),
+                    ("analysis", -1000),
+                    ("footprint", -1000),
+                    ("bandwidth", -1000),
+                    ("persistence", -1000),
+                ],
+            ),
+            &db,
+        );
+        assert_eq!(low.max_hp, 1);
+        assert_eq!(low.atk, 1);
+        assert_eq!(low.mitigation, 0);
+        assert_eq!(low.decompiler, 0);
+        assert_eq!(low.max_power, MIN_MAX_POWER);
+        assert_eq!(low.status_resist, STATUS_RESIST_MIN);
+        assert_eq!(low.extraction, 0.0);
+        let high = derive(
+            &base,
+            &attrs_at_base(&db, &[("analysis", 1000), ("persistence", 1000)]),
+            &db,
+        );
+        assert_eq!(high.status_resist, STATUS_RESIST_MAX);
+        assert_eq!(high.extraction, MINING_EXTRACTION_CAP);
+    }
+
+    #[test]
+    fn canonical_spend_is_the_old_per_level_growth() {
+        let db = shipped_db();
+        for n in 0..=40u32 {
+            let mut attrs = attrs_at_base(&db, &[]);
+            for (id, points) in canonical_spend(n) {
+                attrs.set(&id, attrs.get(&id).unwrap() + points as i32);
+            }
+            let d = derive(&DerivedBase::player(), &attrs, &db);
+            let old = stats_after_levels(
+                PLAYER_BASE_STATS,
+                n,
+                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
+            );
+            assert_eq!(
+                (d.max_hp, d.atk, d.mitigation),
+                (old.max_hp, old.atk, old.mitigation),
+                "level {n}"
+            );
+            assert_eq!(d.decompiler, 2 * n as i32, "level {n}");
+        }
+        assert_eq!(
+            canonical_spend(3).values().sum::<u32>(),
+            STAT_POINTS_PER_LEVEL * 3
+        );
+    }
     use crate::tuning::{
         BASELINE_GROWTH_MULTIPLIER, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, TALENT_START_LEVEL,
         XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
@@ -398,7 +709,9 @@ mod tests {
             &mut exp,
             &mut stats,
             two_levels,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         );
@@ -417,7 +730,14 @@ mod tests {
         // "everything is zero". The window is narrower than it was at 1 point
         // a level: 1.25x now genuinely moves ATK, which is the granularity
         // `HP_PER_LEVEL`'s `K = 2` was meant to buy back.
-        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.1, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.1 },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.max_hp, 26);
         assert_eq!(gain.atk, ATK_PER_LEVEL, "1.1 * 2 rounds back to 2");
@@ -425,16 +745,65 @@ mod tests {
         // 0.2x rounds ATK away entirely: 0.4 rounds to 0.
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 0.2, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 0.2 },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.atk, 0, "0.2 * 2 rounds to no attack gain");
+    }
+
+    #[test]
+    fn points_growth_banks_six_a_level_and_grows_nothing() {
+        let mut exp = Experience::default();
+        let mut stats = Stats {
+            hp: 3,
+            ..base_stats()
+        };
+        let two_levels = xp_for_level(1) + xp_for_level(2);
+        let gain = add_xp(&mut exp, &mut stats, two_levels, Growth::Points, None, 0);
+        assert_eq!(gain.levels, 2);
+        assert_eq!(gain.stat_points, 2 * STAT_POINTS_PER_LEVEL);
+        assert_eq!((gain.max_hp, gain.atk), (0, 0));
+        assert_eq!((stats.max_hp, stats.atk, stats.mitigation), (10, 5, 5));
+        assert_eq!(stats.hp, stats.max_hp, "a level still full-heals");
+    }
+
+    #[test]
+    fn auto_growth_banks_no_points() {
+        let mut exp = Experience::default();
+        let mut stats = base_stats();
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.0 },
+            None,
+            0,
+        );
+        assert_eq!(gain.levels, 1);
+        assert_eq!(gain.stat_points, 0);
+        assert!(stats.max_hp > 10);
     }
 
     #[test]
     fn a_gain_that_levels_nothing_reports_no_growth() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let gain = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None, 0);
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            5,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
+            None,
+            0,
+        );
         assert_eq!(gain.levels, 0);
         assert_eq!(gain.max_hp, 0);
         assert_eq!(gain.atk, 0);
@@ -471,7 +840,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1),
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         );
@@ -490,7 +861,17 @@ mod tests {
     fn xp_below_threshold_does_not_level_up() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let levels = add_xp(&mut exp, &mut stats, 5, BASELINE_GROWTH_MULTIPLIER, None, 0).levels;
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            5,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
+            None,
+            0,
+        )
+        .levels;
         assert_eq!(levels, 0);
         assert_eq!(exp.level, 1);
         assert_eq!(exp.xp, 5);
@@ -505,7 +886,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1),
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -531,7 +914,9 @@ mod tests {
             &mut exp,
             &mut stats,
             xp_for_level(1) + xp_for_level(2) + 5,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -548,7 +933,15 @@ mod tests {
         // 1.5x rounds HP_PER_LEVEL (24) to 36 and ATK_PER_LEVEL (2) to 3,
         // crossing the rounding boundary scaled_growth's doc comment warns
         // about — a smaller multiplier like 1.1 wouldn't move ATK at all.
-        let levels = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.5, None, 0).levels;
+        let levels = add_xp(
+            &mut exp,
+            &mut stats,
+            xp_for_level(1),
+            Growth::Auto { multiplier: 1.5 },
+            None,
+            0,
+        )
+        .levels;
         assert_eq!(levels, 1);
         assert_eq!(
             stats.max_hp,
@@ -572,7 +965,14 @@ mod tests {
         let mut stats = base_stats();
         for _ in 0..3 {
             let needed = exp.xp_to_next;
-            add_xp(&mut exp, &mut stats, needed, 1.5, None, 0);
+            add_xp(
+                &mut exp,
+                &mut stats,
+                needed,
+                Growth::Auto { multiplier: 1.5 },
+                None,
+                0,
+            );
         }
         let projected = stats_after_levels(base_stats(), 3, 1.5);
         assert_eq!(stats.max_hp, projected.max_hp);
@@ -593,7 +993,9 @@ mod tests {
             &mut exp,
             &mut stats,
             10_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             Some(TALENT_START_LEVEL),
             0,
         );
@@ -632,7 +1034,9 @@ mod tests {
             &mut exp,
             &mut stats,
             100_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             Some(TALENT_START_LEVEL),
             0,
         )
@@ -660,7 +1064,9 @@ mod tests {
             &mut exp,
             &mut stats,
             100_000,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -691,7 +1097,9 @@ mod tests {
             &mut unboosted_exp,
             &mut unboosted_stats,
             three_quarters,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             0,
         )
@@ -708,7 +1116,9 @@ mod tests {
             &mut boosted_exp,
             &mut boosted_stats,
             three_quarters,
-            BASELINE_GROWTH_MULTIPLIER,
+            Growth::Auto {
+                multiplier: BASELINE_GROWTH_MULTIPLIER,
+            },
             None,
             50,
         )

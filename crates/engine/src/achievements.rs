@@ -1,5 +1,4 @@
-//! The cross-run achievement profile: what can be earned, and the roll that
-//! decides what a stat reward turns into.
+//! The cross-run achievement profile: what can be earned and what it pays.
 //!
 //! Achievements are data, like species and items — `assets/achievements/*.ron`,
 //! one file per rung, so adding one is a file drop. What is *not* data is the
@@ -76,8 +75,9 @@ pub enum Trigger {
 /// authored list and therefore assertable — see `tuning::MAX_PROFILE_*`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reward {
-    /// `n` points into one main stat, chosen by `roll_main_stat` at earn time
-    /// and then stored in the profile entry so it never rerolls.
+    /// `n` stat points banked at the start of the next run, for the player
+    /// to spend on the Points screen. Named for the roll it used to make;
+    /// the name stays because it is what the shipped `.ron` files say.
     RandomMainStat(u32),
     /// `n` added to the player's Perk Point pool, spent through the ordinary
     /// `perks.rs` machinery.
@@ -85,41 +85,6 @@ pub enum Reward {
     /// The next run begins with this species tamed and owned. Whether the id
     /// names a real species is checked where `SpeciesDb` is in hand, not here.
     StartingProgram(String),
-}
-
-/// The four axes `Reward::RandomMainStat` can land on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MainStat {
-    Atk,
-    Def,
-    /// `Stats::max_hp`, and `hp` with it — a run must not start damaged.
-    Integrity,
-    Decompiler,
-}
-
-impl MainStat {
-    /// In the order `roll_main_stat` indexes. Appending here changes what
-    /// every existing id rolls, which would contradict an already-written
-    /// `profile.ron`; the four axes are the player's four axes, so this is
-    /// not expected to grow.
-    pub fn all() -> [MainStat; 4] {
-        [
-            MainStat::Atk,
-            MainStat::Def,
-            MainStat::Integrity,
-            MainStat::Decompiler,
-        ]
-    }
-
-    /// How the stat reads on the achievements screen.
-    pub fn label(self) -> &'static str {
-        match self {
-            MainStat::Atk => "Attack",
-            MainStat::Def => "Mitigation",
-            MainStat::Integrity => "Integrity",
-            MainStat::Decompiler => "Decompiler",
-        }
-    }
 }
 
 /// One authored rung.
@@ -207,9 +172,10 @@ fn reward_complaint(def: &AchievementDef) -> Option<String> {
 }
 
 /// One rung, earned. What the profile remembers about it beyond the fact
-/// itself: when it first happened, whether it has ever been done on
-/// permadeath, and — for a `Reward::RandomMainStat` — which stat the roll
-/// landed on, so it is decided once and never rerolls.
+/// itself: when it first happened and whether it has ever been done on
+/// permadeath. A `profile.ron` written when a stat reward rolled an axis
+/// still carries a `rolled_stat` field; nothing sets `deny_unknown_fields`,
+/// so it parses and is ignored.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Earned {
     pub id: AchievementId,
@@ -221,8 +187,6 @@ pub struct Earned {
     /// is the only thing that may write it.
     #[serde(default)]
     pub permadeath: bool,
-    #[serde(default)]
-    pub rolled_stat: Option<MainStat>,
 }
 
 /// Everything earned across every run, and the one thing in this game that
@@ -352,27 +316,6 @@ impl Profile {
     }
 }
 
-/// Which main stat a `Reward::RandomMainStat` rung pays into.
-///
-/// A pure function of the id, seeded from the id's own bytes and never from
-/// `resources::GameRng`, for the reason `Game::orphan_species` gives: the
-/// answer is written into `profile.ron` and must be identical after a reload
-/// and on every machine, and a draw off the shared stream would also shift
-/// every later roll in the run.
-///
-/// The fold is spelled out rather than handed to `DefaultHasher`, whose
-/// output is explicitly not stable across Rust releases — a toolchain upgrade
-/// would otherwise silently disagree with every profile already on disk.
-/// FNV-1a, 64-bit.
-pub fn roll_main_stat(id: &AchievementId) -> MainStat {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in id.as_str().as_bytes() {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    MainStat::all()[(hash % MainStat::all().len() as u64) as usize]
-}
-
 /// Every authored rung with what it pays and, where earned, what earning it
 /// looked like — in `AchievementDb::iter` order, which is stable between
 /// runs so the screen does not reshuffle.
@@ -391,7 +334,6 @@ pub fn report(db: &AchievementDb, profile: &Profile) -> Vec<crate::views::Achiev
                 crate::views::EarnedSummary {
                     tick: e.first_tick,
                     permadeath: e.permadeath,
-                    rolled_stat: e.rolled_stat.map(|s| s.label().to_string()),
                 }
             }),
         })
@@ -405,16 +347,11 @@ pub fn report(db: &AchievementDb, profile: &Profile) -> Vec<crate::views::Achiev
 /// creation wizard's preview reads.** A rung whose id is no longer in `db`
 /// (a mod removed) is silently dropped, same as `grant_profile_rewards`
 /// always did — the caller decides what to do with an empty list.
-///
-/// The paired `MainStat` is `Earned::rolled_stat`, the roll as recorded at
-/// earn time, never a fresh `roll_main_stat` call — see that function's own
-/// doc comment for why a re-roll here would be wrong even though it is
-/// deterministic.
-pub fn profile_rewards(profile: &Profile, db: &AchievementDb) -> Vec<(Reward, Option<MainStat>)> {
+pub fn profile_rewards(profile: &Profile, db: &AchievementDb) -> Vec<Reward> {
     profile
         .earned
         .iter()
-        .filter_map(|e| db.get(&e.id).map(|def| (def.reward.clone(), e.rolled_stat)))
+        .filter_map(|e| db.get(&e.id).map(|def| def.reward.clone()))
         .collect()
 }
 
@@ -430,22 +367,12 @@ pub fn profile_rewards(profile: &Profile, db: &AchievementDb) -> Vec<(Reward, Op
 /// owes — this is a second *length* of it, `Game::item_effects`' relation
 /// to `item_grant`.
 pub fn profile_summary(profile: &Profile, db: &AchievementDb) -> Vec<String> {
-    let mut stats: Vec<(MainStat, u32)> = Vec::new();
+    let mut stat_points = 0;
     let mut perk_points = 0;
     let mut programs: Vec<(String, u32)> = Vec::new();
-    for (reward, rolled) in profile_rewards(profile, db) {
+    for reward in profile_rewards(profile, db) {
         match reward {
-            Reward::RandomMainStat(n) => {
-                // An unrolled rung names no axis and so cannot be folded
-                // into one; `preview_line` keeps it vague for the same
-                // reason, and it is dropped here rather than guessed at.
-                if let Some(stat) = rolled {
-                    match stats.iter_mut().find(|(s, _)| *s == stat) {
-                        Some((_, total)) => *total += n,
-                        None => stats.push((stat, n)),
-                    }
-                }
-            }
+            Reward::RandomMainStat(n) => stat_points += n,
             Reward::PerkPoints(n) => perk_points += n,
             Reward::StartingProgram(species) => {
                 match programs.iter_mut().find(|(s, _)| *s == species) {
@@ -456,15 +383,11 @@ pub fn profile_summary(profile: &Profile, db: &AchievementDb) -> Vec<String> {
         }
     }
 
-    let mut lines: Vec<String> = MainStat::all()
-        .into_iter()
-        .filter_map(|axis| {
-            stats
-                .iter()
-                .find(|(s, _)| *s == axis)
-                .map(|(_, n)| format!("+{n} {}", axis.label()))
-        })
-        .collect();
+    let mut lines = Vec::new();
+    if stat_points > 0 {
+        let plural = if stat_points == 1 { "" } else { "s" };
+        lines.push(format!("+{stat_points} stat point{plural}"));
+    }
     if perk_points > 0 {
         let plural = if perk_points == 1 { "" } else { "s" };
         lines.push(format!("+{perk_points} Perk Point{plural}"));
@@ -478,27 +401,10 @@ pub fn profile_summary(profile: &Profile, db: &AchievementDb) -> Vec<String> {
     lines
 }
 
-/// How an already-rolled reward reads on the creation wizard's preview.
-///
-/// Unlike `reward_label`, which keeps `RandomMainStat` deliberately vague
-/// for the achievements screen's still-unearned rows, this is only ever
-/// called on a reward `profile_rewards` has already resolved — the roll
-/// happened at earn time, so naming the stat here reveals nothing that
-/// earning it didn't already.
-pub fn preview_line(reward: &Reward, rolled: Option<MainStat>) -> String {
-    match (reward, rolled) {
-        (Reward::RandomMainStat(n), Some(stat)) => format!("+{n} {}", stat.label()),
-        _ => reward_label(reward),
-    }
-}
-
-/// How a reward reads on the screen. A `RandomMainStat` is deliberately
-/// unspecific here — the roll *is* predictable from the id, but which stat it
-/// landed on is the small reveal of earning it, and the earned row shows the
-/// answer through `EarnedSummary::rolled_stat`.
+/// How a reward reads on the achievements screen.
 fn reward_label(reward: &Reward) -> String {
     match reward {
-        Reward::RandomMainStat(n) => format!("+{n} to one main stat"),
+        Reward::RandomMainStat(n) => format!("+{n} stat point"),
         Reward::PerkPoints(n) => format!("+{n} Perk Point"),
         Reward::StartingProgram(species) => format!("start with a {species}"),
     }
@@ -510,7 +416,6 @@ mod tests {
     use crate::tuning::{
         MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
     };
-    use std::collections::HashSet;
 
     fn temp_profile(tag: &str) -> std::path::PathBuf {
         let path =
@@ -524,7 +429,6 @@ mod tests {
             id: AchievementId::from(id),
             first_tick: 7,
             permadeath,
-            rolled_stat: Some(MainStat::Def),
         }
     }
 
@@ -536,13 +440,11 @@ mod tests {
             id: AchievementId::from("breach_zone_4"),
             first_tick: 812,
             permadeath: true,
-            rolled_stat: None,
         });
         profile.record(Earned {
             id: AchievementId::from("breach_zone_2"),
             first_tick: 190,
             permadeath: false,
-            rolled_stat: Some(MainStat::Atk),
         });
         profile.save(&path).unwrap();
 
@@ -629,14 +531,13 @@ mod tests {
     }
 
     #[test]
-    fn an_earned_achievement_reports_its_cycle_mode_and_rolled_stat() {
+    fn an_earned_achievement_reports_its_cycle_and_mode() {
         let (db, _) = AchievementDb::load_dir(&achievement_assets_dir()).unwrap();
         let mut profile = Profile::default();
         profile.record(Earned {
             id: AchievementId::from("breach_zone_2"),
             first_tick: 812,
             permadeath: true,
-            rolled_stat: Some(MainStat::Integrity),
         });
 
         let rows = report(&db, &profile);
@@ -647,7 +548,6 @@ mod tests {
         let summary = row.earned.as_ref().expect("it was earned");
         assert_eq!(summary.tick, 812);
         assert!(summary.permadeath);
-        assert_eq!(summary.rolled_stat.as_deref(), Some("Integrity"));
 
         assert!(
             rows.iter().filter(|r| r.earned.is_some()).count() == 1,
@@ -752,30 +652,32 @@ mod tests {
         );
     }
 
+    /// A `profile.ron` written when a stat reward rolled an axis still
+    /// carries `rolled_stat`. Nothing sets `deny_unknown_fields`, and `load`
+    /// throws the whole profile away on a parse failure, so the retired
+    /// field must be ignored rather than cost the player every achievement.
     #[test]
-    fn a_rolled_stat_is_a_pure_function_of_the_id() {
+    fn a_profile_written_with_the_retired_rolled_stat_field_still_loads() {
+        let path = temp_profile("rolled_stat");
+        std::fs::write(
+            &path,
+            "(earned:[(id:\"breach_zone_2\",first_tick:12,permadeath:false,rolled_stat:Some(Atk))])",
+        )
+        .unwrap();
+        let (profile, warning) = Profile::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(warning, None);
+        assert_eq!(profile.earned.len(), 1);
+    }
+
+    #[test]
+    fn stat_rewards_fold_into_one_stat_point_line() {
         let (db, _) = AchievementDb::load_dir(&achievement_assets_dir()).unwrap();
-        let rolling: Vec<&AchievementDef> = db
-            .iter()
-            .filter(|d| matches!(d.reward, Reward::RandomMainStat(_)))
-            .collect();
-        assert!(rolling.len() >= 4, "the ladder should roll more than once");
-
-        for def in &rolling {
-            assert_eq!(
-                roll_main_stat(&def.id),
-                roll_main_stat(&def.id),
-                "{} must roll the same stat every time — the answer is written into \
-                 profile.ron and has to survive a reload",
-                def.id
-            );
+        let mut profile = Profile::default();
+        for id in ["breach_zone_2", "uptime_500"] {
+            profile.record(earned(id, false));
         }
-
-        let distinct: HashSet<MainStat> = rolling.iter().map(|d| roll_main_stat(&d.id)).collect();
-        assert!(
-            distinct.len() > 1,
-            "every rolling rung landed on the same stat; the roll is not distributing"
-        );
+        assert_eq!(profile_summary(&profile, &db), vec!["+2 stat points"]);
     }
 
     /// The whole reason this is a plain `bool` on `Profile` rather than

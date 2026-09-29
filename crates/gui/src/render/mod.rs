@@ -61,6 +61,7 @@ mod meta;
 mod notify;
 mod outposts;
 mod party;
+mod points;
 mod popup;
 mod progression;
 mod research_graph;
@@ -896,6 +897,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::PartyMenu => app.party_menu_rows(),
         _ => Vec::new(),
     };
+    // Rows off `app` before `app.game` is borrowed, `group_rows`' reason.
+    let allocation_rows = match app.mode {
+        Mode::AllocateStats => points::allocate_stats_rows(app),
+        _ => Vec::new(),
+    };
     let staffing = match app.mode {
         Mode::StructureAssign => app.staffing(),
         _ => None,
@@ -1430,6 +1436,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::Perks => draw_perks_menu(game, selected, refusal, painter, m),
+        Mode::AllocateStats => points::draw_allocate_stats(&allocation_rows, refusal, painter, m),
         Mode::RespecPerksConfirm => {
             let quote = game.respec_quote(RespecSubject::Perks);
             draw_respec_confirm(&quote, "perk", refusal, painter, m)
@@ -1551,7 +1558,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 120] = [
+    const ALL_MODES: [Mode; 121] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1646,6 +1653,7 @@ mod tests {
         Mode::RespecPerksConfirm,
         Mode::RespecTalentsConfirm,
         Mode::Perks,
+        Mode::AllocateStats,
         Mode::Research,
         Mode::RoutineResearch,
         Mode::Contracts,

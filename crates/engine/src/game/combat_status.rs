@@ -57,7 +57,9 @@ impl Game {
     /// clear it (`Cleanse` and `end_battle`), which is what makes
     /// `ActiveStatus::landed_this_round` true for every condition that has
     /// ever been inflicted rather than for the ones whose call site
-    /// remembered. Silently does nothing on an entity with no
+    /// remembered. The target's `Derived::status_resist` scales `duration`
+    /// here and nowhere else (`progression::resisted_duration`), so no
+    /// caller can skip it. Silently does nothing on an entity with no
     /// `StatusEffects` component — a condition needs somewhere to live, and
     /// the caller has no better answer than the target simply not being a
     /// combatant.
@@ -68,10 +70,14 @@ impl Game {
         duration: u32,
         power: i32,
     ) {
+        let resist = self
+            .world
+            .get::<crate::components::Derived>(entity)
+            .map_or(0, |d| d.status_resist);
         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
             statuses.active = Some(ActiveStatus {
                 kind,
-                remaining: duration,
+                remaining: crate::progression::resisted_duration(duration, resist),
                 power,
                 landed_this_round: true,
             });
@@ -373,8 +379,9 @@ impl Game {
                 }
             }
             FieldBuffKind::Trickle => {
+                let max = self.max_power(entity);
                 if let Some(mut needs) = self.world.get_mut::<PowerReserve>(entity) {
-                    needs.restore(power as f32);
+                    needs.restore(power as f32, max);
                 }
             }
             FieldBuffKind::Atk

@@ -238,7 +238,7 @@ mod tests {
     /// duplicating it: it buys attempts on *healthier* programs, so it is
     /// worth nothing once the target is already drained. A change that made
     /// it a flat bonus would break this and re-introduce the overlap with
-    /// `DECOMPILER_SKILL_PER_LEVEL` that it exists to avoid.
+    /// automatic Decompiler growth that it exists to avoid.
     #[test]
     fn hp_penalty_reduction_is_inert_against_a_fully_drained_target() {
         let plain = capture_chance(0.4, fresh(0.0, 0.4), RAW);

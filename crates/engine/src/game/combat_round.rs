@@ -934,6 +934,7 @@ impl Game {
             mitigation: self.effective_mitigation(entity),
             status_effect: self.status_label(entity),
             power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
+            max_power: self.max_power(entity),
             planned,
             front: slot < FRONT_SLOTS,
             gear: self.gear_tag(entity),

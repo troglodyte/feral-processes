@@ -25,6 +25,7 @@ const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 
 const ESC_HINT: &str = "[Esc] Close";
 const PERKS_HINT: &str = "[P] Perks";
+const POINTS_HINT: &str = "[Enter] Spend points";
 
 fn panel_rect(w: f32, h: f32) -> Rect {
     let (pw, ph) = (w * PANEL_W_FRACTION, h * PANEL_H_FRACTION);
@@ -91,7 +92,10 @@ fn widest_line(painter: &Painter, m: &Metrics, report: &LevelUpReport) -> f32 {
         "  +{} Perk Points ({} unspent)   {PERKS_HINT}",
         report.perk_points_gained, report.perk_points_unspent
     );
-    let decompiler_line = format!("  +{} Decompiler skill", report.decompiler_gained);
+    let points_line = format!(
+        "  +{} Stat Points ({} unspent)   {POINTS_HINT}",
+        report.stat_points_gained, report.stat_points_unspent
+    );
 
     let mut widest = painter.measure_ui_advance(&title, m.title());
     for row in &report.stats {
@@ -103,7 +107,7 @@ fn widest_line(painter: &Painter, m: &Metrics, report: &LevelUpReport) -> f32 {
     }
     widest = widest.max(painter.measure_ui_advance("TO SPEND", m.font_size));
     widest = widest.max(painter.measure_ui_advance(&perk_line, m.font_size));
-    widest = widest.max(painter.measure_ui_advance(&decompiler_line, m.font_size));
+    widest = widest.max(painter.measure_ui_advance(&points_line, m.font_size));
     widest
 }
 
@@ -157,13 +161,13 @@ pub(super) fn draw_level_up(report: &LevelUpReport, painter: &Painter, m: &Metri
     painter.ui(PERKS_HINT, right - hint_w, y, m.small(), TEXT_DIM);
 
     y += m.line_height;
-    painter.ui(
-        format!("  +{} Decompiler skill", report.decompiler_gained),
-        left,
-        y,
-        m.font_size,
-        TEXT,
+    let points_line = format!(
+        "  +{} Stat Points ({} unspent)",
+        report.stat_points_gained, report.stat_points_unspent
     );
+    painter.ui(&points_line, left, y, m.font_size, TEXT);
+    let hint_w = painter.measure_ui_advance(POINTS_HINT, m.small());
+    painter.ui(POINTS_HINT, right - hint_w, y, m.small(), TEXT_DIM);
 
     y += m.gap;
     y += m.line_height;
@@ -195,7 +199,8 @@ mod tests {
             swings_to_down_you: (999, 999),
             perk_points_gained: 98,
             perk_points_unspent: 998,
-            decompiler_gained: 98,
+            stat_points_gained: 98,
+            stat_points_unspent: 998,
         }
     }
 
@@ -247,8 +252,9 @@ mod tests {
             "1234.9 \u{2192} 9999.9",
             "999 \u{2192} 999",
             "+98 Perk Points (998 unspent)",
-            "+98 Decompiler skill",
+            "+98 Stat Points (998 unspent)",
             PERKS_HINT,
+            POINTS_HINT,
             ESC_HINT,
         ] {
             assert!(text.contains(want), "missing {want:?} in {text}");

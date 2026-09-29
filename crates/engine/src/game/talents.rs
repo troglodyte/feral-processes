@@ -241,5 +241,6 @@ impl Game {
         }
         self.world.entity_mut(entity).insert(receipt);
         self.apply_equipment_delta(entity, gear, 1);
+        self.recompute_derived(entity);
     }
 }

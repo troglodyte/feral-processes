@@ -237,6 +237,7 @@ impl Game {
             }
         }
         self.world.entity_mut(player).insert(receipt);
+        self.recompute_derived(player);
         self.log(format!("You buy the {name} perk (level {level})."));
         self.note_deed(crate::contracts::Deed::UnlockedPerk);
         Ok(())

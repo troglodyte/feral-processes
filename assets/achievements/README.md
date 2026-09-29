@@ -27,10 +27,9 @@ there is no in-game reset.
 
 ```ron
 (
-    // Unique. Also the key in profile.ron, and the seed for the
-    // RandomMainStat roll below — so renaming an id makes an already-earned
-    // achievement look unearned, and re-rolls its stat. Treat it as
-    // permanent once anyone has played with it.
+    // Unique. Also the key in profile.ron, so renaming an id makes an
+    // already-earned achievement look unearned. Treat it as permanent once
+    // anyone has played with it.
     id: "breach_zone_4",
 
     // Shown on the achievements screen, reachable from the main menu.
@@ -82,15 +81,13 @@ riding in on this note.
 
 | Written as | Pays |
 |---|---|
-| `RandomMainStat(1)` | 1 point into one of Attack / Mitigation / Integrity / Decompiler |
+| `RandomMainStat(1)` | 1 stat point, banked at the start of the next run and spent on the Points screen |
 | `PerkPoints(1)` | 1 Perk Point, spent in the perk picker like any other |
 | `StartingProgram("scrapper")` | that species, tamed and owned, at the start of the next run |
 
-`RandomMainStat`'s "random" is decided once, at the moment you earn it, by a
-roll seeded from the achievement's **id** — not from the game's RNG. So it's
-the same answer on every machine and after every reload, and two players who
-earn `breach_zone_2` get the same stat. Which stat an id lands on isn't
-predictable by eye; change the id and you change the answer.
+The name is a leftover from when the reward rolled one of four stats; it now
+banks plain stat points, and the name stays because it is what the shipped
+files say. A `profile.ron` written under the old rule still loads.
 
 `StartingProgram` hands the program over **owned but not deployed** — it goes
 in your roster, and you add it to the party yourself, like every other
@@ -107,7 +104,7 @@ The whole authored ladder is capped, and the cap is asserted over these files
 by `the_full_ladder_stays_under_its_ceiling` in
 `crates/engine/src/achievements.rs`:
 
-- at most **8** total `RandomMainStat` points
+- at most **8** total `RandomMainStat` stat points
 - at most **5** total `PerkPoints`
 - at most **1** `StartingProgram`
 

@@ -295,12 +295,17 @@ fn spawn_player_from_save(
                 color: GlyphColor::Cyan,
             },
             Stats {
+                // Placeholders but for `hp`: `recompute_derived` in
+                // `Game::load` writes the rest and clamps `hp` to the new
+                // maximum, so the file carries none of them.
                 hp: player_save.hp,
-                max_hp: player_save.max_hp,
-                atk: player_save.atk,
-                mitigation: player_save.mitigation,
+                max_hp: player_save.hp,
+                atk: 0,
+                mitigation: 0,
             },
-            PowerReserve::new(player_save.power),
+            // Unbounded until `recompute_derived` below trims it to the
+            // derived maximum: the file's Bandwidth is not known yet.
+            PowerReserve::new(player_save.power, f32::MAX),
             Experience {
                 level: player_save.level,
                 xp: player_save.xp,
@@ -312,9 +317,7 @@ fn spawn_player_from_save(
                 // `SAVE_FORMAT_VERSION` bump) and is simply not trusted.
                 xp_to_next: crate::progression::xp_for_level(player_save.level),
             },
-            Decompiler {
-                skill: player_save.decompiler,
-            },
+            Decompiler { skill: 0 },
             Equipment {
                 weapon: worn_from_save(
                     player_save.weapon,
@@ -1530,6 +1533,7 @@ impl Game {
         let saved_routes = std::mem::take(&mut data.player.routes);
         let tutorial_seeded = data.player.tutorial_seeded;
         let saved_attributes = std::mem::take(&mut data.player.attributes);
+        let saved_stat_points = data.player.stat_points;
         let player_class = data.player.class;
         let player =
             spawn_player_from_save(&mut world, data.player, player_routines, player_perk_levels);
@@ -1550,9 +1554,8 @@ impl Game {
                         .map(|def| def.attributes.clone())
                 })
                 .unwrap_or_default();
-            crate::attributes::mint(
+            crate::attributes::authored_or_base(
                 world.resource::<crate::attributes::AttributeDb>(),
-                crate::attributes::player_seed(world.resource::<WorldMap>().seed()),
                 &authored,
             )
         } else {
@@ -1562,7 +1565,11 @@ impl Game {
             }
             restored
         };
-        world.entity_mut(player).insert(player_attributes);
+        world.entity_mut(player).insert((
+            player_attributes,
+            crate::components::Derived::default(),
+            crate::components::StatPoints(saved_stat_points),
+        ));
 
         if let Some(name) = CustomName::sanitize(Some(player_name)) {
             world.entity_mut(player).insert(CustomName(name));
@@ -1600,6 +1607,10 @@ impl Game {
         let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
+        // Derived values are not trusted from the file: gear, `BoughtStats`
+        // and the attributes are, and the stats are rebuilt from them.
+        let player = game.player_entity();
+        game.recompute_derived(player);
         for warning in load_warnings {
             game.log(warning);
         }
@@ -2185,7 +2196,7 @@ impl Game {
                 c.disposition
                     .unwrap_or_else(|| crate::disposition::Disposition::seed(program_id)),
                 Tamed { owner: ctx.player },
-                PowerReserve::new(c.power),
+                PowerReserve::new(c.power, POWER_MAX),
                 Experience {
                     level: c.level,
                     xp: c.xp,
@@ -2727,7 +2738,6 @@ impl Game {
         let stats = *self.world.get::<Stats>(player).unwrap();
         let needs = *self.world.get::<PowerReserve>(player).unwrap();
         let exp = *self.world.get::<Experience>(player).unwrap();
-        let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = self.world.get::<Equipment>(player).unwrap().clone();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
         let gear_copies = self
@@ -2838,15 +2848,15 @@ impl Game {
         save::PlayerSave {
             position: (pos.x, pos.y),
             hp: stats.hp,
-            max_hp: stats.max_hp,
-            atk: stats.atk,
-            mitigation: stats.mitigation,
             power: needs.get(),
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(player)
+                .map_or(0, |p| p.0),
             inventory,
             level: exp.level,
             xp: exp.xp,
             xp_to_next: exp.xp_to_next,
-            decompiler,
             weapon: equipment.weapon.as_ref().map(|e| e.copy.item.clone()),
             weapon_level: equipment.weapon.as_ref().map(|e| e.level).unwrap_or(1),
             weapon_fusion_tier: equipment.weapon.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -3245,7 +3255,7 @@ impl Game {
     /// Takes no argument on purpose: it reads the installed `Profile`, so the
     /// two calls cannot disagree about which profile is in play.
     pub fn grant_profile_rewards(&mut self) {
-        use crate::achievements::{AchievementDb, MainStat, Profile, Reward};
+        use crate::achievements::{AchievementDb, Profile, Reward};
 
         // Nothing calls this twice, and the doubling would be invisible if
         // something started to — a stat is just a number, with no record of
@@ -3258,7 +3268,7 @@ impl Game {
         }
         self.world.insert_resource(ProfileRewardsPaid);
 
-        let rewards: Vec<(Reward, Option<MainStat>)> = {
+        let rewards: Vec<Reward> = {
             let db = self.world.resource::<AchievementDb>();
             let profile = self.world.resource::<Profile>();
             crate::achievements::profile_rewards(profile, db)
@@ -3271,28 +3281,13 @@ impl Game {
         let mut stat_points = 0;
         let mut perk_points = 0;
         let mut programs = Vec::new();
-        for (reward, rolled) in rewards {
+        for reward in rewards {
             match reward {
                 Reward::RandomMainStat(n) => {
-                    // The profile's recorded answer, never a fresh roll: the
-                    // stat was decided at earn time and written down so it
-                    // could not drift.
-                    let Some(stat) = rolled else { continue };
-                    let n = n as i32;
-                    match stat {
-                        MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += n,
-                        MainStat::Def => {
-                            self.world.get_mut::<Stats>(player).unwrap().mitigation += n
-                        }
-                        MainStat::Integrity => {
-                            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
-                            stats.max_hp += n;
-                            // Both halves, or the run starts damaged.
-                            stats.hp += n;
-                        }
-                        MainStat::Decompiler => {
-                            self.world.get_mut::<Decompiler>(player).unwrap().skill += n
-                        }
+                    if let Some(mut points) =
+                        self.world.get_mut::<crate::components::StatPoints>(player)
+                    {
+                        points.0 += n;
                     }
                     stat_points += n;
                 }

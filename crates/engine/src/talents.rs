@@ -42,9 +42,8 @@ impl std::fmt::Display for TalentId {
 
 /// Which of a creature's three stats a `TalentNode::Stat` raises.
 ///
-/// Deliberately not `achievements::MainStat`, whose fourth axis is the
-/// player-only `Decompiler` — a companion has no such stat, and a node naming
-/// it would be authorable and silently do nothing.
+/// Deliberately three: `Decompiler` is a player-only stat, and a companion
+/// node naming it would be authorable and silently do nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TalentStat {
     Hp,

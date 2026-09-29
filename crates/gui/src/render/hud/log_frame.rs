@@ -40,7 +40,6 @@
 //! a pickup and a sweep — picked out of it. See `channel_tag`.
 
 use feral_processes_app_core::LogFilter;
-use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::text::wrap;
 use feral_processes_engine::{LogEntry, MessageKind, MessageSource, PlayerStatus};
 
@@ -156,7 +155,13 @@ fn vitals_segments(v: &Vitals) -> Vec<Vec<Piece>> {
     integ.push(value(format!(" {}/{}", s.hp, s.max_hp.max(1))));
     out.push(integ);
 
-    let mut pwr = meter("PWR ", s.power, POWER_MAX, POWER_CELLS, palette::ATTENTION);
+    let mut pwr = meter(
+        "PWR ",
+        s.power,
+        s.max_power,
+        POWER_CELLS,
+        palette::ATTENTION,
+    );
     pwr.push(value(format!(" {:.0}", s.power)));
     out.push(pwr);
 

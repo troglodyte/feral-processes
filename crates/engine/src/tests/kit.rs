@@ -427,7 +427,7 @@ mod emulation_tests {
     #[test]
     fn the_creation_stat_pool_writes_no_bought_stats_receipt() {
         let choice = crate::CharacterChoice {
-            stats: [1, 0, 0, 0],
+            stats: [("analysis".into(), 1)].into(),
             ..crate::CharacterChoice::default()
         };
         let game = Game::new_with(4, DifficultyMode::Forgiving, &test_assets_dir(), &choice)
@@ -1539,7 +1539,10 @@ mod emulation_tests {
             game.world.entity_mut(player).remove::<Emulation>();
             game.world.entity_mut(player).remove::<AbilityCooldowns>();
             game.world.get_mut::<Stats>(player).unwrap().hp = 1;
-            game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+            game.world
+                .get_mut::<PowerReserve>(player)
+                .unwrap()
+                .fill(crate::components::POWER_MAX);
 
             let index = game
                 .actor_abilities(player)

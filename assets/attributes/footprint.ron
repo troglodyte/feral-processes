@@ -6,4 +6,6 @@
     meaning: "How much of the heap this program takes up while it runs. A large-Footprint program is a presence wherever it is loaded, and a small one is the kind you forget is resident at all.",
     base: 45,
     spread: 16,
+    effects: [(stat: Mitigation, per_point: 1.0), (stat: MaxHp, per_point: 2.0)],
+    does: "Each point above the baseline adds 1 mitigation and 2 maximum HP.",
 )

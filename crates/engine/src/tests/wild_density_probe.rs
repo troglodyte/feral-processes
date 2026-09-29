@@ -28,7 +28,7 @@ fn box_count(pts: &[(i32, i32)], cx: i32, cy: i32) -> usize {
 fn keep_alive(game: &mut Game) {
     let p = game.player_entity();
     if let Some(mut r) = game.world.get_mut::<PowerReserve>(p) {
-        r.fill();
+        r.fill(crate::components::POWER_MAX);
     }
 }
 

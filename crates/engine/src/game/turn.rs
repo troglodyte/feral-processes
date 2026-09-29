@@ -1315,8 +1315,9 @@ impl Game {
             self.log(format!("You have no {}.", self.item_name(id)));
             return false;
         }
+        let max = self.max_power(who);
         if let Some(mut needs) = self.world.get_mut::<PowerReserve>(who) {
-            needs.restore(effect.power);
+            needs.restore(effect.power, max);
         }
         if effect.heal != 0
             && let Some(mut stats) = self.world.get_mut::<Stats>(who)
@@ -1506,8 +1507,9 @@ impl Game {
             spent = Some(name);
         }
         {
+            let max = self.max_power(player);
             let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
-            needs.fill();
+            needs.fill(max);
         }
         {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
@@ -1570,8 +1572,9 @@ impl Game {
             // — a Bay restores Integrity and nothing else, so withholding
             // this too would strand a program that spent Power defending a
             // sweep.
+            let max = self.max_power(creature);
             if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(creature) {
-                reserve.fill();
+                reserve.fill(max);
             }
         }
         match spent {

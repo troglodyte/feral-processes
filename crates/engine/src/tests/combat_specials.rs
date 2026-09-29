@@ -398,8 +398,10 @@ fn a_companion_spends_its_round_on_a_power_cell_and_charges_itself() {
     let companion = spawn_tamed(&mut game, 10, 20);
     enlist(&mut game, companion);
 
-    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(10.0);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(40.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+        PowerReserve::new(10.0, crate::components::POWER_MAX);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(40.0, crate::components::POWER_MAX);
     let cell = ItemId::from(ids::POWER_CELL);
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
     let held = inv.count(&cell);

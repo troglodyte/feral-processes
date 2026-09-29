@@ -5,10 +5,16 @@
     player: (
         position: (4, -2),
         hp: 535,
-        max_hp: 535,
-        atk: 48,
-        mitigation: 48,
         power: 99.85,
+        stat_points: 0,
+        attributes: {
+            "analysis": 84,
+            "bandwidth": 50,
+            "entropy": 40,
+            "footprint": 45,
+            "parity": 198,
+            "persistence": 50,
+        },
         inventory: [
             ("power_cell", 205),
             ("core_fragment", 222),
@@ -38,7 +44,6 @@
         level: 38,
         xp: 173,
         xp_to_next: 3040,
-        decompiler: 44,
         weapon: Some("black_ice_pick"),
         weapon_level: 1,
         weapon_fusion_tier: 0,

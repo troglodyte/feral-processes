@@ -296,6 +296,9 @@ pub struct PlayerStatus {
     /// What the player has left to spend on routine calls — see
     /// `components::PowerReserve`.
     pub power: f32,
+    /// The ceiling `power` is read against: derived from Bandwidth, so the
+    /// bar must never assume `POWER_MAX`. See `Game::max_power`.
+    pub max_power: f32,
     /// The player's cargo, and the one list every "what does the player
     /// have" screen reads. Banked items (`ItemDef::banked`) are **not** in
     /// it: a bank is not something carried and not something a trader
@@ -335,6 +338,9 @@ pub struct PlayerStatus {
     pub zone: u32,
     /// Unspent Perk Points (see `perks::Perk`), earned 1 per level gained.
     pub perk_points: u32,
+    /// Unspent attribute points, earned 6 per level gained and spent on the
+    /// Points screen.
+    pub stat_points: u32,
     /// Which perks have been unlocked so far.
     pub unlocked_perks: Vec<Perk>,
 }
@@ -1725,6 +1731,8 @@ pub enum AttentionKind {
     /// settled leaves nothing outstanding for the player to find.
     ResearchStalled,
     PerkPoints,
+    /// Attribute points banked by levelling and not yet spent.
+    StatPoints,
     /// The roster has outgrown `Game::pet_capacity`, and the programs past
     /// it are earning `unslotted`. Past, not at: a roster filling its slots
     /// exactly has nothing wrong with it, since slots are not a door.
@@ -1885,6 +1893,8 @@ pub struct PartySlotView {
     /// field routines are charged against — so this is `Some` for the whole
     /// party, and `None` only for a body that was never taken onto it.
     pub power: Option<f32>,
+    /// The ceiling `power` is read against - see `Game::max_power`.
+    pub max_power: f32,
     /// This round's chosen action rendered for the roster, or `None` if the
     /// slot is still awaiting one.
     pub planned: Option<String>,
@@ -2635,6 +2645,8 @@ impl ManifestView {
 pub struct PlayerManifest {
     /// See `components::PowerReserve`.
     pub power: f32,
+    /// See `PlayerStatus::max_power`.
+    pub max_power: f32,
     pub decompiler: i32,
     pub perk_points: u32,
     /// Every perk bought at least once, as (display name, level).
@@ -2968,8 +2980,6 @@ pub struct EarnedSummary {
     pub tick: u64,
     /// Whether it has ever been earned on permadeath.
     pub permadeath: bool,
-    /// Which stat the roll landed on, for a `Reward::RandomMainStat`.
-    pub rolled_stat: Option<String>,
 }
 
 /// One contract, worded — an offer on a Broker's board or one the run is
@@ -3580,9 +3590,10 @@ pub struct AlertView {
 /// The four duel figures are measured against `zone`'s typical foe (see
 /// `Game::typical_foe`), which does not itself change between the two
 /// columns — only the player does. `perk_points_gained` and
-/// `decompiler_gained` are `current − snapshot`, not
+/// `stat_points_gained` are `current − snapshot`, not
 /// `PERK_POINTS_PER_LEVEL * levels`, so an overflow point earned in the
-/// same award counts too.
+/// same award counts too. A level-up grows no stats on its own: the
+/// banked stat points are what it earned, spent on the Points screen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LevelUpReport {
     pub from_level: u32,
@@ -3595,5 +3606,6 @@ pub struct LevelUpReport {
     pub swings_to_down_you: (u32, u32),
     pub perk_points_gained: u32,
     pub perk_points_unspent: u32,
-    pub decompiler_gained: i32,
+    pub stat_points_gained: u32,
+    pub stat_points_unspent: u32,
 }

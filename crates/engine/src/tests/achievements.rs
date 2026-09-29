@@ -243,54 +243,54 @@ fn an_earned_line_survives_the_end_of_a_battle() {
     );
 }
 
-/// A profile holding exactly `id`, with `rolled_stat` as recorded — the shape
-/// app-core hands `install_profile` after reading `profile.ron`.
-pub(super) fn profile_of(id: &str, rolled_stat: Option<achievements::MainStat>) -> Profile {
+/// A profile holding exactly `id` — the shape app-core hands
+/// `install_profile` after reading `profile.ron`.
+pub(super) fn profile_of(id: &str) -> Profile {
     let mut profile = Profile::default();
     profile.record(achievements::Earned {
         id: AchievementId::from(id),
         first_tick: 1,
         permadeath: false,
-        rolled_stat,
     });
     profile
 }
 
+fn stat_points(game: &Game) -> u32 {
+    game.world
+        .get::<components::StatPoints>(game.player_entity())
+        .unwrap()
+        .0
+}
+
 #[test]
-fn a_profile_stat_reward_applies_at_new_game() {
+fn a_profile_stat_reward_banks_a_point_at_new_game() {
     let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of(
-        "breach_zone_2",
-        Some(achievements::MainStat::Atk),
-    ));
+    game.install_profile(profile_of("breach_zone_2"));
     game.grant_profile_rewards();
 
     let player = game.player_entity();
+    assert_eq!(stat_points(&game), 1);
     assert_eq!(
-        game.world.get::<Stats>(player).unwrap().atk,
-        tuning::PLAYER_BASE_STATS.atk + 1
+        *game.world.get::<Stats>(player).unwrap(),
+        tuning::PLAYER_BASE_STATS,
+        "the reward is a point to spend, not a stat: recompute would erase the latter"
     );
 }
 
 #[test]
-fn an_integrity_reward_starts_the_run_at_full_hp() {
+fn a_stat_reward_leaves_the_run_at_full_hp() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of(
-        "breach_zone_2",
-        Some(achievements::MainStat::Integrity),
-    ));
+    game.install_profile(profile_of("breach_zone_2"));
     game.grant_profile_rewards();
 
-    let player = game.player_entity();
-    let stats = *game.world.get::<Stats>(player).unwrap();
-    assert_eq!(stats.max_hp, tuning::PLAYER_BASE_STATS.max_hp + 1);
+    let stats = *game.world.get::<Stats>(game.player_entity()).unwrap();
     assert_eq!(stats.hp, stats.max_hp, "the run must not start damaged");
 }
 
 #[test]
 fn a_perk_point_reward_applies_at_new_game() {
     let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of("breach_zone_4", None));
+    game.install_profile(profile_of("breach_zone_4"));
     game.grant_profile_rewards();
 
     let player = game.player_entity();
@@ -300,7 +300,7 @@ fn a_perk_point_reward_applies_at_new_game() {
 #[test]
 fn a_starting_program_is_owned_but_not_deployed() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of("stack_depth_8", None));
+    game.install_profile(profile_of("stack_depth_8"));
     game.grant_profile_rewards();
 
     assert_eq!(game.pet_count(), 1, "the program should be owned");
@@ -316,15 +316,11 @@ fn a_starting_program_is_owned_but_not_deployed() {
 #[test]
 fn installing_a_profile_pays_nothing_on_its_own() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of(
-        "breach_zone_2",
-        Some(achievements::MainStat::Atk),
-    ));
+    game.install_profile(profile_of("breach_zone_2"));
 
-    let player = game.player_entity();
     assert_eq!(
-        game.world.get::<Stats>(player).unwrap().atk,
-        tuning::PLAYER_BASE_STATS.atk,
+        stat_points(&game),
+        0,
         "installing says what has been earned; it does not pay for it"
     );
 }
@@ -332,17 +328,13 @@ fn installing_a_profile_pays_nothing_on_its_own() {
 #[test]
 fn granting_twice_pays_once() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.install_profile(profile_of(
-        "breach_zone_2",
-        Some(achievements::MainStat::Atk),
-    ));
+    game.install_profile(profile_of("breach_zone_2"));
     game.grant_profile_rewards();
     game.grant_profile_rewards();
 
-    let player = game.player_entity();
     assert_eq!(
-        game.world.get::<Stats>(player).unwrap().atk,
-        tuning::PLAYER_BASE_STATS.atk + 1,
+        stat_points(&game),
+        1,
         "nothing should call this twice, but the doubling would be invisible if it did"
     );
 }
@@ -362,7 +354,7 @@ fn a_starting_program_naming_an_unknown_species_warns_and_pays_nothing() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 
-    game.install_profile(profile_of("ghost_program", None));
+    game.install_profile(profile_of("ghost_program"));
     game.grant_profile_rewards();
 
     assert_eq!(game.pet_count(), 0);
@@ -393,7 +385,7 @@ fn a_starting_program_arrives_holding_a_full_reserve() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &dir).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 
-    game.install_profile(profile_of("charged_program", None));
+    game.install_profile(profile_of("charged_program"));
     game.grant_profile_rewards();
 
     let player = game.player_entity();

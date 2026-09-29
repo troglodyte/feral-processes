@@ -17,8 +17,9 @@ pre-class game. That is the same supported way to play that deleting
 A class is chosen once, at character creation, and never rerolled. This
 file authors an **affinity spread** — a multiplier per ability category that
 scales the authored magnitude of the player's own routines — and a
-**starting kit** that replaces the default four-item inventory. No stat
-bonus, no talent tree.
+**starting kit** that replaces the default four-item inventory. It also
+authors the player's **starting attributes**, and through them the class's
+starting stats; see "Attributes" below. No talent tree.
 
 Three classes also carry an **effect**, which is *not* authored here — see
 "What a class does is code" below. (Talent trees in `assets/talents/` are a *companion's* axis;
@@ -51,6 +52,10 @@ Each file is one class:
                    damage routines land softer.",
     affinities: (heal: 1.3, damage: 0.8),
     kit: [("core_fragment", 5), ("power_cell", 5), ("outlet", 2)],
+    attributes: {
+        "analysis": 10, "persistence": 60, "entropy": 38,
+        "bandwidth": 48, "footprint": 44, "parity": 76,
+    },
 )
 ```
 
@@ -61,20 +66,33 @@ Each file is one class:
 | `description` | One or two sentences of flavour under it. |
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
 | `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. Superseded entirely if the player buys anything on the Kit step; see "What a class is" above. |
-| `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's own **base** for each one. An id this map does not name falls through to that attribute def's own `base`, so the two directories stay independent. |
+| `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's **starting value** for each one. An id this map does not name (or an empty map) starts at that attribute def's own `base`, so the two directories stay independent. |
 
 ## Attributes
 
-A class is the player's only authored source of attribute bases — the player
-carries no species. The number here is a **base the player mints a spread
-around**, not the number they end up with, and it is read once at creation:
-editing it does not change a run already in progress. Nothing reads an
-attribute for a mechanic; they are what the dossier page shows.
+A class is the player's only authored source of attribute values — the
+player carries no species. The number here is the player's **starting value,
+exactly**: there is no spread, because the player's numbers are chosen, not
+rolled (`attributes::authored_or_base`). It is read once at creation, so
+editing it does not change a run already in progress.
 
-All eight shipped classes author all five shipped attributes, held by
+**Classes deliberately start with different stats.** Each attribute's
+`effects` (see `assets/attributes/README.md`) are measured from that
+attribute's catalogue `base`, so a class that authors Parity above its base
+starts with more max HP, and one that authors Footprint below its base
+starts with negative mitigation and less HP. There is no net-zero rule
+across a class's attributes. The creation and level-up Points screens spend
+points on top of these values. The arena is the instrument for how far apart
+the shipped starts land:
+`docs/measurements/2026-09-29-level-up-stat-spend.md`, which found them
+very far apart at level 1.
+
+All eight shipped classes author all six shipped attributes, held by
 `every_shipped_class_authors_every_attribute` in
 `crates/engine/src/tests/assets.rs`. The field itself stays optional, so a
-mod's class file keeps parsing untouched.
+mod's class file keeps parsing untouched. An attribute a class authors at
+the def's `base` (every shipped class does this for Analysis, at 10) adds
+nothing to that attribute's stats.
 
 ## The damped-axis convention
 

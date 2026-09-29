@@ -13,11 +13,12 @@
 //! `Game::new` call sites construct.
 
 use crate::abilities::AbilityId;
-use crate::achievements::MainStat;
+use crate::attributes::AttributeId;
 use crate::classes::PlayerClass;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::*;
+use std::collections::BTreeMap;
 
 /// The sprite name every player carried before the wizard could choose
 /// one, and the name `assets/sprites/player.png` is loaded under. Named
@@ -44,13 +45,12 @@ pub struct CharacterChoice {
     /// `None` is `CharacterChoice::default()`'s own value, same as
     /// `components::PlayerIdentity::icon`.
     pub icon: Option<crate::icon::PlayerIcon>,
-    /// Units *bought* per axis, indexed as `MainStat::all()` — not points
-    /// spent. `cost()` is what prices a unit, at that axis's own
-    /// `tuning::CREATION_COST_*` rate; pricing at conversion time instead
-    /// (storing the spend and dividing it back out per axis on read) would
-    /// let 4 points on Def buy the same +1 mitigation as 3, silently
-    /// eating a point the player chose to spend.
-    pub stats: [u32; 4],
+    /// Points *bought* per attribute, on top of the class's values, out of
+    /// `tuning::CREATION_STAT_POINTS`. Keyed by attribute because the
+    /// attribute set is open (a mod adds one by adding a file). Units, not
+    /// pool points spent: `cost()` prices them, so a per-attribute rate can
+    /// return without the stored spend changing meaning.
+    pub stats: BTreeMap<AttributeId, u32>,
     pub routine: Option<AbilityId>,
     /// The starting kit picked off `items_db::creation_shelf`, priced
     /// against `tuning::CREATION_CREDITS`.
@@ -101,7 +101,7 @@ impl Default for CharacterChoice {
             sprite: DEFAULT_PLAYER_SPRITE.to_string(),
             colour: None,
             icon: None,
-            stats: [0; 4],
+            stats: BTreeMap::new(),
             routine: None,
             items: Vec::new(),
             perks: Vec::new(),
@@ -121,27 +121,14 @@ impl CharacterChoice {
         }
     }
 
-    /// Pool points this spend costs, priced per axis through
-    /// `crate::tuning::CREATION_COST_*` — `stats[i]` is how many points of axis
-    /// `MainStat::all()[i]` are bought, each at that axis's own rate. `None`
-    /// above `crate::tuning::CREATION_STAT_POINTS`; `Game::apply_character_choice`
-    /// fails closed on that, applying no spend at all rather than a
-    /// clamped one.
+    /// Pool points this spend costs, at
+    /// `tuning::CREATION_COST_PER_ATTRIBUTE_POINT` a point. `None` above
+    /// `tuning::CREATION_STAT_POINTS`; `Game::apply_character_choice` fails
+    /// closed on that, applying no spend at all rather than a clamped one.
     pub fn cost(&self) -> Option<u32> {
-        // Order matches `MainStat::all()`: Atk, Def, Integrity, Decompiler.
-        let costs = [
-            crate::tuning::CREATION_COST_ATK,
-            crate::tuning::CREATION_COST_DEF,
-            crate::tuning::CREATION_COST_INTEGRITY,
-            crate::tuning::CREATION_COST_DECOMPILER,
-        ];
-        let total = self
-            .stats
-            .iter()
-            .zip(costs)
-            .try_fold(0u32, |sum, (&points, cost)| {
-                sum.checked_add(points.checked_mul(cost)?)
-            })?;
+        let total = self.stats.values().try_fold(0u32, |sum, &points| {
+            sum.checked_add(points.checked_mul(crate::tuning::CREATION_COST_PER_ATTRIBUTE_POINT)?)
+        })?;
         (total <= crate::tuning::CREATION_STAT_POINTS).then_some(total)
     }
 
@@ -167,8 +154,10 @@ impl Game {
     /// logic; kit and routine are one-line delegations — see the module doc
     /// comment.
     pub(crate) fn apply_character_choice(&mut self, choice: &CharacterChoice) {
-        self.apply_creation_stats(choice);
+        // Identity first: it mints the attributes that the stat spend and
+        // `recompute_derived` both read.
         self.apply_creation_identity(choice);
+        self.apply_creation_stats(choice);
         self.apply_creation_kit(choice);
         crate::abilities::install_starter(self, choice.routine.as_ref());
         self.apply_creation_perks(choice);
@@ -215,33 +204,38 @@ impl Game {
         }
     }
 
-    /// Adds `choice`'s spend on top of `PLAYER_BASE_STATS`, never
-    /// redistributing it — every build is therefore at or above the floor
-    /// `balance_sim` models. Fails closed: `cost()` is the one gate, checked
-    /// once here, and an overspent choice gets no spend at all rather than
-    /// a clamped or partial one.
+    /// Raises the attributes `choice`'s spend buys, then derives the
+    /// player's stats from them and starts the run at full health and full
+    /// Power. Fails closed: `cost()` is the one gate, checked once here, and
+    /// an overspent choice gets no spend at all rather than a clamped or
+    /// partial one. An attribute the catalogue does not hold, or one with no
+    /// effects, buys nothing.
     fn apply_creation_stats(&mut self, choice: &CharacterChoice) {
-        if choice.cost().is_none() {
-            return;
-        }
         let player = self.player_entity();
-        for (axis, &points) in MainStat::all().iter().zip(choice.stats.iter()) {
-            let points = points as i32;
-            match axis {
-                MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += points,
-                MainStat::Def => self.world.get_mut::<Stats>(player).unwrap().mitigation += points,
-                MainStat::Integrity => {
-                    let gain = points * crate::tuning::CREATION_GAIN_INTEGRITY as i32;
-                    let mut stats = self.world.get_mut::<Stats>(player).unwrap();
-                    stats.max_hp += gain;
-                    // Both halves, or the run starts damaged — see
-                    // `MainStat::Integrity`'s own doc comment.
-                    stats.hp += gain;
-                }
-                MainStat::Decompiler => {
-                    self.world.get_mut::<Decompiler>(player).unwrap().skill += points
+        if choice.cost().is_some() {
+            let mut attrs = self
+                .world
+                .get::<crate::components::Attributes>(player)
+                .cloned()
+                .unwrap_or_default();
+            let db = self.world.resource::<crate::attributes::AttributeDb>();
+            for (id, &points) in &choice.stats {
+                let buyable = db.get(id).is_some_and(|def| def.buyable());
+                if let (true, Some(value)) = (buyable, attrs.get(id)) {
+                    attrs.set(id, value + points as i32);
                 }
             }
+            self.world.entity_mut(player).insert(attrs);
+        }
+        self.recompute_derived(player);
+        // The run must not start damaged, and Power starts full:
+        // `recompute_derived` clamps and never refills.
+        let max_power = self.max_power(player);
+        if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+            stats.hp = stats.max_hp;
+        }
+        if let Some(mut power) = self.world.get_mut::<PowerReserve>(player) {
+            power.fill(max_power);
         }
     }
 
@@ -266,26 +260,16 @@ impl Game {
         if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
             self.world.entity_mut(player).insert(CustomName(name));
         }
-        // The class's authored bases, or the catalogue's own where the run
-        // has no class — `CharacterChoice::default()`'s supported state.
-        // Here rather than in `spawn_player` because that function is a
-        // free fn over `&mut World` with no class and no `ClassDb`, and its
-        // bundle is already at bevy's 15-element ceiling.
-        let authored = choice
-            .class
-            .and_then(|class| {
-                self.world
-                    .resource::<crate::classes::ClassDb>()
-                    .get(class)
-                    .map(|def| def.attributes.clone())
-            })
-            .unwrap_or_default();
-        let attrs = crate::attributes::mint(
+        let attrs = starting_attributes(
+            self.world.resource::<crate::classes::ClassDb>(),
             self.world.resource::<crate::attributes::AttributeDb>(),
-            crate::attributes::player_seed(self.world.resource::<WorldMap>().seed()),
-            &authored,
+            choice.class,
         );
-        self.world.entity_mut(player).insert(attrs);
+        self.world.entity_mut(player).insert((
+            attrs,
+            crate::components::Derived::default(),
+            crate::components::StatPoints::default(),
+        ));
     }
 
     /// The kit slot: `choice.items` if the player picked one, the class kit
@@ -335,7 +319,27 @@ impl Game {
     }
 }
 
-/// The three databases the creation wizard reads, loaded on their own.
+/// The class's authored bases, or the catalogue's own where the run has no
+/// class - `CharacterChoice::default()`'s supported state. **No spread**: the
+/// player's numbers are chosen, not rolled. The one derivation both the run
+/// and the wizard's Points preview call, so the screen cannot open on
+/// numbers the run then disagrees with.
+///
+/// Called from `apply_creation_identity` rather than `spawn_player` because
+/// that function is a free fn over `&mut World` with no class and no
+/// `ClassDb`, and its bundle is already at bevy's 15-element ceiling.
+fn starting_attributes(
+    classes: &crate::classes::ClassDb,
+    attributes: &crate::attributes::AttributeDb,
+    class: Option<PlayerClass>,
+) -> crate::components::Attributes {
+    let authored = class
+        .and_then(|class| classes.get(class).map(|def| def.attributes.clone()))
+        .unwrap_or_default();
+    crate::attributes::authored_or_base(attributes, &authored)
+}
+
+/// The databases the creation wizard reads, loaded on their own.
 ///
 /// The wizard runs **before any `Game` exists** — the difficulty it picks is
 /// a `Game::new_with` argument — so it cannot ask a `World` for its rows.
@@ -359,6 +363,7 @@ pub struct CreationCatalogue {
     items: crate::items_db::ItemDb,
     abilities: crate::abilities::AbilityDb,
     perks: crate::perks::PerkDb,
+    attributes: crate::attributes::AttributeDb,
 }
 
 impl CreationCatalogue {
@@ -376,12 +381,26 @@ impl CreationCatalogue {
         // leaves the class step with no rows, which is the pre-class game.
         let (classes, _) = crate::classes::ClassDb::load_dir(&assets_dir.join("classes"))?;
         let (perks, _) = crate::perks::PerkDb::load_dir(&assets_dir.join("perks"))?;
+        let (attributes, _) =
+            crate::attributes::AttributeDb::load_dir(&assets_dir.join("attributes"))?;
         Ok(Self {
             classes,
             items,
             abilities,
             perks,
+            attributes,
         })
+    }
+
+    /// The attribute catalogue, for the Points step's before/after preview.
+    pub fn attribute_db(&self) -> crate::attributes::AttributeDb {
+        self.attributes.clone()
+    }
+
+    /// What the player's attributes open on for `class`, before any point
+    /// is bought - `starting_attributes` called, as the run calls it.
+    pub fn start_attributes(&self, class: Option<PlayerClass>) -> crate::components::Attributes {
+        starting_attributes(&self.classes, &self.attributes, class)
     }
 
     /// One row per loaded class — `Game::class_rows`' own derivation.

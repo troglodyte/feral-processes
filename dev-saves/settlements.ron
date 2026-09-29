@@ -6,10 +6,16 @@
     player: (
         position: (-125, -128),
         hp: 509,
-        max_hp: 510,
-        atk: 47,
-        mitigation: 46,
         power: 99.7,
+        stat_points: 0,
+        attributes: {
+            "analysis": 80,
+            "bandwidth": 50,
+            "entropy": 40,
+            "footprint": 45,
+            "parity": 190,
+            "persistence": 50,
+        },
         inventory: [
             ("research_data", 500),
             ("ice_breaker", 200),
@@ -40,7 +46,6 @@
         level: 36,
         xp: 430,
         xp_to_next: 2880,
-        decompiler: 41,
         weapon: Some("shiv_routine"),
         weapon_level: 2,
         weapon_fusion_tier: 4,

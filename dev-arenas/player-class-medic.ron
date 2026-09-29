@@ -38,7 +38,7 @@
     player: Fresh(level: 5, zone: 1),
     character: (
         class: Some(Medic),
-        stats: (0, 0, 0, 0),
+        stats: {},
         routine: Some("checksum_repair"),
     ),
     party: [

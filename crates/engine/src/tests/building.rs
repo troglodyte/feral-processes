@@ -806,7 +806,8 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
 fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
     let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     // `stand_in_base` + `spawn_structure_at`, not `spawn_recharger_node`:
     // `power_regen_system` reads `Locale::Base`'s own cell, never the
     // player's `Position`, so a fixture placing the Recharger at an offset
@@ -837,7 +838,8 @@ fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
 fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(50.0, crate::components::POWER_MAX);
     let reach = recharger_reach(&game);
     stand_in_base(&mut game);
     spawn_structure_at(&mut game, "recharger_node", reach + 1, 0);
@@ -855,7 +857,8 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
 fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
     let mut game = Game::new(405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.1);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() =
+        PowerReserve::new(0.1, crate::components::POWER_MAX);
     let before = *game.world.get::<Stats>(player).unwrap();
     stand_in_base(&mut game);
     spawn_structure_at(&mut game, "recharger_node", 0, 0);
@@ -1201,6 +1204,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                     class: None,
                     morale: 0.0,
                     need_strain: 0.0,
+                    extraction: 0.0,
                 },
                 world.resource::<ItemDb>(),
                 &mut rng,

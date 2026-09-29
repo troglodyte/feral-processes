@@ -282,6 +282,15 @@ pub struct DerivedStats {
     pub extraction: f32,
 }
 
+/// How many rounds a status armed for `duration` lasts on a body with
+/// `status_resist` percent Persistence: shortened by that share, lengthened
+/// when it is negative, and never below one round. No RNG - resist changes
+/// how long a condition lasts, not whether it lands.
+pub fn resisted_duration(duration: u32, status_resist: i32) -> u32 {
+    let scaled = duration as f32 * (1.0 - status_resist as f32 / 100.0);
+    (scaled.round() as u32).max(1)
+}
+
 /// The one formula. For each stat, `base + sum(per_point * (value - the
 /// attribute's catalogue base))`, rounded once per stat and then clamped to
 /// that stat's range. An attribute the store does not hold counts as its

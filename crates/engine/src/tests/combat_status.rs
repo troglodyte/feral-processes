@@ -1494,3 +1494,62 @@ fn the_evasion_raise_reaches_the_roll() {
         "{covered} hits in cover should be below {open} in the open"
     );
 }
+
+fn remaining_after_arming(game: &mut Game, target: Entity, duration: u32) -> u32 {
+    game.arm_status(target, StatusKind::Stun, duration, 0);
+    game.world
+        .get::<StatusEffects>(target)
+        .unwrap()
+        .active
+        .unwrap()
+        .remaining
+}
+
+fn with_resist(game: &mut Game, entity: Entity, status_resist: i32) {
+    game.world
+        .entity_mut(entity)
+        .insert(crate::components::Derived {
+            status_resist,
+            ..Default::default()
+        });
+}
+
+/// Persistence shortens an armed status by its percentage. Drop the resist
+/// factor in `arm_status` and this fails.
+#[test]
+fn status_resist_shortens_an_armed_status() {
+    let mut game = Game::new(790, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert_eq!(remaining_after_arming(&mut game, player, 4), 4);
+    with_resist(&mut game, player, 50);
+    assert_eq!(remaining_after_arming(&mut game, player, 4), 2);
+}
+
+#[test]
+fn negative_status_resist_lengthens_an_armed_status() {
+    let mut game = Game::new(791, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    with_resist(&mut game, player, -50);
+    assert_eq!(remaining_after_arming(&mut game, player, 4), 6);
+}
+
+/// No resist can talk a status out of landing: the shortest it gets is one
+/// round.
+#[test]
+fn status_resist_never_shortens_below_one_round() {
+    let mut game = Game::new(792, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    with_resist(&mut game, player, crate::tuning::STATUS_RESIST_MAX);
+    assert_eq!(remaining_after_arming(&mut game, player, 1), 1);
+    assert_eq!(remaining_after_arming(&mut game, player, 2), 1);
+}
+
+/// A body with no `Derived` (every companion and wild creature) is armed for
+/// exactly the duration asked.
+#[test]
+fn a_body_without_derived_takes_the_full_duration() {
+    let mut game = Game::new(793, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    assert!(game.world.get::<crate::components::Derived>(wild).is_none());
+    assert_eq!(remaining_after_arming(&mut game, wild, 5), 5);
+}

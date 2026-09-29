@@ -998,6 +998,9 @@ impl Game {
     /// nothing for the player if they're somehow missing an `Experience`
     /// component (shouldn't happen in practice).
     pub(crate) fn award_player_xp(&mut self, player: Entity, amount: u32) {
+        if self.world.contains_resource::<LevellingFrozen>() {
+            return;
+        }
         // `XpBoost` is `FieldScope::Run`, so it reads off the player
         // regardless of whether `player` here is the player themself (the
         // only caller today, but the parameter doesn't guarantee it).
@@ -1130,7 +1133,7 @@ impl Game {
     /// differs between the two callers is *who* is paid and how much, which
     /// is what the parameters are.
     pub(crate) fn award_companion_xp(&mut self, companion: Entity, amount: u32) {
-        if amount == 0 {
+        if amount == 0 || self.world.contains_resource::<LevellingFrozen>() {
             return;
         }
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);

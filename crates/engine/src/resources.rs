@@ -122,6 +122,13 @@ pub struct GameClock {
 /// off — which is both the new default and the safe reading of a save that
 /// never expressed a preference. Additive, so it costs no
 /// `SAVE_FORMAT_VERSION` bump.
+/// Present only in an arena-staged `Game`: XP awards are dropped, so no one
+/// levels mid-fight. A level-up refills HP, and kill XP grows as the
+/// player's Atk shrinks, so a fight that could level would score a weaker
+/// build as a stronger one — the arena measures the build it staged.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct LevellingFrozen;
+
 #[derive(Resource, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MiningMode(pub bool);
 

@@ -43,7 +43,7 @@ const BRACE_BELOW_HP_FRACTION: f32 = 0.5;
 /// be given one.
 ///
 /// `game` is consumed for one fight and must not be reused: it comes out
-/// carrying this fight's dead companions, spent items and XP.
+/// carrying this fight's dead companions and spent items.
 pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> RepRecord {
     while watch.rounds() < ROUND_CAP {
         // Not the player's HP: a Forgiving defeat is rebooted inside the
@@ -208,6 +208,31 @@ mod tests {
         assert!(record.won);
         assert!(record.rounds > 0);
         assert!(record.rounds < 50, "{} rounds", record.rounds);
+    }
+
+    #[test]
+    fn nobody_levels_inside_an_arena_fight() {
+        // A level-up refills HP, and kill XP grows as the player's Atk
+        // shrinks — so a mid-fight level would score a weaker build as a
+        // stronger one. Level 1 costs next to nothing to leave, so any kill
+        // would level here if the arena let it.
+        let s = scenario(1, 1, &[("glitch", 20)], &[("sprite", 4)]);
+        let mut staged = crate::arena::stage(
+            &s,
+            &test_assets_dir(),
+            3,
+            false,
+            crate::arena::CombatModel::Group,
+        )
+        .unwrap();
+        let levels = |game: &mut Game| -> Vec<u32> {
+            let mut q = game.world.query::<&Experience>();
+            q.iter(&game.world).map(|e| e.level).collect()
+        };
+        let before = levels(&mut staged.game);
+        let record = run_rep(&mut staged.game, &mut staged.watch, PartyPlan::default());
+        assert!(record.won, "{record:?}");
+        assert_eq!(levels(&mut staged.game), before);
     }
 
     #[test]

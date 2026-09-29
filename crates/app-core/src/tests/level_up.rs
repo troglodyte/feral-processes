@@ -177,10 +177,9 @@ fn a_lowercase_p_does_nothing() {
     assert!(app.pending_level_up.is_some());
 }
 
-/// An arena session never opens the page: `after_tick` returns before
-/// `show_next_notification` while `in_arena()`, so a level earned in a
-/// staged fight leaves its report sitting in the engine, undrained, rather
-/// than surfacing on `App`.
+/// An arena session never opens the page, because a staged fight cannot
+/// level anyone (`LevellingFrozen`): the fixture is one XP short of a level,
+/// so without the freeze its kill would leave a report in the engine.
 #[test]
 fn an_arena_session_never_opens_the_page() {
     let assets_dir = test_assets_dir();
@@ -242,11 +241,10 @@ fn an_arena_session_never_opens_the_page() {
         "an arena session must never open the page"
     );
     assert!(app.pending_level_up.is_none());
-    let report = app.game.as_mut().unwrap().take_level_up_report().expect(
-        "the fixture's kill must actually have levelled the player, \
-             or this proves nothing",
+    assert!(
+        app.game.as_mut().unwrap().take_level_up_report().is_none(),
+        "a staged fight must not level the player"
     );
-    assert!(report.to_level > report.from_level);
 
     let _ = std::fs::remove_file(&path);
 }

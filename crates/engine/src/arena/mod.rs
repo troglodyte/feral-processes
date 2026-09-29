@@ -271,6 +271,7 @@ pub fn stage(
     // both from `Game::new(0)`'s stream and hand every rep the same pack.
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(seed)));
+    game.world.insert_resource(LevellingFrozen);
 
     let (groups, warnings) = match &scenario.encounter {
         // A rolled encounter warns about nothing: nothing was asked for past

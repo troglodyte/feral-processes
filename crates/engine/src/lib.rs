@@ -127,9 +127,9 @@ pub use research::{ResearchId, ResearchRecipe, ResearchTree};
 use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BoltQueue, BuybackLedger,
     ClosingRoster, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines,
-    KnownTools, LevelSnapshot, Locale, MessageLog, Party, PendingLevelUp, PlayerEntity, Research,
-    RosterFrame, StackMemory, TacticalFxQueue, TransitQueue, WieldedProgram, XpTally, ZoneLevel,
-    ZoneSpawnPoint,
+    KnownTools, LevelSnapshot, LevellingFrozen, Locale, MessageLog, Party, PendingLevelUp,
+    PlayerEntity, Research, RosterFrame, StackMemory, TacticalFxQueue, TransitQueue,
+    WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,

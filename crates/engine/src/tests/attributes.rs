@@ -324,11 +324,7 @@ fn the_dossier_is_trimmed_to_its_row_ceiling() {
     // `Game::new` against the shipped five and a row is skipped when the
     // store has no value for it.
     let player = game.player_entity();
-    let attrs = crate::attributes::mint(
-        &db,
-        crate::attributes::player_seed(7),
-        &std::collections::BTreeMap::new(),
-    );
+    let attrs = crate::attributes::authored_or_base(&db, &std::collections::BTreeMap::new());
     game.world.entity_mut(player).insert(attrs);
     game.world.insert_resource(db);
     let report = game.dossier_report(player).unwrap();

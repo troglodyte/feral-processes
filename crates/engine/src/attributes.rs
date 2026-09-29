@@ -3,17 +3,18 @@
 //!
 //! One def per attribute: its name in this setting's words, the old-school
 //! word beside it, two lengths of player-facing prose, and the base and
-//! spread a body's own value is minted within. **Nothing reads these
-//! numbers.** They are what the dossier page shows, and each one's eventual
-//! mechanic is designed for the number rather than around it — see
-//! `docs/superpowers/specs/2026-09-21-program-attributes-design.md` §2.
+//! spread a body's own value is minted within, and the `effects` that make
+//! a point above the base worth something. The dossier page shows them, and
+//! `progression::derive` turns the player's into combat stats. Programs
+//! keep stored stats until they are derived too — see
+//! `docs/superpowers/specs/2026-09-29-level-up-stat-allocation-design.md`.
 //!
 //! **Data where `disposition.rs` is Rust, and that line is the whole
 //! reason this directory exists.** A `Disposition` ships no name, no blurb
 //! and no glyph, only multipliers on numbers the sim already computes,
 //! which puts it with `tuning.rs` on the not-moddable side. An attribute is
-//! the inverse: a name, a legacy name and two lines of prose, and today no
-//! multiplier at all. That is content by the same test that put species,
+//! the inverse: a name, a legacy name and two lines of prose, and for most
+//! attributes a list of per-point effects. That is content by the same test that put species,
 //! needs, memories and the perk catalogue in `assets/`.
 //!
 //! **An empty database is valid and inert**, exactly like `NeedDb`: nothing
@@ -70,10 +71,9 @@ impl std::fmt::Display for AttributeId {
 /// `SpeciesDef`/`StructureDef`/`ItemDef`, so a mod's existing files keep
 /// parsing untouched — but do not retroactively default these.
 ///
-/// The field that is deliberately **absent** is the one saying what the
-/// attribute *does*. It lands with the mechanic that does it, as a second
-/// authored field, because a gloss promising an effect is a claim the
-/// player will test and find false.
+/// `effects` and `does` came later and default. `meaning` still may not
+/// promise a mechanic: `does` is the one sentence that says what the
+/// effects do, so it is a claim made where the mechanic lives.
 #[derive(Clone, Debug, Deserialize)]
 pub struct AttributeDef {
     pub id: AttributeId,
@@ -236,11 +236,6 @@ pub fn body_seed(world_seed: u32, x: i32, y: i32, species: &str, zone: u32) -> u
 /// own input, for its reason.
 pub fn program_seed(program_id: u32) -> u64 {
     derive::fold(derive::FNV_BASIS, &[ATTRIBUTE_SALT, program_id as u64])
-}
-
-/// The player, who has no species and no spawn tile worth folding.
-pub fn player_seed(world_seed: u32) -> u64 {
-    derive::fold(derive::FNV_BASIS, &[ATTRIBUTE_SALT, world_seed as u64])
 }
 
 /// Every attribute the catalogue knows about, minted for one body.

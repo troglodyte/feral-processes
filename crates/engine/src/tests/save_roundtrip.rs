@@ -495,7 +495,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     // Every shipped attribute, off the wild spawn the fixture was built
     // from — an empty map here would load as a body the mint has to repair,
     // which is the old-save arm and not what a save written today means.
-    assert_eq!(saved.attributes.len(), 5, "attributes");
+    assert_eq!(saved.attributes.len(), 6, "attributes");
     assert!(saved.siege_cell.is_none(), "siege_cell");
     assert!(saved.siege_order.is_none(), "siege_order");
     assert!(!saved.besieger, "besieger");

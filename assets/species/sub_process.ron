@@ -23,6 +23,7 @@
         "schedules them for cleanup and does not mark it urgent.",
     ],
     attributes: {
+        "analysis": 15,
         "persistence": 38,
         "entropy": 34,
         "bandwidth": 30,

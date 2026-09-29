@@ -23,6 +23,7 @@
         "drops to hover height and waits, rotors idling.",
     ],
     attributes: {
+        "analysis": 7,
         "persistence": 40,
         "entropy": 28,
         "bandwidth": 44,

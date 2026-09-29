@@ -19,6 +19,7 @@
     is_boss: true,
     abilities: [(id: "broadcast_storm"), (id: "null_route", level: 3)],
     attributes: {
+        "analysis": 18,
         "persistence": 80,
         "entropy": 60,
         "bandwidth": 78,

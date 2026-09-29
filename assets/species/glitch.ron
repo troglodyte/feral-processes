@@ -23,6 +23,7 @@
         "renders the pack twice, badly, and discards both.",
     ],
     attributes: {
+        "analysis": 5,
         "persistence": 26,
         "entropy": 78,
         "bandwidth": 52,

@@ -5,6 +5,7 @@
     affinities: (damage: 0.8),
     kit: [("ice_breaker", 8), ("core_fragment", 4), ("power_cell", 2)],
     attributes: {
+        "analysis": 10,
         "persistence": 58,
         "entropy": 44,
         "bandwidth": 54,

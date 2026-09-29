@@ -5,6 +5,7 @@
     affinities: (buff: 1.15, debuff: 1.15, damage: 0.85),
     kit: [("power_cell", 8), ("core_fragment", 4)],
     attributes: {
+        "analysis": 10,
         "persistence": 66,
         "entropy": 48,
         "bandwidth": 70,

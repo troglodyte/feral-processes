@@ -5,6 +5,7 @@
     affinities: (drain: 1.3, buff: 0.8),
     kit: [("core_fragment", 5), ("power_cell", 3), ("ice_breaker", 2), ("cache_grain", 1)],
     attributes: {
+        "analysis": 10,
         "persistence": 50,
         "entropy": 56,
         "bandwidth": 58,

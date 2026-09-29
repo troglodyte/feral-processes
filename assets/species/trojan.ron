@@ -20,6 +20,7 @@
     abilities: [(id: "deadlock", level: 2), (id: "bit_rot_v2", level: 4)],
     affinities: (heal: 0.85, debuff: 1.3),
     attributes: {
+        "analysis": 13,
         "persistence": 56,
         "entropy": 50,
         "bandwidth": 46,

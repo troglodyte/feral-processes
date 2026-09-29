@@ -83,8 +83,32 @@ impl Game {
             .unwrap_or_default()
     }
 
+    /// What the player holds on top of their attributes' derivation - the
+    /// perk receipt and worn gear - so the Points screen can preview the
+    /// figures the HUD will show. Read off the live stats rather than summed
+    /// again, so it cannot drift from `recompute_derived`. Only the stats
+    /// gear or a perk can move are non-zero.
+    pub fn player_stat_bonus(&self) -> crate::progression::DerivedStats {
+        let player = self.player_entity();
+        let derived = self.derived_stats(player);
+        let stats = *self
+            .world
+            .get::<Stats>(player)
+            .expect("the player always has Stats");
+        let skill = self.world.get::<Decompiler>(player).map_or(0, |d| d.skill);
+        crate::progression::DerivedStats {
+            max_hp: stats.max_hp - derived.max_hp,
+            atk: stats.atk - derived.atk,
+            mitigation: stats.mitigation - derived.mitigation,
+            decompiler: skill - derived.decompiler,
+            max_power: 0.0,
+            status_resist: 0,
+            extraction: 0.0,
+        }
+    }
+
     /// What `progression::derive` answers for `entity` right now.
-    fn derived_stats(&self, entity: Entity) -> crate::progression::DerivedStats {
+    pub(crate) fn derived_stats(&self, entity: Entity) -> crate::progression::DerivedStats {
         crate::progression::derive(
             &crate::progression::DerivedBase::player(),
             self.world

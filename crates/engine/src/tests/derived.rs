@@ -389,6 +389,36 @@ fn a_power_item_restores_only_up_to_the_derived_maximum() {
     );
 }
 
+/// The Points screen previews `derive` plus this, so it must be exactly
+/// what gear and the perk receipt hold on top of the attributes.
+#[test]
+fn the_stat_bonus_is_what_gear_and_perks_add_to_the_derivation() {
+    let mut game = Game::new(7013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(player, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .unwrap();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Attacker).unwrap();
+    set_attribute(&mut game, "analysis", 14);
+    game.recompute_derived(player);
+
+    let bonus = game.player_stat_bonus();
+    let derived = game.derived_stats(player);
+    let stats = stats_of(&game, player);
+    assert!(bonus.atk > 0, "the fixture must add Atk: {bonus:?}");
+    assert_eq!(derived.atk + bonus.atk, stats.atk);
+    assert_eq!(derived.max_hp + bonus.max_hp, stats.max_hp);
+    assert_eq!(derived.mitigation + bonus.mitigation, stats.mitigation);
+    assert_eq!(
+        derived.decompiler + bonus.decompiler,
+        game.world.get::<Decompiler>(player).unwrap().skill
+    );
+}
+
 #[test]
 fn a_save_keeps_attributes_points_and_derived_values_with_gear_and_a_perk() {
     use crate::components::StatPoints;

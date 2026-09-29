@@ -9,15 +9,16 @@
 //! re-implements the ceiling rule or the preview.
 //!
 //! **The preview is `progression::derive` called**, once on the opening
-//! attributes and once on those plus the spend, so a before->after figure on
-//! this screen is by construction what the run will then hold.
+//! attributes and once on those plus the spend, with the player's perk and
+//! gear bonus (`Game::player_stat_bonus`) added to both - so a
+//! before->after figure is what the HUD reads now and will read after.
 
 use std::collections::BTreeMap;
 
 use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::{AttributeDb, AttributeDef, AttributeId, DerivedStat};
 use feral_processes_engine::components::Attributes;
-use feral_processes_engine::progression::{DerivedBase, derive};
+use feral_processes_engine::progression::{DerivedBase, DerivedStats, derive};
 use feral_processes_engine::tuning::CREATION_COST_PER_ATTRIBUTE_POINT;
 
 use crate::{App, CreationRow, GameKey, Mode};
@@ -51,6 +52,9 @@ pub struct StatAllocation {
     rows: Vec<AttributeDef>,
     db: AttributeDb,
     start: Attributes,
+    /// What perks and gear hold on top of the derivation. `None` at
+    /// creation, where neither exists yet.
+    bonus: Option<DerivedStats>,
 }
 
 /// What a Points-screen key does to the highlighted row's count, as
@@ -89,7 +93,15 @@ impl StatAllocation {
             rows,
             db,
             start,
+            bonus: None,
         }
+    }
+
+    /// Previews on top of `bonus`, `Game::player_stat_bonus` for a player
+    /// who already holds perks or gear.
+    pub fn with_bonus(mut self, bonus: DerivedStats) -> Self {
+        self.bonus = Some(bonus);
+        self
     }
 
     pub fn purpose(&self) -> AllocationFor {
@@ -157,7 +169,10 @@ impl StatAllocation {
                     value: self.value(def, spent),
                     effects: stats
                         .into_iter()
-                        .map(|stat| (stat, before.get(stat), after.get(stat)))
+                        .map(|stat| {
+                            let bonus = self.bonus.map_or(0.0, |b| b.get(stat));
+                            (stat, before.get(stat) + bonus, after.get(stat) + bonus)
+                        })
                         .collect(),
                     cost: self.purpose.cost(),
                 }
@@ -246,12 +261,15 @@ impl App {
             self.refuse("No stat points to spend.");
             return;
         }
-        self.stat_allocation = Some(StatAllocation::new(
-            AllocationFor::Owned(StatOwner::Player),
-            banked,
-            game.attribute_db(),
-            game.player_attributes(),
-        ));
+        self.stat_allocation = Some(
+            StatAllocation::new(
+                AllocationFor::Owned(StatOwner::Player),
+                banked,
+                game.attribute_db(),
+                game.player_attributes(),
+            )
+            .with_bonus(game.player_stat_bonus()),
+        );
         self.allocation_spent.clear();
         self.allocation_origin = origin;
         self.status_line = None;

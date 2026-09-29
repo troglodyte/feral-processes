@@ -40,8 +40,8 @@ The final review is opus, over the whole branch.
 
 ## Decisions the spec left open, or got wrong against the code
 
-1. **Level-up spends do not write `BoughtStats`. This contradicts the spec
-   and needs the user's OK.** `BoughtStats` is the perk/talent receipt.
+1. **Level-up spends do not write `BoughtStats`** (spec corrected to match).
+   `BoughtStats` is the perk/talent receipt.
    `respec_perks` subtracts it, so a perk respec would take level-up stats
    away without giving their points back. `emulated_base` adds it on top of
    an emulation, so emulated players would suddenly keep level ATK/Def they

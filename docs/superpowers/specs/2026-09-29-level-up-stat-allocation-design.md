@@ -82,15 +82,20 @@ in `XpTally` for the log line, as Perk Points are today.
 
 `Game::spend_stat_points(target, spend: &[(MainStat, u32)]) -> Result<StatDelta, SpendError>`
 
-- `target` is a unit identifier with only a `Player` variant for now. The
-  plan picks the existing type (or adds a minimal enum) that a companion
-  variant can join.
+- `target` is `progression::StatOwner`, an enum with only a `Player` variant
+  for now. A companion variant can join it later.
 - It validates the whole spend against `StatPoints` before writing anything,
   so a refused spend leaves nothing half-applied.
-- It applies the spend through `stat_units` and records the result in
-  `BoughtStats`, the existing receipt for purchased stats (see the
-  `a-baked-stat-needs-a-receipt` trap). Integrity raises `hp` together with
-  `max_hp`, as it does at creation.
+- It applies the spend through `stat_units` and writes it directly into
+  `Stats`/`Decompiler`, as `apply_creation_stats` does. Integrity raises `hp`
+  together with `max_hp`, as it does at creation.
+- It does **not** write `BoughtStats`. That component is the receipt for perk
+  and talent purchases. `respec_perks` subtracts it, so a perk respec would
+  take level-up stats away without returning their points. `emulated_base`
+  adds it on top of an emulation, so emulated players would suddenly keep
+  level ATK/Def they don't keep today. Stat respec is out of scope, so there
+  is nothing to invert. `game/kit.rs` gives the same reason for keeping the
+  creation pool out of `BoughtStats`.
 - It fails with `SpendError::{InsufficientPoints, NoSuchTarget}`, not a panic.
 
 ### Save
@@ -126,8 +131,12 @@ StatAllocation { target, pool: u32, base: StatLine, spent: [u32; 4] }
 
 The row building (`CreationRow::Stat`), `spend_on_row` and the cost lookup
 move onto `StatAllocation`, and `Mode::CreateCharacter`'s Points step holds
-one. A new `Mode::AllocateStats(StatAllocation)` reuses the same rows and
-handler. Its commit and leave rules come from what the allocation is *for*, a
+one. A new `Mode::AllocateStats` reuses the same rows and handler. `Mode` is
+`Copy` and has only data-free variants, so the allocation lives in
+`App.stat_allocation: Option<StatAllocation>`. Creation keeps
+`CharacterChoice.stats` as its store, because it is engine API and `[R]`'s
+roll writes it. `StatAllocation`'s methods therefore take the `spent` array,
+and do not own it. Its commit and leave rules come from what the allocation is *for*, a
 small enum (`Creation | Owned`), not from which mode holds it.
 
 ### Flow
@@ -137,9 +146,9 @@ small enum (`Creation | Owned`), not from which mode holds it.
 - **`Mode::AllocateStats`:** commit, or `Esc` without spending, → `Mode::Perks`
   when Perk Points are unspent, otherwise `Mode::Playing`. When it was opened
   from the menu, it returns to where it came from.
-- **Menu entry:** from the Perks screen and the character sheet, the key is
-  settled in the plan against the uppercase-action rule. Refused with
-  `App::refuse` when no points are banked.
+- **Menu entry:** uppercase `S` on the Perks screen. No character sheet mode
+  exists. It is refused with `App::refuse` when no points are banked. The
+  attention row uses the Perk Points row's `'p'` key, which reaches Perks.
 
 ### Level Up report
 
@@ -172,8 +181,8 @@ continue", level-up says "Esc keeps the rest". Drawing goes only through
 
 - Engine: `add_xp` with `Points` grows no stats, heals and reports
   `stat_points`, and `Auto` is unchanged. `award_player_xp` banks 6 per
-  level. `spend_stat_points` applies through `stat_units`, writes
-  `BoughtStats`, refuses an overspend with nothing written, and raises `hp`
+  level. `spend_stat_points` applies through `stat_units`, leaves
+  `BoughtStats` untouched, refuses an overspend with nothing written, and raises `hp`
   with Integrity. Save→load keeps `StatPoints`. `attention` flags unspent
   points.
 - App-core: LevelUp → AllocateStats → Perks → Playing. `Esc` keeps points.

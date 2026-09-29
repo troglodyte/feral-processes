@@ -292,9 +292,11 @@ impl Game {
             self.world.resource::<crate::attributes::AttributeDb>(),
             &authored,
         );
-        self.world
-            .entity_mut(player)
-            .insert((attrs, crate::components::Derived::default()));
+        self.world.entity_mut(player).insert((
+            attrs,
+            crate::components::Derived::default(),
+            crate::components::StatPoints::default(),
+        ));
     }
 
     /// The kit slot: `choice.items` if the player picked one, the class kit

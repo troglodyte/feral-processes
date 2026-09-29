@@ -297,6 +297,24 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
     }
 }
 
+/// Whose attributes a spend raises. A companion variant joins it when
+/// programs are derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatOwner {
+    Player,
+}
+
+/// Why `Game::spend_stat_points` wrote nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpendError {
+    /// The spend costs more than the owner has banked.
+    InsufficientPoints,
+    /// The owner has no banked points or no such attribute in the catalogue.
+    NoSuchTarget,
+    /// The attribute exists but has no effects, so a point buys nothing.
+    NotBuyable,
+}
+
 /// The spend that reproduces the old automatic per-level growth: 4 Parity and
 /// 2 Analysis a level, which `tuning`'s compile-time assert ties to
 /// `HP_PER_LEVEL`, `ATK_PER_LEVEL` and the retired Decompiler grant.

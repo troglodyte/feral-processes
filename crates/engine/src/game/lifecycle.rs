@@ -1561,9 +1561,11 @@ impl Game {
             }
             restored
         };
-        world
-            .entity_mut(player)
-            .insert((player_attributes, crate::components::Derived::default()));
+        world.entity_mut(player).insert((
+            player_attributes,
+            crate::components::Derived::default(),
+            crate::components::StatPoints::default(),
+        ));
 
         if let Some(name) = CustomName::sanitize(Some(player_name)) {
             world.entity_mut(player).insert(CustomName(name));

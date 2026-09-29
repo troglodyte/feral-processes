@@ -154,3 +154,123 @@ fn emulation_keeps_its_own_attack_through_a_recompute() {
         "an emulated body's attack comes from the image, not from Analysis"
     );
 }
+
+fn bank(game: &mut Game, points: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::StatPoints>(player)
+        .unwrap()
+        .0 = points;
+}
+
+fn banked(game: &Game) -> u32 {
+    game.world
+        .get::<crate::components::StatPoints>(game.player_entity())
+        .unwrap()
+        .0
+}
+
+fn spend(pairs: &[(&str, u32)]) -> Vec<(AttributeId, u32)> {
+    pairs
+        .iter()
+        .map(|(id, n)| (AttributeId::from(*id), *n))
+        .collect()
+}
+
+#[test]
+fn a_spend_raises_the_attributes_and_derives_the_stats() {
+    let mut game = Game::new(7010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    bank(&mut game, 6);
+    let derived = game
+        .spend_stat_points(StatOwner::Player, &spend(&[("parity", 4), ("analysis", 2)]))
+        .unwrap();
+    let player = game.player_entity();
+    assert_eq!(derived.max_hp, 90 + 24);
+    assert_eq!(stats_of(&game, player).max_hp, 90 + 24);
+    assert_eq!(stats_of(&game, player).atk, 6 + 2);
+    assert_eq!(game.world.get::<Decompiler>(player).unwrap().skill, 2);
+    assert_eq!(banked(&game), 0);
+}
+
+#[test]
+fn an_overspend_writes_nothing() {
+    let mut game = Game::new(7011, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    bank(&mut game, 3);
+    let player = game.player_entity();
+    let before = (
+        stats_of(&game, player),
+        game.world.get::<Attributes>(player).cloned().unwrap(),
+    );
+    assert_eq!(
+        game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 2), ("analysis", 2)])),
+        Err(SpendError::InsufficientPoints)
+    );
+    assert_eq!(banked(&game), 3);
+    assert_eq!(stats_of(&game, player), before.0);
+    assert_eq!(
+        game.world.get::<Attributes>(player).cloned().unwrap(),
+        before.1
+    );
+}
+
+#[test]
+fn a_bad_row_refuses_the_whole_spend() {
+    let mut game = Game::new(7012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    bank(&mut game, 6);
+    let player = game.player_entity();
+    let before = game.world.get::<Attributes>(player).cloned().unwrap();
+    assert_eq!(
+        game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 1), ("entropy", 1)])),
+        Err(SpendError::NotBuyable)
+    );
+    assert_eq!(
+        game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 1), ("nonesuch", 1)])),
+        Err(SpendError::NoSuchTarget)
+    );
+    assert_eq!(banked(&game), 6);
+    assert_eq!(
+        game.world.get::<Attributes>(player).cloned().unwrap(),
+        before
+    );
+}
+
+#[test]
+fn a_spend_never_touches_the_perk_receipt_so_a_respec_keeps_it() {
+    let mut game = Game::new(7013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    bank(&mut game, 4);
+    game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 4)]))
+        .unwrap();
+    assert_eq!(
+        *game
+            .world
+            .get::<BoughtStats>(player)
+            .unwrap_or(&BoughtStats::default()),
+        BoughtStats::default()
+    );
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Attacker).unwrap();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CREDITS), 1_000_000);
+    game.respec_perks().unwrap();
+    assert_eq!(stats_of(&game, player).max_hp, 90 + 24, "the spend stays");
+}
+
+#[test]
+fn attention_flags_unspent_stat_points() {
+    let mut game = Game::new(7014, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let has = |game: &mut Game| {
+        game.attention()
+            .into_iter()
+            .find(|r| r.kind == AttentionKind::StatPoints)
+    };
+    assert!(has(&mut game).is_none());
+    bank(&mut game, 6);
+    let row = has(&mut game).expect("6 unspent points ask to be spent");
+    assert_eq!(row.key, 'p');
+    assert!(row.text.contains("6 stat points"), "{}", row.text);
+    assert!(row.text.contains('S'), "{}", row.text);
+    assert!(!row.threat);
+}

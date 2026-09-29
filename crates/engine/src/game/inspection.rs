@@ -1852,6 +1852,20 @@ impl Game {
             });
         }
 
+        let stat_points = self
+            .world
+            .get::<crate::components::StatPoints>(self.player_entity())
+            .map_or(0, |p| p.0);
+        if stat_points > 0 {
+            let noun = if stat_points == 1 { "point" } else { "points" };
+            rows.push(AttentionRow {
+                kind: AttentionKind::StatPoints,
+                text: format!("{stat_points} stat {noun} unspent (S on the perks screen)"),
+                key: 'p',
+                threat: false,
+            });
+        }
+
         let (count, capacity) = (self.pet_count(), self.pet_capacity());
         if count > capacity {
             rows.push(AttentionRow {

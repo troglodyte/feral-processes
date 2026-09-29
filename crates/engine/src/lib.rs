@@ -65,6 +65,7 @@ use std::path::Path;
 pub use base_ledger::LootSource;
 pub use bevy_ecs::prelude::Entity;
 use bevy_ecs::prelude::*;
+pub use progression::{SpendError, StatOwner};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 

@@ -1934,6 +1934,11 @@ impl Default for Derived {
     }
 }
 
+/// Attribute points earned by levelling and not yet spent. Banked by
+/// `award_player_xp`, spent by `Game::spend_stat_points`.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StatPoints(pub u32);
+
 /// What one owned program's reserves stand at. Minted empty at
 /// `Game::roster_parts` beside `Memories`, so the absence of this component
 /// means "not on the roster" rather than "needs nothing".

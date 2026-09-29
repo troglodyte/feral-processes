@@ -1725,6 +1725,8 @@ pub enum AttentionKind {
     /// settled leaves nothing outstanding for the player to find.
     ResearchStalled,
     PerkPoints,
+    /// Attribute points banked by levelling and not yet spent.
+    StatPoints,
     /// The roster has outgrown `Game::pet_capacity`, and the programs past
     /// it are earning `unslotted`. Past, not at: a roster filling its slots
     /// exactly has nothing wrong with it, since slots are not a door.

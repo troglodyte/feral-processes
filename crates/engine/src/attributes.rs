@@ -125,6 +125,21 @@ pub enum DerivedStat {
     Extraction,
 }
 
+impl DerivedStat {
+    /// How the stat reads on the Points screen, in the log's own labels.
+    pub fn label(self) -> &'static str {
+        match self {
+            DerivedStat::MaxHp => "Max HP",
+            DerivedStat::Atk => "ATK",
+            DerivedStat::Mitigation => "Mitigation",
+            DerivedStat::Decompiler => "Decompiler",
+            DerivedStat::MaxPower => "Max Power",
+            DerivedStat::StatusResist => "Status resist",
+            DerivedStat::Extraction => "Extraction",
+        }
+    }
+}
+
 /// One line of an attribute's effect: each point above the catalogue
 /// `base` moves `stat` by `per_point`.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
@@ -137,7 +152,7 @@ pub struct AttributeEffect {
 ///
 /// See the module doc for why an empty database is a supported state rather
 /// than an install fault.
-#[derive(Resource, Default, Clone)]
+#[derive(Resource, Default, Clone, Debug)]
 pub struct AttributeDb {
     defs: BTreeMap<AttributeId, AttributeDef>,
 }

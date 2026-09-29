@@ -282,6 +282,23 @@ pub struct DerivedStats {
     pub extraction: f32,
 }
 
+impl DerivedStats {
+    /// The figure for `stat` as a float, so a screen can list any stat an
+    /// attribute feeds without naming each field.
+    pub fn get(&self, stat: crate::attributes::DerivedStat) -> f32 {
+        use crate::attributes::DerivedStat as S;
+        match stat {
+            S::MaxHp => self.max_hp as f32,
+            S::Atk => self.atk as f32,
+            S::Mitigation => self.mitigation as f32,
+            S::Decompiler => self.decompiler as f32,
+            S::MaxPower => self.max_power,
+            S::StatusResist => self.status_resist as f32,
+            S::Extraction => self.extraction,
+        }
+    }
+}
+
 /// How many rounds a status armed for `duration` lasts on a body with
 /// `status_resist` percent Persistence: shortened by that share, lengthened
 /// when it is negative, and never below one round. No RNG - resist changes

@@ -22,6 +22,12 @@ impl App {
             self.mode = Mode::RespecPerksConfirm;
             return;
         }
+        // Uppercase for the same reason as `X`: this picker's rows run past
+        // `s` in the label alphabet.
+        if key == GameKey::Char('S') {
+            self.open_stat_allocation(AllocationOrigin::Perks);
+            return;
+        }
         let Some(perks) = self
             .game
             .as_ref()

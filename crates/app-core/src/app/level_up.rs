@@ -3,9 +3,11 @@
 use crate::*;
 
 impl App {
-    /// Only two keys act; everything else is ignored, `Mode::Notification`'s
+    /// Only three keys act; everything else is ignored, `Mode::Notification`'s
     /// own shape.
     ///
+    /// `Enter` opens the Points screen on the banked stat points - the
+    /// report is the page that says growth is now the player's to place.
     /// `Esc` closes to `Mode::Playing` and immediately lets the next queued
     /// notification through, `handle_notification_key`'s pattern. Uppercase
     /// `P` — lowercase letters are row selectors, and this page has none —
@@ -19,6 +21,12 @@ impl App {
                 self.pending_level_up = None;
                 self.mode = Mode::Playing;
                 self.show_next_notification();
+            }
+            GameKey::Enter => {
+                self.open_stat_allocation(AllocationOrigin::LevelUp);
+                if self.mode == Mode::AllocateStats {
+                    self.pending_level_up = None;
+                }
             }
             GameKey::Char('P') => {
                 self.pending_level_up = None;

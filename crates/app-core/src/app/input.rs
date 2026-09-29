@@ -189,8 +189,9 @@ impl App {
         // the far side of the seam from the mode that decides it. The
         // The transfer picker and the caravan basket are those screens — see
         // `app/basket.rs` and `app/caravan.rs`. The creation wizard's Points
-        // step is the fourth: it borrows the transfer picker's key idiom
-        // whole, so it needs the same four keys to reach it unfolded.
+        // step is the fourth and `Mode::AllocateStats` the fifth: they borrow the
+        // transfer picker's key idiom whole, so they need the same four keys
+        // to reach them unfolded.
         // **Miss one here and its four modified arrows are folded to bare
         // `Left`/`Right` before its handler ever sees them**, so Shift and
         // Ctrl silently become plain steps and nothing fails anywhere.
@@ -203,6 +204,7 @@ impl App {
                     | Mode::RouteCargo
                     | Mode::CraftQuantity
                     | Mode::CreateCharacter
+                    | Mode::AllocateStats
             ) =>
             {
                 key
@@ -261,6 +263,7 @@ impl App {
             Mode::OutpostPost => self.handle_outpost_post_key(key),
             Mode::Notification => self.handle_notification_key(key),
             Mode::LevelUp => self.handle_level_up_key(key),
+            Mode::AllocateStats => self.handle_allocate_stats_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),
             Mode::Inventory => self.handle_inventory_key(key),

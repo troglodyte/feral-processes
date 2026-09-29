@@ -6,6 +6,7 @@ use feral_processes_engine::arena::{OpponentSpec, PlayerSource, Scenario};
 use feral_processes_engine::notifications::NotificationKind;
 use feral_processes_engine::progression::xp_for_level;
 use feral_processes_engine::save;
+use feral_processes_engine::tuning::STAT_POINTS_PER_LEVEL;
 
 use super::support::*;
 use crate::*;
@@ -248,4 +249,150 @@ fn an_arena_session_never_opens_the_page() {
     assert!(report.to_level > report.from_level);
 
     let _ = std::fs::remove_file(&path);
+}
+
+fn allocation_row(app: &App, id: &str) -> usize {
+    let want = feral_processes_engine::attributes::AttributeId::from(id);
+    app.allocation_rows()
+        .iter()
+        .position(|row| matches!(row, CreationRow::Attribute { id, .. } if *id == want))
+        .unwrap_or_else(|| panic!("no Points row for {id}"))
+}
+
+fn stat_points(app: &App) -> u32 {
+    app.game.as_ref().unwrap().player_status().stat_points
+}
+
+fn attribute(app: &App, id: &str) -> i32 {
+    app.game
+        .as_ref()
+        .unwrap()
+        .player_attributes()
+        .get(&id.into())
+        .unwrap()
+}
+
+/// A level-up leaves the report page with points to place: `Enter` opens
+/// the Points screen, spending and `Enter` commit through the engine, the
+/// commit carries on to Perks while Perk Points are unspent, and `Esc`
+/// there returns to the map.
+#[test]
+fn the_flow_runs_level_up_then_points_then_perks_then_playing() {
+    let mut app = app_about_to_level(9505);
+    win_it_and_leave_results(&mut app);
+    assert_eq!(app.mode, Mode::LevelUp, "{:?}", app.status_line);
+    let banked = stat_points(&app);
+    assert_eq!(banked, STAT_POINTS_PER_LEVEL);
+    let parity_before = attribute(&app, "parity");
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    assert!(app.pending_level_up.is_none());
+    assert_eq!(app.allocation_points_left(), banked);
+
+    app.menu_selected = allocation_row(&app, "parity");
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(
+        app.allocation_points_left(),
+        0,
+        "Shift+Right spends the pool"
+    );
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Perks,
+        "unspent Perk Points carry on to Perks"
+    );
+    assert_eq!(stat_points(&app), 0);
+    assert_eq!(attribute(&app, "parity"), parity_before + banked as i32);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// `Esc` on the Points screen leaves without spending: the points stay
+/// banked and no attribute moves.
+#[test]
+fn esc_on_the_points_screen_keeps_the_points() {
+    let mut app = app_about_to_level(9506);
+    win_it_and_leave_results(&mut app);
+    let banked = stat_points(&app);
+    let parity_before = attribute(&app, "parity");
+
+    app.handle_key(GameKey::Enter);
+    app.menu_selected = allocation_row(&app, "parity");
+    app.handle_key(GameKey::ShiftRight);
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(stat_points(&app), banked);
+    assert_eq!(attribute(&app, "parity"), parity_before);
+    assert!(app.stat_allocation.is_none());
+}
+
+/// Unlike creation's pool, banked points are never lost by leaving, so
+/// `Enter` with points still unspent is allowed and they stay banked.
+#[test]
+fn the_owned_points_screen_can_be_left_with_points_unspent() {
+    let mut app = app_about_to_level(9507);
+    win_it_and_leave_results(&mut app);
+    let banked = stat_points(&app);
+
+    app.handle_key(GameKey::Enter);
+    app.menu_selected = allocation_row(&app, "parity");
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Enter);
+
+    assert_ne!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    assert_eq!(stat_points(&app), banked - 1);
+}
+
+/// Uppercase `S` on the Perks screen opens the Points screen and `Esc`
+/// returns to Perks; at no points it is refused through `App::refuse`.
+#[test]
+fn s_on_the_perks_screen_opens_points_and_is_refused_at_zero() {
+    let mut app = test_app(9508);
+    app.mode = Mode::Perks;
+
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.mode, Mode::Perks, "nothing banked, nothing to spend");
+    assert!(app.status_line.is_some(), "the refusal must say why");
+
+    let mut app = app_about_to_level(9509);
+    win_it_and_leave_results(&mut app);
+    app.handle_key(GameKey::Char('P'));
+    assert_eq!(app.mode, Mode::Perks);
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::Perks,
+        "opened from Perks, Esc goes back to it"
+    );
+}
+
+/// The screen's preview is the engine formula called: after spending on
+/// Parity, its row's Max HP figure moves by exactly what the commit then
+/// gives the player.
+#[test]
+fn the_preview_equals_what_the_commit_delivers() {
+    let mut app = app_about_to_level(9510);
+    win_it_and_leave_results(&mut app);
+    app.handle_key(GameKey::Enter);
+    let row = allocation_row(&app, "parity");
+    app.menu_selected = row;
+    app.handle_key(GameKey::ShiftRight);
+    let CreationRow::Attribute { effects, .. } = app.allocation_rows()[row].clone() else {
+        panic!("not an attribute row");
+    };
+    let (_, _, after) = effects
+        .into_iter()
+        .find(|(stat, _, _)| *stat == feral_processes_engine::attributes::DerivedStat::MaxHp)
+        .expect("Parity feeds Max HP");
+
+    app.handle_key(GameKey::Enter);
+    let max_hp = app.game.as_ref().unwrap().player_status().max_hp;
+    assert_eq!(after, max_hp as f32);
 }

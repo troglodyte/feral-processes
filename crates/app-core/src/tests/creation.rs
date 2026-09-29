@@ -10,12 +10,37 @@ use super::support::*;
 use crate::*;
 use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::achievements::Earned;
+use feral_processes_engine::attributes::AttributeId;
 use feral_processes_engine::classes::PlayerClass;
 use feral_processes_engine::save;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
-use feral_processes_engine::tuning::{
-    CREATION_COST_DEF, CREATION_CREDITS, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
-};
+use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS, PLAYER_BASE_STATS};
+
+/// The Points step's row for `id`, by position in `App::creation_rows`.
+fn attribute_row(app: &App, id: &str) -> usize {
+    let want = AttributeId::from(id);
+    app.creation_rows()
+        .iter()
+        .position(|row| matches!(row, CreationRow::Attribute { id, .. } if *id == want))
+        .unwrap_or_else(|| panic!("no Points row for {id}"))
+}
+
+/// Points bought on `id`.
+fn bought(app: &App, id: &str) -> u32 {
+    app.creation_choice()
+        .stats
+        .get(&AttributeId::from(id))
+        .copied()
+        .unwrap_or(0)
+}
+
+/// Empties every row of the Points step, whatever the roll left there.
+fn clear_the_points(app: &mut App) {
+    for i in 0..app.creation_rows().len() {
+        app.menu_selected = i;
+        press(app, GameKey::ShiftLeft);
+    }
+}
 
 /// An `App` sitting on the main menu with no run, its own scratch saves
 /// directory and profile — the wizard writes a save the moment it commits,
@@ -96,9 +121,9 @@ fn spend_the_perks(app: &mut App) {
     app.menu_selected = 0;
 }
 
-/// `spend_the_kit` for the Points step's four axes.
+/// `spend_the_kit` for the Points step's rows.
 fn spend_the_points(app: &mut App) {
-    for i in 0..MainStat::all().len() {
+    for i in 0..app.creation_rows().len() {
         app.menu_selected = i;
         press(app, GameKey::ShiftRight);
     }
@@ -270,17 +295,10 @@ fn the_name_step_commits_the_choice() {
     // The step opens on a rolled spread that already spends the pool —
     // clear it so exactly two units of Integrity is this test's own spend,
     // not whatever the roll happened to leave there.
-    for i in 0..MainStat::all().len() {
-        app.menu_selected = i;
-        press(&mut app, GameKey::ShiftLeft);
-    }
-    let integrity = MainStat::all()
-        .iter()
-        .position(|s| *s == MainStat::Integrity)
-        .unwrap();
-    app.menu_selected = integrity;
+    clear_the_points(&mut app);
+    app.menu_selected = attribute_row(&app, "parity");
     press(&mut app, GameKey::ShiftRight);
-    let bought = app.creation_choice().stats[integrity];
+    let bought = bought(&app, "parity");
     press(&mut app, GameKey::Enter);
 
     assert_eq!(app.creation_step(), CreationStep::Perks);
@@ -366,14 +384,11 @@ fn points_cannot_be_overspent() {
     // The step opens on a rolled spread that already spends the pool —
     // clear it so "fill the first axis, then ask for one more" is this
     // test's own doing rather than a coincidence of whatever was rolled.
-    for i in 0..MainStat::all().len() {
-        app.menu_selected = i;
-        press(&mut app, GameKey::ShiftLeft);
-    }
+    clear_the_points(&mut app);
     app.menu_selected = 0;
     press(&mut app, GameKey::ShiftRight);
     assert_eq!(app.creation_points_left(), 0);
-    let spent = app.creation_choice().stats;
+    let spent = app.creation_choice().stats.clone();
     app.status_line = None;
 
     press(&mut app, GameKey::Right);
@@ -404,53 +419,32 @@ fn the_points_step_sees_a_modifier() {
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
-    let axis = |want: MainStat| MainStat::all().iter().position(|s| *s == want).unwrap();
 
     // The step now opens on a rolled spread that already spends the whole
     // pool, which is what this test's own "the whole pool fits on it"
     // assumption depends on being false-going-in — clear every axis first
     // so this test still starts from an empty pool regardless of the roll.
-    for i in 0..MainStat::all().len() {
-        app.menu_selected = i;
-        press(&mut app, GameKey::ShiftLeft);
-    }
+    clear_the_points(&mut app);
 
-    // Integrity costs one point, so the whole pool fits on it — which is
-    // what makes a *target* observably different from a single step. Def
-    // costs three, and at a five-point pool its ceiling is one unit, so a
-    // test written on that axis passes with the fold missing entirely.
-    let integrity = axis(MainStat::Integrity);
-    app.menu_selected = integrity;
+    // A point costs one, so the whole pool fits on any row — which is what
+    // makes a *target* observably different from a single step.
+    app.menu_selected = attribute_row(&app, "parity");
     press(&mut app, GameKey::ShiftRight);
     assert_eq!(
-        app.creation_choice().stats[integrity],
+        bought(&app, "parity"),
         CREATION_STAT_POINTS,
         "Shift+Right is a target — the far end of the row, not one step"
     );
 
     press(&mut app, GameKey::CtrlLeft);
-    let halved = app.creation_choice().stats[integrity];
+    let halved = bought(&app, "parity");
     assert!(
         halved > 0 && halved < CREATION_STAT_POINTS,
         "Ctrl+Left is a step that halves the gap, and it landed on {halved}"
     );
 
     press(&mut app, GameKey::ShiftLeft);
-    assert_eq!(
-        app.creation_choice().stats[integrity],
-        0,
-        "Shift+Left empties the row"
-    );
-
-    // The axis that costs more than a point: its ceiling is a division, so
-    // the pool's remainder is unspendable there by construction.
-    let def = axis(MainStat::Def);
-    app.menu_selected = def;
-    press(&mut app, GameKey::ShiftRight);
-    assert_eq!(
-        app.creation_choice().stats[def],
-        CREATION_STAT_POINTS / CREATION_COST_DEF
-    );
+    assert_eq!(bought(&app, "parity"), 0, "Shift+Left empties the row");
 }
 
 /// The save picker shows the player's own name, which is most of why the
@@ -790,22 +784,17 @@ fn a_rolled_spread_can_be_redistributed() {
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
 
-    // Atk, Integrity and Decompiler all cost one point a unit; Def costs
-    // three, and two units of Def alone already outspends a five-point
-    // pool, so a one-point axis is guaranteed to hold at least one point
-    // for a roll that spent the pool at all — moving a point between two
-    // of them is a like-for-like swap the total spend cannot see.
-    let one_point_axes: Vec<usize> = MainStat::all()
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| **s != MainStat::Def)
-        .map(|(i, _)| i)
-        .collect();
-    let from = *one_point_axes
-        .iter()
-        .find(|&&i| app.creation_choice().stats[i] > 0)
-        .expect("a one-point axis always holds what Def alone could not");
-    let to = *one_point_axes.iter().find(|&&i| i != from).unwrap();
+    // Every row costs one point a unit, so moving a point between two of
+    // them is a like-for-like swap the total spend cannot see.
+    let rows = app.creation_rows().len();
+    let held = |app: &App, i: usize| match &app.creation_rows()[i] {
+        CreationRow::Attribute { spent, .. } => *spent,
+        other => panic!("not a Points row: {other:?}"),
+    };
+    let from = (0..rows)
+        .find(|&i| held(&app, i) > 0)
+        .expect("a rolled spread of the whole pool holds a point somewhere");
+    let to = (0..rows).find(|&i| i != from).unwrap();
 
     app.menu_selected = from;
     press(&mut app, GameKey::Left);
@@ -834,18 +823,11 @@ fn reentering_points_keeps_a_hand_made_spread() {
     assert_eq!(app.creation_step(), CreationStep::Points);
 
     // A spread deliberately unlike anything the roll would leave alone:
-    // clear every axis, then put the whole pool on Decompiler alone.
-    for i in 0..MainStat::all().len() {
-        app.menu_selected = i;
-        press(&mut app, GameKey::ShiftLeft);
-    }
-    let decompiler = MainStat::all()
-        .iter()
-        .position(|s| *s == MainStat::Decompiler)
-        .unwrap();
-    app.menu_selected = decompiler;
+    // clear every row, then put the whole pool on Analysis alone.
+    clear_the_points(&mut app);
+    app.menu_selected = attribute_row(&app, "analysis");
     press(&mut app, GameKey::ShiftRight);
-    let made = app.creation_choice().stats;
+    let made = app.creation_choice().stats.clone();
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
 
     press(&mut app, GameKey::Enter); // -> Perks
@@ -1902,4 +1884,31 @@ fn taking_a_preset_leaves_the_profiles_drawing_alone() {
             .is_none(),
         "a character who wears a preset has no icon of their own in the save"
     );
+}
+
+/// The roll spends exactly the pool, and only on attributes the screen
+/// offers: a point on Entropy (no effects) would be a point the run never
+/// reads, and `apply_creation_stats` would silently drop it.
+#[test]
+fn the_rolled_spread_spends_the_pool_on_offered_attributes_only() {
+    let mut app = opened("roll_buyable");
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    skip_the_look(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Points);
+
+    let offered: Vec<AttributeId> = app
+        .creation_rows()
+        .into_iter()
+        .filter_map(|row| match row {
+            CreationRow::Attribute { id, .. } => Some(id),
+            _ => None,
+        })
+        .collect();
+    assert!(!offered.is_empty());
+    assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
+    for id in app.creation_choice().stats.keys() {
+        assert!(offered.contains(id), "{id} was rolled but is not offered");
+    }
 }

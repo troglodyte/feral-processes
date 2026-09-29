@@ -87,39 +87,6 @@ pub enum Reward {
     StartingProgram(String),
 }
 
-/// The four axes the character-creation stat pool is spent on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MainStat {
-    Atk,
-    Def,
-    /// `Stats::max_hp`, and `hp` with it — a run must not start damaged.
-    Integrity,
-    Decompiler,
-}
-
-impl MainStat {
-    /// The four axes are the creation screen's rows; this is not expected to
-    /// grow.
-    pub fn all() -> [MainStat; 4] {
-        [
-            MainStat::Atk,
-            MainStat::Def,
-            MainStat::Integrity,
-            MainStat::Decompiler,
-        ]
-    }
-
-    /// How the stat reads on the achievements screen.
-    pub fn label(self) -> &'static str {
-        match self {
-            MainStat::Atk => "Attack",
-            MainStat::Def => "Mitigation",
-            MainStat::Integrity => "Integrity",
-            MainStat::Decompiler => "Decompiler",
-        }
-    }
-}
-
 /// One authored rung.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AchievementDef {

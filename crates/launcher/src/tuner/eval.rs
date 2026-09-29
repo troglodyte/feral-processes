@@ -111,6 +111,14 @@ impl Workspace {
         Ok(())
     }
 
+    /// The install's attribute catalogue, which the balance sim derives the
+    /// player's growth from. A tuner candidate never edits it.
+    pub fn attribute_db(&self) -> Result<feral_processes_engine::attributes::AttributeDb, String> {
+        feral_processes_engine::attributes::AttributeDb::load_dir(&self.dir.join("attributes"))
+            .map(|(db, _)| db)
+            .map_err(|e| format!("cannot load attributes: {e}"))
+    }
+
     /// Every species in the install, as the engine would read them.
     ///
     /// Parsed from what is on disk rather than from the candidate, so the

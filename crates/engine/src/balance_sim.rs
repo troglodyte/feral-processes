@@ -15,10 +15,12 @@
 //! `a_full_party_survives_a_full_group_at_each_zone` for the actual
 //! regression checks this module exists to support.
 
+use crate::attributes::AttributeDb;
 use crate::battle::{DamageRange, accuracy_of, evasion_of, expected_damage};
+use crate::components::Attributes;
 use crate::components::Stats;
 use crate::items::EquipmentStats;
-use crate::progression::stats_after_levels;
+use crate::progression::{DerivedBase, canonical_spend, derive, stats_after_levels};
 use crate::resources::ZoneLevel;
 use crate::species::{SpeciesDb, SpeciesDef};
 use crate::tuning::PLAYER_BASE_STATS;
@@ -138,6 +140,29 @@ fn player_profile(
 /// which is what `Game::attack_range` falls back to.
 fn unarmed_player_profile(level: u32) -> AttackProfile {
     player_profile(level, 0, 0, crate::tuning::PLAYER_UNARMED_DAMAGE)
+}
+
+/// The player after `levels_gained` level-ups, fully healed: the catalogue
+/// bases plus the canonical spend, run through `progression::derive`. The
+/// sim models a classless player, so class attributes are outside it.
+/// `stats_after_levels(PLAYER_BASE_STATS, n, BASELINE_GROWTH_MULTIPLIER)` is
+/// what this replaced, and a test holds the two equal for every level.
+fn player_stats_after_levels(levels_gained: u32, attrs: &AttributeDb) -> Stats {
+    let mut store = Attributes::default();
+    for def in attrs.iter() {
+        store.set(&def.id, def.base);
+    }
+    for (id, points) in canonical_spend(levels_gained) {
+        let base = attrs.get(&id).map_or(0, |d| d.base);
+        store.set(&id, base + points as i32);
+    }
+    let derived = derive(&DerivedBase::player(), &store, attrs);
+    Stats {
+        hp: derived.max_hp,
+        max_hp: derived.max_hp,
+        atk: derived.atk,
+        mitigation: derived.mitigation,
+    }
 }
 
 /// A companion tamed from `species` while breached into `zone` — it starts
@@ -452,7 +477,7 @@ impl std::fmt::Display for ReachRuleVerdict {
 /// rather than a bool: a human reading a proposal's diff needs to see how
 /// close it came, not merely that it passed.
 /// `the_reach_rule_measurably_softens_a_full_pack` asserts `holds()`.
-pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
+pub fn reach_rule_verdict(db: &SpeciesDb, attrs: &AttributeDb) -> ReachRuleVerdict {
     let toughest = toughest_ordinary_species(db);
     let party = median_ordinary_species(db);
 
@@ -469,11 +494,7 @@ pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
 
     let level_needed = |groups: &[GroupSim]| {
         (1..=REACH_RULE_MAX_LEVEL).find(|&level| {
-            let player = stats_after_levels(
-                PLAYER_BASE_STATS,
-                level - 1,
-                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
-            );
+            let player = player_stats_after_levels(level - 1, attrs);
             let companions: Vec<Stats> = (0..crate::tuning::MAX_PARTY_SIZE)
                 .map(|_| {
                     companion_stats(
@@ -724,32 +745,33 @@ pub fn simulate_roster_fight(
 /// mirror of the toughest thing they have to fight. Pass
 /// `median_ordinary_species` for the realistic baseline.
 ///
-/// `with_gear` adds `best_case_gear_bonus(zone, gear.0, gear.1)` to the
-/// player's ATK/DEF (companions never carry equipment — see
-/// `components::Equipment`, only ever fetched for the player entity) — set
-/// it to `false` for a gear-free, pure-grind floor, `true` for the
-/// fully-intended progression path where the player re-equips
-/// zone-appropriate gear as they go. `gear` is `(weapon, armor)`, the base
-/// `EquipmentStats` of the strongest shipped gear, resolved from `ItemDb`
-/// by the caller (see `best_gear_stats`, which already returns them paired
-/// this way) — kept as one tuple parameter rather than two so this
-/// function stays under clippy's argument-count lint; ignored when
-/// `with_gear` is `false`.
+/// `gear` adds `best_case_gear_bonus(zone, gear.0, gear.1)` to the player's
+/// ATK/DEF (companions never carry equipment — see `components::Equipment`,
+/// only ever fetched for the player entity) — `None` is a gear-free,
+/// pure-grind floor, `Some` the fully-intended progression path where the
+/// player re-equips zone-appropriate gear as they go. It is `(weapon,
+/// armor)`, the base `EquipmentStats` of the strongest shipped gear,
+/// resolved from `ItemDb` by the caller (see `best_gear_stats`, which
+/// already returns them paired this way) — one option of a tuple rather
+/// than a flag and two items so this function stays under clippy's
+/// argument-count lint. `attrs` is the catalogue the player's growth is
+/// derived from.
 pub fn min_level_to_clear_zone(
     wild_species: &SpeciesDef,
     party_species: &SpeciesDef,
     zone: u32,
     max_level: u32,
     companion_count: usize,
-    with_gear: bool,
-    gear: (EquipmentStats, EquipmentStats),
+    gear: Option<(EquipmentStats, EquipmentStats)>,
+    attrs: &AttributeDb,
 ) -> Option<(u32, BattleOutcome)> {
     let groups = full_group_at_zone(wild_species, zone);
-    let (gear_atk, gear_mitigation, gear_accuracy, gear_evasion, weapon_range) = if with_gear {
-        best_case_gear_bonus(zone, gear.0, gear.1)
-    } else {
-        (0, 0, 0, 0, DamageRange::default())
-    };
+    let (gear_atk, gear_mitigation, gear_accuracy, gear_evasion, weapon_range) =
+        if let Some(gear) = gear {
+            best_case_gear_bonus(zone, gear.0, gear.1)
+        } else {
+            (0, 0, 0, 0, DamageRange::default())
+        };
     // `Game::attack_range`'s rule: a weapon with a band supplies it outright,
     // and unarmed the natural one applies.
     let swing = if weapon_range == DamageRange::default() {
@@ -758,11 +780,7 @@ pub fn min_level_to_clear_zone(
         weapon_range
     };
     for level in 1..=max_level {
-        let mut player = stats_after_levels(
-            PLAYER_BASE_STATS,
-            level - 1,
-            crate::tuning::BASELINE_GROWTH_MULTIPLIER,
-        );
+        let mut player = player_stats_after_levels(level - 1, attrs);
         player.atk += gear_atk;
         player.mitigation += gear_mitigation;
         let companion_level = companion_level_for_player_level(level);
@@ -794,6 +812,34 @@ mod tests {
 
     fn species_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/species")
+    }
+
+    fn shipped_attribute_db() -> AttributeDb {
+        AttributeDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/attributes"),
+        )
+        .unwrap()
+        .0
+    }
+
+    /// The player's growth is derived from attributes now, and the curves
+    /// this file gates must not have moved: the canonical spend has to give
+    /// back exactly what `stats_after_levels` did at every level.
+    #[test]
+    fn the_derived_player_equals_the_old_flat_growth_at_every_level() {
+        let attrs = shipped_attribute_db();
+        for n in 0..=MAX_LEVEL_SEARCHED {
+            assert_eq!(
+                player_stats_after_levels(n, &attrs),
+                stats_after_levels(
+                    PLAYER_BASE_STATS,
+                    n,
+                    crate::tuning::BASELINE_GROWTH_MULTIPLIER
+                ),
+                "level {}",
+                n + 1
+            );
+        }
     }
 
     /// The shipped ability set, which `SpeciesDb::load_dir` validates
@@ -982,6 +1028,7 @@ mod tests {
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
         let (weapon, armor) = best_gear_stats();
+        let attrs = shipped_attribute_db();
 
         for zone in 1..=MAX_GEARED_ZONE_SWEPT {
             let Some((level, outcome)) = min_level_to_clear_zone(
@@ -990,8 +1037,8 @@ mod tests {
                 zone,
                 MAX_LEVEL_SEARCHED,
                 MAX_PARTY_SIZE,
-                true,
-                (weapon, armor),
+                Some((weapon, armor)),
+                &attrs,
             ) else {
                 panic!(
                     "zone {zone}: a full party of {MAX_PARTY_SIZE} can't clear a full group of \
@@ -1030,7 +1077,7 @@ mod tests {
     #[test]
     fn the_reach_rule_measurably_softens_a_full_pack() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
-        let verdict = reach_rule_verdict(&db);
+        let verdict = reach_rule_verdict(&db, &shipped_attribute_db());
         eprintln!("{verdict}");
         assert!(
             verdict.holds(),
@@ -1079,7 +1126,7 @@ mod tests {
         );
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
-        let (weapon, armor) = best_gear_stats();
+        let attrs = shipped_attribute_db();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GRIND_ONLY_ZONE_SWEPT {
@@ -1089,8 +1136,8 @@ mod tests {
                 zone,
                 MAX_LEVEL_SEARCHED,
                 BASE_PET_CAPACITY,
-                false,
-                (weapon, armor),
+                None,
+                &attrs,
             ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} on pure grind \
@@ -1149,6 +1196,7 @@ mod tests {
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
         let (weapon, armor) = best_gear_stats();
+        let attrs = shipped_attribute_db();
 
         let mut required_levels = Vec::new();
         for zone in 1..=MAX_GEARED_ZONE_SWEPT {
@@ -1158,8 +1206,8 @@ mod tests {
                 zone,
                 MAX_LEVEL_SEARCHED,
                 BASE_PET_CAPACITY,
-                true,
-                (weapon, armor),
+                Some((weapon, armor)),
+                &attrs,
             ) else {
                 panic!(
                     "zone {zone} ({}) isn't clearable by level {MAX_LEVEL_SEARCHED} even fully \
@@ -1187,8 +1235,8 @@ mod tests {
                 zone,
                 MAX_LEVEL_SEARCHED,
                 BASE_PET_CAPACITY,
-                false,
-                (weapon, armor),
+                None,
+                &attrs,
             ) {
                 assert!(
                     geared_level <= grind_only_level,

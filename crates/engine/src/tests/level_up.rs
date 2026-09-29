@@ -468,6 +468,12 @@ fn shipped_species_db() -> crate::species::SpeciesDb {
         .0
 }
 
+fn shipped_attribute_db() -> crate::attributes::AttributeDb {
+    crate::attributes::AttributeDb::load_dir(&test_assets_dir().join("attributes"))
+        .unwrap()
+        .0
+}
+
 fn cap_at_zone(zone: u32) -> u32 {
     let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.insert_resource(ZoneLevel(zone));
@@ -503,15 +509,15 @@ fn the_zone_level_cap_rises_linearly() {
 fn zone_one_is_capped_at_the_floor() {
     assert_eq!(cap_at_zone(1), ZONE_LEVEL_CAP_FLOOR);
     let db = shipped_species_db();
-    let (weapon, armor) = best_gear_stats();
+    let attrs = shipped_attribute_db();
     let (needed, _) = min_level_to_clear_zone(
         toughest_ordinary_species(&db),
         median_ordinary_species(&db),
         1,
         200,
         BASE_PET_CAPACITY,
-        false,
-        (weapon, armor),
+        None,
+        &attrs,
     )
     .expect("zone 1 is clearable");
     assert!(
@@ -541,6 +547,7 @@ fn the_zone_level_cap_is_bounded_by_both_clear_curves() {
     let db = shipped_species_db();
     let (toughest, party) = (toughest_ordinary_species(&db), median_ordinary_species(&db));
     let (weapon, armor) = best_gear_stats();
+    let attrs = shipped_attribute_db();
     let required = |zone: u32, with_gear: bool| {
         min_level_to_clear_zone(
             toughest,
@@ -548,8 +555,8 @@ fn the_zone_level_cap_is_bounded_by_both_clear_curves() {
             zone,
             400,
             BASE_PET_CAPACITY,
-            with_gear,
-            (weapon, armor),
+            with_gear.then_some((weapon, armor)),
+            &attrs,
         )
         .map(|(level, _)| level)
     };

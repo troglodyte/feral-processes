@@ -3252,7 +3252,7 @@ impl Game {
     /// Takes no argument on purpose: it reads the installed `Profile`, so the
     /// two calls cannot disagree about which profile is in play.
     pub fn grant_profile_rewards(&mut self) {
-        use crate::achievements::{AchievementDb, MainStat, Profile, Reward};
+        use crate::achievements::{AchievementDb, Profile, Reward};
 
         // Nothing calls this twice, and the doubling would be invisible if
         // something started to — a stat is just a number, with no record of
@@ -3265,7 +3265,7 @@ impl Game {
         }
         self.world.insert_resource(ProfileRewardsPaid);
 
-        let rewards: Vec<(Reward, Option<MainStat>)> = {
+        let rewards: Vec<Reward> = {
             let db = self.world.resource::<AchievementDb>();
             let profile = self.world.resource::<Profile>();
             crate::achievements::profile_rewards(profile, db)
@@ -3278,28 +3278,13 @@ impl Game {
         let mut stat_points = 0;
         let mut perk_points = 0;
         let mut programs = Vec::new();
-        for (reward, rolled) in rewards {
+        for reward in rewards {
             match reward {
                 Reward::RandomMainStat(n) => {
-                    // The profile's recorded answer, never a fresh roll: the
-                    // stat was decided at earn time and written down so it
-                    // could not drift.
-                    let Some(stat) = rolled else { continue };
-                    let n = n as i32;
-                    match stat {
-                        MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += n,
-                        MainStat::Def => {
-                            self.world.get_mut::<Stats>(player).unwrap().mitigation += n
-                        }
-                        MainStat::Integrity => {
-                            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
-                            stats.max_hp += n;
-                            // Both halves, or the run starts damaged.
-                            stats.hp += n;
-                        }
-                        MainStat::Decompiler => {
-                            self.world.get_mut::<Decompiler>(player).unwrap().skill += n
-                        }
+                    if let Some(mut points) =
+                        self.world.get_mut::<crate::components::StatPoints>(player)
+                    {
+                        points.0 += n;
                     }
                     stat_points += n;
                 }

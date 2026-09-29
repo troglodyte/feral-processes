@@ -67,8 +67,7 @@ pub const CREATION_STAT_POINTS: u32 = 20;
 /// for what a point buys.
 pub const CREATION_COST_INTEGRITY: u32 = 1;
 
-/// Pool points one point of Atk costs — priced 1-for-1, the same rate
-/// `Reward::RandomMainStat` already grants it at.
+/// Pool points one point of Atk costs — priced 1-for-1.
 pub const CREATION_COST_ATK: u32 = 1;
 
 /// Pool points one point of Decompiler (`Decompiler::skill`) costs — priced
@@ -3454,8 +3453,8 @@ pub const ENEMY_ROUTINE_MIN_COOLDOWN: u32 = 1;
 // Achievement profile ceilings
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Most main-stat points a fully-cleared `assets/achievements/` ladder may
-/// hand a new run, summed across every `Reward::RandomMainStat`.
+/// Most stat points a fully-cleared `assets/achievements/` ladder may
+/// hand a new run to bank, summed across every `Reward::RandomMainStat`.
 ///
 /// `balance_sim` simulates a run's own curve and deliberately does not model
 /// the cross-run profile, so this bound — asserted over the real assets by

@@ -335,6 +335,9 @@ pub struct PlayerStatus {
     pub zone: u32,
     /// Unspent Perk Points (see `perks::Perk`), earned 1 per level gained.
     pub perk_points: u32,
+    /// Unspent attribute points, earned 6 per level gained and spent on the
+    /// Points screen.
+    pub stat_points: u32,
     /// Which perks have been unlocked so far.
     pub unlocked_perks: Vec<Perk>,
 }
@@ -2970,8 +2973,6 @@ pub struct EarnedSummary {
     pub tick: u64,
     /// Whether it has ever been earned on permadeath.
     pub permadeath: bool,
-    /// Which stat the roll landed on, for a `Reward::RandomMainStat`.
-    pub rolled_stat: Option<String>,
 }
 
 /// One contract, worded — an offer on a Broker's board or one the run is

@@ -9,13 +9,12 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::PlayerIcon;
-use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat};
+use feral_processes_engine::achievements::Earned;
 use feral_processes_engine::classes::PlayerClass;
 use feral_processes_engine::save;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
 use feral_processes_engine::tuning::{
-    CREATION_COST_DEF, CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS,
-    PLAYER_BASE_STATS,
+    CREATION_COST_DEF, CREATION_CREDITS, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
 };
 
 /// An `App` sitting on the main menu with no run, its own scratch saves
@@ -617,7 +616,6 @@ fn the_profile_page_summarises_what_carried_over() {
         id: "boss_wintermute".into(), // PerkPoints(1), a second one
         first_tick: 9,
         permadeath: false,
-        rolled_stat: None,
     });
     let mut app = wizard_app_with_profile("profile_page", &profile);
     press(&mut app, ch('n'));
@@ -640,38 +638,24 @@ fn the_profile_page_summarises_what_carried_over() {
     );
 }
 
-/// One rung of each `Reward` kind, earned before the wizard ever opens —
-/// what a returning player's record would look like. The `RandomMainStat`
-/// rung's roll is deliberately forced to differ from what a *fresh*
-/// `roll_main_stat` call on the same id would produce, so this only passes
-/// if the preview reads `Earned::rolled_stat` — the recorded answer — and
-/// not a re-roll.
+/// One rung of each `Reward` kind, earned before the wizard ever opens -
+/// what a returning player's record would look like.
 fn profile_with_every_reward_kind() -> Profile {
-    let stat_rung: AchievementId = "breach_zone_2".into();
-    let fresh_roll = roll_main_stat(&stat_rung);
-    let recorded_roll = MainStat::all()
-        .into_iter()
-        .find(|stat| *stat != fresh_roll)
-        .expect("MainStat::all() has more than one variant");
-
     let mut profile = Profile::default();
     profile.record(Earned {
-        id: stat_rung,
+        id: "breach_zone_2".into(), // RandomMainStat(1)
         first_tick: 1,
         permadeath: false,
-        rolled_stat: Some(recorded_roll),
     });
     profile.record(Earned {
         id: "stack_depth_5".into(), // PerkPoints(1)
         first_tick: 2,
         permadeath: false,
-        rolled_stat: None,
     });
     profile.record(Earned {
         id: "stack_depth_8".into(), // StartingProgram("scrapper")
         first_tick: 3,
         permadeath: false,
-        rolled_stat: None,
     });
     profile
 }
@@ -699,19 +683,6 @@ fn wizard_app_with_profile(name: &str, profile: &Profile) -> App {
     )
 }
 
-/// Which `PlayerStatus` field a `Reward::RandomMainStat` axis lands on —
-/// mirrors the match in `Game::grant_profile_rewards`, by call rather than
-/// copy: `stat_field` is test-only scaffolding to read the *result*, not a
-/// second statement of what pays what.
-fn stat_field(stat: MainStat, status: &feral_processes_engine::views::PlayerStatus) -> i32 {
-    match stat {
-        MainStat::Atk => status.atk,
-        MainStat::Def => status.mitigation,
-        MainStat::Integrity => status.max_hp,
-        MainStat::Decompiler => status.decompiler,
-    }
-}
-
 /// The load-bearing test for Task 8: the preview and the payout must agree,
 /// because they are the same call. Builds a profile with all three reward
 /// kinds, reads the preview, starts the run, and checks the actual `Stats`,
@@ -722,14 +693,12 @@ fn stat_field(stat: MainStat, status: &feral_processes_engine::views::PlayerStat
 #[test]
 fn the_preview_matches_what_is_paid() {
     let profile = profile_with_every_reward_kind();
-    let recorded_stat = profile.earned[0].rolled_stat.unwrap();
-
     let mut app = wizard_app_with_profile("matches_paid", &profile);
     let rows = app.profile_preview_rows();
     assert_eq!(
         rows,
         vec![
-            format!("+1 {}", recorded_stat.label()),
+            "+1 stat point".to_string(),
             "+1 Perk Point".to_string(),
             "start with a scrapper".to_string(),
         ]
@@ -745,9 +714,9 @@ fn the_preview_matches_what_is_paid() {
     let status = app.game.as_ref().unwrap().player_status();
 
     assert_eq!(
-        stat_field(recorded_stat, &status),
-        stat_field(recorded_stat, &baseline_status) + 1,
-        "the stat the preview named did not move by what it claimed"
+        status.stat_points,
+        baseline_status.stat_points + 1,
+        "the stat point the preview named was not banked"
     );
     assert_eq!(status.perk_points, baseline_status.perk_points + 1);
 

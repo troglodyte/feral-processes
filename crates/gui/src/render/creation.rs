@@ -528,7 +528,6 @@ mod tests {
                 id: id.as_str().into(),
                 first_tick: 1,
                 permadeath: false,
-                rolled_stat: Some(feral_processes_engine::achievements::MainStat::Atk),
             });
         };
         for i in 0..MAX_PROFILE_STAT_POINTS {

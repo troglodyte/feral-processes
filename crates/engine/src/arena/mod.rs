@@ -123,8 +123,9 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
 /// Raises the player to `level` by banking stat points and spending them
 /// every level in `per_level`'s pattern - `None` is `canonical_spend`, which
 /// reproduces the old automatic growth. A pattern that does not sum to
-/// `STAT_POINTS_PER_LEVEL`, or names an attribute that is not buyable, is an
-/// error rather than a quiet fallback: a sweep that silently ignored its
+/// `STAT_POINTS_PER_LEVEL`, or names an attribute that is not buyable
+/// (`spend_stat_points` refuses it, even at zero points), is an error rather
+/// than a quiet fallback: a sweep that silently ignored its
 /// spend would report identical numbers and read as the attribute being
 /// worthless.
 pub(crate) fn set_player_level(
@@ -143,12 +144,6 @@ pub(crate) fn set_player_level(
             "player_spend: {pattern:?} spends {per_level_total} points a level, not {}",
             crate::tuning::STAT_POINTS_PER_LEVEL
         ));
-    }
-    let db = game.world.resource::<crate::attributes::AttributeDb>();
-    for id in pattern.keys() {
-        if !db.get(id).is_some_and(|d| d.buyable()) {
-            return Err(format!("player_spend: `{id}` is not a buyable attribute"));
-        }
     }
     let before = game.world.get::<Experience>(player).map_or(1, |e| e.level);
     let mut levels = 0;

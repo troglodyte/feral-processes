@@ -1124,7 +1124,7 @@ impl App {
     pub fn profile_perk_points(&self) -> u32 {
         feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
             .into_iter()
-            .map(|(reward, _)| match reward {
+            .map(|reward| match reward {
                 feral_processes_engine::achievements::Reward::PerkPoints(n) => n,
                 _ => 0,
             })

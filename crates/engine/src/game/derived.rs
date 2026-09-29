@@ -15,10 +15,10 @@ impl Game {
 
     /// The only writer of derived values. Sets `Stats::{max_hp, atk,
     /// mitigation}` to the derived figure plus the `BoughtStats` receipt,
-    /// `Decompiler::skill` and `Derived`, with gear lifted around the write
-    /// (the order `unbake_bought_stats` uses) so no stat operation runs with
-    /// gear baked in. `hp` and Power are clamped to their new maxima, never
-    /// refilled.
+    /// `Decompiler::skill` and `Derived`, then puts worn gear back on top.
+    /// The writes are absolute, so they replace whatever gear was baked in
+    /// and nothing needs lifting first. `hp` and Power are clamped to their
+    /// new maxima, never refilled.
     ///
     /// A no-op for an entity without `Derived`: companions keep stored
     /// stats, and the `BoughtStats` writers that serve them call this too.
@@ -44,7 +44,6 @@ impl Game {
             .copied()
             .unwrap_or_default();
         let gear = self.gear_bonus(entity);
-        self.apply_equipment_delta(entity, gear, -1);
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
             stats.max_hp = derived.max_hp + receipt.max_hp;
             stats.atk = derived.atk + receipt.atk;

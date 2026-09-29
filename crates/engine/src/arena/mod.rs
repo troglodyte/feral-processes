@@ -177,6 +177,12 @@ pub(crate) fn set_player_level(
         .collect();
     game.spend_stat_points(StatOwner::Player, &spend)
         .map_err(|e| format!("player_spend: {e:?}"))?;
+    // The spend never refills Power (HP is full from `add_xp`'s heal), and
+    // a build that bought Bandwidth must open on the reserve it bought.
+    let max_power = game.max_power(player);
+    if let Some(mut power) = game.world.get_mut::<PowerReserve>(player) {
+        power.fill(max_power);
+    }
     let after = game
         .world
         .get::<Experience>(player)
@@ -487,6 +493,17 @@ mod tests {
         let stats = *game.world.get::<Stats>(game.player_entity()).unwrap();
         assert_eq!((stats.max_hp, stats.atk), (90 + 5 * 24, 6 + 5 * 2));
         assert_eq!(stats.hp, stats.max_hp, "and starts the fight healthy");
+    }
+
+    /// Bandwidth raises max Power, and a staged fight must open on the
+    /// reserve the build bought, as it opens on full HP.
+    #[test]
+    fn an_arena_player_starts_the_fight_on_full_power() {
+        let game = staged_player(Some(player_spend(&[("bandwidth", 6)])));
+        let player = game.player_entity();
+        let max = game.max_power(player);
+        assert!(max > crate::components::POWER_MAX, "{max}");
+        assert_eq!(game.world.get::<PowerReserve>(player).unwrap().get(), max);
     }
 
     #[test]

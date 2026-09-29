@@ -181,11 +181,9 @@ fn spend(pairs: &[(&str, u32)]) -> Vec<(AttributeId, u32)> {
 fn a_spend_raises_the_attributes_and_derives_the_stats() {
     let mut game = Game::new(7010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     bank(&mut game, 6);
-    let derived = game
-        .spend_stat_points(StatOwner::Player, &spend(&[("parity", 4), ("analysis", 2)]))
+    game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 4), ("analysis", 2)]))
         .unwrap();
     let player = game.player_entity();
-    assert_eq!(derived.max_hp, 90 + 24);
     assert_eq!(stats_of(&game, player).max_hp, 90 + 24);
     assert_eq!(stats_of(&game, player).atk, 6 + 2);
     assert_eq!(game.world.get::<Decompiler>(player).unwrap().skill, 2);
@@ -296,7 +294,7 @@ fn spending_raises_current_hp_by_what_the_maximum_rose_by() {
     assert_eq!(
         (stats.hp, stats.max_hp),
         (62, 114),
-        "a wounded one is not healed"
+        "a wounded one gains only what the maximum rose by"
     );
 }
 

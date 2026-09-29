@@ -152,12 +152,12 @@ pub struct ClassDef {
     /// An id the catalogue does not define, or an absent map, falls
     /// through to each def's own `base`.
     ///
-    /// The value is a **base** the player mints a spread around, read once
-    /// at creation, so editing it does not change a run already in
-    /// progress.
+    /// The value is where the player starts, before creation's Points
+    /// spend, read once at creation, so editing it does not change a run
+    /// already in progress.
     ///
     /// `#[serde(default)]`, so no existing class file — including a mod's
-    /// — needs editing. The shipped eight are held to authoring all five
+    /// — needs editing. The shipped eight are held to authoring every attribute
     /// by `every_shipped_class_authors_every_attribute`.
     #[serde(default)]
     pub attributes: std::collections::BTreeMap<String, i32>,

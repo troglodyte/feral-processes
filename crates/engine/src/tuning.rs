@@ -176,17 +176,14 @@ pub const STAT_POINTS_PER_LEVEL: u32 = 6;
 
 /// The canonical spend per level: 4 Parity (6 max HP each) and 2 Analysis
 /// (1 Atk and 1 Decompiler each). Equals `HP_PER_LEVEL`, `ATK_PER_LEVEL`
-/// and the retired automatic Decompiler grant (2 a level) exactly, which
-/// the assert below holds
-/// so `balance_sim`'s curves cannot drift from the shipped effect values
-/// without a build failure.
+/// and the retired automatic Decompiler grant (2 a level) exactly. The
+/// per-point values live in `assets/attributes/`, so that equality is held
+/// by `progression::canonical_spend_is_the_old_per_level_growth` against
+/// the real assets, not here; only the pool size is a build failure.
 pub const CANONICAL_PARITY_PER_LEVEL: u32 = 4;
 pub const CANONICAL_ANALYSIS_PER_LEVEL: u32 = 2;
-const _: () = {
+const _: () =
     assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_ANALYSIS_PER_LEVEL == STAT_POINTS_PER_LEVEL);
-    assert!(CANONICAL_PARITY_PER_LEVEL as i32 * 6 == HP_PER_LEVEL);
-    assert!(CANONICAL_ANALYSIS_PER_LEVEL as i32 == ATK_PER_LEVEL);
-};
 
 /// The floor on a derived max Power, so a low Bandwidth cannot leave a
 /// reserve too small to cast anything.

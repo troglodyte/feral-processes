@@ -991,7 +991,7 @@ impl Game {
         )
     }
 
-    /// Awards `amount` XP to the player, growing stats and fully healing on
+    /// Awards `amount` XP to the player, banking stat points and fully healing on
     /// any level-up gained, then awards every current party member half as
     /// much (see `award_party_xp`) — fighting beside you pays off even on
     /// rounds where only the player's hit actually lands. Silently does

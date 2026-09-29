@@ -328,7 +328,7 @@ impl App {
             .collect();
         let Some(game) = &mut self.game else { return };
         match game.spend_stat_points(StatOwner::Player, &spend) {
-            Ok(_) => self.leave_allocation(true),
+            Ok(()) => self.leave_allocation(true),
             Err(why) => self.refuse(format!("Cannot spend those points: {why:?}.")),
         }
     }

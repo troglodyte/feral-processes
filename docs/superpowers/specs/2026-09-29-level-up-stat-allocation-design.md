@@ -110,6 +110,10 @@ as that spec's decision 2 requires.
 3. Puts gear back and clamps `hp` to `max_hp` and `PowerReserve` to max
    Power. It never refills either.
 
+   *As built:* `spend_stat_points`, not recompute, then raises current HP
+   by what max HP rose by, so a level-up's full heal is not undone by
+   spending the points it paid. Power gets no such rule.
+
 It is called after creation, any attribute spend, a perk purchase or respec
 that touches `BoughtStats`, and load. The plan has to find every
 player-`Stats` writer: most of them either go through recompute or turn out

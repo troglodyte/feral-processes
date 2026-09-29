@@ -20,7 +20,7 @@ impl Game {
         &mut self,
         owner: StatOwner,
         spend: &[(crate::attributes::AttributeId, u32)],
-    ) -> Result<crate::progression::DerivedStats, SpendError> {
+    ) -> Result<(), SpendError> {
         let StatOwner::Player = owner;
         let entity = self.player_entity();
         let banked = self
@@ -64,7 +64,7 @@ impl Game {
             let raised = (stats.max_hp - max_hp_before).max(0);
             stats.hp = (stats.hp + raised).min(stats.max_hp);
         }
-        Ok(self.derived_stats(entity))
+        Ok(())
     }
 
     /// The catalogue as the Points screen previews against - a clone, so a

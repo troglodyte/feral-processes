@@ -24,6 +24,7 @@ pub(crate) mod commerce;
 pub(crate) mod contracts;
 pub(crate) mod crafting;
 pub(crate) mod creation;
+pub(crate) mod derived;
 pub(crate) mod descriptions;
 pub(crate) mod environment;
 pub(crate) mod extraction;

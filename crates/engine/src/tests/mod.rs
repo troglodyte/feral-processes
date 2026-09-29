@@ -35,6 +35,7 @@ mod contracts;
 mod crafting;
 mod creation;
 mod depot_filter;
+mod derived;
 mod descriptions;
 mod difficulty;
 mod disposition;

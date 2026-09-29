@@ -4,8 +4,8 @@ use crate::species::SpeciesDef;
 use crate::tuning::{
     ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, DIFFICULTY_EASY_MAX,
     EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL, HP_PER_LEVEL, MIN_MAX_POWER,
-    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL,
-    STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
+    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STATUS_RESIST_MAX,
+    STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 use std::collections::BTreeMap;
 
@@ -389,6 +389,7 @@ pub fn add_xp(
 mod tests {
     use super::*;
     use crate::attributes::AttributeDb;
+    use crate::tuning::STAT_POINTS_PER_LEVEL;
 
     fn shipped_db() -> AttributeDb {
         AttributeDb::load_dir(&crate::tests::support::test_assets_dir().join("attributes"))

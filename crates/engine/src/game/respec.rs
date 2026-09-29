@@ -186,6 +186,7 @@ impl Game {
             max_hp: 0,
             ever_bought: receipt.ever_bought,
         });
+        self.recompute_derived(entity);
     }
 
     /// Puts `entity`'s routine kit back to what its species and level alone

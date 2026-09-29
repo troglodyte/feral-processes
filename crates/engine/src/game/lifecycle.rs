@@ -1550,9 +1550,8 @@ impl Game {
                         .map(|def| def.attributes.clone())
                 })
                 .unwrap_or_default();
-            crate::attributes::mint(
+            crate::attributes::authored_or_base(
                 world.resource::<crate::attributes::AttributeDb>(),
-                crate::attributes::player_seed(world.resource::<WorldMap>().seed()),
                 &authored,
             )
         } else {
@@ -1562,7 +1561,9 @@ impl Game {
             }
             restored
         };
-        world.entity_mut(player).insert(player_attributes);
+        world
+            .entity_mut(player)
+            .insert((player_attributes, crate::components::Derived::default()));
 
         if let Some(name) = CustomName::sanitize(Some(player_name)) {
             world.entity_mut(player).insert(CustomName(name));

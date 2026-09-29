@@ -373,17 +373,21 @@ fn buffer_perk_scales_past_the_floor_at_high_max_hp() {
     let mut game = Game::new(118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Perks>(player).unwrap().points = 10;
-    {
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.max_hp = 2000;
-        stats.hp = 2000;
-    }
+    // 320 points of Parity above the base of 50 is 90 + 320 * 6 = 2010 max
+    // HP, written through the attribute because `Stats` is derived.
+    let parity = crate::attributes::AttributeId::from("parity");
+    game.world
+        .get_mut::<crate::components::Attributes>(player)
+        .unwrap()
+        .set(&parity, 370);
+    game.recompute_derived(player);
+    game.world.get_mut::<Stats>(player).unwrap().hp = 2010;
 
     game.unlock_perk(Perk::Buffer).unwrap();
     let status = game.player_status();
     assert_eq!(
-        status.max_hp, 2020,
-        "1% of 2000 is 20, above the floor, so that's what should apply"
+        status.max_hp, 2030,
+        "1% of 2010 is 20, above the floor, so that's what should apply"
     );
 }
 

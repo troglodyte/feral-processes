@@ -261,6 +261,12 @@ impl PowerReserve {
     pub fn raise_to_at_least(&mut self, floor: f32) {
         self.0 = self.0.max(floor).min(POWER_MAX);
     }
+
+    /// `Game::recompute_derived`: a lowered maximum trims the reserve down
+    /// to it, and a raised one leaves it where it was. Never refills.
+    pub fn clamp_to(&mut self, max: f32) {
+        self.0 = self.0.min(max);
+    }
 }
 
 #[cfg(test)]
@@ -1901,6 +1907,30 @@ impl Attributes {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+/// The player's derived figures that have no `Stats` field: what
+/// `progression::derive` answers beyond hp, attack, mitigation and
+/// Decompiler. Written only by `Game::recompute_derived`, and its absence
+/// means "not derived" - a companion reads the defaults (`POWER_MAX`, no
+/// resist, no extraction).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Derived {
+    pub max_power: f32,
+    /// Percent shortening of an armed status; negative lengthens.
+    pub status_resist: i32,
+    /// The player's capped extra mining chance.
+    pub extraction: f32,
+}
+
+impl Default for Derived {
+    fn default() -> Self {
+        Derived {
+            max_power: POWER_MAX,
+            status_resist: 0,
+            extraction: 0.0,
+        }
     }
 }
 

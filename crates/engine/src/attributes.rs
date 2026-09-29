@@ -273,6 +273,19 @@ pub fn mint(db: &AttributeDb, seed: u64, authored: &BTreeMap<String, i32>) -> At
     out
 }
 
+/// The player's attributes: the class's authored value for each attribute,
+/// or the catalogue `base` where it authors none. **No spread** - the
+/// player's numbers are chosen, not rolled, and `progression::derive` reads
+/// them against the catalogue base.
+pub fn authored_or_base(db: &AttributeDb, authored: &BTreeMap<String, i32>) -> Attributes {
+    let mut out = Attributes::default();
+    for def in db.iter() {
+        let value = authored.get(def.id.as_str()).copied().unwrap_or(def.base);
+        out.set(&def.id, value);
+    }
+    out
+}
+
 /// A build revision for one body — `"rev 4.17"`.
 ///
 /// Derived, never stored, `handles::of`'s model: no pool, no storage and no

@@ -167,8 +167,10 @@ impl Game {
     /// logic; kit and routine are one-line delegations — see the module doc
     /// comment.
     pub(crate) fn apply_character_choice(&mut self, choice: &CharacterChoice) {
-        self.apply_creation_stats(choice);
+        // Identity first: it mints the attributes that the stat spend and
+        // `recompute_derived` both read.
         self.apply_creation_identity(choice);
+        self.apply_creation_stats(choice);
         self.apply_creation_kit(choice);
         crate::abilities::install_starter(self, choice.routine.as_ref());
         self.apply_creation_perks(choice);
@@ -215,33 +217,39 @@ impl Game {
         }
     }
 
-    /// Adds `choice`'s spend on top of `PLAYER_BASE_STATS`, never
-    /// redistributing it — every build is therefore at or above the floor
-    /// `balance_sim` models. Fails closed: `cost()` is the one gate, checked
-    /// once here, and an overspent choice gets no spend at all rather than
-    /// a clamped or partial one.
+    /// Raises the attributes `choice`'s spend buys, then derives the
+    /// player's stats from them and starts the run at full health. Fails
+    /// closed: `cost()` is the one gate, checked once here, and an
+    /// overspent choice gets no spend at all rather than a clamped or
+    /// partial one.
+    ///
+    /// The four creation axes still map onto attributes one-for-one, Atk
+    /// and Decompiler onto Analysis, Def onto Footprint and Integrity onto
+    /// Parity, until the creation screen spends on attributes directly.
     fn apply_creation_stats(&mut self, choice: &CharacterChoice) {
-        if choice.cost().is_none() {
-            return;
-        }
         let player = self.player_entity();
-        for (axis, &points) in MainStat::all().iter().zip(choice.stats.iter()) {
-            let points = points as i32;
-            match axis {
-                MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += points,
-                MainStat::Def => self.world.get_mut::<Stats>(player).unwrap().mitigation += points,
-                MainStat::Integrity => {
-                    let gain = points * crate::tuning::CREATION_GAIN_INTEGRITY as i32;
-                    let mut stats = self.world.get_mut::<Stats>(player).unwrap();
-                    stats.max_hp += gain;
-                    // Both halves, or the run starts damaged — see
-                    // `MainStat::Integrity`'s own doc comment.
-                    stats.hp += gain;
-                }
-                MainStat::Decompiler => {
-                    self.world.get_mut::<Decompiler>(player).unwrap().skill += points
+        if choice.cost().is_some() {
+            let mut attrs = self
+                .world
+                .get::<crate::components::Attributes>(player)
+                .cloned()
+                .unwrap_or_default();
+            for (axis, &points) in MainStat::all().iter().zip(choice.stats.iter()) {
+                let id = crate::attributes::AttributeId::from(match axis {
+                    MainStat::Atk | MainStat::Decompiler => "analysis",
+                    MainStat::Def => "footprint",
+                    MainStat::Integrity => "parity",
+                });
+                if let Some(value) = attrs.get(&id) {
+                    attrs.set(&id, value + points as i32);
                 }
             }
+            self.world.entity_mut(player).insert(attrs);
+        }
+        self.recompute_derived(player);
+        // The run must not start damaged - `MainStat::Integrity`'s trap.
+        if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
+            stats.hp = stats.max_hp;
         }
     }
 
@@ -280,12 +288,13 @@ impl Game {
                     .map(|def| def.attributes.clone())
             })
             .unwrap_or_default();
-        let attrs = crate::attributes::mint(
+        let attrs = crate::attributes::authored_or_base(
             self.world.resource::<crate::attributes::AttributeDb>(),
-            crate::attributes::player_seed(self.world.resource::<WorldMap>().seed()),
             &authored,
         );
-        self.world.entity_mut(player).insert(attrs);
+        self.world
+            .entity_mut(player)
+            .insert((attrs, crate::components::Derived::default()));
     }
 
     /// The kit slot: `choice.items` if the player picked one, the class kit

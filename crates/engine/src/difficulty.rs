@@ -69,6 +69,15 @@ impl DeathReport<'_> {
     }
 }
 
+type DeathRow = (
+    Entity,
+    &'static mut Stats,
+    &'static mut PowerReserve,
+    &'static mut Position,
+    &'static mut Experience,
+    Option<&'static Derived>,
+);
+
 /// Gates what happens when the player's HP hits zero. Permadeath ends the
 /// run (the caller is responsible for writing the history log once);
 /// Forgiving mode is a soft respawn with a penalty, warping the player to
@@ -92,17 +101,7 @@ impl DeathReport<'_> {
 /// `Game::clear_stack`, because a system has no `Game` — it shares that
 /// function's implementation instead.
 pub(crate) fn death_handling_system(
-    mut player_query: Query<
-        (
-            Entity,
-            &mut Stats,
-            &mut PowerReserve,
-            &mut Position,
-            &mut Experience,
-            Option<&Derived>,
-        ),
-        With<Player>,
-    >,
+    mut player_query: Query<DeathRow, With<Player>>,
     anchor_query: Query<&Position, (With<BaseAnchor>, Without<Player>)>,
     mut field_buffs: PartyFieldBuffs,
     difficulty: Res<DifficultyMode>,

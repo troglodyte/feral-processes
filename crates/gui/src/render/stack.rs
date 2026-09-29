@@ -241,7 +241,7 @@ pub(super) fn draw_stack(
         for depth in (0..view.cells.len()).rev() {
             let row = &view.cells[depth];
             for i in 0..row.len() {
-                draw_cell(painter, row, i, depth, pane, m, power, max_power);
+                draw_cell(painter, row, i, depth, pane, m, (power, max_power));
             }
         }
     });
@@ -289,8 +289,7 @@ fn draw_cell(
     depth: usize,
     pane: Rect,
     m: &Metrics,
-    power: f32,
-    max_power: f32,
+    (power, max_power): (f32, f32),
 ) {
     let cell = row[i];
     let lateral = i as i32 - (row.len() / 2) as i32;

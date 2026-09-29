@@ -1579,6 +1579,13 @@ pub struct PlayerGatherLookups<'w> {
     research_defs: Res<'w, crate::research::ResearchDb>,
 }
 
+type PlayerGatherRow = (
+    &'static mut Task,
+    Option<&'static Perks>,
+    &'static mut Inventory,
+    Option<&'static Derived>,
+);
+
 /// The player running a gather job themselves, rather than posting a
 /// program to it — see `Game::work_structure`. The player carries the same
 /// `Task` a worker does and earns through the same `resolve_gather_cycle`,
@@ -1599,7 +1606,7 @@ pub struct PlayerGatherLookups<'w> {
 /// handle yourself is the largest hole there is in that. See the guard itself
 /// for the second, independent reason.
 pub fn player_gather_system(
-    mut player: Query<(&mut Task, Option<&Perks>, &mut Inventory, Option<&Derived>), With<Player>>,
+    mut player: Query<PlayerGatherRow, With<Player>>,
     mut nodes: Query<WorkedNode>,
     db: PlayerGatherLookups,
     mut log: ResMut<MessageLog>,

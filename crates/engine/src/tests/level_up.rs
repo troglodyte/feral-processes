@@ -911,13 +911,13 @@ fn every_figure_on_the_report_equals_a_direct_battle_call() {
 
     let hit_before = battle::hit_chance(before.combatant.accuracy, foe.evasion);
     let hit_after = battle::hit_chance(after.combatant.accuracy, foe.evasion);
-    assert_eq!(report.hit_chance, (hit_before, hit_after));
+    assert_eq!(report.duel.hit_chance, (hit_before, hit_after));
 
     let per_swing_before = battle::expected_damage(before.combatant, foe);
     let per_swing_after = battle::expected_damage(after.combatant, foe);
-    assert_eq!(report.per_swing, (per_swing_before, per_swing_after));
+    assert_eq!(report.duel.per_swing, (per_swing_before, per_swing_after));
     assert_eq!(
-        report.swings_to_win,
+        report.duel.swings_to_win,
         (
             (foe_ehp / per_swing_before).ceil() as u32,
             (foe_ehp / per_swing_after).ceil() as u32,
@@ -929,7 +929,7 @@ fn every_figure_on_the_report_equals_a_direct_battle_call() {
     let player_ehp_before = battle::effective_hp(before.max_hp, before.mitigation);
     let player_ehp_after = battle::effective_hp(after.max_hp, after.mitigation);
     assert_eq!(
-        report.swings_to_down_you,
+        report.duel.swings_to_down_you,
         (
             (player_ehp_before / foe_per_swing_before).ceil() as u32,
             (player_ehp_after / foe_per_swing_after).ceil() as u32,
@@ -970,4 +970,28 @@ fn swings_to_clamps_a_zero_expected_damage_rather_than_saturating() {
         "an exact multiple ceils to itself"
     );
     assert_eq!(swings_to(501.0, 100.0), 6, "ceil, not floor or round");
+}
+
+/// The level-up page and the perk preview share `stat_rows`, and Mitigation
+/// is a row it must draw when it moves (a level-up never moves it, a perk
+/// can).
+#[test]
+fn stat_rows_draws_a_mitigation_row_only_when_it_moved() {
+    let game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let before = game.snapshot_player(game.player_entity());
+    assert!(
+        crate::game::level_up::stat_rows(&before, &before).is_empty(),
+        "nothing moved, nothing drawn"
+    );
+
+    let mut after = before;
+    after.mitigation += 3;
+    assert_eq!(
+        crate::game::level_up::stat_rows(&before, &after),
+        vec![StatRow::new(
+            "Mitigation",
+            before.mitigation,
+            before.mitigation + 3
+        )]
+    );
 }

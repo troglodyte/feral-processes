@@ -36,15 +36,15 @@ fn stat_line(row: &StatRow) -> String {
     format!("  {}   {} \u{2192} {}", row.label, row.before, row.after)
 }
 
-/// The duel section's four rows, against `report.zone`'s typical foe.
+/// The duel section's four rows, against `report.duel.zone`'s typical foe.
 /// Percentages are whole numbers, the per-swing figure one decimal — the
 /// rest of the page is integers already, and those are the two figures
 /// `Game::take_level_up_report` hands back as `f64`.
 fn duel_lines(report: &LevelUpReport) -> [String; 4] {
-    let (hit_before, hit_after) = report.hit_chance;
-    let (swing_before, swing_after) = report.per_swing;
-    let (win_before, win_after) = report.swings_to_win;
-    let (down_before, down_after) = report.swings_to_down_you;
+    let (hit_before, hit_after) = report.duel.hit_chance;
+    let (swing_before, swing_after) = report.duel.per_swing;
+    let (win_before, win_after) = report.duel.swings_to_win;
+    let (down_before, down_after) = report.duel.swings_to_down_you;
     [
         format!(
             "  Hit chance      {:.0}% \u{2192} {:.0}%",
@@ -87,7 +87,7 @@ fn block_height(painter: &Painter, m: &Metrics, title: &str, stat_rows: usize) -
 #[cfg(test)]
 fn widest_line(painter: &Painter, m: &Metrics, report: &LevelUpReport) -> f32 {
     let title = format!("LEVEL {} \u{2192} {}", report.from_level, report.to_level);
-    let duel_header = format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.zone);
+    let duel_header = format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.duel.zone);
     let perk_line = format!(
         "  +{} Perk Points ({} unspent)   {PERKS_HINT}",
         report.perk_points_gained, report.perk_points_unspent
@@ -136,7 +136,7 @@ pub(super) fn draw_level_up(report: &LevelUpReport, painter: &Painter, m: &Metri
     y += m.gap;
     y += m.line_height;
     painter.ui_bold(
-        format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.zone),
+        format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.duel.zone),
         left,
         y,
         m.font_size,
@@ -178,6 +178,7 @@ pub(super) fn draw_level_up(report: &LevelUpReport, painter: &Painter, m: &Metri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::DuelComparison;
 
     /// The widest reachable report by hand: two stat rows at four digits, a
     /// level pair that never needs a third digit (`Game::level_cap`'s own
@@ -188,15 +189,17 @@ mod tests {
         LevelUpReport {
             from_level: 99,
             to_level: 99,
-            zone: 99,
             stats: vec![
                 StatRow::new("Max HP", 1234, 9999),
                 StatRow::new("ATK", 1234, 9999),
             ],
-            hit_chance: (0.05, 0.99),
-            per_swing: (1234.9, 9999.9),
-            swings_to_win: (999, 999),
-            swings_to_down_you: (999, 999),
+            duel: DuelComparison {
+                zone: 99,
+                hit_chance: (0.05, 0.99),
+                per_swing: (1234.9, 9999.9),
+                swings_to_win: (999, 999),
+                swings_to_down_you: (999, 999),
+            },
             perk_points_gained: 98,
             perk_points_unspent: 998,
             stat_points_gained: 98,

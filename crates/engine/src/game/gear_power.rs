@@ -51,10 +51,10 @@ fn reference_soak() -> f64 {
 
 /// One landed hit from the nominal hostile, before the wearer's defences: the
 /// median ordinary species at `POWER_REFERENCE_ZONE`, its first move's mean
-/// band plus its scaled attack — `battle::expected_damage`'s plain-hit term.
+/// band plus its scaled attack (`battle::plain_hit`).
 fn reference_foe_hit(foe: &crate::SpeciesDef) -> i32 {
     let stats = crate::balance_sim::wild_stats_at_zone(foe, POWER_REFERENCE_ZONE);
-    (foe.natural_range().mean() + stats.atk as f64).round() as i32
+    crate::battle::plain_hit(foe.natural_range(), stats.atk).round() as i32
 }
 
 /// Rates `mods` against the reference wearer, facing a hostile with

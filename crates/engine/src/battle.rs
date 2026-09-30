@@ -349,7 +349,13 @@ pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
     let plain = h - crit;
     let mean = attacker.range.mean();
     let atk = attacker.atk as f64;
-    plain * (mean + atk) + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
+    plain * plain_hit(attacker.range, attacker.atk)
+        + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
+}
+
+/// The mean of one landed, non-critical hit: the band's mean plus attack.
+pub fn plain_hit(range: DamageRange, atk: i32) -> f64 {
+    range.mean() + atk as f64
 }
 
 /// What one landed hit of `dmg` costs its target after `percent` mitigation

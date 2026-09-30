@@ -50,7 +50,8 @@ spec resolves to a release tag.
 | `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
 | `2026-09-16-routine-research-tree-design` | **built**; path-pinned | `v0.13.196`; `ResearchTree`, `DiscoveredRoutines` and `crates/engine/src/routine_tree.rs` resolve in `crates/engine` |
 | `2026-09-21-program-attributes-design` | **built**, unplayed; path-pinned | `v0.13.218`; see its own section below |
-| `2026-09-16-base-social-roadmap` | roadmap, **unbuilt** | each sub-project is to get its own spec; none has one yet |
+| `2026-09-16-base-social-roadmap` | roadmap, **partly built** | A+B (`handles-and-memory-schema`) built: `crates/engine/src/handles.rs`, `MemoryDef::mood`/`stack_decay`; C+D specced in `2026-09-30-bonds-and-social-tab-design`; E–G have no spec |
+| `2026-09-30-bonds-and-social-tab-design` | design, **unbuilt** | `crates/engine/src/bonds.rs` does not exist yet |
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |

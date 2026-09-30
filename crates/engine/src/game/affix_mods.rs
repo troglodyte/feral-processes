@@ -5,10 +5,8 @@
 //! `Game::fuse_item` does, and return the new key because the copy the
 //! caller named no longer exists under it.
 
-use std::collections::BTreeMap;
-
 use crate::affixes::AffixId;
-use crate::items::{EquipmentSlot, GearCopy, ItemId};
+use crate::items::{EquipmentSlot, GearCopy};
 use crate::*;
 
 /// The structure apply and remove require. Only its presence matters — the
@@ -192,36 +190,5 @@ impl Game {
             .unwrap()
             .slot_mut(slot) = Some(promoted);
         new
-    }
-
-    /// Takes `cost` out of the pack, or refuses naming what is short.
-    /// Every line is checked before any is taken, and the taking is booked
-    /// as craft consumption like `take_hand_craft_unit`'s.
-    fn pay_items(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
-        let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();
-        for (item, qty) in cost {
-            *need.entry(item).or_default() += qty;
-        }
-        let player = self.player_entity();
-        let short: Vec<String> = {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            need.iter()
-                .filter(|(item, qty)| inv.count(item) < **qty)
-                .map(|(item, qty)| {
-                    format!("{qty} {} (have {})", self.item_name(item), inv.count(item))
-                })
-                .collect()
-        };
-        if !short.is_empty() {
-            return Err(format!("Need {}.", short.join(", ")));
-        }
-        for (item, qty) in need {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .take(item.clone(), qty);
-            self.note_consumed(item, qty, crate::base_ledger::ConsumeSource::Craft);
-        }
-        Ok(())
     }
 }

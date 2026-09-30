@@ -1,6 +1,8 @@
 //! Recipes, crafting, and the equipment the results go into: equip,
 //! unequip, fuse, and erase.
 
+use std::collections::BTreeMap;
+
 use crate::tuning::{
     QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT,
 };
@@ -503,30 +505,45 @@ impl Game {
         }
     }
 
+    /// Takes `cost` out of the pack, or refuses naming what is short.
+    /// Every line is checked before any is taken, and the taking is booked
+    /// as craft consumption — the sink the ledger was missing on the hand path:
+    /// `HandCraft` folds the product and nothing else, so what a player makes
+    /// themselves was produced out of units that never left. The hand-craft
+    /// unit and the Mod Bench both pay through this one door.
+    pub(crate) fn pay_items(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
+        let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();
+        for (item, qty) in cost {
+            *need.entry(item).or_default() += qty;
+        }
+        let player = self.player_entity();
+        let short: Vec<String> = {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            need.iter()
+                .filter(|(item, qty)| inv.count(item) < **qty)
+                .map(|(item, qty)| {
+                    format!("{qty} {} (have {})", self.item_name(item), inv.count(item))
+                })
+                .collect()
+        };
+        if !short.is_empty() {
+            return Err(format!("Need {}.", short.join(", ")));
+        }
+        for (item, qty) in need {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), qty);
+            self.note_consumed(item, qty, crate::base_ledger::ConsumeSource::Craft);
+        }
+        Ok(())
+    }
+
     /// Takes one unit's ingredients out of the pack, or reports that the
     /// pack can no longer cover them.
     fn take_hand_craft_unit(&mut self, item: &ItemId, careful: bool) -> bool {
-        let player = self.player_entity();
         let cost = self.craft_cost(item, careful);
-        {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            if cost.iter().any(|(id, qty)| inv.count(id) < *qty) {
-                return false;
-            }
-        }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (id, qty) in &cost {
-                inv.take(id.clone(), *qty);
-            }
-        }
-        // The sink the ledger was missing on the hand path: `HandCraft`
-        // folds the product and nothing else, so what a player makes
-        // themselves was produced out of units that never left.
-        for (id, qty) in &cost {
-            self.note_consumed(id, *qty, crate::base_ledger::ConsumeSource::Craft);
-        }
-        true
+        self.pay_items(&cost).is_ok()
     }
 
     /// Puts one finished unit into cargo, rolling its quality if the batch

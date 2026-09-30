@@ -481,23 +481,11 @@ impl Game {
     /// passes through untouched rather than being raised to 1. A target that
     /// neither cuts by percentage nor deflects also passes through untouched.
     pub(crate) fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
-        if dmg <= 0 {
-            return dmg;
-        }
-        let percent = self.effective_mitigation(target);
-        let deflection = self
-            .gear_bonus(target)
-            .deflection
-            .clamp(0, crate::tuning::DEFLECTION_MAX);
-        if percent <= 0 && deflection == 0 {
-            return dmg;
-        }
-        let reduced = if percent > 0 {
-            (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32
-        } else {
-            dmg
-        };
-        (reduced - deflection).max(1)
+        battle::damage_after_mitigation(
+            dmg,
+            self.effective_mitigation(target),
+            self.gear_bonus(target).deflection,
+        )
     }
 
     /// The `Outcome` line for a party member killed in battle: what died and

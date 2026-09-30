@@ -352,6 +352,30 @@ pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
     plain * (mean + atk) + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
 }
 
+/// What one landed hit of `dmg` costs its target after `percent` mitigation
+/// and then a flat `deflection`. The one statement of that order: the damage
+/// path (`Game::mitigate_incoming_damage`) and the gear rating
+/// (`gear_power::rate`) both call it.
+///
+/// Rounds once, in the same expression as the percentage cut, rather than
+/// rounding the reduction and then subtracting it — two roundings can discard
+/// a point the combined operation keeps. Floors at 1 so a landed hit stays a
+/// hit; `dmg <= 0` (already a miss) and a target that neither cuts nor
+/// deflects pass through untouched. `deflection` is clamped to
+/// `DEFLECTION_MAX` here so no caller can forget the cap.
+pub fn damage_after_mitigation(dmg: i32, percent: i32, deflection: i32) -> i32 {
+    let deflection = deflection.clamp(0, crate::tuning::DEFLECTION_MAX);
+    if dmg <= 0 || (percent <= 0 && deflection == 0) {
+        return dmg;
+    }
+    let reduced = if percent > 0 {
+        (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32
+    } else {
+        dmg
+    };
+    (reduced - deflection).max(1)
+}
+
 /// What `max_hp` is worth once `mitigation` cuts every blow:
 /// `max_hp / (1 - mitigation/100)`.
 ///

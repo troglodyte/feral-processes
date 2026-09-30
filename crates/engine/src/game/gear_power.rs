@@ -49,6 +49,14 @@ fn reference_soak() -> f64 {
     (bare().power() - POWER_REFERENCE_ATK) as f64
 }
 
+/// One landed hit from the nominal hostile, before the wearer's defences: the
+/// median ordinary species at `POWER_REFERENCE_ZONE`, its first move's mean
+/// band plus its scaled attack — `battle::expected_damage`'s plain-hit term.
+fn reference_foe_hit(foe: &crate::SpeciesDef) -> i32 {
+    let stats = crate::balance_sim::wild_stats_at_zone(foe, POWER_REFERENCE_ZONE);
+    (foe.natural_range().mean() + stats.atk as f64).round() as i32
+}
+
 /// Rates `mods` against the reference wearer, facing a hostile with
 /// `foe_accuracy` and `foe_evasion`.
 ///
@@ -60,11 +68,17 @@ fn reference_soak() -> f64 {
 /// no answer", not "the answer is zero": `EquipmentStats::decompiler` buys
 /// taming rather than combat and gets **no term**, so a Decompiler module
 /// rates `None` however large its number.
-pub(crate) fn rate(mods: EquipmentStats, foe_accuracy: f64, foe_evasion: f64) -> Option<ItemPower> {
+pub(crate) fn rate(
+    mods: EquipmentStats,
+    foe_accuracy: f64,
+    foe_evasion: f64,
+    foe_hit: i32,
+) -> Option<ItemPower> {
     if mods.atk == 0
         && mods.mitigation == 0
         && mods.accuracy == 0
         && mods.evasion == 0
+        && mods.deflection == 0
         && mods.damage == crate::battle::DamageRange::default()
     {
         return None;
@@ -83,12 +97,22 @@ pub(crate) fn rate(mods: EquipmentStats, foe_accuracy: f64, foe_evasion: f64) ->
     }
     .power()
         - baseline;
-    let survivability = Stats {
+    let mitigation = Stats {
         mitigation: bare.mitigation + mods.mitigation,
         ..bare
     }
     .power()
         - baseline;
+
+    // Deflection is flat per hit, so it is priced like evasion: the fraction
+    // by which it lengthens the life of the soak it protects, against one
+    // reference hit, through the same call the damage path makes.
+    let hit_taken = |deflection| {
+        crate::battle::damage_after_mitigation(foe_hit, bare.mitigation, deflection) as f64
+    };
+    let deflection =
+        (reference_soak() * (hit_taken(0) / hit_taken(mods.deflection) - 1.0)).round() as i32;
+    let survivability = mitigation + deflection;
 
     // A weapon **replaces** the natural band rather than adding to it
     // (`Game::attack_range`), so this is a difference and a worse band than
@@ -144,6 +168,7 @@ impl Game {
             mods,
             crate::battle::accuracy_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
             crate::battle::evasion_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
+            reference_foe_hit(median),
         )
     }
 }
@@ -157,9 +182,11 @@ mod tests {
     /// against parity.
     const FOE_ACC: f64 = 12.5;
     const FOE_EVA: f64 = 12.5;
+    /// A hit in the region the shipped roster lands at the reference zone.
+    const FOE_HIT: i32 = 30;
 
     fn rated(mods: EquipmentStats) -> ItemPower {
-        rate(mods, FOE_ACC, FOE_EVA).expect("a copy paying on one axis rates")
+        rate(mods, FOE_ACC, FOE_EVA, FOE_HIT).expect("a copy paying on one axis rates")
     }
 
     #[test]
@@ -188,6 +215,47 @@ mod tests {
             power.survivability
         );
         assert_eq!(power.total, power.survivability);
+    }
+
+    #[test]
+    fn a_deflection_only_copy_rates_on_the_soak_it_protects() {
+        let rate_of = |deflection| {
+            rate(
+                EquipmentStats {
+                    deflection,
+                    ..Default::default()
+                },
+                FOE_ACC,
+                FOE_EVA,
+                FOE_HIT,
+            )
+        };
+        let small = rate_of(2).expect("deflection alone rates");
+        assert!(small.survivability > 0 && small.total == small.survivability);
+        let more = rate_of(4).unwrap();
+        assert!(more.total > small.total);
+        let capped = rate_of(crate::tuning::DEFLECTION_MAX).unwrap();
+        assert!(capped.total > more.total);
+        assert_eq!(rate_of(crate::tuning::DEFLECTION_MAX + 5).unwrap(), capped);
+    }
+
+    /// The floor of 1 in the damage path would flatten the term if the
+    /// reference hit were no bigger than the deflection cap.
+    #[test]
+    fn the_reference_hit_is_bigger_than_the_deflection_cap() {
+        let game = Game::new(
+            934,
+            crate::DifficultyMode::Forgiving,
+            &crate::tests::support::test_assets_dir(),
+        )
+        .unwrap();
+        let median =
+            crate::balance_sim::median_ordinary_species(game.world.resource::<SpeciesDb>());
+        let hit = reference_foe_hit(median);
+        assert!(
+            hit > 2 * crate::tuning::DEFLECTION_MAX,
+            "reference hit {hit}"
+        );
     }
 
     /// A weapon **overrides** the natural attack. A band worse than the
@@ -281,6 +349,7 @@ mod tests {
                 },
                 FOE_ACC,
                 FOE_EVA,
+                FOE_HIT,
             )
             .is_none()
         );

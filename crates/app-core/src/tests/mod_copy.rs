@@ -87,3 +87,42 @@ fn the_group_menu_row_opens_the_affix_research_view() {
     app.handle_key(GameKey::Esc);
     assert_ne!(app.mode, Mode::AffixResearch);
 }
+
+/// An over-cap copy (a drop can carry more affixes than its fusions buy
+/// slots for) loses a row when stripped. The highlight must follow, or the
+/// next `R` lands on a row that is gone and is refused as an empty slot.
+#[test]
+fn stripping_the_last_row_of_an_over_cap_copy_keeps_the_highlight_on_a_row() {
+    let over_cap = GearCopy::with_affixes(
+        ItemId::from("nullsteel_plate"),
+        Rarity::Ordinary,
+        0,
+        ["deflecting", "hardened", "reinforced"]
+            .iter()
+            .map(|a| AffixId::from(*a))
+            .collect(),
+        feral_processes_engine::tuning::QUALITY_DEFAULT,
+    );
+    let carried = feral_processes_engine::save::GearCopySave {
+        item: over_cap.item.clone(),
+        rarity: over_cap.rarity,
+        tier: over_cap.tier,
+        affix: None,
+        affixes: over_cap.affixes.clone(),
+        quality: over_cap.quality,
+    };
+    let mut app = app_at_a_mod_bench_carrying(9304, 10, vec![(carried, 1)]);
+    app.mod_copy = Some(over_cap);
+    app.mode = Mode::ModCopy;
+
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(app.mod_copy.as_ref().unwrap().affixes.len(), 2);
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(
+        app.mod_copy.as_ref().unwrap().affixes.len(),
+        1,
+        "the second R stripped the new last row: {:?}",
+        app.status_line
+    );
+}

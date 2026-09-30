@@ -33,6 +33,12 @@ impl App {
             (GameKey::Char('R'), Some(affix)) => {
                 let Some(game) = &mut self.game else { return };
                 let outcome = game.remove_affix(&copy, &affix);
+                // An over-cap copy loses a row when stripped, so the
+                // highlight may now sit past the end of the list.
+                if let Ok((stripped, _)) = &outcome {
+                    let left = mod_slot_rows(game, stripped).len();
+                    self.menu_selected = self.menu_selected.min(left.saturating_sub(1));
+                }
                 self.finish_mod(outcome, Mode::ModCopy);
             }
             (GameKey::Char('R'), None) => self.refuse("That slot is empty."),

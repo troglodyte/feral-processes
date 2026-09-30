@@ -3017,6 +3017,15 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
 /// `core_fragment` to pay for applying it. Built by editing a save, for the reason
 /// `app_in_base_with_routine_tree_open` gives.
 pub(crate) fn app_at_a_mod_bench(seed: u32, fragments: u32) -> App {
+    app_at_a_mod_bench_carrying(seed, fragments, Vec::new())
+}
+
+/// `app_at_a_mod_bench` with `modded` copies in the pack as well.
+pub(crate) fn app_at_a_mod_bench_carrying(
+    seed: u32,
+    fragments: u32,
+    modded: Vec<(save::GearCopySave, u32)>,
+) -> App {
     let mut app = test_app(seed);
     let path = scratch_path("mod_bench", seed);
     found_the_base(&mut app);
@@ -3048,6 +3057,7 @@ pub(crate) fn app_at_a_mod_bench(seed: u32, fragments: u32) -> App {
         (ItemId::from("core_fragment"), fragments),
         (ItemId::from("nullsteel_plate"), 1),
     ];
+    data.player.gear_copies = modded;
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
     stand_in_base(&mut app);

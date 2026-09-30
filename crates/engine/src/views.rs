@@ -3577,11 +3577,6 @@ pub struct AlertView {
     pub unread: bool,
 }
 
-/// The level-up summary page, read back from `Game::take_level_up_report`.
-/// Several levels gained before the page shows are **one page**:
-/// `from_level` is the level the player held before the first of them, and
-/// `to_level` is where they stand now.
-///
 /// The four duel figures against a typical program of `zone`, each a
 /// `(before, after)` pair. Built by `game::level_up::duel_comparison`, the
 /// one place the arithmetic lives, and shared by the level-up page, the
@@ -3613,10 +3608,15 @@ pub struct PerkReport {
     pub preview: PerkPreview,
 }
 
+/// The level-up summary page, read back from `Game::take_level_up_report`.
+/// Several levels gained before the page shows are **one page**:
+/// `from_level` is the level the player held before the first of them, and
+/// `to_level` is where they stand now.
+///
 /// Every pair is `(before, after)`. `stats` is `StatRow`'s own shape — the
 /// log's own labels and arrow format — with a row already dropped when it
-/// did not move (mitigation never grows with level, so a run with only that
-/// row eligible ships an empty list rather than a page with nothing on it).
+/// did not move, so a level that moved no stat ships an empty list rather
+/// than a page of unchanged rows.
 ///
 /// The duel figures are measured against `duel.zone`'s typical foe (see
 /// `Game::typical_foe`), which does not itself change between the two

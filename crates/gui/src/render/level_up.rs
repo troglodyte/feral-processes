@@ -202,6 +202,7 @@ mod tests {
             stats: vec![
                 StatRow::new("Max HP", 1234, 9999),
                 StatRow::new("ATK", 1234, 9999),
+                StatRow::new("Mitigation", 1234, 9999),
             ],
             duel: DuelComparison {
                 zone: 99,

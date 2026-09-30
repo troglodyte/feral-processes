@@ -16,8 +16,8 @@ use bevy_ecs::component::Component;
 /// Every player component `apply_stat_spend`, `apply_perk_level` and
 /// `recompute_derived` (with `apply_equipment_delta`) write, each as it was,
 /// including absent. A component a future change writes from those paths
-/// must be added here, and the no-leak test in `tests/spend_preview.rs`
-/// fails until it is.
+/// must be added here. The no-leak test in `tests/spend_preview.rs` catches
+/// the omission only if that component is saved or added to its own list.
 struct TrialState {
     attributes: Option<Attributes>,
     stat_points: Option<StatPoints>,

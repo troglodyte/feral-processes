@@ -466,6 +466,12 @@ impl Game {
                 .contains(&def.id)
     }
 
+    /// An affix node is listed, and buyable, only with its tree open and the
+    /// base having found it. One rule for the menu and for `select_research`.
+    fn affix_node_visible(&self, def: &ResearchDef) -> bool {
+        self.affix_tree_open() && self.base_node_visible(def)
+    }
+
     fn listed_research(&self, tree: ResearchTree) -> Vec<&ResearchDef> {
         let db = self.world.resource::<ResearchDb>();
         if tree == ResearchTree::Base {
@@ -478,11 +484,10 @@ impl Game {
         if tree == ResearchTree::Affixes {
             // Closed lists nothing, known nodes included — the routine
             // tree's own rule. Open lists only what the base has found.
-            let tree_open = self.affix_tree_open();
             return db
                 .all()
                 .filter(|d| d.tree == ResearchTree::Affixes)
-                .filter(|d| tree_open && self.base_node_visible(d))
+                .filter(|d| self.affix_node_visible(d))
                 .collect();
         }
         let tree_open = self.routine_tree_open();
@@ -972,9 +977,7 @@ impl Game {
             return Err("Unknown research.".to_string());
         }
         // An affix node is hidden by the same rule, plus its tree's gate.
-        if def.tree == ResearchTree::Affixes
-            && !(self.affix_tree_open() && self.base_node_visible(&def))
-        {
+        if def.tree == ResearchTree::Affixes && !self.affix_node_visible(&def) {
             return Err("Unknown research.".to_string());
         }
         if self.is_researched(id) {

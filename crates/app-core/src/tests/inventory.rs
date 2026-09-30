@@ -98,9 +98,19 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
             .into_iter()
             .map(|(k, _)| k)
             .collect();
+        // Modify is for Weapon and Armor copies; a Module has no affix slots
+        // to fit.
+        let modifiable = game
+            .equipment_of(&item)
+            .is_some_and(|(slot, _)| slot != EquipmentSlot::Module);
+        let expected = if modifiable {
+            vec!['e', 'u', 'm', 'd', 'x']
+        } else {
+            vec!['e', 'u', 'd', 'x']
+        };
         assert_eq!(
             keys,
-            vec!['e', 'u', 'd', 'x'],
+            expected,
             "{} should offer fuse regardless of how many copies are held",
             game.item_name(&item)
         );

@@ -1,0 +1,10 @@
+// What a friend leaves behind by falling. The heaviest of the departure defs, and the slowest to fade: a loss, not a parting.
+(
+    id: "lost_in_battle",
+    name: "Lost in battle",
+    blurb: "It didn't come back.",
+    valence: -8.0,
+    half_life: 6000,
+    subject: Program,
+    strike_cap: 1,
+)

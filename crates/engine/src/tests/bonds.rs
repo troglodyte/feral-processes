@@ -5,6 +5,7 @@ use super::support::*;
 use crate::bonds::Bond;
 use crate::components::{Memories, Memory, MemorySubject, ProgramId};
 use crate::memories::MemoryId;
+use crate::resources::Brawl;
 use crate::*;
 
 /// Writes a memory straight into the store, bypassing `remember` — the
@@ -168,4 +169,319 @@ fn a_worker_steps_beside_a_stranger() {
         (candidate.x, candidate.y),
         "control: with no bond the same fixture takes the same tile"
     );
+}
+
+// ---------------------------------------------------------------------
+// Departures
+// ---------------------------------------------------------------------
+
+const DEPARTURE_DEFS: [&str; 4] = ["lost_in_battle", "let_go", "became_part_of", "rid_of"];
+
+fn implant_strikes(game: &mut Game, who: Entity, def: &str, about: ProgramId, strikes: u32) {
+    implant(game, who, def, MemorySubject::Program(about));
+    let mut store = game.world.get_mut::<Memories>(who).unwrap();
+    store.0.last_mut().unwrap().strikes = strikes;
+}
+
+fn befriend(game: &mut Game, holder: Entity, about: ProgramId) {
+    implant_strikes(game, holder, "bonded_in_battle", about, 3);
+    assert_eq!(game.bond(holder, about), Bond::Friend);
+}
+
+fn sour_on(game: &mut Game, holder: Entity, about: ProgramId) {
+    implant_strikes(game, holder, "turned_on_me", about, 1);
+    assert!(game.bond(holder, about).relieved());
+}
+
+/// The departure defs `who` holds about `about`, in store order.
+fn departures(game: &Game, who: Entity, about: ProgramId) -> Vec<String> {
+    game.world
+        .get::<Memories>(who)
+        .map(|m| {
+            m.0.iter()
+                .filter(|m| m.subject == MemorySubject::Program(about))
+                .filter(|m| DEPARTURE_DEFS.contains(&m.def.as_str()))
+                .map(|m| m.def.as_str().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// One program about to leave and three who have an opinion of it.
+struct Cast {
+    friend: Entity,
+    rival: Entity,
+    stranger: Entity,
+}
+
+fn cast_around(game: &mut Game, leaving: Entity) -> Cast {
+    let id = id_of(game, leaving);
+    let friend = spawn_tamed(game, 500, 3);
+    let rival = spawn_tamed(game, 500, 3);
+    let stranger = spawn_tamed(game, 500, 3);
+    befriend(game, friend, id);
+    sour_on(game, rival, id);
+    Cast {
+        friend,
+        rival,
+        stranger,
+    }
+}
+
+/// What every door must do: a friend grieves in the door's own def, a rival
+/// is relieved, and a holder with no bond is left alone.
+fn assert_grief_by(game: &Game, cast: &Cast, about: ProgramId, friend_def: &str) {
+    assert_eq!(departures(game, cast.friend, about), vec![friend_def]);
+    assert_eq!(departures(game, cast.rival, about), vec!["rid_of"]);
+    assert!(departures(game, cast.stranger, about).is_empty());
+}
+
+#[test]
+fn a_sale_is_let_go() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let market = spawn_market(&mut game);
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.sell_companion(market, leaving).unwrap();
+
+    assert_grief_by(&game, &cast, id, "let_go");
+}
+
+#[test]
+fn an_extraction_is_let_go() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let prize = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .next()
+        .expect("some shipped ability is wild-poolable");
+    game.world
+        .get_mut::<crate::components::Routines>(leaving)
+        .unwrap()
+        .0 = vec![prize];
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.extract_routine(leaving, 0).unwrap();
+
+    assert_grief_by(&game, &cast, id, "let_go");
+}
+
+#[test]
+fn a_permadeath_death_is_a_fall() {
+    let mut game = Game::new(41, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.bench_or_dissolve(leaving);
+
+    assert_grief_by(&game, &cast, id, "lost_in_battle");
+}
+
+/// A Forgiving "death" leaves the program `Downed` on the roster: it is
+/// still there to be mourned or not, and nobody grieves a body that is
+/// coming back.
+#[test]
+fn a_forgiving_death_writes_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.bench_or_dissolve(leaving);
+
+    assert!(game.world.get_entity(leaving).is_ok());
+    for who in [cast.friend, cast.rival, cast.stranger] {
+        assert!(departures(&game, who, id).is_empty());
+    }
+}
+
+#[test]
+fn each_fusion_parent_is_grieved_as_part_of_another() {
+    let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = spawn_tamed(&mut game, 20, 10);
+    let b = spawn_tamed(&mut game, 10, 6);
+    let (id_a, id_b) = (id_of(&game, a), id_of(&game, b));
+    let friend = spawn_tamed(&mut game, 500, 3);
+    let rival = spawn_tamed(&mut game, 500, 3);
+    let stranger = spawn_tamed(&mut game, 500, 3);
+    befriend(&mut game, friend, id_a);
+    befriend(&mut game, friend, id_b);
+    sour_on(&mut game, rival, id_a);
+    // The co-parent's own opinion of the other parent dies with it; nothing
+    // is written to a body that is about to be despawned.
+    befriend(&mut game, a, id_b);
+    let before: Vec<Entity> = game
+        .world
+        .query_filtered::<Entity, With<crate::components::Tamed>>()
+        .iter(&game.world)
+        .collect();
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    assert_eq!(departures(&game, friend, id_a), vec!["became_part_of"]);
+    assert_eq!(departures(&game, friend, id_b), vec!["became_part_of"]);
+    assert_eq!(departures(&game, rival, id_a), vec!["rid_of"]);
+    assert!(departures(&game, stranger, id_a).is_empty());
+    let child = *game
+        .world
+        .query_filtered::<Entity, With<crate::components::Tamed>>()
+        .iter(&game.world)
+        .collect::<Vec<_>>()
+        .iter()
+        .find(|e| !before.contains(e))
+        .expect("fusion leaves a child");
+    assert!(
+        departures(&game, child, id_a).is_empty() && departures(&game, child, id_b).is_empty(),
+        "the child is nobody's co-parent's mourner"
+    );
+}
+
+fn a_base_with_a_crew(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<crate::components::Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    game
+}
+
+#[test]
+fn a_finished_build_lets_its_spent_program_go() {
+    let mut game = a_base_with_a_crew(1102);
+    let leaving = tame_at_zone(&mut game, 1);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.place_structure("mining_node", 1, 0, Some(leaving))
+        .unwrap();
+    assert!(
+        departures(&game, cast.friend, id).is_empty(),
+        "committing is reversible, so committing grieves nothing"
+    );
+    let (px, py) = game.base_pos().unwrap();
+    for _ in 0..600 {
+        if game.build_site_at(px + 1, py).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game.build_site_at(px + 1, py).is_none(),
+        "the crew finished it"
+    );
+
+    assert_grief_by(&game, &cast, id, "let_go");
+}
+
+#[test]
+fn a_committed_then_refunded_program_grieves_nobody() {
+    let mut game = a_base_with_a_crew(1103);
+    let leaving = tame_at_zone(&mut game, 1);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+
+    game.place_structure("mining_node", 1, 0, Some(leaving))
+        .unwrap();
+    let (px, py) = game.base_pos().unwrap();
+    let site = game.build_site_at(px + 1, py).unwrap();
+    game.cancel_build_request(site).unwrap();
+
+    for who in [cast.friend, cast.rival, cast.stranger] {
+        assert!(departures(&game, who, id).is_empty());
+    }
+}
+
+#[test]
+fn a_program_spent_in_the_study_is_let_go() {
+    let mut game = Game::new(4501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    pin_subject_at_pen(&mut game, leaving, node);
+    // After the pin: a cast member standing in the pen would refuse it.
+    let cast = cast_around(&mut game, leaving);
+    game.discover_research("paging");
+    game.select_research("paging").unwrap();
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(game.world.get_entity(leaving).is_err(), "it was spent");
+    assert_grief_by(&game, &cast, id, "let_go");
+}
+
+/// The name is stored at the write, because the program it names is gone.
+#[test]
+fn a_departure_keeps_the_departed_programs_name() {
+    let mut game = Game::new(41, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+    let name = game.creature_short_label(leaving);
+
+    game.bench_or_dissolve(leaving);
+
+    let held = game.world.get::<Memories>(cast.friend).unwrap();
+    let grief = held
+        .0
+        .iter()
+        .find(|m| m.def.as_str() == "lost_in_battle" && m.subject == MemorySubject::Program(id))
+        .expect("the friend grieves");
+    assert_eq!(grief.subject_name.as_deref(), Some(name.as_str()));
+}
+
+/// A brawl, a witness and a departure draw nothing from the seeded stream.
+#[test]
+fn a_brawl_and_a_departure_draw_no_rng() {
+    assert!(rng_unadvanced_by(77, |game| {
+        stand_in_base(game);
+        let staff: Vec<Entity> = (0..4).map(|_| spawn_tamed(game, 10, 3)).collect();
+        let id = id_of(game, staff[0]);
+        befriend(game, staff[1], id);
+        game.close_brawl(&Brawl {
+            aggressor: staff[0],
+            victim: staff[2],
+            ticks_left: 0,
+            dealt: 3,
+            taken: 3,
+        });
+        // Not `sell_companion`, which ticks the world and so draws.
+        game.dissolve_tamed_program(staff[0], crate::bonds::Departure::LetGo);
+        assert_eq!(departures(game, staff[1], id), vec!["let_go"]);
+    }));
+}
+
+/// Deleting `assets/memories/` is a supported install: a departure writes
+/// nothing and does not panic.
+#[test]
+fn with_no_memory_catalogue_a_departure_writes_nothing() {
+    let dir = scratch_assets_dir("bonds_no_memories");
+    std::fs::create_dir_all(&*dir).unwrap();
+    copy_shipped_assets(&dir, &[]);
+    assert!(!dir.join("memories").exists());
+    let mut game = Game::new(41, DifficultyMode::Permadeath, &dir).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let holder = spawn_tamed(&mut game, 10, 3);
+    implant_strikes(&mut game, holder, "bonded_in_battle", id, 3);
+    let held = game.world.get::<Memories>(holder).unwrap().0.len();
+
+    game.bench_or_dissolve(leaving);
+
+    assert_eq!(game.world.get::<Memories>(holder).unwrap().0.len(), held);
 }

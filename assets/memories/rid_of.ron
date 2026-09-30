@@ -1,0 +1,10 @@
+// The relief of a rival or enemy leaving, however it left. The one fondness a departure writes.
+(
+    id: "rid_of",
+    name: "Rid of it",
+    blurb: "Good. One fewer to watch.",
+    valence: 3.0,
+    half_life: 3000,
+    subject: Program,
+    strike_cap: 1,
+)

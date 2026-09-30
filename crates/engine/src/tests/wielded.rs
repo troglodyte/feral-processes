@@ -260,7 +260,7 @@ fn selling_the_wielded_program_ends_the_wield() {
     let program = spawn_tamed(&mut game, 40, 60);
     game.wield_program(program).unwrap();
 
-    game.dissolve_tamed_program(program);
+    game.dissolve_tamed_program(program, crate::bonds::Departure::LetGo);
 
     assert_eq!(game.wielded_program(), None);
     assert_eq!(

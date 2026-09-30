@@ -2998,6 +2998,13 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // `BOND_WITNESS_REACH` of the victim. Weaker, and names the
         // aggressor.
         ("saw_turn_on", K::Program),
+        // `Game::note_departure`, off every door a program leaves play by
+        // (its doc lists the six). The subject is the program that left, and
+        // the four are one per `Departure` plus the relief for a rival going.
+        ("lost_in_battle", K::Program),
+        ("let_go", K::Program),
+        ("became_part_of", K::Program),
+        ("rid_of", K::Program),
         // `Game::note_respites`, off `tick_inner` on a period. The one
         // fondness written by an errand the program took itself, and the
         // mechanism the morale errand is built out of: morale has no reserve

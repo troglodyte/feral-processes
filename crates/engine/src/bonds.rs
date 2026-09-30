@@ -72,6 +72,32 @@ impl Bond {
     }
 }
 
+/// How a program stopped being on the roster, for the grief its friends
+/// feel. `Game::note_departure` is the one reader.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Departure {
+    /// Killed under Permadeath.
+    Fell,
+    /// Sold, extracted, or spent on a build or in the study.
+    LetGo,
+    /// Consumed as a fusion parent.
+    Fused,
+}
+
+impl Departure {
+    /// The memory a friend or close friend is left holding.
+    pub fn grief_def(self) -> &'static str {
+        match self {
+            Departure::Fell => "lost_in_battle",
+            Departure::LetGo => "let_go",
+            Departure::Fused => "became_part_of",
+        }
+    }
+}
+
+/// What a rival or enemy is left holding, whatever way the program left.
+pub const RELIEF_DEF: &str = "rid_of";
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -67,6 +67,23 @@ impl crate::Game {
         def_id: &str,
         subject: MemorySubject,
     ) -> Remembered {
+        // Resolved before the def is looked up, which is harmless: a name is
+        // a read of the world and nothing here touches the store until the
+        // def has resolved.
+        let subject_name = self.remembered_name(&subject);
+        self.remember_named(who, def_id, subject, subject_name)
+    }
+
+    /// `remember` with the subject's name handed in, for a subject that is
+    /// already gone — `remembered_name` cannot resolve a despawned program,
+    /// and a departure is written after the despawn.
+    pub(crate) fn remember_named(
+        &mut self,
+        who: Entity,
+        def_id: &str,
+        subject: MemorySubject,
+        subject_name: Option<String>,
+    ) -> Remembered {
         let id = MemoryId::from(def_id);
         let Some(def) = self.world.resource::<MemoryDb>().get(&id) else {
             return Remembered::UnknownDef;
@@ -78,9 +95,6 @@ impl crate::Game {
         if self.world.get::<Memories>(who).is_none() {
             return Remembered::NoStore;
         }
-        // Resolved before the component is borrowed mutably: naming a program
-        // is a read of the whole world, which cannot coexist with that borrow.
-        let subject_name = self.remembered_name(&subject);
         let now = self.world.resource::<GameClock>().tick;
 
         // The store is looked up a second time rather than held across the
@@ -613,6 +627,52 @@ impl crate::Game {
     /// `bonds::band`. Derived on every read and saved nowhere.
     pub(crate) fn bond(&self, holder: Entity, about: ProgramId) -> crate::bonds::Bond {
         crate::bonds::band(self.opinion_of(holder, &MemorySubject::Program(about)))
+    }
+
+    /// Writes what every other owned program is left holding now that the
+    /// program `id` (called `name`) has left the roster. Base-wide and
+    /// instant, not proximity.
+    ///
+    /// **Called after the despawn, with the id and name read before it.**
+    /// That ordering is what keeps a departing co-parent, and the departing
+    /// program itself, out of the holders: neither is in the world to be
+    /// asked. A holder's band is read first and decides the def — a
+    /// `grieves()` band takes the departure's own def, a `relieved()` band
+    /// takes `bonds::RELIEF_DEF`, and anyone else is left alone, which is
+    /// also what a holder with no memory of `id` is.
+    ///
+    /// **The six doors**, each of which calls it: `dissolve_tamed_program`
+    /// (sold and extracted, `LetGo`; a Permadeath death through
+    /// `bench_or_dissolve`, `Fell`), `fuse_companions` (both parents,
+    /// `Fused`), `consume_site` (a finished build, `LetGo`) and
+    /// `settle_research` (spent in the study, `LetGo`). A Forgiving death
+    /// leaves the program `Downed` on the roster and is not a departure, and
+    /// a committed build that is refunded writes nothing.
+    ///
+    /// Draws no RNG, and with no memory catalogue `remember_named` resolves
+    /// no def, so every write is a no-op.
+    pub(crate) fn note_departure(
+        &mut self,
+        id: ProgramId,
+        name: &str,
+        how: crate::bonds::Departure,
+    ) {
+        for holder in self.owned_pets() {
+            let bond = self.bond(holder.entity, id);
+            let def = if bond.grieves() {
+                how.grief_def()
+            } else if bond.relieved() {
+                crate::bonds::RELIEF_DEF
+            } else {
+                continue;
+            };
+            self.remember_named(
+                holder.entity,
+                def,
+                MemorySubject::Program(id),
+                Some(name.to_string()),
+            );
+        }
     }
 
     /// How hard what `who` remembers lands on it — its `Disposition`, or the

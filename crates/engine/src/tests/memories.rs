@@ -1345,7 +1345,7 @@ fn a_remembered_name_survives_the_program_it_names() {
         "bonded_in_battle",
         MemorySubject::Program(comrade_id),
     );
-    game.dissolve_tamed_program(comrade);
+    game.dissolve_tamed_program(comrade, crate::bonds::Departure::LetGo);
 
     let mut loaded = round_trip(&mut game, "memories_name_save");
     let who = by_id(&mut loaded, id);
@@ -2147,7 +2147,7 @@ fn a_destroyed_programs_name_still_reaches_the_row() {
         game.remember(holder, "bonded_in_battle", MemorySubject::Program(id)),
         Remembered::Written
     );
-    game.dissolve_tamed_program(subject);
+    game.dissolve_tamed_program(subject, crate::bonds::Departure::LetGo);
 
     let rows = game.memory_report(holder);
     assert_eq!(rows.len(), 1, "{rows:?}");

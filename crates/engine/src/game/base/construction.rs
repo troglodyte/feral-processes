@@ -487,7 +487,29 @@ impl Game {
                 },
             );
         }
+        // Read off the snapshot, which is all there is of the program: it was
+        // committed at filing and is gone from the world. Here and not at
+        // the commit, because a commit is reversible through
+        // `refund_program` and a departure is not. The name is the short
+        // label's ladder (custom name, else handle, zone-tagged) spelled
+        // from the snapshot's fields, since there is no entity to ask.
+        let spent = self
+            .world
+            .get::<BuildSite>(site)
+            .and_then(|b| b.program.as_ref())
+            .filter(|p| p.program_id != 0)
+            .map(|p| {
+                let id = crate::components::ProgramId(p.program_id);
+                let name = p
+                    .custom_name
+                    .clone()
+                    .unwrap_or_else(|| crate::handles::of(id));
+                (id, format!("{name} {}", p.zone))
+            });
         self.world.despawn(site);
+        if let Some((id, name)) = spent {
+            self.note_departure(id, &name, crate::bonds::Departure::LetGo);
+        }
     }
 
     /// One tick of construction, and the structure itself once the meter is

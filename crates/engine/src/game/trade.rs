@@ -579,16 +579,28 @@ impl Game {
     }
 
     /// Logs `sale_detachments`, then drops `creature` out of the party and
-    /// the world for good. The one way a tamed program permanently leaves
-    /// play — `sell_companion` and `routines::extract_routine` both end a
-    /// program this way and only differ in what they hand back for it, so
-    /// this is the single call that keeps the two sequences from drifting
-    /// apart the way a doc comment merely claiming to mirror one another
-    /// couldn't. Returns the label logged, since both callers still need it
-    /// for their own payout line afterward.
-    pub(crate) fn dissolve_tamed_program(&mut self, creature: Entity) -> String {
+    /// the world for good, and tells its friends and rivals how it left.
+    /// Sale, extraction and a Permadeath death end a program this way and
+    /// only differ in what they hand back for it and in the `Departure`
+    /// they name, so this is the single call that keeps the sequences from
+    /// drifting apart the way a doc comment merely claiming to mirror one
+    /// another couldn't. Not the only way a program leaves play: a fusion
+    /// parent, a spent build and a spent study subject each reap their own,
+    /// and `Game::note_departure` lists all six doors. Returns the label
+    /// logged, since the callers still need it for their own payout line
+    /// afterward.
+    pub(crate) fn dissolve_tamed_program(
+        &mut self,
+        creature: Entity,
+        how: crate::bonds::Departure,
+    ) -> String {
+        let id = self.world.get::<ProgramId>(creature).copied();
+        let short = self.creature_short_label(creature);
         let name = self.detach_from_play(creature);
         self.world.despawn(creature);
+        if let Some(id) = id {
+            self.note_departure(id, &short, how);
+        }
         name
     }
 
@@ -649,7 +661,7 @@ impl Game {
         // both arms still have it to read.
         let program_id = self.world.get::<ProgramId>(creature).copied();
         if *self.world.resource::<DifficultyMode>() == DifficultyMode::Permadeath {
-            let name = self.dissolve_tamed_program(creature);
+            let name = self.dissolve_tamed_program(creature, crate::bonds::Departure::Fell);
             if let Some(id) = program_id {
                 self.post_alert(
                     AlertKind::ProgramDowned,
@@ -730,7 +742,7 @@ impl Game {
             .ok_or_else(|| "That program can't be appraised.".to_string())?;
         let currency = self.trade_currency();
 
-        let name = self.dissolve_tamed_program(creature);
+        let name = self.dissolve_tamed_program(creature, crate::bonds::Departure::LetGo);
         let money = self.item_name(&currency).to_string();
         self.world
             .get_mut::<Inventory>(self.player_entity())

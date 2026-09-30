@@ -1,0 +1,10 @@
+// What a friend leaves behind by being fused into a new program.
+(
+    id: "became_part_of",
+    name: "Became part of another",
+    blurb: "It is something else now.",
+    valence: -2.0,
+    half_life: 3000,
+    subject: Program,
+    strike_cap: 1,
+)

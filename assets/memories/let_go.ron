@@ -1,0 +1,10 @@
+// What a friend leaves behind by being sold, extracted, spent on a build or spent in the study.
+(
+    id: "let_go",
+    name: "Let go",
+    blurb: "It was spent, and I was not asked.",
+    valence: -3.0,
+    half_life: 3000,
+    subject: Program,
+    strike_cap: 1,
+)

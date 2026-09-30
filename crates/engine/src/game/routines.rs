@@ -759,7 +759,7 @@ impl Game {
             return Err("that routine is already familiar".into());
         }
 
-        let name = self.dissolve_tamed_program(creature);
+        let name = self.dissolve_tamed_program(creature, crate::bonds::Departure::LetGo);
         let ability_name = self.ability_display_name(&ability);
         match self.take_routine(&ability) {
             RoutineTaken::DiskPopped => self.log(format!(

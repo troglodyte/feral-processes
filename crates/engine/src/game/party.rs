@@ -1473,6 +1473,13 @@ impl Game {
 
         let name_a = self.creature_label(a);
         let name_b = self.creature_label(b);
+        let departing: Vec<(ProgramId, String)> = [a, b]
+            .into_iter()
+            .filter_map(|e| {
+                let id = self.world.get::<ProgramId>(e).copied()?;
+                Some((id, self.creature_short_label(e)))
+            })
+            .collect();
         let lost = self.fusion_routine_losses(a, b);
         self.world
             .resource_mut::<Party>()
@@ -1480,6 +1487,11 @@ impl Game {
             .retain(|&e| e != a && e != b);
         self.world.despawn(a);
         self.world.despawn(b);
+        // After both despawns, so neither parent is a holder of the other's
+        // departure and the child, not yet spawned, is nobody's mourner.
+        for (id, short) in &departing {
+            self.note_departure(*id, short, crate::bonds::Departure::Fused);
+        }
 
         let final_name = CustomName::sanitize(custom_name);
 

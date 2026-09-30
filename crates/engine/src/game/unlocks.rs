@@ -1328,10 +1328,18 @@ impl Game {
         // even on the refusal this repo has already recorded elsewhere.
         if let Some(subject) = subject {
             let name = self.creature_label(subject);
+            let departing = self
+                .world
+                .get::<crate::components::ProgramId>(subject)
+                .copied()
+                .map(|id| (id, self.creature_short_label(subject)));
             if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0)
                 && self.push_downed_program(program)
             {
                 self.world.despawn(subject);
+                if let Some((id, short)) = departing {
+                    self.note_departure(id, &short, crate::bonds::Departure::LetGo);
+                }
                 self.log(format!("{name} is spent in the study."));
             }
         }

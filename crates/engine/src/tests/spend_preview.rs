@@ -167,13 +167,21 @@ fn a_preview_leaves_no_trace_in_the_game() {
     let components_before = components(&game);
     let save_before = save_bytes(&mut game, "a");
 
+    // Checked after every preview, not once at the end: recompute writes
+    // absolute values, so a later preview would paper over an earlier leak.
     game.preview_stat_spend(&a_spend()).unwrap();
+    assert_eq!(components(&game), components_before, "after the spend");
+    assert_eq!(save_bytes(&mut game, "b"), save_before, "after the spend");
     for def in game.perk_defs() {
         game.preview_perk(def.id).unwrap();
+        assert_eq!(components(&game), components_before, "after {}", def.name);
+        assert_eq!(
+            save_bytes(&mut game, "c"),
+            save_before,
+            "after {}",
+            def.name
+        );
     }
-
-    assert_eq!(components(&game), components_before);
-    assert_eq!(save_bytes(&mut game, "b"), save_before);
 }
 
 #[test]

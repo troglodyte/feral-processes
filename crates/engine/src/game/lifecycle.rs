@@ -466,6 +466,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             memories: memory_db,
+            thoughts: thought_db,
             needs: need_db,
             attributes: attribute_db,
             sorties: sortie_db,
@@ -506,6 +507,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
+        world.insert_resource(thought_db);
         world.insert_resource(need_db);
         world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
@@ -1310,6 +1312,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             memories: memory_db,
+            thoughts: thought_db,
             needs: need_db,
             attributes: attribute_db,
             sorties: sortie_db,
@@ -1368,6 +1371,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
+        world.insert_resource(thought_db);
         world.insert_resource(need_db);
         world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
@@ -3358,6 +3362,7 @@ struct AssetDbs {
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
+    thoughts: crate::situations::ThoughtDb,
     needs: crate::needs::NeedDb,
     attributes: crate::attributes::AttributeDb,
     sorties: crate::sorties::SortieDb,
@@ -3484,6 +3489,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (memories, memory_warnings) =
         crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
     warnings.extend(memory_warnings);
+    // Same absent-is-silent rule again — see `ThoughtDb`'s own doc. An empty
+    // catalogue fires no thought, so every program's situational term is zero
+    // and the game is the pre-situation game.
+    let (thoughts, thought_warnings) =
+        crate::situations::ThoughtDb::load_dir(&assets_dir.join("thoughts"))?;
+    warnings.extend(thought_warnings);
     // Same absent-is-silent rule again — see `NeedDb`'s own doc. An empty
     // catalogue seeds nothing, drains nothing and takes nobody off a post,
     // which is the pre-needs game.
@@ -3550,6 +3561,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         contracts,
         descriptions,
         memories,
+        thoughts,
         needs,
         attributes,
         sorties,

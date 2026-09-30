@@ -289,3 +289,90 @@ fn a_worn_copy_keeps_its_stats_right_across_apply_and_remove() {
     assert_eq!(back, copy);
     assert_eq!(game.world.get::<Stats>(player).unwrap().mitigation, base);
 }
+
+#[test]
+fn removing_names_the_affix_stripped_not_the_last_one() {
+    let mut game = bench_game("mods_named", 9415);
+    let copy = tiered(1, &["t_plate", "t_weave"]);
+    carry(&mut game, &copy);
+    let (left, _) = game.remove_affix(&copy, &"t_plate".into()).unwrap();
+    assert_eq!(left.affixes, vec!["t_weave".into()]);
+}
+
+fn saved_and_loaded(game: &mut Game, tag: &str) -> Game {
+    let path =
+        std::env::temp_dir().join(format!("feral_processes_{tag}_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    loaded
+}
+
+/// A RON round trip cannot catch a skipped field, so this goes through the
+/// real `Game::save`/`Game::load`: a modded copy worn and a modded copy
+/// carried both come back carrying what they carried.
+#[test]
+fn a_modded_copy_survives_save_and_load_worn_and_carried() {
+    let assets = crate::tests::support::test_assets_dir();
+    let mut game = Game::new(9420, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    let carried = tiered(1, &["deflecting"]);
+    let worn = GearCopy::with_affixes(
+        ItemId::from("arc_lance"),
+        crate::components::Rarity::Ordinary,
+        0,
+        vec!["of_introspection".into()],
+        crate::tuning::QUALITY_DEFAULT,
+    );
+    game.add_copies(&carried, 1);
+    game.add_copies(&worn, 1);
+    game.equip(player, &worn).unwrap();
+
+    let loaded = saved_and_loaded(&mut game, "modded_copy");
+    assert_eq!(loaded.count_copies(&carried), 1);
+    let back = loaded
+        .world
+        .get::<Equipment>(loaded.player_entity())
+        .and_then(|e| e.weapon.clone())
+        .expect("the weapon is still worn");
+    assert_eq!(back.copy, worn);
+}
+
+#[test]
+fn a_researched_and_discovered_affix_node_survives_save_and_load() {
+    let assets = crate::tests::support::test_assets_dir();
+    let mut game = Game::new(9421, DifficultyMode::Forgiving, &assets).unwrap();
+    assert!(!game.affix_tree_open());
+    for id in ["mod_bench", "affix:deflecting"] {
+        game.world
+            .resource_mut::<Research>()
+            .0
+            .insert(id.to_string());
+    }
+    game.world
+        .resource_mut::<crate::resources::DiscoveredResearch>()
+        .0
+        .insert("affix:of_introspection".to_string());
+
+    let loaded = saved_and_loaded(&mut game, "affix_research");
+    assert!(loaded.affix_tree_open());
+    assert!(loaded.affix_researched(&"deflecting".into()));
+    assert!(!loaded.affix_researched(&"of_introspection".into()));
+    let listed: Vec<String> = loaded
+        .research_nodes(crate::research::ResearchTree::Affixes)
+        .into_iter()
+        .map(|n| n.id)
+        .collect();
+    assert!(
+        listed.contains(&"affix:deflecting".to_string()),
+        "{listed:?}"
+    );
+    assert!(
+        listed.contains(&"affix:of_introspection".to_string()),
+        "a discovery is permanent: {listed:?}"
+    );
+    assert!(
+        !listed.contains(&"affix:of_deflection".to_string()),
+        "an undiscovered node stays hidden"
+    );
+}

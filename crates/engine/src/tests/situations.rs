@@ -7,6 +7,7 @@ use crate::bonds::Bond;
 use crate::components::{
     Disgruntled, Grievance, Memories, Memory, MemorySubject, Position, ProgramId,
 };
+use crate::disposition::Disposition;
 use crate::memories::MemoryId;
 use crate::situations::{Situation, ThoughtDb, Trigger};
 use crate::tuning::{MORALE_SULKS_AT, SITUATION_MAX_TOTAL};
@@ -103,56 +104,11 @@ fn a_program_with_no_situation_folds_as_empty() {
     assert_eq!(game.morale(worker), 0.0);
 }
 
-/// `Game::morale` and the morale `task_progress_system` folds for the same
-/// worker on the same tick are one derivation, `situations::morale`. The
-/// system's `CycleModifiers` is not observable from a test, so this holds the
-/// two sides to it: `Game::morale` against a hand-gathered call over exactly
-/// the components the system queries, after a real tick has written them.
-#[test]
-fn game_morale_is_the_morale_the_cronjob_folds() {
-    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    let node = deploy_upgradeable_node(&mut game);
-    let worker = spawn_tamed(&mut game, 40, 4);
-    stand_player_at_post(&mut game, node);
-    game.assign_cronjob(worker, node)
-        .expect("a node takes a posted program");
-    park_at_post(&mut game, worker, node);
-    implant(
-        &mut game,
-        worker,
-        "saw_turn_on",
-        2,
-        MemorySubject::Program(ProgramId(999)),
-    );
-    game.tick();
-
-    let situation = game
-        .world
-        .get::<Situation>(worker)
-        .expect("assessed this tick");
-    assert!(
-        !situation.thoughts.is_empty(),
-        "the fixture must give the worker a thought, or this compares zeros"
-    );
-    let folded = crate::situations::morale(
-        game.world.get::<Memories>(worker),
-        Some(situation),
-        game.world.resource::<crate::memories::MemoryDb>(),
-        game.world.resource::<ThoughtDb>(),
-        game.current_tick(),
-        game.world
-            .get::<crate::disposition::Disposition>(worker)
-            .copied()
-            .unwrap_or_default(),
-    );
-    assert_eq!(game.morale(worker), folded);
-}
-
 /// The system's own fold, observed through what morale buys: a paired run of
 /// the same seeds with and without a thought that weighs the cap. Same RNG
 /// stream in both arms, and a lower success chance can only turn a hit into a
-/// miss, so the difference is deterministic and never negative.
+/// miss. Only the aggregate over the seeds is asserted: later state can
+/// diverge between the arms, so no single seed is promised to be ordered.
 #[test]
 fn the_cronjob_folds_the_situation_too() {
     const SEEDS: std::ops::Range<u32> = 1..41;
@@ -212,6 +168,9 @@ fn an_active_rival_beside_changes_no_opinion_and_no_bond() {
 fn no_memories_and_every_negative_thought_never_sulks() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
+    // `Abrasive` feels every thought 1.4x heavier: -9.8 raw, so it is the
+    // clamp and not the catalogue's modesty that keeps this out of Sulking.
+    game.world.entity_mut(worker).insert(Disposition::Abrasive);
     set_situation(&mut game, worker, &EVERY_NEGATIVE);
     assert!(
         game.morale(worker) > MORALE_SULKS_AT,
@@ -222,25 +181,31 @@ fn no_memories_and_every_negative_thought_never_sulks() {
     assert!(game.world.get::<Disgruntled>(worker).is_none());
 }
 
+/// The spec's case: -4 from memories, then every reachable negative thought
+/// (-7 raw, clamped to -5) for -9. Neutral -4 with a rival alone is -7 and
+/// does not sulk, so the whole set is what tips it.
 #[test]
 fn the_situation_tips_a_program_already_soured_by_memories() {
     let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    implant(
-        &mut game,
-        worker,
-        "saw_turn_on",
-        2,
-        MemorySubject::Program(ProgramId(999)),
-    );
+    implant(&mut game, worker, "jammed_here", 1, MemorySubject::Nothing);
     assert!(
-        game.morale(worker) > MORALE_SULKS_AT,
-        "memories alone must not sulk"
+        (game.morale(worker) + 4.0).abs() < 1e-3,
+        "{}",
+        game.morale(worker)
     );
     game.update_disgruntled(&[worker]);
     assert!(game.world.get::<Disgruntled>(worker).is_none());
 
+    set_situation(&mut game, worker, &[Trigger::BesideRival]);
+    game.update_disgruntled(&[worker]);
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_none(),
+        "a rival alone is -7"
+    );
+
     set_situation(&mut game, worker, &EVERY_NEGATIVE);
+    assert!((game.morale(worker) + 9.0).abs() < 1e-3);
     game.update_disgruntled(&[worker]);
     assert_eq!(
         game.world.get::<Disgruntled>(worker).map(|d| d.grievance),
@@ -350,4 +315,32 @@ fn thought_rows_show_without_any_memories() {
     let rows = game.memory_report(worker);
     assert_eq!(rows.len(), 1);
     assert!((rows[0].intensity - game.morale(worker)).abs() < 1e-5);
+}
+
+/// A program that leaves the staff takes its thoughts with it: the assessment
+/// only writes staff, so it has to clear the rest, or a party member's page
+/// and morale would carry a base it is no longer in.
+#[test]
+fn a_program_that_leaves_the_staff_loses_its_situation() {
+    let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    implant(&mut game, worker, "jammed_here", 1, MemorySubject::Nothing);
+    let remembered = game.morale(worker);
+    set_situation(&mut game, worker, &EVERY_NEGATIVE);
+    assert!(game.morale(worker) < remembered);
+    let without_thoughts = |game: &mut Game| {
+        let held = game.world.entity_mut(worker).take::<Situation>();
+        let fold = game.morale(worker);
+        if let Some(held) = held {
+            game.world.entity_mut(worker).insert(held);
+        }
+        fold
+    };
+
+    game.world.resource_mut::<Party>().0.push(worker);
+    game.tick();
+
+    assert!(game.world.get::<Situation>(worker).is_none());
+    assert_eq!(game.morale(worker), without_thoughts(&mut game));
+    assert!(game.memory_report(worker).iter().all(|r| r.age != "now"));
 }

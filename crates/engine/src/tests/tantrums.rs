@@ -728,6 +728,9 @@ fn a_witness_in_reach_remembers_the_aggressor_and_nobody_else_does() {
     let staff = a_scattered_base(&mut game);
     let (aggressor, victim, near, far) = (staff[0], staff[1], staff[2], staff[3]);
     place_at(&mut game, victim, 100, 100);
+    // Inside reach of its own victim, so only the aggressor exclusion keeps
+    // it from witnessing itself.
+    place_at(&mut game, aggressor, 100, 101);
     place_at(
         &mut game,
         near,

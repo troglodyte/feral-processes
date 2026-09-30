@@ -75,6 +75,10 @@
   `memories::opinion_about`, the same call `Game::opinion_about` makes.
   `Unpowered` and `MachineRunning` are exclusive (dark wins), and
   `MachineRunning` reads last tick's status.
+  The cap stops a sulk from situation alone, not an oscillation: the sulk
+  hysteresis gap (`-8` to `-6`) is 2 while the situational swing is up to
+  10, so a memory-soured program can still enter and leave Sulking as bodies
+  move around it.
 - **A work memory is either an edge or a stretch, and `Game::note_postings`
   is the stretch half.** It runs beside `note_strandings`, after the schedule
   and before the clock moves, but **on a period rather than on an edge**: a

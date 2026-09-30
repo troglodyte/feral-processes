@@ -44,6 +44,14 @@ reweight or delete a thought but not invent a trigger.
 | `MachineRunning` | The program is posted to a machine that is running and powered (a dark machine gives only `Unpowered`). |
 | `NoAmenity` | The base has no amenity at all. |
 
+`Unpowered` and `MachineRunning` fire only for a program posted to gather at
+the machine; a guard, digger or builder posted at one thinks neither. A posted
+guard also never thinks `BesideRival` or `BesideFriend` and is never counted as
+a neighbour, since its position is where it was assigned and not a tile it
+stands on.
+
+A thought whose `intensity` is not a finite number is skipped with a warning.
+
 Two files naming the same trigger: the first by file name wins and the second
 is skipped with a warning.
 

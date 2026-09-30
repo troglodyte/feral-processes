@@ -735,22 +735,14 @@ impl crate::Game {
             .unwrap_or_default()
     }
 
-    /// The one fold both readers are, with the restriction handed in.
+    /// `memories::sum_intensity` over `who`'s store with the restriction
+    /// handed in — the one fold, so an entry whose def no file defines is
+    /// skipped here as everywhere else, which is where the empty-database
+    /// property comes from.
     ///
-    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
-    /// description: two folds could disagree about whether an unresolvable def
-    /// counts, and a comment claiming one mirrors the other is the shape that
-    /// has drifted in this repo four times.
-    ///
-    /// **An entry whose def no file defines is skipped**, contributing
-    /// nothing. That is where the empty-database property comes from — with
-    /// `assets/memories/` deleted every entry is unresolvable and every reader
-    /// answers zero, without a load-time purge and without the entries being
-    /// lost if the directory comes back.
-    ///
-    /// `read` is the caller's own restriction too: `morale` passes
-    /// `Read::Morale` (mood-scaled), `opinion_of` passes `Read::Opinion` (the
-    /// full felt figure) — see `memories::Read`.
+    /// Only `known_for` calls it now: `morale` goes through
+    /// `situations::morale` and `opinion_of` through `memories::opinion_about`,
+    /// both of which hold no `Game`. A missing store folds as zero.
     fn memory_sum(
         &self,
         who: Entity,

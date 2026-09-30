@@ -461,8 +461,16 @@ pub(super) fn draw_research_menu(
             "Routine research",
             research_menu_rows(&nodes, selected, &currency, active.as_ref()),
         ),
-        // No mode opens this tree yet; the arm keeps the match exhaustive
-        // and draws the rows the other trees do.
+        // Two empty lines, because "closed" and "open but nothing found yet"
+        // call for different actions from the player.
+        ResearchTree::Affixes if nodes.is_empty() => (
+            "Affix research",
+            vec![text_row(if game.affix_tree_open() {
+                "No affixes discovered yet. Study programs to find some."
+            } else {
+                "Research the Mod Bench to open affix research."
+            })],
+        ),
         ResearchTree::Affixes => (
             "Affix research",
             research_menu_rows(&nodes, selected, &currency, active.as_ref()),

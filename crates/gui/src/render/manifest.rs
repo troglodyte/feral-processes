@@ -640,6 +640,9 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     if slot.mitigation != 0 {
         bonus.push(format!("{:+} MIT", slot.mitigation));
     }
+    if slot.deflection != 0 {
+        bonus.push(format!("{:+} DEFL", slot.deflection));
+    }
     if slot.decompiler != 0 {
         bonus.push(format!("{:+} DECOMP", slot.decompiler));
     }
@@ -1371,6 +1374,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_worn_slot_with_deflection_draws_defl_beside_mit() {
+        let mut slot = worn("Armor");
+        slot.mitigation = 5;
+        slot.deflection = 2;
+        let SectionRow::Stat(_, bonus) = equip_row(&slot) else {
+            panic!("an equipment row is a stat row");
+        };
+        assert!(bonus.contains("+5 MIT +2 DEFL"), "{bonus}");
+        slot.deflection = 0;
+        let SectionRow::Stat(_, bonus) = equip_row(&slot) else {
+            panic!("an equipment row is a stat row");
+        };
+        assert!(!bonus.contains("DEFL"), "{bonus}");
+    }
+
     /// Window sizes a width census is measured at.
     ///
     /// Whole shapes, and not `manifest_layout`'s cross product of widths and
@@ -1460,7 +1479,7 @@ mod tests {
                 atk: mods.atk,
                 mitigation: mods.mitigation,
                 decompiler: mods.decompiler,
-                deflection: 0,
+                deflection: mods.deflection,
             };
             let cells = row.item_name.chars().count();
             if worst.as_ref().is_none_or(|(_, w)| cells > *w) {
@@ -1521,7 +1540,7 @@ mod tests {
                         atk: mods.atk,
                         mitigation: mods.mitigation,
                         decompiler: mods.decompiler,
-                        deflection: 0,
+                        deflection: mods.deflection,
                     },
                     word,
                 ));

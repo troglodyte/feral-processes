@@ -22,11 +22,11 @@ impl App {
         };
         // Enter is the one key `selected_index` resolves to a row, and here
         // it is an action on the highlighted row, not a selection.
-        if key != GameKey::Enter {
-            if let Some(i) = self.selected_index(key, rows.len()) {
-                self.menu_selected = i;
-                return;
-            }
+        if key != GameKey::Enter
+            && let Some(i) = self.selected_index(key, rows.len())
+        {
+            self.menu_selected = i;
+            return;
         }
         let row = rows.get(self.menu_selected).cloned().flatten();
         match (key, row) {

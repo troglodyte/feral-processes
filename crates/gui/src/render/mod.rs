@@ -58,6 +58,7 @@ mod manifest;
 mod manifest_layout;
 mod marks;
 mod meta;
+mod mod_copy;
 mod notify;
 mod outposts;
 mod party;
@@ -131,6 +132,7 @@ use meta::{
     draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
+use mod_copy::{draw_mod_copy, draw_mod_pick_affix};
 use outposts::{draw_outpost_post, draw_outpost_visit};
 use party::{
     draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
@@ -902,6 +904,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let pending_downed_program = app.pending_downed_program_index;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
+    let mod_copy = app.mod_copy.clone();
     let pending_inspect = app.pending_inspect.clone();
     // Taken off `app` before `app.game` is borrowed below, and through the
     // same methods the handlers pick from. A renderer holding its own copy
@@ -1485,6 +1488,21 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RoutineResearch => {
             draw_research_menu(game, ResearchTree::Routines, selected, refusal, painter, m)
         }
+        Mode::AffixResearch if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Affixes,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::AffixResearch => {
+            draw_research_menu(game, ResearchTree::Affixes, selected, refusal, painter, m)
+        }
+        Mode::ModCopy => draw_mod_copy(game, mod_copy.clone(), selected, refusal, painter, m),
+        Mode::ModPickAffix => {
+            draw_mod_pick_affix(game, mod_copy.clone(), selected, refusal, painter, m)
+        }
         Mode::Contracts => draw_contracts(
             &contract_active,
             &contract_offers,
@@ -1574,7 +1592,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 122] = [
+    const ALL_MODES: [Mode; 125] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1672,6 +1690,9 @@ mod tests {
         Mode::AllocateStats,
         Mode::Research,
         Mode::RoutineResearch,
+        Mode::AffixResearch,
+        Mode::ModCopy,
+        Mode::ModPickAffix,
         Mode::Contracts,
         Mode::Alerts,
         Mode::History,
@@ -1772,7 +1793,10 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 23] = [
+    const NEEDS_PENDING_STATE: [Mode; 25] = [
+        // Drawn off `App::mod_copy`, which the census app never sets.
+        Mode::ModCopy,
+        Mode::ModPickAffix,
         // Drawn off `pending_develop_target`, which the census app never
         // sets — the same omission `Mode::FuseSecond` below is here for.
         Mode::RespecTalentsConfirm,

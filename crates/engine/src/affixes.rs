@@ -11,13 +11,14 @@
 //! affix by dropping in a file, and it is immediately in the roll for every
 //! item whose slot it allows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::items::{EquipmentSlot, EquipmentStats};
+use crate::items::{EquipmentSlot, EquipmentStats, ItemId};
+use crate::items_db::ItemDb;
 
 /// A string newtype for the same reason `ItemId` is one: an affix is
 /// content, so a mod must be able to add one without touching Rust, and a
@@ -77,6 +78,31 @@ pub struct AffixDef {
     /// mean adding an affix changed how often affixes appear.
     #[serde(default = "default_weight")]
     pub weight: u32,
+    /// Present on an affix that is **research-only**: it never drops and
+    /// never appears on a caravan shelf, and is reached only by researching
+    /// it and applying it at a bench. See `AffixResearch`.
+    #[serde(default)]
+    pub research: Option<AffixResearch>,
+}
+
+/// What it takes to research an affix and then to apply it to a copy. Its
+/// presence is what makes an affix research-only — `AffixDb::pool_for`
+/// filters on it, which is the one door both roll sites (a drop and a
+/// caravan shelf) draw their pool through.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AffixResearch {
+    /// Research Data, as `ResearchDef::cost`.
+    pub cost: u32,
+    #[serde(default)]
+    pub materials: Vec<(ItemId, u32)>,
+    #[serde(default)]
+    pub min_zone: u32,
+    /// Other research-only affixes that must be researched first.
+    #[serde(default)]
+    pub requires: Vec<AffixId>,
+    /// Paid from the pack on every apply. Required and non-empty: an affix
+    /// that applies for free would be a recipe with no price.
+    pub apply_cost: Vec<(ItemId, u32)>,
 }
 
 fn default_weight() -> u32 {
@@ -111,7 +137,9 @@ impl AffixDef {
         if self.prefix.is_some() && self.suffix.is_some() {
             return Some("sets both prefix and suffix; no screen has room for both");
         }
-        if self.weight == 0 {
+        // A research-only affix is never rolled, so its weight is moot; it
+        // is warned about in `load_dir` rather than refused here.
+        if self.weight == 0 && self.research.is_none() {
             return Some("has weight 0, so it could never be rolled");
         }
         if self.stats.is_empty() {
@@ -126,6 +154,30 @@ impl AffixDef {
         }
         if self.slots.as_ref().is_some_and(|s| s.is_empty()) {
             return Some("allows no slots, so it could never be rolled");
+        }
+        None
+    }
+
+    /// Why this file's research block is unusable against the items that
+    /// loaded, or `None`. Separate from `fault` because it needs `ItemDb`,
+    /// and a bad item id would otherwise surface as a silent free apply or
+    /// an unpayable research bill mid-play.
+    fn research_fault(&self, items: &ItemDb) -> Option<String> {
+        let research = self.research.as_ref()?;
+        if research.apply_cost.is_empty() {
+            return Some("has an empty apply_cost, so applying it would be free".into());
+        }
+        let unknown = |lines: &[(ItemId, u32)]| {
+            lines
+                .iter()
+                .find(|(item, _)| items.get(item.as_str()).is_none())
+                .map(|(item, _)| item.as_str().to_string())
+        };
+        if let Some(item) = unknown(&research.apply_cost) {
+            return Some(format!("apply_cost names unknown item {item:?}"));
+        }
+        if let Some(item) = unknown(&research.materials) {
+            return Some(format!("materials names unknown item {item:?}"));
         }
         None
     }
@@ -147,7 +199,12 @@ impl AffixDb {
     /// unusable file is skipped with a warning the game logs at startup,
     /// never a panic that stops a player reaching the main menu over
     /// somebody else's mod.
-    pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
+    ///
+    /// Takes `ItemDb` to check the item ids a research block names, which is
+    /// why it loads after items. A research-only affix whose `requires` names
+    /// an affix that is unknown, not research-only, or itself refused is
+    /// refused too, to a fixpoint — `ResearchDb::load_dir`'s cascade.
+    pub fn load_dir(dir: &Path, items: &ItemDb) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = AffixDb::default();
         let mut warnings = Vec::new();
         // A missing directory is not an error: affixes are optional content
@@ -164,31 +221,88 @@ impl AffixDb {
             }
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<AffixDef>(&text) {
-                Ok(def) => match def.fault() {
+                Ok(def) => match def
+                    .fault()
+                    .map(String::from)
+                    .or_else(|| def.research_fault(items))
+                {
                     Some(why) => {
                         warnings.push(format!("skipped invalid affix file {path:?}: {why}"))
                     }
                     None => {
+                        if def.research.is_some() && def.weight != default_weight() {
+                            warnings.push(format!(
+                                "affix file {path:?} sets weight on a research-only affix, \
+                                 which is never rolled"
+                            ));
+                        }
                         db.defs.insert(def.id.clone(), def);
                     }
                 },
                 Err(e) => warnings.push(format!("skipped invalid affix file {path:?}: {e}")),
             }
         }
+        db.drop_unmet_requirements(&mut warnings);
         Ok((db, warnings))
+    }
+
+    /// Removes every research-only affix whose prerequisite is missing or
+    /// not itself research-only, repeating until a pass removes nothing so
+    /// that dropping one takes its dependants with it. Sorted so the warning
+    /// order does not depend on the `HashMap`.
+    fn drop_unmet_requirements(&mut self, warnings: &mut Vec<String>) {
+        loop {
+            let standing: HashSet<&AffixId> = self
+                .defs
+                .values()
+                .filter(|d| d.research.is_some())
+                .map(|d| &d.id)
+                .collect();
+            let mut doomed: Vec<(AffixId, AffixId)> = self
+                .defs
+                .values()
+                .filter_map(|d| {
+                    let missing = d
+                        .research
+                        .as_ref()?
+                        .requires
+                        .iter()
+                        .find(|r| !standing.contains(r))?;
+                    Some((d.id.clone(), missing.clone()))
+                })
+                .collect();
+            if doomed.is_empty() {
+                return;
+            }
+            doomed.sort();
+            for (id, missing) in doomed {
+                self.defs.remove(&id);
+                warnings.push(format!(
+                    "skipped affix {:?}: it requires {:?}, which is not a loaded research-only affix",
+                    id.as_str(),
+                    missing.as_str()
+                ));
+            }
+        }
     }
 
     pub fn get(&self, id: &AffixId) -> Option<&AffixDef> {
         self.defs.get(id)
     }
 
-    /// Every affix that may land on `slot`, sorted by id.
+    /// Every affix that may *roll* on `slot`, sorted by id — research-only
+    /// affixes are excluded, and both roll sites (a drop and a caravan shelf)
+    /// draw through here, so this is the one place that rule lives.
     ///
     /// Sorted for the reason `equipment_drops_for` and the cache table are:
     /// a seeded run has to consume its rolls in the same order however the
     /// files happen to come off the disk.
     pub fn pool_for(&self, slot: EquipmentSlot) -> Vec<&AffixDef> {
-        let mut pool: Vec<&AffixDef> = self.defs.values().filter(|d| d.fits(slot)).collect();
+        let mut pool: Vec<&AffixDef> = self
+            .defs
+            .values()
+            .filter(|d| d.research.is_none() && d.fits(slot))
+            .collect();
         pool.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
         pool
     }
@@ -213,6 +327,7 @@ mod tests {
             },
             slots,
             weight: 1,
+            research: None,
         }
     }
 

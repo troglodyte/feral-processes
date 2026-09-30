@@ -29,6 +29,15 @@ fn affix_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
     dir
 }
 
+/// `AffixDb::load_dir` over `dir`, checked against the shipped items — the
+/// ids a research block names are validated there.
+fn load_affixes(dir: &std::path::Path) -> (AffixDb, Vec<String>) {
+    let assets = test_assets_dir();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
+    AffixDb::load_dir(dir, &items).unwrap()
+}
+
 /// Every axis an affix may charge on, each paired with the most it may be
 /// worth — so a test can speak about "the axis this affix charges on"
 /// without naming it, and a new axis cannot be added without a ceiling.
@@ -72,7 +81,7 @@ fn an_affix_that_only_charges_is_refused() {
             r#"(id: "cursed", prefix: Some("Cursed"), stats: (def: -2))"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0, "the affix must be skipped");
     assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
@@ -94,7 +103,7 @@ fn an_affix_that_pays_before_it_charges_loads() {
             r#"(id: "volatile", prefix: Some("Volatile"), stats: (atk: 2, def: -1))"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.all().count(), 1);
@@ -124,7 +133,7 @@ fn an_affix_paying_only_on_a_newer_axis_loads() {
             ),
         ],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.all().count(), 3, "all three axes have to be authorable");
@@ -341,7 +350,7 @@ fn an_affix_with_neither_prefix_nor_suffix_is_refused() {
         "affix_no_prefix_or_suffix",
         &[("bare.ron", r#"(id: "bare", stats: (atk: 1))"#)],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -358,7 +367,7 @@ fn an_affix_with_both_prefix_and_suffix_is_refused() {
             r#"(id: "both", prefix: Some("Honed"), suffix: Some("of Static"), stats: (atk: 1))"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -375,7 +384,7 @@ fn an_affix_with_zero_weight_is_refused() {
             r#"(id: "never", prefix: Some("Never"), weight: 0, stats: (atk: 1))"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -392,7 +401,7 @@ fn an_affix_granting_no_stats_is_refused() {
             r#"(id: "hollow", prefix: Some("Hollow"), stats: ())"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -415,7 +424,7 @@ fn an_affix_with_an_empty_slot_list_is_refused() {
             r#"(id: "nowhere", prefix: Some("Nowhere"), slots: Some([]), stats: (atk: 1))"#,
         )],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -426,7 +435,7 @@ fn an_affix_with_an_empty_slot_list_is_refused() {
 #[test]
 fn an_unparseable_affix_file_is_skipped_with_a_warning() {
     let dir = affix_dir("affix_broken_ron", &[("broken.ron", r#"(id: "#)]);
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert_eq!(warnings.len(), 1);
@@ -437,7 +446,7 @@ fn an_unparseable_affix_file_is_skipped_with_a_warning() {
 #[test]
 fn a_missing_affix_directory_yields_an_empty_database() {
     let dir = scratch_assets_dir("affix_missing");
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 0);
     assert!(warnings.is_empty());
@@ -456,7 +465,7 @@ fn a_notes_txt_file_is_ignored_without_warnings() {
             ("notes.txt", "This is a note."),
         ],
     );
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert_eq!(db.all().count(), 1);
     assert!(warnings.is_empty());
@@ -495,7 +504,7 @@ fn wear_with_mitigation(game: &mut Game, copy: &GearCopy, percent: i32) -> Entit
 #[test]
 fn an_affix_granting_only_deflection_loads() {
     let dir = affix_dir("affix_deflection_only", &[("deflecting.ron", DEFLECTING)]);
-    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+    let (db, warnings) = load_affixes(&dir);
 
     assert!(warnings.is_empty(), "warnings were {warnings:?}");
     assert_eq!(db.all().count(), 1);
@@ -610,4 +619,224 @@ fn stat_summary_names_deflection() {
     };
 
     assert_eq!(game.stat_summary(mods), "+2 DEFL");
+}
+
+// ---------------------------------------------------------------------------
+// Research-only affixes: never rolled, and refused unless they can be paid for.
+
+/// A research-only armour affix `id`, optionally with `requires`.
+fn research_affix(id: &str, extra: &str) -> String {
+    format!(
+        r#"(id: "{id}", prefix: Some("Deflecting"), stats: (deflection: 2), slots: Some([Armor]),
+            research: Some((cost: 20, apply_cost: [("core_fragment", 3)]{extra})))"#
+    )
+}
+
+fn ids(pool: Vec<&crate::affixes::AffixDef>) -> Vec<&str> {
+    pool.iter().map(|a| a.id.as_str()).collect()
+}
+
+#[test]
+fn a_research_only_affix_is_never_offered_to_a_roll() {
+    let dir = affix_dir(
+        "affix_research_pool",
+        &[
+            (
+                "plain.ron",
+                r#"(id: "plain", prefix: Some("Plain"), stats: (mitigation: 2))"#,
+            ),
+            ("gated.ron", &research_affix("gated", "")),
+        ],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.all().count(), 2, "it still loads, for the research tree");
+    assert_eq!(ids(db.pool_for(EquipmentSlot::Armor)), vec!["plain"]);
+}
+
+#[test]
+fn the_shipped_roll_pool_is_every_shipped_affix_that_fits() {
+    let game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs = game.affix_defs();
+    let (db, _) = load_affixes(&test_assets_dir().join("affixes"));
+
+    for slot in EquipmentSlot::ALL {
+        let mut expected: Vec<&str> = defs
+            .iter()
+            .filter(|d| d.fits(slot))
+            .map(|d| d.id.as_str())
+            .collect();
+        expected.sort();
+        assert_eq!(ids(db.pool_for(slot)), expected, "{slot:?}");
+    }
+}
+
+/// The caravan rolls from the same pool as a drop. With only a research-only
+/// affix installed, a row that is *certain* to carry an affix (`bonus`) still
+/// carries none.
+#[test]
+fn a_caravan_row_never_carries_a_research_only_affix() {
+    let dir = modded_assets_dir("affix_research_caravan", &[], &[], &[], &[], &[]);
+    let affixes = dir.join("affixes");
+    std::fs::remove_dir_all(&affixes).unwrap();
+    std::fs::create_dir_all(&affixes).unwrap();
+    std::fs::write(affixes.join("gated.ron"), research_affix("gated", "")).unwrap();
+    let game = Game::new(4121, DifficultyMode::Forgiving, &dir).unwrap();
+    assert_eq!(
+        game.affix_defs().len(),
+        1,
+        "the precondition: only `gated` loaded"
+    );
+
+    let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(7);
+    for _ in 0..20 {
+        let copy = game.roll_shelf_copy(ItemId::from("firewall_plating"), &mut rng, true);
+        assert!(copy.affixes.is_empty(), "rolled {:?}", copy.affixes);
+    }
+}
+
+fn refusal(tag: &str, files: &[(&str, &str)], names: &str) {
+    let dir = affix_dir(tag, files);
+    let (db, warnings) = load_affixes(&dir);
+    assert_eq!(db.all().count(), 0, "it must be skipped");
+    assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
+    assert!(warnings[0].contains(names), "warning was: {}", warnings[0]);
+}
+
+#[test]
+fn an_empty_apply_cost_is_refused() {
+    refusal(
+        "affix_empty_apply_cost",
+        &[(
+            "free.ron",
+            r#"(id: "free", prefix: Some("Free"), stats: (deflection: 2),
+                research: Some((cost: 5, apply_cost: [])))"#,
+        )],
+        "apply_cost",
+    );
+}
+
+#[test]
+fn an_unknown_item_in_apply_cost_is_refused() {
+    refusal(
+        "affix_unknown_apply_item",
+        &[(
+            "odd.ron",
+            r#"(id: "odd", prefix: Some("Odd"), stats: (deflection: 2),
+                research: Some((cost: 5, apply_cost: [("no_such_item", 1)])))"#,
+        )],
+        "no_such_item",
+    );
+}
+
+#[test]
+fn an_unknown_item_in_materials_is_refused() {
+    refusal(
+        "affix_unknown_material",
+        &[(
+            "odd.ron",
+            r#"(id: "odd", prefix: Some("Odd"), stats: (deflection: 2),
+                research: Some((cost: 5, materials: [("no_such_item", 1)],
+                                apply_cost: [("core_fragment", 1)])))"#,
+        )],
+        "no_such_item",
+    );
+}
+
+#[test]
+fn a_requirement_on_an_unknown_affix_is_refused() {
+    refusal(
+        "affix_unknown_requirement",
+        &[(
+            "child.ron",
+            &research_affix("child", r#", requires: ["ghost"]"#),
+        )],
+        "ghost",
+    );
+}
+
+#[test]
+fn a_requirement_on_a_droppable_affix_is_refused() {
+    let dir = affix_dir(
+        "affix_droppable_requirement",
+        &[
+            (
+                "plain.ron",
+                r#"(id: "plain", prefix: Some("Plain"), stats: (mitigation: 2))"#,
+            ),
+            (
+                "child.ron",
+                &research_affix("child", r#", requires: ["plain"]"#),
+            ),
+        ],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    assert_eq!(ids(db.pool_for(EquipmentSlot::Armor)), vec!["plain"]);
+    assert_eq!(db.all().count(), 1, "only `plain` survives");
+    assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
+}
+
+/// Dropping a prerequisite drops what requires it, however deep.
+#[test]
+fn a_refused_prerequisite_takes_its_dependants_with_it() {
+    let dir = affix_dir(
+        "affix_requirement_cascade",
+        &[
+            (
+                "root.ron",
+                r#"(id: "root", prefix: Some("Root"), stats: (deflection: 2),
+                    research: Some((cost: 5, apply_cost: [])))"#,
+            ),
+            ("mid.ron", &research_affix("mid", r#", requires: ["root"]"#)),
+            (
+                "leaf.ron",
+                &research_affix("leaf", r#", requires: ["mid"]"#),
+            ),
+            ("free.ron", &research_affix("free", "")),
+        ],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    let mut left: Vec<&str> = db.all().map(|d| d.id.as_str()).collect();
+    left.sort();
+    assert_eq!(left, vec!["free"]);
+    assert_eq!(warnings.len(), 3, "warnings were {warnings:?}");
+}
+
+#[test]
+fn a_chain_of_research_only_affixes_loads_intact() {
+    let dir = affix_dir(
+        "affix_requirement_chain",
+        &[
+            ("root.ron", &research_affix("root", "")),
+            (
+                "leaf.ron",
+                &research_affix("leaf", r#", requires: ["root"]"#),
+            ),
+        ],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.all().count(), 2);
+}
+
+/// Weight is moot on a research-only affix, so it is warned about and kept.
+#[test]
+fn a_weight_on_a_research_only_affix_warns_but_loads() {
+    let dir = affix_dir(
+        "affix_research_weight",
+        &[(
+            "heavy.ron",
+            r#"(id: "heavy", prefix: Some("Heavy"), stats: (deflection: 2), weight: 9,
+                research: Some((cost: 5, apply_cost: [("core_fragment", 1)])))"#,
+        )],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    assert_eq!(db.all().count(), 1);
+    assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
+    assert!(warnings[0].contains("weight"), "{}", warnings[0]);
 }

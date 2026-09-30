@@ -3441,7 +3441,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(talent_warnings);
     // An absent directory is silent and leaves the db empty, which is the
     // pre-affix game — see `AffixDb`.
-    let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
+    let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"), &items)?;
     warnings.extend(affix_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;

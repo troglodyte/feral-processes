@@ -1306,6 +1306,9 @@ fn a_programs_memories_survive_a_save_and_load() {
     game.remember(program, "mauled_by", mauling.clone());
     set_tick(&mut game, 4_500);
     game.remember(program, "hard_won", MemorySubject::Nothing);
+    // A load assesses straight away, so the game it is compared with must
+    // have been assessed too — a fixture that has not yet ticked has not.
+    game.assess_situations();
     let before = game.morale(program);
 
     let mut loaded = round_trip(&mut game, "memories_save");
@@ -2006,6 +2009,9 @@ fn with_no_catalogue_loaded_every_trigger_is_inert() {
     join_party(&mut game, comrade);
     game.world
         .insert_resource(crate::memories::MemoryDb::default());
+    // Morale is memories plus thoughts now; this test is about the first term.
+    game.world
+        .insert_resource(crate::situations::ThoughtDb::default());
 
     // A mauling.
     let attacker = hostile_of(&mut game, "zero_day", 0);

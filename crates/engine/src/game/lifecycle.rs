@@ -681,6 +681,7 @@ impl Game {
         // Before the first tick, so the very first contracts screen a run
         // opens already has the chain's first mission in hand.
         game.ensure_tutorial_held();
+        game.assess_situations();
         Ok(game)
     }
 
@@ -713,6 +714,10 @@ impl Game {
                 // short — see `systems::power_grid_system`.
                 systems::power_grid_system,
                 systems::idle_machine_system,
+                // Between the two, and inserted rather than reordered: it
+                // needs the grid `power_grid_system` just decided, and
+                // `task_progress_system` folds what it writes.
+                crate::situations::assess_situation_system,
                 systems::task_progress_system,
                 systems::player_gather_system,
                 systems::assembler_system,
@@ -1912,6 +1917,7 @@ impl Game {
         game.world
             .resource_mut::<crate::resources::LabourDemand>()
             .staff = on_shift;
+        game.assess_situations();
         Ok(game)
     }
 

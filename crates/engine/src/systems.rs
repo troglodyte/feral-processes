@@ -1161,6 +1161,7 @@ type CronjobWorker = (
     Option<&'static Memories>,
     Option<&'static Needs>,
     Option<&'static crate::disposition::Disposition>,
+    Option<&'static crate::situations::Situation>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -1184,6 +1185,7 @@ pub struct CronjobLookups<'w> {
     /// both are already registered and already saved — so this adds a read
     /// where there was none rather than shifting what the world holds.
     memories: Res<'w, MemoryDb>,
+    thoughts: Res<'w, crate::situations::ThoughtDb>,
     clock: Res<'w, GameClock>,
     /// The other half of pricing what a worker brings to a cycle — see
     /// `CycleModifiers::need_strain`. Already a registered resource, so this
@@ -1243,6 +1245,7 @@ pub fn task_progress_system(
         zone,
         power: grid,
         memories: memory_db,
+        thoughts: thought_db,
         clock,
         needs: need_db,
         research: mut active_research,
@@ -1283,6 +1286,7 @@ pub fn task_progress_system(
         memories,
         worker_needs,
         disposition,
+        situation,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -1403,20 +1407,17 @@ pub fn task_progress_system(
                 class: worker_def.and_then(|d| d.affinity_class()),
                 // The same fold `Game::morale` is, through the shared free
                 // function rather than a copy of it: a worker with no
-                // `Memories` sums nothing and reads exactly `0.0`, which is
-                // the baseline and not a missing value.
-                morale: memories
-                    .map(|m| {
-                        crate::memories::sum_intensity(
-                            m,
-                            &memory_db,
-                            clock.tick,
-                            disposition.copied().unwrap_or_default(),
-                            crate::memories::Read::Morale,
-                            |_| true,
-                        )
-                    })
-                    .unwrap_or(0.0),
+                // `Memories` and no `Situation` sums nothing and reads
+                // exactly `0.0`, which is the baseline and not a missing
+                // value.
+                morale: crate::situations::morale(
+                    memories,
+                    situation,
+                    &memory_db,
+                    &thought_db,
+                    clock.tick,
+                    disposition.copied().unwrap_or_default(),
+                ),
                 // The same fold `Game::need_strain` is, through the shared
                 // free function rather than a copy of it — `party::role_of`'s
                 // reason, and the property the empty-catalogue guarantee

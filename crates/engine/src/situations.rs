@@ -348,6 +348,48 @@ pub fn assess_situation_system(
     }
 }
 
+impl crate::Game {
+    /// Runs the assessment once, outside the schedule, so `Game::morale` agrees
+    /// with the next tick's fold from the moment a game exists. Runs the same
+    /// system the schedule does rather than a second gather of its inputs.
+    pub(crate) fn assess_situations(&mut self) {
+        use bevy_ecs::system::RunSystemOnce;
+        self.world
+            .run_system_once(assess_situation_system)
+            .expect("the assessment's parameters are all registered at construction");
+    }
+}
+
+/// A program's whole morale: what it remembers plus what its surroundings
+/// make it think.
+///
+/// **The one derivation behind `Game::morale` and `CycleModifiers::morale`**,
+/// `memories::sum_intensity`'s reason one level up: `task_progress_system`
+/// has no `Game` to ask, and two sums of the same two terms would eventually
+/// disagree about one of them. A missing `Memories` or `Situation` folds as
+/// empty, never as a panic.
+pub(crate) fn morale(
+    store: Option<&Memories>,
+    situation: Option<&Situation>,
+    memories: &MemoryDb,
+    thoughts: &ThoughtDb,
+    now: u64,
+    felt_as: Disposition,
+) -> f32 {
+    let remembered = store.map_or(0.0, |store| {
+        crate::memories::sum_intensity(
+            store,
+            memories,
+            now,
+            felt_as,
+            crate::memories::Read::Morale,
+            |_| true,
+        )
+    });
+    let situational = situation.map_or(0.0, |s| sum(s, thoughts, felt_as));
+    remembered + situational
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

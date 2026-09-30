@@ -469,9 +469,13 @@ impl crate::Game {
         }
     }
 
-    /// The signed sum of every memory `who` currently holds — the one figure
-    /// the screen heads its page with, and the closest thing the roster has to
-    /// a mood.
+    /// The signed sum of every memory `who` currently holds plus what its
+    /// surroundings make it think (`situations::morale`) — the one figure the
+    /// screen heads its page with, and the closest thing the roster has to a
+    /// mood.
+    ///
+    /// The situational term reads the `Situation` the last assessment wrote,
+    /// so between a change in the base and the next tick it is one tick old.
     ///
     /// `&self`: it derives. Nothing here evicts, because a read-only screen
     /// that rewrote the roster it is drawing would make what a program
@@ -481,7 +485,14 @@ impl crate::Game {
     /// same asymmetry `remember` makes on the write side: hostiles, structures
     /// and the player are safe here without a branch at the call site.
     pub fn morale(&self, who: Entity) -> f32 {
-        self.memory_sum(who, crate::memories::Read::Morale, |_| true)
+        crate::situations::morale(
+            self.world.get::<Memories>(who),
+            self.world.get::<crate::situations::Situation>(who),
+            self.world.resource::<MemoryDb>(),
+            self.world.resource::<crate::situations::ThoughtDb>(),
+            self.world.resource::<GameClock>().tick,
+            self.felt_as(who),
+        )
     }
 
     /// Every memory `who` currently holds, as the page draws them: strongest

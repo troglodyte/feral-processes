@@ -512,6 +512,26 @@ fn known_for_reads_what_others_think_not_what_the_program_thinks() {
 }
 
 #[test]
+fn known_for_sums_across_every_holder_not_the_first_of_each_def() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let sid = id_of(&game, subject);
+    for _ in 0..3 {
+        let witness = spawn_tamed(&mut game, 10, 3);
+        implant(
+            &mut game,
+            witness,
+            "saw_turn_on",
+            MemorySubject::Program(sid),
+        );
+    }
+    let friend = spawn_tamed(&mut game, 10, 3);
+    implant(&mut game, friend, "idled_with", MemorySubject::Program(sid));
+    // Three witnesses at -3 outweigh one friend at +4.
+    assert_eq!(game.known_for(subject)[0], "a brawler");
+}
+
+#[test]
 fn two_defs_with_one_phrase_are_one_entry() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let subject = spawn_tamed(&mut game, 10, 3);

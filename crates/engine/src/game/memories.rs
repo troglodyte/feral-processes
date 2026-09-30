@@ -781,7 +781,9 @@ impl crate::Game {
         };
         let subject = MemorySubject::Program(id);
         let db = self.world.resource::<MemoryDb>();
-        let mut by_def: std::collections::BTreeMap<MemoryId, f32> = Default::default();
+        // One contribution per (holder, def); a holder's repeated memories of
+        // a def are already folded by `memory_sum`.
+        let mut contributions: Vec<(MemoryId, f32)> = Vec::new();
         for other in self.world.iter_entities().map(|o| o.id()) {
             if other == e || !self.is_owned_program(other) {
                 continue;
@@ -789,16 +791,25 @@ impl crate::Game {
             let Some(store) = self.world.get::<Memories>(other) else {
                 continue;
             };
-            for held in store.0.iter().filter(|m| m.subject == subject) {
-                if by_def.contains_key(&held.def) {
-                    continue;
-                }
-                let def = held.def.clone();
+            let defs: std::collections::BTreeSet<&MemoryId> = store
+                .0
+                .iter()
+                .filter(|m| m.subject == subject)
+                .map(|m| &m.def)
+                .collect();
+            for def in defs {
                 let sum = self.memory_sum(other, crate::memories::Read::Opinion, |m| {
-                    m.subject == subject && m.def == def
+                    m.subject == subject && m.def == *def
                 });
-                *by_def.entry(held.def.clone()).or_default() += sum;
+                contributions.push((def.clone(), sum));
             }
+        }
+        // Float addition is not associative: fixing the order makes the
+        // totals independent of entity iteration order.
+        contributions.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let mut by_def: std::collections::BTreeMap<MemoryId, f32> = Default::default();
+        for (def, sum) in contributions {
+            *by_def.entry(def).or_default() += sum;
         }
         let mut ranked: Vec<(f32, &str)> = by_def
             .iter()

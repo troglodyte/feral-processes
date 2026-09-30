@@ -4482,6 +4482,28 @@ pub const MEMORY_MAUL_FRACTION: f32 = 0.35;
 /// the ring offers it a different tile on the next step.
 pub const MEMORY_AVOIDANCE_THRESHOLD: f32 = -3.0;
 
+/// Where an opinion of another program becomes an enemy, in `bonds::band`.
+///
+/// Placeholders until play; `balance_sim` gates none of them. Two fresh
+/// `turned_on_me` strikes (-14) plus a witness reach it.
+pub const BOND_ENEMY_AT: f32 = -15.0;
+
+/// Where an opinion becomes a rival — `MEMORY_AVOIDANCE_THRESHOLD`'s value,
+/// the same "worth avoiding", stated separately so a retune of one does not
+/// silently move the other.
+pub const BOND_RIVAL_AT: f32 = -3.0;
+
+/// Where an opinion becomes a friend: two strikes of `idled_with` or
+/// `bonded_in_battle`.
+pub const BOND_FRIEND_AT: f32 = 8.0;
+
+/// Where an opinion becomes close: a full `bonded_in_battle` stack.
+pub const BOND_CLOSE_AT: f32 = 20.0;
+
+/// How far, Chebyshev, from a brawl's victim a staff body still sees it
+/// happen and writes `saw_turn_on`.
+pub const BOND_WITNESS_REACH: i32 = 2;
+
 /// How far one point of `Game::morale` shifts a worker's extraction
 /// reliability, in `systems::mining_success_chance`.
 ///

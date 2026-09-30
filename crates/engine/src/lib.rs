@@ -9,6 +9,7 @@ pub mod balance_sim;
 pub mod base_grid;
 pub mod base_ledger;
 pub mod battle;
+pub mod bonds;
 pub mod caravans;
 pub mod classes;
 pub mod components;

@@ -609,6 +609,12 @@ impl crate::Game {
         })
     }
 
+    /// What `holder` makes of `about`, banded — `opinion_of` read through
+    /// `bonds::band`. Derived on every read and saved nowhere.
+    pub(crate) fn bond(&self, holder: Entity, about: ProgramId) -> crate::bonds::Bond {
+        crate::bonds::band(self.opinion_of(holder, &MemorySubject::Program(about)))
+    }
+
     /// How hard what `who` remembers lands on it — its `Disposition`, or the
     /// neutral `Steady` for anything that has none.
     ///

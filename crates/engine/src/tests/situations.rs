@@ -315,3 +315,39 @@ fn a_loaded_save_reports_the_situational_term_before_any_tick() {
     assert_eq!(staff.len(), 1);
     assert_eq!(loaded.morale(staff[0]), before);
 }
+
+/// The memories page is one derivation with morale: its rows sum to the figure
+/// it is headed with, through the clamp, and the thought rows read as "now".
+#[test]
+fn the_memory_rows_sum_to_morale_including_situational_thoughts() {
+    let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    implant(
+        &mut game,
+        worker,
+        "saw_turn_on",
+        1,
+        MemorySubject::Program(ProgramId(999)),
+    );
+    for thoughts in [
+        &[Trigger::BesideFriend, Trigger::MachineRunning][..],
+        &EVERY_NEGATIVE[..],
+    ] {
+        set_situation(&mut game, worker, thoughts);
+        let rows = game.memory_report(worker);
+        assert!(rows.iter().any(|r| r.age == "now" && r.subject.is_none()));
+        let total: f32 = rows.iter().map(|r| r.intensity).sum();
+        assert!((total - game.morale(worker)).abs() < 1e-4, "{total}");
+    }
+}
+
+#[test]
+fn thought_rows_show_without_any_memories() {
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).remove::<Memories>();
+    set_situation(&mut game, worker, &[Trigger::Unpowered]);
+    let rows = game.memory_report(worker);
+    assert_eq!(rows.len(), 1);
+    assert!((rows[0].intensity - game.morale(worker)).abs() < 1e-5);
+}

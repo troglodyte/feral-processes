@@ -514,6 +514,10 @@ impl crate::Game {
     /// whether anybody looked; a faded entry is still one the program holds,
     /// and it is `Game::remember` that drops it at the next formation.
     ///
+    /// **Situational thoughts are rows too**, from `situations::scaled_rows`
+    /// — the very rows `situations::sum` adds up — so the page's rows still
+    /// sum to `morale`, clamp included. They have no subject and read "now".
+    ///
     /// **An entry whose def no file defines is skipped**, contributing no
     /// row — `memory_sum`'s rule, and where the empty-database property comes
     /// from at this end: with `assets/memories/` deleted the store is intact
@@ -539,9 +543,6 @@ impl crate::Game {
     /// guarantee is taken from the standard library's contract and stated
     /// here instead.
     pub fn memory_report(&self, who: Entity) -> Vec<crate::views::MemoryRow> {
-        let Some(store) = self.world.get::<Memories>(who) else {
-            return Vec::new();
-        };
         let db = self.world.resource::<MemoryDb>();
         let now = self.world.resource::<GameClock>().tick;
         // The page shows what this program feels, not what a neutral one
@@ -549,9 +550,11 @@ impl crate::Game {
         // that is the whole channel a hidden disposition has to reach the
         // player through.
         let felt_as = self.felt_as(who);
-        let mut rows: Vec<crate::views::MemoryRow> = store
-            .0
-            .iter()
+        let mut rows: Vec<crate::views::MemoryRow> = self
+            .world
+            .get::<Memories>(who)
+            .into_iter()
+            .flat_map(|store| store.0.iter())
             .filter_map(|m| {
                 let def = db.get(&m.def)?;
                 Some(crate::views::MemoryRow {
@@ -564,6 +567,20 @@ impl crate::Game {
                 })
             })
             .collect();
+        if let Some(situation) = self.world.get::<crate::situations::Situation>(who) {
+            let thoughts = self.world.resource::<crate::situations::ThoughtDb>();
+            rows.extend(
+                crate::situations::scaled_rows(situation, thoughts, felt_as)
+                    .into_iter()
+                    .map(|(def, intensity)| crate::views::MemoryRow {
+                        name: def.name.clone(),
+                        blurb: def.blurb.clone(),
+                        subject: None,
+                        intensity,
+                        age: "now".to_string(),
+                    }),
+            );
+        }
         rows.sort_by(|a, b| {
             b.intensity
                 .abs()

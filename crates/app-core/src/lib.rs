@@ -88,6 +88,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::achievements::{AchievementDb, Profile};
+use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
@@ -197,6 +198,12 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
             ),
         ));
     }
+    if game
+        .equipment_of(item)
+        .is_some_and(|(slot, _)| matches!(slot, EquipmentSlot::Weapon | EquipmentSlot::Armor))
+    {
+        actions.push(('m', "[M] Modify affixes...".to_string()));
+    }
     if game.is_usable(item) {
         actions.push(('c', "[C]onsume".to_string()));
     }
@@ -212,6 +219,16 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
     actions.push(('d', "[D]escribe".to_string()));
     actions.push(('x', "[X] Erase".to_string()));
     actions
+}
+
+/// The rows of `Mode::ModCopy`: each affix the copy carries, then one `None`
+/// per free slot. A fused copy can carry more affixes than it has slots, so
+/// the filled rows are never cut to the slot count — that would hide an
+/// affix the player could strip.
+pub fn mod_slot_rows(game: &Game, copy: &GearCopy) -> Vec<Option<AffixId>> {
+    let mut rows: Vec<Option<AffixId>> = copy.affixes.iter().cloned().map(Some).collect();
+    rows.resize((game.affix_slots(copy) as usize).max(rows.len()), None);
+    rows
 }
 
 /// Formats the slot an equippable item would occupy plus its stat bonus as it
@@ -1789,6 +1806,15 @@ pub enum Mode {
     /// the things you might want that slot to become, not a separate errand.
     EquipSwap,
     InventoryItemAction,
+    /// The Mod Bench screen for `App::mod_copy`: one row per affix slot,
+    /// filled rows strippable with `R`, empty rows opening
+    /// `Mode::ModPickAffix` with Enter. Reached with `[M]` from
+    /// `Mode::InventoryItemAction`.
+    ModCopy,
+    /// The researched affixes that fit `App::mod_copy`, each with its stats
+    /// and `apply_cost`. A row applies it; a refusal stays here on the
+    /// status line.
+    ModPickAffix,
     /// The gear inspect page: a copy's full stat block at the level it
     /// would go on at, what it does to the wearer's chance of landing a
     /// swing, and — if it grants a routine — what fires that routine, what
@@ -2018,6 +2044,11 @@ pub enum Mode {
     /// rather than on anything being listed, because the empty-list line is
     /// what tells the player the tree is there before anything is.
     RoutineResearch,
+    /// The affix research tree — `Mode::Research`'s screen again, for
+    /// `ResearchTree::Affixes`. Its group-menu row is gated on
+    /// `Game::has_research_tree(Affixes)`, as Routines' is, so the closed-tree
+    /// line is what tells the player the tree exists.
+    AffixResearch,
     /// Contracts: what the run is holding, then what a Broker in range is
     /// offering. Stays open after each verb so several can be taken in one
     /// visit, as `Mode::Research` does.
@@ -2354,6 +2385,9 @@ impl Mode {
             | Mode::Perks
             | Mode::Research
             | Mode::RoutineResearch
+            | Mode::AffixResearch
+            | Mode::ModCopy
+            | Mode::ModPickAffix
             | Mode::Contracts
             // Opened from the map with `N`, so it never layers over a
             // fight — `Mode::History`'s reason exactly.
@@ -2770,6 +2804,10 @@ pub struct App {
     /// — a fused copy and its ordinary spares are separate rows and every
     /// action on one has to say which it meant.
     pub pending_inventory_item: Option<GearCopy>,
+    /// The copy `Mode::ModCopy` is editing. Re-keyed from the copy each
+    /// apply or strip hands back, because a modded copy is a different
+    /// ledger key from the one the screen was opened on.
+    pub mod_copy: Option<GearCopy>,
     /// What `Mode::ItemDescribe` is showing, and where Esc goes — see
     /// `GearInspect`. Set by every `[I]` and by `[d]` on the action list,
     /// so the page has one subject however it was reached.

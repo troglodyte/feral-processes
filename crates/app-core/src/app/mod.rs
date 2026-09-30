@@ -27,6 +27,7 @@ mod inventory;
 mod level_up;
 mod lifecycle;
 mod menus;
+mod mod_copy;
 pub(crate) mod outposts;
 mod party;
 mod playing;

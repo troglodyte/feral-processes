@@ -101,6 +101,7 @@ impl App {
             pending_party_attack: false,
             pending_special_ability: None,
             pending_inventory_item: None,
+            mod_copy: None,
             pending_inspect: None,
             pending_swap_slot: None,
             pending_swap_target: None,

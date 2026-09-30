@@ -3011,3 +3011,45 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
     app.mode = Mode::Playing;
     app
 }
+
+/// A founded base with a Mod Bench standing, `affix:deflecting` researched,
+/// one ordinary `nullsteel_plate` in the pack and `fragments` of
+/// `core_fragment` to pay for applying it. Built by editing a save, for the reason
+/// `app_in_base_with_routine_tree_open` gives.
+pub(crate) fn app_at_a_mod_bench(seed: u32, fragments: u32) -> App {
+    let mut app = test_app(seed);
+    let path = scratch_path("mod_bench", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.researched.push("affix:deflecting".to_string());
+    data.structures.push(save::StructureSave {
+        kind: "mod_bench".to_string(),
+        position: (2, 2),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+    });
+    // A plain copy lives in `inventory`; `gear_copies` holds only modded ones.
+    data.player.inventory = vec![
+        (ItemId::from("core_fragment"), fragments),
+        (ItemId::from("nullsteel_plate"), 1),
+    ];
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    stand_in_base(&mut app);
+    app
+}

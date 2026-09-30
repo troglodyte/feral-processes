@@ -202,6 +202,16 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        label: "Affix research",
+        target: Mode::AffixResearch,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Affixes))
+        },
+    },
+    GroupEntry {
         // Not base-only, and deliberately so: mission status is the
         // question worth answering four frames down, and the board itself is
         // a property of the sector rather than of where the party is

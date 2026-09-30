@@ -32,6 +32,7 @@ mod keys;
 mod level_up;
 mod log_filter;
 mod menus;
+mod mod_copy;
 mod notifications;
 mod options;
 mod outposts;

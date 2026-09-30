@@ -9,4 +9,5 @@
     half_life: 4000,
     subject: Program,
     strike_cap: 4,
+    known_for: Some("good company"),
 )

@@ -485,3 +485,144 @@ fn with_no_memory_catalogue_a_departure_writes_nothing() {
 
     assert_eq!(game.world.get::<Memories>(holder).unwrap().0.len(), held);
 }
+
+// ---------------------------------------------------------------------
+// Known for and the social view
+// ---------------------------------------------------------------------
+
+#[test]
+fn known_for_reads_what_others_think_not_what_the_program_thinks() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let (sid, oid) = (id_of(&game, subject), id_of(&game, other));
+
+    // The subject's own grudge against the other is not its reputation.
+    implant(
+        &mut game,
+        subject,
+        "turned_on_me",
+        MemorySubject::Program(oid),
+    );
+    assert!(game.known_for(subject).is_empty());
+    assert_eq!(game.known_for(other), vec!["a brawler".to_string()]);
+
+    implant(&mut game, other, "idled_with", MemorySubject::Program(sid));
+    assert_eq!(game.known_for(subject), vec!["good company".to_string()]);
+}
+
+#[test]
+fn two_defs_with_one_phrase_are_one_entry() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let sid = id_of(&game, subject);
+    implant(
+        &mut game,
+        other,
+        "turned_on_me",
+        MemorySubject::Program(sid),
+    );
+    implant(&mut game, other, "saw_turn_on", MemorySubject::Program(sid));
+    assert_eq!(game.known_for(subject), vec!["a brawler".to_string()]);
+}
+
+#[test]
+fn known_for_is_capped_at_two_heaviest_first() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let sid = id_of(&game, subject);
+    implant(&mut game, other, "idled_with", MemorySubject::Program(sid));
+    implant(
+        &mut game,
+        other,
+        "bonded_in_battle",
+        MemorySubject::Program(sid),
+    );
+    implant(
+        &mut game,
+        other,
+        "turned_on_me",
+        MemorySubject::Program(sid),
+    );
+    let known = game.known_for(subject);
+    assert_eq!(known.len(), 2, "{known:?}");
+    assert_eq!(known[0], "a brawler", "turned_on_me is the heaviest");
+}
+
+#[test]
+fn nothing_said_about_a_program_is_nothing_known() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let _other = spawn_tamed(&mut game, 10, 3);
+    assert!(game.known_for(subject).is_empty());
+}
+
+#[test]
+fn social_is_only_for_an_owned_program() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let owned = spawn_tamed(&mut game, 10, 3);
+    let player = game.player_entity();
+    assert!(game.social(owned).is_some());
+    assert!(game.social(player).is_none());
+    let wild = spawn_wild_on_player_tile(&mut game);
+    assert!(game.social(wild).is_none());
+}
+
+#[test]
+fn social_rows_are_strongest_opinion_first() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let holder = spawn_tamed(&mut game, 10, 3);
+    let weak = spawn_tamed(&mut game, 10, 3);
+    let strong = spawn_tamed(&mut game, 10, 3);
+    let (wid, sid) = (id_of(&game, weak), id_of(&game, strong));
+    implant(&mut game, holder, "idled_with", MemorySubject::Program(wid));
+    implant(
+        &mut game,
+        holder,
+        "turned_on_me",
+        MemorySubject::Program(sid),
+    );
+    implant(
+        &mut game,
+        holder,
+        "turned_on_me",
+        MemorySubject::Program(sid),
+    );
+
+    let view = game.social(holder).unwrap();
+    assert_eq!(view.relationships.len(), 2);
+    assert_eq!(
+        view.relationships[0].name,
+        game.creature_short_label(strong)
+    );
+    assert_eq!(
+        view.relationships[0].bond,
+        crate::bonds::band(view.relationships[0].opinion)
+    );
+    assert!(
+        view.relationships[0].opinion.abs() > view.relationships[1].opinion.abs(),
+        "{:?}",
+        view.relationships
+    );
+    assert!(view.relationships.iter().all(|r| !r.gone));
+}
+
+#[test]
+fn a_departed_friend_is_gone_and_keeps_its_name() {
+    let mut game = Game::new(41, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let cast = cast_around(&mut game, leaving);
+    let name = game.creature_short_label(leaving);
+
+    game.bench_or_dissolve(leaving);
+
+    let view = game.social(cast.friend).unwrap();
+    let row = view
+        .relationships
+        .iter()
+        .find(|r| r.name == name)
+        .expect("the friend still has a row for it");
+    assert!(row.gone);
+}

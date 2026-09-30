@@ -106,6 +106,11 @@ pub struct MemoryDef {
     /// `memories::Read` and `Game::morale`/`Game::opinion_of`.
     #[serde(default = "one")]
     pub mood: f32,
+    /// What a program carrying a heavy sum of this def *about it*, across
+    /// its fellows, is known for — `Game::known_for` reads it. `None` (the
+    /// default) is a memory that makes no reputation.
+    #[serde(default)]
+    pub known_for: Option<String>,
 }
 
 impl MemoryDef {

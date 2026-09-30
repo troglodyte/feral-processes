@@ -744,12 +744,130 @@ impl crate::Game {
         let MemorySubject::Program(id) = subject else {
             return None;
         };
-        let entity = self
-            .world
-            .iter_entities()
-            .find(|e| e.get::<ProgramId>() == Some(id))?
-            .id();
+        let entity = self.program_entity(*id)?;
         Some(self.creature_short_label(entity))
+    }
+
+    /// The live body a `ProgramId` names, if it is still in the world.
+    fn program_entity(&self, id: ProgramId) -> Option<Entity> {
+        self.world
+            .iter_entities()
+            .find(|e| e.get::<ProgramId>() == Some(&id))
+            .map(|e| e.id())
+    }
+
+    /// Whether `e` is a program the player owns — the only kind that has a
+    /// social life to show, and the only kind whose opinions count.
+    fn is_owned_program(&self, e: Entity) -> bool {
+        let player = self.player_entity();
+        self.world.get::<ProgramId>(e).is_some()
+            && self
+                .world
+                .get::<Tamed>(e)
+                .is_some_and(|t| t.owner == player)
+    }
+
+    /// What the rest of the roster says `e` is like, at most two phrases.
+    ///
+    /// **Reputation is what others think**, so `e`'s own store is never
+    /// read: every *other* owned program's memories about `e` are summed by
+    /// def through `opinion_of`'s fold, the defs carrying a `known_for` are
+    /// ranked by the magnitude of that sum, and two defs sharing a phrase
+    /// ("a brawler") are one entry. A tie breaks on def id so the answer
+    /// never depends on query order.
+    pub fn known_for(&self, e: Entity) -> Vec<String> {
+        let Some(&id) = self.world.get::<ProgramId>(e) else {
+            return Vec::new();
+        };
+        let subject = MemorySubject::Program(id);
+        let db = self.world.resource::<MemoryDb>();
+        let mut by_def: std::collections::BTreeMap<MemoryId, f32> = Default::default();
+        for other in self.world.iter_entities().map(|o| o.id()) {
+            if other == e || !self.is_owned_program(other) {
+                continue;
+            }
+            let Some(store) = self.world.get::<Memories>(other) else {
+                continue;
+            };
+            for held in store.0.iter().filter(|m| m.subject == subject) {
+                if by_def.contains_key(&held.def) {
+                    continue;
+                }
+                let def = held.def.clone();
+                let sum = self.memory_sum(other, crate::memories::Read::Opinion, |m| {
+                    m.subject == subject && m.def == def
+                });
+                *by_def.entry(held.def.clone()).or_default() += sum;
+            }
+        }
+        let mut ranked: Vec<(f32, &str)> = by_def
+            .iter()
+            .filter_map(|(def, sum)| {
+                let phrase = db.get(def)?.known_for.as_deref()?;
+                Some((*sum, phrase))
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.0.abs().total_cmp(&a.0.abs()));
+        let mut phrases: Vec<String> = Vec::new();
+        for (_, phrase) in ranked {
+            if !phrases.iter().any(|p| p == phrase) {
+                phrases.push(phrase.to_string());
+            }
+        }
+        phrases.truncate(2);
+        phrases
+    }
+
+    /// The SOCIAL tab's read of `e`: who it has feelings about, and what the
+    /// others say of it. `None` for anything but an owned program.
+    ///
+    /// Rows group the holder's memories by `Program` subject and read each
+    /// through `opinion_of` and `bonds::band`, so the tab can never band
+    /// differently from avoidance or grief. A subject no longer in the world
+    /// keeps the name stamped on its most recent memory and is `gone`.
+    pub fn social(&self, e: Entity) -> Option<crate::views::SocialView> {
+        if !self.is_owned_program(e) {
+            return None;
+        }
+        let store = self.world.get::<Memories>(e)?;
+        let mut seen: Vec<ProgramId> = Vec::new();
+        let mut relationships: Vec<crate::views::RelationshipRow> = Vec::new();
+        for held in &store.0 {
+            let MemorySubject::Program(about) = held.subject else {
+                continue;
+            };
+            if seen.contains(&about) {
+                continue;
+            }
+            seen.push(about);
+            let opinion = self.opinion_of(e, &held.subject);
+            let (name, gone) = match self.program_entity(about) {
+                Some(live) => (self.creature_short_label(live), false),
+                None => {
+                    let stamped = store
+                        .0
+                        .iter()
+                        .rev()
+                        .filter(|m| m.subject == held.subject)
+                        .find_map(|m| m.subject_name.clone());
+                    (
+                        stamped.unwrap_or_else(|| "a program that is gone".to_string()),
+                        true,
+                    )
+                }
+            };
+            relationships.push(crate::views::RelationshipRow {
+                name,
+                bond: crate::bonds::band(opinion),
+                opinion,
+                gone,
+            });
+        }
+        relationships.sort_by(|a, b| b.opinion.abs().total_cmp(&a.opinion.abs()));
+        Some(crate::views::SocialView {
+            relationships,
+            known_for: self.known_for(e),
+        })
     }
 }
 

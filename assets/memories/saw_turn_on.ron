@@ -10,4 +10,5 @@
     half_life: 5000,
     subject: Program,
     strike_cap: 3,
+    known_for: Some("a brawler"),
 )

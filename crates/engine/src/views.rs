@@ -3638,3 +3638,24 @@ pub struct LevelUpReport {
     pub stat_points_gained: u32,
     pub stat_points_unspent: u32,
 }
+
+/// One line of the SOCIAL tab: what a program makes of another.
+#[derive(Clone, Debug)]
+pub struct RelationshipRow {
+    /// The live short label, or the name stamped on the memory once the
+    /// subject has left.
+    pub name: String,
+    pub bond: crate::bonds::Bond,
+    /// Signed, from `Game::opinion_of`; the band is derived from it.
+    pub opinion: f32,
+    pub gone: bool,
+}
+
+/// What the SOCIAL tab draws for one owned program.
+#[derive(Clone, Debug)]
+pub struct SocialView {
+    /// Strongest `|opinion|` first.
+    pub relationships: Vec<RelationshipRow>,
+    /// At most two phrases, from `Game::known_for`.
+    pub known_for: Vec<String>,
+}

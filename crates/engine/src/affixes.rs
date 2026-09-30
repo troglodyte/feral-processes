@@ -122,6 +122,15 @@ impl AffixDef {
         }
     }
 
+    /// The word this affix reads as on a copy's name — its prefix or suffix,
+    /// the id only for an affix `fault` would have refused.
+    pub fn label(&self) -> String {
+        self.prefix
+            .clone()
+            .or_else(|| self.suffix.clone())
+            .unwrap_or_else(|| self.id.as_str().to_string())
+    }
+
     /// Whether this affix may land on `slot`.
     pub fn fits(&self, slot: EquipmentSlot) -> bool {
         self.slots.as_ref().is_none_or(|s| s.contains(&slot))

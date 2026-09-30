@@ -13,14 +13,6 @@ pub fn node_id(affix: &str) -> String {
     format!("affix:{affix}")
 }
 
-/// The word an affix reads as on a copy's name, used as the node's title.
-fn title(def: &AffixDef) -> String {
-    def.prefix
-        .clone()
-        .or_else(|| def.suffix.clone())
-        .unwrap_or_else(|| def.id.as_str().to_string())
-}
-
 fn description(def: &AffixDef) -> String {
     let slots = match &def.slots {
         Some(slots) => slots
@@ -32,7 +24,7 @@ fn description(def: &AffixDef) -> String {
     };
     format!(
         "Lets you fit the {} affix to {slots} at a Mod Bench.",
-        title(def)
+        def.label()
     )
 }
 
@@ -46,7 +38,7 @@ pub fn synthesise_nodes(affixes: &AffixDb) -> Vec<ResearchDef> {
             let research = def.research.as_ref()?;
             Some(ResearchDef {
                 id: node_id(def.id.as_str()),
-                name: title(def),
+                name: def.label(),
                 description: description(def),
                 cost: research.cost,
                 materials: research.materials.clone(),

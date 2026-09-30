@@ -6,6 +6,7 @@
 //! `Game`.
 
 pub(crate) mod achievements;
+pub(crate) mod affix_mods;
 pub(crate) mod alerts;
 pub(crate) mod auto_resolve;
 pub(crate) mod base;

@@ -4,7 +4,9 @@
 use super::bars::*;
 use super::manifest_layout::*;
 use super::popup::*;
+use super::social::{draw_tab_strip, social_sections};
 use super::*;
+use feral_processes_app_core::ManifestTab;
 use feral_processes_engine::components::TaskKind;
 use feral_processes_engine::species::{AffinityClass, MoveDef};
 use feral_processes_engine::{
@@ -49,6 +51,9 @@ pub(super) struct ManifestNav {
     /// program when the party is not in base space, which is where staff
     /// stand. `Game::watch_position` is the one rule; this is its `is_some`.
     pub(super) watchable: bool,
+    /// Which face of an owned program's sheet is up. Only read when the
+    /// subject has a SOCIAL face at all.
+    pub(super) tab: ManifestTab,
 }
 
 pub(super) fn draw_manifest(
@@ -71,8 +76,14 @@ pub(super) fn draw_manifest(
         return;
     };
 
-    let meters = meter_rows(&view);
-    let sections = sections_for(game, &view);
+    // `Some` only for a program you own, which is also exactly who has a tab
+    // strip: the strip never offers a face the subject does not have.
+    let social = game.social(view.entity);
+    let showing_social = social.is_some() && nav.tab == ManifestTab::Social;
+    let (meters, sections) = match &social {
+        Some(s) if showing_social => (Vec::new(), social_sections(s)),
+        _ => (meter_rows(&view), sections_for(game, &view)),
+    };
     let l = manifest_layout(
         painter.screen_w(),
         painter.screen_h(),
@@ -84,7 +95,13 @@ pub(super) fn draw_manifest(
     painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
     painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
 
-    draw_header(&view, l.header, painter, m);
+    draw_header(
+        &view,
+        social.is_some().then_some(nav.tab),
+        l.header,
+        painter,
+        m,
+    );
     for (rect, meter) in l.meters.iter().zip(&meters) {
         let g = BarGeometry {
             x: rect.x,
@@ -179,7 +196,13 @@ fn meter_rows(view: &ManifestView) -> Vec<Meter> {
     meters
 }
 
-fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) {
+fn draw_header(
+    view: &ManifestView,
+    tab: Option<ManifestTab>,
+    rect: Rect,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let glyph_size = m.title() * HEADER_GLYPH_SCALE;
     let glyph = view.glyph.to_string();
     painter.map(
@@ -218,6 +241,16 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
             rect.y + m.title() as f32,
             m.title(),
             tier_color,
+        );
+    }
+
+    if let Some(active) = tab {
+        draw_tab_strip(
+            active,
+            rect.x + rect.w,
+            rect.y + m.title() as f32,
+            painter,
+            m,
         );
     }
 
@@ -2455,6 +2488,7 @@ mod tests {
                         cyclable: false,
                         back_to_list: false,
                         watchable,
+                        tab: ManifestTab::Stats,
                     },
                     None,
                     p,
@@ -2486,6 +2520,7 @@ mod tests {
                         cyclable,
                         back_to_list,
                         watchable,
+                        tab: ManifestTab::Stats,
                     };
                     assert!(footer_text(&nav, false).contains("[D] dossier"));
                 }
@@ -2501,6 +2536,7 @@ mod tests {
             cyclable: false,
             back_to_list: false,
             watchable: false,
+            tab: ManifestTab::Stats,
         };
         assert!(footer_text(&nav, true).contains("[R] memories"));
         assert!(!footer_text(&nav, false).contains("[R]"));
@@ -2514,6 +2550,7 @@ mod tests {
             cyclable: true,
             back_to_list: true,
             watchable: true,
+            tab: ManifestTab::Stats,
         };
         for h in [720.0, 1080.0, 1440.0] {
             let m = ui_metrics(h);

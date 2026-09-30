@@ -72,6 +72,7 @@ mod routines;
 mod settlement;
 mod settlement_board;
 mod settlement_market;
+mod social;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
 // hands back — every other module here stays private because nothing
@@ -900,6 +901,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let graph_view = app.research_graph_view;
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
+    let manifest_tab = app.manifest_tab;
     let pending_field_routine = app.pending_field_routine;
     let pending_downed_program = app.pending_downed_program_index;
     let pending_structure = app.pending_structure.clone();
@@ -1230,6 +1232,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 // the roster reaches every program you own, including the
                 // ones whose tile is the one they were beaten on.
                 watchable: pending_manifest.is_some_and(|e| game.watch_position(e).is_some()),
+                tab: manifest_tab,
             };
             draw_manifest(game, pending_manifest, nav, refusal, painter, m)
         }

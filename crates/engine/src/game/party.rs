@@ -67,6 +67,28 @@ pub enum ProgramRole {
     Staff,
 }
 
+/// `name` with its zone appended (`"Scrapper 2"`) when there is one.
+fn zone_tagged(name: String, zone: Option<u32>) -> String {
+    match zone {
+        Some(zone) => format!("{name} {zone}"),
+        None => name,
+    }
+}
+
+/// An owned program's short label — custom name, else handle, zone-tagged.
+/// Pure so the live label and a departure written from a `CreatureSave`
+/// snapshot (there is no entity to ask) are one rule, not two.
+pub(crate) fn program_short_label(
+    custom_name: Option<&str>,
+    id: ProgramId,
+    zone: Option<u32>,
+) -> String {
+    let name = custom_name
+        .map(str::to_string)
+        .unwrap_or_else(|| crate::handles::of(id));
+    zone_tagged(name, zone)
+}
+
 impl ProgramRole {
     /// Where a run of this role sits on the roster screen, and so the order
     /// `Game::owned_pets` groups the list into.
@@ -439,6 +461,16 @@ impl Game {
     /// its own to read back, since a memory's subject is who it is about,
     /// not what tier they were when it formed.
     pub fn creature_short_label(&self, entity: Entity) -> String {
+        if let (Some(_), Some(&id)) = (
+            self.world.get::<Creature>(entity),
+            self.world.get::<ProgramId>(entity),
+        ) {
+            return program_short_label(
+                self.world.get::<CustomName>(entity).map(|n| n.0.as_str()),
+                id,
+                self.world.get::<ZonePortal>(entity).map(|z| z.0),
+            );
+        }
         match self.creature_name(entity) {
             Some(named) => self.zone_tagged_name(entity, named),
             None => "Program".to_string(),
@@ -479,10 +511,7 @@ impl Game {
     /// has no `ZonePortal` — expected for creatures hand-spawned outside the
     /// normal `spawn_wild_creature` path (e.g. in tests).
     pub(crate) fn zone_tagged_name(&self, entity: Entity, name: String) -> String {
-        match self.world.get::<ZonePortal>(entity) {
-            Some(zone) => format!("{name} {}", zone.0),
-            None => name,
-        }
+        zone_tagged(name, self.world.get::<ZonePortal>(entity).map(|z| z.0))
     }
 
     /// Whether `entity` is a boss — either because it was spawned as one

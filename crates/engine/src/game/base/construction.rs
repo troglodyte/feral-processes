@@ -491,8 +491,7 @@ impl Game {
         // committed at filing and is gone from the world. Here and not at
         // the commit, because a commit is reversible through
         // `refund_program` and a departure is not. The name is the short
-        // label's ladder (custom name, else handle, zone-tagged) spelled
-        // from the snapshot's fields, since there is no entity to ask.
+        // label, from the snapshot's fields since there is no entity to ask.
         let spent = self
             .world
             .get::<BuildSite>(site)
@@ -500,11 +499,12 @@ impl Game {
             .filter(|p| p.program_id != 0)
             .map(|p| {
                 let id = crate::components::ProgramId(p.program_id);
-                let name = p
-                    .custom_name
-                    .clone()
-                    .unwrap_or_else(|| crate::handles::of(id));
-                (id, format!("{name} {}", p.zone))
+                let name = crate::game::party::program_short_label(
+                    p.custom_name.as_deref(),
+                    id,
+                    Some(p.zone),
+                );
+                (id, name)
             });
         self.world.despawn(site);
         if let Some((id, name)) = spent {

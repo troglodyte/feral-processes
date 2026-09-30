@@ -523,6 +523,20 @@ fn known_for_reads_what_others_think_not_what_the_program_thinks() {
 }
 
 #[test]
+fn a_departure_name_from_a_snapshot_is_the_live_short_label() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(program)
+        .insert(crate::components::ZonePortal(4));
+    let id = id_of(&game, program);
+    assert_eq!(
+        crate::game::party::program_short_label(None, id, Some(4)),
+        game.creature_short_label(program)
+    );
+}
+
+#[test]
 fn known_for_sums_across_every_holder_not_the_first_of_each_def() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let subject = spawn_tamed(&mut game, 10, 3);

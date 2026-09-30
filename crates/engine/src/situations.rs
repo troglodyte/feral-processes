@@ -14,7 +14,10 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::{Component, Resource};
+
+use crate::disposition::Disposition;
+use crate::tuning::SITUATION_MAX_TOTAL;
 
 /// What can make a program think something about its surroundings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -110,6 +113,57 @@ impl ThoughtDb {
     }
 }
 
+/// What one program's surroundings currently make it think: the triggers that
+/// hold right now, written by `assess_situation_system` every tick.
+///
+/// Holds triggers rather than def ids, so a reworded asset needs no
+/// migration and the fold resolves through `ThoughtDb` on read. Not saved,
+/// `Stranded`'s precedent: the walk that produced it runs again next tick,
+/// and a missing one folds as empty.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Situation {
+    pub thoughts: Vec<Trigger>,
+}
+
+/// Each active thought with its share of the situational total, after the
+/// clamp. A trigger with no def contributes no row.
+///
+/// When the raw total's magnitude exceeds `SITUATION_MAX_TOTAL` every share
+/// is scaled by `cap / |total|`, so the rows still sum to the clamped figure
+/// and the memories page and the morale sum are one derivation.
+pub(crate) fn scaled_rows<'a>(
+    situation: &Situation,
+    db: &'a ThoughtDb,
+    felt_as: Disposition,
+) -> Vec<(&'a ThoughtDef, f32)> {
+    let mut rows: Vec<(&ThoughtDef, f32)> = situation
+        .thoughts
+        .iter()
+        .filter_map(|t| db.get(*t))
+        .map(|def| (def, felt_as.felt(def.intensity)))
+        .collect();
+    let total: f32 = rows.iter().map(|(_, v)| v).sum();
+    if total.abs() > SITUATION_MAX_TOTAL {
+        let scale = SITUATION_MAX_TOTAL / total.abs();
+        for (_, v) in &mut rows {
+            *v *= scale;
+        }
+    }
+    rows
+}
+
+/// The situational term of morale: the sum of `scaled_rows`.
+///
+/// A free function for `memories::sum_intensity`'s reason: `task_progress_system`
+/// has no `Game` to ask, and two folds could disagree about whether an
+/// unresolvable trigger counts.
+pub(crate) fn sum(situation: &Situation, db: &ThoughtDb, felt_as: Disposition) -> f32 {
+    scaled_rows(situation, db, felt_as)
+        .iter()
+        .map(|(_, v)| v)
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +182,75 @@ mod tests {
             std::fs::write(dir.join(name), body).unwrap();
         }
         ThoughtDb::load_dir(&dir).unwrap()
+    }
+
+    fn shipped() -> ThoughtDb {
+        let dir = crate::tests::support::test_assets_dir().join("thoughts");
+        ThoughtDb::load_dir(&dir).unwrap().0
+    }
+
+    fn all_negative() -> Situation {
+        Situation {
+            thoughts: vec![Trigger::BesideRival, Trigger::Unpowered, Trigger::NoAmenity],
+        }
+    }
+
+    #[test]
+    fn a_raw_total_past_the_cap_is_clamped_to_it() {
+        let db = shipped();
+        // -3 + -2 + -2 = -7 raw.
+        let s = all_negative();
+        let total = sum(&s, &db, Disposition::default());
+        assert!((total + SITUATION_MAX_TOTAL).abs() < 1e-5, "{total}");
+    }
+
+    #[test]
+    fn under_the_cap_nothing_is_scaled() {
+        let db = shipped();
+        let s = Situation {
+            thoughts: vec![Trigger::BesideRival, Trigger::MachineRunning],
+        };
+        assert!((sum(&s, &db, Disposition::default()) + 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rows_sum_to_the_total_under_the_clamp() {
+        let db = shipped();
+        let s = all_negative();
+        let rows = scaled_rows(&s, &db, Disposition::default());
+        assert_eq!(rows.len(), 3);
+        let by_rows: f32 = rows.iter().map(|(_, v)| v).sum();
+        assert_eq!(by_rows, sum(&s, &db, Disposition::default()));
+        assert!(rows.iter().all(|(_, v)| *v < 0.0));
+    }
+
+    #[test]
+    fn an_unresolved_trigger_contributes_nothing() {
+        let (db, _) = load(&[("a.ron", def_text("Unpowered", "Dark"))]);
+        let s = Situation {
+            thoughts: vec![Trigger::BesideRival, Trigger::Unpowered],
+        };
+        let rows = scaled_rows(&s, &db, Disposition::default());
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.trigger, Trigger::Unpowered);
+    }
+
+    #[test]
+    fn an_empty_db_sums_to_zero() {
+        let s = all_negative();
+        assert_eq!(sum(&s, &ThoughtDb::default(), Disposition::default()), 0.0);
+        assert!(scaled_rows(&s, &ThoughtDb::default(), Disposition::default()).is_empty());
+    }
+
+    #[test]
+    fn an_abrasive_program_feels_a_negative_thought_heavier() {
+        let db = shipped();
+        let s = Situation {
+            thoughts: vec![Trigger::BesideRival],
+        };
+        let neutral = sum(&s, &db, Disposition::default());
+        let abrasive = sum(&s, &db, Disposition::Abrasive);
+        assert!(abrasive < neutral, "{abrasive} vs {neutral}");
     }
 
     #[test]

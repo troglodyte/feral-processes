@@ -4892,6 +4892,18 @@ pub const MORALE_DOWNS_TOOLS_AT: f32 = -50.0;
 /// hole.
 pub const MORALE_RECOVERED_AT: f32 = -6.0;
 
+/// The most the situational thoughts can add to or take from a program's
+/// morale in total (`situations::sum`), either way.
+///
+/// **Below `-MORALE_SULKS_AT`**, so where a program stands can tip one already
+/// soured by real memories into sulking but can never start a sulk alone:
+/// otherwise base layout and power budget become Grievance triggers by
+/// themselves, and a sulker that refuses its post changes its own situation,
+/// recovers, is re-posted and sulks again. Unmeasured, a starting value to
+/// revisit after play.
+pub const SITUATION_MAX_TOTAL: f32 = 5.0;
+const _: () = assert!(SITUATION_MAX_TOTAL < -MORALE_SULKS_AT);
+
 /// The ladder climbs in order, and the gap between recovery and downing
 /// tools *is* the feature.
 ///

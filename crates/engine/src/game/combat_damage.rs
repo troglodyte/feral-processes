@@ -466,17 +466,38 @@ impl Game {
     /// than rounding the reduction and then subtracting it — two roundings
     /// can discard a point the combined operation keeps.
     ///
+    /// Then subtracts the target's Deflection, a flat per-hit reduction read
+    /// live off `gear_bonus` (`EquipmentStats::deflection`) and capped at
+    /// `DEFLECTION_MAX`. It comes after the percentage so a point of it is
+    /// worth the same against a big hit and a small one, and it applies even
+    /// with no percentage mitigation at all.
+    ///
+    /// **Every `apply_damage` source reaches this** — terrain, status ticks,
+    /// fumbles, turrets and all — so Deflection blocks them as the percentage
+    /// already does.
+    ///
     /// Floors at 1 so a landed hit stays a hit under heavy mitigation, but
-    /// only when there was a hit to protect: `dmg <= 0` (already a miss, or
-    /// no mitigation at all) passes through untouched rather than being
-    /// raised to 1.
+    /// only when there was a hit to protect: `dmg <= 0` (already a miss)
+    /// passes through untouched rather than being raised to 1. A target that
+    /// neither cuts by percentage nor deflects also passes through untouched.
     pub(crate) fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
-        let percent = self.effective_mitigation(target);
-        if percent <= 0 || dmg <= 0 {
+        if dmg <= 0 {
             return dmg;
         }
-        let reduced = (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32;
-        reduced.max(1)
+        let percent = self.effective_mitigation(target);
+        let deflection = self
+            .gear_bonus(target)
+            .deflection
+            .clamp(0, crate::tuning::DEFLECTION_MAX);
+        if percent <= 0 && deflection == 0 {
+            return dmg;
+        }
+        let reduced = if percent > 0 {
+            (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32
+        } else {
+            dmg
+        };
+        (reduced - deflection).max(1)
     }
 
     /// The `Outcome` line for a party member killed in battle: what died and

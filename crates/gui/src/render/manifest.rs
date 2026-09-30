@@ -1367,6 +1367,7 @@ mod tests {
             atk: 4,
             mitigation: 0,
             decompiler: 0,
+            deflection: 0,
         }
     }
 
@@ -1459,6 +1460,7 @@ mod tests {
                 atk: mods.atk,
                 mitigation: mods.mitigation,
                 decompiler: mods.decompiler,
+                deflection: 0,
             };
             let cells = row.item_name.chars().count();
             if worst.as_ref().is_none_or(|(_, w)| cells > *w) {
@@ -1519,6 +1521,7 @@ mod tests {
                         atk: mods.atk,
                         mitigation: mods.mitigation,
                         decompiler: mods.decompiler,
+                        deflection: 0,
                     },
                     word,
                 ));

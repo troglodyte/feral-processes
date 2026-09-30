@@ -572,6 +572,7 @@ fn delta_total(mods: EquipmentStats, worn: EquipmentStats) -> i32 {
         + (mods.damage.mean() - worn.damage.mean()).round() as i32
         + (mods.accuracy - worn.accuracy)
         + (mods.evasion - worn.evasion)
+        + (mods.deflection - worn.deflection)
 }
 
 /// What swapping to `mods` from `worn` changes, per axis — or "no change".
@@ -588,6 +589,7 @@ fn swap_delta(game: &Game, mods: EquipmentStats, worn: EquipmentStats) -> String
             },
             accuracy: mods.accuracy - worn.accuracy,
             evasion: mods.evasion - worn.evasion,
+            deflection: mods.deflection - worn.deflection,
         },
     );
     if delta.is_empty() {

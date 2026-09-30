@@ -802,6 +802,7 @@ impl Game {
                     },
                     accuracy: acc.accuracy + affix.stats.accuracy,
                     evasion: acc.evasion + affix.stats.evasion,
+                    deflection: acc.deflection + affix.stats.deflection,
                 });
         Some(
             affixed
@@ -868,6 +869,7 @@ impl Game {
                     },
                     accuracy: acc.accuracy + mods.accuracy,
                     evasion: acc.evasion + mods.evasion,
+                    deflection: acc.deflection + mods.deflection,
                 }
             })
     }

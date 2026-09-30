@@ -589,6 +589,17 @@ pub struct EquipmentStats {
     /// choice.
     #[serde(default)]
     pub evasion: i32,
+    /// Flat damage removed from every incoming hit, after the percentage cut
+    /// and before the floor of 1 — see `Game::mitigate_incoming_damage`. Read
+    /// live off `Game::gear_bonus` like `accuracy`, and capped there by
+    /// `tuning::DEFLECTION_MAX`.
+    ///
+    /// **Carried through all four scaling axes unscaled.** An affix is added
+    /// before scaling, so a scaled +2 on a level-5 copy would block ~12 per
+    /// hit, and with the floor of 1 that makes armour near-immune to small
+    /// hits. Each scaler names it by hand for that reason.
+    #[serde(default)]
+    pub deflection: i32,
 }
 
 impl EquipmentStats {
@@ -609,12 +620,14 @@ impl EquipmentStats {
             damage,
             accuracy,
             evasion,
+            deflection,
         } = self;
         atk == 0
             && mitigation == 0
             && decompiler == 0
             && accuracy == 0
             && evasion == 0
+            && deflection == 0
             && damage == crate::battle::DamageRange::default()
     }
 
@@ -632,8 +645,15 @@ impl EquipmentStats {
             damage,
             accuracy,
             evasion,
+            deflection,
         } = self;
-        atk > 0 || mitigation > 0 || decompiler > 0 || accuracy > 0 || evasion > 0 || damage.max > 0
+        atk > 0
+            || mitigation > 0
+            || decompiler > 0
+            || accuracy > 0
+            || evasion > 0
+            || deflection > 0
+            || damage.max > 0
     }
 
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
@@ -648,6 +668,7 @@ impl EquipmentStats {
             damage: scale_range(self.damage, scale),
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
+            deflection: self.deflection,
         }
     }
 
@@ -686,6 +707,7 @@ impl EquipmentStats {
             damage: scale_range(self.damage, scale),
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
+            deflection: self.deflection,
         }
     }
 
@@ -737,6 +759,7 @@ impl EquipmentStats {
             damage: scale_range(self.damage, scale),
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
+            deflection: self.deflection,
         }
     }
 
@@ -774,6 +797,7 @@ impl EquipmentStats {
             damage: scale_range(self.damage, scale),
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
+            deflection: self.deflection,
         }
     }
 }

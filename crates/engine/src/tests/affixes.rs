@@ -12,7 +12,9 @@ use crate::Game;
 use crate::affixes::AffixDb;
 use crate::components::{Decompiler, Rarity, Stats};
 use crate::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
-use crate::tests::support::{ScratchAssets, scratch_assets_dir, test_assets_dir};
+use crate::tests::support::{
+    ScratchAssets, modded_assets_dir, scratch_assets_dir, test_assets_dir,
+};
 use bevy_ecs::prelude::Entity;
 
 /// A scratch affix directory holding `files` as `(filename, body)`. Built
@@ -458,4 +460,154 @@ fn a_notes_txt_file_is_ignored_without_warnings() {
 
     assert_eq!(db.all().count(), 1);
     assert!(warnings.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Deflection: a flat per-hit reduction, read live and never scaled.
+
+const DEFLECTING: &str = r#"(id: "deflecting", prefix: Some("Deflecting"), stats: (deflection: 2), slots: Some([Armor]))"#;
+
+/// A game whose affix pool also holds `deflecting` (+2 DEFL, armour only).
+fn deflecting_game(seed: u32, tag: &str) -> Game {
+    let dir = modded_assets_dir(tag, &[], &[], &[], &[], &[]);
+    std::fs::write(dir.join("affixes").join("deflecting.ron"), DEFLECTING).unwrap();
+    let game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+    game
+}
+
+fn deflecting_armour(count: usize) -> GearCopy {
+    GearCopy {
+        affixes: vec!["deflecting".into(); count],
+        ..GearCopy::plain(ItemId::from("firewall_plating"))
+    }
+}
+
+/// Wears `copy` on the player and zeroes the wearer's percentage
+/// mitigation to `percent`, so the flat term is read on its own.
+fn wear_with_mitigation(game: &mut Game, copy: &GearCopy, percent: i32) -> Entity {
+    let player = game.player_entity();
+    game.add_copies(copy, 1);
+    game.equip(player, copy).unwrap();
+    game.world.get_mut::<Stats>(player).unwrap().mitigation = percent;
+    player
+}
+
+#[test]
+fn an_affix_granting_only_deflection_loads() {
+    let dir = affix_dir("affix_deflection_only", &[("deflecting.ron", DEFLECTING)]);
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.all().count(), 1);
+}
+
+#[test]
+fn deflection_is_subtracted_even_with_no_percentage_mitigation() {
+    let mut game = deflecting_game(4110, "deflection_zero_mitigation");
+    let player = wear_with_mitigation(&mut game, &deflecting_armour(1), 0);
+    assert_eq!(
+        game.effective_mitigation(player),
+        0,
+        "the test's precondition"
+    );
+
+    assert_eq!(game.mitigate_incoming_damage(player, 20), 18);
+}
+
+#[test]
+fn deflection_comes_off_after_the_percentage_cut_and_the_floor_is_one() {
+    let mut game = deflecting_game(4111, "deflection_order");
+    let player = wear_with_mitigation(&mut game, &deflecting_armour(1), 50);
+    assert_eq!(
+        game.effective_mitigation(player),
+        50,
+        "the test's precondition"
+    );
+
+    // 20 -> 10 by the percentage, then -2.
+    assert_eq!(game.mitigate_incoming_damage(player, 20), 8);
+    // 2 -> 1 by the percentage, then -2 would be -1: a landed hit stays one.
+    assert_eq!(game.mitigate_incoming_damage(player, 2), 1);
+    // A miss is not raised to a hit.
+    assert_eq!(game.mitigate_incoming_damage(player, 0), 0);
+}
+
+#[test]
+fn a_wearers_total_deflection_is_capped() {
+    let mut game = deflecting_game(4112, "deflection_cap");
+    // Four of the +2 affix is 8 before the cap.
+    let player = wear_with_mitigation(&mut game, &deflecting_armour(4), 0);
+
+    assert_eq!(
+        game.mitigate_incoming_damage(player, 20),
+        20 - crate::tuning::DEFLECTION_MAX
+    );
+}
+
+/// What one scaling axis does to a copy's deflection, against a control
+/// stat on the same copy so the axis is known to have acted at all.
+fn deflection_and_control(game: &Game, copy: &GearCopy, level: u32) -> (i32, i32) {
+    let bonus = game.copy_bonus(copy, level).unwrap();
+    (bonus.deflection, bonus.mitigation)
+}
+
+#[test]
+fn deflection_is_not_scaled_by_gear_level() {
+    let game = deflecting_game(4113, "deflection_level");
+    let copy = deflecting_armour(1);
+    let (base, base_control) = deflection_and_control(&game, &copy, 1);
+    let (high, high_control) = deflection_and_control(&game, &copy, 10);
+
+    assert!(high_control > base_control, "level scaled nothing");
+    assert_eq!((base, high), (2, 2));
+}
+
+#[test]
+fn deflection_is_not_scaled_by_fusion_tier() {
+    let game = deflecting_game(4114, "deflection_tier");
+    let fused = GearCopy {
+        tier: 3,
+        ..deflecting_armour(1)
+    };
+    let (deflection, control) = deflection_and_control(&game, &fused, 1);
+
+    assert!(control > 9, "the tier scaled nothing");
+    assert_eq!(deflection, 2);
+}
+
+#[test]
+fn deflection_is_not_scaled_by_rarity() {
+    let game = deflecting_game(4115, "deflection_rarity");
+    let rare = GearCopy {
+        rarity: Rarity::Prismatic,
+        ..deflecting_armour(1)
+    };
+    let (deflection, control) = deflection_and_control(&game, &rare, 1);
+
+    assert!(control > 9, "the rarity scaled nothing");
+    assert_eq!(deflection, 2);
+}
+
+#[test]
+fn deflection_is_not_scaled_by_quality() {
+    let game = deflecting_game(4116, "deflection_quality");
+    let fine = GearCopy {
+        quality: crate::tuning::QUALITY_MAX,
+        ..deflecting_armour(1)
+    };
+    let (deflection, control) = deflection_and_control(&game, &fine, 1);
+
+    assert!(control > 9, "the quality scaled nothing");
+    assert_eq!(deflection, 2);
+}
+
+#[test]
+fn stat_summary_names_deflection() {
+    let game = Game::new(4117, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mods = EquipmentStats {
+        deflection: 2,
+        ..EquipmentStats::default()
+    };
+
+    assert_eq!(game.stat_summary(mods), "+2 DEFL");
 }

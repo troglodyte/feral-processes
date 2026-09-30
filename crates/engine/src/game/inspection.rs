@@ -2285,6 +2285,7 @@ impl Game {
             atk: mods.atk,
             mitigation: mods.mitigation,
             decompiler: mods.decompiler,
+            deflection: mods.deflection,
         })
     }
 

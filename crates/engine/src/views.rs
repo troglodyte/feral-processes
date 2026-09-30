@@ -2706,6 +2706,8 @@ pub struct ManifestEquipSlot {
     /// **Percentage points** — see `components::Stats::mitigation`.
     pub mitigation: i32,
     pub decompiler: i32,
+    /// Flat damage removed per hit — see `items::EquipmentStats::deflection`.
+    pub deflection: i32,
 }
 
 /// The creature-only half of a manifest — an owned program or a wild one.

@@ -622,6 +622,7 @@ impl Game {
         for (value, name) in [
             (mods.atk, "ATK"),
             (mods.mitigation, "MIT"),
+            (mods.deflection, "DEFL"),
             (mods.accuracy, "ACC"),
             (mods.evasion, "EVA"),
             (mods.decompiler, "DECOMP"),
@@ -1141,5 +1142,6 @@ fn scale_stats(stats: crate::items::EquipmentStats, count: u32) -> crate::items:
         },
         accuracy: stats.accuracy * n,
         evasion: stats.evasion * n,
+        deflection: stats.deflection * n,
     }
 }

@@ -4337,6 +4337,13 @@ pub const MAX_ATTACKS_PER_ROUND: u32 = 2;
 /// `Stats::power`'s effective-HP denominator away from zero.
 pub const MAX_MITIGATION_PERCENT: i32 = 75;
 
+/// Ceiling on a wearer's total Deflection, the flat per-hit reduction
+/// (`EquipmentStats::deflection`). Applied to the summed gear bonus, not per
+/// piece. Unlike the percentage cap this is not what prevents immunity — the
+/// floor of 1 in `Game::mitigate_incoming_damage` does that — it is what keeps
+/// a stack of small affixes from erasing every hit under a boss-tier one.
+pub const DEFLECTION_MAX: i32 = 6;
+
 /// The player's damage range with no weapon equipped. Replaces
 /// the flat `PLAYER_STRIKE_POWER` that used to be the player's one basic
 /// strike; a weapon **overrides** this rather than adding to it.

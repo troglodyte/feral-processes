@@ -1,6 +1,6 @@
 # Spend preview — plan
 
-Spec: `docs/superpowers/specs/2026-09-29-spend-preview-design.md`. Branch:
+Spec: `docs/superpowers/archive/specs/2026-09-29-spend-preview-design.md`. Branch:
 `worktree-level-up-summary`. TDD, a commit per green step, every new test
 mutation-checked with the fix committed. No save-format change. This is a
 **minor** release (`CHANGELOG.md` preamble).

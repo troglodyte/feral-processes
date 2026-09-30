@@ -1,6 +1,6 @@
 # Spend preview: fight figures on the Points screen and the Perks menu (TODO #57, remainder)
 
-**Status:** design approved in conversation 2026-09-29; spec awaiting review.
+**Status:** built in `v0.14.1`; unplayed.
 
 ## Intent
 

@@ -53,6 +53,20 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.1
+
+**The Points screen and the Perks menu now show what a choice does in a
+fight before you make it.** Since 0.14.0 a level-up grows no stat by
+itself, so the level-up page's fight figures barely moved and nothing
+showed what a stat point or a perk bought. The Points screen now shows hit
+chance, damage per swing and swings to win or be downed against a typical
+program of your zone, now → with your pending spend, updated on every key.
+The Perks menu shows the same for one more level of the highlighted perk,
+and buying one opens a page saying what it changed. The figures come from
+the real fight calculation, so a spend that an emulated body ignores shows
+no gain. The level-up page also gains a Mitigation row when that stat
+moves.
+
 ## 0.14.0
 
 **Levelling up now gives you six stat points to spend yourself.** Your stats

@@ -414,6 +414,14 @@ change of its own.
 | --- | --- | --- |
 | `2026-09-29-level-up-stat-allocation-design` | Attributes carry derived effects (Parity -> max HP, Analysis -> Atk and Decompiler, Bandwidth -> max Power, ...); the player levels by banking six stat points spent on a shared Points screen instead of automatic growth | `AttributeDef::effects`, `progression::derive`/`canonical_spend`, `Game::spend_stat_points`, `Mode::AllocateStats`, `crates/gui/src/render/points.rs`, save format 33, `docs/measurements/2026-09-29-level-up-stat-spend.md` |
 
+## The spec that landed on 2026-09-30
+
+Built in `v0.14.1` and archived on landing: no source file cites its path.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-29-spend-preview-design` | Fight figures against a typical zone program on the Points screen (now → with the pending spend) and the Perks menu (one more level of the highlighted perk), and a read-back page after buying a perk; each preview is the real computation run inside a rolled-back trial | `Game::preview_stat_spend`/`preview_perk`/`buy_perk`, `crates/engine/src/game/preview.rs`, `Mode::PerkBought`, `crates/gui/src/render/perk_bought.rs`. Not yet played at the keyboard |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

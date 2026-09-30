@@ -500,8 +500,7 @@ const DEFLECTING: &str = r#"(id: "deflecting", prefix: Some("Deflecting"), stats
 fn deflecting_game(seed: u32, tag: &str) -> Game {
     let dir = modded_assets_dir(tag, &[], &[], &[], &[], &[]);
     std::fs::write(dir.join("affixes").join("deflecting.ron"), DEFLECTING).unwrap();
-    let game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
-    game
+    Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap()
 }
 
 fn deflecting_armour(count: usize) -> GearCopy {

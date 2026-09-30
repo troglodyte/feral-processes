@@ -6,6 +6,7 @@
 pub(crate) mod support;
 
 mod achievements;
+mod affix_tree;
 mod affixes;
 mod alerts;
 mod assets;

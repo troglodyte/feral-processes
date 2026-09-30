@@ -1,5 +1,6 @@
 pub mod abilities;
 pub mod achievements;
+pub mod affix_tree;
 pub mod affixes;
 pub mod alerts;
 pub mod arena;

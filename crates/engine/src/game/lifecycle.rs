@@ -3407,13 +3407,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     species.insert(crate::tests::support::generic_species());
     let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
-    let (research, research_warnings) = ResearchDb::load_dir(
-        &assets_dir.join("research"),
-        &structures,
-        &abilities,
-        &tools,
-    )?;
-    warnings.extend(research_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
     // After the files, and after `abilities`, because every etched disk is
@@ -3443,6 +3436,17 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // pre-affix game — see `AffixDb`.
     let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"), &items)?;
     warnings.extend(affix_warnings);
+    // After `affixes`: every research-only affix is a node in the Affixes
+    // tree, derived from `AffixDb` (`affix_tree::synthesise_nodes`). Nothing
+    // between the old position and this one reads research.
+    let (research, research_warnings) = ResearchDb::load_dir(
+        &assets_dir.join("research"),
+        &structures,
+        &abilities,
+        &tools,
+        &affixes,
+    )?;
+    warnings.extend(research_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.

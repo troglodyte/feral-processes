@@ -212,6 +212,7 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 // tree has its own gate in `opens_routine_tree`.
                 discoverable: false,
                 unlocks_fusion: false,
+                opens_affix_tree: false,
             }
         })
         .collect()

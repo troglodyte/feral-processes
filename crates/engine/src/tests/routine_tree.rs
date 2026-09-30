@@ -192,9 +192,14 @@ fn shipped_research() -> (AbilityDb, crate::research::ResearchDb) {
     assert!(sw.is_empty());
     let (tools, tw) = crate::tools::ToolDb::load_dir(&assets.join("tools")).unwrap();
     assert!(tw.is_empty());
-    let (research, rw) =
-        crate::research::ResearchDb::load_dir(&assets.join("research"), &structures, &db, &tools)
-            .unwrap();
+    let (research, rw) = crate::research::ResearchDb::load_dir(
+        &assets.join("research"),
+        &structures,
+        &db,
+        &tools,
+        &crate::tests::support::shipped_affix_db(),
+    )
+    .unwrap();
     assert!(rw.is_empty(), "the shipped tree must load clean: {rw:?}");
     (db, research)
 }

@@ -19,6 +19,9 @@ pub enum ResearchTree {
     #[default]
     Base,
     Routines,
+    /// Synthesised from `AffixDb`, one node per research-only affix (see
+    /// `affix_tree::synthesise_nodes`).
+    Affixes,
 }
 
 /// A craft recipe a research node unlocks. Recipe *data* lives in the
@@ -146,6 +149,12 @@ pub struct ResearchDef {
     /// split — the catalogue is data, the effect is a named query in Rust.
     #[serde(default)]
     pub unlocks_fusion: bool,
+    /// Marks the node that opens the Affixes tree — set on
+    /// `mod_bench.ron`. `opens_routine_tree`'s exact shape, including its
+    /// lenient rule: if no loaded node carries it, the tree is open from the
+    /// start (`Game::affix_tree_open`).
+    #[serde(default)]
+    pub opens_affix_tree: bool,
 }
 
 #[derive(Resource, Default)]
@@ -171,6 +180,7 @@ impl ResearchDb {
         structures: &StructureDb,
         abilities: &crate::abilities::AbilityDb,
         tools: &ToolDb,
+        affixes: &crate::affixes::AffixDb,
     ) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = ResearchDb::default();
         let mut warnings = Vec::new();
@@ -208,6 +218,12 @@ impl ResearchDb {
         // `requires` (another synthesised node's id) is validated exactly
         // like an authored one's.
         for def in crate::routine_tree::synthesise_nodes(abilities) {
+            db.nodes.insert(def.id.clone(), def);
+        }
+        // One node per research-only affix, merged on the same terms: before
+        // the fixpoint, so a node's `requires` (another affix node) is
+        // validated, and a cycle among them is caught by the Kahn pass.
+        for def in crate::affix_tree::synthesise_nodes(affixes) {
             db.nodes.insert(def.id.clone(), def);
         }
 
@@ -359,7 +375,14 @@ mod tests {
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
-        let result = ResearchDb::load_dir(&dir, &structures, &abilities, &tools).unwrap();
+        let result = ResearchDb::load_dir(
+            &dir,
+            &structures,
+            &abilities,
+            &tools,
+            &crate::affixes::AffixDb::default(),
+        )
+        .unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         result
     }
@@ -538,8 +561,14 @@ mod tests {
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
-        let (db, warnings) =
-            ResearchDb::load_dir(&research_dir, &structures, &abilities, &tools).unwrap();
+        let (db, warnings) = ResearchDb::load_dir(
+            &research_dir,
+            &structures,
+            &abilities,
+            &tools,
+            &crate::tests::support::shipped_affix_db(),
+        )
+        .unwrap();
         assert!(
             warnings.is_empty(),
             "the shipped tree must not warn: {warnings:?}"
@@ -681,9 +710,14 @@ mod tests {
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
-        let (db, _) =
-            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities, &tools)
-                .unwrap();
+        let (db, _) = ResearchDb::load_dir(
+            &assets.join("research"),
+            &structures,
+            &abilities,
+            &tools,
+            &crate::tests::support::shipped_affix_db(),
+        )
+        .unwrap();
         let path = db.recommended_ids();
         assert!(
             !path.is_empty(),

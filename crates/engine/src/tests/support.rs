@@ -200,6 +200,17 @@ pub(super) fn set_zone(game: &mut Game, zone: u32) {
     game.world.resource_mut::<ZoneLevel>().0 = zone;
 }
 
+/// The shipped `AffixDb`, for a test that loads a `ResearchDb` over the
+/// shipped tree — the Affixes tree is synthesised from it.
+pub(crate) fn shipped_affix_db() -> crate::affixes::AffixDb {
+    let assets = test_assets_dir();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
+    crate::affixes::AffixDb::load_dir(&assets.join("affixes"), &items)
+        .unwrap()
+        .0
+}
+
 pub(crate) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }

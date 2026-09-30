@@ -1082,7 +1082,14 @@ fn research_db_with_tool_unlocks(tag: &str, nodes: &[(&str, &[&str])]) -> Resear
     let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
     let (abilities, _) = AbilityDb::load_dir(&assets.join("abilities")).unwrap();
     let (tool_db, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
-    let (db, warnings) = ResearchDb::load_dir(&dir, &structures, &abilities, &tool_db).unwrap();
+    let (db, warnings) = ResearchDb::load_dir(
+        &dir,
+        &structures,
+        &abilities,
+        &tool_db,
+        &crate::affixes::AffixDb::default(),
+    )
+    .unwrap();
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
         warnings.is_empty(),

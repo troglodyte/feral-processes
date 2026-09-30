@@ -344,6 +344,21 @@ impl Game {
         self.capability_unlocked(|d| d.opens_routine_tree)
     }
 
+    /// Whether the Affixes research tree is open — `capability_unlocked` over
+    /// `opens_affix_tree`, so a mod that deletes the Mod Bench node is not
+    /// stranded behind a gate nothing can open.
+    pub fn affix_tree_open(&self) -> bool {
+        self.capability_unlocked(|d| d.opens_affix_tree)
+    }
+
+    /// Whether `affix` has been researched — the one door apply goes
+    /// through. An affix node is an ordinary node in the `Research` set, so
+    /// this is `is_researched` over the synthesised id; it is false for an
+    /// affix with no research block, which has no node.
+    pub fn affix_researched(&self, affix: &crate::affixes::AffixId) -> bool {
+        self.is_researched(&crate::affix_tree::node_id(affix.as_str()))
+    }
+
     /// Whether fusing two tamed programs together is unlocked — a call into
     /// `capability_unlocked` over `unlocks_fusion`, `routine_tree_open`'s
     /// exact shape including its lenient rule.
@@ -458,6 +473,16 @@ impl Game {
                 .all()
                 .filter(|d| d.tree == ResearchTree::Base)
                 .filter(|d| self.base_node_visible(d))
+                .collect();
+        }
+        if tree == ResearchTree::Affixes {
+            // Closed lists nothing, known nodes included — the routine
+            // tree's own rule. Open lists only what the base has found.
+            let tree_open = self.affix_tree_open();
+            return db
+                .all()
+                .filter(|d| d.tree == ResearchTree::Affixes)
+                .filter(|d| tree_open && self.base_node_visible(d))
                 .collect();
         }
         let tree_open = self.routine_tree_open();
@@ -946,6 +971,12 @@ impl Game {
         if def.tree == ResearchTree::Base && !self.base_node_visible(&def) {
             return Err("Unknown research.".to_string());
         }
+        // An affix node is hidden by the same rule, plus its tree's gate.
+        if def.tree == ResearchTree::Affixes
+            && !(self.affix_tree_open() && self.base_node_visible(&def))
+        {
+            return Err("Unknown research.".to_string());
+        }
         if self.is_researched(id) {
             return Err(format!("{} is already researched.", def.name));
         }
@@ -1172,7 +1203,8 @@ impl Game {
         true
     }
 
-    /// Every node a study may find right now: a **base** node that is
+    /// Every node a study may find right now: a **base** node (or an Affixes
+    /// node, while that tree is open) that is
     /// `discoverable`, not already discovered, not already researched, has
     /// every prerequisite satisfied and is inside the zone the party has
     /// reached.
@@ -1185,14 +1217,20 @@ impl Game {
     /// future filters this pool or narrows it rather than restating the
     /// rule. `ResearchDb::all` is ordered (cheapest first, ties by id), so
     /// the pool a seeded run indexes into is stable.
-    fn eligible_discoveries(&self) -> Vec<ResearchId> {
+    pub(crate) fn eligible_discoveries(&self) -> Vec<ResearchId> {
         let db = self.world.resource::<ResearchDb>();
+        // Affix nodes join the pool only once their tree is open, so before
+        // the Mod Bench is researched the pool — and every seeded study roll
+        // indexing into it — is exactly what it was without them.
+        let affixes_open = self.affix_tree_open();
         let discovered = &self
             .world
             .resource::<crate::resources::DiscoveredResearch>()
             .0;
         db.all()
-            .filter(|d| d.tree == ResearchTree::Base)
+            .filter(|d| {
+                d.tree == ResearchTree::Base || (d.tree == ResearchTree::Affixes && affixes_open)
+            })
             .filter(|d| d.discoverable)
             .filter(|d| !discovered.contains(&d.id))
             .filter(|d| !self.node_researched(d))

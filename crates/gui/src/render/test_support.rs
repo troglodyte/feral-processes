@@ -199,6 +199,18 @@ pub(super) fn game_with_a_rare_party_companion(
 /// the next save field, and a fixture short a field reads as the feature
 /// being broken (`tests/support.rs`'s `spawn_tamed` records the same rule).
 fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Game {
+    game_with_tweaked_programs(fixture, seed, programs, |_| {})
+}
+
+/// `game_with_programs`, each `CreatureSave` handed to `tweak` before it is
+/// pushed — for a fixture that needs one field off its default and not a
+/// second 45-field literal.
+pub(super) fn game_with_tweaked_programs(
+    fixture: &str,
+    seed: u32,
+    programs: &[(bool, &str)],
+    tweak: impl Fn(&mut CreatureSave),
+) -> Game {
     let mut game = new_game(seed);
     let path = scratch_path(fixture, seed);
     let _cleanup = RemoveOnDrop(&path);
@@ -269,7 +281,9 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         drop_trooper: false,
     };
     for &(wielded, name) in programs {
-        data.creatures.push(program(wielded, name));
+        let mut save = program(wielded, name);
+        tweak(&mut save);
+        data.creatures.push(save);
     }
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()

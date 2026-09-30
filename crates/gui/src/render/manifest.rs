@@ -214,19 +214,15 @@ fn draw_header(
     );
     let text_x = rect.x + painter.measure_map(&glyph, glyph_size).width + m.pad;
 
-    let boss = matches!(&view.subject, ManifestSubject::Program(p) if p.is_boss);
-    let rarity = match &view.subject {
-        ManifestSubject::Program(p) => p.rarity,
-        ManifestSubject::Player(_) => Rarity::Ordinary,
-    };
-    let title = subject_title(view);
+    let boss = is_boss(view);
+    let rarity = header_rarity(view);
     // Both flags, and the tier keeps its own colour claim: a boss reads red
     // and an Overclocked spawn gold, so a program that is both would have to
     // give one up if this were a single string in a single colour. `[BOSS]`
     // wins the title because it is the one that decides whether to open the
     // fight; the tier follows it, drawn in the same silver/gold the map's
     // bar uses so the two channels agree.
-    let head = format!("{title}{}", if boss { "  [BOSS]" } else { "" });
+    let head = header_title(view);
     painter.ui_bold(
         head.clone(),
         text_x,
@@ -237,7 +233,10 @@ fn draw_header(
     if let Some(tier_color) = rarity_color(rarity) {
         painter.ui_bold(
             rarity_tag(rarity),
-            text_x + painter.measure_ui(&head, m.title()).width,
+            text_x
+                + painter
+                    .measure(crate::paint::Face::UiBold, &head, m.title())
+                    .width,
             rect.y + m.title() as f32,
             m.title(),
             tier_color,
@@ -447,6 +446,27 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
 /// — the branch's original regression was a missing box, not a wrong row
 /// count or a wrong order, and a fixture that omits a box passes every
 /// test while the real page still doesn't fit.
+fn is_boss(view: &ManifestView) -> bool {
+    matches!(&view.subject, ManifestSubject::Program(p) if p.is_boss)
+}
+
+pub(super) fn header_rarity(view: &ManifestView) -> Rarity {
+    match &view.subject {
+        ManifestSubject::Program(p) => p.rarity,
+        ManifestSubject::Player(_) => Rarity::Ordinary,
+    }
+}
+
+/// The bold title line before the tier tag: the subject's title and, for a
+/// boss, its `[BOSS]` flag.
+pub(super) fn header_title(view: &ManifestView) -> String {
+    format!(
+        "{}{}",
+        subject_title(view),
+        if is_boss(view) { "  [BOSS]" } else { "" }
+    )
+}
+
 /// What heads the page: who this is, and in parentheses what kind of thing
 /// they are.
 ///

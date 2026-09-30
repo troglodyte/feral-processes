@@ -282,32 +282,47 @@ mod tests {
     /// after the glyph, at the narrowest window.
     #[test]
     fn the_widest_title_and_the_strip_fit_the_header() {
-        let game = census_game();
-        let species = game
-            .species_defs()
-            .into_iter()
-            .map(|d| d.name.clone())
-            .max_by_key(|n| n.chars().count())
-            .expect("species exist");
-        let name = format!(
-            "{} ({species})",
-            "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN)
-        );
-        let head = format!("{name}{}", rarity_tag(Rarity::Gold));
-        with_painter(|p| {
-            for (w, h) in WINDOWS {
-                let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &[], &m);
-                let glyph = p.measure_map("x", m.title() * 2).width + m.pad;
-                let title = p.measure_ui(&head, m.title()).width;
-                let strip = tab_strip_width(p, &m);
-                assert!(
-                    glyph + title + m.pad + strip <= l.header.w,
-                    "title and tab strip collide at {w}x{h}: {} into {}",
-                    glyph + title + m.pad + strip,
-                    l.header.w
-                );
-            }
-        });
+        use super::super::manifest::{header_rarity, header_title};
+        use super::super::test_support::game_with_tweaked_programs;
+        use feral_processes_engine::components::Rarity;
+
+        // The two ways a title gets long: a full custom name, or a handle
+        // that has the species appended to it. Either can be a boss of the
+        // highest tier, in a deep zone.
+        let custom = "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
+        for (fixture, name) in [
+            ("title_custom", Some(custom.as_str())),
+            ("title_handle", None),
+        ] {
+            let mut game = game_with_tweaked_programs(fixture, 11, &[(false, "")], |c| {
+                c.custom_name = name.map(str::to_string);
+                c.rarity = Rarity::Gold;
+                c.boss = true;
+                c.zone = 10;
+            });
+            let subject = game.manifest_subjects()[1];
+            let view = game.manifest(subject).expect("an owned program has a page");
+            let head = header_title(&view);
+            let tag = rarity_tag(header_rarity(&view));
+            assert!(head.contains("[BOSS]") && !tag.is_empty(), "{head:?}{tag}");
+            with_painter(|p| {
+                for (w, h) in WINDOWS {
+                    let m = ui_metrics(h);
+                    let l = manifest_layout(w, h, 0, &[], &m);
+                    let glyph = p.measure_map("x", m.title() * 2).width + m.pad;
+                    let title = p
+                        .measure(crate::paint::Face::UiBold, &head, m.title())
+                        .width
+                        + p.measure(crate::paint::Face::UiBold, &tag, m.title()).width;
+                    let strip = tab_strip_width(p, &m);
+                    assert!(
+                        glyph + title + m.pad + strip <= l.header.w,
+                        "title {head:?}{tag} and tab strip collide at {w}x{h}: {} into {}",
+                        glyph + title + m.pad + strip,
+                        l.header.w
+                    );
+                }
+            });
+        }
     }
 }

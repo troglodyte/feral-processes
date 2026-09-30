@@ -15,16 +15,30 @@ use crate::*;
 const MOD_BENCH: &str = "mod_bench";
 
 impl Game {
-    /// How many affixes `copy` may carry — one, plus one per fusion.
+    /// How many affixes `copy` may carry — one, plus one per fusion, and
+    /// none for anything a bench does not take (`bench_slot`).
     pub fn affix_slots(&self, copy: &GearCopy) -> u32 {
+        if self.bench_slot(&copy.item).is_none() {
+            return 0;
+        }
         1 + copy.tier
+    }
+
+    /// The slot `item` fills if a Mod Bench takes it: Weapon and Armor only.
+    /// A Module buys taming or a stat line the affix pool was never priced
+    /// against, so it is refused rather than left to an affix that happens
+    /// to name no slot.
+    fn bench_slot(&self, item: &crate::items::ItemId) -> Option<EquipmentSlot> {
+        self.equipment_of(item)
+            .map(|(slot, _)| slot)
+            .filter(|slot| matches!(slot, EquipmentSlot::Weapon | EquipmentSlot::Armor))
     }
 
     /// Researched affixes that may go on `copy`'s slot, sorted by id. Not
     /// filtered by free slots or by what the pack can pay: the picker shows
     /// those as refusals, so the player sees what exists.
     pub fn appliable_affixes(&self, copy: &GearCopy) -> Vec<AffixId> {
-        let Some((slot, _)) = self.equipment_of(&copy.item) else {
+        let Some(slot) = self.bench_slot(&copy.item) else {
             return Vec::new();
         };
         let mut found: Vec<AffixId> = self
@@ -135,7 +149,7 @@ impl Game {
         &self,
         copy: &GearCopy,
     ) -> Result<(EquipmentSlot, Option<EquippedItem>), String> {
-        let Some((slot, _)) = self.equipment_of(&copy.item) else {
+        let Some(slot) = self.bench_slot(&copy.item) else {
             return Err(format!("{} can't be modified.", self.item_name(&copy.item)));
         };
         let player = self.player_entity();

@@ -4799,9 +4799,20 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     let mut checked = 0;
     for def in research.all() {
         // The transitive `requires` closure, guarded on `seen` so a modded
-        // cycle terminates — `ResearchDb::recommended_ids`' reason.
+        // cycle terminates — `ResearchDb::recommended_ids`' reason. An
+        // Affixes-tree node is also behind its tree's gate, so the gate's own
+        // closure counts: it is what the player has researched before one of
+        // these nodes can so much as be found.
         let mut prereqs: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut stack: Vec<String> = def.requires.clone();
+        if def.tree == crate::research::ResearchTree::Affixes {
+            stack.extend(
+                research
+                    .all()
+                    .filter(|d| d.opens_affix_tree)
+                    .map(|d| d.id.clone()),
+            );
+        }
         while let Some(id) = stack.pop() {
             if !prereqs.insert(id.clone()) {
                 continue;
@@ -4910,8 +4921,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 30,
-        "expected the shipped base tree's 30 nodes; a count that moved means a node was \
+        checked, 31,
+        "expected the shipped base tree's 31 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5223,11 +5234,11 @@ fn deleting_the_fork_routines_leaves_the_game_as_it_was() {
 /// This repo has already been bitten by exactly that.
 ///
 /// `routine_fabrication` and `program_refactoring` are named on the other
-/// side deliberately: they carry `requires_subject` like the twenty-one, and
+/// side deliberately: they carry `requires_subject` like the base ones, and
 /// leaving them visible is what keeps the routine tree and companion fusion
 /// arriving when they do today rather than behind a dice roll.
 #[test]
-fn exactly_the_twenty_one_named_research_nodes_are_discoverable() {
+fn exactly_the_named_research_nodes_are_discoverable() {
     let game = Game::new(4118, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut found: Vec<&str> = game
         .world
@@ -5241,6 +5252,9 @@ fn exactly_the_twenty_one_named_research_nodes_are_discoverable() {
         found,
         vec![
             "ablative",
+            "affix:deflecting",
+            "affix:of_deflection",
+            "affix:of_introspection",
             "armor_bench",
             "cache_coherence",
             "capacitance",
@@ -5252,6 +5266,7 @@ fn exactly_the_twenty_one_named_research_nodes_are_discoverable() {
             "drop_pods",
             "firewall",
             "memory_mapping",
+            "mod_bench",
             "model_inspection",
             "monofilament",
             "neural_amp",

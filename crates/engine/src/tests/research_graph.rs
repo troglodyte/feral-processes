@@ -42,17 +42,18 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
     );
     assert_eq!(by_tier.get(&1).map(Vec::len), Some(9));
     assert_eq!(by_tier.get(&2).map(Vec::len), Some(7));
-    assert_eq!(by_tier.get(&3).map(Vec::len), Some(5));
+    assert_eq!(by_tier.get(&3).map(Vec::len), Some(6));
     assert_eq!(by_tier.get(&4).map(Vec::len), Some(3));
     assert_eq!(by_tier.get(&5).map(Vec::len), Some(2));
-    assert_eq!(g.cells.len(), 30, "every shipped base node gets a cell");
+    assert_eq!(g.cells.len(), 31, "every shipped base node gets a cell");
     assert_eq!(g.tiers, 6);
     assert_eq!(g.widest, 9, "tier 1 is the crowded one now");
 }
 
 /// Tier is the *longest* path from a root, so the diamond's short leg
 /// stretches rather than pointing backwards. `paging` -> `segmentation` is
-/// the one shipped edge that spans more than one tier, and asserting it by
+/// one of the two shipped edges that span more than one tier (the other is
+/// the Mod Bench's shorter bench parent), and asserting it by
 /// name is what stops a "simplification" to shortest-path shipping silently.
 #[test]
 fn every_edge_points_strictly_rightward() {
@@ -79,8 +80,9 @@ fn every_edge_points_strictly_rightward() {
         .collect();
     assert_eq!(
         spans.len(),
-        1,
-        "exactly one shipped edge skips a tier, and no edge router is drawn for it: {spans:?}"
+        2,
+        "exactly two shipped edges skip a tier (`paging` -> `segmentation`, and the Mod Bench's \
+         shorter bench parent), and no edge router is drawn for either: {spans:?}"
     );
 }
 

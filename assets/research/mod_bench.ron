@@ -1,0 +1,12 @@
+(
+    id: "mod_bench",
+    name: "Mod Bench",
+    description: "The bench where gear is modified. Opens the Affixes research tree, and with it the chance to find affixes that only research can teach.",
+    cost: 40,
+    materials: [("bytecode_block", 16), ("logic_wafer", 8)],
+    requires: ["weapon_bench", "armor_bench"],
+    requires_subject: true,
+    discoverable: true,
+    opens_affix_tree: true,
+    unlocks_structures: ["mod_bench"],
+)

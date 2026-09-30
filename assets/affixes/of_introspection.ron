@@ -1,0 +1,12 @@
+(
+    id: "of_introspection",
+    suffix: Some("of Introspection"),
+    stats: (decompiler: 2),
+    slots: Some([Weapon]),
+    research: Some((
+        cost: 30,
+        materials: [("trace_sniffer", 3), ("logic_wafer", 6)],
+        min_zone: 2,
+        apply_cost: [("trace_sniffer", 2), ("core_fragment", 4)],
+    )),
+)

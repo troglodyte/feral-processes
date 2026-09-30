@@ -1,0 +1,13 @@
+(
+    id: "of_deflection",
+    suffix: Some("of Deflection"),
+    stats: (deflection: 4),
+    slots: Some([Armor]),
+    research: Some((
+        cost: 90,
+        materials: [("hardened_shell", 8), ("bytecode_block", 20)],
+        min_zone: 4,
+        requires: ["deflecting"],
+        apply_cost: [("hardened_shell", 3), ("core_fragment", 6)],
+    )),
+)

@@ -1,0 +1,11 @@
+(
+    id: "mod_bench",
+    name: "Mod Bench",
+    description: "Where gear is modified: fit a researched affix to a weapon or armor, or strip one off. One standing anywhere in the base is enough.",
+    glyph: 'M',
+    color: Magenta,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 10,
+    power_draw: 3,
+)

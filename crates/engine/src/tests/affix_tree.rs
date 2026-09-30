@@ -18,8 +18,24 @@ const BETA: &str = r#"(id: "t_beta", suffix: Some("of Beta"), stats: (decompiler
 const GATE: &str = r#"(id: "t_gate", name: "Test Gate", description: "g", cost: 1,
     opens_affix_tree: true)"#;
 
+/// The shipped Mod Bench node with its gate flag removed — the lenient rule's
+/// own fixture, so a test of the tree sees it open from the start unless it
+/// installs a gate of its own.
+fn ungated_mod_bench() -> String {
+    let body =
+        std::fs::read_to_string(test_assets_dir().join("research").join("mod_bench.ron")).unwrap();
+    assert!(
+        body.contains("opens_affix_tree: true,"),
+        "fixture assumption"
+    );
+    body.replace("opens_affix_tree: true,", "")
+}
+
 fn affix_game(tag: &str, seed: u32, affixes: &[(&str, &str)], research: &[(&str, &str)]) -> Game {
-    let dir = modded_assets_dir(tag, &[], &[], &[], research, &[]);
+    let mut research = research.to_vec();
+    let stripped = ungated_mod_bench();
+    research.push(("mod_bench.ron", &stripped));
+    let dir = modded_assets_dir(tag, &[], &[], &[], &research, &[]);
     for (name, body) in affixes {
         std::fs::write(dir.join("affixes").join(name), body).unwrap();
     }
@@ -74,10 +90,24 @@ fn a_research_only_affix_becomes_a_hidden_node_carrying_its_block() {
 fn an_affix_with_no_research_block_gets_no_node() {
     let game = affix_game("tree_no_block", 9302, &[], &[]);
     let db = game.world.resource::<ResearchDb>();
+    let mut nodes: Vec<String> = db
+        .all()
+        .filter(|d| d.tree == ResearchTree::Affixes)
+        .map(|d| d.id.clone())
+        .collect();
+    let mut expected: Vec<String> = game
+        .affix_defs()
+        .iter()
+        .filter(|d| d.research.is_some())
+        .map(|d| format!("affix:{}", d.id.as_str()))
+        .collect();
+    nodes.sort();
+    expected.sort();
     assert!(
-        db.all().all(|d| d.tree != ResearchTree::Affixes),
-        "the shipped drop-pool affixes must not become nodes"
+        !expected.is_empty(),
+        "the shipped set has research-only affixes"
     );
+    assert_eq!(nodes, expected, "a drop-pool affix must not become a node");
 }
 
 #[test]
@@ -240,4 +270,12 @@ fn the_discovery_pool_admits_affix_nodes_only_once_the_gate_is_researched() {
     let mut stripped = after.clone();
     stripped.retain(|id| !id.starts_with("affix:"));
     assert_eq!(stripped, before);
+}
+
+#[test]
+fn the_shipped_tree_opens_when_the_mod_bench_is_researched() {
+    let mut game = Game::new(9310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(!game.affix_tree_open());
+    research(&mut game, "mod_bench");
+    assert!(game.affix_tree_open());
 }

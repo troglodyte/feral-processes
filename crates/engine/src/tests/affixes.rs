@@ -683,7 +683,7 @@ fn the_shipped_roll_pool_is_every_shipped_affix_that_fits() {
     for slot in EquipmentSlot::ALL {
         let mut expected: Vec<&str> = defs
             .iter()
-            .filter(|d| d.fits(slot))
+            .filter(|d| d.fits(slot) && d.research.is_none())
             .map(|d| d.id.as_str())
             .collect();
         expected.sort();

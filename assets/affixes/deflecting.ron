@@ -1,0 +1,12 @@
+(
+    id: "deflecting",
+    prefix: Some("Deflecting"),
+    stats: (deflection: 2),
+    slots: Some([Armor]),
+    research: Some((
+        cost: 30,
+        materials: [("logic_wafer", 6)],
+        min_zone: 2,
+        apply_cost: [("core_fragment", 4)],
+    )),
+)

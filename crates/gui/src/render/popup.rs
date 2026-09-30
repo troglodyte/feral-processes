@@ -1882,8 +1882,8 @@ mod tests {
             .collect();
         assert!(count > 1 && previews.iter().all(Option::is_some));
         let m = ui_metrics(720.0);
-        for selected in 0..count {
-            let line = perk_preview_line(previews[selected].as_ref());
+        for (selected, preview) in previews.iter().enumerate() {
+            let line = perk_preview_line(preview.as_ref());
             assert!(line.starts_with("Next level: "), "{line}");
             let rows = perks_menu_rows(3, 2, &line, &groups, &[], selected, 500);
             let l = popup_layout(720.0, 0.85, &rows, 0, &m);

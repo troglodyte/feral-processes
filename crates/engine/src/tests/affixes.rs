@@ -51,7 +51,7 @@ fn load_affixes(dir: &std::path::Path) -> (AffixDb, Vec<String>) {
 /// Not `tuning.rs` constants: these bound the *content*, are checked against
 /// the content, and an affix past one stops being a bonus on an item and
 /// starts being the item.
-fn axes(stats: EquipmentStats) -> [(&'static str, i32, i32); 6] {
+fn axes(stats: EquipmentStats) -> [(&'static str, i32, i32); 7] {
     [
         ("ATK", stats.atk, 3),
         ("MIT", stats.mitigation, 9),
@@ -60,6 +60,9 @@ fn axes(stats: EquipmentStats) -> [(&'static str, i32, i32); 6] {
         ("EVA", stats.evasion, 5),
         // A damage affix widens a band, and the high end is what bounds it.
         ("DMG", stats.damage.max, 3),
+        // Flat per-hit reduction, unscaled and capped per wearer at
+        // `tuning::DEFLECTION_MAX` (6): +4 leaves room for a second piece.
+        ("DEFL", stats.deflection, 4),
     ]
 }
 
@@ -469,6 +472,23 @@ fn a_notes_txt_file_is_ignored_without_warnings() {
 
     assert_eq!(db.all().count(), 1);
     assert!(warnings.is_empty());
+}
+
+/// The calibration reaches Deflection, so a shipped or modded-in affix past
+/// +4 DEFL is caught by the census rather than slipping through unmeasured.
+#[test]
+fn the_calibration_census_measures_deflection() {
+    let stats = EquipmentStats {
+        deflection: 5,
+        ..EquipmentStats::default()
+    };
+
+    assert!(
+        axes(stats)
+            .iter()
+            .any(|&(name, value, ceiling)| name == "DEFL" && value > ceiling),
+        "a +5 DEFL affix must read as past its ceiling"
+    );
 }
 
 // ---------------------------------------------------------------------------

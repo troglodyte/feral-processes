@@ -276,7 +276,26 @@ impl App {
         self.allocation_origin = origin;
         self.status_line = None;
         self.menu_selected = 0;
+        self.refresh_allocation_duel();
         self.mode = Mode::AllocateStats;
+    }
+
+    /// The one writer of `allocation_duel`: the fight the pending spend
+    /// would give, read from the engine on every change to the spend.
+    fn refresh_allocation_duel(&mut self) {
+        if self.stat_allocation.is_none() {
+            self.allocation_duel = None;
+            return;
+        }
+        let spend: Vec<_> = self
+            .allocation_spent
+            .iter()
+            .map(|(id, points)| (id.clone(), *points))
+            .collect();
+        self.allocation_duel = self
+            .game
+            .as_mut()
+            .and_then(|g| g.preview_stat_spend(&spend));
     }
 
     /// The Points screen's rows, for the renderer.
@@ -317,6 +336,7 @@ impl App {
                         Ok(()) => self.status_line = None,
                         Err(why) => self.refuse(why),
                     }
+                    self.refresh_allocation_duel();
                 }
             }
         }
@@ -347,13 +367,14 @@ impl App {
             .game
             .as_ref()
             .map_or(0, |g| g.player_status().perk_points);
-        self.mode = match (self.allocation_origin, committed) {
-            (AllocationOrigin::Perks, _) => Mode::Perks,
-            (AllocationOrigin::LevelUp, true) if perk_points > 0 => Mode::Perks,
-            (AllocationOrigin::LevelUp, _) => Mode::Playing,
-        };
-        if self.mode == Mode::Playing {
-            self.show_next_notification();
+        self.refresh_allocation_duel();
+        match (self.allocation_origin, committed) {
+            (AllocationOrigin::Perks, _) => self.open_perks(),
+            (AllocationOrigin::LevelUp, true) if perk_points > 0 => self.open_perks(),
+            (AllocationOrigin::LevelUp, _) => {
+                self.mode = Mode::Playing;
+                self.show_next_notification();
+            }
         }
     }
 }

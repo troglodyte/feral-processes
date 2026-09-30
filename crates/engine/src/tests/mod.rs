@@ -90,6 +90,7 @@ mod settlements;
 mod siege;
 mod sorties;
 mod spawning;
+mod spend_preview;
 mod sprite_palette;
 mod stack;
 mod stack_movement;

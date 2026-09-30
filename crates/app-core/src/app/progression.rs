@@ -37,9 +37,42 @@ impl App {
         };
         if let Some(idx) = self.selected_index(key, perks.len()) {
             let Some(game) = &mut self.game else { return };
-            let outcome = game.unlock_perk(perks[idx]);
-            self.report(outcome);
+            match game.buy_perk(perks[idx]) {
+                Ok(report) => {
+                    self.status_line = None;
+                    self.pending_perk_report = Some(report);
+                    self.mode = Mode::PerkBought;
+                }
+                Err(why) => self.refuse(why),
+            }
         }
+    }
+
+    /// `Enter` or `Esc` leaves the purchase page for the menu it came from.
+    pub(crate) fn handle_perk_bought_key(&mut self, key: GameKey) {
+        if matches!(key, GameKey::Enter | GameKey::Esc) {
+            self.pending_perk_report = None;
+            self.open_perks();
+        }
+    }
+
+    /// The one door into `Mode::Perks`: the previews are read here, so every
+    /// route in shows figures for the perks as they stand now.
+    pub(crate) fn open_perks(&mut self) {
+        self.refresh_perk_previews();
+        self.mode = Mode::Perks;
+    }
+
+    fn refresh_perk_previews(&mut self) {
+        let Some(game) = &mut self.game else {
+            self.perk_previews.clear();
+            return;
+        };
+        self.perk_previews = game
+            .perk_defs()
+            .into_iter()
+            .map(|def| game.preview_perk(def.id))
+            .collect();
     }
 
     /// Confirms or backs out of a full perk refund.
@@ -50,9 +83,9 @@ impl App {
                     let outcome = game.respec_perks();
                     self.report(outcome);
                 }
-                self.mode = Mode::Perks;
+                self.open_perks();
             }
-            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => self.mode = Mode::Perks,
+            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => self.open_perks(),
             _ => {}
         }
     }

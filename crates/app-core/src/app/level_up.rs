@@ -30,7 +30,7 @@ impl App {
             }
             GameKey::Char('P') => {
                 self.pending_level_up = None;
-                self.mode = Mode::Perks;
+                self.open_perks();
             }
             _ => {}
         }

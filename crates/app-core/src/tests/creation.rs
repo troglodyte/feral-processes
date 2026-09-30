@@ -771,6 +771,21 @@ fn the_points_step_opens_on_a_full_spread() {
     );
 }
 
+/// The creation Points step has no fight to compare against yet, so it never
+/// asks the engine for one.
+#[test]
+fn the_creation_points_step_carries_no_duel() {
+    let mut app = opened("no_duel");
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    skip_the_look(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Points);
+    assert!(app.allocation_duel.is_none());
+    press(&mut app, GameKey::Right);
+    assert!(app.allocation_duel.is_none());
+}
+
 /// The rolled spread is a starting point, not a fixed one — the player must
 /// still be able to move points around, and moving them must not create or
 /// destroy any: `cost()` reads the same pool figure before and after.

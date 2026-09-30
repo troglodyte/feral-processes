@@ -3577,6 +3577,37 @@ pub struct AlertView {
     pub unread: bool,
 }
 
+/// The four duel figures against a typical program of `zone`, each a
+/// `(before, after)` pair. Built by `game::level_up::duel_comparison`, the
+/// one place the arithmetic lives, and shared by the level-up page, the
+/// Points screen and the perk preview.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DuelComparison {
+    pub zone: u32,
+    pub hit_chance: (f64, f64),
+    pub per_swing: (f64, f64),
+    pub swings_to_win: (u32, u32),
+    pub swings_to_down_you: (u32, u32),
+}
+
+/// What one more level of a perk changes: the stat rows that moved and the
+/// duel, both from a trial that is rolled back (`Game::preview_perk`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PerkPreview {
+    pub stats: Vec<StatRow>,
+    pub duel: DuelComparison,
+}
+
+/// A purchased perk read back: what it is, the level now held, and what it
+/// changed (`Game::buy_perk`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PerkReport {
+    pub name: String,
+    pub level: u32,
+    pub description: String,
+    pub preview: PerkPreview,
+}
+
 /// The level-up summary page, read back from `Game::take_level_up_report`.
 /// Several levels gained before the page shows are **one page**:
 /// `from_level` is the level the player held before the first of them, and
@@ -3584,10 +3615,10 @@ pub struct AlertView {
 ///
 /// Every pair is `(before, after)`. `stats` is `StatRow`'s own shape — the
 /// log's own labels and arrow format — with a row already dropped when it
-/// did not move (mitigation never grows with level, so a run with only that
-/// row eligible ships an empty list rather than a page with nothing on it).
+/// did not move, so a level that moved no stat ships an empty list rather
+/// than a page of unchanged rows.
 ///
-/// The four duel figures are measured against `zone`'s typical foe (see
+/// The duel figures are measured against `duel.zone`'s typical foe (see
 /// `Game::typical_foe`), which does not itself change between the two
 /// columns — only the player does. `perk_points_gained` and
 /// `stat_points_gained` are `current − snapshot`, not
@@ -3598,12 +3629,8 @@ pub struct AlertView {
 pub struct LevelUpReport {
     pub from_level: u32,
     pub to_level: u32,
-    pub zone: u32,
     pub stats: Vec<StatRow>,
-    pub hit_chance: (f64, f64),
-    pub per_swing: (f64, f64),
-    pub swings_to_win: (u32, u32),
-    pub swings_to_down_you: (u32, u32),
+    pub duel: DuelComparison,
     pub perk_points_gained: u32,
     pub perk_points_unspent: u32,
     pub stat_points_gained: u32,

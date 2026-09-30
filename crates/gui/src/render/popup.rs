@@ -1687,6 +1687,8 @@ mod tests {
                 "perks",
                 perks_menu_rows(
                     3,
+                    2,
+                    "Next level: Max HP 120\u{2192}132 \u{b7} ATK 14\u{2192}16 \u{b7} hit 71%\u{2192}71% \u{b7} per swing 9.4\u{2192}10.1",
                     // Split across two headed sections, because the headings
                     // and the blank line between them are rows too: a
                     // fixture of one flat section would measure a body
@@ -1853,6 +1855,52 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// **The Perks menu at its full shipped perk count, with the preview line
+    /// in its pinned header.** The header takes body capacity for as long as
+    /// it is shown, so at the smallest window every perk must still be
+    /// reachable with the highlight inside the visible window, and the
+    /// header must leave the body room to scroll at all.
+    #[test]
+    fn the_perks_menu_with_its_preview_line_keeps_every_perk_reachable() {
+        use super::super::progression::{perk_preview_line, perks_menu_rows};
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game = feral_processes_engine::Game::new(
+            7,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+        let groups = game.perk_groups();
+        let count = game.perk_defs().len();
+        let previews: Vec<_> = game
+            .perk_defs()
+            .iter()
+            .map(|d| game.preview_perk(d.id))
+            .collect();
+        assert!(count > 1 && previews.iter().all(Option::is_some));
+        let m = ui_metrics(720.0);
+        for (selected, preview) in previews.iter().enumerate() {
+            let line = perk_preview_line(preview.as_ref());
+            assert!(line.starts_with("Next level: "), "{line}");
+            let rows = perks_menu_rows(3, 2, &line, &groups, &[], selected, 500);
+            let l = popup_layout(720.0, 0.85, &rows, 0, &m);
+            assert!(
+                l.capacity >= 4,
+                "the header leaves the {count}-perk list only {} visible rows at 720px",
+                l.capacity
+            );
+            let idx = l
+                .body
+                .iter()
+                .position(|r| matches!(r, Row::Item { selected: true, .. }))
+                .expect("the selected perk is in the body");
+            assert!(
+                idx >= l.offset && idx < l.offset + l.capacity,
+                "perk {selected} of {count} is outside the visible window"
+            );
         }
     }
 

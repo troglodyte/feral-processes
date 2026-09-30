@@ -7,6 +7,7 @@
 use feral_processes_app_core::CreationRow;
 use feral_processes_engine::attributes::DerivedStat;
 
+use super::level_up::{duel_heading, duel_lines};
 use super::popup::{PopupSize, Row, draw_popup, item_row, text_row};
 use super::*;
 
@@ -99,6 +100,14 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
     if rows.is_empty() {
         rows.push(text_row("Nothing to spend points on."));
     }
+    // What the pending spend does in a fight, after the attribute rows and
+    // pinned with the footer: the screen keeps its whole attribute list in
+    // view and this block costs the body no row.
+    if let Some(duel) = &app.allocation_duel {
+        rows.push(text_row(""));
+        rows.push(text_row(duel_heading(duel)));
+        rows.extend(duel_lines(duel).into_iter().map(text_row));
+    }
     rows.push(text_row(""));
     rows.push(text_row(footer(
         app.allocation_pool(),
@@ -189,6 +198,54 @@ mod tests {
         let spent = text(&app);
         assert!(spent.contains("Max HP 90 \u{2192} 102"), "{spent}");
         assert!(spent.contains("4 of 6 points left"), "{spent}");
+    }
+
+    /// The block sits in the pinned footer, so the widest Points screen, at
+    /// every shipped attribute with the widest duel and a refusal showing,
+    /// must still fit the smallest window without scrolling: a scroll here
+    /// would hide attribute rows behind the block.
+    #[test]
+    fn the_points_screen_with_its_duel_block_fits_without_scrolling() {
+        use feral_processes_engine::DuelComparison;
+        let game = shipped_game();
+        let mut app = shipped_app();
+        app.stat_allocation = Some(allocation(&game, 999));
+        app.allocation_duel = Some(DuelComparison {
+            zone: 99,
+            hit_chance: (0.05, 0.99),
+            per_swing: (1234.9, 9999.9),
+            swings_to_win: (999, 999),
+            swings_to_down_you: (999, 999),
+        });
+        app.mode = Mode::AllocateStats;
+        let rows = allocate_stats_rows(&app);
+        let m = ui_metrics(720.0);
+        assert!(
+            !super::super::popup::popup_scrolls(
+                720.0,
+                PopupSize::Large,
+                &rows,
+                Some("Requires Zone 3 first."),
+                &m
+            ),
+            "the Points screen scrolls at 1280x720 with {} rows drawn",
+            rows.len()
+        );
+        with_painter(|p| {
+            let room = super::super::popup::popup_body_width(1280.0, PopupSize::Large, &m);
+            for row in &rows {
+                let text = super::super::popup::row_label_text(row);
+                assert!(
+                    p.measure_ui_advance(&text, m.font_size) <= room,
+                    "a Points row overflows: {text}"
+                );
+            }
+        });
+        let text: Vec<String> = rows
+            .iter()
+            .map(super::super::popup::row_label_text)
+            .collect();
+        assert!(text.iter().any(|t| t.contains("AGAINST A TYPICAL ZONE 99")));
     }
 
     fn shipped_app() -> App {

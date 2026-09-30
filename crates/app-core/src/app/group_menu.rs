@@ -469,7 +469,10 @@ impl App {
         let rows = self.group_rows(entries);
         if let Some(idx) = self.selected_index(key, rows.len()) {
             self.menu_origin = Some(self.mode);
-            self.mode = rows[idx].target;
+            match rows[idx].target {
+                Mode::Perks => self.open_perks(),
+                target => self.mode = target,
+            }
         }
     }
 

@@ -1,10 +1,11 @@
 //! The perk and research pickers.
 
+use super::level_up::duel_moved;
 use super::popup::*;
 use super::*;
 use feral_processes_engine::perks::{Perk, PerkDef};
 use feral_processes_engine::{
-    ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote, RespecSubject,
+    PerkPreview, ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote, RespecSubject,
 };
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
@@ -17,20 +18,27 @@ use feral_processes_engine::{
 /// scrollable_body`.
 pub(super) fn perks_menu_rows(
     points: u32,
+    stat_points: u32,
+    preview: &str,
     groups: &[(String, Vec<PerkDef>)],
     held: &[Perk],
     selected: usize,
     respec_cost: u32,
 ) -> Vec<Row> {
     // The respec is named on the existing instruction line rather than in a
-    // footer of its own: this popup has no scroll, so a row here is a row the
-    // eighteenth perk loses. `PopupSize::Large` carries about 114 monospace
-    // cells, which this sits well inside.
+    // footer of its own: the header is pinned above the scrolling body, so a
+    // row here is a row of the list the player can no longer see at once.
+    // `PopupSize::Large` carries about 114 monospace cells, which this sits
+    // well inside. `[S]` is named beside the Perk Points line rather than in
+    // the instruction line: that one is already near the popup's width, and
+    // `[S]` is only useful with points to spend.
     let mut rows = vec![
         Row::TextColored(format!("Perk Points: {points}"), CYAN),
+        Row::TextColored(format!("Stat points: {stat_points}  [S] spends them"), CYAN),
         text_row(format!(
             "A row's key buys a level.  [X] refunds every perk for {respec_cost} Credits.  Esc to close"
         )),
+        text_row(preview),
         text_row(""),
     ];
     // The shortcut a player types is an index into the *flattened* list,
@@ -89,8 +97,52 @@ fn heading_rows(name: &str, gap_above: bool) -> Vec<Row> {
     rows
 }
 
+/// The line under the instructions: what the highlighted perk's next level
+/// does to the player and to a typical foe's fight. One line and not the
+/// Points screen's block, because it sits in the pinned header and costs
+/// the scrolling list a row for as long as it is shown. A perk that moves
+/// nothing here says so, since a blank line reads as a broken screen.
+pub(super) fn perk_preview_line(preview: Option<&PerkPreview>) -> String {
+    let Some(preview) = preview else {
+        return String::new();
+    };
+    let mut parts: Vec<String> = preview
+        .stats
+        .iter()
+        .map(|row| format!("{} {}\u{2192}{}", row.label, row.before, row.after))
+        .collect();
+    let duel = &preview.duel;
+    if duel_moved(duel) {
+        parts.push(format!(
+            "hit {:.0}%\u{2192}{:.0}%",
+            duel.hit_chance.0 * 100.0,
+            duel.hit_chance.1 * 100.0
+        ));
+        parts.push(format!(
+            "per swing {:.1}\u{2192}{:.1}",
+            duel.per_swing.0, duel.per_swing.1
+        ));
+        parts.push(format!(
+            "win in {}\u{2192}{}",
+            duel.swings_to_win.0, duel.swings_to_win.1
+        ));
+        parts.push(format!(
+            "down in {}\u{2192}{}",
+            duel.swings_to_down_you.0, duel.swings_to_down_you.1
+        ));
+    }
+    if parts.is_empty() {
+        return format!(
+            "Next level: no change against a typical zone {} program",
+            duel.zone
+        );
+    }
+    format!("Next level: {}", parts.join(" \u{b7} "))
+}
+
 pub(super) fn draw_perks_menu(
     game: &mut Game,
+    previews: &[Option<PerkPreview>],
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -98,22 +150,15 @@ pub(super) fn draw_perks_menu(
 ) {
     let status = game.player_status();
     let quote = game.respec_quote(RespecSubject::Perks);
-    let mut rows = perks_menu_rows(
+    let preview = perk_preview_line(previews.get(selected).and_then(Option::as_ref));
+    let rows = perks_menu_rows(
         status.perk_points,
+        status.stat_points,
+        &preview,
         &game.perk_groups(),
         &status.unlocked_perks,
         selected,
         quote.cost,
-    );
-    // Named beside the Perk Points line rather than in the help line: that
-    // one is already near the popup's width, and `[S]` is only useful with
-    // points to spend.
-    rows.insert(
-        1,
-        Row::TextColored(
-            format!("Stat points: {}  [S] spends them", status.stat_points),
-            CYAN,
-        ),
     );
     draw_popup("Perks", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -728,6 +773,8 @@ mod tests {
 
         let rows = perks_menu_rows(
             3,
+            0,
+            "",
             &groups,
             &[],
             0,
@@ -843,6 +890,8 @@ mod tests {
                 "Perks",
                 perks_menu_rows(
                     3,
+                    0,
+                    "",
                     &perk_groups,
                     &status.unlocked_perks,
                     0,
@@ -877,6 +926,87 @@ mod tests {
                 assert!(measured > 0, "the {screen} picker drew no rows to measure");
             }
         });
+    }
+
+    /// The Perks menu's preview line is drawn as one row and `draw_row`
+    /// never wraps, so the widest line any shipped perk produces must fit the
+    /// popup body. Read off the real engine, for the reason the census above
+    /// reads real assets.
+    #[test]
+    fn every_shipped_perks_preview_line_fits_the_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for def in game.perk_defs() {
+                let line = perk_preview_line(game.preview_perk(def.id).as_ref());
+                let drawn = p.measure_ui_advance(&line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "{}'s preview line overflows by {:.0}px:\n{line}",
+                    def.name,
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// The preview line is a header row of the menu, right under the
+    /// instruction line, and nothing else draws it.
+    #[test]
+    fn the_preview_line_is_the_row_under_the_instructions() {
+        let rows = perks_menu_rows(3, 2, "Next level: sentinel", &[], &[], 0, 500);
+        let texts: Vec<&str> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Text(t) | Row::TextColored(t, _) => t.as_str(),
+                Row::Item { text, .. } => text.as_str(),
+            })
+            .collect();
+        let at = texts
+            .iter()
+            .position(|t| t.contains("[X] refunds"))
+            .expect("the instruction line");
+        assert_eq!(texts[at + 1], "Next level: sentinel");
+    }
+
+    /// A perk that moves nothing says so rather than drawing a blank row, and
+    /// one that moves a stat and a fight figure lists both.
+    #[test]
+    fn the_preview_line_names_what_moves() {
+        use feral_processes_engine::progression::StatRow;
+        use feral_processes_engine::{DuelComparison, PerkPreview};
+        let still = DuelComparison {
+            zone: 4,
+            hit_chance: (0.5, 0.5),
+            per_swing: (5.0, 5.0),
+            swings_to_win: (4, 4),
+            swings_to_down_you: (7, 7),
+        };
+        let none = PerkPreview {
+            stats: Vec::new(),
+            duel: still.clone(),
+        };
+        assert_eq!(
+            perk_preview_line(Some(&none)),
+            "Next level: no change against a typical zone 4 program"
+        );
+        let moved = PerkPreview {
+            stats: vec![StatRow::new("ATK", 14, 16)],
+            duel: DuelComparison {
+                per_swing: (9.4, 10.1),
+                swings_to_win: (6, 5),
+                ..still
+            },
+        };
+        assert_eq!(
+            perk_preview_line(Some(&moved)),
+            "Next level: ATK 14\u{2192}16 \u{b7} hit 50%\u{2192}50% \u{b7} per swing \
+             9.4\u{2192}10.1 \u{b7} win in 6\u{2192}5 \u{b7} down in 7\u{2192}7"
+        );
+        assert_eq!(perk_preview_line(None), "");
     }
 
     /// The header is `research_header`'s own argument now, not a scan of

@@ -92,6 +92,11 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // edit row 30, back out, and press `t` on the same row.
             | (Mode::SpritePicker, Mode::SpriteEditor)
             | (Mode::SpriteEditor, Mode::SpritePicker)
+            // Buying a level opens its page and `Enter` comes back: the
+            // player is buying down a list, and losing the row after each
+            // level would make that key, page, scroll, key.
+            | (Mode::Perks, Mode::PerkBought)
+            | (Mode::PerkBought, Mode::Perks)
     )
 }
 
@@ -310,6 +315,7 @@ impl App {
             Mode::SortieSquad => self.handle_sortie_squad_key(key),
             Mode::RouteCargo => self.handle_route_cargo_key(key),
             Mode::Perks => self.handle_perks_key(key),
+            Mode::PerkBought => self.handle_perk_bought_key(key),
             Mode::RespecPerksConfirm => self.handle_respec_perks_confirm_key(key),
             Mode::RespecTalentsConfirm => self.handle_respec_talents_confirm_key(key),
             Mode::Research => self.handle_research_key(key, ResearchTree::Base),

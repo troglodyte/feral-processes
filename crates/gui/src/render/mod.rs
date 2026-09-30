@@ -61,6 +61,7 @@ mod meta;
 mod notify;
 mod outposts;
 mod party;
+mod perk_bought;
 mod points;
 mod popup;
 mod progression;
@@ -584,6 +585,7 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::FieldRoutineCell
             | Mode::Notification
             | Mode::LevelUp
+            | Mode::PerkBought
             | Mode::SpritePicker
             | Mode::SpriteEditor
     )
@@ -662,6 +664,14 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 Some(report) => level_up::draw_level_up(report, painter, &m),
                 // Only ever entered with a report, `Mode::Notification`'s
                 // own unreachable-in-practice fallback.
+                None => draw_mode_overlay(app, None, painter, &m),
+            }
+        }
+        // `Mode::LevelUp`'s arrangement exactly.
+        Mode::PerkBought => {
+            draw_playing_base(app, fx, None, painter, &m, reveal);
+            match &app.pending_perk_report {
+                Some(report) => perk_bought::draw_perk_bought(report, painter, &m),
                 None => draw_mode_overlay(app, None, painter, &m),
             }
         }
@@ -879,6 +889,12 @@ fn cost_rows(game: &Game, cost: &[(ItemId, u32)], have: impl Fn(&ItemId) -> u32)
 /// about, as the `(item, tier)` pair both their screens take.
 fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
+    // Cloned off `app` before `app.game` is borrowed, `group_rows`' reason,
+    // and only where it is read: a preview is a few numbers per perk.
+    let perk_previews = match app.mode {
+        Mode::Perks => app.perk_previews.clone(),
+        _ => Vec::new(),
+    };
     let graph_view = app.research_graph_view;
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
@@ -1435,7 +1451,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 m,
             )
         }
-        Mode::Perks => draw_perks_menu(game, selected, refusal, painter, m),
+        Mode::Perks => draw_perks_menu(game, &perk_previews, selected, refusal, painter, m),
         Mode::AllocateStats => points::draw_allocate_stats(&allocation_rows, refusal, painter, m),
         Mode::RespecPerksConfirm => {
             let quote = game.respec_quote(RespecSubject::Perks);
@@ -1558,7 +1574,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 121] = [
+    const ALL_MODES: [Mode; 122] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1670,6 +1686,7 @@ mod tests {
         Mode::HelpPage,
         Mode::Notification,
         Mode::LevelUp,
+        Mode::PerkBought,
         Mode::GameOver,
         Mode::QuitRunConfirm,
         Mode::QuitAppConfirm,

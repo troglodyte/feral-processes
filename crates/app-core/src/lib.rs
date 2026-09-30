@@ -114,12 +114,13 @@ use feral_processes_engine::views::WorkColumnKey;
 use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
-    DispatchReach, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
+    DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, LevelUpReport, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageSource, OutpostReport, ProgramSaleOption, RigToolView,
-    RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
-    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
-    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkTable, condense,
+    MESSAGE_LOG_CAP, MessageSource, OutpostReport, PerkPreview, PerkReport, ProgramSaleOption,
+    RigToolView, RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
+    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
+    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
+    WorkTable, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2144,6 +2145,11 @@ pub enum Mode {
     /// page and opens `Mode::Perks` instead, since the page exists to
     /// answer "what do I do with what I just earned."
     LevelUp,
+    /// The page a perk purchase opens: what the level bought and what it
+    /// moved, from `App::pending_perk_report`. `Enter` or `Esc` returns to
+    /// `Mode::Perks` with the highlight kept, so buying several levels is
+    /// key, page, key.
+    PerkBought,
     /// Spending banked stat points on attributes: the creation Points
     /// screen, generalised. `App::stat_allocation` is the subject and
     /// `App::allocation_spent` the pending spend - `Mode` is `Copy` with
@@ -2377,6 +2383,7 @@ impl Mode {
             // over a fight.
             | Mode::Notification
             | Mode::LevelUp
+            | Mode::PerkBought
             | Mode::AllocateStats => false,
         }
     }
@@ -2609,6 +2616,19 @@ pub struct App {
     /// The Points screen on show in `Mode::AllocateStats`. Its **one**
     /// writer is `App::open_stat_allocation`.
     pub stat_allocation: Option<StatAllocation>,
+    /// What the pending spend on the Points screen would change in a fight.
+    /// The **one** writer is `App::refresh_allocation_duel`, called on open
+    /// and after every spend key; never on the creation wizard's Points
+    /// step, where it stays `None`.
+    pub allocation_duel: Option<DuelComparison>,
+    /// What one more level of each perk would change, indexed as
+    /// `Game::perk_defs`. The **one** writer is `App::refresh_perk_previews`,
+    /// reached only through `App::open_perks`, so no route into the Perks
+    /// menu shows a stale list.
+    pub perk_previews: Vec<Option<PerkPreview>>,
+    /// The report on screen in `Mode::PerkBought`. Its one writer is
+    /// `handle_perks_key`.
+    pub pending_perk_report: Option<PerkReport>,
     /// The spend pending on `stat_allocation`, per attribute. Empty when
     /// the screen opens; the allocation's methods take it as an argument.
     pub allocation_spent:

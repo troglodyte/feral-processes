@@ -3078,7 +3078,7 @@ pub struct Temporary {
 /// perks have been bought with them. See `perks::Perk` — a perk can be
 /// bought more than once, so `unlocked` holds one entry per level bought
 /// (duplicates allowed) rather than a unique set.
-#[derive(Component, Default, Clone)]
+#[derive(Component, Default, Clone, Debug)]
 pub struct Perks {
     pub points: u32,
     pub unlocked: Vec<Perk>,

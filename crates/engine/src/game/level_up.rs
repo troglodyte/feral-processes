@@ -32,6 +32,55 @@ pub(crate) fn swings_to(ehp: f64, per_swing: f64) -> u32 {
     (ehp / per_swing).ceil() as u32
 }
 
+/// The stat rows that moved between two snapshots: Max HP, ATK and
+/// Mitigation. The level-up page and the perk preview both draw these, so
+/// they cannot disagree about which stats a comparison covers.
+pub(crate) fn stat_rows(before: &LevelSnapshot, after: &LevelSnapshot) -> Vec<StatRow> {
+    [
+        StatRow::new("Max HP", before.max_hp, after.max_hp),
+        StatRow::new("ATK", before.combatant.atk, after.combatant.atk),
+        StatRow::new("Mitigation", before.mitigation, after.mitigation),
+    ]
+    .into_iter()
+    .filter(|row| row.before != row.after)
+    .collect()
+}
+
+/// The duel figures of `before` against `after`, both facing the same
+/// `foe` (only the player moves). Every figure is a call into
+/// `battle::hit_chance` / `expected_damage` / `effective_hp` and
+/// `swings_to`.
+pub(crate) fn duel_comparison(
+    before: &LevelSnapshot,
+    after: &LevelSnapshot,
+    foe: battle::Combatant,
+    foe_ehp: f64,
+    zone: u32,
+) -> DuelComparison {
+    let per_swing_before = battle::expected_damage(before.combatant, foe);
+    let per_swing_after = battle::expected_damage(after.combatant, foe);
+    let foe_per_swing_before = battle::expected_damage(foe, before.combatant);
+    let foe_per_swing_after = battle::expected_damage(foe, after.combatant);
+    let player_ehp_before = battle::effective_hp(before.max_hp, before.mitigation);
+    let player_ehp_after = battle::effective_hp(after.max_hp, after.mitigation);
+    DuelComparison {
+        zone,
+        hit_chance: (
+            battle::hit_chance(before.combatant.accuracy, foe.evasion),
+            battle::hit_chance(after.combatant.accuracy, foe.evasion),
+        ),
+        per_swing: (per_swing_before, per_swing_after),
+        swings_to_win: (
+            swings_to(foe_ehp, per_swing_before),
+            swings_to(foe_ehp, per_swing_after),
+        ),
+        swings_to_down_you: (
+            swings_to(player_ehp_before, foe_per_swing_before),
+            swings_to(player_ehp_after, foe_per_swing_after),
+        ),
+    }
+}
+
 impl Game {
     /// `player`'s level-up "before"/"now" state: level, the two stats a
     /// level-up can move, Perk Points, stat points, and the swing
@@ -107,39 +156,19 @@ impl Game {
         let now = self.snapshot_player(player);
         let (foe, foe_ehp) = self.typical_foe();
 
-        let stats = [
-            StatRow::new("Max HP", snapshot.max_hp, now.max_hp),
-            StatRow::new("ATK", snapshot.combatant.atk, now.combatant.atk),
-        ]
-        .into_iter()
-        .filter(|row| row.before != row.after)
-        .collect();
-
-        let hit_before = battle::hit_chance(snapshot.combatant.accuracy, foe.evasion);
-        let hit_after = battle::hit_chance(now.combatant.accuracy, foe.evasion);
-        let per_swing_before = battle::expected_damage(snapshot.combatant, foe);
-        let per_swing_after = battle::expected_damage(now.combatant, foe);
-
-        let foe_per_swing_before = battle::expected_damage(foe, snapshot.combatant);
-        let foe_per_swing_after = battle::expected_damage(foe, now.combatant);
-        let player_ehp_before = battle::effective_hp(snapshot.max_hp, snapshot.mitigation);
-        let player_ehp_after = battle::effective_hp(now.max_hp, now.mitigation);
+        let duel = duel_comparison(
+            &snapshot,
+            &now,
+            foe,
+            foe_ehp,
+            self.world.resource::<ZoneLevel>().0,
+        );
 
         Some(LevelUpReport {
             from_level: snapshot.level,
             to_level: now.level,
-            zone: self.world.resource::<ZoneLevel>().0,
-            stats,
-            hit_chance: (hit_before, hit_after),
-            per_swing: (per_swing_before, per_swing_after),
-            swings_to_win: (
-                swings_to(foe_ehp, per_swing_before),
-                swings_to(foe_ehp, per_swing_after),
-            ),
-            swings_to_down_you: (
-                swings_to(player_ehp_before, foe_per_swing_before),
-                swings_to(player_ehp_after, foe_per_swing_after),
-            ),
+            stats: stat_rows(&snapshot, &now),
+            duel,
             // `current − snapshot`, not `PERK_POINTS_PER_LEVEL * levels` —
             // correction 6. An
             // overflow point banked by the same award that levelled is then

@@ -1,0 +1,13 @@
+// What a bystander is left holding after watching one program turn on
+// another. Weaker than `turned_on_me`, which is the victim's own; it names the
+// aggressor, so a base that lets a brawler loose grows several programs that
+// would rather not stand beside it.
+(
+    id: "saw_turn_on",
+    name: "Saw it turn on another",
+    blurb: "I watched it go for one of us.",
+    valence: -3.0,
+    half_life: 5000,
+    subject: Program,
+    strike_cap: 3,
+)

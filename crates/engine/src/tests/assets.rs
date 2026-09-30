@@ -2994,6 +2994,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // aggressor and outlasts it.
         ("vented", K::Nothing),
         ("turned_on_me", K::Program),
+        // The same call, for every other staff body within
+        // `BOND_WITNESS_REACH` of the victim. Weaker, and names the
+        // aggressor.
+        ("saw_turn_on", K::Program),
         // `Game::note_respites`, off `tick_inner` on a period. The one
         // fondness written by an errand the program took itself, and the
         // mechanism the morale errand is built out of: morale has no reserve

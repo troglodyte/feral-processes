@@ -138,8 +138,26 @@ impl Game {
             format!("{who} came out of it calmer. {them} will not forget it."),
         );
         self.remember(brawl.aggressor, "vented", MemorySubject::Nothing);
-        if let Some(id) = self.world.get::<ProgramId>(brawl.aggressor).copied() {
-            self.remember(brawl.victim, "turned_on_me", MemorySubject::Program(id));
+        let Some(id) = self.world.get::<ProgramId>(brawl.aggressor).copied() else {
+            return;
+        };
+        self.remember(brawl.victim, "turned_on_me", MemorySubject::Program(id));
+        let Some(at) = self.world.get::<Position>(brawl.victim).copied() else {
+            return;
+        };
+        // Weaker than the victim's own grudge, and written to everyone close
+        // enough to have seen it: this is what lets a brawler's reputation
+        // spread through the staff rather than stopping at the one it hit.
+        for witness in self.base_staff() {
+            if witness == brawl.aggressor || witness == brawl.victim {
+                continue;
+            }
+            let Some(p) = self.world.get::<Position>(witness) else {
+                continue;
+            };
+            if (p.x - at.x).abs().max((p.y - at.y).abs()) <= crate::tuning::BOND_WITNESS_REACH {
+                self.remember(witness, "saw_turn_on", MemorySubject::Program(id));
+            }
         }
     }
 

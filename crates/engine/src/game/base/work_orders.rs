@@ -2439,6 +2439,24 @@ impl Game {
             {
                 continue;
             }
+            // A body does not stand beside one it holds a grudge against.
+            // Signed through `Bond::avoids`, so a fondness never triggers
+            // it; the adjacency is read first because the bond is a fold
+            // over a store and most candidates have no neighbour at all.
+            if staff.iter().any(|&other| {
+                other != worker
+                    && self
+                        .world
+                        .get::<Position>(other)
+                        .is_some_and(|p| (p.x - tile.x).abs().max((p.y - tile.y).abs()) <= 1)
+                    && self
+                        .world
+                        .get::<components::ProgramId>(other)
+                        .copied()
+                        .is_some_and(|id| self.bond(worker, id).avoids())
+            }) {
+                continue;
+            }
             held.insert((tile.x, tile.y));
             if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
                 *pos = tile;

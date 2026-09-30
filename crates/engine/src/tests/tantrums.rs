@@ -9,7 +9,7 @@ use super::support::*;
 use crate::components::{Memories, MemorySubject, Position, Structure};
 use crate::needs::NeedId;
 use crate::structures::{StructureDb, StructureId};
-use crate::tuning::{BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES};
+use crate::tuning::{BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, BOND_WITNESS_REACH};
 use crate::*;
 
 fn coherence() -> NeedId {
@@ -705,5 +705,58 @@ fn a_program_left_unslotted_reaches_lashing_out_on_its_own() {
     assert!(
         morale <= crate::tuning::MORALE_LASHES_OUT_AT,
         "a saturated unslotted grudge must reach the tantrum rung alone, got {morale}"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Witnesses
+// ---------------------------------------------------------------------
+
+fn close_a_brawl(game: &mut Game, aggressor: Entity, victim: Entity) {
+    game.close_brawl(&Brawl {
+        aggressor,
+        victim,
+        ticks_left: 0,
+        dealt: 5,
+        taken: 5,
+    });
+}
+
+#[test]
+fn a_witness_in_reach_remembers_the_aggressor_and_nobody_else_does() {
+    let mut game = Game::new(104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_scattered_base(&mut game);
+    let (aggressor, victim, near, far) = (staff[0], staff[1], staff[2], staff[3]);
+    place_at(&mut game, victim, 100, 100);
+    place_at(
+        &mut game,
+        near,
+        100 + BOND_WITNESS_REACH,
+        100 - BOND_WITNESS_REACH,
+    );
+    place_at(&mut game, far, 100 + BOND_WITNESS_REACH + 1, 100);
+    let id = *game.world.get::<ProgramId>(aggressor).unwrap();
+
+    close_a_brawl(&mut game, aggressor, victim);
+
+    assert_eq!(
+        entries(&game, near, "saw_turn_on"),
+        vec![MemorySubject::Program(id)],
+        "Chebyshev reach, corner included"
+    );
+    for (who, what) in [
+        (far, "out of reach"),
+        (aggressor, "the aggressor"),
+        (victim, "the victim"),
+    ] {
+        assert!(
+            entries(&game, who, "saw_turn_on").is_empty(),
+            "{what} did not witness it"
+        );
+    }
+    assert_eq!(
+        entries(&game, victim, "turned_on_me"),
+        vec![MemorySubject::Program(id)],
+        "the victim's own grudge is unchanged"
     );
 }

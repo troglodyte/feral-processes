@@ -62,6 +62,19 @@
   `party::role_of`'s reason: `task_progress_system` has no `Game` to ask, and
   two folds would eventually disagree about whether an unresolvable def
   counts — which is the property the whole empty-catalogue guarantee rests on.
+- **Morale is the memory fold plus the situational sum, and
+  `situations::morale` is the one place they meet.** `Game::morale` and
+  `task_progress_system`'s `CycleModifiers::morale` both call it over the
+  `Situation` that `assess_situation_system` wrote this tick (`Game::
+  assess_situations` seeds it on load, so a read before the first tick is not
+  zero). The trap is the cap: `SITUATION_MAX_TOTAL` sits below
+  `-MORALE_SULKS_AT` so thoughts alone can never sulk a program, and
+  `situations::scaled_rows` scales every row to the clamp so the memories page
+  (`memory_report` appends them as "now" rows) still sums to `Game::morale`.
+  Thoughts feed morale and **never** opinion or bond; `BesideRival` reads
+  `memories::opinion_about`, the same call `Game::opinion_about` makes.
+  `Unpowered` and `MachineRunning` are exclusive (dark wins), and
+  `MachineRunning` reads last tick's status.
 - **A work memory is either an edge or a stretch, and `Game::note_postings`
   is the stretch half.** It runs beside `note_strandings`, after the schedule
   and before the clock moves, but **on a period rather than on an edge**: a

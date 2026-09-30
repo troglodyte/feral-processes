@@ -4,6 +4,8 @@ paths:
   - "**/needs*"
   - "**/disposition*"
   - "assets/memories/**"
+  - "**/situations*"
+  - "assets/thoughts/**"
 ---
 
 # Load-bearing seams: What a program remembers
@@ -36,6 +38,10 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   and two folds would eventually disagree about whether an unresolvable def
   counts — which is the property the whole empty-catalogue guarantee rests
   on.
+- **Morale is the memory fold plus the situational sum, and
+  `situations::morale` is the one place they meet**, capped by
+  `SITUATION_MAX_TOTAL` below the sulk line, rowed by `scaled_rows` on the
+  memories page, and never read into opinion or bond.
 - **A work memory is either an edge or a stretch, and `Game::note_postings`
   is the stretch half.**
 - **A `Structure` memory names the kind, not the entity**, which is what

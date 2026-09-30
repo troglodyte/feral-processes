@@ -40,11 +40,25 @@ impl Game {
         if total > banked {
             return Err(SpendError::InsufficientPoints);
         }
-        let mut attrs = self
-            .world
-            .get::<Attributes>(entity)
-            .cloned()
-            .ok_or(SpendError::NoSuchTarget)?;
+        if self.world.get::<Attributes>(entity).is_none() {
+            return Err(SpendError::NoSuchTarget);
+        }
+        self.apply_stat_spend(entity, spend);
+        Ok(())
+    }
+
+    /// The write half of `spend_stat_points`: attributes, the banked pool,
+    /// the recompute and the current-HP raise. No validation, so a caller
+    /// that has not checked affordability gets a pool that floors at zero
+    /// rather than an underflow - the preview relies on that.
+    pub(crate) fn apply_stat_spend(
+        &mut self,
+        entity: Entity,
+        spend: &[(crate::attributes::AttributeId, u32)],
+    ) {
+        let Some(mut attrs) = self.world.get::<Attributes>(entity).cloned() else {
+            return;
+        };
         for (id, points) in spend {
             let base = self
                 .world
@@ -55,7 +69,10 @@ impl Game {
         }
         let max_hp_before = self.world.get::<Stats>(entity).map_or(0, |s| s.max_hp);
         self.world.entity_mut(entity).insert(attrs);
-        self.world.get_mut::<StatPoints>(entity).unwrap().0 = banked - total;
+        let total: u32 = spend.iter().fold(0, |n, (_, p)| n.saturating_add(*p));
+        if let Some(mut points) = self.world.get_mut::<StatPoints>(entity) {
+            points.0 = points.0.saturating_sub(total);
+        }
         self.recompute_derived(entity);
         // Current HP rises by what the maximum rose by, so a level-up's full
         // heal is not undone by spending the points it paid, and a wounded
@@ -64,7 +81,6 @@ impl Game {
             let raised = (stats.max_hp - max_hp_before).max(0);
             stats.hp = (stats.hp + raised).min(stats.max_hp);
         }
-        Ok(())
     }
 
     /// The catalogue as the Points screen previews against - a clone, so a

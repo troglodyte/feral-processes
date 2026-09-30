@@ -161,41 +161,15 @@ impl Game {
         }
     }
 
-    /// Spends Perk Points to buy another level of `perk` (see
-    /// `perks::Perk`). Perks are repeatable — there's no cap on levels,
-    /// only on how many Perk Points you've earned.
-    ///
-    /// Name and price come from `PerkDb`, so a perk whose `.ron` file is
-    /// missing or malformed can't be bought at all — the same state the
-    /// picker shows by leaving it out of the list.
-    pub fn unlock_perk(&mut self, perk: Perk) -> Result<(), String> {
-        if self.is_game_over().is_some() {
-            return Err("Can't do that right now.".into());
-        }
-        let player = self.player_entity();
-        let (name, cost) = {
-            let def = self
-                .world
-                .resource::<PerkDb>()
-                .get(perk)
-                .ok_or_else(|| "That perk isn't available.".to_string())?;
-            (def.name.clone(), def.cost)
-        };
-        let level = {
-            let mut perks = self
-                .world
-                .get_mut::<Perks>(player)
-                .ok_or_else(|| "No perks available.".to_string())?;
-            if perks.points < cost {
-                return Err(format!(
-                    "Not enough Perk Points (need {cost}, have {}).",
-                    perks.points
-                ));
-            }
-            perks.points -= cost;
+    /// The write half of `unlock_perk`: one more level of `perk` in
+    /// `Perks::unlocked`, its stat gain into `Stats` and the receipt, then
+    /// the recompute. Returns the level now held. No cost check, no log and
+    /// no deed - the preview runs it on a trial that is rolled back.
+    pub(crate) fn apply_perk_level(&mut self, player: Entity, perk: Perk) -> u32 {
+        let level = self.world.get_mut::<Perks>(player).map_or(0, |mut perks| {
             perks.unlocked.push(perk);
             perks.level(perk)
-        };
+        });
         // What the gain *is* belongs to the perk; writing it belongs here,
         // so `Stats` keeps one writer. `Buffer` reads the current maximum,
         // which is why the gain is asked for after the purchase.
@@ -238,6 +212,43 @@ impl Game {
         }
         self.world.entity_mut(player).insert(receipt);
         self.recompute_derived(player);
+        level
+    }
+
+    /// Spends Perk Points to buy another level of `perk` (see
+    /// `perks::Perk`). Perks are repeatable — there's no cap on levels,
+    /// only on how many Perk Points you've earned.
+    ///
+    /// Name and price come from `PerkDb`, so a perk whose `.ron` file is
+    /// missing or malformed can't be bought at all — the same state the
+    /// picker shows by leaving it out of the list.
+    pub fn unlock_perk(&mut self, perk: Perk) -> Result<(), String> {
+        if self.is_game_over().is_some() {
+            return Err("Can't do that right now.".into());
+        }
+        let player = self.player_entity();
+        let (name, cost) = {
+            let def = self
+                .world
+                .resource::<PerkDb>()
+                .get(perk)
+                .ok_or_else(|| "That perk isn't available.".to_string())?;
+            (def.name.clone(), def.cost)
+        };
+        {
+            let mut perks = self
+                .world
+                .get_mut::<Perks>(player)
+                .ok_or_else(|| "No perks available.".to_string())?;
+            if perks.points < cost {
+                return Err(format!(
+                    "Not enough Perk Points (need {cost}, have {}).",
+                    perks.points
+                ));
+            }
+            perks.points -= cost;
+        }
+        let level = self.apply_perk_level(player, perk);
         self.log(format!("You buy the {name} perk (level {level})."));
         self.note_deed(crate::contracts::Deed::UnlockedPerk);
         Ok(())

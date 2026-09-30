@@ -39,9 +39,11 @@ const LABEL_LINES: usize = 2;
 /// lanes that gutter is carrying.
 ///
 /// **Every edge makes its vertical run in the gutter immediately right of
-/// its source**, even the one shipped edge that spans two tiers — that one's
-/// last horizontal run passes under the intervening tier's boxes, which is
-/// what it did when there was one lane and is why boxes are drawn last.
+/// its source.** An edge that spans more than one tier cannot then run
+/// straight across at its target's height — that passes under the
+/// intervening boxes and reads as leaving them — so it crosses in the gap
+/// between box rows and drops to its target through a `landing` lane in the
+/// gutter left of the target.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct EdgeRoute {
     pub from: ResearchId,
@@ -49,13 +51,15 @@ pub(super) struct EdgeRoute {
     /// The gutter right of tier `gutter`.
     pub gutter: usize,
     pub lane: usize,
+    /// A tier-skipping edge's lane in the gutter left of its target.
+    pub landing: Option<usize>,
 }
 
-/// How many edges make their vertical run in the gutter right of each tier.
+/// How many vertical runs each gutter carries: every edge's first, plus a
+/// tier-skipping edge's landing.
 ///
 /// This is what sizes a gutter, so the crowded one gets room and the sparse
-/// one does not waste it: the shipped tree runs 8, 5, 9, 6 and 3 edges
-/// through its five gutters.
+/// one does not waste it.
 fn lane_counts(graph: &ResearchGraph) -> Vec<usize> {
     let mut counts = vec![0usize; graph.tiers.saturating_sub(1)];
     for (from, to) in &graph.edges {
@@ -64,6 +68,9 @@ fn lane_counts(graph: &ResearchGraph) -> Vec<usize> {
         };
         if b.tier > a.tier && a.tier < counts.len() {
             counts[a.tier] += 1;
+        }
+        if b.tier > a.tier + 1 {
+            counts[b.tier - 1] += 1;
         }
     }
     counts
@@ -75,19 +82,19 @@ fn lane_counts(graph: &ResearchGraph) -> Vec<usize> {
 /// edges never swap lanes between frames. Ids break the tie, because two
 /// edges can join the same pair of slots across a tier-skipping gap.
 pub(super) fn assign_lanes(graph: &ResearchGraph) -> Vec<EdgeRoute> {
-    let mut routed: Vec<(usize, usize, usize, &ResearchId, &ResearchId)> = graph
+    let mut routed: Vec<(usize, usize, usize, &ResearchId, &ResearchId, usize)> = graph
         .edges
         .iter()
         .filter_map(|(from, to)| {
             let (a, b) = (graph.cell(from)?, graph.cell(to)?);
-            (b.tier > a.tier).then_some((a.tier, a.slot, b.slot, from, to))
+            (b.tier > a.tier).then_some((a.tier, a.slot, b.slot, from, to, b.tier))
         })
         .collect();
     routed.sort_by(|l, r| (l.0, l.1, l.2, l.3, l.4).cmp(&(r.0, r.1, r.2, r.3, r.4)));
     let mut lane_in: Vec<usize> = vec![0; graph.tiers];
-    routed
-        .into_iter()
-        .map(|(gutter, _, _, from, to)| {
+    let mut routes: Vec<EdgeRoute> = routed
+        .iter()
+        .map(|&(gutter, _, _, from, to, _)| {
             let lane = lane_in[gutter];
             lane_in[gutter] += 1;
             EdgeRoute {
@@ -95,9 +102,19 @@ pub(super) fn assign_lanes(graph: &ResearchGraph) -> Vec<EdgeRoute> {
                 to: to.clone(),
                 gutter,
                 lane,
+                landing: None,
             }
         })
-        .collect()
+        .collect();
+    // Landings after every first run, so they take a gutter's rightmost
+    // lanes — the ones beside the target column they drop into.
+    for (route, &(gutter, _, _, _, _, to_tier)) in routes.iter_mut().zip(&routed) {
+        if to_tier > gutter + 1 {
+            route.landing = Some(lane_in[to_tier - 1]);
+            lane_in[to_tier - 1] += 1;
+        }
+    }
+    routes
 }
 
 pub(super) struct GraphGeometry {
@@ -173,6 +190,19 @@ impl GraphGeometry {
         // Evenly across the gutter, so neither the first nor the last lane
         // grazes the box it runs beside.
         left + gutter * (lane as f32 + 1.0) / (lanes as f32 + 1.0)
+    }
+
+    /// Content-space y of the gap between box rows nearest `slot`'s box:
+    /// the one above it, or below for the top row. No box reaches into a
+    /// gap in any column, so an edge can cross columns there.
+    pub fn channel_y(&self, slot: usize) -> f32 {
+        let half_gap = (self.pitch_y - self.cell_h) * 0.5;
+        let top = self.margin + slot as f32 * self.pitch_y;
+        if slot > 0 {
+            top - half_gap
+        } else {
+            top + self.cell_h + half_gap
+        }
     }
 
     /// How many characters of a label fit one line of a box at `small`.
@@ -335,10 +365,42 @@ fn intersects(a: &Rect, b: &Rect) -> bool {
     a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
+/// The screen-space corners of one edge, from the right side of its source
+/// at `ay` to the left side of its target at `by`. The draw loop and the
+/// no-edge-under-a-box test both walk this, so the test checks the route
+/// that is drawn.
+fn edge_polyline(
+    geo: &GraphGeometry,
+    route: &EdgeRoute,
+    graph: &ResearchGraph,
+    ay: f32,
+    by: f32,
+    offset: (f32, f32),
+) -> Vec<(f32, f32)> {
+    let (Some(a), Some(b)) = (graph.cell(&route.from), graph.cell(&route.to)) else {
+        return Vec::new();
+    };
+    let ra = geo.cell_rect(a.tier, a.slot, offset);
+    let rb = geo.cell_rect(b.tier, b.slot, offset);
+    let lane = geo.pane.x + geo.lane_x(route.gutter, route.lane) - offset.0;
+    let Some(landing) = route.landing else {
+        return vec![(ra.x + ra.w, ay), (lane, ay), (lane, by), (rb.x, by)];
+    };
+    let drop = geo.pane.x + geo.lane_x(b.tier - 1, landing) - offset.0;
+    let channel = geo.pane.y + geo.channel_y(b.slot) - offset.1;
+    vec![
+        (ra.x + ra.w, ay),
+        (lane, ay),
+        (lane, channel),
+        (drop, channel),
+        (drop, by),
+        (rb.x, by),
+    ]
+}
+
 /// An edge that does not end at the selected node.
 const EDGE_DIM: Color = Color::new(0.35, 0.35, 0.42, 1.0);
-/// An edge into the selected node — the whole of what makes the one
-/// tier-skipping edge readable, since there is no edge router.
+/// An edge into the selected node.
 const EDGE_LIVE: Color = Color::new(0.25, 0.85, 0.85, 1.0);
 
 /// The research tree as a flow chart. `draw_research_menu`'s signature
@@ -416,16 +478,6 @@ pub(super) fn draw_research_graph(
             };
             let ra = geo.cell_rect(a.tier, a.slot, offset);
             let rb = geo.cell_rect(b.tier, b.slot, offset);
-            let lane = geo.pane.x + geo.lane_x(route.gutter, route.lane) - offset.0;
-            let span = Rect::new(
-                ra.x.min(lane).min(rb.x),
-                ra.y.min(rb.y),
-                (ra.x.max(rb.x + rb.w).max(lane) - ra.x.min(lane).min(rb.x)).max(1.0),
-                (ra.y.max(rb.y) - ra.y.min(rb.y) + ra.h).max(1.0),
-            );
-            if !intersects(&span, &geo.pane) {
-                continue;
-            }
             let out_of = fan_out(&route.from);
             let into = fan_in(&route.to);
             let out_index = routes
@@ -440,12 +492,21 @@ pub(super) fn draw_research_graph(
                 .unwrap_or(0);
             let ay = anchor_y(&ra, out_index, out_of);
             let by = anchor_y(&rb, in_index, into);
+            let points = edge_polyline(&geo, route, &graph, ay, by, offset);
+            let (lx, hx, ly, hy) = points.iter().fold(
+                (f32::MAX, f32::MIN, f32::MAX, f32::MIN),
+                |(lx, hx, ly, hy), &(x, y)| (lx.min(x), hx.max(x), ly.min(y), hy.max(y)),
+            );
+            let span = Rect::new(lx, ly, (hx - lx).max(1.0), (hy - ly).max(1.0));
+            if !intersects(&span, &geo.pane) {
+                continue;
+            }
             let live = route.to == selected_id;
             let color = if live { EDGE_LIVE } else { EDGE_DIM };
             let thickness = if live { 2.0 } else { 1.0 };
-            p.line(ra.x + ra.w, ay, lane, ay, thickness, color);
-            p.line(lane, ay, lane, by, thickness, color);
-            p.line(lane, by, rb.x, by, thickness, color);
+            for seg in points.windows(2) {
+                p.line(seg[0].0, seg[0].1, seg[1].0, seg[1].1, thickness, color);
+            }
         }
 
         let columns = geo.label_columns(p, m);
@@ -691,10 +752,18 @@ mod tests {
         let routes = assign_lanes(&g);
         assert_eq!(routes.len(), g.edges.len(), "every edge is routed");
         for gutter in 0..g.tiers.saturating_sub(1) {
+            // A tier-skipping edge's landing is a second vertical run, in
+            // the gutter left of its target.
             let lanes: Vec<f32> = routes
                 .iter()
                 .filter(|r| r.gutter == gutter)
                 .map(|r| geo.lane_x(r.gutter, r.lane))
+                .chain(routes.iter().filter_map(|r| {
+                    let to = g.cell(&r.to)?;
+                    r.landing
+                        .filter(|_| to.tier == gutter + 1)
+                        .map(|l| geo.lane_x(gutter, l))
+                }))
                 .collect();
             for (i, a) in lanes.iter().enumerate() {
                 for b in &lanes[i + 1..] {
@@ -712,6 +781,53 @@ mod tests {
                     *x > left && *x < right,
                     "a lane at {x} escaped its gutter ({left}..{right})"
                 );
+            }
+        }
+    }
+
+    /// The bug a tier-skipping edge was reported for: its last horizontal
+    /// run went through the intervening column at the target's anchor
+    /// height, under an opaque box, so it read as leaving that box instead
+    /// of its real source. No segment of any edge may cross a box other than
+    /// the two it joins.
+    #[test]
+    fn no_edge_runs_under_a_box_it_does_not_join() {
+        let g = shipped_graph();
+        let m = ui_metrics(720.0);
+        let geo = geometry(1280.0, 720.0, &g, &m);
+        let routes = assign_lanes(&g);
+        assert!(
+            g.edges.iter().any(|(f, t)| {
+                let (a, b) = (g.cell(f).unwrap(), g.cell(t).unwrap());
+                b.tier > a.tier + 1
+            }),
+            "the shipped tree has a tier-skipping edge, or this proves nothing"
+        );
+        let crosses = |r: &Rect, (x0, y0): (f32, f32), (x1, y1): (f32, f32)| {
+            let (lx, hx) = (x0.min(x1), x0.max(x1));
+            let (ly, hy) = (y0.min(y1), y0.max(y1));
+            lx < r.x + r.w - 0.5 && hx > r.x + 0.5 && ly < r.y + r.h - 0.5 && hy > r.y + 0.5
+        };
+        for route in &routes {
+            let (a, b) = (g.cell(&route.from).unwrap(), g.cell(&route.to).unwrap());
+            let ra = geo.cell_rect(a.tier, a.slot, (0.0, 0.0));
+            let rb = geo.cell_rect(b.tier, b.slot, (0.0, 0.0));
+            let mid = |r: &Rect| r.y + r.h * 0.5;
+            let points = edge_polyline(&geo, route, &g, mid(&ra), mid(&rb), (0.0, 0.0));
+            for cell in &g.cells {
+                if cell.id == route.from || cell.id == route.to {
+                    continue;
+                }
+                let r = geo.cell_rect(cell.tier, cell.slot, (0.0, 0.0));
+                for seg in points.windows(2) {
+                    assert!(
+                        !crosses(&r, seg[0], seg[1]),
+                        "{} -> {} runs under {}",
+                        route.from,
+                        route.to,
+                        cell.id
+                    );
+                }
             }
         }
     }

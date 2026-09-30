@@ -188,7 +188,13 @@ fn no_memories_and_every_negative_thought_never_sulks() {
 fn the_situation_tips_a_program_already_soured_by_memories() {
     let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    implant(&mut game, worker, "jammed_here", 1, MemorySubject::Nothing);
+    implant(
+        &mut game,
+        worker,
+        "jammed_here",
+        1,
+        MemorySubject::Structure("mining_node".to_string()),
+    );
     assert!(
         (game.morale(worker) + 4.0).abs() < 1e-3,
         "{}",
@@ -324,7 +330,13 @@ fn thought_rows_show_without_any_memories() {
 fn a_program_that_leaves_the_staff_loses_its_situation() {
     let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    implant(&mut game, worker, "jammed_here", 1, MemorySubject::Nothing);
+    implant(
+        &mut game,
+        worker,
+        "jammed_here",
+        1,
+        MemorySubject::Structure("mining_node".to_string()),
+    );
     let remembered = game.morale(worker);
     set_situation(&mut game, worker, &EVERY_NEGATIVE);
     assert!(game.morale(worker) < remembered);

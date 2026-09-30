@@ -55,7 +55,7 @@ spec resolves to a release tag.
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
-| `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
+| `2026-08-24-departure-memories-design` | brainstorm parked | superseded in part: departure memories (`let_go`, `lost_in_battle`, ...) shipped with `2026-09-30-bonds-and-social-tab-design` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
 | `2026-08-17-zones-as-difficulty-parked` | parked | no shape chosen |
 | `2026-08-17-item-synergy-burnout-parked` | parked | nothing stacks yet |

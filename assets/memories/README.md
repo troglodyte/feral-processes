@@ -43,7 +43,9 @@ Each file is one kind:
 | `stack_decay` | Optional, default `1.0`. In `(0, 1]`: how much each strike past the first is worth relative to the one before it. `1.0` is plain linear stacking; below that, reinforcement still compounds but tapers off. **Out of range is a load-time fault, not a clamp** — `0.0` or below is skipped with a warning, the same as a file that fails to parse; `0.0` collapses the compounding formula to a cliff (worth something at one strike, nothing at any other) and anything at or below `-1.0` alternates sign every strike and grows without bound. |
 | `mood` | Optional, default `1.0`. In `[0, 1]`: the share of this def's intensity that reaches a program's Morale. `1.0` makes Morale and Opinion the same figure; lower values still show up in full when something asks this specific program's opinion of this specific subject, but count for less — or nothing, at `0.0` — toward the roster's collective mood. A `mood: 0.0` def must declare a `subject` something still reads an opinion about (`Program` or `BaseTile` today), or it is worth nothing anywhere. **Outside `[0, 1]` is a load-time fault**, skipped with a warning — a Morale reading a def's own `valence` sign disagree with is not a supported way to tune one. |
 
-The first seven are required. `stack_decay` and `mood` were added later and
+| `known_for` | Optional, default none. A short phrase — "a brawler", "good company" — for what a program is **known for** among the others when their memories *of it* under this def sum heavily. `Game::known_for` reads it: it folds every other owned program's memories about the program through this catalogue, takes the phrases of the defs carrying one, and names at most the two heaviest on the SOCIAL tab. It reads what the others hold about the program, never what the program itself holds. Only meaningful on a `Program`-subject def; keep the phrase short, since the SOCIAL tab draws it on one line beside its sibling and a census measures every shipped phrase. |
+
+The first seven are required. `stack_decay`, `mood` and `known_for` were added later and
 carry a default, so a file written before they existed keeps parsing
 untouched — but none of the first seven may be omitted.
 
@@ -149,11 +151,28 @@ but not what makes a program remember.
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 | `unwound_at` | + | `Structure` | a stretch spent standing at an amenity, in a mood bad enough to have gone there |
 | `at_ease_on` | + | `BaseTile` | a stretch of standing on a floor finish whose `comfort` names it (`assets/floors/README.md`) |
+| `saw_turn_on` | − | `Program` | watching another program turn on a third, about the aggressor (carries `known_for: "a brawler"`) |
+| `lost_in_battle` | − | `Program` | a program you held as a friend falling in battle |
+| `let_go` | − | `Program` | a friend being sold, extracted, spent on a build or spent in the study |
+| `became_part_of` | − | `Program` | a friend being fused into a new program |
+| `rid_of` | + | `Program` | a rival or enemy leaving play, however it left |
 
 They are chosen to cover both valences and every subject kind, not because
-these sixteen are the interesting content. `Nothing`, `Program`, `Species`
+these are the interesting content. `Nothing`, `Program`, `Species`
 and `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
+
+**The last five are the bond kinds.** `saw_turn_on` is formed by a brawl's
+witnesses; the other four are the **departure defs**, formed in every
+program that held the departing one as a friend (or, for `rid_of`, as a rival
+or enemy) at the moment it left play. Their subject is the program that went,
+and the row keeps the departed program's name, so the SOCIAL tab can still say
+who it was after the body is gone. `lost_in_battle` is the heaviest and
+slowest to fade — a loss, not a parting. `rid_of` is the one fondness a
+departure writes. What decides who grieves, and which kind a departure writes,
+is Rust (`Game`'s departure hook); the numbers and words are here.
+`turned_on_me` and `saw_turn_on` also carry `known_for: "a brawler"`;
+`bonded_in_battle` carries "steady in a fight" and `idled_with` "good company".
 
 `frayed_here` shares `stranded_at`'s subject and sign and is deliberately a
 separate kind: a hauler nothing can reach and a program worn down with

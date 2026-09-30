@@ -671,3 +671,29 @@ fn a_departed_friend_is_gone_and_keeps_its_name() {
         .expect("the friend still has a row for it");
     assert!(row.gone);
 }
+
+/// The SOCIAL row shows the bond as it stood when the program left: the
+/// grief that would otherwise drag a friend down to Neutral is left out of it,
+/// while every other reader of opinion still counts it.
+#[test]
+fn a_gone_friends_row_excludes_the_departure_memory() {
+    let mut game = Game::new(41, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let leaving = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+    let subject = MemorySubject::Program(id);
+    let before = game.opinion_of(cast.friend, &subject);
+
+    game.bench_or_dissolve(leaving);
+
+    let after = game.opinion_of(cast.friend, &subject);
+    assert!(
+        after < before,
+        "{after} vs {before}: the grief is still counted"
+    );
+    let view = game.social(cast.friend).unwrap();
+    let row = &view.relationships[0];
+    assert!(row.gone);
+    assert_eq!(row.bond, Bond::Friend);
+    assert_eq!(row.opinion, before);
+}

@@ -1203,6 +1203,13 @@
                     strikes: 5,
                 ),
                 (
+                    def: "bonded_in_battle",
+                    subject: Program((42)),
+                    subject_name: Some("Kestrel"),
+                    reinforced: 5349,
+                    strikes: 5,
+                ),
+                (
                     def: "lost_in_battle",
                     subject: Program((42)),
                     subject_name: Some("Kestrel"),

@@ -111,6 +111,12 @@ pub struct MemoryDef {
     /// default) is a memory that makes no reputation.
     #[serde(default)]
     pub known_for: Option<String>,
+    /// Marks a memory written when the program it is about leaves play.
+    /// `Game::social` leaves these out of a relationship row's opinion, so a
+    /// gone program's row shows the bond as it stood when it left; every
+    /// other reader still counts them.
+    #[serde(default)]
+    pub departure: bool,
 }
 
 impl MemoryDef {

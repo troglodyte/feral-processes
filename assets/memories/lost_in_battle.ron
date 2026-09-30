@@ -7,4 +7,5 @@
     half_life: 6000,
     subject: Program,
     strike_cap: 1,
+    departure: true,
 )

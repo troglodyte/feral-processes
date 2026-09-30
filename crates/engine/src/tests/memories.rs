@@ -236,6 +236,7 @@ fn test_def(valence: f32, half_life: u64, strike_cap: u32) -> MemoryDef {
         stack_decay: 1.0,
         mood: 1.0,
         known_for: None,
+        departure: false,
     }
 }
 

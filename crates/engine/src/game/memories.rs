@@ -618,8 +618,18 @@ impl crate::Game {
     /// A subject nothing has happened about sums an empty set and answers
     /// zero, which is a real answer and not a missing one.
     pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
+        self.opinion_about(who, subject, true)
+    }
+
+    /// The one sum behind `opinion_of` and the SOCIAL rows. `departures`
+    /// false leaves out the defs marked `departure`, which is the bond as it
+    /// stood before the subject left; `note_departure` and every other
+    /// reader pass true.
+    fn opinion_about(&self, who: Entity, subject: &MemorySubject, departures: bool) -> f32 {
+        let db = self.world.resource::<crate::memories::MemoryDb>();
         self.memory_sum(who, crate::memories::Read::Opinion, |m| {
             &m.subject == subject
+                && (departures || !db.get(&m.def).is_some_and(|def| def.departure))
         })
     }
 
@@ -833,8 +843,10 @@ impl crate::Game {
     /// others say of it. `None` for anything but an owned program.
     ///
     /// Rows group the holder's memories by `Program` subject and read each
-    /// through `opinion_of` and `bonds::band`, so the tab can never band
-    /// differently from avoidance or grief. A subject no longer in the world
+    /// through `opinion_about` and `bonds::band`, leaving out departure
+    /// memories so a gone program's row shows the bond as it stood when it
+    /// left. A live subject holds none, so only gone rows differ from
+    /// avoidance or grief. A subject no longer in the world
     /// keeps the name stamped on its most recent memory and is `gone`.
     pub fn social(&self, e: Entity) -> Option<crate::views::SocialView> {
         if !self.is_owned_program(e) {
@@ -851,7 +863,7 @@ impl crate::Game {
                 continue;
             }
             seen.push(about);
-            let opinion = self.opinion_of(e, &held.subject);
+            let opinion = self.opinion_about(e, &held.subject, false);
             let (name, gone) = match self.program_entity(about) {
                 Some(live) => (self.creature_short_label(live), false),
                 None => {

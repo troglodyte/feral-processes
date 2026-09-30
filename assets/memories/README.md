@@ -44,8 +44,9 @@ Each file is one kind:
 | `mood` | Optional, default `1.0`. In `[0, 1]`: the share of this def's intensity that reaches a program's Morale. `1.0` makes Morale and Opinion the same figure; lower values still show up in full when something asks this specific program's opinion of this specific subject, but count for less — or nothing, at `0.0` — toward the roster's collective mood. A `mood: 0.0` def must declare a `subject` something still reads an opinion about (`Program` or `BaseTile` today), or it is worth nothing anywhere. **Outside `[0, 1]` is a load-time fault**, skipped with a warning — a Morale reading a def's own `valence` sign disagree with is not a supported way to tune one. |
 
 | `known_for` | Optional, default none. A short phrase — "a brawler", "good company" — for what a program is **known for** among the others when their memories *of it* under this def sum heavily. `Game::known_for` reads it: it folds every other owned program's memories about the program through this catalogue, takes the phrases of the defs carrying one, and names at most the two heaviest on the SOCIAL tab. It reads what the others hold about the program, never what the program itself holds. Only meaningful on a `Program`-subject def; keep the phrase short, since the SOCIAL tab draws it on one line beside its sibling and a census measures every shipped phrase. |
+| `departure` | Optional, default `false`. Marks a def written when the program it is about leaves play (the four departure defs). The SOCIAL tab leaves these out of a relationship row's opinion and band, so a gone friend's row still reads "Friend (gone)" rather than the grief's own pull; `opinion_of`, avoidance, Morale and `known_for` count them as usual. |
 
-The first seven are required. `stack_decay`, `mood` and `known_for` were added later and
+The first seven are required. `stack_decay`, `mood`, `known_for` and `departure` were added later and
 carry a default, so a file written before they existed keeps parsing
 untouched — but none of the first seven may be omitted.
 

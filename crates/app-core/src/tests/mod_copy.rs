@@ -42,13 +42,15 @@ fn apply_then_strip_follows_the_rekeyed_copy() {
     assert_eq!(app.mode, Mode::ModCopy, "{:?}", app.status_line);
     let fitted = app.mod_copy.clone().unwrap();
     assert_eq!(fitted.affixes, vec![AffixId::from("deflecting")]);
-    assert!(app.status_line.as_deref().unwrap().contains("fit"));
+    // Success clears the status line, which only ever draws as a refusal;
+    // the game log carries the sentence.
+    assert_eq!(app.status_line, None);
 
     // `R` strips the highlighted filled row, and the screen follows the
     // copy back to its plain key.
     app.handle_key(GameKey::Char('R'));
     assert_eq!(app.mod_copy, Some(plate()));
-    assert!(app.status_line.as_deref().unwrap().contains("strip"));
+    assert_eq!(app.status_line, None);
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Inventory);

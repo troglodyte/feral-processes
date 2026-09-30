@@ -77,12 +77,14 @@ impl App {
     }
 
     /// Follows the re-keyed copy on success and lands on the slot list; a
-    /// refusal goes to the status line and stays on `on_refusal`.
+    /// refusal goes to the status line and stays on `on_refusal`. Success
+    /// clears the line, as `report` does: the popup draws it in the refusal
+    /// colour, and the engine has already logged the sentence.
     fn finish_mod(&mut self, outcome: Result<(GearCopy, String), String>, on_refusal: Mode) {
         match outcome {
-            Ok((copy, msg)) => {
+            Ok((copy, _)) => {
                 self.mod_copy = Some(copy);
-                self.status_line = Some(msg);
+                self.status_line = None;
                 self.mode = Mode::ModCopy;
             }
             Err(e) => {

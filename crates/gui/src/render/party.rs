@@ -1341,7 +1341,8 @@ mod tests {
             .expect("the census must walk a real catalogue");
 
         let subject = widest_subject(&assets);
-        let entries: Vec<MemoryRow> = (0..feral_processes_engine::tuning::MEMORY_CAP_PER_PROGRAM)
+        let mut entries: Vec<MemoryRow> = (0
+            ..feral_processes_engine::tuning::MEMORY_CAP_PER_PROGRAM)
             .map(|i| MemoryRow {
                 name: format!("{}{i:02}", widest.name),
                 blurb: widest.blurb.clone(),
@@ -1350,6 +1351,38 @@ mod tests {
                 age: "a while ago".to_string(),
             })
             .collect();
+        // Plus every situational thought at once: `Game::memory_report`
+        // appends one subjectless "now" row per trigger the program is
+        // under, and they coexist (a rival beside and a friend
+        // beside are different neighbours).
+        let (thoughts, warnings) =
+            feral_processes_engine::situations::ThoughtDb::load_dir(&assets.join("thoughts"))
+                .expect("the thoughts load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        // Four, not five: `assess` makes `Unpowered` and `MachineRunning`
+        // exclusive, so the wider of the two is the most a page can carry.
+        use feral_processes_engine::situations::Trigger;
+        let width = |t: Trigger| {
+            let def = thoughts.get(t).expect("every trigger ships a def");
+            def.name.chars().count() + def.blurb.chars().count()
+        };
+        let machine = [Trigger::Unpowered, Trigger::MachineRunning]
+            .into_iter()
+            .max_by_key(|t| width(*t))
+            .expect("two candidates");
+        let worst = Trigger::ALL.into_iter().filter(|t| {
+            !matches!(t, Trigger::Unpowered | Trigger::MachineRunning) || *t == machine
+        });
+        for trigger in worst {
+            let def = thoughts.get(trigger).expect("every trigger ships a def");
+            entries.push(MemoryRow {
+                name: def.name.clone(),
+                blurb: def.blurb.clone(),
+                subject: None,
+                intensity: -def.intensity.abs(),
+                age: "now".to_string(),
+            });
+        }
         memory_page_rows(&subject, -99.0, &entries)
     }
 

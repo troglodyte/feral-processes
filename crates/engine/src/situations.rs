@@ -102,6 +102,14 @@ impl ThoughtDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ThoughtDef>(&text) {
                 Ok(def) => {
+                    // A NaN or infinite weight would poison every morale sum
+                    // it reaches, and `f32` parses both from a mod's file.
+                    if !def.intensity.is_finite() {
+                        warnings.push(format!(
+                            "skipped invalid thought file {path:?}: intensity is not finite"
+                        ));
+                        continue;
+                    }
                     if db.defs.contains_key(&def.trigger) {
                         warnings.push(format!(
                             "skipped thought file {path:?}: {:?} already has a thought",
@@ -314,6 +322,14 @@ pub fn assess_situation_system(
         sites.iter().map(|(s, p)| (&s.kind, p)),
         &structure_db,
     );
+    // A program that has left the staff (party, sortie, outpost, study) keeps
+    // nothing of the base it stood in: its page and its morale read the
+    // `Situation`, and nobody else would ever clear it.
+    for (entity, tamed, .., current) in programs.iter() {
+        if current.is_some() && roles.of(entity, tamed.owner) != Some(ProgramRole::Staff) {
+            commands.entity(entity).remove::<Situation>();
+        }
+    }
     let mut staff: Vec<(Body, Option<&Situation>)> = programs
         .iter()
         .filter(|(entity, tamed, ..)| roles.of(*entity, tamed.owner) == Some(ProgramRole::Staff))
@@ -684,6 +700,27 @@ mod tests {
         assert_eq!(dark[0].thoughts, vec![Trigger::Unpowered]);
         let lit = assess_with(&posted(&e), &PowerGrid::default(), &running, true);
         assert!(lit[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_non_finite_intensity_is_skipped_with_a_warning() {
+        let (db, warnings) = load(&[
+            (
+                "a.ron",
+                def_text("Unpowered", "Dark").replace("-3.0", "inf"),
+            ),
+            (
+                "b.ron",
+                def_text("NoAmenity", "Bare").replace("-3.0", "NaN"),
+            ),
+        ]);
+        assert!(db.get(Trigger::Unpowered).is_none());
+        assert!(db.get(Trigger::NoAmenity).is_none());
+        assert!(
+            warnings.iter().all(|w| w.contains("intensity")),
+            "{warnings:?}"
+        );
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
     }
 
     #[test]

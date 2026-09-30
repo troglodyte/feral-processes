@@ -461,6 +461,12 @@ pub(super) fn draw_research_menu(
             "Routine research",
             research_menu_rows(&nodes, selected, &currency, active.as_ref()),
         ),
+        // No mode opens this tree yet; the arm keeps the match exhaustive
+        // and draws the rows the other trees do.
+        ResearchTree::Affixes => (
+            "Affix research",
+            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+        ),
     };
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }

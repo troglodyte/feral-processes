@@ -758,7 +758,7 @@ impl crate::Game {
 
     /// Whether `e` is a program the player owns — the only kind that has a
     /// social life to show, and the only kind whose opinions count.
-    fn is_owned_program(&self, e: Entity) -> bool {
+    pub fn is_owned_program(&self, e: Entity) -> bool {
         let player = self.player_entity();
         self.world.get::<ProgramId>(e).is_some()
             && self

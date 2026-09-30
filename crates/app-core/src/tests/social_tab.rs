@@ -60,3 +60,36 @@ fn tab_is_a_no_op_on_the_player() {
     app.handle_key(GameKey::Tab);
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
 }
+
+#[test]
+fn tab_is_a_no_op_on_a_wild_program() {
+    let (mut app, _, _) = owned_pair(7405);
+    let wild = place_wild_program_east(&mut app, 3);
+    open(&mut app, wild);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}
+
+#[test]
+fn watching_from_the_social_tab_resets_it() {
+    let mut app = app_owning_distant_programs(7406, 1);
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    for _ in 0..4 {
+        app.handle_key(GameKey::Char('.'));
+    }
+    let staff = app
+        .game
+        .as_ref()
+        .unwrap()
+        .base_staff()
+        .first()
+        .copied()
+        .expect("the fixture owns a staff program");
+    open(&mut app, staff);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    app.handle_key(GameKey::Char('w'));
+    assert_eq!(app.watching, Some(staff), "the watch must have started");
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}

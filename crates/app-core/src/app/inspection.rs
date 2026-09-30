@@ -312,7 +312,7 @@ impl App {
     fn toggle_manifest_tab(&mut self) {
         let owned = self
             .pending_manifest
-            .is_some_and(|e| self.game.as_ref().is_some_and(|g| g.social(e).is_some()));
+            .is_some_and(|e| self.game.as_ref().is_some_and(|g| g.is_owned_program(e)));
         if owned {
             self.manifest_tab = match self.manifest_tab {
                 ManifestTab::Stats => ManifestTab::Social,

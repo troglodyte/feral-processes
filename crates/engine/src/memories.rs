@@ -268,6 +268,25 @@ pub(crate) fn sum_intensity(
         .sum()
 }
 
+/// What `store` makes of `subject` — the fold `Game::opinion_of` and the
+/// SOCIAL rows read, lifted out of `Game` so `situations::assess_situation_system`
+/// asks the same question rather than restating the subject filter.
+///
+/// `departures` false leaves out the defs marked `departure`: the bond as it
+/// stood before the subject left. Every reader but a SOCIAL row passes true.
+pub(crate) fn opinion_about(
+    store: &Memories,
+    db: &MemoryDb,
+    now: u64,
+    felt_as: crate::disposition::Disposition,
+    subject: &crate::components::MemorySubject,
+    departures: bool,
+) -> f32 {
+    sum_intensity(store, db, now, felt_as, Read::Opinion, |m| {
+        &m.subject == subject && (departures || !db.get(&m.def).is_some_and(|def| def.departure))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

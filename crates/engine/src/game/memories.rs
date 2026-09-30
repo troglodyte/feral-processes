@@ -626,11 +626,17 @@ impl crate::Game {
     /// stood before the subject left; `note_departure` and every other
     /// reader pass true.
     fn opinion_about(&self, who: Entity, subject: &MemorySubject, departures: bool) -> f32 {
-        let db = self.world.resource::<crate::memories::MemoryDb>();
-        self.memory_sum(who, crate::memories::Read::Opinion, |m| {
-            &m.subject == subject
-                && (departures || !db.get(&m.def).is_some_and(|def| def.departure))
-        })
+        let Some(store) = self.world.get::<Memories>(who) else {
+            return 0.0;
+        };
+        crate::memories::opinion_about(
+            store,
+            self.world.resource::<MemoryDb>(),
+            self.world.resource::<GameClock>().tick,
+            self.felt_as(who),
+            subject,
+            departures,
+        )
     }
 
     /// What `holder` makes of `about`, banded — `opinion_of` read through

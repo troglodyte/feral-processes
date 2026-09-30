@@ -14,9 +14,18 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use bevy_ecs::prelude::{Component, Resource};
+use bevy_ecs::prelude::{Commands, Component, Entity, Query, Res, Resource};
+use bevy_ecs::system::SystemParam;
 
+use crate::components::{
+    MachineStatus, Memories, MemorySubject, Position, ProgramId, Structure, Tamed, Task, TaskKind,
+};
 use crate::disposition::Disposition;
+use crate::game::party::{self, ProgramRole, Roles};
+use crate::memories::MemoryDb;
+use crate::resources::GameClock;
+use crate::resources::PowerGrid;
+use crate::structures::StructureDb;
 use crate::tuning::SITUATION_MAX_TOTAL;
 
 /// What can make a program think something about its surroundings.
@@ -164,6 +173,181 @@ pub(crate) fn sum(situation: &Situation, db: &ThoughtDb, felt_as: Disposition) -
         .sum()
 }
 
+/// One staff program as `assess` reads it: the values, not the entity, so the
+/// system and a test fill the same struct.
+pub(crate) struct Body<'a> {
+    pub entity: Entity,
+    pub pos: Position,
+    pub id: ProgramId,
+    pub task: Option<(TaskKind, Entity)>,
+    pub store: Option<&'a Memories>,
+    pub felt_as: Disposition,
+}
+
+/// What the base says about a body's surroundings, other than the bodies.
+pub(crate) struct Surroundings<'a> {
+    pub grid: &'a PowerGrid,
+    pub memories: &'a MemoryDb,
+    pub now: u64,
+    /// `offshift::Amenities::any` over the base's structures.
+    pub has_amenity: bool,
+    /// A machine's `MachineStatus`; `None` for an entity that has none.
+    pub status: &'a dyn Fn(Entity) -> Option<MachineStatus>,
+}
+
+/// Each body's situation, in `bodies` order. The one derivation behind both
+/// `assess_situation_system` and any caller that needs an answer outside the
+/// schedule.
+///
+/// **Beside is Chebyshev distance 1, excluding the body itself** — the
+/// adjacency `drift_idle_staff` scans — and only bodies `walks_the_base`
+/// count as neighbours, since a posted guard's `Position` is wherever it was
+/// assigned and not a cell it stands in. The bond is
+/// `memories::opinion_about` through `bonds::band`, the call
+/// `Game::bond` makes, so the two cannot disagree about who is a rival.
+///
+/// The machine terms read a `GatherResource` posting only: a guard, digger or
+/// builder is not working a machine.
+pub(crate) fn assess(bodies: &[Body], around: &Surroundings) -> Vec<Situation> {
+    bodies
+        .iter()
+        .map(|body| {
+            let mut thoughts = Vec::new();
+            if party::walks_the_base(Some(ProgramRole::Staff), body.task.map(|(k, _)| k)) {
+                let bond_with = |other: &Body| {
+                    let opinion = body.store.map_or(0.0, |store| {
+                        crate::memories::opinion_about(
+                            store,
+                            around.memories,
+                            around.now,
+                            body.felt_as,
+                            &MemorySubject::Program(other.id),
+                            true,
+                        )
+                    });
+                    crate::bonds::band(opinion)
+                };
+                let neighbours = || {
+                    bodies.iter().filter(|other| {
+                        other.entity != body.entity
+                            && party::walks_the_base(
+                                Some(ProgramRole::Staff),
+                                other.task.map(|(k, _)| k),
+                            )
+                            && (other.pos.x - body.pos.x)
+                                .abs()
+                                .max((other.pos.y - body.pos.y).abs())
+                                <= 1
+                    })
+                };
+                if neighbours().any(|o| bond_with(o).avoids()) {
+                    thoughts.push(Trigger::BesideRival);
+                }
+                if neighbours().any(|o| bond_with(o).grieves()) {
+                    thoughts.push(Trigger::BesideFriend);
+                }
+            }
+            if let Some((TaskKind::GatherResource, machine)) = body.task {
+                if around.grid.is_dark(machine) {
+                    thoughts.push(Trigger::Unpowered);
+                }
+                if (around.status)(machine) == Some(MachineStatus::Running) {
+                    thoughts.push(Trigger::MachineRunning);
+                }
+            }
+            if !around.has_amenity {
+                thoughts.push(Trigger::NoAmenity);
+            }
+            Situation { thoughts }
+        })
+        .collect()
+}
+
+/// What `assess_situation_system` reads of each candidate. Aliased for the
+/// `type_complexity` reason `Needful` is.
+type Assessed<'w> = (
+    Entity,
+    &'w Tamed,
+    &'w Position,
+    &'w ProgramId,
+    Option<&'w Task>,
+    Option<&'w Memories>,
+    Option<&'w Disposition>,
+    Option<&'w Situation>,
+);
+
+/// The read-only lookups `assess_situation_system` needs, bundled for
+/// `CronjobLookups`' reason: the parameter list would trip clippy's
+/// argument-count threshold.
+#[derive(SystemParam)]
+pub struct AssessLookups<'w, 's> {
+    statuses: Query<'w, 's, &'static MachineStatus>,
+    sites: Query<'w, 's, (&'static Structure, &'static Position)>,
+    structure_db: Res<'w, StructureDb>,
+    grid: Res<'w, PowerGrid>,
+    memories: Res<'w, MemoryDb>,
+    clock: Res<'w, GameClock>,
+}
+
+/// Writes every staff program's `Situation`, once a tick, between
+/// `idle_machine_system` and `task_progress_system`.
+///
+/// `MachineStatus` is written later in the chain, so `MachineRunning` reads
+/// the previous tick's status — the one-tick lag `Stranded` accepts. The
+/// grid (`power_grid_system`) has already run, so `Unpowered` is this tick's.
+pub fn assess_situation_system(
+    programs: Query<Assessed>,
+    lookups: AssessLookups,
+    roles: Roles,
+    mut commands: Commands,
+) {
+    let AssessLookups {
+        statuses,
+        sites,
+        structure_db,
+        grid,
+        memories,
+        clock,
+    } = lookups;
+    let amenities = crate::game::base::offshift::Amenities::build(
+        sites.iter().map(|(s, p)| (&s.kind, p)),
+        &structure_db,
+    );
+    let mut staff: Vec<(Body, Option<&Situation>)> = programs
+        .iter()
+        .filter(|(entity, tamed, ..)| roles.of(*entity, tamed.owner) == Some(ProgramRole::Staff))
+        .map(|(entity, _, pos, id, task, store, disposition, current)| {
+            let body = Body {
+                entity,
+                pos: *pos,
+                id: *id,
+                task: task.map(|t| (t.kind, t.target)),
+                store,
+                felt_as: disposition.copied().unwrap_or_default(),
+            };
+            (body, current)
+        })
+        .collect();
+    // A total order, not bevy's iteration order: the answer does not depend on
+    // the order today, but a reader should not have to prove that.
+    staff.sort_by_key(|(body, _)| body.entity);
+    let (bodies, current): (Vec<Body>, Vec<Option<&Situation>>) = staff.into_iter().unzip();
+    let status = |e: Entity| statuses.get(e).ok().copied();
+    let around = Surroundings {
+        grid: &grid,
+        memories: &memories,
+        now: clock.tick,
+        has_amenity: amenities.any(),
+        status: &status,
+    };
+    let answers = assess(&bodies, &around);
+    for ((body, current), answer) in bodies.iter().zip(current).zip(answers) {
+        if current != Some(&answer) {
+            commands.entity(body.entity).insert(answer);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,5 +482,194 @@ mod tests {
         for (i, t) in Trigger::ALL.iter().enumerate() {
             assert_eq!(t.index(), i);
         }
+    }
+
+    // ---- assess ----
+
+    use crate::components::Memory;
+    use crate::memories::MemoryId;
+    use bevy_ecs::world::World;
+
+    const NOW: u64 = 100;
+
+    fn store_of(def: &str, about: u32, strikes: u32) -> Memories {
+        Memories(vec![Memory {
+            def: MemoryId::from(def),
+            subject: MemorySubject::Program(ProgramId(about)),
+            subject_name: None,
+            reinforced: NOW,
+            strikes,
+        }])
+    }
+
+    fn rival_store(about: u32) -> Memories {
+        store_of("turned_on_me", about, 1)
+    }
+
+    fn friend_store(about: u32) -> Memories {
+        store_of("bonded_in_battle", about, 2)
+    }
+
+    fn entities(n: usize) -> Vec<Entity> {
+        let mut world = World::new();
+        (0..n).map(|_| world.spawn_empty().id()).collect()
+    }
+
+    fn body<'a>(entity: Entity, id: u32, at: (i32, i32), store: Option<&'a Memories>) -> Body<'a> {
+        Body {
+            entity,
+            pos: Position { x: at.0, y: at.1 },
+            id: ProgramId(id),
+            task: None,
+            store,
+            felt_as: Disposition::default(),
+        }
+    }
+
+    /// Runs `assess` with a base that has an amenity, so `NoAmenity` stays out
+    /// of the way unless a test asks for it.
+    fn assess_with(
+        bodies: &[Body],
+        grid: &PowerGrid,
+        status: &dyn Fn(Entity) -> Option<MachineStatus>,
+        has_amenity: bool,
+    ) -> Vec<Situation> {
+        let db = MemoryDb::load_dir(&crate::tests::support::test_assets_dir().join("memories"))
+            .unwrap()
+            .0;
+        assess(
+            bodies,
+            &Surroundings {
+                grid,
+                memories: &db,
+                now: NOW,
+                has_amenity,
+                status,
+            },
+        )
+    }
+
+    fn plain(bodies: &[Body]) -> Vec<Situation> {
+        assess_with(bodies, &PowerGrid::default(), &|_| None, true)
+    }
+
+    #[test]
+    fn a_rival_on_a_diagonal_fires_and_two_tiles_away_does_not() {
+        let e = entities(2);
+        let store = rival_store(2);
+        let near = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (6, 6), None),
+        ];
+        assert_eq!(plain(&near)[0].thoughts, vec![Trigger::BesideRival]);
+        let far = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (7, 5), None),
+        ];
+        assert!(plain(&far)[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_friend_beside_fires_and_the_other_side_of_the_room_does_not() {
+        let e = entities(2);
+        let store = friend_store(2);
+        let near = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (5, 4), None),
+        ];
+        assert_eq!(plain(&near)[0].thoughts, vec![Trigger::BesideFriend]);
+        let far = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (5, 8), None),
+        ];
+        assert!(plain(&far)[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn the_bond_is_the_holders_view_and_a_neutral_neighbour_fires_neither() {
+        let e = entities(2);
+        let store = rival_store(2);
+        // Only program 1 holds the grudge, so program 2 beside it reads
+        // nothing.
+        let bodies = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (5, 6), None),
+        ];
+        let got = plain(&bodies);
+        assert_eq!(got[0].thoughts, vec![Trigger::BesideRival]);
+        assert!(got[1].thoughts.is_empty());
+        // A neighbour nobody has a memory of is neutral.
+        let empty = Memories::default();
+        let neutral = [
+            body(e[0], 1, (5, 5), Some(&empty)),
+            body(e[1], 2, (5, 6), Some(&empty)),
+        ];
+        assert!(plain(&neutral).iter().all(|s| s.thoughts.is_empty()));
+    }
+
+    #[test]
+    fn a_body_is_never_beside_itself() {
+        let e = entities(1);
+        let store = rival_store(1);
+        let alone = [body(e[0], 1, (5, 5), Some(&store))];
+        assert!(plain(&alone)[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_guard_is_not_a_neighbour() {
+        let e = entities(3);
+        let store = rival_store(2);
+        let mut guard = body(e[1], 2, (5, 6), None);
+        guard.task = Some((TaskKind::Guard, e[2]));
+        let bodies = [body(e[0], 1, (5, 5), Some(&store)), guard];
+        assert!(plain(&bodies)[0].thoughts.is_empty());
+    }
+
+    fn posted(e: &[Entity]) -> Vec<Body<'static>> {
+        let mut b = body(e[0], 1, (5, 5), None);
+        b.task = Some((TaskKind::GatherResource, e[1]));
+        vec![b]
+    }
+
+    #[test]
+    fn a_dark_machine_is_unpowered_and_a_powered_one_is_not() {
+        let e = entities(2);
+        let mut grid = PowerGrid::default();
+        grid.dark.insert(e[1]);
+        let running = |_: Entity| Some(MachineStatus::Unpowered);
+        let dark = assess_with(&posted(&e), &grid, &running, true);
+        assert_eq!(dark[0].thoughts, vec![Trigger::Unpowered]);
+        let lit = assess_with(&posted(&e), &PowerGrid::default(), &running, true);
+        assert!(lit[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn running_fires_and_starved_does_not() {
+        let e = entities(2);
+        let grid = PowerGrid::default();
+        let running = assess_with(&posted(&e), &grid, &|_| Some(MachineStatus::Running), true);
+        assert_eq!(running[0].thoughts, vec![Trigger::MachineRunning]);
+        let starved = assess_with(&posted(&e), &grid, &|_| Some(MachineStatus::Starved), true);
+        assert!(starved[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn an_unposted_body_has_no_machine_thought() {
+        let e = entities(1);
+        let grid = PowerGrid::default();
+        let idle = [body(e[0], 1, (5, 5), None)];
+        let got = assess_with(&idle, &grid, &|_| Some(MachineStatus::Running), true);
+        assert!(got[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn no_amenity_fires_only_when_the_base_has_none() {
+        let e = entities(1);
+        let idle = [body(e[0], 1, (5, 5), None)];
+        let grid = PowerGrid::default();
+        let none = assess_with(&idle, &grid, &|_| None, false);
+        assert_eq!(none[0].thoughts, vec![Trigger::NoAmenity]);
+        let some = assess_with(&idle, &grid, &|_| None, true);
+        assert!(some[0].thoughts.is_empty());
     }
 }

@@ -2,6 +2,7 @@
 paths:
   - "**/research*"
   - "**/routine_tree*"
+  - "**/affix_tree*"
 ---
 
 # Load-bearing seams: The research tree

@@ -48,8 +48,9 @@ property `assets/policies/enemy_battle.ron` has.
     // do. Added afterwards it would dwindle across a run, which is the
     // opposite of what a rolled property is for.
     //
-    // The same six fields `EquipmentStats` carries — `atk`, `mitigation`,
-    // `decompiler`, `damage`, `accuracy`, `evasion`. `mitigation` was `def`
+    // The same seven fields `EquipmentStats` carries — `atk`, `mitigation`,
+    // `decompiler`, `damage`, `accuracy`, `evasion`, `deflection` (see
+    // "Deflection" below; it is the one stat that is not scaled). `mitigation` was `def`
     // and is now percentage points rather than points of absorption, so an
     // affix that used to add 1 point of armour should read as roughly 3
     // points of percentage. A `damage` affix widens a weapon's band:
@@ -68,8 +69,73 @@ property `assets/policies/enemy_battle.ron` has.
     // roll time, so it is not a probability and adding an affix does not
     // make affixes more common overall.
     weight: 10,
+
+    // Optional; omit for an ordinary affix that drops. Present, it makes the
+    // affix RESEARCH-ONLY — see "Research-only affixes" below.
+    research: Some((
+        // Required. Research Data, as a research node's `cost`.
+        cost: 30,
+        // Optional; defaults to none. Goods consumed alongside `cost`, as a
+        // research node's `materials`.
+        materials: [("logic_wafer", 6)],
+        // Optional; defaults to 0. The zone that must be reached first.
+        min_zone: 2,
+        // Optional; defaults to none. Other research-only affix ids that
+        // must be researched first.
+        requires: ["deflecting"],
+        // Required and non-empty. Paid from the pack every time the affix is
+        // fitted at a Mod Bench.
+        apply_cost: [("core_fragment", 4)],
+    )),
 )
 ```
+
+## Research-only affixes
+
+An affix with a `research` block never drops and never appears on a caravan
+shelf: `AffixDb::pool_for`, the one door both roll sites draw through, skips
+it. (`weight` is moot on one, and setting it logs a warning.) It is reached
+only by researching it and then **fitting** it to a weapon or armor copy at a
+Mod Bench — `assets/structures/mod_bench.ron`, opened by the `mod_bench`
+research node.
+
+Nothing is authored in `assets/research/` for it. Each affix with a `research`
+block becomes a node in the **Affixes** research tree, id `"affix:<id>"`
+(`affix_tree::synthesise_nodes`), so a mod adds one by adding one affix file
+and cannot forget its node. The node is `discoverable`, so it stays hidden
+until a study attempt finds it, like a base bench. `cost`, `materials`,
+`min_zone` and `requires` mean what they do on a research node, except that
+`requires` names **affix ids** (not `affix:` ids) and each must itself be
+research-only. See `assets/research/README.md`.
+
+`apply_cost` is what each fitting costs, spent from the pack; a refused fit
+spends nothing. A copy holds `1 + fusion tier` affixes, so a fitted one takes
+a slot until stripped (stripping is free and destroys the affix). `slots`
+restricts where it can be fitted exactly as it restricts where one rolls; a
+research-only affix with no `slots` fits any weapon or armor (the item menu
+offers Modify only on those two).
+
+A research block is refused at load, with a warning naming the file, if
+`apply_cost` is empty (a free fit) or if `apply_cost` or `materials` name an
+unknown item. One whose `requires` names an unknown or non-research-only
+affix, or one that was itself refused, is dropped too, repeating until nothing
+more falls out. A research-only affix must still carry a positive stat.
+
+## Deflection
+
+`deflection` (shown as **DEFL**) is a flat number of damage removed from every
+incoming hit, after the percentage cut from `mitigation` and before the floor
+of 1 (`Game::mitigate_incoming_damage`). It applies even to a wearer with no
+percentage mitigation.
+
+Unlike the other six stats it is **not scaled** by gear level, fusion tier,
+rare tier or quality: the affix is added before scaling, and a scaled +2 on a
+high-level copy would block a dozen damage per hit. The wearer's summed
+deflection is capped at `tuning::DEFLECTION_MAX` (6) across everything worn, so
+stacking it does not erase every hit. The shipped `deflecting` (+2) and
+`of_deflection` (+4) are research-only armor affixes; both are
+ceilinged at +4 by the calibration test, which leaves room for a second piece
+under the cap.
 
 ## Two rolls, not one
 
@@ -156,9 +222,10 @@ being a bonus and starts being the item.
 | DECOMP | +3 | flat, and shipped modules grant 1–4 |
 | ACC | +3 | shipped weapons buy 2–3 |
 | EVA | +5 | shipped light armour buys 3–5 |
+| DEFL | +4 | unscaled, and capped per wearer at `DEFLECTION_MAX` (6) |
 | DMG | +3 | bounded on the band's high end |
 
-One ceiling across all six would be wrong now that they are not the same
+One ceiling across all seven would be wrong now that they are not the same
 currency: the +3 that makes an attack affix generous is nearly nothing as a
 percentage. The ceiling is on the *axis*, not on the affix: a drawback pays
 for a fourth point across two of them without reaching for a fifth on

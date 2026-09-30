@@ -143,6 +143,14 @@ Core Fragments.
     // fails the build on one.
     discoverable: true,
 
+    // Optional; defaults to false. Set this on the one node that should open
+    // the Affixes research tree (the shipped tree sets it on `mod_bench`).
+    // Until a loaded node carrying it is researched, the Affixes tree lists
+    // nothing and no affix node can be researched. Like `opens_routine_tree`
+    // it is lenient: if no loaded node carries it the tree is open from the
+    // start, so deleting the flagged node does not strand a run.
+    opens_affix_tree: true,
+
     // Optional; defaults to false. Set this on the one node that should
     // unlock fusing two tamed programs together (the shipped tree sets it
     // on `program_refactoring`). Until a loaded node carrying it is
@@ -178,6 +186,20 @@ a `dev-saves/` template) still naming `unlocks_abilities` keeps loading —
 this parser, like every other in the game, drops an unknown field silently
 rather than refusing the file — it simply grants nothing through it any
 more.
+
+## Affixes are a third tree, and you cannot author one here either
+
+Every affix in `assets/affixes/` that has a `research` block gets its own
+node automatically (`affix_tree::synthesise_nodes`), with `tree` reading
+`Affixes`. Its id is `"affix:<affix id>"`, so, as with `routine/`, you cannot
+mint, override or `requires` one from this directory. The node is
+`discoverable` and has no `unlocks_*`: researching it teaches the player to
+fit that affix at a Mod Bench, which is what `affix_researched` checks. See
+`assets/affixes/README.md` for the `research` block that feeds it.
+
+The tree is shown from the group menu's "Affix research" row, which is listed
+whenever any affix node exists; the screen itself stays empty until the
+`opens_affix_tree` node is researched.
 
 ## Rules
 

@@ -75,6 +75,13 @@ fn zone_tagged(name: String, zone: Option<u32>) -> String {
     }
 }
 
+/// An owned program's name: the player's custom name, else its handle.
+pub(crate) fn program_name(custom_name: Option<&str>, id: ProgramId) -> String {
+    custom_name
+        .map(str::to_string)
+        .unwrap_or_else(|| crate::handles::of(id))
+}
+
 /// An owned program's short label — custom name, else handle, zone-tagged.
 /// Pure so the live label and a departure written from a `CreatureSave`
 /// snapshot (there is no entity to ask) are one rule, not two.
@@ -83,10 +90,7 @@ pub(crate) fn program_short_label(
     id: ProgramId,
     zone: Option<u32>,
 ) -> String {
-    let name = custom_name
-        .map(str::to_string)
-        .unwrap_or_else(|| crate::handles::of(id));
-    zone_tagged(name, zone)
+    zone_tagged(program_name(custom_name, id), zone)
 }
 
 impl ProgramRole {
@@ -368,13 +372,15 @@ impl Game {
     /// through to its species name.
     pub(crate) fn creature_name(&self, entity: Entity) -> Option<String> {
         let c = self.world.get::<Creature>(entity)?;
-        if let Some(custom) = self.world.get::<CustomName>(entity) {
-            return Some(custom.0.clone());
+        let custom = self.world.get::<CustomName>(entity).map(|n| n.0.as_str());
+        match self.world.get::<ProgramId>(entity) {
+            Some(&id) => Some(program_name(custom, id)),
+            None => Some(
+                custom
+                    .map(str::to_string)
+                    .unwrap_or_else(|| self.species_display_name(c)),
+            ),
         }
-        if let Some(id) = self.world.get::<ProgramId>(entity) {
-            return Some(crate::handles::of(*id));
-        }
-        Some(self.species_display_name(c))
     }
 
     /// The species' display name, falling back to its raw id if the def

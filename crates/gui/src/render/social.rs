@@ -290,12 +290,26 @@ mod tests {
         // that has the species appended to it. Either can be a boss of the
         // highest tier, in a deep zone.
         let custom = "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
+        // `subject_title` appends the species, so the fixture's first
+        // species would hide the longest-name worst case.
+        let longest_species = feral_processes_engine::Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            &super::super::test_support::test_assets_dir(),
+        )
+        .expect("the shipped asset tree builds a fresh game")
+        .species_defs()
+        .into_iter()
+        .max_by_key(|d| d.name.chars().count())
+        .expect("the shipped catalogue has species")
+        .id;
         for (fixture, name) in [
             ("title_custom", Some(custom.as_str())),
             ("title_handle", None),
         ] {
             let mut game = game_with_tweaked_programs(fixture, 11, &[(false, "")], |c| {
                 c.custom_name = name.map(str::to_string);
+                c.species = longest_species.clone();
                 c.rarity = Rarity::Gold;
                 c.boss = true;
                 c.zone = 10;

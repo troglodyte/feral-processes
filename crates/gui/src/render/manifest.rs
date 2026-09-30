@@ -428,24 +428,6 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
     SectionRow::Stat(label.into(), value.into())
 }
 
-/// Builds COMBAT, dispatches to `player_sections` or `program_sections` for
-/// the subject-specific middle, then appends EQUIPMENT and ROUTINES **last**
-/// — after whichever of those two returns, not as one of their own pushes.
-/// That makes this function, not either of them, the one place that knows the
-/// page's *full* section set.
-///
-/// `manifest_layout`'s column packer is an exact 2-partition
-/// (`best_column_split`), not the order-sensitive greedy it used to be, so
-/// the *set* of boxes is what decides whether a page fits — order no
-/// longer changes the tallest column's height. Order still decides which
-/// specific box lands in which column when two partitions tie (see
-/// `best_column_split`'s doc), which is what
-/// `columned_sections_fill_left_then_right` pins. Either way, every
-/// section this function or its callee pushes must have a matching entry
-/// in `manifest_layout::tests::worst_case_program` or `worst_case_player`
-/// — the branch's original regression was a missing box, not a wrong row
-/// count or a wrong order, and a fixture that omits a box passes every
-/// test while the real page still doesn't fit.
 fn is_boss(view: &ManifestView) -> bool {
     matches!(&view.subject, ManifestSubject::Program(p) if p.is_boss)
 }
@@ -490,6 +472,24 @@ fn subject_title(view: &ManifestView) -> String {
     }
 }
 
+/// Builds COMBAT, dispatches to `player_sections` or `program_sections` for
+/// the subject-specific middle, then appends EQUIPMENT and ROUTINES **last**
+/// — after whichever of those two returns, not as one of their own pushes.
+/// That makes this function, not either of them, the one place that knows the
+/// page's *full* section set.
+///
+/// `manifest_layout`'s column packer is an exact 2-partition
+/// (`best_column_split`), not the order-sensitive greedy it used to be, so
+/// the *set* of boxes is what decides whether a page fits — order no
+/// longer changes the tallest column's height. Order still decides which
+/// specific box lands in which column when two partitions tie (see
+/// `best_column_split`'s doc), which is what
+/// `columned_sections_fill_left_then_right` pins. Either way, every
+/// section this function or its callee pushes must have a matching entry
+/// in `manifest_layout::tests::worst_case_program` or `worst_case_player`
+/// — the branch's original regression was a missing box, not a wrong row
+/// count or a wrong order, and a fixture that omits a box passes every
+/// test while the real page still doesn't fit.
 fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
     let mut combat = vec![
         stat("Damage", view.damage.clone()),

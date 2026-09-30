@@ -463,7 +463,7 @@ impl Game {
     /// early returns above leave a site alone rather than tidying it away —
     /// folding at the raise's *start* would charge the run for a build that
     /// a missing def or a lowered tier ceiling then declines to finish.
-    fn consume_site(&mut self, site: Entity) {
+    pub(crate) fn consume_site(&mut self, site: Entity) {
         let delivered = self
             .world
             .get::<BuildSite>(site)

@@ -3141,6 +3141,27 @@ fn every_shipped_memory_def_is_reachable_from_a_trigger() {
     }
 }
 
+/// `note_departure` writes by id, and a departure memory that does not carry
+/// `departure: true` would be counted by the bond read it is meant to be
+/// left out of. So every id it can write must resolve, flagged.
+#[test]
+fn every_departure_def_ships_flagged() {
+    use crate::bonds::{Departure, RELIEF_DEF};
+    use crate::memories::{MemoryDb, MemoryId};
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let written = [Departure::Fell, Departure::LetGo, Departure::Fused]
+        .map(Departure::grief_def)
+        .into_iter()
+        .chain([RELIEF_DEF]);
+    for id in written {
+        let def = db
+            .get(&MemoryId::from(id))
+            .unwrap_or_else(|| panic!("{id} is written by note_departure but does not ship"));
+        assert!(def.departure, "{id} ships without `departure: true`");
+    }
+}
+
 /// The memory-catalogue census, over the **real** `assets/memories/` rather
 /// than a fixture. `MemoryDb::load_dir` refuses nothing beyond a file that
 /// will not parse — a mod's def is never turned away for being nonsense — so

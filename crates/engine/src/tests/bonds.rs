@@ -386,6 +386,33 @@ fn a_finished_build_lets_its_spent_program_go() {
     assert_grief_by(&game, &cast, id, "let_go");
 }
 
+/// The name is read off the filed snapshot, not an entity, so it must equal
+/// the live short label the program wore before it was committed.
+#[test]
+fn a_finished_build_stamps_the_live_short_label_on_the_grief() {
+    let mut game = a_base_with_a_crew(1104);
+    let leaving = tame_at_zone(&mut game, 1);
+    let id = id_of(&game, leaving);
+    let cast = cast_around(&mut game, leaving);
+    let live = game.creature_short_label(leaving);
+
+    game.place_structure("mining_node", 1, 0, Some(leaving))
+        .unwrap();
+    let (px, py) = game.base_pos().unwrap();
+    let site = game.build_site_at(px + 1, py).unwrap();
+    game.consume_site(site);
+
+    let grief = game
+        .world
+        .get::<Memories>(cast.friend)
+        .unwrap()
+        .0
+        .iter()
+        .find(|m| m.def.as_str() == "let_go" && m.subject == MemorySubject::Program(id))
+        .expect("the friend grieves");
+    assert_eq!(grief.subject_name.as_deref(), Some(live.as_str()));
+}
+
 #[test]
 fn a_committed_then_refunded_program_grieves_nobody() {
     let mut game = a_base_with_a_crew(1103);
@@ -460,7 +487,7 @@ fn a_brawl_and_a_departure_draw_no_rng() {
             dealt: 3,
             taken: 3,
         });
-        // A witness is the third program; it must have written, or the
+        // A witness is the fourth program; it must have written, or the
         // witness path was never part of what drew nothing.
         assert!(
             game.world
@@ -520,20 +547,6 @@ fn known_for_reads_what_others_think_not_what_the_program_thinks() {
 
     implant(&mut game, other, "idled_with", MemorySubject::Program(sid));
     assert_eq!(game.known_for(subject), vec!["good company".to_string()]);
-}
-
-#[test]
-fn a_departure_name_from_a_snapshot_is_the_live_short_label() {
-    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let program = spawn_tamed(&mut game, 10, 3);
-    game.world
-        .entity_mut(program)
-        .insert(crate::components::ZonePortal(4));
-    let id = id_of(&game, program);
-    assert_eq!(
-        crate::game::party::program_short_label(None, id, Some(4)),
-        game.creature_short_label(program)
-    );
 }
 
 #[test]

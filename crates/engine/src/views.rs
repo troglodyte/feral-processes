@@ -3646,7 +3646,8 @@ pub struct RelationshipRow {
     /// subject has left.
     pub name: String,
     pub bond: crate::bonds::Bond,
-    /// Signed, from `Game::opinion_of`; the band is derived from it.
+    /// Signed, from `Game::opinion_about` with departure memories left out,
+    /// so the row reads the bond as it stood; the band is derived from it.
     pub opinion: f32,
     pub gone: bool,
 }

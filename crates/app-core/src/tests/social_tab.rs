@@ -1,0 +1,62 @@
+//! `Tab` on a manifest: STATS and SOCIAL, for programs you own.
+
+use super::support::*;
+use crate::*;
+
+fn open(app: &mut App, subject: Entity) {
+    app.pending_manifest = Some(subject);
+    app.manifest_origin = ManifestOrigin::Map;
+    app.mode = Mode::Manifest;
+}
+
+fn owned_pair(seed: u32) -> (App, Entity, Entity) {
+    let mut app = app_owning_distant_programs(seed, 2);
+    let subjects = app.manifest_subjects();
+    let programs: Vec<Entity> = subjects
+        .iter()
+        .copied()
+        .filter(|&e| app.game.as_ref().unwrap().social(e).is_some())
+        .collect();
+    assert!(programs.len() >= 2, "fixture must own two programs");
+    (app, programs[0], programs[1])
+}
+
+#[test]
+fn tab_toggles_between_stats_and_social_on_an_owned_program() {
+    let (mut app, a, _) = owned_pair(7401);
+    open(&mut app, a);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}
+
+#[test]
+fn paging_keeps_the_tab() {
+    let (mut app, a, b) = owned_pair(7402);
+    open(&mut app, a);
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Right);
+    assert_ne!(app.pending_manifest, Some(a));
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    let _ = b;
+}
+
+#[test]
+fn leaving_the_manifest_resets_the_tab() {
+    let (mut app, a, _) = owned_pair(7403);
+    open(&mut app, a);
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}
+
+#[test]
+fn tab_is_a_no_op_on_the_player() {
+    let (mut app, _, _) = owned_pair(7404);
+    let player = app.game.as_ref().unwrap().player_entity();
+    open(&mut app, player);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}

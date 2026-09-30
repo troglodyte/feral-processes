@@ -66,6 +66,7 @@ impl App {
             pending_remove_structure: None,
             watching: None,
             pending_manifest: None,
+            manifest_tab: ManifestTab::default(),
             pending_structure_manifest: None,
             pending_description: None,
             pending_notification: None,

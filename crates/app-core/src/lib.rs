@@ -1216,6 +1216,14 @@ pub enum ManifestOrigin {
     Roster,
 }
 
+/// The two faces of an owned program's manifest, switched with `Tab`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ManifestTab {
+    #[default]
+    Stats,
+    Social,
+}
+
 impl ManifestOrigin {
     /// Whether Esc backs into a list rather than onto the map — the one
     /// thing the manifest's footer needs to know about where it came from.
@@ -2631,6 +2639,9 @@ pub struct App {
     /// Whose stat sheet `Mode::Manifest` is showing — the player, a program
     /// you own, or the wild one `Mode::InspectDirection` just found.
     pub pending_manifest: Option<Entity>,
+    /// Which face of an owned program's sheet is up. Reset by
+    /// `leave_manifest`; paging between programs keeps it.
+    pub manifest_tab: ManifestTab,
     /// Which structure `Mode::StructureManifest` is showing — whatever the
     /// inspector found in the direction you pointed. Not `pending_structure`:
     /// that one is a structure *kind* awaiting placement in `Mode::Build`.

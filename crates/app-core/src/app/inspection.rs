@@ -281,6 +281,10 @@ impl App {
             self.open_manifest_memories();
             return;
         }
+        if key == GameKey::Tab {
+            self.toggle_manifest_tab();
+            return;
+        }
         let step = match key {
             GameKey::Left => -1,
             GameKey::Right => 1,
@@ -301,6 +305,20 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// Only an owned program has a SOCIAL face; on anyone else the key is
+    /// not bound, so the tab can never be left pointing at nothing.
+    fn toggle_manifest_tab(&mut self) {
+        let owned = self
+            .pending_manifest
+            .is_some_and(|e| self.game.as_ref().is_some_and(|g| g.social(e).is_some()));
+        if owned {
+            self.manifest_tab = match self.manifest_tab {
+                ManifestTab::Stats => ManifestTab::Social,
+                ManifestTab::Social => ManifestTab::Stats,
+            };
+        }
     }
 
     /// `R` on a sheet: the whole memories page behind its MEMORIES box.
@@ -361,6 +379,7 @@ impl App {
         }
         self.watching = self.pending_manifest;
         self.pending_manifest = None;
+        self.manifest_tab = ManifestTab::Stats;
         self.status_line = None;
         self.mode = Mode::Playing;
     }
@@ -396,6 +415,7 @@ impl App {
     /// than snapped to the top — which is what `keeps_highlight` parks it for
     /// across the side trip.
     fn leave_manifest(&mut self) {
+        self.manifest_tab = ManifestTab::Stats;
         match self.manifest_origin {
             ManifestOrigin::Map => {
                 self.pending_manifest = None;

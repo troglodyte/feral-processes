@@ -49,6 +49,7 @@ mod settlement;
 mod settlement_aid;
 mod settlement_board;
 mod settlement_market;
+mod social_tab;
 mod spend_preview;
 mod sprite_forge;
 mod stack;

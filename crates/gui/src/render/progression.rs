@@ -953,6 +953,25 @@ mod tests {
         });
     }
 
+    /// The preview line is a header row of the menu, right under the
+    /// instruction line, and nothing else draws it.
+    #[test]
+    fn the_preview_line_is_the_row_under_the_instructions() {
+        let rows = perks_menu_rows(3, 2, "Next level: sentinel", &[], &[], 0, 500);
+        let texts: Vec<&str> = rows
+            .iter()
+            .map(|r| match r {
+                Row::Text(t) | Row::TextColored(t, _) => t.as_str(),
+                Row::Item { text, .. } => text.as_str(),
+            })
+            .collect();
+        let at = texts
+            .iter()
+            .position(|t| t.contains("[X] refunds"))
+            .expect("the instruction line");
+        assert_eq!(texts[at + 1], "Next level: sentinel");
+    }
+
     /// A perk that moves nothing says so rather than drawing a blank row, and
     /// one that moves a stat and a fight figure lists both.
     #[test]

@@ -8,8 +8,8 @@
 //! a census test over the widest reachable report (`the_widest_report_fits_
 //! its_screen`) rather than fitted to the content at draw time.
 
-use feral_processes_engine::LevelUpReport;
 use feral_processes_engine::progression::StatRow;
+use feral_processes_engine::{DuelComparison, LevelUpReport};
 
 use super::{BORDER, Metrics, PANEL_BG, TEXT, TEXT_DIM};
 use crate::paint::{Color, Painter, Rect};
@@ -27,24 +27,41 @@ const ESC_HINT: &str = "[Esc] Close";
 const PERKS_HINT: &str = "[P] Perks";
 const POINTS_HINT: &str = "[Enter] Spend points";
 
-fn panel_rect(w: f32, h: f32) -> Rect {
+pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
     let (pw, ph) = (w * PANEL_W_FRACTION, h * PANEL_H_FRACTION);
     Rect::new((w - pw) / 2.0, (h - ph) / 2.0, pw, ph)
 }
 
-fn stat_line(row: &StatRow) -> String {
+pub(super) fn stat_line(row: &StatRow) -> String {
     format!("  {}   {} \u{2192} {}", row.label, row.before, row.after)
 }
 
-/// The duel section's four rows, against `report.duel.zone`'s typical foe.
-/// Percentages are whole numbers, the per-swing figure one decimal — the
-/// rest of the page is integers already, and those are the two figures
-/// `Game::take_level_up_report` hands back as `f64`.
-fn duel_lines(report: &LevelUpReport) -> [String; 4] {
-    let (hit_before, hit_after) = report.duel.hit_chance;
-    let (swing_before, swing_after) = report.duel.per_swing;
-    let (win_before, win_after) = report.duel.swings_to_win;
-    let (down_before, down_after) = report.duel.swings_to_down_you;
+/// The duel section's heading, the one string all three screens that draw
+/// the block put above `duel_lines`.
+pub(super) fn duel_heading(duel: &DuelComparison) -> String {
+    format!("AGAINST A TYPICAL ZONE {} PROGRAM", duel.zone)
+}
+
+/// Whether the change moves any fight figure. A purchase that does not shows
+/// its description in place of the block, and the Perks menu says "no
+/// change" rather than four figures that read the same twice.
+pub(super) fn duel_moved(duel: &DuelComparison) -> bool {
+    duel.hit_chance.0 != duel.hit_chance.1
+        || duel.per_swing.0 != duel.per_swing.1
+        || duel.swings_to_win.0 != duel.swings_to_win.1
+        || duel.swings_to_down_you.0 != duel.swings_to_down_you.1
+}
+
+/// The duel section's four rows, against `duel.zone`'s typical foe. The one
+/// drawer of them on the level-up page, the Points screen and the purchase
+/// page. Percentages are whole numbers, the per-swing figure one decimal —
+/// the rest of the page is integers already, and those are the two figures
+/// the engine hands back as `f64`.
+pub(super) fn duel_lines(duel: &DuelComparison) -> [String; 4] {
+    let (hit_before, hit_after) = duel.hit_chance;
+    let (swing_before, swing_after) = duel.per_swing;
+    let (win_before, win_after) = duel.swings_to_win;
+    let (down_before, down_after) = duel.swings_to_down_you;
     [
         format!(
             "  Hit chance      {:.0}% \u{2192} {:.0}%",
@@ -87,7 +104,7 @@ fn block_height(painter: &Painter, m: &Metrics, title: &str, stat_rows: usize) -
 #[cfg(test)]
 fn widest_line(painter: &Painter, m: &Metrics, report: &LevelUpReport) -> f32 {
     let title = format!("LEVEL {} \u{2192} {}", report.from_level, report.to_level);
-    let duel_header = format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.duel.zone);
+    let duel_header = duel_heading(&report.duel);
     let perk_line = format!(
         "  +{} Perk Points ({} unspent)   {PERKS_HINT}",
         report.perk_points_gained, report.perk_points_unspent
@@ -102,7 +119,7 @@ fn widest_line(painter: &Painter, m: &Metrics, report: &LevelUpReport) -> f32 {
         widest = widest.max(painter.measure_ui_advance(stat_line(row), m.font_size));
     }
     widest = widest.max(painter.measure_ui_advance(&duel_header, m.font_size));
-    for line in duel_lines(report) {
+    for line in duel_lines(&report.duel) {
         widest = widest.max(painter.measure_ui_advance(&line, m.font_size));
     }
     widest = widest.max(painter.measure_ui_advance("TO SPEND", m.font_size));
@@ -135,14 +152,8 @@ pub(super) fn draw_level_up(report: &LevelUpReport, painter: &Painter, m: &Metri
 
     y += m.gap;
     y += m.line_height;
-    painter.ui_bold(
-        format!("AGAINST A TYPICAL ZONE {} PROGRAM", report.duel.zone),
-        left,
-        y,
-        m.font_size,
-        TEXT_DIM,
-    );
-    for line in duel_lines(report) {
+    painter.ui_bold(duel_heading(&report.duel), left, y, m.font_size, TEXT_DIM);
+    for line in duel_lines(&report.duel) {
         y += m.line_height;
         painter.ui(line, left, y, m.font_size, TEXT);
     }
@@ -178,7 +189,6 @@ pub(super) fn draw_level_up(report: &LevelUpReport, painter: &Painter, m: &Metri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_engine::DuelComparison;
 
     /// The widest reachable report by hand: two stat rows at four digits, a
     /// level pair that never needs a third digit (`Game::level_cap`'s own

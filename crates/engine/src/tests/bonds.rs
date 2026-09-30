@@ -460,6 +460,17 @@ fn a_brawl_and_a_departure_draw_no_rng() {
             dealt: 3,
             taken: 3,
         });
+        // A witness is the third program; it must have written, or the
+        // witness path was never part of what drew nothing.
+        assert!(
+            game.world
+                .get::<Memories>(staff[3])
+                .unwrap()
+                .0
+                .iter()
+                .any(|m| m.def == MemoryId::from("saw_turn_on")),
+            "the witness path did not run"
+        );
         // Not `sell_companion`, which ticks the world and so draws.
         game.dissolve_tamed_program(staff[0], crate::bonds::Departure::LetGo);
         assert_eq!(departures(game, staff[1], id), vec!["let_go"]);

@@ -250,8 +250,7 @@ pub(crate) fn assess(bodies: &[Body], around: &Surroundings) -> Vec<Situation> {
             if let Some((TaskKind::GatherResource, machine)) = body.task {
                 if around.grid.is_dark(machine) {
                     thoughts.push(Trigger::Unpowered);
-                }
-                if (around.status)(machine) == Some(MachineStatus::Running) {
+                } else if (around.status)(machine) == Some(MachineStatus::Running) {
                     thoughts.push(Trigger::MachineRunning);
                 }
             }
@@ -295,6 +294,8 @@ pub struct AssessLookups<'w, 's> {
 /// `MachineStatus` is written later in the chain, so `MachineRunning` reads
 /// the previous tick's status — the one-tick lag `Stranded` accepts. The
 /// grid (`power_grid_system`) has already run, so `Unpowered` is this tick's.
+/// The two machine thoughts are exclusive: a dark machine is never "running",
+/// whatever last tick's status says.
 pub fn assess_situation_system(
     programs: Query<Assessed>,
     lookups: AssessLookups,
@@ -683,6 +684,15 @@ mod tests {
         assert_eq!(dark[0].thoughts, vec![Trigger::Unpowered]);
         let lit = assess_with(&posted(&e), &PowerGrid::default(), &running, true);
         assert!(lit[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_dark_machine_that_ran_last_tick_is_only_unpowered() {
+        let e = entities(2);
+        let mut grid = PowerGrid::default();
+        grid.dark.insert(e[1]);
+        let t = assess_with(&posted(&e), &grid, &|_| Some(MachineStatus::Running), true);
+        assert_eq!(t[0].thoughts, vec![Trigger::Unpowered]);
     }
 
     #[test]

@@ -41,7 +41,7 @@ reweight or delete a thought but not invent a trigger.
 | `BesideRival` | Another staff program stands on an adjacent tile (diagonals count) and this program's bond with it is Rival or Enemy. |
 | `BesideFriend` | As above, and the bond is Friend or Close. |
 | `Unpowered` | The program is posted to a machine the grid cannot power. |
-| `MachineRunning` | The program is posted to a machine that is running. |
+| `MachineRunning` | The program is posted to a machine that is running and powered (a dark machine gives only `Unpowered`). |
 | `NoAmenity` | The base has no amenity at all. |
 
 Two files naming the same trigger: the first by file name wins and the second

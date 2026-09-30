@@ -1100,6 +1100,7 @@ fn charges_for_itself(affix: &crate::affixes::AffixDef) -> bool {
         s.decompiler,
         s.accuracy,
         s.evasion,
+        s.deflection,
         s.damage.min,
         s.damage.max,
     ]
@@ -1143,5 +1144,39 @@ fn scale_stats(stats: crate::items::EquipmentStats, count: u32) -> crate::items:
         accuracy: stats.accuracy * n,
         evasion: stats.evasion * n,
         deflection: stats.deflection * n,
+    }
+}
+
+#[cfg(test)]
+mod charges_for_itself_tests {
+    use super::charges_for_itself;
+    use crate::affixes::AffixDef;
+    use crate::items::EquipmentStats;
+
+    fn affix(stats: EquipmentStats) -> AffixDef {
+        AffixDef {
+            id: "probe".into(),
+            prefix: Some("Probe".into()),
+            suffix: None,
+            stats,
+            slots: None,
+            weight: 1,
+            research: None,
+        }
+    }
+
+    #[test]
+    fn a_negative_deflection_is_a_drawback() {
+        let drawback = affix(EquipmentStats {
+            atk: 3,
+            deflection: -1,
+            ..Default::default()
+        });
+        assert!(charges_for_itself(&drawback));
+        let plain = affix(EquipmentStats {
+            deflection: 2,
+            ..Default::default()
+        });
+        assert!(!charges_for_itself(&plain));
     }
 }

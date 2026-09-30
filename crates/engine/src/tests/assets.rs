@@ -5671,3 +5671,18 @@ mod outpost_content {
         );
     }
 }
+
+/// A shipped-content rule, `MEMORY_TRIGGERS`' kind: a `Trigger` with no
+/// shipped def is a situation the game detects and never feels.
+#[test]
+fn every_thought_trigger_has_a_shipped_def() {
+    let (db, warnings) =
+        crate::situations::ThoughtDb::load_dir(&test_assets_dir().join("thoughts")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    for trigger in crate::situations::Trigger::ALL {
+        let def = db
+            .get(trigger)
+            .unwrap_or_else(|| panic!("{trigger:?} has no def in assets/thoughts/"));
+        assert_ne!(def.intensity, 0.0, "{trigger:?} would be worth nothing");
+    }
+}

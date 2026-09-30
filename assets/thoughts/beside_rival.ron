@@ -1,0 +1,7 @@
+// Standing next to a program it holds a grudge against.
+(
+    trigger: BesideRival,
+    name: "Beside a rival",
+    blurb: "Hard to work with them standing right there.",
+    intensity: -3.0,
+)

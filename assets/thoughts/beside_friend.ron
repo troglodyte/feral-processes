@@ -1,0 +1,7 @@
+// Standing next to a program it is fond of.
+(
+    trigger: BesideFriend,
+    name: "Beside a friend",
+    blurb: "Easier with someone good to have close by.",
+    intensity: 2.0,
+)

@@ -1,0 +1,7 @@
+// Posted to a machine the grid cannot power.
+(
+    trigger: Unpowered,
+    name: "Working in the dark",
+    blurb: "The post has gone dead and there is nothing to do but wait.",
+    intensity: -2.0,
+)

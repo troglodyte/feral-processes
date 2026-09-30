@@ -1,0 +1,7 @@
+// Posted to a machine that is producing.
+(
+    trigger: MachineRunning,
+    name: "A machine that runs",
+    blurb: "It feels good to see the work actually move.",
+    intensity: 1.0,
+)

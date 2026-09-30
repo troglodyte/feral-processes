@@ -1,0 +1,7 @@
+// The base has no amenity at all.
+(
+    trigger: NoAmenity,
+    name: "Nowhere to unwind",
+    blurb: "There is nothing in this base to take a break at.",
+    intensity: -2.0,
+)

@@ -590,6 +590,38 @@ fn slots_fill_and_roles_name_the_right_side() {
 }
 
 #[test]
+fn a_non_program_topic_is_named_from_the_catalogue_even_when_stamped_empty() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_topic_kinds", &[TALK_SAYS]);
+    let o = id_of(&game, b[1]);
+    for (subject, want) in [
+        (
+            MemorySubject::Structure("annealing_node".into()),
+            "About Annealing Node.",
+        ),
+        (MemorySubject::Species("cipher".into()), "About Cipher."),
+        (
+            MemorySubject::BaseTile { x: 3, y: 4 },
+            "About the base at (3, 4).",
+        ),
+    ] {
+        give(
+            &mut game,
+            b[0],
+            record(
+                "talk",
+                Some(1),
+                Role::Listener,
+                o,
+                Some((subject, String::new())),
+            ),
+        );
+        let views = game.conversations(b[0]).unwrap();
+        assert_eq!(views[0].lines[0].text, want);
+    }
+}
+
+#[test]
 fn a_rename_reads_through_and_a_departed_program_uses_its_stamp() {
     use crate::interactions::Role;
     let (mut game, b) = base(

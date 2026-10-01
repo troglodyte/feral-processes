@@ -793,14 +793,17 @@ impl crate::Game {
     /// it was. A species or a structure a mod has since removed falls back to
     /// its id, which is at least a thing the player can search a file for.
     fn subject_name(&self, memory: &Memory) -> Option<String> {
-        match &memory.subject {
+        self.subject_label(&memory.subject, memory.subject_name.as_deref())
+    }
+
+    /// `subject_name`'s body, for a caller holding a subject and a stamped
+    /// name rather than a `Memory` (a conversation's topic).
+    fn subject_label(&self, subject: &MemorySubject, stamped: Option<&str>) -> Option<String> {
+        match subject {
             MemorySubject::Nothing => None,
-            MemorySubject::Program(_) => Some(
-                memory
-                    .subject_name
-                    .clone()
-                    .unwrap_or_else(|| "a program that is gone".to_string()),
-            ),
+            MemorySubject::Program(_) => {
+                Some(stamped.map_or_else(|| "a program that is gone".to_string(), str::to_string))
+            }
             MemorySubject::Species(id) => Some(
                 self.world
                     .resource::<crate::species::SpeciesDb>()
@@ -1104,8 +1107,15 @@ impl crate::Game {
                                     _ => r.topic.as_ref().map_or_else(
                                         || "something".to_string(),
                                         |(subject, stamped)| {
-                                            self.remembered_name(subject)
-                                                .unwrap_or_else(|| stamped.clone())
+                                            // Non-programs are named from the
+                                            // catalogue, so a topic stamped ""
+                                            // by an older save repairs itself.
+                                            let live = self.remembered_name(subject);
+                                            let stamped = live.as_deref().or_else(|| {
+                                                Some(stamped.as_str()).filter(|s| !s.is_empty())
+                                            });
+                                            self.subject_label(subject, stamped)
+                                                .unwrap_or_else(|| "something".to_string())
                                         },
                                     ),
                                 });

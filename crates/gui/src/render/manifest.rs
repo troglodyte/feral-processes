@@ -5,6 +5,7 @@ use super::bars::*;
 use super::manifest_layout::*;
 use super::popup::*;
 use super::social::{draw_tab_strip, social_sections};
+use super::talk::talk_sections;
 use super::*;
 use feral_processes_app_core::ManifestTab;
 use feral_processes_engine::components::TaskKind;
@@ -79,9 +80,13 @@ pub(super) fn draw_manifest(
     // `Some` only for a program you own, which is also exactly who has a tab
     // strip: the strip never offers a face the subject does not have.
     let social = game.social(view.entity);
-    let showing_social = social.is_some() && nav.tab == ManifestTab::Social;
-    let (meters, sections) = match &social {
-        Some(s) if showing_social => (Vec::new(), social_sections(s)),
+    let (meters, sections) = match (&social, nav.tab) {
+        (Some(s), ManifestTab::Social) => (Vec::new(), social_sections(s)),
+        (Some(_), ManifestTab::Talk) => {
+            let exchanges = game.conversations(view.entity).unwrap_or_default();
+            let screen = (painter.screen_w(), painter.screen_h());
+            (Vec::new(), talk_sections(&exchanges, screen, painter, m))
+        }
         _ => (meter_rows(&view), sections_for(game, &view)),
     };
     let l = manifest_layout(

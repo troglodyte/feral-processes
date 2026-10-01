@@ -68,14 +68,17 @@ const TAB_KEY: &str = "[Tab] ";
 const TAB_SEPARATOR: &str = " · ";
 const TAB_STATS: &str = "STATS";
 const TAB_SOCIAL: &str = "SOCIAL";
+const TAB_TALK: &str = "TALK";
 
 /// The strip's pieces left to right, each with whether it is the open tab.
-fn strip_pieces(active: ManifestTab) -> [(&'static str, bool); 4] {
+fn strip_pieces(active: ManifestTab) -> [(&'static str, bool); 6] {
     [
         (TAB_KEY, false),
         (TAB_STATS, active == ManifestTab::Stats),
         (TAB_SEPARATOR, false),
         (TAB_SOCIAL, active == ManifestTab::Social),
+        (TAB_SEPARATOR, false),
+        (TAB_TALK, active == ManifestTab::Talk),
     ]
 }
 

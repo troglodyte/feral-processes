@@ -6,10 +6,12 @@
 //! match and no `_` arm, so a new rung fails to compile until each query
 //! answers it.
 
+use serde::{Deserialize, Serialize};
+
 use crate::tuning::{BOND_CLOSE_AT, BOND_ENEMY_AT, BOND_FRIEND_AT, BOND_RIVAL_AT};
 
 /// Ordered from the bottom so the thresholds read as the ladder they are.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub enum Bond {
     Enemy,
     Rival,

@@ -117,6 +117,12 @@ pub struct MemoryDef {
     /// other reader still counts them.
     #[serde(default)]
     pub departure: bool,
+    /// The hearsay def this memory becomes when its holder tells it to
+    /// someone else. Valid only on a `Program`-subject def whose target is
+    /// also `Program`-subject and spreads no further, so hearsay is never
+    /// retold; `MemoryDb::load_dir` drops a def that breaks this.
+    #[serde(default)]
+    pub spreads_as: Option<String>,
 }
 
 impl MemoryDef {
@@ -189,7 +195,45 @@ impl MemoryDb {
                 Err(e) => warnings.push(format!("skipped invalid memory file {path:?}: {e}")),
             }
         }
+        db.drop_bad_spreads(&mut warnings);
         Ok((db, warnings))
+    }
+
+    /// Checked after every def has loaded, because the target of a
+    /// `spreads_as` may be in a later file. The whole def is dropped, not
+    /// just the field: a memory that silently stops spreading would be a
+    /// quieter fault than one missing from the catalogue.
+    fn drop_bad_spreads(&mut self, warnings: &mut Vec<String>) {
+        let mut bad: Vec<(MemoryId, &'static str)> = Vec::new();
+        for def in self.defs.values() {
+            let Some(target) = &def.spreads_as else {
+                continue;
+            };
+            let fault = if def.subject != MemorySubjectKind::Program {
+                Some("it is not Program-subject")
+            } else {
+                match self.defs.get(&MemoryId::from(target.as_str())) {
+                    None => Some("its spreads_as target does not exist"),
+                    Some(t) if t.subject != MemorySubjectKind::Program => {
+                        Some("its spreads_as target is not Program-subject")
+                    }
+                    Some(t) if t.spreads_as.is_some() => {
+                        Some("its spreads_as target itself spreads")
+                    }
+                    Some(_) => None,
+                }
+            };
+            if let Some(fault) = fault {
+                bad.push((def.id.clone(), fault));
+            }
+        }
+        // Collected first, so one def's removal cannot change whether
+        // another's target "itself spreads".
+        bad.sort();
+        for (id, fault) in bad {
+            warnings.push(format!("skipped invalid memory {id}: {fault}"));
+            self.defs.remove(&id);
+        }
     }
 
     pub fn get(&self, id: &MemoryId) -> Option<&MemoryDef> {
@@ -452,5 +496,69 @@ mod tests {
             "the alphabetically last file must win, whatever order the \
              directory hands its entries back in"
         );
+    }
+
+    fn spread_text(id: &str, subject: &str, spreads_as: Option<&str>) -> String {
+        let extra = spreads_as
+            .map(|t| format!("spreads_as: Some(\"{t}\"),"))
+            .unwrap_or_default();
+        format!(
+            "(id: \"{id}\", name: \"n\", blurb: \"b\", valence: -2.0, half_life: 100, \
+             subject: {subject}, strike_cap: 3, {extra})"
+        )
+    }
+
+    fn spread_case(files: &[(&str, String)]) -> (MemoryDb, Vec<String>) {
+        load(files)
+    }
+
+    #[test]
+    fn a_valid_spreads_as_survives() {
+        let (db, w) = spread_case(&[
+            ("a.ron", spread_text("src", "Program", Some("hear"))),
+            ("b.ron", spread_text("hear", "Program", None)),
+        ]);
+        assert!(w.is_empty(), "{w:?}");
+        assert!(db.get(&MemoryId::from("src")).is_some());
+    }
+
+    #[test]
+    fn a_spreads_as_on_a_non_program_def_is_dropped_with_a_warning() {
+        let (db, w) = spread_case(&[
+            ("a.ron", spread_text("src", "BaseTile", Some("hear"))),
+            ("b.ron", spread_text("hear", "Program", None)),
+        ]);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(db.get(&MemoryId::from("src")).is_none());
+        assert!(db.get(&MemoryId::from("hear")).is_some());
+    }
+
+    #[test]
+    fn a_spreads_as_with_a_missing_target_is_dropped_with_a_warning() {
+        let (db, w) = spread_case(&[("a.ron", spread_text("src", "Program", Some("nope")))]);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(db.get(&MemoryId::from("src")).is_none());
+    }
+
+    #[test]
+    fn a_spreads_as_with_a_non_program_target_is_dropped_with_a_warning() {
+        let (db, w) = spread_case(&[
+            ("a.ron", spread_text("src", "Program", Some("hear"))),
+            ("b.ron", spread_text("hear", "Species", None)),
+        ]);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(db.get(&MemoryId::from("src")).is_none());
+    }
+
+    #[test]
+    fn a_spreads_as_whose_target_also_spreads_is_dropped_with_a_warning() {
+        let (db, w) = spread_case(&[
+            ("a.ron", spread_text("src", "Program", Some("hear"))),
+            ("b.ron", spread_text("hear", "Program", Some("src"))),
+        ]);
+        // Both break the rule against each other; neither may survive.
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert!(db.get(&MemoryId::from("src")).is_none());
+        assert!(db.get(&MemoryId::from("hear")).is_none());
     }
 }

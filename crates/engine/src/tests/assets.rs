@@ -2998,6 +2998,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // `BOND_WITNESS_REACH` of the victim. Weaker, and names the
         // aggressor.
         ("saw_turn_on", K::Program),
+        // `Game::note_sabotage`, off `tick_inner` on `INTERACTION_PERIOD`: the
+        // witnesses of a sulking program spoiling a unit at a machine, about
+        // the saboteur.
+        ("saw_sabotage", K::Program),
         // `Game::note_departure`, off every door a program leaves play by
         // (its doc lists the six). The subject is the program that left, and
         // the four are one per `Departure` plus the relief for a rival going.
@@ -3240,7 +3244,7 @@ fn every_spreads_as_is_a_weaker_program_memory_that_does_not_spread() {
             def.id
         );
     }
-    assert_eq!(spreading, 4, "the four firsthand Program memories spread");
+    assert_eq!(spreading, 5, "the five firsthand Program memories spread");
 }
 
 /// `note_departure` writes by id, and a departure memory that does not carry

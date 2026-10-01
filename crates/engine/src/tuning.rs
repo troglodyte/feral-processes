@@ -4504,6 +4504,18 @@ pub const BOND_CLOSE_AT: f32 = 20.0;
 /// happen and writes `saw_turn_on`.
 pub const BOND_WITNESS_REACH: i32 = 2;
 
+/// How far, Chebyshev, from a machine a sulking program must stand to spoil
+/// its output (`Game::note_sabotage`).
+pub const SABOTAGE_REACH: i32 = 1;
+
+/// The chance, per `INTERACTION_PERIOD`, that a sulker with a candidate
+/// machine in reach spoils a unit.
+pub const SABOTAGE_CHANCE: f64 = 0.25;
+const _: () = assert!(SABOTAGE_CHANCE > 0.0 && SABOTAGE_CHANCE <= 1.0);
+
+/// Seeds `note_sabotage`'s folds. Own constant, `CARAVAN_SALT`'s rule.
+pub const SABOTAGE_SALT: u64 = 0x5AB0_7A6E_5EED_0001;
+
 /// How far one point of `Game::morale` shifts a worker's extraction
 /// reliability, in `systems::mining_success_chance`.
 ///

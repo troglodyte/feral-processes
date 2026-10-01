@@ -1,0 +1,14 @@
+// Watching a program spoil a unit at a machine, about the saboteur. Fainter
+// than `saw_turn_on` (a lost unit is smaller than a brawl) and, like it,
+// carried onward as hearsay.
+(
+    id: "saw_sabotage",
+    name: "Saw sabotage",
+    blurb: "Watched it spoil good output out of spite.",
+    valence: -3.0,
+    half_life: 4000,
+    subject: Program,
+    strike_cap: 3,
+    spreads_as: Some("heard_ill_of"),
+    known_for: Some("petty sabotage"),
+)

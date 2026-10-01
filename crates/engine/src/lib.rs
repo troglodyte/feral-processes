@@ -44,6 +44,7 @@ pub mod routine_tree;
 pub mod save;
 pub mod settlements;
 pub mod situations;
+pub mod sociability;
 pub mod sorties;
 pub mod species;
 pub mod stack;

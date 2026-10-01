@@ -96,6 +96,14 @@ pub(crate) fn index(seed: u64, len: usize) -> usize {
     ((seed as u128 * len as u128) >> 64) as usize
 }
 
+/// A uniform value in `[0, 1)` from the top 53 bits of `seed`.
+///
+/// The top bits, `index`'s reason: they are the ones the fold mixes. A caller
+/// must end its fold on a constant word for the same reason.
+pub(crate) fn unit(seed: u64) -> f64 {
+    (seed >> 11) as f64 / (1u64 << 53) as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +162,33 @@ mod tests {
             flips >= 8,
             "bit 63 moved in only {flips} of 64 adjacent pairs; the fold is not reaching \
              the bit `index` reads"
+        );
+    }
+
+    #[test]
+    fn unit_stays_in_range() {
+        for seed in [0, 1, u64::MAX, FNV_BASIS, 1 << 63] {
+            let u = unit(seed);
+            assert!((0.0..1.0).contains(&u), "{u}");
+        }
+        assert_eq!(unit(0), 0.0);
+    }
+
+    /// `index`'s sweep, for the shape `note_interactions` rolls with: the
+    /// varying id sits *before* a constant salt word, so a one-id difference
+    /// still reaches the top bits `unit` reads.
+    #[test]
+    fn adjacent_ids_before_a_salt_give_decorrelated_rolls() {
+        let salt = crate::tuning::INTERACTION_SALT;
+        let flips = (0..64_u64)
+            .filter(|n| {
+                (unit(fold(FNV_BASIS, &[7, 1, *n, salt])) < 0.5)
+                    != (unit(fold(FNV_BASIS, &[7, 1, n + 1, salt])) < 0.5)
+            })
+            .count();
+        assert!(
+            flips >= 8,
+            "the roll flipped in only {flips} of 64 adjacent pairs"
         );
     }
 }

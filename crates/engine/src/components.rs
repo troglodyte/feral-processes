@@ -1099,6 +1099,25 @@ pub enum TaskKind {
     Construct,
 }
 
+impl TaskKind {
+    pub const ALL: [TaskKind; 4] = [
+        TaskKind::GatherResource,
+        TaskKind::Guard,
+        TaskKind::Excavate,
+        TaskKind::Construct,
+    ];
+
+    /// How a memory or a conversation names this activity as a topic.
+    pub fn phrase(self) -> &'static str {
+        match self {
+            TaskKind::GatherResource => "working a machine",
+            TaskKind::Guard => "standing guard",
+            TaskKind::Excavate => "cutting rock",
+            TaskKind::Construct => "raising a structure",
+        }
+    }
+}
+
 /// A generic ongoing job: `worker` progresses `target` over multiple ticks.
 /// This is deliberately generic so base-building work and any future
 /// colonist-style job assignment share one mechanism.

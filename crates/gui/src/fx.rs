@@ -898,8 +898,8 @@ impl Fx {
 
     /// Called once per frame before drawing: stamps the frame's time,
     /// takes in newly queued engine effects and walks, and retires expired
-    /// ones. Both queues are always consumed, even when disabled, so the
-    /// engine's cannot sit permanently at its cap.
+    /// ones. Every queue in `cues` is always consumed, even when disabled, so
+    /// none of the engine's can sit permanently at its cap.
     pub fn begin_frame(&mut self, now: f64, cues: FrameCues, in_battle: bool) {
         let FrameCues {
             effects,

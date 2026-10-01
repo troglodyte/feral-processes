@@ -37,34 +37,36 @@ pub struct Line {
 /// The slot names a line may use, each written `{name}`.
 const KNOWN_SLOTS: [&str; 3] = ["speaker", "listener", "topic"];
 
-/// The `{name}` tokens of `text`, without the braces. The one reader of the
-/// slot syntax: the loader validates with it and the renderer fills with it,
-/// so the two cannot disagree about what a slot is.
-pub fn slots(text: &str) -> impl Iterator<Item = &str> {
-    let mut rest = text;
+/// The byte span `open..=close` of each `{name}` token in `text`, braces
+/// included. The one reader of the slot syntax: `slots` (the loader) and
+/// `fill` (the renderer) both walk it, so they cannot disagree about what a
+/// slot is.
+fn slot_spans(text: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
+    let mut from = 0;
     std::iter::from_fn(move || {
-        let open = rest.find('{')?;
-        let close = rest[open..].find('}')? + open;
-        let name = &rest[open + 1..close];
-        rest = &rest[close + 1..];
-        Some(name)
+        let open = text[from..].find('{')? + from;
+        let close = text[open..].find('}')? + open;
+        from = close + 1;
+        Some((open, close))
     })
 }
 
-/// `text` with every `{name}` replaced by `value(name)`. Walks `slots`, so
-/// the renderer and the loader agree on what a slot is.
+/// The `{name}` tokens of `text`, without the braces.
+pub fn slots(text: &str) -> impl Iterator<Item = &str> {
+    slot_spans(text).map(|(open, close)| &text[open + 1..close])
+}
+
+/// `text` with every `{name}` replaced by `value(name)`, in one pass so a
+/// substituted value is never itself read for slots.
 pub fn fill(text: &str, value: impl Fn(&str) -> String) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(open) = rest.find('{') {
-        let Some(close) = rest[open..].find('}').map(|c| c + open) else {
-            break;
-        };
-        out.push_str(&rest[..open]);
-        out.push_str(&value(&rest[open + 1..close]));
-        rest = &rest[close + 1..];
+    let mut from = 0;
+    for (open, close) in slot_spans(text) {
+        out.push_str(&text[from..open]);
+        out.push_str(&value(&text[open + 1..close]));
+        from = close + 1;
     }
-    out.push_str(rest);
+    out.push_str(&text[from..]);
     out
 }
 

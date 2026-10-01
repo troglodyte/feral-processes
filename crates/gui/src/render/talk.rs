@@ -130,13 +130,15 @@ mod tests {
         (2560.0, 1440.0),
     ];
 
+    use feral_processes_engine::components::TaskKind;
+
     fn assets() -> std::path::PathBuf {
         std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets")).to_path_buf()
     }
 
     /// The longest name `Game::conversations` can give a topic: a species or
-    /// structure of the shipped catalogue, or the longest of the fixed
-    /// activity phrases and a base tile at a wide coordinate pair.
+    /// structure of the shipped catalogue, an activity's phrase, or a base tile
+    /// at a wide coordinate pair.
     fn longest_topic() -> String {
         let game = feral_processes_engine::Game::new(
             11,
@@ -148,7 +150,8 @@ mod tests {
             .into_iter()
             .map(|d| d.name)
             .chain(game.structure_defs().into_iter().map(|d| d.name))
-            .chain(["raising a structure", "the base at (-1000, -1000)"].map(String::from))
+            .chain(TaskKind::ALL.map(|k| k.phrase().to_string()))
+            .chain(["the base at (-1000, -1000)".to_string()])
             .max_by_key(|n| n.chars().count())
             .expect("the catalogue has names")
     }

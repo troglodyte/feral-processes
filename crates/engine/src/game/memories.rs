@@ -821,15 +821,7 @@ impl crate::Game {
             // things, and reading one as the other put the base's roster on
             // the open grid once already.
             MemorySubject::BaseTile { x, y } => Some(format!("the base at ({x}, {y})")),
-            MemorySubject::Activity(kind) => Some(
-                match kind {
-                    crate::components::TaskKind::GatherResource => "working a machine",
-                    crate::components::TaskKind::Guard => "standing guard",
-                    crate::components::TaskKind::Excavate => "cutting rock",
-                    crate::components::TaskKind::Construct => "raising a structure",
-                }
-                .to_string(),
-            ),
+            MemorySubject::Activity(kind) => Some(kind.phrase().to_string()),
         }
     }
 

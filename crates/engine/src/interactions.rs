@@ -10,8 +10,8 @@
 //! `assets/interactions/` is silent and means no program ever talks.
 
 use crate::bonds::Bond;
-use crate::components::{Position, ProgramId};
-use crate::derive::{fold, unit};
+use crate::components::{Memory, MemorySubject, Position, ProgramId};
+use crate::derive::{fold, index, unit};
 use crate::disposition::Disposition;
 use crate::memories::{MemoryDb, MemoryId, MemorySubjectKind};
 use crate::tuning::{BOND_WITNESS_REACH, CONVERSATION_MAX_LINES, INTERACTION_SALT};
@@ -288,6 +288,74 @@ pub fn pick(
     last
 }
 
+/// One conversation as one program remembers it. Holds no generated text:
+/// the page renders it from the current templates, so a retuned or removed
+/// template reads through. `tick` orders records and is never shown.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ConversationRecord {
+    pub tick: u64,
+    /// The `InteractionDef` id.
+    pub interaction: String,
+    /// Index into the def's `exchanges`; `None` renders the fallback line.
+    pub exchange: Option<u8>,
+    /// This program's side; the other program's record has the opposite.
+    pub role: Role,
+    pub other: ProgramId,
+    /// Stamped at the write; a live program's current name wins on read.
+    pub other_name: String,
+    pub topic: Option<(MemorySubject, String)>,
+}
+
+/// What `speaker` is on about: one of its own memories' subjects, never
+/// itself, the listener or no subject at all. Subjects are taken in the
+/// store's order, de-duplicated, and one is picked by `seed`, so the same
+/// state names the same topic.
+pub fn topic(
+    memories: &[Memory],
+    speaker: ProgramId,
+    listener: ProgramId,
+    seed: u64,
+) -> Option<MemorySubject> {
+    let mut subjects: Vec<&MemorySubject> = Vec::new();
+    for m in memories {
+        let excluded = match &m.subject {
+            MemorySubject::Nothing => true,
+            MemorySubject::Program(p) => *p == speaker || *p == listener,
+            _ => false,
+        };
+        if !excluded && !subjects.contains(&&m.subject) {
+            subjects.push(&m.subject);
+        }
+    }
+    if subjects.is_empty() {
+        return None;
+    }
+    Some(subjects[index(fold(seed, &[2, INTERACTION_SALT]), subjects.len())].clone())
+}
+
+/// Which of `def`'s exchanges is said: any when there is a topic, otherwise
+/// only those that never name one. `None` when nothing qualifies, which the
+/// reader renders as the fallback line.
+pub fn pick_exchange(def: &InteractionDef, has_topic: bool, seed: u64) -> Option<u8> {
+    let fits: Vec<usize> = def
+        .exchanges
+        .iter()
+        .enumerate()
+        .filter(|(_, lines)| {
+            has_topic
+                || !lines
+                    .iter()
+                    .flat_map(|l| slots(&l.text))
+                    .any(|s| s == "topic")
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if fits.is_empty() {
+        return None;
+    }
+    u8::try_from(fits[index(fold(seed, &[3, INTERACTION_SALT]), fits.len())]).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,6 +483,113 @@ mod tests {
         let (db, w) = load(&[("a.ron", def_text("a", ""))]);
         assert!(w.is_empty(), "{w:?}");
         assert!(db.iter().next().unwrap().exchanges.is_empty());
+    }
+
+    fn memory_about(subject: MemorySubject) -> Memory {
+        Memory {
+            def: MemoryId::from("chatted_with"),
+            subject,
+            subject_name: None,
+            reinforced: 0,
+            strikes: 1,
+        }
+    }
+
+    #[test]
+    fn topic_is_never_the_speaker_the_listener_or_nothing() {
+        let me = ProgramId(1);
+        let you = ProgramId(2);
+        let them = ProgramId(3);
+        let held = [
+            memory_about(MemorySubject::Nothing),
+            memory_about(MemorySubject::Program(me)),
+            memory_about(MemorySubject::Program(you)),
+            memory_about(MemorySubject::Program(them)),
+            memory_about(MemorySubject::Program(them)),
+        ];
+        for seed in 0..50 {
+            assert_eq!(
+                topic(&held, me, you, seed),
+                Some(MemorySubject::Program(them))
+            );
+        }
+    }
+
+    #[test]
+    fn topic_with_no_candidates_is_none() {
+        let me = ProgramId(1);
+        let you = ProgramId(2);
+        assert_eq!(topic(&[], me, you, 0), None);
+        let held = [
+            memory_about(MemorySubject::Nothing),
+            memory_about(MemorySubject::Program(you)),
+        ];
+        assert_eq!(topic(&held, me, you, 0), None);
+    }
+
+    #[test]
+    fn topic_reaches_every_candidate_across_seeds() {
+        let held = [
+            memory_about(MemorySubject::Program(ProgramId(5))),
+            memory_about(MemorySubject::Program(ProgramId(6))),
+        ];
+        let seen: std::collections::BTreeSet<_> = (0..64)
+            .filter_map(|s| topic(&held, ProgramId(1), ProgramId(2), s))
+            .map(|t| format!("{t:?}"))
+            .collect();
+        assert_eq!(seen.len(), 2);
+    }
+
+    fn def_with(exchanges: &[&str]) -> InteractionDef {
+        let lines: Vec<String> = exchanges
+            .iter()
+            .map(|t| exchange(&[("Speaker", t), ("Listener", "ok")]))
+            .collect();
+        let (db, w) = load(&[(
+            "a.ron",
+            def_text("a", &format!("exchanges: [{}]", lines.join(", "))),
+        )]);
+        assert!(w.is_empty(), "{w:?}");
+        db.iter().next().unwrap().clone()
+    }
+
+    #[test]
+    fn without_a_topic_only_topic_free_exchanges_are_picked() {
+        let def = def_with(&["about {topic}", "plain", "also {topic}", "plain too"]);
+        for seed in 0..50 {
+            let i = pick_exchange(&def, false, seed).unwrap();
+            assert!(i == 1 || i == 3, "{i}");
+        }
+        let seen: std::collections::BTreeSet<_> = (0..64)
+            .filter_map(|s| pick_exchange(&def, true, s))
+            .collect();
+        assert_eq!(seen.len(), 4);
+    }
+
+    #[test]
+    fn no_qualifying_exchange_is_none() {
+        assert_eq!(pick_exchange(&def_with(&[]), true, 0), None);
+        assert_eq!(pick_exchange(&def_with(&["about {topic}"]), false, 0), None);
+    }
+
+    #[test]
+    fn the_ring_keeps_the_newest_and_drops_the_oldest() {
+        use crate::components::Conversations;
+        let mut ring = Conversations::default();
+        for tick in 0..=crate::tuning::CONVERSATION_RING as u64 {
+            ring.push(ConversationRecord {
+                tick,
+                interaction: "talk".into(),
+                exchange: None,
+                role: Role::Speaker,
+                other: ProgramId(2),
+                other_name: "x".into(),
+                topic: None,
+            });
+        }
+        assert_eq!(ring.0.len(), crate::tuning::CONVERSATION_RING);
+        assert_eq!(ring.0.front().unwrap().tick, 32);
+        assert_eq!(ring.0.back().unwrap().tick, 1);
     }
 
     #[test]

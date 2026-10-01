@@ -53,6 +53,50 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.2
+
+**Idle programs on your base now pair up and talk to each other.** Staff
+with nothing to do used to stand about without any effect on one another.
+Now, every so often, an idle program speaks to a neighbour: small talk, shop
+talk, jokes, compliments, complaints, slights or insults, and each leaves a
+memory that moves the listener's opinion of the speaker, so a base can start
+a friendship or a feud on its own. A program may instead pass on gossip, a
+one-hop copy of a memory it holds about a third program, which the listener
+takes up as hearsay and which does not spread further. Each program now has
+a Sociability, Reserved, Sociable or Chatty, shown on its SOCIAL tab, that
+sets how often it speaks. Modders can add their own talk as files in
+`assets/interactions/`, and a memory def can declare `spreads_as` to say how
+it is gossiped. No save change.
+
+**A program's morale now reflects where it is standing, not only what has
+happened to it.** Morale used to be the sum of memories alone, so the
+layout of your base and its power budget changed nothing. Five situational
+thoughts now weigh on it while they hold and vanish when they stop: beside
+a rival, beside a friend, unpowered, a machine running and no amenity. They
+show on the memories page as rows marked "now", and their total is capped so
+that situation alone cannot start a sulk. Wording and weight are files in
+`assets/thoughts/`. No save change.
+
+**Programs on your roster now have a standing with each other, shown on a
+SOCIAL tab.** Press Tab on an owned program's manifest to switch between
+STATS and SOCIAL. Opinion of another program falls into five bands: Enemy,
+Rival, Neutral, Friend and Close. A worker avoids a rival's neighbourhood,
+a brawl has witnesses, and a program that falls, is let go or is fused is
+grieved by those who knew it, or celebrated by a rival or enemy. Before
+this, opinions existed only as memories nobody could read as a relationship.
+No save change.
+
+**You can now add and remove affixes on weapons and armour at a Mod Bench,
+and a new Affixes research tree supplies them.** Affixes used to be found
+or not at all. The bench applies researched affixes for materials and
+strips any affix, found or applied, with a copy holding 1 plus its fusion
+tier of them. The Affixes tree is hidden until a study attempt finds each
+node, and holds three new affixes: Deflecting and of Deflection, which add
+Deflection (DEFL), a flat reduction to every hit taken that is not scaled
+and has a hard cap, and of Introspection. Research-only affixes never drop.
+Gear rating prices Deflection as soak against a reference hit. A
+`dev-saves/` modding template starts with a bench and Deflecting researched.
+
 ## 0.14.1
 
 **The Points screen and the Perks menu now show what a choice does in a

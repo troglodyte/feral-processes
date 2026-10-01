@@ -9,6 +9,7 @@ use crate::components::{MemorySubject, Position, ProgramId, Stock, Structure, Ta
 use crate::derive::{FNV_BASIS, fold, index, unit};
 use crate::game::base::hauling;
 use crate::resources::GameClock;
+use crate::situations::chebyshev;
 use crate::tuning::{
     BOND_WITNESS_REACH, INTERACTION_PERIOD, SABOTAGE_CHANCE, SABOTAGE_REACH, SABOTAGE_SALT,
 };
@@ -18,10 +19,6 @@ use crate::tuning::{
 /// `SABOTAGE_CHANCE` by calling it instead of copying it.
 pub(crate) fn sabotage_seed(now: u64, id: ProgramId) -> u64 {
     fold(FNV_BASIS, &[now, id.0 as u64, SABOTAGE_SALT])
-}
-
-fn within(a: Position, b: Position, reach: i32) -> bool {
-    (a.x - b.x).abs().max((a.y - b.y).abs()) <= reach
 }
 
 impl Game {
@@ -76,7 +73,7 @@ impl Game {
                 let kind = &e.get::<Structure>()?.kind;
                 let pos = *e.get::<Position>()?;
                 let stock = e.get::<Stock>()?;
-                if stock.output.is_empty() || !within(pos, at, SABOTAGE_REACH) {
+                if stock.output.is_empty() || chebyshev(pos, at) > SABOTAGE_REACH {
                     return None;
                 }
                 let rival_worked = staff.iter().any(|&w| {
@@ -137,7 +134,7 @@ impl Game {
             let near = self
                 .world
                 .get::<Position>(witness)
-                .is_some_and(|&p| within(p, at, BOND_WITNESS_REACH));
+                .is_some_and(|&p| chebyshev(p, at) <= BOND_WITNESS_REACH);
             if near {
                 self.remember(witness, "saw_sabotage", MemorySubject::Program(id));
             }

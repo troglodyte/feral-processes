@@ -207,7 +207,12 @@ pub(crate) struct Surroundings<'a> {
 /// `BesideRival` and `Game::refuses_post` both read it, so the thought and
 /// the refusal agree about who is beside whom.
 pub(crate) fn is_beside(a: Position, b: Position) -> bool {
-    (a.x - b.x).abs().max((a.y - b.y).abs()) <= 1
+    chebyshev(a, b) <= 1
+}
+
+/// Tiles between two positions, diagonals counting as one step.
+pub(crate) fn chebyshev(a: Position, b: Position) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
 }
 
 /// Each body's situation, in `bodies` order. The one derivation behind both

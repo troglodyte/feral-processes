@@ -353,6 +353,10 @@ impl Game {
         // written before its hearsay competes with them at
         // `MEMORY_CAP_PER_PROGRAM`, where eviction drops the weakest.
         self.note_interactions();
+        // After the talk, on its period: a `&mut Game` pass because it spends
+        // from a machine's `Stock`, writes the ledger and the base log, and
+        // remembers on witnesses, none of which a bevy system can reach.
+        self.note_sabotage();
         // A `&mut Game` pass for `run_dig_crew`'s second reason: a rig prices
         // its work through `Game::extraction_yield` and
         // `Game::extraction_ticks`, `&Game` methods folding perks, species

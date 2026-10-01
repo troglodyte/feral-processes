@@ -82,6 +82,7 @@ mod rig_tool;
 mod routes;
 mod routine_tree;
 mod routines;
+mod sabotage;
 mod save_roundtrip;
 mod settlement_aid_reach;
 mod settlement_boards;

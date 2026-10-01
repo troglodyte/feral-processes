@@ -25,6 +25,7 @@ pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod repair;
+pub(crate) mod sabotage;
 pub(crate) mod stock;
 pub(crate) mod study;
 pub(crate) mod tantrum;

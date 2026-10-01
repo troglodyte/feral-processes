@@ -629,6 +629,17 @@ fn social_is_only_for_an_owned_program() {
 }
 
 #[test]
+fn social_names_the_programs_sociability() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let owned = spawn_tamed(&mut game, 10, 3);
+    let id = *game.world.get::<ProgramId>(owned).unwrap();
+    assert_eq!(
+        game.social(owned).unwrap().sociability,
+        crate::sociability::Sociability::of(id).name()
+    );
+}
+
+#[test]
 fn social_rows_are_strongest_opinion_first() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let holder = spawn_tamed(&mut game, 10, 3);

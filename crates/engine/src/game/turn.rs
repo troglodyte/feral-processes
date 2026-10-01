@@ -349,6 +349,10 @@ impl Game {
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.
         self.note_low_power();
+        // Last of the `note_*` block: a pass's firsthand memories are
+        // written before its hearsay competes with them at
+        // `MEMORY_CAP_PER_PROGRAM`, where eviction drops the weakest.
+        self.note_interactions();
         // A `&mut Game` pass for `run_dig_crew`'s second reason: a rig prices
         // its work through `Game::extraction_yield` and
         // `Game::extraction_ticks`, `&Game` methods folding perks, species

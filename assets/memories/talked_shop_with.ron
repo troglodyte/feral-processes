@@ -1,0 +1,10 @@
+// Two programs trading notes on the work.
+(
+    id: "talked_shop_with",
+    name: "Talked shop with",
+    blurb: "Compared notes on the work.",
+    valence: 2.0,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

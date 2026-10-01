@@ -469,6 +469,142 @@ impl crate::Game {
         }
     }
 
+    /// Pairs idle base staff and, for each pair the roll lets speak, writes
+    /// what was said. Spec section 4; the catalogue is
+    /// `interactions::InteractionDb`.
+    ///
+    /// **Last of the `note_*` block**, so a pass's firsthand memories are
+    /// written before this pass's hearsay competes with them at
+    /// `MEMORY_CAP_PER_PROGRAM`, where `remember`'s tail eviction drops the
+    /// weakest.
+    ///
+    /// **No `GameRng`**: the roll and the pick are two folds of one seed
+    /// derived from the tick and the pair, so the pass is a pure function of
+    /// the state it reads and shifts no stream.
+    pub(crate) fn note_interactions(&mut self) {
+        use crate::derive::{FNV_BASIS, fold, unit};
+        use crate::interactions::{InteractionDb, pair_idle, pick};
+        use crate::tuning::{INTERACTION_CHANCE, INTERACTION_PERIOD, INTERACTION_SALT};
+
+        let now = self.world.resource::<GameClock>().tick;
+        if !now.is_multiple_of(INTERACTION_PERIOD)
+            || !self.base_is_established()
+            || self.world.resource::<InteractionDb>().is_empty()
+        {
+            return;
+        }
+        let idle: Vec<(Entity, ProgramId, Position)> = self
+            .base_staff()
+            .into_iter()
+            .filter(|&e| self.world.get::<Task>(e).is_none())
+            .filter_map(|e| {
+                Some((
+                    e,
+                    *self.world.get::<ProgramId>(e)?,
+                    *self.world.get::<Position>(e)?,
+                ))
+            })
+            .collect();
+        let at: Vec<(ProgramId, Position)> = idle.iter().map(|&(_, id, p)| (id, p)).collect();
+        let body = |id: ProgramId| idle.iter().find(|(_, i, _)| *i == id).map(|(e, _, _)| *e);
+
+        // Collected before anything is written, the `note_*` pattern: a
+        // write moves the opinions the next pair's pick reads, and the pairs
+        // must not depend on the order they are walked in.
+        let mut writes: Vec<(Entity, String, MemorySubject, Option<String>)> = Vec::new();
+        for (speaker_id, listener_id) in pair_idle(&at) {
+            let (Some(speaker), Some(listener)) = (body(speaker_id), body(listener_id)) else {
+                continue;
+            };
+            let seed = fold(
+                FNV_BASIS,
+                &[
+                    now,
+                    speaker_id.0 as u64,
+                    listener_id.0 as u64,
+                    INTERACTION_SALT,
+                ],
+            );
+            let chance =
+                INTERACTION_CHANCE * crate::sociability::Sociability::of(speaker_id).chance_mult();
+            if unit(seed) >= chance {
+                continue;
+            }
+            let tellable = self.tellable(speaker, speaker_id, listener_id);
+            let db = self.world.resource::<InteractionDb>();
+            let Some(def) = pick(
+                db,
+                self.felt_as(speaker),
+                self.bond(speaker, listener_id),
+                tellable.is_some(),
+                seed,
+            ) else {
+                continue;
+            };
+            if def.gossip {
+                if let Some((hearsay, about, name)) = tellable {
+                    writes.push((listener, hearsay, MemorySubject::Program(about), name));
+                }
+            } else {
+                writes.push((
+                    listener,
+                    def.listener_memory.clone(),
+                    MemorySubject::Program(speaker_id),
+                    None,
+                ));
+            }
+            if let Some(mine) = &def.speaker_memory {
+                writes.push((
+                    speaker,
+                    mine.clone(),
+                    MemorySubject::Program(listener_id),
+                    None,
+                ));
+            }
+        }
+        for (who, def, subject, name) in writes {
+            let name = self.remembered_name(&subject).or(name);
+            self.remember_named(who, &def, subject, name);
+        }
+    }
+
+    /// What `speaker` would tell `listener`: the hearsay def its strongest
+    /// spreadable memory becomes, whom it is about, and that subject's name
+    /// as the memory stamped it — so a departed program is still readable.
+    ///
+    /// Strongest by `Disposition::felt` magnitude, ties to the lower subject
+    /// id. **Never about the listener** (it would be handed an opinion of
+    /// itself) **nor the speaker**. Hearsay defs carry no `spreads_as`, which
+    /// is what keeps a rumour one hop.
+    fn tellable(
+        &self,
+        speaker: Entity,
+        speaker_id: ProgramId,
+        listener_id: ProgramId,
+    ) -> Option<(String, ProgramId, Option<String>)> {
+        let store = self.world.get::<Memories>(speaker)?;
+        let db = self.world.resource::<MemoryDb>();
+        let now = self.world.resource::<GameClock>().tick;
+        let felt = self.felt_as(speaker);
+        store
+            .0
+            .iter()
+            .filter_map(|m| {
+                let MemorySubject::Program(about) = m.subject else {
+                    return None;
+                };
+                if about == listener_id || about == speaker_id {
+                    return None;
+                }
+                let def = db.get(&m.def)?;
+                let hearsay = def.spreads_as.clone()?;
+                let strength = felt.felt(m.intensity(def, now)).abs();
+                Some((strength, about, hearsay, m.subject_name.clone()))
+            })
+            .min_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)))
+            .map(|(_, about, hearsay, name)| (hearsay, about, name))
+    }
+
     /// The signed sum of every memory `who` currently holds plus what its
     /// surroundings make it think (`situations::morale`) — the one figure the
     /// screen heads its page with, and the closest thing the roster has to a
@@ -916,6 +1052,10 @@ impl crate::Game {
         Some(crate::views::SocialView {
             relationships,
             known_for: self.known_for(e),
+            sociability: crate::sociability::Sociability::of(
+                self.world.get::<ProgramId>(e).copied()?,
+            )
+            .name(),
         })
     }
 }

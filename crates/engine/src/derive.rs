@@ -81,12 +81,15 @@ pub(crate) fn fold_bytes(seed: u64, bytes: &[u8]) -> u64 {
 /// promises.
 ///
 /// **Reaching those high bits is not automatic, and is the caller's
-/// problem.** One XOR-then-multiply round carries a difference only about
-/// the prime's own width (~41 bits) upward, so a value folded in as the
-/// *last* word, differing only in its low bits, never reaches bit 63 — which
-/// is the bit this function actually reads. `descriptions::Slot::tags`
-/// carries the measurement, and `rock::block_seed` is why a block
-/// coordinate is folded a byte at a time rather than as one word.
+/// problem.** Folded as one whole word, a value gets a single
+/// XOR-then-multiply round, which carries a difference only about the
+/// prime's own width (~41 bits) upward and so rarely reaches bit 63 — the
+/// bit this function actually reads. Hence the byte-at-a-time `fold`
+/// (`descriptions::Slot::tags` carries the measurement, `rock::block_seed`
+/// the coordinate case). Even byte-wise, a varying word with nothing folded
+/// after it is only a fixed multiply from the output, so adjacent values
+/// give structured, correlated results; callers that need independent rolls
+/// end on a salt word.
 ///
 /// Shared rather than copied because the `%` version passes every casual
 /// test: it anti-correlates two small pools perfectly while looking
@@ -94,6 +97,16 @@ pub(crate) fn fold_bytes(seed: u64, bytes: &[u8]) -> u64 {
 /// again.
 pub(crate) fn index(seed: u64, len: usize) -> usize {
     ((seed as u128 * len as u128) >> 64) as usize
+}
+
+/// A uniform value in `[0, 1)` from the top 53 bits of `seed`.
+///
+/// The top bits, `index`'s reason: they are the ones the fold mixes. A caller
+/// ends its fold on a constant salt word: the varying word's contribution is
+/// then not a bare final multiply, whose outputs for adjacent values are
+/// structured and correlated.
+pub(crate) fn unit(seed: u64) -> f64 {
+    (seed >> 11) as f64 / (1u64 << 53) as f64
 }
 
 #[cfg(test)]
@@ -154,6 +167,33 @@ mod tests {
             flips >= 8,
             "bit 63 moved in only {flips} of 64 adjacent pairs; the fold is not reaching \
              the bit `index` reads"
+        );
+    }
+
+    #[test]
+    fn unit_stays_in_range() {
+        for seed in [0, 1, u64::MAX, FNV_BASIS, 1 << 63] {
+            let u = unit(seed);
+            assert!((0.0..1.0).contains(&u), "{u}");
+        }
+        assert_eq!(unit(0), 0.0);
+    }
+
+    /// `index`'s sweep, for the shape `note_interactions` rolls with: the
+    /// varying id sits *before* a constant salt word, so a one-id difference
+    /// still reaches the top bits `unit` reads.
+    #[test]
+    fn adjacent_ids_before_a_salt_give_decorrelated_rolls() {
+        let salt = crate::tuning::INTERACTION_SALT;
+        let flips = (0..64_u64)
+            .filter(|n| {
+                (unit(fold(FNV_BASIS, &[7, 1, *n, salt])) < 0.5)
+                    != (unit(fold(FNV_BASIS, &[7, 1, n + 1, salt])) < 0.5)
+            })
+            .count();
+        assert!(
+            flips >= 24,
+            "the roll flipped in only {flips} of 64 adjacent pairs"
         );
     }
 }

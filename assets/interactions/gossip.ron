@@ -1,0 +1,10 @@
+(
+    id: "gossip",
+    name: "Gossip",
+    // Ignored: the hearsay def comes from the speaker's own memory's `spreads_as`.
+    listener_memory: "chatted_with",
+    weight: 1.0,
+    by_band: {Enemy: 1.0, Rival: 1.0, Neutral: 1.0, Friend: 1.3, Close: 1.5},
+    by_disposition: {Amiable: 1.2},
+    gossip: true,
+)

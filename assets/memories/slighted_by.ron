@@ -1,0 +1,10 @@
+// Written on the listener only.
+(
+    id: "slighted_by",
+    name: "Slighted by",
+    blurb: "It brushed me off.",
+    valence: -2.5,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

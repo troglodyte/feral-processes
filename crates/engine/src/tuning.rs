@@ -4577,6 +4577,31 @@ pub const NEED_STRAIN_PER_POINT: f64 = 0.01;
 /// rather than a moment of it.
 pub const MEMORY_POSTING_PERIOD: u64 = 250;
 
+/// How often `Game::note_interactions` pairs idle staff and rolls for a
+/// word between them, in ticks.
+pub const INTERACTION_PERIOD: u64 = MEMORY_POSTING_PERIOD;
+// A pass faster than the posting period would let an interaction memory land
+// between two posting writes and make eviction's winner depend on who
+// happened to be idle, `MEMORY_POSTING_PERIOD`'s own argument.
+const _: () = assert!(INTERACTION_PERIOD >= MEMORY_POSTING_PERIOD);
+
+/// The chance a paired speaker speaks at all, before its `Sociability`.
+pub const INTERACTION_CHANCE: f64 = 0.5;
+
+/// `Sociability`'s multipliers on `INTERACTION_CHANCE`.
+pub const SOCIABILITY_RESERVED: f64 = 0.5;
+pub const SOCIABILITY_SOCIABLE: f64 = 1.0;
+pub const SOCIABILITY_CHATTY: f64 = 1.5;
+
+/// Folded last into `Sociability`'s seed, which domain-separates it from
+/// `Disposition::seed` (the same `[id]` fold, unsalted). Trailing because with
+/// no bytes after the id its contribution is one fixed multiply, so adjacent
+/// ids would give structured, correlated outputs; the salt's bytes mix it.
+pub const SOCIABILITY_SALT: u64 = 0x9e37_79b9_7f4a_7c15;
+/// Folded last into every roll `note_interactions` reads, for the same
+/// reasons.
+pub const INTERACTION_SALT: u64 = 0xc2b2_ae3d_27d4_eb4f;
+
 // ---------------------------------------------------------------------------
 // Sorties
 // ---------------------------------------------------------------------------

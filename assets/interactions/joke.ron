@@ -1,0 +1,9 @@
+(
+    id: "joke",
+    name: "A joke",
+    listener_memory: "laughed_with",
+    speaker_memory: Some("laughed_with"),
+    weight: 1.5,
+    by_band: {Enemy: 0.1, Rival: 0.4, Neutral: 1.0, Friend: 1.5, Close: 2.0},
+    by_disposition: {Amiable: 1.5, Languid: 0.7},
+)

@@ -3659,4 +3659,7 @@ pub struct SocialView {
     pub relationships: Vec<RelationshipRow>,
     /// At most two phrases, from `Game::known_for`.
     pub known_for: Vec<String>,
+    /// How much it talks, `Sociability::name`: the reason one program is in
+    /// more conversations than another.
+    pub sociability: &'static str,
 }

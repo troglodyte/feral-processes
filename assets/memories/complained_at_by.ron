@@ -1,0 +1,10 @@
+// Written on the listener only.
+(
+    id: "complained_at_by",
+    name: "Complained at by",
+    blurb: "It unloaded its troubles on me.",
+    valence: -1.5,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

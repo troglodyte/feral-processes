@@ -1,0 +1,10 @@
+// Hearsay: what `spreads_as` turns a grudge into. Weaker than any source, and it never spreads again.
+(
+    id: "heard_ill_of",
+    name: "Heard ill of",
+    blurb: "Word is it is trouble.",
+    valence: -2.0,
+    half_life: 1500,
+    subject: Program,
+    strike_cap: 3,
+)

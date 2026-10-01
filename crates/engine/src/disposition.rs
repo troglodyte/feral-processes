@@ -43,7 +43,9 @@ use serde::{Deserialize, Serialize};
 /// player, a wild program, a hand-built test fixture — reads as neutral
 /// without a branch at any call site. That is `Memories`' rule: absence is a
 /// meaning, not a missing value.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize,
+)]
 pub enum Disposition {
     /// Neutral on both axes. Not a fallback — a real draw, one of five.
     #[default]

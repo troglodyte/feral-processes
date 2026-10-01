@@ -1,0 +1,10 @@
+// A word in passing between two idle programs; the weakest fondness the pass writes.
+(
+    id: "chatted_with",
+    name: "Chatted with",
+    blurb: "Passed the time of day.",
+    valence: 1.5,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

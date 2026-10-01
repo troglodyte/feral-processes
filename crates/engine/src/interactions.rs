@@ -54,10 +54,17 @@ pub fn slots(text: &str) -> impl Iterator<Item = &str> {
 /// `text` with every `{name}` replaced by `value(name)`. Walks `slots`, so
 /// the renderer and the loader agree on what a slot is.
 pub fn fill(text: &str, value: impl Fn(&str) -> String) -> String {
-    let mut out = text.to_string();
-    for name in slots(text) {
-        out = out.replace(&format!("{{{name}}}"), &value(name));
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        let Some(close) = rest[open..].find('}').map(|c| c + open) else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        out.push_str(&value(&rest[open + 1..close]));
+        rest = &rest[close + 1..];
     }
+    out.push_str(rest);
     out
 }
 
@@ -468,6 +475,16 @@ mod tests {
             .map(|(by, text)| format!("(by: {by}, text: \"{text}\")"))
             .collect();
         format!("[{}]", lines.join(", "))
+    }
+
+    #[test]
+    fn fill_never_rescans_substituted_text() {
+        let got = fill("{speaker} / {topic}", |s| match s {
+            "speaker" => "{topic}".to_string(),
+            _ => "T".to_string(),
+        });
+        assert_eq!(got, "{topic} / T");
+        assert_eq!(fill("a {x} {open", |_| "1".into()), "a 1 {open");
     }
 
     #[test]

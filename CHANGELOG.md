@@ -53,6 +53,18 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.3
+
+**You can now read what your programs said to each other.** When two idle
+programs talk, the exchange is kept as a few lines of dialogue that name the
+speaker, the listener and, often, what they talked about: another program, a
+species, a structure, a job or a spot on the base. A new TALK tab, reached
+with Tab after SOCIAL on a program you own, lists its recent conversations,
+newest first, and a speech mark appears for a moment over a program on the base map when
+it speaks. Conversations are kept in your save; older saves load with none.
+Modders write the dialogue as `exchanges` in `assets/interactions/` files,
+with `{speaker}`, `{listener}` and `{topic}` slots.
+
 ## 0.14.2
 
 **Idle programs on your base now pair up and talk to each other.** Staff

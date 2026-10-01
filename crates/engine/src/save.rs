@@ -795,6 +795,16 @@ pub struct CreatureSave {
     /// every program in it loads with an empty store.
     #[serde(default)]
     pub memories: Vec<MemorySave>,
+    /// What this program has said and heard, newest first — see
+    /// `components::Conversations`. Only meaningful when `tamed` is true,
+    /// exactly as `memories` is.
+    ///
+    /// Additive behind `#[serde(default)]`, so it earns no
+    /// `SAVE_FORMAT_VERSION` bump: a file written before conversations
+    /// existed carries no key and every program in it loads with no ring.
+    /// The record is its own save shape, so there is no mirror type.
+    #[serde(default)]
+    pub conversations: Vec<crate::interactions::ConversationRecord>,
     /// Where this program's need reserves stand — see `components::Needs`.
     /// Only meaningful when `tamed` is true, exactly as `memories` is.
     ///
@@ -2304,6 +2314,7 @@ mod tests {
             disgruntled: None,
             disgruntled_stranded: false,
             memories: Vec::new(),
+            conversations: Vec::new(),
             needs: Default::default(),
             attributes: Default::default(),
             off_shift: None,

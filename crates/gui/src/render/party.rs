@@ -1487,6 +1487,7 @@ mod tests {
             disgruntled: None,
             disgruntled_stranded: false,
             memories: Vec::new(),
+            conversations: Vec::new(),
             needs: Default::default(),
             attributes: Default::default(),
             off_shift: None,

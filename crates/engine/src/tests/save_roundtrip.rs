@@ -385,6 +385,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         disposition: _,
         program_id: _,
         memories: _,
+        conversations: _,
         needs: _,
         off_shift: _,
         disgruntled: _,
@@ -752,6 +753,70 @@ fn a_snapshot_respawns_as_the_same_program() {
         remembered.0[0].subject,
         MemorySubject::BaseTile { x: 2, y: 9 },
         "and what it is about",
+    );
+}
+
+/// A conversation record must come back through a real `Game` save and
+/// load: a RON round trip of the struct cannot catch a field the writer or
+/// the restorer skips.
+#[test]
+fn a_snapshot_keeps_its_conversations() {
+    use crate::interactions::{ConversationRecord, Role};
+    let mut game = Game::new(20260912, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let original = spawn_tamed(&mut game, 30, 6);
+    let player = game.player_entity();
+    let mut ring = crate::components::Conversations::default();
+    for (tick, role) in [(5, Role::Listener), (9, Role::Speaker)] {
+        ring.push(ConversationRecord {
+            tick,
+            interaction: "small_talk".into(),
+            exchange: Some(1),
+            role,
+            other: ProgramId(41),
+            other_name: "Vesper".into(),
+            topic: Some((MemorySubject::BaseTile { x: 2, y: 9 }, "the mill".into())),
+        });
+    }
+    let expected: Vec<_> = ring.0.iter().cloned().collect();
+    game.world.entity_mut(original).insert(ring);
+
+    let snapshot = game.creature_save_for(original).expect("snapshot");
+    assert_eq!(snapshot.conversations, expected, "written");
+    game.world.despawn(original);
+    let mut restore = CreatureRestore::new(player, 99, HashMap::new());
+    let restored = game
+        .spawn_creature_from_save(&snapshot, &mut restore)
+        .expect("respawn");
+
+    let back: Vec<_> = game
+        .world
+        .get::<crate::components::Conversations>(restored)
+        .expect("a program with a history keeps its ring")
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    assert_eq!(back, expected, "restored, newest first");
+}
+
+/// A program that has never talked has no ring, and a file from before
+/// conversations existed (no key, so an empty vec) restores that way.
+#[test]
+fn a_snapshot_without_conversations_restores_no_ring() {
+    let mut game = Game::new(20260913, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let original = spawn_tamed(&mut game, 30, 6);
+    let player = game.player_entity();
+    let snapshot = game.creature_save_for(original).expect("snapshot");
+    assert!(snapshot.conversations.is_empty());
+    game.world.despawn(original);
+    let mut restore = CreatureRestore::new(player, 99, HashMap::new());
+    let restored = game
+        .spawn_creature_from_save(&snapshot, &mut restore)
+        .expect("respawn");
+    assert!(
+        game.world
+            .get::<crate::components::Conversations>(restored)
+            .is_none()
     );
 }
 

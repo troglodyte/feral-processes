@@ -6,4 +6,19 @@
     weight: 3.0,
     by_band: {Enemy: 0.3, Rival: 0.6, Neutral: 1.0, Friend: 1.3, Close: 1.5},
     by_disposition: {Amiable: 1.3},
+    exchanges: [
+        [
+            (by: Speaker, text: "Idle. You also idle, {listener}."),
+            (by: Listener, text: "Affirmative. Nothing queued."),
+        ],
+        [
+            (by: Speaker, text: "Status of {topic}?"),
+            (by: Listener, text: "Unchanged."),
+            (by: Speaker, text: "Acknowledged."),
+        ],
+        [
+            (by: Speaker, text: "Cycle nominal."),
+            (by: Listener, text: "Nominal."),
+        ],
+    ],
 )

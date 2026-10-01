@@ -5,4 +5,14 @@
     weight: 1.0,
     by_band: {Enemy: 0.1, Rival: 0.4, Neutral: 1.0, Friend: 1.4, Close: 1.6},
     by_disposition: {Amiable: 1.4},
+    exchanges: [
+        [
+            (by: Speaker, text: "Assist received, {listener}. Thanks."),
+            (by: Listener, text: "Assist logged."),
+        ],
+        [
+            (by: Speaker, text: "Your help is noted."),
+            (by: Listener, text: "Acknowledged, {speaker}."),
+        ],
+    ],
 )

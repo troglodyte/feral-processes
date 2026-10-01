@@ -307,7 +307,7 @@ impl App {
         self.pending_manifest = Some(subjects[next]);
     }
 
-    /// Only an owned program has a SOCIAL face; on anyone else the key is
+    /// Only an owned program has SOCIAL and TALK faces; on anyone else the key is
     /// not bound, so the tab can never be left pointing at nothing.
     fn toggle_manifest_tab(&mut self) {
         let owned = self
@@ -316,7 +316,8 @@ impl App {
         if owned {
             self.manifest_tab = match self.manifest_tab {
                 ManifestTab::Stats => ManifestTab::Social,
-                ManifestTab::Social => ManifestTab::Stats,
+                ManifestTab::Social => ManifestTab::Talk,
+                ManifestTab::Talk => ManifestTab::Stats,
             };
         }
     }

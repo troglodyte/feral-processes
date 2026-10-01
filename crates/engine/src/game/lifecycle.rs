@@ -467,6 +467,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             thoughts: thought_db,
+            interactions: interaction_db,
             needs: need_db,
             attributes: attribute_db,
             sorties: sortie_db,
@@ -508,6 +509,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(thought_db);
+        world.insert_resource(interaction_db);
         world.insert_resource(need_db);
         world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
@@ -1318,6 +1320,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             thoughts: thought_db,
+            interactions: interaction_db,
             needs: need_db,
             attributes: attribute_db,
             sorties: sortie_db,
@@ -1377,6 +1380,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(thought_db);
+        world.insert_resource(interaction_db);
         world.insert_resource(need_db);
         world.insert_resource(attribute_db);
         world.insert_resource(crate::resources::Notifications::default());
@@ -3369,6 +3373,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
     thoughts: crate::situations::ThoughtDb,
+    interactions: crate::interactions::InteractionDb,
     needs: crate::needs::NeedDb,
     attributes: crate::attributes::AttributeDb,
     sorties: crate::sorties::SortieDb,
@@ -3501,6 +3506,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (thoughts, thought_warnings) =
         crate::situations::ThoughtDb::load_dir(&assets_dir.join("thoughts"))?;
     warnings.extend(thought_warnings);
+    // Same absent-is-silent rule again — see `InteractionDb`'s own doc. An
+    // empty catalogue means nobody talks. Loaded after `MemoryDb` because a
+    // def naming a memory that does not exist is skipped.
+    let (interactions, interaction_warnings) =
+        crate::interactions::InteractionDb::load_dir(&assets_dir.join("interactions"), &memories)?;
+    warnings.extend(interaction_warnings);
     // Same absent-is-silent rule again — see `NeedDb`'s own doc. An empty
     // catalogue seeds nothing, drains nothing and takes nobody off a post,
     // which is the pre-needs game.
@@ -3568,6 +3579,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         memories,
         thoughts,
+        interactions,
         needs,
         attributes,
         sorties,

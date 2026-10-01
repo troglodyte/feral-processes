@@ -1216,12 +1216,13 @@ pub enum ManifestOrigin {
     Roster,
 }
 
-/// The two faces of an owned program's manifest, switched with `Tab`.
+/// The three faces of an owned program's manifest, cycled with `Tab`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ManifestTab {
     #[default]
     Stats,
     Social,
+    Talk,
 }
 
 impl ManifestOrigin {

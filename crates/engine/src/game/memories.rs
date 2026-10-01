@@ -5,8 +5,8 @@
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
 use crate::components::{
-    MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats, Stranded,
-    Structure, Tamed, Task, TaskKind,
+    Conversations, MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats,
+    Stranded, Structure, Tamed, Task, TaskKind,
 };
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{GameClock, Party};
@@ -483,7 +483,9 @@ impl crate::Game {
     /// the state it reads and shifts no stream.
     pub(crate) fn note_interactions(&mut self) {
         use crate::derive::{FNV_BASIS, fold, unit};
-        use crate::interactions::{InteractionDb, pair_idle, pick};
+        use crate::interactions::{
+            ConversationRecord, InteractionDb, Role, pair_idle, pick, pick_exchange,
+        };
         use crate::tuning::{INTERACTION_CHANCE, INTERACTION_PERIOD, INTERACTION_SALT};
 
         let now = self.world.resource::<GameClock>().tick;
@@ -512,6 +514,8 @@ impl crate::Game {
         // write moves the opinions the next pair's pick reads, and the pairs
         // must not depend on the order they are walked in.
         let mut writes: Vec<(Entity, String, MemorySubject, Option<String>)> = Vec::new();
+        let mut records: Vec<(Entity, ConversationRecord)> = Vec::new();
+        let mut cues: Vec<crate::resources::SpeechCue> = Vec::new();
         for (speaker_id, listener_id) in pair_idle(&at) {
             let (Some(speaker), Some(listener)) = (body(speaker_id), body(listener_id)) else {
                 continue;
@@ -541,8 +545,45 @@ impl crate::Game {
             ) else {
                 continue;
             };
+            let told = if def.gossip { tellable } else { None };
+            let on_mind = match &told {
+                Some((_, about, _)) => Some(MemorySubject::Program(*about)),
+                None => self
+                    .world
+                    .get::<Memories>(speaker)
+                    .and_then(|m| crate::interactions::topic(&m.0, speaker_id, listener_id, seed)),
+            };
+            let topic = on_mind.map(|subject| {
+                let name = self
+                    .remembered_name(&subject)
+                    .or_else(|| told.as_ref().and_then(|t| t.2.clone()))
+                    .or_else(|| {
+                        self.world.get::<Memories>(speaker).and_then(|m| {
+                            m.0.iter()
+                                .find(|m| m.subject == subject)
+                                .and_then(|m| m.subject_name.clone())
+                        })
+                    })
+                    .unwrap_or_default();
+                (subject, name)
+            });
+            let exchange = pick_exchange(def, topic.is_some(), seed);
+            let record = |role, other: ProgramId, other_body| ConversationRecord {
+                tick: now,
+                interaction: def.id.clone(),
+                exchange,
+                role,
+                other,
+                other_name: self.creature_short_label(other_body),
+                topic: topic.clone(),
+            };
+            if let Some(&(_, _, at)) = idle.iter().find(|(e, _, _)| *e == speaker) {
+                cues.push(crate::resources::SpeechCue { cell: (at.x, at.y) });
+            }
+            records.push((speaker, record(Role::Speaker, listener_id, listener)));
+            records.push((listener, record(Role::Listener, speaker_id, speaker)));
             if def.gossip {
-                if let Some((hearsay, about, name)) = tellable {
+                if let Some((hearsay, about, name)) = told {
                     writes.push((listener, hearsay, MemorySubject::Program(about), name));
                 }
             } else {
@@ -565,6 +606,19 @@ impl crate::Game {
         for (who, def, subject, name) in writes {
             let name = self.remembered_name(&subject).or(name);
             self.remember_named(who, &def, subject, name);
+        }
+        for cue in cues {
+            self.world
+                .resource_mut::<crate::resources::SpeechQueue>()
+                .push(cue);
+        }
+        for (who, record) in records {
+            if self.world.get::<Conversations>(who).is_none() {
+                self.world.entity_mut(who).insert(Conversations::default());
+            }
+            if let Some(mut ring) = self.world.get_mut::<Conversations>(who) {
+                ring.push(record);
+            }
         }
     }
 
@@ -739,14 +793,17 @@ impl crate::Game {
     /// it was. A species or a structure a mod has since removed falls back to
     /// its id, which is at least a thing the player can search a file for.
     fn subject_name(&self, memory: &Memory) -> Option<String> {
-        match &memory.subject {
+        self.subject_label(&memory.subject, memory.subject_name.as_deref())
+    }
+
+    /// `subject_name`'s body, for a caller holding a subject and a stamped
+    /// name rather than a `Memory` (a conversation's topic).
+    fn subject_label(&self, subject: &MemorySubject, stamped: Option<&str>) -> Option<String> {
+        match subject {
             MemorySubject::Nothing => None,
-            MemorySubject::Program(_) => Some(
-                memory
-                    .subject_name
-                    .clone()
-                    .unwrap_or_else(|| "a program that is gone".to_string()),
-            ),
+            MemorySubject::Program(_) => {
+                Some(stamped.map_or_else(|| "a program that is gone".to_string(), str::to_string))
+            }
             MemorySubject::Species(id) => Some(
                 self.world
                     .resource::<crate::species::SpeciesDb>()
@@ -764,15 +821,7 @@ impl crate::Game {
             // things, and reading one as the other put the base's roster on
             // the open grid once already.
             MemorySubject::BaseTile { x, y } => Some(format!("the base at ({x}, {y})")),
-            MemorySubject::Activity(kind) => Some(
-                match kind {
-                    crate::components::TaskKind::GatherResource => "working a machine",
-                    crate::components::TaskKind::Guard => "standing guard",
-                    crate::components::TaskKind::Excavate => "cutting rock",
-                    crate::components::TaskKind::Construct => "raising a structure",
-                }
-                .to_string(),
-            ),
+            MemorySubject::Activity(kind) => Some(kind.phrase().to_string()),
         }
     }
 
@@ -999,6 +1048,87 @@ impl crate::Game {
         }
         phrases.truncate(2);
         phrases
+    }
+
+    /// The TALK tab's read of `e`: its conversations newest first, rendered
+    /// from the current templates. `None` for anything but an owned program;
+    /// an owned program that has never talked has an empty list.
+    ///
+    /// **Names read through**: `e` and a live `other` (or a live `Program`
+    /// topic) are named now, so a rename shows; a departed program keeps the
+    /// name stamped at the write. A def or exchange index that no longer
+    /// resolves renders one fallback line and never panics.
+    pub fn conversations(&self, e: Entity) -> Option<Vec<crate::views::ExchangeView>> {
+        use crate::interactions::{InteractionDb, Role, fill};
+        use crate::views::{ExchangeView, SpokenLine};
+        if !self.is_owned_program(e) {
+            return None;
+        }
+        let Some(ring) = self.world.get::<Conversations>(e) else {
+            return Some(Vec::new());
+        };
+        let me = self.creature_short_label(e);
+        let db = self.world.resource::<InteractionDb>();
+        let views = ring
+            .0
+            .iter()
+            .map(|r| {
+                let other = self
+                    .program_entity(r.other)
+                    .map(|o| self.creature_short_label(o))
+                    .unwrap_or_else(|| r.other_name.clone());
+                let (speaker, listener) = match r.role {
+                    Role::Speaker => (&me, &other),
+                    Role::Listener => (&other, &me),
+                };
+                let def = db.get(&r.interaction);
+                let lines = def
+                    .zip(r.exchange)
+                    .and_then(|(d, i)| d.exchanges.get(usize::from(i)))
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .map(|l| {
+                                let by = match l.by {
+                                    Role::Speaker => speaker,
+                                    Role::Listener => listener,
+                                };
+                                let text = fill(&l.text, |slot| match slot {
+                                    "speaker" => speaker.clone(),
+                                    "listener" => listener.clone(),
+                                    _ => r.topic.as_ref().map_or_else(
+                                        || "something".to_string(),
+                                        |(subject, stamped)| {
+                                            // Non-programs are named from the
+                                            // catalogue, so a topic stamped ""
+                                            // by an older save repairs itself.
+                                            let live = self.remembered_name(subject);
+                                            let stamped = live.as_deref().or_else(|| {
+                                                Some(stamped.as_str()).filter(|s| !s.is_empty())
+                                            });
+                                            self.subject_label(subject, stamped)
+                                                .unwrap_or_else(|| "something".to_string())
+                                        },
+                                    ),
+                                });
+                                SpokenLine {
+                                    who: by.clone(),
+                                    text,
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_else(|| {
+                        let name = def.map_or(r.interaction.as_str(), |d| d.name.as_str());
+                        vec![SpokenLine {
+                            who: speaker.clone(),
+                            text: format!("{speaker} and {listener}: {name}"),
+                        }]
+                    });
+                ExchangeView { lines }
+            })
+            .collect();
+        Some(views)
     }
 
     /// The SOCIAL tab's read of `e`: who it has feelings about, and what the

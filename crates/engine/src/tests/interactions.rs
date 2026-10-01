@@ -7,7 +7,9 @@
 //! fails), sets the clock there and runs the pass.
 
 use super::support::*;
-use crate::components::{Memories, Memory, MemorySubject, Position, ProgramId, Task, TaskKind};
+use crate::components::{
+    Conversations, Memories, Memory, MemorySubject, Position, ProgramId, Task, TaskKind,
+};
 use crate::derive::{FNV_BASIS, fold, unit};
 use crate::interactions::InteractionDb;
 use crate::memories::{MemoryDb, MemoryId};
@@ -394,4 +396,314 @@ fn hearsay_is_not_retold() {
     game.note_interactions();
 
     assert_eq!(held(&game, b[3]).len(), 0, "a rumour does not travel twice");
+}
+
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
+
+const TALK_SAYS: &str = "(id: \"talk\", name: \"n\", listener_memory: \"chatted_with\", \
+    weight: 1.0, exchanges: [[(by: Speaker, text: \"Hello {listener}.\"), \
+    (by: Listener, text: \"Hello {speaker}.\")], \
+    [(by: Speaker, text: \"About {topic}.\"), (by: Listener, text: \"Yes.\")]])";
+
+fn records(game: &Game, e: Entity) -> Vec<crate::interactions::ConversationRecord> {
+    game.world
+        .get::<Conversations>(e)
+        .map(|c| c.0.iter().cloned().collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_fired_interaction_leaves_a_mirrored_record_on_each_side() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("rec_pair", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    let tick = period_tick(s, l, true, 0);
+    set_tick(&mut game, tick);
+
+    game.note_interactions();
+
+    let (said, heard) = (records(&game, b[0]), records(&game, b[1]));
+    assert_eq!((said.len(), heard.len()), (1, 1), "{said:?} {heard:?}");
+    assert_eq!((said[0].role, said[0].other), (Role::Speaker, l));
+    assert_eq!((heard[0].role, heard[0].other), (Role::Listener, s));
+    assert_eq!(said[0].tick, tick);
+    assert_eq!(said[0].interaction, "talk");
+    assert_eq!(said[0].exchange, heard[0].exchange);
+    assert!(said[0].exchange.is_some());
+    assert_eq!(said[0].topic, heard[0].topic);
+    assert_eq!(said[0].other_name, game.creature_short_label(b[1]));
+    assert_eq!(heard[0].other_name, game.creature_short_label(b[0]));
+    assert_eq!(records(&game, b[2]).len(), 0);
+}
+
+#[test]
+fn nothing_fires_so_no_record_is_written() {
+    let (mut game, b) = established("rec_none", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    set_tick(&mut game, period_tick(s, l, false, 0));
+    game.note_interactions();
+    assert!(
+        b.iter()
+            .all(|&e| game.world.get::<Conversations>(e).is_none())
+    );
+}
+
+/// Runs the pass on `n` successive ticks whose roll passes for this pair, so
+/// a test of what a seed decides sees several seeds rather than one lucky one.
+fn pass_over_ticks(game: &mut Game, s: ProgramId, l: ProgramId, n: usize) {
+    let mut t = 0;
+    for _ in 0..n {
+        t = period_tick(s, l, true, t);
+        set_tick(game, t);
+        game.note_interactions();
+    }
+}
+
+#[test]
+fn a_gossip_conversation_is_about_the_subject_it_told() {
+    let (mut game, b, s, l) = gossip_game("rec_gossip");
+    let (c, d) = (id_of(&game, b[2]), id_of(&game, b[3]));
+    told(&mut game, b[0], "idled_with", d);
+    told(&mut game, b[0], "turned_on_me", c);
+    let label = game.creature_short_label(b[2]);
+
+    pass_over_ticks(&mut game, s, l, 12);
+
+    for e in [b[0], b[1]] {
+        let r = records(&game, e);
+        assert_eq!(r.len(), 12);
+        for rec in r {
+            assert_eq!(rec.topic, Some((MemorySubject::Program(c), label.clone())));
+        }
+    }
+}
+
+#[test]
+fn a_plain_conversation_is_about_something_the_speaker_holds() {
+    let (mut game, b) = established("rec_topic", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    let c = id_of(&game, b[2]);
+    told(&mut game, b[0], "heard_ill_of", c);
+    set_tick(&mut game, period_tick(s, l, true, 0));
+
+    game.note_interactions();
+
+    let r = records(&game, b[0]);
+    assert_eq!(
+        r[0].topic.as_ref().map(|t| &t.0),
+        Some(&MemorySubject::Program(c))
+    );
+}
+
+#[test]
+fn with_nothing_on_its_mind_only_a_topic_free_exchange_is_said() {
+    let (mut game, b) = established("rec_no_topic", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    pass_over_ticks(&mut game, s, l, 12);
+    let r = records(&game, b[0]);
+    assert_eq!(r.len(), 12);
+    for rec in r {
+        assert_eq!((rec.topic, rec.exchange), (None, Some(0)));
+    }
+}
+
+#[test]
+fn the_same_state_writes_the_same_records() {
+    let run = |tag: &str| {
+        let (mut game, b) = established(tag, &[TALK_SAYS]);
+        let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+        let c = id_of(&game, b[2]);
+        told(&mut game, b[0], "heard_ill_of", c);
+        pass_over_ticks(&mut game, s, l, 12);
+        b.iter().map(|&e| records(&game, e)).collect::<Vec<_>>()
+    };
+    let first = run("rec_det_0");
+    assert!(first.iter().any(|v| !v.is_empty()));
+    for i in 1..4 {
+        assert_eq!(first, run(&format!("rec_det_{i}")));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+fn record(
+    interaction: &str,
+    exchange: Option<u8>,
+    role: crate::interactions::Role,
+    other: ProgramId,
+    topic: Option<(MemorySubject, String)>,
+) -> crate::interactions::ConversationRecord {
+    crate::interactions::ConversationRecord {
+        tick: 1,
+        interaction: interaction.into(),
+        exchange,
+        role,
+        other,
+        other_name: "Stamped".into(),
+        topic,
+    }
+}
+
+fn give(game: &mut Game, e: Entity, r: crate::interactions::ConversationRecord) {
+    if game.world.get::<Conversations>(e).is_none() {
+        game.world.entity_mut(e).insert(Conversations::default());
+    }
+    game.world.get_mut::<Conversations>(e).unwrap().push(r);
+}
+
+#[test]
+fn slots_fill_and_roles_name_the_right_side() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_fill", &[TALK_SAYS]);
+    let (me, other) = (
+        game.creature_short_label(b[0]),
+        game.creature_short_label(b[1]),
+    );
+    let (o, c) = (id_of(&game, b[1]), id_of(&game, b[2]));
+    let topic = Some((MemorySubject::Program(c), "Old".to_string()));
+    let c_name = game.creature_short_label(b[2]);
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(1), Role::Listener, o, topic),
+    );
+
+    let views = game.conversations(b[0]).unwrap();
+
+    assert_eq!(views.len(), 2);
+    // Newest first: the listener-side record with a topic.
+    assert_eq!(views[0].lines[0].who, other);
+    assert_eq!(views[0].lines[0].text, format!("About {c_name}."));
+    assert_eq!(views[0].lines[1].who, me);
+    assert_eq!(views[1].lines[0].who, me);
+    assert_eq!(views[1].lines[0].text, format!("Hello {other}."));
+    assert_eq!(views[1].lines[1].text, format!("Hello {me}."));
+}
+
+#[test]
+fn a_non_program_topic_is_named_from_the_catalogue_even_when_stamped_empty() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_topic_kinds", &[TALK_SAYS]);
+    let o = id_of(&game, b[1]);
+    for (subject, want) in [
+        (
+            MemorySubject::Structure("annealing_node".into()),
+            "About Annealing Node.",
+        ),
+        (MemorySubject::Species("cipher".into()), "About Cipher."),
+        (
+            MemorySubject::BaseTile { x: 3, y: 4 },
+            "About the base at (3, 4).",
+        ),
+    ] {
+        give(
+            &mut game,
+            b[0],
+            record(
+                "talk",
+                Some(1),
+                Role::Listener,
+                o,
+                Some((subject, String::new())),
+            ),
+        );
+        let views = game.conversations(b[0]).unwrap();
+        assert_eq!(views[0].lines[0].text, want);
+    }
+}
+
+#[test]
+fn a_rename_reads_through_and_a_departed_program_uses_its_stamp() {
+    use crate::interactions::Role;
+    let (mut game, b) = base(
+        7,
+        BASE_ESTABLISHED_STAFF + 1,
+        BASE_ESTABLISHED_STRUCTURES,
+        "view_names",
+        &[TALK_SAYS],
+    );
+    let o = id_of(&game, b[1]);
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Speaker, o, None),
+    );
+    game.rename_companion(b[1], Some("Zed".into())).unwrap();
+    let live = game.conversations(b[0]).unwrap();
+    assert_eq!(live[0].lines[0].text, "Hello Zed.");
+
+    game.world.despawn(b[1]);
+    let gone = game.conversations(b[0]).unwrap();
+    assert_eq!(gone[0].lines[0].text, "Hello Stamped.");
+}
+
+#[test]
+fn a_missing_def_or_bad_index_falls_back_without_panicking() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_fallback", &[TALK_SAYS]);
+    let o = id_of(&game, b[1]);
+    let (me, other) = (
+        game.creature_short_label(b[0]),
+        game.creature_short_label(b[1]),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("gone", Some(0), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(9), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", None, Role::Listener, o, None),
+    );
+
+    let v = game.conversations(b[0]).unwrap();
+
+    assert_eq!(v[0].lines.len(), 1);
+    assert_eq!(v[0].lines[0].text, format!("{other} and {me}: n"));
+    assert_eq!(v[1].lines[0].text, format!("{me} and {other}: n"));
+    assert_eq!(v[2].lines[0].text, format!("{me} and {other}: gone"));
+}
+
+#[test]
+fn an_unowned_program_has_no_conversations_and_a_quiet_one_has_none_listed() {
+    let (game, b) = established("view_owned", &[TALK_SAYS]);
+    assert_eq!(game.conversations(b[0]), Some(Vec::new()));
+    assert_eq!(game.conversations(game.player_entity()), None);
+}
+
+#[test]
+fn one_cue_per_fired_interaction_at_the_speakers_cell_then_drained() {
+    let (mut game, b) = established("speech_cue", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    set_tick(&mut game, period_tick(s, l, false, 0));
+    game.note_interactions();
+    assert!(game.take_speech().is_empty(), "a failed roll says nothing");
+
+    set_tick(&mut game, period_tick(s, l, true, 0));
+    game.note_interactions();
+
+    let speaker = *game.world.get::<Position>(b[0]).unwrap();
+    assert_ne!(speaker, *game.world.get::<Position>(b[1]).unwrap());
+    assert_eq!(
+        game.take_speech(),
+        vec![crate::resources::SpeechCue {
+            cell: (speaker.x, speaker.y)
+        }]
+    );
+    assert!(game.take_speech().is_empty(), "taking drains");
 }

@@ -530,6 +530,7 @@ impl Game {
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
+        world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());
         world.insert_resource(TacticalFxQueue::default());
         world.insert_resource(crate::resources::SwingCueQueue::default());
@@ -1398,6 +1399,7 @@ impl Game {
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
+        world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());
         world.insert_resource(TacticalFxQueue::default());
         world.insert_resource(crate::resources::SwingCueQueue::default());
@@ -2152,6 +2154,13 @@ impl Game {
                     })
                     .collect(),
             );
+            // Absent until a program's first conversation, so an empty list
+            // inserts nothing and the two stay the same state.
+            if !c.conversations.is_empty() {
+                entity.insert(crate::components::Conversations(
+                    c.conversations.iter().cloned().collect(),
+                ));
+            }
             // A file written before needs existed carries no key and
             // loads empty; `needs_drain_system` seeds it full on the first
             // tick, which is the one seeding site.
@@ -2535,6 +2544,11 @@ impl Game {
                         })
                         .collect()
                 })
+                .unwrap_or_default(),
+            conversations: self
+                .world
+                .get::<crate::components::Conversations>(e)
+                .map(|c| c.0.iter().cloned().collect())
                 .unwrap_or_default(),
             needs: self
                 .world

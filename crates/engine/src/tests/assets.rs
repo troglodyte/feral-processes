@@ -3170,6 +3170,45 @@ fn every_shipped_interaction_loads_without_a_warning() {
     assert_eq!(db.iter().count(), 10, "the full set ships");
 }
 
+/// What the shipped interactions can say. Slot names and line counts need no
+/// check here: an exchange that breaks either is dropped with a warning, and
+/// `every_shipped_interaction_loads_without_a_warning` holds that at zero.
+#[test]
+fn every_shipped_interaction_has_exchanges_that_fit_the_topic_rules() {
+    use crate::interactions::{InteractionDb, slots};
+    use crate::memories::MemoryDb;
+
+    let (memories, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let (db, _) =
+        InteractionDb::load_dir(&test_assets_dir().join("interactions"), &memories).unwrap();
+    let uses_topic = |lines: &Vec<crate::interactions::Line>| {
+        lines.iter().any(|l| slots(&l.text).any(|s| s == "topic"))
+    };
+    for def in db.iter() {
+        assert!(!def.exchanges.is_empty(), "{} says nothing", def.id);
+        if def.gossip {
+            assert!(
+                def.exchanges.iter().all(uses_topic),
+                "{}: a rumour is always about someone",
+                def.id
+            );
+        } else {
+            assert!(
+                !def.exchanges.iter().all(uses_topic),
+                "{} has no topic-free exchange, so it could say nothing with nothing on its mind",
+                def.id
+            );
+        }
+    }
+    for id in ["small_talk", "shop_talk", "complain", "commiserate"] {
+        let def = db.get(id).unwrap();
+        assert!(
+            def.exchanges.iter().any(uses_topic),
+            "{id} never names a topic"
+        );
+    }
+}
+
 /// A rumour is weaker than what it is told from, and tells nothing further:
 /// the target of `spreads_as` is a `Program`-subject def that does not itself
 /// spread, which is what keeps gossip one hop.

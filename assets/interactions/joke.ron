@@ -6,4 +6,21 @@
     weight: 1.5,
     by_band: {Enemy: 0.1, Rival: 0.4, Neutral: 1.0, Friend: 1.5, Close: 2.0},
     by_disposition: {Amiable: 1.5, Languid: 0.7},
+    exchanges: [
+        [
+            (by: Speaker, text: "Why did the loop stop?"),
+            (by: Listener, text: "Unknown."),
+            (by: Speaker, text: "Out of iterations."),
+        ],
+        [
+            (by: Speaker, text: "Knock knock."),
+            (by: Listener, text: "Who is there?"),
+            (by: Speaker, text: "Segfault."),
+            (by: Listener, text: "Segfault who?"),
+        ],
+        [
+            (by: Speaker, text: "I would tell a UDP joke."),
+            (by: Listener, text: "You might not get it."),
+        ],
+    ],
 )

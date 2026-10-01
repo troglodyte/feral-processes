@@ -214,6 +214,16 @@ impl Game {
             .take()
     }
 
+    /// Drains every `SpeechCue` queued since the last call — `take_transits`'
+    /// counterpart for a conversation. The same two duties hold: a frontend
+    /// that draws no marks must still call it, and one not drawing base space
+    /// drops what it gets, since a cue names base-space cells.
+    pub fn take_speech(&mut self) -> Vec<crate::resources::SpeechCue> {
+        self.world
+            .resource_mut::<crate::resources::SpeechQueue>()
+            .take()
+    }
+
     /// Drains every `BoltCue` queued since the last call — `take_transits`'
     /// counterpart on a battle map.
     ///

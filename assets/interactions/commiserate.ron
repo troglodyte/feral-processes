@@ -6,4 +6,19 @@
     weight: 1.0,
     by_band: {Enemy: 0.2, Rival: 0.5, Neutral: 1.0, Friend: 1.5, Close: 1.5},
     by_disposition: {Languid: 2.0},
+    exchanges: [
+        [
+            (by: Speaker, text: "Load is heavy, {listener}."),
+            (by: Listener, text: "Heavy for both."),
+            (by: Speaker, text: "Shared load is lighter."),
+        ],
+        [
+            (by: Speaker, text: "{topic} wears on me."),
+            (by: Listener, text: "And on me."),
+        ],
+        [
+            (by: Speaker, text: "Low power again."),
+            (by: Listener, text: "Same here."),
+        ],
+    ],
 )

@@ -1525,6 +1525,16 @@ fn draw_surface_map(
                 pane,
             )
         });
+        fx.draw_speech(painter, tile_px, glyph_px, |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        });
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
     entities
@@ -1702,6 +1712,7 @@ pub(crate) fn tile_at_px(px: f32, py: f32, layout: &MapClickLayout) -> (i32, i32
 mod tests {
     use super::history::*;
     use super::*;
+    use crate::fx::FrameCues;
     use crate::paint::SpriteTable;
     use crate::paint::{
         painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
@@ -1813,7 +1824,7 @@ mod tests {
     #[test]
     fn a_recovering_program_wears_a_floating_mark_and_nothing_else_does() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, FrameCues::default(), false);
 
         assert!(
             recovery_mark_at(&fx, &patient_view(true)).is_some(),
@@ -1828,7 +1839,7 @@ mod tests {
         let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
             .into_iter()
             .map(|now| {
-                fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+                fx.begin_frame(now, FrameCues::default(), false);
                 recovery_mark_at(&fx, &busy).expect("the mark is drawn every frame")
             })
             .collect();
@@ -1842,7 +1853,7 @@ mod tests {
         // mark ever sits.
         let mut still = Fx::new();
         still.enabled = false;
-        still.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        still.begin_frame(0.0, FrameCues::default(), false);
         let rest = recovery_mark_at(&still, &busy).expect("drawn with animations off");
         assert!(
             ys.iter().all(|y| *y <= rest + 0.01),
@@ -1853,7 +1864,7 @@ mod tests {
         let alphas: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
             .into_iter()
             .map(|now| {
-                fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+                fx.begin_frame(now, FrameCues::default(), false);
                 crate::paint::painted_map_glyphs(&recovery_mark_shapes(&fx, &busy))
                     .into_iter()
                     .find(|(text, _)| text == "+")
@@ -1881,7 +1892,7 @@ mod tests {
         // alpha into the colour, and the float's fade would read as a hue drift.
         let mut fx = Fx::new();
         fx.enabled = false;
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, FrameCues::default(), false);
 
         let shapes = recovery_mark_shapes(&fx, &patient_view(true));
         let painted: Vec<Color> = crate::paint::painted_map_glyphs(&shapes)
@@ -1922,7 +1933,7 @@ mod tests {
     #[test]
     fn the_recovery_mark_floats_clear_above_the_patients_own_glyph() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, FrameCues::default(), false);
         let busy = patient_view(true);
         let own_glyph = busy.glyph.to_string();
 
@@ -3471,7 +3482,7 @@ mod tests {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         let mut fx = Fx::new();
-        fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(at, FrameCues::default(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();
@@ -3585,7 +3596,7 @@ mod tests {
 
         let mut fx = Fx::new();
         fx.enabled = animated;
-        fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(at, FrameCues::default(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();
@@ -5939,6 +5950,7 @@ mod tests {
                 disgruntled: None,
                 disgruntled_stranded: false,
                 memories: Vec::new(),
+                conversations: Vec::new(),
                 needs: Default::default(),
                 attributes: Default::default(),
                 off_shift: None,
@@ -6011,7 +6023,7 @@ mod tests {
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let frame = |game: &mut Game, now: f64| {
             let mut fx = Fx::new();
-            fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+            fx.begin_frame(now, FrameCues::default(), false);
             let (_, shapes) = with_painter(|p| {
                 let status = game.player_status();
                 draw_surface_map(

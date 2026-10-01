@@ -40,6 +40,7 @@ per pass.
 | `by_band` | Optional. A multiplier per band of the **speaker's** opinion of the listener: `Enemy`, `Rival`, `Neutral`, `Friend`, `Close`. A band left out is `1.0`. |
 | `by_disposition` | Optional. A multiplier per **speaker** disposition: `Steady`, `Amiable`, `Abrasive`, `Languid`, `Dogged`. One left out is `1.0`. |
 | `gossip` | Optional, default `false`. See below. |
+| `exchanges` | Optional, default none. What the pair says: a list of exchanges, each a list of `Line`s. See below. |
 
 The pick weight of a def is `weight * by_disposition * by_band`. A negative or
 non-finite number in any of the three is a load-time fault. Every weight at
@@ -48,6 +49,38 @@ zero means nothing is said.
 The memories an interaction writes are an engine concern in one respect only:
 a def's memory must carry a `Program` subject, and it is written about the
 other program in the pair.
+
+## Exchanges
+
+When an interaction fires, the engine picks one of the def's `exchanges` and
+both programs keep a record of it, shown on the TALK tab. A record stores which
+exchange was said, not the words, so editing a line rewords the history.
+
+```ron
+exchanges: [
+    [
+        (by: Speaker, text: "Status of {topic}?"),
+        (by: Listener, text: "Unchanged."),
+    ],
+],
+```
+
+- A `Line` is `(by: Speaker, text: "...")` or `(by: Listener, text: "...")`.
+- An exchange has **2 to 4 lines** (`tuning::CONVERSATION_MAX_LINES`). One
+  outside that range is dropped with a warning naming the file and the
+  exchange's index; the def and its other exchanges still load.
+- Text may use three slots, written in braces: `{speaker}`, `{listener}` and
+  `{topic}`. Any other `{name}` drops the exchange with a warning. Names are
+  filled in when the page is drawn, so a rename reads through.
+- `{topic}` is something the speaker holds a memory about (never the speaker
+  or the listener). When the speaker has nothing on its mind, only exchanges
+  **without** `{topic}` are eligible, so give every non-gossip def at least one.
+  A gossip def should use `{topic}` in every exchange: it is always about the
+  third program it told.
+- A def with no exchanges is valid. Its records show one line, `<speaker> and
+  <listener>: <name>`. The same line is shown when a record names an exchange
+  or def that has since been removed or reordered.
+- Keep lines short: they are drawn in a narrow panel and wrap.
 
 ## Gossip
 

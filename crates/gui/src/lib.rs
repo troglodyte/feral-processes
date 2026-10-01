@@ -37,7 +37,7 @@ pub use capture::Capture;
 use feral_processes_app_core::{
     App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
 };
-use fx::Fx;
+use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
 use sounds::SoundBank;
@@ -832,23 +832,16 @@ fn frame(
     // so a disabled `Fx` can't leave the engine's queue at its cap.
     let in_battle = fx_in_fight(&fe.app);
     let in_base = fe.app.game.as_ref().is_some_and(|g| g.base_pos().is_some());
-    let (effects, transits, bolts, tactical_fx, last_log) = match &mut fe.app.game {
-        Some(game) => (
-            game.take_effects(),
-            game.take_transits(),
-            game.take_bolts(),
-            game.take_tactical_fx(),
-            game.message_log(1).pop(),
-        ),
-        None => (Vec::new(), Vec::new(), Vec::new(), Vec::new(), None),
+    let (cues, last_log) = match &mut fe.app.game {
+        Some(game) => (FrameCues::take(game), game.message_log(1).pop()),
+        None => (FrameCues::default(), None),
     };
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
-    for event in frame_cues(queued, &effects, &tactical_fx, in_base) {
+    for event in frame_cues(queued, &cues.effects, &cues.tactical_fx, in_base) {
         sounds.play(&mut commands, event, fe.volume);
     }
-    fe.fx
-        .begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
+    fe.fx.begin_frame(now, cues, in_battle);
     fe.fx.observe_log(last_log.as_ref());
     let round = fe.app.game.as_ref().and_then(|g| g.tactical_round());
     if fe.fx.observe_round(round) {
@@ -972,7 +965,9 @@ mod tests {
     use super::*;
     use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::items::{ItemId, ids};
-    use feral_processes_engine::resources::{EffectKind, Locale, TransitCue, VisualEffect};
+    use feral_processes_engine::resources::{
+        EffectKind, Locale, SpeechCue, TransitCue, VisualEffect,
+    };
     use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
     use feral_processes_engine::{DifficultyMode, Game, save};
     use std::path::PathBuf;
@@ -1549,10 +1544,10 @@ mod tests {
         };
         fx.begin_frame(
             0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![cue],
+            FrameCues {
+                tactical_fx: vec![cue],
+                ..Default::default()
+            },
             fx_in_fight(&app),
         );
         assert!(
@@ -1713,17 +1708,11 @@ mod tests {
     /// does, then draw whatever mode the app is now in.
     fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
         let in_battle = fx_in_fight(app);
-        let (effects, transits, bolts, tactical_fx, last_log) = match &mut app.game {
-            Some(game) => (
-                game.take_effects(),
-                game.take_transits(),
-                game.take_bolts(),
-                game.take_tactical_fx(),
-                game.message_log(1).pop(),
-            ),
-            None => (Vec::new(), Vec::new(), Vec::new(), Vec::new(), None),
+        let (cues, last_log) = match &mut app.game {
+            Some(game) => (FrameCues::take(game), game.message_log(1).pop()),
+            None => (FrameCues::default(), None),
         };
-        fx.begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
+        fx.begin_frame(now, cues, in_battle);
         fx.observe_log(last_log.as_ref());
         paint::with_painter(|p| render::draw(app, fx, p, false));
     }
@@ -1756,13 +1745,13 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            vec![VisualEffect {
-                pos: in_base,
-                kind: EffectKind::Hit,
-            }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            FrameCues {
+                effects: vec![VisualEffect {
+                    pos: in_base,
+                    kind: EffectKind::Hit,
+                }],
+                ..Default::default()
+            },
             false,
         );
         let flash = fx
@@ -1781,13 +1770,13 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            vec![VisualEffect {
-                pos: on_surface,
-                kind: EffectKind::Hit,
-            }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            FrameCues {
+                effects: vec![VisualEffect {
+                    pos: on_surface,
+                    kind: EffectKind::Hit,
+                }],
+                ..Default::default()
+            },
             false,
         );
         let flash = fx
@@ -1805,7 +1794,7 @@ mod tests {
         // the guard has to be on both — a rect count alone would leave the
         // sparks free to keep landing on open ground.
         let mut quiet = Fx::new();
-        quiet.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        quiet.begin_frame(0.0, FrameCues::default(), false);
         let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p, false));
         assert_eq!(
             paint::painted_line_count(&shapes),
@@ -1835,10 +1824,17 @@ mod tests {
         };
         let painted = |app: &mut App| {
             let mut fx = Fx::new();
-            fx.begin_frame(0.0, Vec::new(), vec![cue()], Vec::new(), Vec::new(), false);
+            fx.begin_frame(
+                0.0,
+                FrameCues {
+                    transits: vec![cue()],
+                    ..Default::default()
+                },
+                false,
+            );
             // A frame in, so the body is off its first cell and being drawn
             // by the interpolating pass rather than sitting on a tile.
-            fx.begin_frame(0.06, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+            fx.begin_frame(0.06, FrameCues::default(), false);
             let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false));
             paint::painted_text(&shapes)
                 .iter()
@@ -1858,6 +1854,48 @@ mod tests {
             painted(&mut app),
             0,
             "the zone map is not base space, so a walk across it must draw nothing"
+        );
+    }
+
+    /// A speech mark names a base-space cell, so it draws in base space and
+    /// never over the zone surface; the walk test's two halves, and for its
+    /// reason. Counted against a control frame, because the quote glyph is
+    /// not one nothing else draws on the map.
+    #[test]
+    fn a_speech_mark_draws_in_base_space_and_never_on_the_surface() {
+        let quotes = |app: &mut App, speech: Vec<SpeechCue>| {
+            let mut fx = Fx::new();
+            fx.begin_frame(
+                0.0,
+                FrameCues {
+                    speech,
+                    ..Default::default()
+                },
+                false,
+            );
+            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false));
+            let mark = fx::SPEECH_GLYPH.to_string();
+            paint::painted_text(&shapes)
+                .iter()
+                .filter(|t| **t == mark)
+                .count()
+        };
+        let cue = || vec![SpeechCue { cell: (0, 0) }];
+
+        let mut app = app_in_base(4247);
+        let bare = quotes(&mut app, Vec::new());
+        assert_eq!(
+            quotes(&mut app, cue()),
+            bare + 1,
+            "a conversation in the base is marked"
+        );
+
+        app.game.as_mut().unwrap().leave_base().unwrap();
+        let bare = quotes(&mut app, Vec::new());
+        assert_eq!(
+            quotes(&mut app, cue()),
+            bare,
+            "the zone map is not base space, so a mark over its cells would be aliasing"
         );
     }
 

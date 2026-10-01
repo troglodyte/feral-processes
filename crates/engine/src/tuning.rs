@@ -4601,6 +4601,10 @@ pub const SOCIABILITY_SALT: u64 = 0x9e37_79b9_7f4a_7c15;
 /// Folded last into every roll `note_interactions` reads, for the same
 /// reasons.
 pub const INTERACTION_SALT: u64 = 0xc2b2_ae3d_27d4_eb4f;
+/// The most lines one exchange may have; the TALK page must fit whole ones.
+pub const CONVERSATION_MAX_LINES: usize = 4;
+/// Conversation records a program keeps; the oldest is dropped past this.
+pub const CONVERSATION_RING: usize = 32;
 
 // ---------------------------------------------------------------------------
 // Sorties

@@ -5,4 +5,14 @@
     weight: 0.3,
     by_band: {Enemy: 4.0, Rival: 3.0, Neutral: 0.3, Friend: 0.02, Close: 0.01},
     by_disposition: {Abrasive: 3.0, Amiable: 0.1},
+    exchanges: [
+        [
+            (by: Speaker, text: "Your code is bloated, {listener}."),
+            (by: Listener, text: "Yours is unreadable."),
+        ],
+        [
+            (by: Speaker, text: "You are a memory leak."),
+            (by: Listener, text: "Noted."),
+        ],
+    ],
 )

@@ -83,6 +83,7 @@ mod stack_market;
 mod structure_manifest;
 mod tactical;
 mod talents;
+mod talk;
 mod terrain;
 #[cfg(test)]
 mod test_support;

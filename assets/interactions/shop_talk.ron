@@ -6,4 +6,19 @@
     weight: 2.0,
     by_band: {Enemy: 0.3, Rival: 0.6, Neutral: 1.0, Friend: 1.2, Close: 1.3},
     by_disposition: {Dogged: 2.0},
+    exchanges: [
+        [
+            (by: Speaker, text: "Throughput is down, {listener}."),
+            (by: Listener, text: "Check the queue depth."),
+            (by: Speaker, text: "Queue checked. Still down."),
+        ],
+        [
+            (by: Speaker, text: "{topic} needs a rework."),
+            (by: Listener, text: "Log it. Then rework it."),
+        ],
+        [
+            (by: Speaker, text: "Is your routine optimal?"),
+            (by: Listener, text: "Within tolerance."),
+        ],
+    ],
 )

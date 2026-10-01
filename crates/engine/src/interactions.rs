@@ -10,15 +10,80 @@
 //! `assets/interactions/` is silent and means no program ever talks.
 
 use crate::bonds::Bond;
-use crate::components::{Position, ProgramId};
-use crate::derive::{fold, unit};
+use crate::components::{Memory, MemorySubject, Position, ProgramId};
+use crate::derive::{fold, index, unit};
 use crate::disposition::Disposition;
 use crate::memories::{MemoryDb, MemoryId, MemorySubjectKind};
-use crate::tuning::{BOND_WITNESS_REACH, INTERACTION_SALT};
+use crate::tuning::{BOND_WITNESS_REACH, CONVERSATION_MAX_LINES, INTERACTION_SALT};
 use bevy_ecs::prelude::Resource;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
+
+/// Which of the pair a line belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Role {
+    Speaker,
+    Listener,
+}
+
+/// One line of an exchange.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Line {
+    pub by: Role,
+    pub text: String,
+}
+
+/// The slot names a line may use, each written `{name}`.
+const KNOWN_SLOTS: [&str; 3] = ["speaker", "listener", "topic"];
+
+/// The byte span `open..=close` of each `{name}` token in `text`, braces
+/// included. The one reader of the slot syntax: `slots` (the loader) and
+/// `fill` (the renderer) both walk it, so they cannot disagree about what a
+/// slot is.
+fn slot_spans(text: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
+    let mut from = 0;
+    std::iter::from_fn(move || {
+        let open = text[from..].find('{')? + from;
+        let close = text[open..].find('}')? + open;
+        from = close + 1;
+        Some((open, close))
+    })
+}
+
+/// The `{name}` tokens of `text`, without the braces.
+pub fn slots(text: &str) -> impl Iterator<Item = &str> {
+    slot_spans(text).map(|(open, close)| &text[open + 1..close])
+}
+
+/// `text` with every `{name}` replaced by `value(name)`, in one pass so a
+/// substituted value is never itself read for slots.
+pub fn fill(text: &str, value: impl Fn(&str) -> String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut from = 0;
+    for (open, close) in slot_spans(text) {
+        out.push_str(&text[from..open]);
+        out.push_str(&value(&text[open + 1..close]));
+        from = close + 1;
+    }
+    out.push_str(&text[from..]);
+    out
+}
+
+/// Whether an exchange can be loaded: a playable length and only known slots.
+fn exchange_problem(lines: &[Line]) -> Option<String> {
+    if !(2..=CONVERSATION_MAX_LINES).contains(&lines.len()) {
+        return Some(format!(
+            "{} lines (need 2 to {CONVERSATION_MAX_LINES})",
+            lines.len()
+        ));
+    }
+    lines
+        .iter()
+        .flat_map(|l| slots(&l.text))
+        .find(|s| !KNOWN_SLOTS.contains(s))
+        .map(|s| format!("unknown slot {{{s}}}"))
+}
 
 /// One kind of exchange. `assets/interactions/README.md` is the schema.
 #[derive(Clone, Debug, Deserialize)]
@@ -45,6 +110,10 @@ pub struct InteractionDef {
     /// fixed one.
     #[serde(default)]
     pub gossip: bool,
+    /// What the pair can say, each inner list one back-and-forth. Empty is
+    /// valid: the record then renders as the def's `name`.
+    #[serde(default)]
+    pub exchanges: Vec<Vec<Line>>,
 }
 
 impl InteractionDef {
@@ -103,7 +172,7 @@ impl InteractionDb {
         };
         for path in paths {
             let text = std::fs::read_to_string(&path)?;
-            let def = match ron::from_str::<InteractionDef>(&text) {
+            let mut def = match ron::from_str::<InteractionDef>(&text) {
                 Ok(def) => def,
                 Err(e) => {
                     warnings.push(format!("skipped invalid interaction file {path:?}: {e}"));
@@ -129,6 +198,19 @@ impl InteractionDb {
                 ));
                 continue;
             }
+            // Reported by its position in the file, which is what the modder
+            // can find; the survivors keep their order.
+            let mut index = 0;
+            def.exchanges.retain(|lines| {
+                let problem = exchange_problem(lines);
+                if let Some(problem) = &problem {
+                    warnings.push(format!(
+                        "dropped exchange {index} of interaction file {path:?}: {problem}"
+                    ));
+                }
+                index += 1;
+                problem.is_none()
+            });
             if db.defs.contains_key(&def.id) {
                 warnings.push(format!(
                     "skipped interaction file {path:?}: {:?} is already defined",
@@ -147,6 +229,10 @@ impl InteractionDb {
 
     /// Every def in id order, which the weighted pick depends on being
     /// stable.
+    pub fn get(&self, id: &str) -> Option<&InteractionDef> {
+        self.defs.get(id)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &InteractionDef> {
         self.defs.values()
     }
@@ -223,6 +309,74 @@ pub fn pick(
         }
     }
     last
+}
+
+/// One conversation as one program remembers it. Holds no generated text:
+/// the page renders it from the current templates, so a retuned or removed
+/// template reads through. `tick` orders records and is never shown.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ConversationRecord {
+    pub tick: u64,
+    /// The `InteractionDef` id.
+    pub interaction: String,
+    /// Index into the def's `exchanges`; `None` renders the fallback line.
+    pub exchange: Option<u8>,
+    /// This program's side; the other program's record has the opposite.
+    pub role: Role,
+    pub other: ProgramId,
+    /// Stamped at the write; a live program's current name wins on read.
+    pub other_name: String,
+    pub topic: Option<(MemorySubject, String)>,
+}
+
+/// What `speaker` is on about: one of its own memories' subjects, never
+/// itself, the listener or no subject at all. Subjects are taken in the
+/// store's order, de-duplicated, and one is picked by `seed`, so the same
+/// state names the same topic.
+pub fn topic(
+    memories: &[Memory],
+    speaker: ProgramId,
+    listener: ProgramId,
+    seed: u64,
+) -> Option<MemorySubject> {
+    let mut subjects: Vec<&MemorySubject> = Vec::new();
+    for m in memories {
+        let excluded = match &m.subject {
+            MemorySubject::Nothing => true,
+            MemorySubject::Program(p) => *p == speaker || *p == listener,
+            _ => false,
+        };
+        if !excluded && !subjects.contains(&&m.subject) {
+            subjects.push(&m.subject);
+        }
+    }
+    if subjects.is_empty() {
+        return None;
+    }
+    Some(subjects[index(fold(seed, &[2, INTERACTION_SALT]), subjects.len())].clone())
+}
+
+/// Which of `def`'s exchanges is said: any when there is a topic, otherwise
+/// only those that never name one. `None` when nothing qualifies, which the
+/// reader renders as the fallback line.
+pub fn pick_exchange(def: &InteractionDef, has_topic: bool, seed: u64) -> Option<u8> {
+    let fits: Vec<usize> = def
+        .exchanges
+        .iter()
+        .enumerate()
+        .filter(|(_, lines)| {
+            has_topic
+                || !lines
+                    .iter()
+                    .flat_map(|l| slots(&l.text))
+                    .any(|s| s == "topic")
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if fits.is_empty() {
+        return None;
+    }
+    u8::try_from(fits[index(fold(seed, &[3, INTERACTION_SALT]), fits.len())]).ok()
 }
 
 #[cfg(test)]
@@ -315,6 +469,160 @@ mod tests {
         ]);
         assert_eq!(w.len(), 4, "{w:?}");
         assert!(db.is_empty());
+    }
+
+    fn exchange(lines: &[(&str, &str)]) -> String {
+        let lines: Vec<String> = lines
+            .iter()
+            .map(|(by, text)| format!("(by: {by}, text: \"{text}\")"))
+            .collect();
+        format!("[{}]", lines.join(", "))
+    }
+
+    #[test]
+    fn fill_never_rescans_substituted_text() {
+        let got = fill("{speaker} / {topic}", |s| match s {
+            "speaker" => "{topic}".to_string(),
+            _ => "T".to_string(),
+        });
+        assert_eq!(got, "{topic} / T");
+        assert_eq!(fill("a {x} {open", |_| "1".into()), "a 1 {open");
+    }
+
+    #[test]
+    fn slots_yields_each_braced_name() {
+        let got: Vec<_> = slots("a {x} b {y}{z} {open").collect();
+        assert_eq!(got, ["x", "y", "z"]);
+    }
+
+    #[test]
+    fn a_bad_exchange_is_dropped_with_a_warning_and_the_def_loads() {
+        let ok = exchange(&[("Speaker", "hi {topic}"), ("Listener", "ok {speaker}")]);
+        let unknown = exchange(&[("Speaker", "hi {nope}"), ("Listener", "ok")]);
+        let one = exchange(&[("Speaker", "hi")]);
+        let five = exchange(&[("Speaker", "a"); 5]);
+        for (bad, name) in [(unknown, "unknown"), (one, "one"), (five, "five")] {
+            let (db, w) = load(&[("a.ron", def_text("a", &format!("exchanges: [{bad}, {ok}]")))]);
+            assert_eq!(w.len(), 1, "{name}: {w:?}");
+            assert!(w[0].contains("exchange 0"), "{name}: {w:?}");
+            let def = db.iter().next().unwrap_or_else(|| panic!("{name}: no def"));
+            assert_eq!(def.exchanges.len(), 1, "{name}");
+            assert_eq!(def.exchanges[0][0].by, Role::Speaker);
+        }
+    }
+
+    #[test]
+    fn a_def_without_exchanges_loads_clean() {
+        let (db, w) = load(&[("a.ron", def_text("a", ""))]);
+        assert!(w.is_empty(), "{w:?}");
+        assert!(db.iter().next().unwrap().exchanges.is_empty());
+    }
+
+    fn memory_about(subject: MemorySubject) -> Memory {
+        Memory {
+            def: MemoryId::from("chatted_with"),
+            subject,
+            subject_name: None,
+            reinforced: 0,
+            strikes: 1,
+        }
+    }
+
+    #[test]
+    fn topic_is_never_the_speaker_the_listener_or_nothing() {
+        let me = ProgramId(1);
+        let you = ProgramId(2);
+        let them = ProgramId(3);
+        let held = [
+            memory_about(MemorySubject::Nothing),
+            memory_about(MemorySubject::Program(me)),
+            memory_about(MemorySubject::Program(you)),
+            memory_about(MemorySubject::Program(them)),
+            memory_about(MemorySubject::Program(them)),
+        ];
+        for seed in 0..50 {
+            assert_eq!(
+                topic(&held, me, you, seed),
+                Some(MemorySubject::Program(them))
+            );
+        }
+    }
+
+    #[test]
+    fn topic_with_no_candidates_is_none() {
+        let me = ProgramId(1);
+        let you = ProgramId(2);
+        assert_eq!(topic(&[], me, you, 0), None);
+        let held = [
+            memory_about(MemorySubject::Nothing),
+            memory_about(MemorySubject::Program(you)),
+        ];
+        assert_eq!(topic(&held, me, you, 0), None);
+    }
+
+    #[test]
+    fn topic_reaches_every_candidate_across_seeds() {
+        let held = [
+            memory_about(MemorySubject::Program(ProgramId(5))),
+            memory_about(MemorySubject::Program(ProgramId(6))),
+        ];
+        let seen: std::collections::BTreeSet<_> = (0..64)
+            .filter_map(|s| topic(&held, ProgramId(1), ProgramId(2), s))
+            .map(|t| format!("{t:?}"))
+            .collect();
+        assert_eq!(seen.len(), 2);
+    }
+
+    fn def_with(exchanges: &[&str]) -> InteractionDef {
+        let lines: Vec<String> = exchanges
+            .iter()
+            .map(|t| exchange(&[("Speaker", t), ("Listener", "ok")]))
+            .collect();
+        let (db, w) = load(&[(
+            "a.ron",
+            def_text("a", &format!("exchanges: [{}]", lines.join(", "))),
+        )]);
+        assert!(w.is_empty(), "{w:?}");
+        db.iter().next().unwrap().clone()
+    }
+
+    #[test]
+    fn without_a_topic_only_topic_free_exchanges_are_picked() {
+        let def = def_with(&["about {topic}", "plain", "also {topic}", "plain too"]);
+        for seed in 0..50 {
+            let i = pick_exchange(&def, false, seed).unwrap();
+            assert!(i == 1 || i == 3, "{i}");
+        }
+        let seen: std::collections::BTreeSet<_> = (0..64)
+            .filter_map(|s| pick_exchange(&def, true, s))
+            .collect();
+        assert_eq!(seen.len(), 4);
+    }
+
+    #[test]
+    fn no_qualifying_exchange_is_none() {
+        assert_eq!(pick_exchange(&def_with(&[]), true, 0), None);
+        assert_eq!(pick_exchange(&def_with(&["about {topic}"]), false, 0), None);
+    }
+
+    #[test]
+    fn the_ring_keeps_the_newest_and_drops_the_oldest() {
+        use crate::components::Conversations;
+        let mut ring = Conversations::default();
+        for tick in 0..=crate::tuning::CONVERSATION_RING as u64 {
+            ring.push(ConversationRecord {
+                tick,
+                interaction: "talk".into(),
+                exchange: None,
+                role: Role::Speaker,
+                other: ProgramId(2),
+                other_name: "x".into(),
+                topic: None,
+            });
+        }
+        assert_eq!(ring.0.len(), crate::tuning::CONVERSATION_RING);
+        assert_eq!(ring.0.front().unwrap().tick, 32);
+        assert_eq!(ring.0.back().unwrap().tick, 1);
     }
 
     #[test]

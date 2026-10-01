@@ -3652,6 +3652,19 @@ pub struct RelationshipRow {
     pub gone: bool,
 }
 
+/// One line of a rendered conversation: who says it, already named.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpokenLine {
+    pub who: String,
+    pub text: String,
+}
+
+/// One conversation as the TALK tab draws it, slots already filled.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExchangeView {
+    pub lines: Vec<SpokenLine>,
+}
+
 /// What the SOCIAL tab draws for one owned program.
 #[derive(Clone, Debug)]
 pub struct SocialView {

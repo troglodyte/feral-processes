@@ -832,6 +832,34 @@ impl TransitQueue {
     }
 }
 
+/// A conversation that fired, for a frontend to mark over the speaker. In
+/// base-space cells, like `TransitCue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SpeechCue {
+    pub cell: (i32, i32),
+}
+
+/// Cues queued since the last `Game::take_speech` — `TransitQueue`'s shape:
+/// capped, oldest dropped, drained on read and never saved.
+#[derive(Resource, Default)]
+pub struct SpeechQueue {
+    cues: Vec<SpeechCue>,
+}
+
+impl SpeechQueue {
+    pub(crate) fn push(&mut self, cue: SpeechCue) {
+        self.cues.push(cue);
+        if self.cues.len() > EFFECT_QUEUE_CAP {
+            let excess = self.cues.len() - EFFECT_QUEUE_CAP;
+            self.cues.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<SpeechCue> {
+        std::mem::take(&mut self.cues)
+    }
+}
+
 /// A blow travelling from the body that swung it to the body it landed on,
 /// for a frontend to draw as a streak.
 ///

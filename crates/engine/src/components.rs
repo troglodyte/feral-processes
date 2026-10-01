@@ -1099,6 +1099,25 @@ pub enum TaskKind {
     Construct,
 }
 
+impl TaskKind {
+    pub const ALL: [TaskKind; 4] = [
+        TaskKind::GatherResource,
+        TaskKind::Guard,
+        TaskKind::Excavate,
+        TaskKind::Construct,
+    ];
+
+    /// How a memory or a conversation names this activity as a topic.
+    pub fn phrase(self) -> &'static str {
+        match self {
+            TaskKind::GatherResource => "working a machine",
+            TaskKind::Guard => "standing guard",
+            TaskKind::Excavate => "cutting rock",
+            TaskKind::Construct => "raising a structure",
+        }
+    }
+}
+
 /// A generic ongoing job: `worker` progresses `target` over multiple ticks.
 /// This is deliberately generic so base-building work and any future
 /// colonist-style job assignment share one mechanism.
@@ -1894,6 +1913,20 @@ pub struct ProgramId(pub u32);
 /// roster" rather than "remembers nothing".
 #[derive(Component, Clone, Debug, Default)]
 pub struct Memories(pub Vec<Memory>);
+
+/// What one owned program has said and heard, newest first, capped at
+/// `CONVERSATION_RING`. Inserted by the first conversation rather than minted
+/// with the roster, so a program that has never spoken carries none; readers
+/// treat absent as empty.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct Conversations(pub std::collections::VecDeque<crate::interactions::ConversationRecord>);
+
+impl Conversations {
+    pub fn push(&mut self, record: crate::interactions::ConversationRecord) {
+        self.0.push_front(record);
+        self.0.truncate(crate::tuning::CONVERSATION_RING);
+    }
+}
 
 /// What a body is like apart from what it can do in a fight — see
 /// `attributes.rs`.

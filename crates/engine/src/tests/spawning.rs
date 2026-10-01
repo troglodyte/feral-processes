@@ -1721,6 +1721,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             disgruntled: None,
             disgruntled_stranded: false,
             memories: Vec::new(),
+            conversations: Vec::new(),
             needs: Default::default(),
             attributes: Default::default(),
             off_shift: None,

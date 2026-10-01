@@ -100,6 +100,7 @@ mod sprite_palette;
 mod stack;
 mod stack_movement;
 mod stock;
+mod sulking;
 mod summons;
 mod tactical;
 mod talents;

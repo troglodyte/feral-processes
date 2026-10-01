@@ -167,7 +167,24 @@ impl Game {
         let Some(structure) = self.world.get::<crate::components::Structure>(post) else {
             return false;
         };
-        let subject = crate::components::MemorySubject::Structure(structure.kind.clone());
+        self.resents_structure(worker, &structure.kind)
+    }
+
+    /// Whether `e` has reached the mild rung — the one predicate every
+    /// sulking behaviour reads, so a program that has downed tools or is
+    /// lashing out still talks spitefully and still spoils output.
+    pub(crate) fn sulks(&self, e: Entity) -> bool {
+        self.world
+            .get::<Disgruntled>(e)
+            .is_some_and(|d| d.grievance >= Grievance::Sulking)
+    }
+
+    /// Whether `worker` holds a grudge against machines of this kind —
+    /// `MEMORY_AVOIDANCE_THRESHOLD` against the structure's **kind**, the
+    /// subject a `Structure` memory names. One formula for the posting
+    /// refusal and for sabotage.
+    pub(crate) fn resents_structure(&self, worker: Entity, kind: &crate::StructureId) -> bool {
+        let subject = crate::components::MemorySubject::Structure(kind.clone());
         self.opinion_of(worker, &subject) < crate::tuning::MEMORY_AVOIDANCE_THRESHOLD
     }
 }

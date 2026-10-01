@@ -203,6 +203,13 @@ pub(crate) struct Surroundings<'a> {
     pub status: &'a dyn Fn(Entity) -> Option<MachineStatus>,
 }
 
+/// Whether two tiles are neighbours — Chebyshev distance one. `assess`'s
+/// `BesideRival` and `Game::refuses_post` both read it, so the thought and
+/// the refusal agree about who is beside whom.
+pub(crate) fn is_beside(a: Position, b: Position) -> bool {
+    (a.x - b.x).abs().max((a.y - b.y).abs()) <= 1
+}
+
 /// Each body's situation, in `bodies` order. The one derivation behind both
 /// `assess_situation_system` and any caller that needs an answer outside the
 /// schedule.
@@ -242,10 +249,7 @@ pub(crate) fn assess(bodies: &[Body], around: &Surroundings) -> Vec<Situation> {
                                 Some(ProgramRole::Staff),
                                 other.task.map(|(k, _)| k),
                             )
-                            && (other.pos.x - body.pos.x)
-                                .abs()
-                                .max((other.pos.y - body.pos.y).abs())
-                                <= 1
+                            && is_beside(other.pos, body.pos)
                     })
                 };
                 if neighbours().any(|o| bond_with(o).avoids()) {

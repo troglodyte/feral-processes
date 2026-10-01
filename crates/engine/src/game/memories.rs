@@ -515,6 +515,7 @@ impl crate::Game {
         // must not depend on the order they are walked in.
         let mut writes: Vec<(Entity, String, MemorySubject, Option<String>)> = Vec::new();
         let mut records: Vec<(Entity, ConversationRecord)> = Vec::new();
+        let mut cues: Vec<crate::resources::SpeechCue> = Vec::new();
         for (speaker_id, listener_id) in pair_idle(&at) {
             let (Some(speaker), Some(listener)) = (body(speaker_id), body(listener_id)) else {
                 continue;
@@ -576,6 +577,9 @@ impl crate::Game {
                 other_name: self.creature_short_label(other_body),
                 topic: topic.clone(),
             };
+            if let Some(&(_, _, at)) = idle.iter().find(|(e, _, _)| *e == speaker) {
+                cues.push(crate::resources::SpeechCue { cell: (at.x, at.y) });
+            }
             records.push((speaker, record(Role::Speaker, listener_id, listener)));
             records.push((listener, record(Role::Listener, speaker_id, speaker)));
             if def.gossip {
@@ -602,6 +606,11 @@ impl crate::Game {
         for (who, def, subject, name) in writes {
             let name = self.remembered_name(&subject).or(name);
             self.remember_named(who, &def, subject, name);
+        }
+        for cue in cues {
+            self.world
+                .resource_mut::<crate::resources::SpeechQueue>()
+                .push(cue);
         }
         for (who, record) in records {
             if self.world.get::<Conversations>(who).is_none() {

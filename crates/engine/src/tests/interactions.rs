@@ -653,3 +653,25 @@ fn an_unowned_program_has_no_conversations_and_a_quiet_one_has_none_listed() {
     assert_eq!(game.conversations(b[0]), Some(Vec::new()));
     assert_eq!(game.conversations(game.player_entity()), None);
 }
+
+#[test]
+fn one_cue_per_fired_interaction_at_the_speakers_cell_then_drained() {
+    let (mut game, b) = established("speech_cue", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    set_tick(&mut game, period_tick(s, l, false, 0));
+    game.note_interactions();
+    assert!(game.take_speech().is_empty(), "a failed roll says nothing");
+
+    set_tick(&mut game, period_tick(s, l, true, 0));
+    game.note_interactions();
+
+    let speaker = *game.world.get::<Position>(b[0]).unwrap();
+    assert_ne!(speaker, *game.world.get::<Position>(b[1]).unwrap());
+    assert_eq!(
+        game.take_speech(),
+        vec![crate::resources::SpeechCue {
+            cell: (speaker.x, speaker.y)
+        }]
+    );
+    assert!(game.take_speech().is_empty(), "taking drains");
+}

@@ -14,11 +14,57 @@ use crate::components::{Position, ProgramId};
 use crate::derive::{fold, unit};
 use crate::disposition::Disposition;
 use crate::memories::{MemoryDb, MemoryId, MemorySubjectKind};
-use crate::tuning::{BOND_WITNESS_REACH, INTERACTION_SALT};
+use crate::tuning::{BOND_WITNESS_REACH, CONVERSATION_MAX_LINES, INTERACTION_SALT};
 use bevy_ecs::prelude::Resource;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
+
+/// Which of the pair a line belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Role {
+    Speaker,
+    Listener,
+}
+
+/// One line of an exchange.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Line {
+    pub by: Role,
+    pub text: String,
+}
+
+/// The slot names a line may use, each written `{name}`.
+const KNOWN_SLOTS: [&str; 3] = ["speaker", "listener", "topic"];
+
+/// The `{name}` tokens of `text`, without the braces. The one reader of the
+/// slot syntax: the loader validates with it and the renderer fills with it,
+/// so the two cannot disagree about what a slot is.
+pub fn slots(text: &str) -> impl Iterator<Item = &str> {
+    let mut rest = text;
+    std::iter::from_fn(move || {
+        let open = rest.find('{')?;
+        let close = rest[open..].find('}')? + open;
+        let name = &rest[open + 1..close];
+        rest = &rest[close + 1..];
+        Some(name)
+    })
+}
+
+/// Whether an exchange can be loaded: a playable length and only known slots.
+fn exchange_problem(lines: &[Line]) -> Option<String> {
+    if !(2..=CONVERSATION_MAX_LINES).contains(&lines.len()) {
+        return Some(format!(
+            "{} lines (need 2 to {CONVERSATION_MAX_LINES})",
+            lines.len()
+        ));
+    }
+    lines
+        .iter()
+        .flat_map(|l| slots(&l.text))
+        .find(|s| !KNOWN_SLOTS.contains(s))
+        .map(|s| format!("unknown slot {{{s}}}"))
+}
 
 /// One kind of exchange. `assets/interactions/README.md` is the schema.
 #[derive(Clone, Debug, Deserialize)]
@@ -45,6 +91,10 @@ pub struct InteractionDef {
     /// fixed one.
     #[serde(default)]
     pub gossip: bool,
+    /// What the pair can say, each inner list one back-and-forth. Empty is
+    /// valid: the record then renders as the def's `name`.
+    #[serde(default)]
+    pub exchanges: Vec<Vec<Line>>,
 }
 
 impl InteractionDef {
@@ -103,7 +153,7 @@ impl InteractionDb {
         };
         for path in paths {
             let text = std::fs::read_to_string(&path)?;
-            let def = match ron::from_str::<InteractionDef>(&text) {
+            let mut def = match ron::from_str::<InteractionDef>(&text) {
                 Ok(def) => def,
                 Err(e) => {
                     warnings.push(format!("skipped invalid interaction file {path:?}: {e}"));
@@ -129,6 +179,19 @@ impl InteractionDb {
                 ));
                 continue;
             }
+            // Reported by its position in the file, which is what the modder
+            // can find; the survivors keep their order.
+            let mut index = 0;
+            def.exchanges.retain(|lines| {
+                let problem = exchange_problem(lines);
+                if let Some(problem) = &problem {
+                    warnings.push(format!(
+                        "dropped exchange {index} of interaction file {path:?}: {problem}"
+                    ));
+                }
+                index += 1;
+                problem.is_none()
+            });
             if db.defs.contains_key(&def.id) {
                 warnings.push(format!(
                     "skipped interaction file {path:?}: {:?} is already defined",
@@ -315,6 +378,43 @@ mod tests {
         ]);
         assert_eq!(w.len(), 4, "{w:?}");
         assert!(db.is_empty());
+    }
+
+    fn exchange(lines: &[(&str, &str)]) -> String {
+        let lines: Vec<String> = lines
+            .iter()
+            .map(|(by, text)| format!("(by: {by}, text: \"{text}\")"))
+            .collect();
+        format!("[{}]", lines.join(", "))
+    }
+
+    #[test]
+    fn slots_yields_each_braced_name() {
+        let got: Vec<_> = slots("a {x} b {y}{z} {open").collect();
+        assert_eq!(got, ["x", "y", "z"]);
+    }
+
+    #[test]
+    fn a_bad_exchange_is_dropped_with_a_warning_and_the_def_loads() {
+        let ok = exchange(&[("Speaker", "hi {topic}"), ("Listener", "ok {speaker}")]);
+        let unknown = exchange(&[("Speaker", "hi {nope}"), ("Listener", "ok")]);
+        let one = exchange(&[("Speaker", "hi")]);
+        let five = exchange(&[("Speaker", "a"); 5]);
+        for (bad, name) in [(unknown, "unknown"), (one, "one"), (five, "five")] {
+            let (db, w) = load(&[("a.ron", def_text("a", &format!("exchanges: [{bad}, {ok}]")))]);
+            assert_eq!(w.len(), 1, "{name}: {w:?}");
+            assert!(w[0].contains("exchange 0"), "{name}: {w:?}");
+            let def = db.iter().next().unwrap_or_else(|| panic!("{name}: no def"));
+            assert_eq!(def.exchanges.len(), 1, "{name}");
+            assert_eq!(def.exchanges[0][0].by, Role::Speaker);
+        }
+    }
+
+    #[test]
+    fn a_def_without_exchanges_loads_clean() {
+        let (db, w) = load(&[("a.ron", def_text("a", ""))]);
+        assert!(w.is_empty(), "{w:?}");
+        assert!(db.iter().next().unwrap().exchanges.is_empty());
     }
 
     #[test]

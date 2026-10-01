@@ -1164,6 +1164,7 @@ pub(super) fn tactical_result_rows(outcomes: &[LogEntry]) -> Vec<Row> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fx::FrameCues;
     use crate::paint::{painted_rect_fill_count, painted_text, with_painter};
     use crate::text::ui_metrics;
     use feral_processes_engine::{DifficultyMode, Game};
@@ -2241,15 +2242,7 @@ mod tests {
         let view = game.tactical_view().expect("the fight is open");
 
         let mut bare = Fx::new();
-        bare.begin_frame(
-            0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            true,
-        );
+        bare.begin_frame(0.0, FrameCues::default(), true);
         let (_, quiet) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut bare, p, pane(), 32.0, 24)
         });
@@ -2257,15 +2250,14 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            Vec::new(),
-            Vec::new(),
-            vec![feral_processes_engine::BoltCue {
-                from: view.bodies[0].cell,
-                to: view.bodies[1].cell,
-                color: feral_processes_engine::components::GlyphColor::Cyan,
-            }],
-            Vec::new(),
-            Vec::new(),
+            FrameCues {
+                bolts: vec![feral_processes_engine::BoltCue {
+                    from: view.bodies[0].cell,
+                    to: view.bodies[1].cell,
+                    color: feral_processes_engine::components::GlyphColor::Cyan,
+                }],
+                ..Default::default()
+            },
             true,
         );
         let (_, lit) = with_painter(|p| {
@@ -2297,14 +2289,13 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![TacticalFxCue {
-                pos: cell,
-                kind: TacticalFxKind::Hit,
-            }],
-            Vec::new(),
+            FrameCues {
+                tactical_fx: vec![TacticalFxCue {
+                    pos: cell,
+                    kind: TacticalFxKind::Hit,
+                }],
+                ..Default::default()
+            },
             true,
         );
         let flash = fx
@@ -2333,14 +2324,13 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![TacticalFxCue {
-                pos: cell,
-                kind: TacticalFxKind::Heal,
-            }],
-            Vec::new(),
+            FrameCues {
+                tactical_fx: vec![TacticalFxCue {
+                    pos: cell,
+                    kind: TacticalFxKind::Heal,
+                }],
+                ..Default::default()
+            },
             true,
         );
         let (_, shapes) = with_painter(|p| {
@@ -2367,14 +2357,13 @@ mod tests {
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![TacticalFxCue {
-                pos: cell,
-                kind: TacticalFxKind::Reaction,
-            }],
-            Vec::new(),
+            FrameCues {
+                tactical_fx: vec![TacticalFxCue {
+                    pos: cell,
+                    kind: TacticalFxKind::Reaction,
+                }],
+                ..Default::default()
+            },
             true,
         );
         let (_, shapes) = with_painter(|p| {
@@ -2415,15 +2404,7 @@ mod tests {
         let ys: Vec<f32> = (0..8)
             .map(|i| {
                 let mut fx = Fx::new();
-                fx.begin_frame(
-                    i as f64 / 8.0,
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    true,
-                );
+                fx.begin_frame(i as f64 / 8.0, FrameCues::default(), true);
                 let (_, shapes) = with_painter(|p| {
                     draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
                 });
@@ -2461,15 +2442,7 @@ mod tests {
     #[test]
     fn a_wrap_banner_names_the_round_inside_the_pane() {
         let mut fx = Fx::new();
-        fx.begin_frame(
-            0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            false,
-        );
+        fx.begin_frame(0.0, FrameCues::default(), false);
         let m = ui_metrics(720.0);
         let (_, quiet) = with_painter(|p| draw_round_banner(&fx, pane(), p, &m));
         assert!(painted_text(&quiet).is_empty(), "no wrap, no banner");
@@ -2804,15 +2777,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
-            fx.begin_frame(
-                at,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                true,
-            );
+            fx.begin_frame(at, FrameCues::default(), true);
             let (_, shapes) =
                 with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
             shapes
@@ -2891,15 +2856,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
-            fx.begin_frame(
-                at,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                true,
-            );
+            fx.begin_frame(at, FrameCues::default(), true);
             let (_, shapes) =
                 with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
             shapes
@@ -2962,26 +2919,10 @@ mod tests {
                 body.cell = (view.board.side / 2, view.board.side / 2);
             }
         }
-        fx.begin_frame(
-            0.0,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            true,
-        );
+        fx.begin_frame(0.0, FrameCues::default(), true);
         with_painter(|p| draw_tactical_map(&middle, None, &[], &[], &mut fx, p, tight, 32.0, 24));
 
-        fx.begin_frame(
-            0.02,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            true,
-        );
+        fx.begin_frame(0.02, FrameCues::default(), true);
         let (_, shapes) = with_painter(|p| {
             draw_tactical_map(&far_away, Some(far), &[], &[], &mut fx, p, tight, 32.0, 24)
         });

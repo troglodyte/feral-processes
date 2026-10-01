@@ -141,8 +141,9 @@ impl Game {
 
     /// Whether `worker` refuses to be posted to `post`.
     ///
-    /// Only a sulking body refuses anything, and only a machine it holds a
-    /// grudge against — `MEMORY_AVOIDANCE_THRESHOLD` against the structure's
+    /// Only a sulking body refuses anything, and only a post it holds a
+    /// grudge against — a rival standing beside it (`rival_beside`), or the
+    /// machine itself — `MEMORY_AVOIDANCE_THRESHOLD` against the structure's
     /// **kind**, which is the subject a `Structure` memory names. The same
     /// constant and the same comparison `drift_idle_staff` declines a tile
     /// on, so a program will not be posted somewhere it would not even stand.
@@ -167,7 +168,35 @@ impl Game {
         let Some(structure) = self.world.get::<crate::components::Structure>(post) else {
             return false;
         };
-        self.resents_structure(worker, &structure.kind)
+        self.resents_structure(worker, &structure.kind) || self.rival_beside(worker, post)
+    }
+
+    /// Whether some other body walking the base stands beside `post` and is
+    /// one `worker` avoids. The same neighbour filter `situations::assess`
+    /// applies for `BesideRival` — `walks_the_base` and `is_beside` — so a
+    /// rival out on a sortie, or a guard parked at its station, does not
+    /// count and the thought and the refusal agree.
+    fn rival_beside(&self, worker: Entity, post: Entity) -> bool {
+        let Some(at) = self.world.get::<Position>(post).copied() else {
+            return false;
+        };
+        self.base_staff().into_iter().any(|other| {
+            other != worker
+                && crate::game::party::walks_the_base(
+                    Some(crate::game::party::ProgramRole::Staff),
+                    self.world
+                        .get::<crate::components::Task>(other)
+                        .map(|t| t.kind),
+                )
+                && self
+                    .world
+                    .get::<Position>(other)
+                    .is_some_and(|&p| crate::situations::is_beside(p, at))
+                && self
+                    .world
+                    .get::<crate::components::ProgramId>(other)
+                    .is_some_and(|&id| self.bond(worker, id).avoids())
+        })
     }
 
     /// Whether `e` has reached the mild rung — the one predicate every

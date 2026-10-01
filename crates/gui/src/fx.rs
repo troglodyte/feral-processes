@@ -17,8 +17,8 @@ use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::{
-    BoltCue, EffectKind, Entity, LogLine, MessageKind, TacticalFxCue, TacticalFxKind, TransitCue,
-    VisualEffect,
+    BoltCue, EffectKind, Entity, LogLine, MessageKind, SpeechCue, TacticalFxCue, TacticalFxKind,
+    TransitCue, VisualEffect,
 };
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -746,6 +746,20 @@ struct Walker {
     start: f64,
 }
 
+/// The mark over a program that has just spoken — a quotation mark, which
+/// both the UI face (DejaVu) and the map face (UNSCII) carry.
+pub const SPEECH_GLYPH: char = '"';
+/// How long the mark stays up. Long enough to catch the eye on a quiet base
+/// map, short enough that two chats in a row do not blur into one.
+pub const SPEECH_SECONDS: f64 = 1.5;
+
+/// A conversation's mark, drawn from a `SpeechCue` the engine queued and
+/// forgot.
+struct SpeechMark {
+    cell: (i32, i32),
+    start: f64,
+}
+
 /// A blow in flight, drawn from a `BoltCue` the engine queued and forgot.
 ///
 /// **No stagger, where a `Walker` has one.** A squad files out of the base
@@ -806,6 +820,7 @@ pub struct Fx {
     /// that is keyed by a world `EffectKind`, and a landing is not one.
     landings: Vec<((i32, i32), f64)>,
     walkers: Vec<Walker>,
+    speech: Vec<SpeechMark>,
     bolts: Vec<Bolt>,
     floats: Vec<FloatingNumber>,
     bars: HashMap<u64, BarTracking>,
@@ -828,6 +843,7 @@ impl Fx {
             cell_marks: Vec::new(),
             landings: Vec::new(),
             walkers: Vec::new(),
+            speech: Vec::new(),
             bolts: Vec::new(),
             floats: Vec::new(),
             bars: HashMap::new(),
@@ -869,6 +885,7 @@ impl Fx {
         transits: Vec<TransitCue>,
         bolts: Vec<BoltCue>,
         tactical_fx: Vec<TacticalFxCue>,
+        speech: Vec<SpeechCue>,
         in_battle: bool,
     ) {
         self.now = now;
@@ -886,6 +903,12 @@ impl Fx {
                     color: cue.color,
                     path: cue.path,
                     start: now + index as f64 * TRANSIT_STAGGER_SECONDS,
+                });
+            }
+            for cue in speech {
+                self.speech.push(SpeechMark {
+                    cell: cue.cell,
+                    start: now,
                 });
             }
             for cue in bolts {
@@ -931,6 +954,7 @@ impl Fx {
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
         self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
+        self.speech.retain(|s| now - s.start < SPEECH_SECONDS);
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
             self.clear_bars();
@@ -1162,6 +1186,35 @@ impl Fx {
                 py + (tile_px + dims.height) / 2.0,
                 glyph_px,
                 palette::glyph(walker.color),
+            );
+        }
+    }
+
+    /// Every speech mark still up, centred over its cell's top edge and
+    /// fading out. Base-space only, `draw_walkers`' gate: the cell is a
+    /// base-space one.
+    pub fn draw_speech(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        glyph_px: u16,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        let glyph = SPEECH_GLYPH.to_string();
+        for mark in &self.speech {
+            let t = ((self.now - mark.start) / SPEECH_SECONDS) as f32;
+            if !(0.0..1.0).contains(&t) {
+                continue;
+            }
+            let (ox, oy) = to_px(mark.cell);
+            let dims = painter.measure_map(&glyph, glyph_px);
+            let base = palette::EMPHASIS;
+            painter.map(
+                &glyph,
+                ox + (tile_px - dims.width) / 2.0,
+                oy + dims.height * 0.5,
+                glyph_px,
+                Color::new(base.r, base.g, base.b, base.a * (1.0 - t)),
             );
         }
     }
@@ -1553,7 +1606,15 @@ mod tests {
             pos: (2, 3),
             kind: TacticalFxKind::Landing,
         };
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), vec![cue], true);
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![cue],
+            Vec::new(),
+            true,
+        );
         let wash = fx
             .tactical_tile_flash((2, 3))
             .expect("the landing cell flashes");
@@ -1564,6 +1625,7 @@ mod tests {
 
         fx.begin_frame(
             LANDING_FLASH_SECONDS + 0.01,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1626,11 +1688,13 @@ mod tests {
             vec![cue.clone()],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
         // Half a cell in, so the body is between (0, 0) and (1, 0).
         fx.begin_frame(
             TRANSIT_SECONDS_PER_CELL * 0.5,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1664,6 +1728,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
         let (_, shapes) = crate::paint::with_painter(|p| fx.draw_walkers(p, CELL, 16, to_px));
@@ -1693,7 +1758,15 @@ mod tests {
             to: (3, 0),
             color: GlyphColor::Cyan,
         };
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), vec![cue], Vec::new(), true);
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            vec![cue],
+            Vec::new(),
+            Vec::new(),
+            true,
+        );
         let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
         let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
         assert!(
@@ -1703,6 +1776,7 @@ mod tests {
 
         fx.begin_frame(
             BOLT_SECONDS + 0.01,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1734,6 +1808,7 @@ mod tests {
                 color: GlyphColor::Cyan,
             }],
             Vec::new(),
+            Vec::new(),
             true,
         );
         let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
@@ -1758,7 +1833,15 @@ mod tests {
 
         for kind in [MessageKind::Raid, MessageKind::Tantrum] {
             let mut fx = Fx::new();
-            fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+            fx.begin_frame(
+                1.0,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                false,
+            );
             fx.observe_log(Some(&line(kind)));
             assert!(
                 fx.log_flash_until > fx.now,
@@ -1767,7 +1850,15 @@ mod tests {
         }
 
         let mut fx = Fx::new();
-        fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            1.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         fx.observe_log(Some(&line(MessageKind::Info)));
         assert!(
             fx.log_flash_until <= fx.now,
@@ -1776,7 +1867,15 @@ mod tests {
     }
 
     fn at(fx: &mut Fx, now: f64) {
-        fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            now,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
     }
 
     /// A wrap is a round *rising* within one fight: the first round a fight
@@ -2365,7 +2464,15 @@ mod tests {
     #[test]
     fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            0.3,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         let worker = Entity::from_raw_u32(7).unwrap();
         let before = fx.staffed_bob(worker);
         // Same entity, same frame — the only thing a step changes is the
@@ -2482,6 +2589,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
 
@@ -2506,6 +2614,7 @@ mod tests {
                 pos: cell,
                 kind: EffectKind::Hit,
             }],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -2630,7 +2739,15 @@ mod tests {
     #[test]
     fn the_staffed_mark_holds_still_while_effects_are_disabled() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            0.3,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         fx.enabled = false;
         assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }
@@ -2733,7 +2850,15 @@ mod tests {
     #[test]
     fn clouds_are_off_when_effects_are() {
         let mut fx = Fx::new();
-        fx.begin_frame(40.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            40.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         fx.enabled = false;
         for w in [(0, 0), (7, 7), (-13, 2)] {
             assert_eq!(fx.cloud_shade(w), 1.0);
@@ -2743,9 +2868,25 @@ mod tests {
     #[test]
     fn clouds_move_with_the_frame_clock() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         let before: Vec<f32> = cloud_field(0.0);
-        fx.begin_frame(45.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            45.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         let after: Vec<f32> = cloud_field(45.0);
         assert!(
             before != after,

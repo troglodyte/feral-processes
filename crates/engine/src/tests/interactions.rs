@@ -383,14 +383,15 @@ fn hearsay_is_not_retold() {
     game.note_interactions();
     assert_eq!(held(&game, b[1]).len(), 1, "the first hop landed");
 
-    // Second pass: the listener is now the speaker, to a fresh listener.
+    // Second pass: the listener is now the speaker, to a bystander who is
+    // neither the subject nor the original speaker.
     game.world.get_mut::<Position>(b[0]).unwrap().x = 900;
-    game.world.get_mut::<Position>(b[2]).unwrap().x = 1;
-    let (s2, l2) = (id_of(&game, b[1]), id_of(&game, b[2]));
+    game.world.get_mut::<Position>(b[3]).unwrap().x = 2;
+    let (s2, l2) = (id_of(&game, b[1]), id_of(&game, b[3]));
     let now = game.world.resource::<GameClock>().tick;
     set_tick(&mut game, period_tick(s2, l2, true, now));
 
     game.note_interactions();
 
-    assert_eq!(held(&game, b[2]).len(), 0, "a rumour does not travel twice");
+    assert_eq!(held(&game, b[3]).len(), 0, "a rumour does not travel twice");
 }

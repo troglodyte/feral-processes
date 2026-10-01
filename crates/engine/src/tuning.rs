@@ -4593,12 +4593,13 @@ pub const SOCIABILITY_RESERVED: f64 = 0.5;
 pub const SOCIABILITY_SOCIABLE: f64 = 1.0;
 pub const SOCIABILITY_CHATTY: f64 = 1.5;
 
-/// Folded last into `Sociability`'s seed so it partitions ids differently
-/// from `Disposition::seed`, which is unsalted. Folded *last* because a low
-/// word at the end of a fold never reaches the bit `derive::index` reads.
+/// Folded last into `Sociability`'s seed, which domain-separates it from
+/// `Disposition::seed` (the same `[id]` fold, unsalted). Trailing because with
+/// no bytes after the id its contribution is one fixed multiply, so adjacent
+/// ids would give structured, correlated outputs; the salt's bytes mix it.
 pub const SOCIABILITY_SALT: u64 = 0x9e37_79b9_7f4a_7c15;
 /// Folded last into every roll `note_interactions` reads, for the same
-/// reason.
+/// reasons.
 pub const INTERACTION_SALT: u64 = 0xc2b2_ae3d_27d4_eb4f;
 
 // ---------------------------------------------------------------------------

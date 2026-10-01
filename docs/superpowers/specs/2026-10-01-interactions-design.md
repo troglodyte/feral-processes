@@ -189,3 +189,14 @@ table, the gossip rule. `assets/memories/README.md` gains `spreads_as`.
   first, which is the intended order — but it is unplayed.
 - **No player-facing explanation of a moved opinion** until E2's log; E1
   shows only the memory names.
+
+## 9. Deviations in implementation
+
+- The fold order is `[id, SALT]` rather than §3's `[SALT]` then `[id]`: with
+  the varying word last, adjacent ids give correlated outputs.
+- The §4 seed gains a trailing `INTERACTION_SALT`, for the same reason and to
+  keep it apart from other folds of the same words.
+- The pick folds `[1, INTERACTION_SALT]`.
+- The pass runs after `note_low_power`, still last.
+- The gossip def carries a `listener_memory` that is ignored (the field is
+  required by the schema; gossip's hearsay def comes from `spreads_as`).

@@ -27,8 +27,8 @@ impl Sociability {
     ];
 
     pub fn of(id: ProgramId) -> Self {
-        // Ends on the salt: a low-bit difference in the last word never
-        // reaches the high bits `index` reads (see `derive::index`).
+        // Ends on the salt, which separates this from `Disposition::seed`
+        // and mixes the id's otherwise-bare final multiply.
         let h = fold(FNV_BASIS, &[id.0 as u64, SOCIABILITY_SALT]);
         Self::ALL[index(h, Self::ALL.len())]
     }
@@ -88,6 +88,16 @@ mod tests {
                 && Disposition::seed(a) != Disposition::seed(b)
         });
         assert!(same_disp_diff_soc && same_soc_diff_disp);
+
+        for d in Disposition::ALL {
+            for soc in Sociability::ALL {
+                assert!(
+                    (0..1000)
+                        .any(|i| Disposition::seed(i) == d && Sociability::of(ProgramId(i)) == soc),
+                    "{d:?} never pairs with {soc:?} in 1000 ids"
+                );
+            }
+        }
     }
 
     #[test]

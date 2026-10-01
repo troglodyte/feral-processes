@@ -81,12 +81,15 @@ pub(crate) fn fold_bytes(seed: u64, bytes: &[u8]) -> u64 {
 /// promises.
 ///
 /// **Reaching those high bits is not automatic, and is the caller's
-/// problem.** One XOR-then-multiply round carries a difference only about
-/// the prime's own width (~41 bits) upward, so a value folded in as the
-/// *last* word, differing only in its low bits, never reaches bit 63 — which
-/// is the bit this function actually reads. `descriptions::Slot::tags`
-/// carries the measurement, and `rock::block_seed` is why a block
-/// coordinate is folded a byte at a time rather than as one word.
+/// problem.** Folded as one whole word, a value gets a single
+/// XOR-then-multiply round, which carries a difference only about the
+/// prime's own width (~41 bits) upward and so rarely reaches bit 63 — the
+/// bit this function actually reads. Hence the byte-at-a-time `fold`
+/// (`descriptions::Slot::tags` carries the measurement, `rock::block_seed`
+/// the coordinate case). Even byte-wise, a varying word with nothing folded
+/// after it is only a fixed multiply from the output, so adjacent values
+/// give structured, correlated results; callers that need independent rolls
+/// end on a salt word.
 ///
 /// Shared rather than copied because the `%` version passes every casual
 /// test: it anti-correlates two small pools perfectly while looking
@@ -99,7 +102,9 @@ pub(crate) fn index(seed: u64, len: usize) -> usize {
 /// A uniform value in `[0, 1)` from the top 53 bits of `seed`.
 ///
 /// The top bits, `index`'s reason: they are the ones the fold mixes. A caller
-/// must end its fold on a constant word for the same reason.
+/// ends its fold on a constant salt word: the varying word's contribution is
+/// then not a bare final multiply, whose outputs for adjacent values are
+/// structured and correlated.
 pub(crate) fn unit(seed: u64) -> f64 {
     (seed >> 11) as f64 / (1u64 << 53) as f64
 }
@@ -187,7 +192,7 @@ mod tests {
             })
             .count();
         assert!(
-            flips >= 8,
+            flips >= 24,
             "the roll flipped in only {flips} of 64 adjacent pairs"
         );
     }

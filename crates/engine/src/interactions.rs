@@ -13,7 +13,7 @@ use crate::bonds::Bond;
 use crate::components::{Position, ProgramId};
 use crate::derive::{fold, unit};
 use crate::disposition::Disposition;
-use crate::memories::{MemoryDb, MemoryId};
+use crate::memories::{MemoryDb, MemoryId, MemorySubjectKind};
 use crate::tuning::{BOND_WITNESS_REACH, INTERACTION_SALT};
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
@@ -78,7 +78,8 @@ pub struct InteractionDb {
 
 impl InteractionDb {
     /// Loads every `*.ron` def in `dir`, `ThoughtDb::load_dir`'s shape. A def
-    /// whose memory ids do not resolve in `memories` is skipped with a
+    /// whose memory ids do not resolve to Program-subject memories in
+    /// `memories` is skipped with a
     /// warning, so a mod deleting a memory costs the interactions that wrote
     /// it and nothing else.
     pub fn load_dir(dir: &Path, memories: &MemoryDb) -> std::io::Result<(Self, Vec<String>)> {
@@ -95,7 +96,11 @@ impl InteractionDb {
             .collect();
         // Sorted, so "the first wins" is the same every run.
         paths.sort();
-        let resolves = |id: &str| memories.get(&MemoryId::from(id)).is_some();
+        let resolves = |id: &str| {
+            memories
+                .get(&MemoryId::from(id))
+                .is_some_and(|m| m.subject == MemorySubjectKind::Program)
+        };
         for path in paths {
             let text = std::fs::read_to_string(&path)?;
             let def = match ron::from_str::<InteractionDef>(&text) {
@@ -113,14 +118,14 @@ impl InteractionDb {
             }
             if !def.gossip && !resolves(&def.listener_memory) {
                 warnings.push(format!(
-                    "skipped interaction file {path:?}: listener_memory {:?} is not a memory",
+                    "skipped interaction file {path:?}: listener_memory {:?} is not a Program-subject memory",
                     def.listener_memory
                 ));
                 continue;
             }
             if let Some(m) = def.speaker_memory.as_deref().filter(|m| !resolves(m)) {
                 warnings.push(format!(
-                    "skipped interaction file {path:?}: speaker_memory {m:?} is not a memory"
+                    "skipped interaction file {path:?}: speaker_memory {m:?} is not a Program-subject memory"
                 ));
                 continue;
             }
@@ -331,6 +336,35 @@ mod tests {
             ("a.ron", def_text("a", "").replace("chatted_with", "nope")),
             ("b.ron", def_text("b", "speaker_memory: Some(\"nope\")")),
         ]);
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert!(db.is_empty());
+    }
+
+    #[test]
+    fn a_non_program_subject_memory_is_skipped() {
+        let dir = crate::tests::support::scratch_assets_dir("interactions_nothing_memory");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::fs::write(
+            dir.join("bare.ron"),
+            memory_text("bare").replace("subject: Program", "subject: Nothing"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("chatted_with.ron"), memory_text("chatted_with")).unwrap();
+        let (mem, w) = MemoryDb::load_dir(&dir).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let dir = crate::tests::support::scratch_assets_dir("interactions_nothing_defs");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::fs::write(
+            dir.join("a.ron"),
+            def_text("a", "").replace("chatted_with", "bare"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("b.ron"),
+            def_text("b", "speaker_memory: Some(\"bare\")"),
+        )
+        .unwrap();
+        let (db, w) = InteractionDb::load_dir(&dir, &mem).unwrap();
         assert_eq!(w.len(), 2, "{w:?}");
         assert!(db.is_empty());
     }

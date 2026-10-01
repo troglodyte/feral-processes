@@ -11,7 +11,7 @@ interactions existed.
 ## What an interaction is
 
 Every so often (`tuning::INTERACTION_PERIOD`) the base pairs up its idle staff
-— programs with no post, standing within a couple of tiles of each other. Each
+— base staff with no task, standing within a couple of tiles of each other. Each
 pair may speak: the chance is `tuning::INTERACTION_CHANCE` scaled by how
 sociable the speaker is (Reserved, Sociable or Chatty, derived from its id and
 shown on the SOCIAL tab). If it does, one interaction is picked from this

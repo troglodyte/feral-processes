@@ -525,3 +525,131 @@ fn the_same_state_writes_the_same_records() {
         assert_eq!(first, run(&format!("rec_det_{i}")));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+fn record(
+    interaction: &str,
+    exchange: Option<u8>,
+    role: crate::interactions::Role,
+    other: ProgramId,
+    topic: Option<(MemorySubject, String)>,
+) -> crate::interactions::ConversationRecord {
+    crate::interactions::ConversationRecord {
+        tick: 1,
+        interaction: interaction.into(),
+        exchange,
+        role,
+        other,
+        other_name: "Stamped".into(),
+        topic,
+    }
+}
+
+fn give(game: &mut Game, e: Entity, r: crate::interactions::ConversationRecord) {
+    if game.world.get::<Conversations>(e).is_none() {
+        game.world.entity_mut(e).insert(Conversations::default());
+    }
+    game.world.get_mut::<Conversations>(e).unwrap().push(r);
+}
+
+#[test]
+fn slots_fill_and_roles_name_the_right_side() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_fill", &[TALK_SAYS]);
+    let (me, other) = (
+        game.creature_short_label(b[0]),
+        game.creature_short_label(b[1]),
+    );
+    let (o, c) = (id_of(&game, b[1]), id_of(&game, b[2]));
+    let topic = Some((MemorySubject::Program(c), "Old".to_string()));
+    let c_name = game.creature_short_label(b[2]);
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(1), Role::Listener, o, topic),
+    );
+
+    let views = game.conversations(b[0]).unwrap();
+
+    assert_eq!(views.len(), 2);
+    // Newest first: the listener-side record with a topic.
+    assert_eq!(views[0].lines[0].who, other);
+    assert_eq!(views[0].lines[0].text, format!("About {c_name}."));
+    assert_eq!(views[0].lines[1].who, me);
+    assert_eq!(views[1].lines[0].who, me);
+    assert_eq!(views[1].lines[0].text, format!("Hello {other}."));
+    assert_eq!(views[1].lines[1].text, format!("Hello {me}."));
+}
+
+#[test]
+fn a_rename_reads_through_and_a_departed_program_uses_its_stamp() {
+    use crate::interactions::Role;
+    let (mut game, b) = base(
+        7,
+        BASE_ESTABLISHED_STAFF + 1,
+        BASE_ESTABLISHED_STRUCTURES,
+        "view_names",
+        &[TALK_SAYS],
+    );
+    let o = id_of(&game, b[1]);
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Speaker, o, None),
+    );
+    game.rename_companion(b[1], Some("Zed".into())).unwrap();
+    let live = game.conversations(b[0]).unwrap();
+    assert_eq!(live[0].lines[0].text, "Hello Zed.");
+
+    game.world.despawn(b[1]);
+    let gone = game.conversations(b[0]).unwrap();
+    assert_eq!(gone[0].lines[0].text, "Hello Stamped.");
+}
+
+#[test]
+fn a_missing_def_or_bad_index_falls_back_without_panicking() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_fallback", &[TALK_SAYS]);
+    let o = id_of(&game, b[1]);
+    let (me, other) = (
+        game.creature_short_label(b[0]),
+        game.creature_short_label(b[1]),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("gone", Some(0), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(9), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", None, Role::Listener, o, None),
+    );
+
+    let v = game.conversations(b[0]).unwrap();
+
+    assert_eq!(v[0].lines.len(), 1);
+    assert_eq!(v[0].lines[0].text, format!("{other} and {me}: n"));
+    assert_eq!(v[1].lines[0].text, format!("{me} and {other}: n"));
+    assert_eq!(v[2].lines[0].text, format!("{me} and {other}: gone"));
+}
+
+#[test]
+fn an_unowned_program_has_no_conversations_and_a_quiet_one_has_none_listed() {
+    let (game, b) = established("view_owned", &[TALK_SAYS]);
+    assert_eq!(game.conversations(b[0]), Some(Vec::new()));
+    assert_eq!(game.conversations(game.player_entity()), None);
+}

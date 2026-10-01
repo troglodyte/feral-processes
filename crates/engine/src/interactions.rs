@@ -51,6 +51,16 @@ pub fn slots(text: &str) -> impl Iterator<Item = &str> {
     })
 }
 
+/// `text` with every `{name}` replaced by `value(name)`. Walks `slots`, so
+/// the renderer and the loader agree on what a slot is.
+pub fn fill(text: &str, value: impl Fn(&str) -> String) -> String {
+    let mut out = text.to_string();
+    for name in slots(text) {
+        out = out.replace(&format!("{{{name}}}"), &value(name));
+    }
+    out
+}
+
 /// Whether an exchange can be loaded: a playable length and only known slots.
 fn exchange_problem(lines: &[Line]) -> Option<String> {
     if !(2..=CONVERSATION_MAX_LINES).contains(&lines.len()) {
@@ -210,6 +220,10 @@ impl InteractionDb {
 
     /// Every def in id order, which the weighted pick depends on being
     /// stable.
+    pub fn get(&self, id: &str) -> Option<&InteractionDef> {
+        self.defs.get(id)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &InteractionDef> {
         self.defs.values()
     }

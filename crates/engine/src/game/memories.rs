@@ -5,8 +5,8 @@
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
 use crate::components::{
-    MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats, Stranded,
-    Structure, Tamed, Task, TaskKind,
+    Conversations, MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats,
+    Stranded, Structure, Tamed, Task, TaskKind,
 };
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{GameClock, Party};
@@ -482,7 +482,6 @@ impl crate::Game {
     /// derived from the tick and the pair, so the pass is a pure function of
     /// the state it reads and shifts no stream.
     pub(crate) fn note_interactions(&mut self) {
-        use crate::components::Conversations;
         use crate::derive::{FNV_BASIS, fold, unit};
         use crate::interactions::{
             ConversationRecord, InteractionDb, Role, pair_idle, pick, pick_exchange,
@@ -1045,6 +1044,80 @@ impl crate::Game {
         }
         phrases.truncate(2);
         phrases
+    }
+
+    /// The TALK tab's read of `e`: its conversations newest first, rendered
+    /// from the current templates. `None` for anything but an owned program;
+    /// an owned program that has never talked has an empty list.
+    ///
+    /// **Names read through**: `e` and a live `other` (or a live `Program`
+    /// topic) are named now, so a rename shows; a departed program keeps the
+    /// name stamped at the write. A def or exchange index that no longer
+    /// resolves renders one fallback line and never panics.
+    pub fn conversations(&self, e: Entity) -> Option<Vec<crate::views::ExchangeView>> {
+        use crate::interactions::{InteractionDb, Role, fill};
+        use crate::views::{ExchangeView, SpokenLine};
+        if !self.is_owned_program(e) {
+            return None;
+        }
+        let Some(ring) = self.world.get::<Conversations>(e) else {
+            return Some(Vec::new());
+        };
+        let me = self.creature_short_label(e);
+        let db = self.world.resource::<InteractionDb>();
+        let views = ring
+            .0
+            .iter()
+            .map(|r| {
+                let other = self
+                    .program_entity(r.other)
+                    .map(|o| self.creature_short_label(o))
+                    .unwrap_or_else(|| r.other_name.clone());
+                let (speaker, listener) = match r.role {
+                    Role::Speaker => (&me, &other),
+                    Role::Listener => (&other, &me),
+                };
+                let def = db.get(&r.interaction);
+                let lines = def
+                    .zip(r.exchange)
+                    .and_then(|(d, i)| d.exchanges.get(usize::from(i)))
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .map(|l| {
+                                let by = match l.by {
+                                    Role::Speaker => speaker,
+                                    Role::Listener => listener,
+                                };
+                                let text = fill(&l.text, |slot| match slot {
+                                    "speaker" => speaker.clone(),
+                                    "listener" => listener.clone(),
+                                    _ => r.topic.as_ref().map_or_else(
+                                        || "something".to_string(),
+                                        |(subject, stamped)| {
+                                            self.remembered_name(subject)
+                                                .unwrap_or_else(|| stamped.clone())
+                                        },
+                                    ),
+                                });
+                                SpokenLine {
+                                    who: by.clone(),
+                                    text,
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_else(|| {
+                        let name = def.map_or(r.interaction.as_str(), |d| d.name.as_str());
+                        vec![SpokenLine {
+                            who: speaker.clone(),
+                            text: format!("{speaker} and {listener}: {name}"),
+                        }]
+                    });
+                ExchangeView { lines }
+            })
+            .collect();
+        Some(views)
     }
 
     /// The SOCIAL tab's read of `e`: who it has feelings about, and what the

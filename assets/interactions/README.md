@@ -39,11 +39,12 @@ per pass.
 | `weight` | The base pick weight. Finite and `>= 0`. |
 | `by_band` | Optional. A multiplier per band of the **speaker's** opinion of the listener: `Enemy`, `Rival`, `Neutral`, `Friend`, `Close`. A band left out is `1.0`. |
 | `by_disposition` | Optional. A multiplier per **speaker** disposition: `Steady`, `Amiable`, `Abrasive`, `Languid`, `Dogged`. One left out is `1.0`. |
+| `sulking` | Optional, default `1.0`. A multiplier applied while the **speaker** is sulking (on the mild rung or worse). Finite and `>= 0`; `0.0` means a sulker never says it. |
 | `gossip` | Optional, default `false`. See below. |
 | `exchanges` | Optional, default none. What the pair says: a list of exchanges, each a list of `Line`s. See below. |
 
-The pick weight of a def is `weight * by_disposition * by_band`. A negative or
-non-finite number in any of the three is a load-time fault. Every weight at
+The pick weight of a def is `weight * by_disposition * by_band`, times `sulking` while the speaker
+sulks. A negative or non-finite number in any of the four is a load-time fault. Every weight at
 zero means nothing is said.
 
 The memories an interaction writes are an engine concern in one respect only:

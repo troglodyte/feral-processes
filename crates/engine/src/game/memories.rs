@@ -540,6 +540,7 @@ impl crate::Game {
                 db,
                 self.felt_as(speaker),
                 self.bond(speaker, listener_id),
+                self.sulks(speaker),
                 tellable.is_some(),
                 seed,
             ) else {

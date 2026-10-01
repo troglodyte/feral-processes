@@ -3,6 +3,7 @@
     name: "A slight",
     listener_memory: "slighted_by",
     weight: 0.6,
+    sulking: 3.0,
     by_band: {Enemy: 3.0, Rival: 2.5, Neutral: 1.0, Friend: 0.3, Close: 0.1},
     by_disposition: {Abrasive: 2.5, Amiable: 0.3},
     exchanges: [

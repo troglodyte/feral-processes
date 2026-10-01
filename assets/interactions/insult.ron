@@ -3,6 +3,7 @@
     name: "An insult",
     listener_memory: "insulted_by",
     weight: 0.3,
+    sulking: 3.0,
     by_band: {Enemy: 4.0, Rival: 3.0, Neutral: 0.3, Friend: 0.02, Close: 0.01},
     by_disposition: {Abrasive: 3.0, Amiable: 0.1},
     exchanges: [

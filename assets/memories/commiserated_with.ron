@@ -1,0 +1,10 @@
+// Both sides of a shared complaint.
+(
+    id: "commiserated_with",
+    name: "Commiserated with",
+    blurb: "We moaned about it together.",
+    valence: 2.0,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

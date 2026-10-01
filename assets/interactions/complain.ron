@@ -1,0 +1,8 @@
+(
+    id: "complain",
+    name: "A complaint",
+    listener_memory: "complained_at_by",
+    weight: 1.0,
+    by_band: {Enemy: 1.5, Rival: 1.3, Neutral: 1.0, Friend: 0.7, Close: 0.5},
+    by_disposition: {Languid: 2.0, Abrasive: 1.3},
+)

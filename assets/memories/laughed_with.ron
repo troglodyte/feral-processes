@@ -1,0 +1,10 @@
+// A joke that landed.
+(
+    id: "laughed_with",
+    name: "Laughed with",
+    blurb: "Got a laugh out of it.",
+    valence: 2.5,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

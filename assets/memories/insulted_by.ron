@@ -1,0 +1,10 @@
+// Written on the listener only; the heaviest thing a pass can say.
+(
+    id: "insulted_by",
+    name: "Insulted by",
+    blurb: "It said something I will not forget.",
+    valence: -4.0,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

@@ -1,0 +1,10 @@
+// Hearsay: what `spreads_as` turns a fondness into. Weaker than any source, and it never spreads again.
+(
+    id: "heard_well_of",
+    name: "Heard good of",
+    blurb: "Word is it is good to have around.",
+    valence: 1.5,
+    half_life: 1500,
+    subject: Program,
+    strike_cap: 3,
+)

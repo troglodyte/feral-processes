@@ -1,0 +1,10 @@
+// Written on the listener only: what was said to me stays mine.
+(
+    id: "complimented_by",
+    name: "Complimented by",
+    blurb: "It said something kind about me.",
+    valence: 3.0,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

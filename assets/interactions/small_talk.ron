@@ -1,0 +1,9 @@
+(
+    id: "small_talk",
+    name: "Small talk",
+    listener_memory: "chatted_with",
+    speaker_memory: Some("chatted_with"),
+    weight: 3.0,
+    by_band: {Enemy: 0.3, Rival: 0.6, Neutral: 1.0, Friend: 1.3, Close: 1.5},
+    by_disposition: {Amiable: 1.3},
+)

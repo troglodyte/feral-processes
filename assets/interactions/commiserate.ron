@@ -1,0 +1,9 @@
+(
+    id: "commiserate",
+    name: "Commiseration",
+    listener_memory: "commiserated_with",
+    speaker_memory: Some("commiserated_with"),
+    weight: 1.0,
+    by_band: {Enemy: 0.2, Rival: 0.5, Neutral: 1.0, Friend: 1.5, Close: 1.5},
+    by_disposition: {Languid: 2.0},
+)

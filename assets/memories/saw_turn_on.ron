@@ -10,5 +10,6 @@
     half_life: 5000,
     subject: Program,
     strike_cap: 3,
+    spreads_as: Some("heard_ill_of"),
     known_for: Some("a brawler"),
 )

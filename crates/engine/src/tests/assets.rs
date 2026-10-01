@@ -3014,6 +3014,21 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // `note_postings` — a program standing on a finish whose `comfort`
         // names this def.
         ("at_ease_on", K::BaseTile),
+        // `Game::note_interactions`, off `tick_inner` on `INTERACTION_PERIOD`:
+        // what two idle programs say to each other, each def named by an
+        // `assets/interactions/` file. The hearsay pair is what `gossip`
+        // writes, by a firsthand memory's `spreads_as`.
+        ("chatted_with", K::Program),
+        ("talked_shop_with", K::Program),
+        ("laughed_with", K::Program),
+        ("complimented_by", K::Program),
+        ("thanked_by", K::Program),
+        ("commiserated_with", K::Program),
+        ("complained_at_by", K::Program),
+        ("slighted_by", K::Program),
+        ("insulted_by", K::Program),
+        ("heard_well_of", K::Program),
+        ("heard_ill_of", K::Program),
     ]
 };
 
@@ -3139,6 +3154,54 @@ fn every_shipped_memory_def_is_reachable_from_a_trigger() {
             "{id} declares a subject its trigger never hands in, so every              write of it is refused"
         );
     }
+}
+
+/// The shipped interaction catalogue loads clean against the shipped
+/// memories, so no interaction is silently dropped for a dangling id.
+#[test]
+fn every_shipped_interaction_loads_without_a_warning() {
+    use crate::interactions::InteractionDb;
+    use crate::memories::MemoryDb;
+
+    let (memories, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let (db, warnings) =
+        InteractionDb::load_dir(&test_assets_dir().join("interactions"), &memories).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(db.iter().count(), 10, "the full set ships");
+}
+
+/// A rumour is weaker than what it is told from, and tells nothing further:
+/// the target of `spreads_as` is a `Program`-subject def that does not itself
+/// spread, which is what keeps gossip one hop.
+#[test]
+fn every_spreads_as_is_a_weaker_program_memory_that_does_not_spread() {
+    use crate::memories::{MemoryDb, MemoryId, MemorySubjectKind};
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let mut spreading = 0;
+    for def in db.all() {
+        let Some(target) = &def.spreads_as else {
+            continue;
+        };
+        spreading += 1;
+        let hearsay = db
+            .get(&MemoryId::from(target.as_str()))
+            .unwrap_or_else(|| panic!("{} spreads as {target}, which does not ship", def.id));
+        assert_eq!(hearsay.subject, MemorySubjectKind::Program, "{target}");
+        assert!(hearsay.spreads_as.is_none(), "{target} would be retold");
+        assert!(
+            hearsay.valence.abs() < def.valence.abs(),
+            "{target} is not weaker than {}",
+            def.id
+        );
+        assert_eq!(
+            hearsay.valence.signum(),
+            def.valence.signum(),
+            "{target} would turn {} into its opposite",
+            def.id
+        );
+    }
+    assert_eq!(spreading, 4, "the four firsthand Program memories spread");
 }
 
 /// `note_departure` writes by id, and a departure memory that does not carry

@@ -45,8 +45,9 @@ Each file is one kind:
 
 | `known_for` | Optional, default none. A short phrase — "a brawler", "good company" — for what a program is **known for** among the others when their memories *of it* under this def sum heavily. `Game::known_for` reads it: it folds every other owned program's memories about the program through this catalogue, takes the phrases of the defs carrying one, and names at most the two heaviest on the SOCIAL tab. It reads what the others hold about the program, never what the program itself holds. Only meaningful on a `Program`-subject def; keep the phrase short, since the SOCIAL tab draws it on one line beside its sibling and a census measures every shipped phrase. |
 | `departure` | Optional, default `false`. Marks a def written when the program it is about leaves play (the four departure defs). The SOCIAL tab leaves these out of a relationship row's opinion and band, so a gone friend's row still reads "Friend (gone)" rather than the grief's own pull; `opinion_of`, avoidance, Morale and `known_for` count them as usual. |
+| `spreads_as` | Optional, default none. The id of the **hearsay** def this memory becomes when a program tells it to another in gossip (`assets/interactions/README.md`). Valid only on a `Program`-subject def, and the target must exist, be `Program`-subject and **carry no `spreads_as` of its own** — that is what keeps a rumour to one hop. A def that breaks any of these is skipped with a warning, the same as one that fails to parse. Keep the target weaker than the source: a census holds every shipped pair to `|hearsay valence| < |source valence|`, with the same sign. |
 
-The first seven are required. `stack_decay`, `mood`, `known_for` and `departure` were added later and
+The first seven are required. `stack_decay`, `mood`, `known_for`, `departure` and `spreads_as` were added later and
 carry a default, so a file written before they existed keeps parsing
 untouched — but none of the first seven may be omitted.
 
@@ -157,6 +158,11 @@ but not what makes a program remember.
 | `let_go` | − | `Program` | a friend being sold, extracted, spent on a build or spent in the study |
 | `became_part_of` | − | `Program` | a friend being fused into a new program |
 | `rid_of` | + | `Program` | a rival or enemy leaving play, however it left |
+| `chatted_with`, `talked_shop_with`, `laughed_with` | + | `Program` | an idle pair talking (`assets/interactions/`), on both sides |
+| `complimented_by`, `thanked_by` | + | `Program` | being complimented or thanked by an idle program; the listener only |
+| `commiserated_with` | + | `Program` | commiserating with an idle program, on both sides |
+| `complained_at_by`, `slighted_by`, `insulted_by` | − | `Program` | being complained at, slighted or insulted by an idle program; the listener only |
+| `heard_well_of`, `heard_ill_of` | ± | `Program` | being told, in gossip, a fondness or grudge the teller holds about a third program: the **hearsay** pair, never retold |
 
 They are chosen to cover both valences and every subject kind, not because
 these are the interesting content. `Nothing`, `Program`, `Species`

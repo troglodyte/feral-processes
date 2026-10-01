@@ -1,0 +1,10 @@
+// Written on the listener only.
+(
+    id: "thanked_by",
+    name: "Thanked by",
+    blurb: "It thanked me, and meant it.",
+    valence: 2.0,
+    half_life: 2000,
+    subject: Program,
+    strike_cap: 3,
+)

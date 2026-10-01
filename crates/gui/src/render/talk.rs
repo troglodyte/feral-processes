@@ -11,6 +11,10 @@ use feral_processes_engine::ExchangeView;
 
 const NO_CONVERSATIONS: &str = "Nothing has been said yet.";
 
+/// Shown when the newest exchange alone is taller than the frame, so the
+/// page is not mistaken for an empty ring.
+const TOO_LONG_TO_SHOW: &str = "The latest exchange is too long to show here.";
+
 /// Continuation rows of a wrapped line sit under the words, not the speaker.
 const CONTINUATION_INDENT: &str = "  ";
 
@@ -96,7 +100,12 @@ pub(super) fn talk_sections(
         rows = section.rows;
     }
     if rows.is_empty() {
-        rows.push(SectionRow::Note(NO_CONVERSATIONS.to_string()));
+        let note = if exchanges.is_empty() {
+            NO_CONVERSATIONS
+        } else {
+            TOO_LONG_TO_SHOW
+        };
+        rows.push(SectionRow::Note(note.to_string()));
     }
     vec![conversations_section(rows)]
 }
@@ -222,6 +231,26 @@ mod tests {
                     assert!(p.measure_ui_advance(r, m.font_size) <= max_w, "{r:?}");
                 }
             }
+        });
+    }
+
+    #[test]
+    fn an_exchange_too_tall_for_the_frame_is_not_reported_as_silence() {
+        let huge = ExchangeView {
+            lines: vec![
+                SpokenLine {
+                    who: "Kestrel".into(),
+                    text: "word ".repeat(2000),
+                },
+                SpokenLine {
+                    who: "Wren".into(),
+                    text: "Ack.".into(),
+                },
+            ],
+        };
+        with_painter(|p| {
+            let s = talk_sections(&[huge], (1440.0, 900.0), p, &ui_metrics(900.0));
+            assert_eq!(texts(&s[0]), vec![TOO_LONG_TO_SHOW.to_string()]);
         });
     }
 

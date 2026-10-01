@@ -482,8 +482,11 @@ impl crate::Game {
     /// derived from the tick and the pair, so the pass is a pure function of
     /// the state it reads and shifts no stream.
     pub(crate) fn note_interactions(&mut self) {
+        use crate::components::Conversations;
         use crate::derive::{FNV_BASIS, fold, unit};
-        use crate::interactions::{InteractionDb, pair_idle, pick};
+        use crate::interactions::{
+            ConversationRecord, InteractionDb, Role, pair_idle, pick, pick_exchange,
+        };
         use crate::tuning::{INTERACTION_CHANCE, INTERACTION_PERIOD, INTERACTION_SALT};
 
         let now = self.world.resource::<GameClock>().tick;
@@ -512,6 +515,7 @@ impl crate::Game {
         // write moves the opinions the next pair's pick reads, and the pairs
         // must not depend on the order they are walked in.
         let mut writes: Vec<(Entity, String, MemorySubject, Option<String>)> = Vec::new();
+        let mut records: Vec<(Entity, ConversationRecord)> = Vec::new();
         for (speaker_id, listener_id) in pair_idle(&at) {
             let (Some(speaker), Some(listener)) = (body(speaker_id), body(listener_id)) else {
                 continue;
@@ -541,8 +545,42 @@ impl crate::Game {
             ) else {
                 continue;
             };
+            let told = if def.gossip { tellable } else { None };
+            let on_mind = match &told {
+                Some((_, about, _)) => Some(MemorySubject::Program(*about)),
+                None => self
+                    .world
+                    .get::<Memories>(speaker)
+                    .and_then(|m| crate::interactions::topic(&m.0, speaker_id, listener_id, seed)),
+            };
+            let topic = on_mind.map(|subject| {
+                let name = self
+                    .remembered_name(&subject)
+                    .or_else(|| told.as_ref().and_then(|t| t.2.clone()))
+                    .or_else(|| {
+                        self.world.get::<Memories>(speaker).and_then(|m| {
+                            m.0.iter()
+                                .find(|m| m.subject == subject)
+                                .and_then(|m| m.subject_name.clone())
+                        })
+                    })
+                    .unwrap_or_default();
+                (subject, name)
+            });
+            let exchange = pick_exchange(def, topic.is_some(), seed);
+            let record = |role, other: ProgramId, other_body| ConversationRecord {
+                tick: now,
+                interaction: def.id.clone(),
+                exchange,
+                role,
+                other,
+                other_name: self.creature_short_label(other_body),
+                topic: topic.clone(),
+            };
+            records.push((speaker, record(Role::Speaker, listener_id, listener)));
+            records.push((listener, record(Role::Listener, speaker_id, speaker)));
             if def.gossip {
-                if let Some((hearsay, about, name)) = tellable {
+                if let Some((hearsay, about, name)) = told {
                     writes.push((listener, hearsay, MemorySubject::Program(about), name));
                 }
             } else {
@@ -565,6 +603,14 @@ impl crate::Game {
         for (who, def, subject, name) in writes {
             let name = self.remembered_name(&subject).or(name);
             self.remember_named(who, &def, subject, name);
+        }
+        for (who, record) in records {
+            if self.world.get::<Conversations>(who).is_none() {
+                self.world.entity_mut(who).insert(Conversations::default());
+            }
+            if let Some(mut ring) = self.world.get_mut::<Conversations>(who) {
+                ring.push(record);
+            }
         }
     }
 

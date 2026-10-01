@@ -7,7 +7,9 @@
 //! fails), sets the clock there and runs the pass.
 
 use super::support::*;
-use crate::components::{Memories, Memory, MemorySubject, Position, ProgramId, Task, TaskKind};
+use crate::components::{
+    Conversations, Memories, Memory, MemorySubject, Position, ProgramId, Task, TaskKind,
+};
 use crate::derive::{FNV_BASIS, fold, unit};
 use crate::interactions::InteractionDb;
 use crate::memories::{MemoryDb, MemoryId};
@@ -394,4 +396,116 @@ fn hearsay_is_not_retold() {
     game.note_interactions();
 
     assert_eq!(held(&game, b[3]).len(), 0, "a rumour does not travel twice");
+}
+
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
+
+const TALK_SAYS: &str = "(id: \"talk\", name: \"n\", listener_memory: \"chatted_with\", \
+    weight: 1.0, exchanges: [[(by: Speaker, text: \"Hello {listener}.\"), \
+    (by: Listener, text: \"Hello {speaker}.\")], \
+    [(by: Speaker, text: \"About {topic}.\"), (by: Listener, text: \"Yes.\")]])";
+
+fn records(game: &Game, e: Entity) -> Vec<crate::interactions::ConversationRecord> {
+    game.world
+        .get::<Conversations>(e)
+        .map(|c| c.0.iter().cloned().collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_fired_interaction_leaves_a_mirrored_record_on_each_side() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("rec_pair", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    let tick = period_tick(s, l, true, 0);
+    set_tick(&mut game, tick);
+
+    game.note_interactions();
+
+    let (said, heard) = (records(&game, b[0]), records(&game, b[1]));
+    assert_eq!((said.len(), heard.len()), (1, 1), "{said:?} {heard:?}");
+    assert_eq!((said[0].role, said[0].other), (Role::Speaker, l));
+    assert_eq!((heard[0].role, heard[0].other), (Role::Listener, s));
+    assert_eq!(said[0].tick, tick);
+    assert_eq!(said[0].interaction, "talk");
+    assert_eq!(said[0].exchange, heard[0].exchange);
+    assert!(said[0].exchange.is_some());
+    assert_eq!(said[0].topic, heard[0].topic);
+    assert_eq!(said[0].other_name, game.creature_short_label(b[1]));
+    assert_eq!(heard[0].other_name, game.creature_short_label(b[0]));
+    assert_eq!(records(&game, b[2]).len(), 0);
+}
+
+#[test]
+fn nothing_fires_so_no_record_is_written() {
+    let (mut game, b) = established("rec_none", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    set_tick(&mut game, period_tick(s, l, false, 0));
+    game.note_interactions();
+    assert!(
+        b.iter()
+            .all(|&e| game.world.get::<Conversations>(e).is_none())
+    );
+}
+
+#[test]
+fn a_gossip_conversation_is_about_the_subject_it_told() {
+    let (mut game, b, _, _) = gossip_game("rec_gossip");
+    let c = id_of(&game, b[2]);
+    told(&mut game, b[0], "turned_on_me", c);
+    let label = game.creature_short_label(b[2]);
+
+    game.note_interactions();
+
+    for e in [b[0], b[1]] {
+        let r = records(&game, e);
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert_eq!(r[0].topic, Some((MemorySubject::Program(c), label.clone())));
+    }
+}
+
+#[test]
+fn a_plain_conversation_is_about_something_the_speaker_holds() {
+    let (mut game, b) = established("rec_topic", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    let c = id_of(&game, b[2]);
+    told(&mut game, b[0], "heard_ill_of", c);
+    set_tick(&mut game, period_tick(s, l, true, 0));
+
+    game.note_interactions();
+
+    let r = records(&game, b[0]);
+    assert_eq!(
+        r[0].topic.as_ref().map(|t| &t.0),
+        Some(&MemorySubject::Program(c))
+    );
+}
+
+#[test]
+fn with_nothing_on_its_mind_only_a_topic_free_exchange_is_said() {
+    let (mut game, b) = established("rec_no_topic", &[TALK_SAYS]);
+    let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+    set_tick(&mut game, period_tick(s, l, true, 0));
+    game.note_interactions();
+    let r = records(&game, b[0]);
+    assert_eq!(r[0].topic, None);
+    assert_eq!(r[0].exchange, Some(0));
+}
+
+#[test]
+fn the_same_state_writes_the_same_records() {
+    let run = |tag: &str| {
+        let (mut game, b) = established(tag, &[TALK_SAYS]);
+        let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
+        let c = id_of(&game, b[2]);
+        told(&mut game, b[0], "heard_ill_of", c);
+        set_tick(&mut game, period_tick(s, l, true, 0));
+        game.note_interactions();
+        b.iter().map(|&e| records(&game, e)).collect::<Vec<_>>()
+    };
+    let (a, b) = (run("rec_det_a"), run("rec_det_b"));
+    assert!(a.iter().any(|v| !v.is_empty()));
+    assert_eq!(a, b);
 }

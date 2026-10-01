@@ -3,6 +3,7 @@
     name: "A compliment",
     listener_memory: "complimented_by",
     weight: 1.0,
+    sulking: 0.2,
     by_band: {Enemy: 0.05, Rival: 0.2, Neutral: 1.0, Friend: 1.5, Close: 2.0},
     by_disposition: {Amiable: 1.8, Abrasive: 0.3},
     exchanges: [

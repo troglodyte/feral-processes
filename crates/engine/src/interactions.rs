@@ -85,6 +85,10 @@ fn exchange_problem(lines: &[Line]) -> Option<String> {
         .map(|s| format!("unknown slot {{{s}}}"))
 }
 
+fn one() -> f32 {
+    1.0
+}
+
 /// One kind of exchange. `assets/interactions/README.md` is the schema.
 #[derive(Clone, Debug, Deserialize)]
 pub struct InteractionDef {
@@ -110,6 +114,10 @@ pub struct InteractionDef {
     /// fixed one.
     #[serde(default)]
     pub gossip: bool,
+    /// Multiplier while the **speaker sulks** (`Game::sulks`); absent is
+    /// `1.0`. Finite and `>= 0`.
+    #[serde(default = "one")]
+    pub sulking: f32,
     /// What the pair can say, each inner list one back-and-forth. Empty is
     /// valid: the record then renders as the def's `name`.
     #[serde(default)]
@@ -125,6 +133,8 @@ impl InteractionDef {
             Some("by_disposition")
         } else if !self.by_band.values().all(ok) {
             Some("by_band")
+        } else if !ok(&self.sulking) {
+            Some("sulking")
         } else {
             None
         }
@@ -132,10 +142,11 @@ impl InteractionDef {
 
     /// The pick weight for this speaker and band. Gossip availability is the
     /// caller's to apply, because it needs the speaker's memories.
-    pub fn weight_for(&self, speaker: Disposition, band: Bond) -> f32 {
+    pub fn weight_for(&self, speaker: Disposition, band: Bond, sulks: bool) -> f32 {
         self.weight
             * self.by_disposition.get(&speaker).copied().unwrap_or(1.0)
             * self.by_band.get(&band).copied().unwrap_or(1.0)
+            * if sulks { self.sulking } else { 1.0 }
     }
 }
 
@@ -285,6 +296,7 @@ pub fn pick(
     db: &InteractionDb,
     speaker: Disposition,
     band: Bond,
+    sulks: bool,
     gossip_ok: bool,
     seed: u64,
 ) -> Option<&InteractionDef> {
@@ -292,7 +304,7 @@ pub fn pick(
         if d.gossip && !gossip_ok {
             0.0
         } else {
-            d.weight_for(speaker, band) as f64
+            d.weight_for(speaker, band, sulks) as f64
         }
     };
     let total: f64 = db.iter().map(weight).sum();
@@ -432,8 +444,14 @@ mod tests {
         let ids: Vec<_> = db.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids, ["alpha", "zeta"]);
         let alpha = db.iter().next().unwrap();
-        assert_eq!(alpha.weight_for(Disposition::Steady, Bond::Enemy), 4.0);
-        assert_eq!(alpha.weight_for(Disposition::Steady, Bond::Close), 1.0);
+        assert_eq!(
+            alpha.weight_for(Disposition::Steady, Bond::Enemy, false),
+            4.0
+        );
+        assert_eq!(
+            alpha.weight_for(Disposition::Steady, Bond::Close, false),
+            1.0
+        );
     }
 
     #[test]
@@ -686,6 +704,66 @@ mod tests {
         assert!(w.is_empty(), "{w:?}");
         assert_eq!(db.iter().count(), 1);
     }
+
+    #[test]
+    fn sulking_scales_the_weight_only_while_the_speaker_sulks() {
+        let (db, w) = load(&[("a.ron", def_text("a", "sulking: 3.0"))]);
+        assert!(w.is_empty(), "{w:?}");
+        let a = db.iter().next().unwrap();
+        assert_eq!(a.weight_for(Disposition::Steady, Bond::Neutral, true), 3.0);
+        assert_eq!(a.weight_for(Disposition::Steady, Bond::Neutral, false), 1.0);
+    }
+
+    #[test]
+    fn a_bad_sulking_multiplier_is_skipped() {
+        let (db, w) = load(&[
+            ("a.ron", def_text("a", "sulking: -0.5")),
+            ("b.ron", def_text("b", "sulking: NaN")),
+            ("c.ron", def_text("c", "sulking: inf")),
+        ]);
+        assert_eq!(w.len(), 3, "{w:?}");
+        assert!(db.is_empty());
+    }
+
+    #[test]
+    fn a_sulking_speaker_picks_slights_more_often_than_the_same_speaker_content() {
+        let (db, w) = load(&[
+            ("slight.ron", def_text("slight", "sulking: 3.0")),
+            ("small_talk.ron", def_text("small_talk", "sulking: 0.5")),
+        ]);
+        assert!(w.is_empty(), "{w:?}");
+        let slights = |sulks: bool| {
+            (0..200u64)
+                .filter(|&n| {
+                    let seed = crate::derive::fold(
+                        crate::derive::FNV_BASIS,
+                        &[n, crate::tuning::INTERACTION_SALT],
+                    );
+                    pick(&db, Disposition::Steady, Bond::Neutral, sulks, false, seed)
+                        .is_some_and(|d| d.id == "slight")
+                })
+                .count()
+        };
+        assert!(
+            slights(true) > slights(false),
+            "{} vs {}",
+            slights(true),
+            slights(false)
+        );
+    }
+
+    #[test]
+    fn a_sulker_whose_every_def_is_zeroed_picks_nothing() {
+        let (db, w) = load(&[
+            ("a.ron", def_text("a", "sulking: 0.0")),
+            ("b.ron", def_text("b", "sulking: 0.0")),
+        ]);
+        assert!(w.is_empty(), "{w:?}");
+        for n in 0..20u64 {
+            assert!(pick(&db, Disposition::Steady, Bond::Neutral, true, false, n).is_none());
+        }
+        assert!(pick(&db, Disposition::Steady, Bond::Neutral, false, false, 1).is_some());
+    }
 }
 
 #[cfg(test)]
@@ -818,7 +896,7 @@ mod pass_tests {
         let mut counts = BTreeMap::new();
         for n in 0..200u64 {
             let seed = fold(crate::derive::FNV_BASIS, &[n, INTERACTION_SALT]);
-            if let Some(def) = pick(db, d, b, gossip_ok, seed) {
+            if let Some(def) = pick(db, d, b, false, gossip_ok, seed) {
                 *counts.entry(def.id.clone()).or_insert(0) += 1;
             }
         }
@@ -858,12 +936,23 @@ mod pass_tests {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
         };
-        assert!(pick(&only_gossip, Disposition::Steady, Bond::Neutral, false, 5).is_none());
+        assert!(
+            pick(
+                &only_gossip,
+                Disposition::Steady,
+                Bond::Neutral,
+                false,
+                false,
+                5
+            )
+            .is_none()
+        );
         assert!(
             pick(
                 &InteractionDb::default(),
                 Disposition::Steady,
                 Bond::Neutral,
+                false,
                 true,
                 5
             )

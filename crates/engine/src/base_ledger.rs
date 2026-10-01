@@ -202,6 +202,8 @@ pub enum ConsumeSource {
     /// Destroyed by a breach. Core Fragments and Portal Fragments do not
     /// cross, which is a sink nothing else in the ledger could see.
     Breach,
+    /// Spoiled by a sulking program, one unit out of a machine's output.
+    Sabotage,
 }
 
 impl ConsumeSource {
@@ -213,6 +215,7 @@ impl ConsumeSource {
             ConsumeSource::Craft => "craft",
             ConsumeSource::Install => "install",
             ConsumeSource::Breach => "breach",
+            ConsumeSource::Sabotage => "sabotage",
         }
     }
 }

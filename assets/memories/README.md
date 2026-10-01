@@ -154,6 +154,7 @@ but not what makes a program remember.
 | `unwound_at` | + | `Structure` | a stretch spent standing at an amenity, in a mood bad enough to have gone there |
 | `at_ease_on` | + | `BaseTile` | a stretch of standing on a floor finish whose `comfort` names it (`assets/floors/README.md`) |
 | `saw_turn_on` | − | `Program` | watching another program turn on a third, about the aggressor (carries `known_for: "a brawler"`) |
+| `saw_sabotage` | − | `Program` | watching a sulking program spoil a unit at a machine, about the saboteur (carries `known_for: "petty sabotage"`) |
 | `lost_in_battle` | − | `Program` | a program you held as a friend falling in battle |
 | `let_go` | − | `Program` | a friend being sold, extracted, spent on a build or spent in the study |
 | `became_part_of` | − | `Program` | a friend being fused into a new program |

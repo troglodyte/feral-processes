@@ -27,6 +27,7 @@ use crate::components::{
     Disgruntled, Downed, Grievance, MemorySubject, Position, ProgramId, Stats,
 };
 use crate::resources::{Brawl, Brawls, EffectKind, GameRng, MessageKind};
+use crate::situations::chebyshev;
 use crate::tuning::{
     TANTRUM_CHANCE_PER_TICK, TANTRUM_COOLDOWN_TICKS, TANTRUM_DAMAGE_FRACTION, TANTRUM_REACH_TILES,
     TANTRUM_TICKS_MAX, TANTRUM_TICKS_MIN,
@@ -155,7 +156,7 @@ impl Game {
             let Some(p) = self.world.get::<Position>(witness) else {
                 continue;
             };
-            if (p.x - at.x).abs().max((p.y - at.y).abs()) <= crate::tuning::BOND_WITNESS_REACH {
+            if chebyshev(*p, at) <= crate::tuning::BOND_WITNESS_REACH {
                 self.remember(witness, "saw_turn_on", MemorySubject::Program(id));
             }
         }
@@ -237,7 +238,7 @@ impl Game {
             .filter(|&who| !busy.contains(&who))
             .filter_map(|who| {
                 let there = self.world.get::<Position>(who).copied()?;
-                let away = (there.x - here.x).abs().max((there.y - here.y).abs());
+                let away = chebyshev(there, here);
                 (away <= TANTRUM_REACH_TILES).then_some((
                     who,
                     self.regard_for(aggressor, who),

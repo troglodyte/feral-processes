@@ -441,6 +441,9 @@ impl Game {
                     .get::<crate::components::ProgramId>(other)
                     .copied()
             })
+            // A grudge does not heal by accident: rivals sharing an amenity
+            // earn no warmth from it.
+            .filter(|&id| !self.bond(worker, id).avoids())
             .collect();
         for id in company {
             self.remember(

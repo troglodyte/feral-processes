@@ -69,7 +69,7 @@ fn box_in_the_amenity(game: &mut Game) -> Vec<Entity> {
 /// `MORALE_DOWNS_TOOLS_AT` of -50: on the ladder, on the mild rung, and
 /// close enough to the recovery line at -6 that the errand can actually
 /// carry it back over.
-fn sulk(game: &mut Game, who: Entity) {
+pub(super) fn sulk(game: &mut Game, who: Entity) {
     for _ in 0..2 {
         game.remember(who, "ran_down", crate::components::MemorySubject::Nothing);
     }

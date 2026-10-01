@@ -7,11 +7,8 @@ use crate::base_ledger::BaseLedger;
 use crate::components::{
     Memories, MemorySubject, Position, PostedAt, ProgramId, Stock, Structure, Task, TaskKind,
 };
-use crate::game::base::sabotage::sabotage_seed;
-use crate::tuning::{
-    BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, INTERACTION_PERIOD, SABOTAGE_CHANCE,
-    SABOTAGE_SALT,
-};
+use crate::game::base::sabotage::{sabotage_pick, sabotage_rolls, sabotage_seed};
+use crate::tuning::{BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, INTERACTION_PERIOD};
 use crate::*;
 
 const FRAGMENT: &str = ids::CORE_FRAGMENT;
@@ -84,10 +81,7 @@ fn rolling_tick(game: &Game, who: &[Entity]) -> u64 {
         .collect();
     (1..2000)
         .map(|n| n * INTERACTION_PERIOD)
-        .find(|&t| {
-            ids.iter()
-                .all(|&id| crate::derive::unit(sabotage_seed(t, id)) < SABOTAGE_CHANCE)
-        })
+        .find(|&t| ids.iter().all(|&id| sabotage_rolls(sabotage_seed(t, id))))
         .expect("a rolling tick within 2000 periods")
 }
 
@@ -294,11 +288,8 @@ fn the_second_of_two_sulkers_sees_the_stock_the_first_left() {
     let tick = (1..4000)
         .map(|n| n * INTERACTION_PERIOD)
         .find(|&t| {
-            let rolls = |id| crate::derive::unit(sabotage_seed(t, id)) < SABOTAGE_CHANCE;
-            let pick = crate::derive::index(
-                crate::derive::fold(sabotage_seed(t, second_id), &[1, SABOTAGE_SALT]),
-                2,
-            );
+            let rolls = |id| sabotage_rolls(sabotage_seed(t, id));
+            let pick = sabotage_pick(sabotage_seed(t, second_id), 2);
             rolls(first_id) && rolls(second_id) && pick == a_slot
         })
         .expect("a tick where the second would pick the emptied machine");

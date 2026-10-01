@@ -21,6 +21,16 @@ pub(crate) fn sabotage_seed(now: u64, id: ProgramId) -> u64 {
     fold(FNV_BASIS, &[now, id.0 as u64, SABOTAGE_SALT])
 }
 
+/// Whether the saboteur seeded `seed` acts this period.
+pub(crate) fn sabotage_rolls(seed: u64) -> bool {
+    unit(seed) < SABOTAGE_CHANCE
+}
+
+/// Which of `len` candidate machines the saboteur seeded `seed` picks.
+pub(crate) fn sabotage_pick(seed: u64, len: usize) -> usize {
+    index(fold(seed, &[1, SABOTAGE_SALT]), len)
+}
+
 impl Game {
     /// For each idle sulker in `ProgramId` order, maybe spoils one unit of
     /// the output of a machine it resents or whose operator it avoids, and
@@ -50,14 +60,14 @@ impl Game {
         sulkers.sort_by_key(|&(_, id, _)| id);
         for (body, id, at) in sulkers {
             let seed = sabotage_seed(now, id);
-            if unit(seed) >= SABOTAGE_CHANCE {
+            if !sabotage_rolls(seed) {
                 continue;
             }
             let candidates = self.sabotage_candidates(body, at);
             if candidates.is_empty() {
                 continue;
             }
-            let machine = candidates[index(fold(seed, &[1, SABOTAGE_SALT]), candidates.len())];
+            let machine = candidates[sabotage_pick(seed, candidates.len())];
             self.spoil_one(body, id, machine, fold(seed, &[2, SABOTAGE_SALT]));
         }
     }

@@ -321,6 +321,67 @@ fn a_rumour_is_never_about_the_speaker() {
     assert_eq!(held(&game, b[1]).len(), 0);
 }
 
+/// The marker by hand: this catalogue has no mood memories to sink morale
+/// with, and `note_interactions` reads the marker, not the meter.
+fn make_sulk(game: &mut Game, who: Entity) {
+    game.world
+        .entity_mut(who)
+        .insert(crate::components::Disgruntled {
+            grievance: crate::components::Grievance::Sulking,
+            stranded: false,
+            told: false,
+        });
+}
+
+/// A positive rumour that outweighs the negative one, so the sulker's filter
+/// and not the ordering is what picks the negative.
+fn positive_outweighs_negative(game: &mut Game, speaker: Entity, c: ProgramId, d: ProgramId) {
+    for _ in 0..3 {
+        told(game, speaker, "idled_with", d);
+    }
+    told(game, speaker, "turned_on_me", c);
+}
+
+#[test]
+fn a_content_speaker_tells_the_stronger_positive_rumour() {
+    let (mut game, b, _, _) = gossip_game("content_positive");
+    let (c, d) = (id_of(&game, b[2]), id_of(&game, b[3]));
+    positive_outweighs_negative(&mut game, b[0], c, d);
+
+    game.note_interactions();
+
+    let heard = held(&game, b[1]);
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0].def, MemoryId::from("heard_well_of"));
+}
+
+#[test]
+fn a_sulker_tells_the_weaker_negative_rumour_over_a_stronger_positive() {
+    let (mut game, b, _, _) = gossip_game("sulker_negative");
+    let (c, d) = (id_of(&game, b[2]), id_of(&game, b[3]));
+    positive_outweighs_negative(&mut game, b[0], c, d);
+    make_sulk(&mut game, b[0]);
+
+    game.note_interactions();
+
+    let heard = held(&game, b[1]);
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0].def, MemoryId::from("heard_ill_of"));
+    assert_eq!(heard[0].subject, MemorySubject::Program(c));
+}
+
+#[test]
+fn a_sulker_holding_only_positive_rumours_tells_nothing() {
+    let (mut game, b, _, _) = gossip_game("sulker_only_positive");
+    let d = id_of(&game, b[3]);
+    told(&mut game, b[0], "idled_with", d);
+    make_sulk(&mut game, b[0]);
+
+    game.note_interactions();
+
+    assert_eq!(held(&game, b[1]).len(), 0);
+}
+
 #[test]
 fn the_strongest_tellable_memory_is_the_one_told() {
     let (mut game, b, _, _) = gossip_game("strongest");

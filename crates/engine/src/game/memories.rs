@@ -534,7 +534,7 @@ impl crate::Game {
             if unit(seed) >= chance {
                 continue;
             }
-            let tellable = self.tellable(speaker, speaker_id, listener_id);
+            let tellable = self.tellable(speaker, speaker_id, listener_id, self.sulks(speaker));
             let db = self.world.resource::<InteractionDb>();
             let Some(def) = pick(
                 db,
@@ -628,7 +628,9 @@ impl crate::Game {
     /// as the memory stamped it — so a departed program is still readable.
     ///
     /// Strongest by `Disposition::felt` magnitude, ties to the lower subject
-    /// id. **Never about the listener** (it would be handed an opinion of
+    /// id. A `sulker` tells only what is ill-said: a memory is a candidate
+    /// only if its def's valence is negative, the ordering within that set
+    /// unchanged. **Never about the listener** (it would be handed an opinion of
     /// itself) **nor the speaker**. Hearsay defs carry no `spreads_as`, which
     /// is what keeps a rumour one hop.
     fn tellable(
@@ -636,6 +638,7 @@ impl crate::Game {
         speaker: Entity,
         speaker_id: ProgramId,
         listener_id: ProgramId,
+        sulker: bool,
     ) -> Option<(String, ProgramId, Option<String>)> {
         let store = self.world.get::<Memories>(speaker)?;
         let db = self.world.resource::<MemoryDb>();
@@ -652,6 +655,9 @@ impl crate::Game {
                     return None;
                 }
                 let def = db.get(&m.def)?;
+                if sulker && def.valence >= 0.0 {
+                    return None;
+                }
                 let hearsay = def.spreads_as.clone()?;
                 let strength = felt.felt(m.intensity(def, now)).abs();
                 Some((strength, about, hearsay, m.subject_name.clone()))

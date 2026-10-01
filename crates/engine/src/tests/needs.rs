@@ -939,6 +939,61 @@ fn two_programs_servicing_together_each_remember_the_other_once() {
     assert_eq!(idled_strikes(&game, staff[1], staff[0]), 1);
 }
 
+/// Both programs finish at one Sandbox, `holders` already holding the
+/// given memories about each other, and returns the `idled_with` strikes
+/// each then holds about the other.
+fn idle_together_holding(seed: u32, grudge: &str, strikes: u32) -> ((u32, u32), (u32, u32)) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, staff) = a_sandbox_with_company(&mut game, 2);
+    for (a, b) in [(0, 1), (1, 0)] {
+        let about = *game.world.get::<ProgramId>(staff[b]).unwrap();
+        for _ in 0..strikes {
+            game.remember(staff[a], grudge, MemorySubject::Program(about));
+        }
+    }
+    let before = (
+        idled_strikes(&game, staff[0], staff[1]),
+        idled_strikes(&game, staff[1], staff[0]),
+    );
+    let (critical, content) = threshold(&game, &slack());
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), critical - 1.0);
+    }
+    run_the_gate(&mut game, &staff);
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), content);
+    }
+    run_the_gate(&mut game, &staff);
+    let after = (
+        idled_strikes(&game, staff[0], staff[1]),
+        idled_strikes(&game, staff[1], staff[0]),
+    );
+    assert!(
+        game.bond(staff[0], *game.world.get::<ProgramId>(staff[1]).unwrap())
+            != crate::bonds::Bond::Neutral,
+        "the fixture must have moved the bond"
+    );
+    (before, after)
+}
+
+/// A grudge does not heal by accident: rivals sharing an amenity write no
+/// `idled_with` about each other.
+#[test]
+fn rivals_sharing_an_amenity_write_no_idled_with() {
+    let (before, after) = idle_together_holding(93, "turned_on_me", 1);
+    assert_eq!(after, before);
+}
+
+/// The bond's signed band is the test, so a fondness never freezes anyone out.
+#[test]
+fn a_fond_pair_still_writes_idled_with() {
+    let (before, after) = idle_together_holding(94, "idled_with", 2);
+    assert!(
+        after.0 > before.0 && after.1 > before.1,
+        "{before:?} {after:?}"
+    );
+}
+
 /// A program that idled alone has nobody to remember.
 #[test]
 fn a_lone_program_finishing_writes_nothing() {

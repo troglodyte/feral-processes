@@ -104,3 +104,25 @@ fn a_rival_who_is_not_walking_the_base_does_not_cause_refusal() {
     });
     assert!(!game.refuses_post(sulker, post, TaskKind::GatherResource));
 }
+
+/// RF5: an avoided program that is not base staff is not "beside" either.
+#[test]
+fn a_rival_off_the_staff_does_not_cause_refusal() {
+    let mut game = Game::new(86, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (post, sulker, rival) = a_rival_beside_a_post(&mut game);
+    mark_sulking(&mut game, sulker);
+    assert!(
+        game.refuses_post(sulker, post, TaskKind::GatherResource),
+        "the control"
+    );
+
+    game.world
+        .entity_mut(rival)
+        .insert(crate::components::PostedAt((0, 0)));
+    assert_ne!(
+        game.program_role(rival),
+        Some(crate::game::party::ProgramRole::Staff),
+        "fixture: the rival is off the staff"
+    );
+    assert!(!game.refuses_post(sulker, post, TaskKind::GatherResource));
+}

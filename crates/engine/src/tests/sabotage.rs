@@ -10,6 +10,7 @@ use crate::components::{
 use crate::game::base::sabotage::sabotage_seed;
 use crate::tuning::{
     BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, INTERACTION_PERIOD, SABOTAGE_CHANCE,
+    SABOTAGE_SALT,
 };
 use crate::*;
 
@@ -269,24 +270,53 @@ fn an_empty_output_is_never_asked_for_a_unit() {
     assert!(sabotage_lines(&game).is_empty());
 }
 
-/// RF1: two sulkers roll together over one unit.
+/// RF1: two sulkers roll together over one unit. The first reaches only the
+/// one-unit machine A; the second reaches A and a full machine B. Built once
+/// before the loop, the second's candidates would still list the emptied A,
+/// and a tick is chosen where it would pick it, so only a per-body rebuild
+/// lets it spoil at B.
 #[test]
 fn the_second_of_two_sulkers_sees_the_stock_the_first_left() {
     let mut game = Game::new(9006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (staff, machine) = a_base_with_a_full_machine(&mut game, 1);
-    beside_and_resenting(&mut game, &staff, machine);
-    let second = staff[1];
-    place_at(&mut game, second, 21, 21);
-    sulk(&mut game, second);
-    resent(&mut game, second, "mining_node");
-
-    let tick = rolling_tick(&game, &[staff[0], second]);
+    let (staff, a) = a_base_with_a_full_machine(&mut game, 1);
+    let b = spawn_structure_at(&mut game, "mining_node", 20, 22);
+    stock_output(&mut game, b, 5);
+    let id_of = |game: &Game, e: Entity| *game.world.get::<ProgramId>(e).unwrap();
+    let (first, second) = if id_of(&game, staff[0]) < id_of(&game, staff[1]) {
+        (staff[0], staff[1])
+    } else {
+        (staff[1], staff[0])
+    };
+    let (first_id, second_id) = (id_of(&game, first), id_of(&game, second));
+    let mut by_entity = [a, b];
+    by_entity.sort();
+    let a_slot = by_entity.iter().position(|&e| e == a).unwrap();
+    let tick = (1..4000)
+        .map(|n| n * INTERACTION_PERIOD)
+        .find(|&t| {
+            let rolls = |id| crate::derive::unit(sabotage_seed(t, id)) < SABOTAGE_CHANCE;
+            let pick = crate::derive::index(
+                crate::derive::fold(sabotage_seed(t, second_id), &[1, SABOTAGE_SALT]),
+                2,
+            );
+            rolls(first_id) && rolls(second_id) && pick == a_slot
+        })
+        .expect("a tick where the second would pick the emptied machine");
+    // Grudges are written at the tick they are asked about, so they have
+    // not decayed by the time the pass reads them.
     set_tick(&mut game, tick);
+    for (who, x, y) in [(first, 20, 19), (second, 20, 21)] {
+        place_at(&mut game, who, x, y);
+        sulk(&mut game, who);
+        resent(&mut game, who, "mining_node");
+    }
+
     game.note_sabotage();
 
-    assert!(output(&game, machine).is_empty(), "no zero-qty entry left");
-    assert_eq!(consumed(&game), 1);
-    assert_eq!(sabotage_lines(&game).len(), 1);
+    assert!(output(&game, a).is_empty(), "no zero-qty entry left");
+    assert_eq!(output(&game, b), vec![(ItemId::from(FRAGMENT), 4)]);
+    assert_eq!(consumed(&game), 2);
+    assert_eq!(sabotage_lines(&game).len(), 2);
 }
 
 /// RF2: the saboteur is not its own witness, and only staff witness.

@@ -53,6 +53,17 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.4
+
+**A sulking program now acts on its grudge.** Once a program's grievance
+reaches a sulk, its idle talk turns sour: it complains, slights and insults
+more, and any gossip it passes on is ill. It will not stand idle with a
+program it dislikes, refuses a post right beside a rival, and, idle beside a
+machine, may spoil a unit of that machine's output. Staff nearby who see it
+remember the sabotage and spread word of it, so one sulk can sour a base.
+Before, a sulk only kept a program off the line. Modders can weight what a
+sulker says with `sulking` in `assets/interactions/` files.
+
 ## 0.14.3
 
 **You can now read what your programs said to each other.** When two idle

@@ -1052,6 +1052,10 @@ impl crate::Game {
         Some(crate::views::SocialView {
             relationships,
             known_for: self.known_for(e),
+            sociability: crate::sociability::Sociability::of(
+                self.world.get::<ProgramId>(e).copied()?,
+            )
+            .name(),
         })
     }
 }

@@ -19,6 +19,7 @@ pub(super) const MAX_RELATIONSHIP_ROWS: usize = 8;
 
 /// The empty-state lines, so the boxes are never drawn hollow.
 const NO_OPINIONS: &str = "No opinions of the others yet.";
+const SOCIABILITY_LABEL: &str = "Sociability";
 const NOT_KNOWN_FOR_ANYTHING: &str = "The others have nothing to say of it yet.";
 
 fn relationship_row(row: &RelationshipRow) -> SectionRow {
@@ -53,7 +54,10 @@ pub(super) fn social_sections(view: &SocialView) -> Vec<Section> {
         },
         Section {
             title: "KNOWN FOR",
-            rows: vec![SectionRow::Note(known_for)],
+            rows: vec![
+                SectionRow::Stat(SOCIABILITY_LABEL.to_string(), view.sociability.to_string()),
+                SectionRow::Note(known_for),
+            ],
             full_width: true,
             overflow: 0,
         },
@@ -157,6 +161,7 @@ mod tests {
         SocialView {
             relationships: (0..rows).map(|_| widest_row()).collect(),
             known_for,
+            sociability: "Reserved",
         }
     }
 
@@ -181,10 +186,26 @@ mod tests {
         let sections = social_sections(&SocialView {
             relationships: Vec::new(),
             known_for: Vec::new(),
+            sociability: "Sociable",
         });
         for s in &sections {
             assert!(!s.rows.is_empty(), "{} is drawn empty", s.title);
         }
+    }
+
+    #[test]
+    fn the_sociability_line_heads_the_known_for_box() {
+        let mut view = view_with(0, vec!["good company".to_string()]);
+        view.sociability = "Chatty";
+        let sections = social_sections(&view);
+        assert_eq!(
+            sections[1].rows[0],
+            SectionRow::Stat("Sociability".to_string(), "Chatty".to_string())
+        );
+        assert_eq!(
+            sections[1].rows[1],
+            SectionRow::Note("good company".to_string())
+        );
     }
 
     #[test]
@@ -260,7 +281,7 @@ mod tests {
         // shipped phrases are the worst line there is.
         let known: Vec<String> = phrases.into_iter().take(2).collect();
         let sections = social_sections(&view_with(1, known));
-        let SectionRow::Note(text) = sections[1].rows[0].clone() else {
+        let SectionRow::Note(text) = sections[1].rows[1].clone() else {
             panic!("the known-for line is a note");
         };
         with_painter(|p| {

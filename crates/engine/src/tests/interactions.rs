@@ -450,19 +450,33 @@ fn nothing_fires_so_no_record_is_written() {
     );
 }
 
+/// Runs the pass on `n` successive ticks whose roll passes for this pair, so
+/// a test of what a seed decides sees several seeds rather than one lucky one.
+fn pass_over_ticks(game: &mut Game, s: ProgramId, l: ProgramId, n: usize) {
+    let mut t = 0;
+    for _ in 0..n {
+        t = period_tick(s, l, true, t);
+        set_tick(game, t);
+        game.note_interactions();
+    }
+}
+
 #[test]
 fn a_gossip_conversation_is_about_the_subject_it_told() {
-    let (mut game, b, _, _) = gossip_game("rec_gossip");
-    let c = id_of(&game, b[2]);
+    let (mut game, b, s, l) = gossip_game("rec_gossip");
+    let (c, d) = (id_of(&game, b[2]), id_of(&game, b[3]));
+    told(&mut game, b[0], "idled_with", d);
     told(&mut game, b[0], "turned_on_me", c);
     let label = game.creature_short_label(b[2]);
 
-    game.note_interactions();
+    pass_over_ticks(&mut game, s, l, 12);
 
     for e in [b[0], b[1]] {
         let r = records(&game, e);
-        assert_eq!(r.len(), 1, "{r:?}");
-        assert_eq!(r[0].topic, Some((MemorySubject::Program(c), label.clone())));
+        assert_eq!(r.len(), 12);
+        for rec in r {
+            assert_eq!(rec.topic, Some((MemorySubject::Program(c), label.clone())));
+        }
     }
 }
 
@@ -487,11 +501,12 @@ fn a_plain_conversation_is_about_something_the_speaker_holds() {
 fn with_nothing_on_its_mind_only_a_topic_free_exchange_is_said() {
     let (mut game, b) = established("rec_no_topic", &[TALK_SAYS]);
     let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
-    set_tick(&mut game, period_tick(s, l, true, 0));
-    game.note_interactions();
+    pass_over_ticks(&mut game, s, l, 12);
     let r = records(&game, b[0]);
-    assert_eq!(r[0].topic, None);
-    assert_eq!(r[0].exchange, Some(0));
+    assert_eq!(r.len(), 12);
+    for rec in r {
+        assert_eq!((rec.topic, rec.exchange), (None, Some(0)));
+    }
 }
 
 #[test]
@@ -501,11 +516,12 @@ fn the_same_state_writes_the_same_records() {
         let (s, l) = (id_of(&game, b[0]), id_of(&game, b[1]));
         let c = id_of(&game, b[2]);
         told(&mut game, b[0], "heard_ill_of", c);
-        set_tick(&mut game, period_tick(s, l, true, 0));
-        game.note_interactions();
+        pass_over_ticks(&mut game, s, l, 12);
         b.iter().map(|&e| records(&game, e)).collect::<Vec<_>>()
     };
-    let (a, b) = (run("rec_det_a"), run("rec_det_b"));
-    assert!(a.iter().any(|v| !v.is_empty()));
-    assert_eq!(a, b);
+    let first = run("rec_det_0");
+    assert!(first.iter().any(|v| !v.is_empty()));
+    for i in 1..4 {
+        assert_eq!(first, run(&format!("rec_det_{i}")));
+    }
 }

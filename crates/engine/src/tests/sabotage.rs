@@ -193,44 +193,71 @@ fn a_machine_a_rival_works_is_a_candidate_though_not_resented() {
     assert!(spoils_within_a_while(&mut game, machine));
 }
 
-#[test]
-fn nothing_is_spoiled_without_a_sulker_idle_beside_a_wanted_machine_with_output() {
-    let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+/// A resenting sulker beside a full machine, on a game of its own so no
+/// case inherits another's clock or its decayed grudges.
+fn a_resenting_sulker_beside_a_full_machine(seed: u32) -> (Game, Entity, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (staff, machine) = a_base_with_a_full_machine(&mut game, 5);
     let who = beside_and_resenting(&mut game, &staff, machine);
+    assert!(game.sulks(who), "fixture");
+    assert!(
+        game.resents_structure(who, &"mining_node".to_string()),
+        "fixture"
+    );
+    (game, who, machine)
+}
 
-    // Not sulking.
+#[test]
+fn a_program_that_is_not_sulking_spoils_nothing() {
+    let (mut game, who, machine) = a_resenting_sulker_beside_a_full_machine(9004);
     game.world
         .entity_mut(who)
         .remove::<crate::components::Disgruntled>();
-    assert!(!spoils_within_a_while(&mut game, machine), "non-sulker");
+    assert!(!spoils_within_a_while(&mut game, machine));
+    // The loop left the clock far ahead; `sulk` remembers, which prunes a
+    // decayed grudge, so rewind first.
+    set_tick(&mut game, 0);
     sulk(&mut game, who);
+    assert!(spoils_within_a_while(&mut game, machine), "control");
+}
 
-    // Busy.
+#[test]
+fn a_sulker_with_a_task_spoils_nothing() {
+    let (mut game, who, machine) = a_resenting_sulker_beside_a_full_machine(9011);
     game.world.entity_mut(who).insert(Task {
         kind: TaskKind::GatherResource,
         target: machine,
         progress: 0,
         required: 1,
     });
-    assert!(!spoils_within_a_while(&mut game, machine), "has a Task");
+    assert!(!spoils_within_a_while(&mut game, machine));
     game.world.entity_mut(who).remove::<Task>();
+    assert!(spoils_within_a_while(&mut game, machine), "control");
+}
 
-    // Out of reach.
+#[test]
+fn a_machine_out_of_reach_is_left_alone() {
+    let (mut game, who, machine) = a_resenting_sulker_beside_a_full_machine(9012);
     place_at(&mut game, who, 23, 20);
-    assert!(!spoils_within_a_while(&mut game, machine), "out of reach");
+    assert!(!spoils_within_a_while(&mut game, machine));
     place_at(&mut game, who, 21, 20);
+    assert!(spoils_within_a_while(&mut game, machine), "control");
+}
 
-    // Neither resented nor rival-worked.
-    let other = spawn_structure_at(&mut game, "mining_node", 20, 21);
+#[test]
+fn a_machine_nobody_resents_or_rival_works_is_left_alone() {
+    let (mut game, who, machine) = a_resenting_sulker_beside_a_full_machine(9013);
+    let other = spawn_structure_at(&mut game, "depot", 20, 21);
     stock_output(&mut game, other, 5);
-    game.world.entity_mut(machine).insert(Stock::default());
-    assert!(output(&game, machine).is_empty());
+    stock_output(&mut game, machine, 0);
     assert!(
-        !spoils_within_a_while(&mut game, other),
-        "a machine nobody resents is left alone"
+        !game.resents_structure(who, &"depot".to_string()),
+        "fixture"
     );
+    assert!(!spoils_within_a_while(&mut game, other));
     assert!(sabotage_lines(&game).is_empty());
+    stock_output(&mut game, machine, 5);
+    assert!(spoils_within_a_while(&mut game, machine), "control");
 }
 
 #[test]

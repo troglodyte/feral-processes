@@ -133,6 +133,7 @@ mod tests {
         StatAllocation::new(
             AllocationFor::Owned(StatOwner::Player),
             pool,
+            game.derived_base(game.player_entity()),
             game.attribute_db(),
             game.attributes_of(game.player_entity()),
         )

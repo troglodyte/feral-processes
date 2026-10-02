@@ -1,6 +1,7 @@
 //! The perk and research pickers.
 
 use crate::*;
+use feral_processes_engine::StatOwner;
 use feral_processes_engine::{GraphDir, ResearchTree};
 
 impl App {
@@ -25,7 +26,7 @@ impl App {
         // Uppercase for the same reason as `X`: this picker's rows run past
         // `s` in the label alphabet.
         if key == GameKey::Char('S') {
-            self.open_stat_allocation(AllocationOrigin::Perks);
+            self.open_stat_allocation(StatOwner::Player, AllocationOrigin::Perks);
             return;
         }
         let Some(perks) = self

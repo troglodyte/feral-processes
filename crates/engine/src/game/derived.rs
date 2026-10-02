@@ -222,6 +222,15 @@ impl Game {
             .count()
     }
 
+    /// Unspent points `owner` has banked, 0 for one that holds none.
+    pub fn stat_points_of(&self, owner: StatOwner) -> u32 {
+        let entity = match owner {
+            StatOwner::Player => self.player_entity(),
+            StatOwner::Program(program) => program,
+        };
+        self.world.get::<StatPoints>(entity).map_or(0, |p| p.0)
+    }
+
     /// The catalogue as the Points screen previews against - a clone, so a
     /// frontend holds no borrow on `Game`, `attribute_defs`' reason.
     pub fn attribute_db(&self) -> crate::attributes::AttributeDb {

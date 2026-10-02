@@ -2,7 +2,9 @@
 
 use crate::*;
 use feral_processes_engine::tuning::EXAMINE_RANGE_TILES;
-use feral_processes_engine::{ExamineDir, InspectTarget};
+use feral_processes_engine::{
+    ExamineDir, InspectTarget, ManifestSubject, ProgramPoints, StatOwner,
+};
 
 impl App {
     /// Picks a direction (arrows/hjkl) and inspects the first creature the
@@ -285,6 +287,16 @@ impl App {
             self.toggle_manifest_tab();
             return;
         }
+        if self.manifest_tab == ManifestTab::Stats {
+            if key == GameKey::Char('H') {
+                self.toggle_hold_points();
+                return;
+            }
+            if key == GameKey::Char('S') {
+                self.open_manifest_points();
+                return;
+            }
+        }
         let step = match key {
             GameKey::Left => -1,
             GameKey::Right => 1,
@@ -320,6 +332,42 @@ impl App {
                 ManifestTab::Talk => ManifestTab::Stats,
             };
         }
+    }
+
+    /// The sheet's program, when it is one with points to hold and spend: a
+    /// seated program. `H` and `S` are not bound on anyone else.
+    fn pointed_program(&self) -> Option<(Entity, ProgramPoints)> {
+        let entity = self.pending_manifest?;
+        match self.game.as_ref()?.manifest(entity)?.subject {
+            ManifestSubject::Program(p) => p.points.map(|points| (entity, points)),
+            ManifestSubject::Player(_) => None,
+        }
+    }
+
+    /// `H` on a Stats tab: bank this program's level-ups instead of spending
+    /// them, or spend the bank and go back to spending as it levels.
+    fn toggle_hold_points(&mut self) {
+        let Some((program, points)) = self.pointed_program() else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        match game.set_hold_points(program, !points.holding) {
+            Ok(()) => self.status_line = None,
+            Err(why) => self.refuse(format!("Cannot change that: {why:?}.")),
+        }
+    }
+
+    /// `S` on a Stats tab: the Points screen for this program, which
+    /// `open_stat_allocation` refuses at no points.
+    fn open_manifest_points(&mut self) {
+        let Some((program, _)) = self.pointed_program() else {
+            return;
+        };
+        let parked = self.menu_selected;
+        self.open_stat_allocation(
+            StatOwner::Program(program),
+            AllocationOrigin::Manifest { parked },
+        );
     }
 
     /// `R` on a sheet: the whole memories page behind its MEMORIES box.

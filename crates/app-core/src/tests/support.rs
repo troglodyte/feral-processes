@@ -247,6 +247,37 @@ pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -
     app
 }
 
+/// An app owning one seated program that has `banked` points, held or not,
+/// written onto its save record and reloaded - `app_owning_a_developed_program`'s
+/// route, for the same reason. Returns the program.
+pub(crate) fn app_owning_a_program_with_points(
+    seed: u32,
+    banked: u32,
+    hold: bool,
+) -> (App, Entity) {
+    let assets_dir = test_assets_dir();
+    let mut app = app_owning_distant_programs(seed, 1);
+    let path = scratch_path("program_points", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    for c in data.creatures.iter_mut().filter(|c| c.tamed) {
+        // A record with a base is what load restores as seated. Its attack
+        // is not the player's, so a preview that assumed the player's base
+        // would read a different figure.
+        let mut base = feral_processes_engine::progression::DerivedBase::player();
+        base.atk += 7;
+        c.base = Some(base);
+        c.stat_points = banked;
+        c.hold_points = hold;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    // The player is the first subject, so the program is the second.
+    let program = app.game.as_mut().unwrap().manifest_subjects()[1];
+    (app, program)
+}
+
 /// An app whose player already holds `programs` in
 /// `components::DownedPrograms`, without playing to a kill for one — the
 /// engine exposes no way to hand-place one from outside the crate,

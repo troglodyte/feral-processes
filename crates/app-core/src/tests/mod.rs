@@ -38,6 +38,7 @@ mod options;
 mod outposts;
 mod party;
 mod playing;
+mod program_points;
 mod quitting;
 mod readonly_screens;
 mod refactor;

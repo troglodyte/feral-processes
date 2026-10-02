@@ -1,6 +1,7 @@
 //! `Mode::LevelUp`'s one handler.
 
 use crate::*;
+use feral_processes_engine::StatOwner;
 
 impl App {
     /// Only three keys act; everything else is ignored, `Mode::Notification`'s
@@ -23,7 +24,7 @@ impl App {
                 self.show_next_notification();
             }
             GameKey::Enter => {
-                self.open_stat_allocation(AllocationOrigin::LevelUp);
+                self.open_stat_allocation(StatOwner::Player, AllocationOrigin::LevelUp);
                 if self.mode == Mode::AllocateStats {
                     self.pending_level_up = None;
                 }

@@ -489,3 +489,29 @@ fn a_save_keeps_attributes_points_and_derived_values_with_gear_and_a_perk() {
     assert_eq!(loaded.world.get::<PowerReserve>(lp).unwrap().get(), power);
     assert_eq!(*loaded.world.get::<BoughtStats>(lp).unwrap(), receipt);
 }
+
+#[test]
+fn the_players_entropy_sets_their_attack_bands_and_a_wild_programs_stay_flat() {
+    use crate::tuning::{CRIT_CHANCE, FUMBLE_CHANCE};
+    let mut game = Game::new(7013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // Ten points above the catalogue base of 40.
+    set_attribute(&mut game, "entropy", 50);
+    game.recompute_derived(player);
+
+    let mine = game.combatant_profile(player, crate::battle::Swing::default());
+    assert!(
+        (mine.crit - (CRIT_CHANCE + 0.02)).abs() < 1e-6,
+        "{}",
+        mine.crit
+    );
+    assert!(
+        (mine.fumble - (FUMBLE_CHANCE + 0.01)).abs() < 1e-6,
+        "{}",
+        mine.fumble
+    );
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let theirs = game.combatant_profile(wild, crate::battle::Swing::default());
+    assert_eq!((theirs.crit, theirs.fumble), (CRIT_CHANCE, FUMBLE_CHANCE));
+}

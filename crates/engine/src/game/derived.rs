@@ -175,6 +175,8 @@ impl Game {
             max_power: derived.max_power,
             status_resist: derived.status_resist,
             extraction: derived.extraction,
+            crit: derived.crit,
+            fumble: derived.fumble,
         });
     }
 }

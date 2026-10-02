@@ -11,8 +11,8 @@ one to each machine. The base roster shows the line as one row, naming the machi
 running now.
 
 The worker pulls from the end. It runs the machine nearest the finished product that can make
-progress, and drops back to an earlier machine only when the later ones are short of input. It
-never leaves a machine partway through a cycle: it finishes the batch first, then moves on.
+progress, and drops back to an earlier machine only when the later ones are short of input. While a
+batch is still wanted, it finishes that batch before moving to another machine.
 
 - An ingredient that no machine in the line makes comes from a Depot. The worker fetches it, so
 keep the Depot stocked and in reach.

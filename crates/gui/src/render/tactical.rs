@@ -98,7 +98,7 @@ const TURN_ARROW_GAP: f32 = 2.0;
 /// this feature's own bug — two washes stacked read as a colour nobody
 /// authored, not as "you may both step here and throw there".
 ///
-/// Under the aim preview's own 0.22 so a shaped routine reads over it, and
+/// Under `PREVIEW_ALPHA` so a shaped routine reads over it, and
 /// faint enough that the terrain under it stays legible: the wash says a
 /// cell is *available*, and a cell whose kind it hid would make it say
 /// something it does not know.
@@ -119,6 +119,175 @@ const REACH_WASH_ALPHA: f32 = 0.13;
 /// every cell outlined whole is a grid of boxes, which reads as sixty marks
 /// rather than as one area, and the eye has to count them to find the edge.
 const REACH_EDGE_PX: f32 = 1.5;
+
+/// How strongly the area preview washes the cells a routine would hit —
+/// over `REACH_WASH_ALPHA`, so a shaped routine reads over the fields under
+/// it.
+const PREVIEW_ALPHA: f32 = 0.22;
+
+/// How wide the in-cover sunrise's horizon is, as a fraction of the body's
+/// tile — wider than the sun on it, so the line reads as ground.
+const COVER_MARK_WIDTH: f32 = 0.34;
+
+/// The radius of the in-cover sunrise's sun, as a fraction of the tile.
+const COVER_SUN_RADIUS: f32 = 0.11;
+
+/// How many segments the sun's half-disc is drawn with. Enough to read as
+/// round at the largest tile, few enough to stay a cheap convex fan.
+const COVER_SUN_SEGMENTS: u16 = 8;
+
+/// One kind of wash the battle map lays on the ground, and the word the
+/// legend gives it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(super) enum Wash {
+    Move,
+    Cover,
+    Danger,
+    Aim,
+    Hits,
+}
+
+impl Wash {
+    /// **`Hits` is the cursor's white and not `THREAT`** (bug 13). The
+    /// preview used to be the danger field's red at a stronger alpha, and
+    /// where the two met — a blast aimed across cells the body would be
+    /// swung at walking to — they read as one wash. White is what the aim
+    /// cursor outlines in, so "white is where your action lands" is one
+    /// meaning on one channel, and red is left to inbound harm alone.
+    fn color(self) -> Color {
+        match self {
+            Wash::Move => palette::PLAN,
+            Wash::Cover => palette::HEALTHY,
+            Wash::Danger => palette::THREAT,
+            Wash::Aim => palette::AIM,
+            Wash::Hits => palette::EMPHASIS,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Wash::Move => "move",
+            Wash::Cover => "cover",
+            Wash::Danger => "danger",
+            Wash::Aim => "aim",
+            Wash::Hits => "hits",
+        }
+    }
+}
+
+/// Every wash the board lays down this frame, in draw order, each with the
+/// cells it covers. An empty field is left out.
+///
+/// **The one list both the draw and the legend read.** Bug 13 was a board
+/// of five washes nobody had named; a key derived separately from what was
+/// drawn would be a second answer free to disagree with the first.
+fn board_washes<'a>(
+    reachable: &'a [(i32, i32)],
+    covered: &'a [(i32, i32)],
+    provoking: &'a [(i32, i32)],
+    placeable: &'a [(i32, i32)],
+    preview: &'a [(i32, i32)],
+) -> Vec<(Wash, &'a [(i32, i32)])> {
+    let mut washes = Vec::new();
+    // Movement is drawn for **either side**, off `TacticalView::reachable`
+    // alone and never off `player_turn`: a wash that appeared only for
+    // bodies the player commands hid the half of the board a fight is
+    // planned *against*. One colour for both — whose turn it is is the
+    // turn arrow's answer, and tinting the wash by side too would put one
+    // answer on two channels.
+    //
+    // **Suppressed while `placeable` is showing.** The aim field shipped as
+    // "the movement outline, but yellow" — a replacement, not a second
+    // field stacked on the first. Drawing both washed every reachable cell
+    // twice and read as a colour nobody authored.
+    //
+    // Cover, then danger, over movement and in that order: a cell can be
+    // reachable, sheltered and provoking all at once and all three should
+    // read, and an inbound reaction is louder news than a boulder.
+    if placeable.is_empty() {
+        washes.extend([
+            (Wash::Move, reachable),
+            (Wash::Cover, covered),
+            (Wash::Danger, provoking),
+        ]);
+    }
+    // `placeable` is already empty for every shape but `Radius`
+    // (`Game::tactical_placeable_cells`' own gate). The preview goes last,
+    // over everything: a routine resolves wherever it is aimed whether or
+    // not the body could walk there.
+    washes.extend([(Wash::Aim, placeable), (Wash::Hits, preview)]);
+    washes.retain(|(_, field)| !field.is_empty());
+    washes
+}
+
+/// The key to the board's washes: a swatch and a word for each one drawn
+/// this frame, bottom-left inside the map pane.
+///
+/// **Only what is on the board**, which is `draw_tactical_map`'s return
+/// value — two or three entries on an ordinary turn, none when nothing is
+/// washed — so the key never teaches a colour the player cannot see.
+/// Bottom-left because the turn strip and the tamper block take the
+/// top-right, and the map pane's bottom border carries no strip to clear.
+pub(super) fn draw_wash_legend(washes: &[Wash], pane: Rect, painter: &Painter, m: &Metrics) {
+    if washes.is_empty() {
+        return;
+    }
+    let pad = m.line_height * 0.35;
+    let size = m.small();
+    let swatch = f32::from(size) * 0.7;
+    let space = painter.measure_ui_advance(" ", size);
+    let words: f32 = washes
+        .iter()
+        .map(|w| swatch + space + painter.measure_ui_advance(w.label(), size))
+        .sum();
+    let w = pad * 2.0 + words + space * 2.0 * (washes.len() - 1) as f32;
+    let h = pad * 2.0 + m.line_height;
+    let x = pane.x + m.inset;
+    let y = pane.y + pane.h - m.inset - h;
+    if x + w > pane.x + pane.w - m.inset || y < pane.y {
+        return;
+    }
+    painter.rect(x, y, w, h, Color::new(0.04, 0.06, 0.08, 0.88));
+    painter.rect_lines(x, y, w, h, 1.0, palette::PANE_BORDER);
+    let baseline = y + pad + f32::from(size) * 0.8;
+    let mut at = x + pad;
+    for &wash in washes {
+        painter.rect(at, baseline - swatch, swatch, swatch, wash.color());
+        at += swatch + space;
+        painter.ui(wash.label(), at, baseline, size, palette::BODY);
+        at += painter.measure_ui_advance(wash.label(), size) + space * 2.0;
+    }
+}
+
+/// The in-cover mark: a horizon line and a sun's half-disc standing on it,
+/// flat side down.
+struct Sunrise {
+    horizon: [(f32, f32); 2],
+    sun: Vec<(f32, f32)>,
+}
+
+/// The in-cover sunrise for a body whose tile is `cell_px` wide at
+/// `(px, py)`.
+///
+/// A free function for `turn_arrow`'s reason — the geometry is the thing
+/// worth holding, and holding it needs no `Painter`.
+fn sunrise(px: f32, py: f32, cell_px: f32) -> Sunrise {
+    let r = cell_px * COVER_SUN_RADIUS;
+    let right = px + cell_px - 2.0;
+    let left = right - cell_px * COVER_MARK_WIDTH;
+    let horizon = py + RARITY_BAR_PX + 1.0 + r;
+    let cx = (left + right) / 2.0;
+    let sun = (0..=COVER_SUN_SEGMENTS)
+        .map(|i| {
+            let a = std::f32::consts::PI * f32::from(i) / f32::from(COVER_SUN_SEGMENTS);
+            (cx + r * a.cos(), horizon - r * a.sin())
+        })
+        .collect();
+    Sunrise {
+        horizon: [(left, horizon), (right, horizon)],
+        sun,
+    }
+}
 
 /// The three points of that arrow, given the top-left of the acting body's
 /// tile and how far this frame's bob has lifted it.
@@ -224,7 +393,7 @@ pub(super) fn draw_tactical_map(
     pane: Rect,
     tile_px: f32,
     glyph_px: u16,
-) {
+) -> Vec<Wash> {
     let half_w = ((pane.w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((pane.h / tile_px) / 2.0).max(1.0) as i32;
     // The camera follows whoever is acting — the "watch" override's job,
@@ -275,6 +444,7 @@ pub(super) fn draw_tactical_map(
     let reachable = expand_to_footprint(&view.reachable, acting_footprint);
     let covered = expand_to_footprint(&view.covered, acting_footprint);
     let provoking = expand_to_footprint(&view.provoking, acting_footprint);
+    let washes = board_washes(&reachable, &covered, &provoking, placeable, preview);
 
     for (cell, kind) in view.board.cells() {
         let (px, py) = tile_origin_px(
@@ -290,61 +460,26 @@ pub(super) fn draw_tactical_map(
         }
         painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, cell_color(kind));
 
-        // Where the body whose turn it is may still step — **either side**.
-        // `TacticalView::reachable` is `battle.actor()`'s own field and has
-        // never had a notion of sides, so this is drawn off it alone and
-        // never off `player_turn`: a wash that appeared only for bodies the
-        // player commands hid the half of the board a fight is planned
-        // *against*.
-        //
-        // **One colour for both, and `PLAN` rather than `ATTENTION`.** The
-        // wash answers *where*, and whose turn it is is already answered a
-        // few lines down by the arrow bobbing over that body's head, in
-        // `PLAN` against `THREAT`. Tinting the wash by side too would put
-        // one answer on two channels and make neither the place to read it.
-        //
-        // **Suppressed while `placeable` is showing.** The request this
-        // outline shipped for was "the same as the movement outline, but
-        // yellow" — a replacement, not a second field stacked on the first.
-        // Drawing both while aiming a splash washed every reachable cell
-        // twice and read as a colour nobody authored.
-        if placeable.is_empty() {
-            draw_cell_field(painter, &reachable, cell, px, py, tile_px, palette::PLAN);
-            // **Over the reach wash, not instead of it.** A provoking cell is
-            // still somewhere the body may step; what is being said is that
-            // walking there will be swung at, which is `THREAT`'s own
-            // meaning — inbound harm — and the one channel in this pane that
-            // already carries it. The two washes stack deliberately: the
-            // blue answers *where*, the red answers *at what cost*, and a
-            // cell that is neither reachable nor provoking gets neither.
-            // **Between the two, and deliberately.** A cell can be reachable,
-            // sheltered and provoking all at once and all three should read;
-            // the order says which is the louder news, and an inbound
-            // reaction outranks a boulder. `HEALTHY` is the honest role —
-            // cover is protection, and nothing else on this board claims
-            // green but a party body's own health, which is the same thing
-            // said about the same side.
-            draw_cell_field(painter, &covered, cell, px, py, tile_px, palette::HEALTHY);
-            draw_cell_field(painter, &provoking, cell, px, py, tile_px, palette::THREAT);
-        }
-        // Where a `Radius` routine's centre may legally land. `placeable` is
-        // already empty for every shape but `Radius`
-        // (`Game::tactical_placeable_cells`'s own gate), so this draws
-        // nothing while aiming a swing, a `Single` routine or a directional
-        // one, and nothing outside `Mode::TacticalAim` at all.
-        draw_cell_field(painter, placeable, cell, px, py, tile_px, palette::AIM);
-        // What the aim would land on. Over the reach wash, because a routine
-        // resolves wherever it is aimed whether or not the body could walk
-        // there.
-        if preview.contains(&cell) {
-            let c = palette::THREAT;
-            painter.rect(
-                px,
-                py,
-                tile_px - 1.0,
-                tile_px - 1.0,
-                Color::new(c.r, c.g, c.b, 0.22),
-            );
+        // What the legend reports is this list, so a key entry exists
+        // exactly when its wash is drawn — `board_washes`' own doc.
+        for &(wash, field) in &washes {
+            if wash == Wash::Hits {
+                // No edge: a preview is a handful of cells under a cursor
+                // that already outlines its target, and a second boundary
+                // around it would compete with the cursor's own.
+                if field.contains(&cell) {
+                    let c = wash.color();
+                    painter.rect(
+                        px,
+                        py,
+                        tile_px - 1.0,
+                        tile_px - 1.0,
+                        Color::new(c.r, c.g, c.b, PREVIEW_ALPHA),
+                    );
+                }
+            } else {
+                draw_cell_field(painter, field, cell, px, py, tile_px, wash.color());
+            }
         }
         // A body's own hit, last of the tile's washes — `render/base.rs`'s
         // own ordering for a raid flash, and the same call: a tactical hit
@@ -594,6 +729,7 @@ pub(super) fn draw_tactical_map(
             painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, palette::EMPHASIS);
         }
     }
+    washes.into_iter().map(|(wash, _)| wash).collect()
 }
 
 /// The body whose turn it is — the one derivation of that, since the camera,
@@ -704,16 +840,16 @@ fn draw_body(
     }
     // **The top-right corner, which this board alone leaves free** — the
     // surface map spends it on `nemesis_mark_rect`, which is never called
-    // here. Top-left is the con earmark and the two are meant to read as a
-    // pair, so this drops below the rarity bar exactly as that one does.
+    // here. It drops below the rarity bar as the top-left con earmark does,
+    // but is a sunrise — a sun on a horizon — rather than that one's
+    // triangle mirrored, so the two corners never read as one mark twice.
     if body.in_cover {
-        let leg = cell_px * 0.28;
-        let far = px + cell_px - 1.0;
-        let y = py + RARITY_BAR_PX;
-        painter.poly(
-            &[(far, y), (far - leg, y), (far, y + leg)],
-            palette::HEALTHY,
-        );
+        let Sunrise {
+            horizon: [from, to],
+            sun,
+        } = sunrise(px, py, cell_px);
+        painter.line(from.0, from.1, to.0, to.1, REACH_EDGE_PX, palette::HEALTHY);
+        painter.poly(&sun, palette::HEALTHY);
     }
     if let Some(fraction) = body.hp_fraction {
         // The squad's own bar, not a sum of five — `marks::tactical_hp_bar_rect`
@@ -1829,10 +1965,9 @@ mod tests {
         }
     }
 
-    /// The shield mark is drawn, and only for a body the view marks. Told
-    /// apart from the con earmark by *position*: both are triangles of the
-    /// same size dropping below the rarity bar, and only the corner they sit
-    /// in says which is which.
+    /// The cover sunrise is drawn, and only for a body the view marks: one
+    /// horizon line and one half-disc standing on it, in the top-right
+    /// corner rather than the con earmark's top-left.
     #[test]
     fn a_body_in_cover_wears_a_mark() {
         use crate::paint::painted_poly_points;
@@ -1858,26 +1993,48 @@ mod tests {
         assert_eq!(
             after.len(),
             before + 1,
-            "one body in cover should add exactly one mark"
+            "one body in cover should add exactly one sun"
         );
-        // Which corner it sits in, told without reading a colour: both
-        // triangles have a right angle at the tile corner they claim, so the
-        // x that appears twice is that corner. On the con earmark it is the
-        // smallest of the three; on this one it must be the largest.
-        let fresh = after
+        assert_eq!(
+            crate::paint::painted_line_count_in(&marked, palette::HEALTHY),
+            crate::paint::painted_line_count_in(&bare, palette::HEALTHY) + 1,
+            "one body in cover should add exactly one horizon"
+        );
+        // A sunrise: a dome whose flat side is its base. The two ends of
+        // that base are the lowest points and share a y, and nothing of the
+        // dome hangs below it.
+        let sun = after
             .iter()
             .find(|pts| !bare_polys.contains(pts))
             .expect("the new mark is not among the shapes drawn");
-        let xs: Vec<f32> = fresh.iter().map(|&(x, _)| x).collect();
-        let corner = xs
+        let left = sun
             .iter()
             .copied()
-            .find(|x| xs.iter().filter(|&o| o == x).count() == 2)
-            .expect("a right-angled mark has one repeated x");
-        assert_eq!(
-            corner,
-            xs.iter().copied().fold(f32::MIN, f32::max),
-            "the mark took the top-left corner the con earmark owns"
+            .fold((f32::MAX, 0.0), |a, p| if p.0 < a.0 { p } else { a });
+        let right = sun
+            .iter()
+            .copied()
+            .fold((f32::MIN, 0.0), |a, p| if p.0 > a.0 { p } else { a });
+        let horizon = sun.iter().map(|&(_, y)| y).fold(f32::MIN, f32::max);
+        assert!(
+            (left.1 - horizon).abs() < 0.01 && (right.1 - horizon).abs() < 0.01,
+            "the sun's ends must sit on its horizon: {sun:?}"
+        );
+        // Which corner, told against the body's own glyph rather than a
+        // colour: up and to the right of it, where the con earmark is up and
+        // to the left.
+        let mid = (left.0 + right.0) / 2.0;
+        let glyph = crate::paint::painted_text_boxes(&marked)
+            .into_iter()
+            .map(|(_, _, b)| (b.x + b.w / 2.0, b.y + b.h / 2.0))
+            .min_by(|a, b| {
+                let d = |c: &(f32, f32)| (c.0 - mid).powi(2) + (c.1 - horizon).powi(2);
+                d(a).total_cmp(&d(b))
+            })
+            .expect("the marked body drew a glyph");
+        assert!(
+            mid > glyph.0 && horizon < glyph.1,
+            "the sun at ({mid}, {horizon}) is not top-right of its body at {glyph:?}"
         );
     }
 
@@ -2099,10 +2256,10 @@ mod tests {
             "the cover mark must still draw for a squad standing in cover"
         );
         // Told apart by *position* rather than by which draws at all — both
-        // corners are free to carry a mark at once. The cover triangle's
-        // right angle is its top-right corner (`draw_body`'s own geometry),
-        // so its lowest y is the footprint's top edge; the squad's own mark
-        // must sit strictly below that, in the corner nothing else claims.
+        // corners are free to carry a mark at once. The sun's lowest y is
+        // the top of its dome, near the footprint's top edge
+        // (`sunrise`'s own geometry); the squad's own mark must sit
+        // strictly below that, in the corner nothing else claims.
         let cover_top = cover
             .iter()
             .flat_map(|pts| pts.iter().map(|&(_, y)| y))
@@ -3157,5 +3314,134 @@ mod tests {
             ours,
             "the wild side's turn drew a different reach wash from the party's"
         );
+    }
+
+    /// A view whose acting body can reach, shelter at and be swung at on
+    /// exactly its own cell — each wash one cell, so a count is a census.
+    fn one_cell_fields() -> (TacticalView, (i32, i32)) {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let actor = acting_body(&view).expect("someone is acting");
+        assert_eq!(actor.footprint, 1, "the fixture's actor is a squad");
+        let cell = actor.cell;
+        view.reachable = vec![cell];
+        view.covered = vec![cell];
+        view.provoking = vec![cell];
+        (view, cell)
+    }
+
+    /// Bug 13: the cells a routine would hit were washed in `THREAT`, the
+    /// danger field's own red, so the two read as one wherever they met.
+    #[test]
+    fn the_area_preview_is_washed_in_white_and_not_in_danger_red() {
+        let (view, cell) = one_cell_fields();
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[cell], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let at = |c: Color| Color::new(c.r, c.g, c.b, 0.22);
+        assert_eq!(
+            painted_rect_fill_count(&shapes, at(palette::EMPHASIS)),
+            1,
+            "the preview cell was not washed in the cursor's white"
+        );
+        assert_eq!(
+            painted_rect_fill_count(&shapes, at(palette::THREAT)),
+            0,
+            "the preview is still drawn in the danger field's red"
+        );
+    }
+
+    /// The danger field is `THREAT` at the reach wash's alpha, one wash a
+    /// cell — nothing pinned it before.
+    #[test]
+    fn the_danger_field_is_washed_in_threat() {
+        let (view, _) = one_cell_fields();
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let c = palette::THREAT;
+        assert_eq!(
+            painted_rect_fill_count(&shapes, Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA)),
+            1
+        );
+    }
+
+    /// The legend is what the map drew, not a second guess at it: the map
+    /// returns the washes it laid down, in draw order, and nothing else.
+    #[test]
+    fn the_map_reports_exactly_the_washes_it_drew() {
+        let (mut view, cell) = one_cell_fields();
+        let draw = |view: &TacticalView, preview: &[(i32, i32)], placeable: &[(i32, i32)]| {
+            let mut fx = Fx::new();
+            with_painter(|p| {
+                draw_tactical_map(view, None, preview, placeable, &mut fx, p, pane(), 32.0, 24)
+            })
+            .0
+        };
+        assert_eq!(
+            draw(&view, &[cell], &[]),
+            vec![Wash::Move, Wash::Cover, Wash::Danger, Wash::Hits]
+        );
+        assert_eq!(
+            draw(&view, &[cell], &[cell]),
+            vec![Wash::Aim, Wash::Hits],
+            "the aim field replaces the three movement washes"
+        );
+        view.covered.clear();
+        assert_eq!(draw(&view, &[], &[]), vec![Wash::Move, Wash::Danger]);
+        view.reachable.clear();
+        view.provoking.clear();
+        assert!(draw(&view, &[], &[]).is_empty());
+    }
+
+    const ALL_WASHES: [Wash; 5] = [Wash::Move, Wash::Cover, Wash::Danger, Wash::Aim, Wash::Hits];
+
+    #[test]
+    fn the_legend_draws_one_swatch_and_word_per_wash() {
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_wash_legend(&ALL_WASHES, pane(), p, &m));
+        let words = painted_text(&shapes);
+        for wash in ALL_WASHES {
+            assert!(
+                words.contains(&wash.label().to_string()),
+                "{wash:?} has no word in {words:?}"
+            );
+            assert_eq!(
+                painted_rect_fill_count(&shapes, wash.color()),
+                1,
+                "{wash:?} has no swatch"
+            );
+        }
+        let (_, none) = with_painter(|p| draw_wash_legend(&[], pane(), p, &m));
+        assert!(none.is_empty(), "an empty board drew a legend");
+    }
+
+    /// Measured, not hoped: every entry draws, and nothing it paints leaves
+    /// the map pane, at the smallest supported window and a common one.
+    #[test]
+    fn the_whole_legend_fits_the_map_pane() {
+        use crate::paint::painted_fills;
+        use crate::render::hud::layout;
+
+        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
+            let m = ui_metrics(h);
+            let (map, _) = with_painter(|p| {
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                layout::regions(w, h, char_w, &m, false).map_pane
+            });
+            let (_, shapes) = with_painter(|p| draw_wash_legend(&ALL_WASHES, map, p, &m));
+            assert_eq!(painted_text(&shapes).len(), ALL_WASHES.len(), "at {w}x{h}");
+            for (_, r) in painted_fills(&shapes) {
+                assert!(
+                    r.x >= map.x
+                        && r.y >= map.y
+                        && r.x + r.w <= map.x + map.w
+                        && r.y + r.h <= map.y + map.h,
+                    "{r:?} leaves the map pane {map:?} at {w}x{h}"
+                );
+            }
+        }
     }
 }

@@ -12,6 +12,27 @@ theirs. Everyone on your side is yours to command — a companion's turn is
 your turn, not something you watch, unless you hand the side over with A
 below.
 
+The ground under the acting body is washed to show what its turn can do, and
+a key in the bottom-left corner of the board names whichever washes are
+showing:
+
+- Blue, move — every cell it can still step to.
+- Green, cover — a cell it can reach with something between it and the
+  other side, so attempts on it there fail more often.
+- Red, danger — a cell it can reach, but a hostile beside the way gets a free
+  attempt at it on the way past.
+- Yellow, aim — while a blast is being aimed, the cells its centre may land
+  on; while running Teleport, the bodies that can be picked up and
+  then the cells they can be sent to. It replaces the three above until the
+  cursor closes.
+- White, hits — while a routine is being aimed, the cells it will actually
+  hit.
+
+A small green sunrise in a body's top-right corner means it is standing in
+cover against whoever is acting. A purple path ending in a purple outline is
+a hostile's next move and target, shown while Inference Probe Single is
+reading it.
+
 On your turn:
 
 - Arrows or the numpad — step one cell, diagonals included. The bar counts

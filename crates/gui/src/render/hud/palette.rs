@@ -90,9 +90,11 @@ pub(crate) const PLAN: Color = rgb(0x4a7fd0);
 /// [`PLAN`]'s doc above is not: that wash sits on the map for as long as a
 /// dig box stays marked, competing with a stalled machine's [`ATTENTION`]
 /// for the same glance across the whole base. This one exists only for the
-/// seconds a routine is being aimed, on a grid that draws neither role —
-/// nothing tactical.rs paints is [`ATTENTION`] or [`WARN`] — so there is no
-/// second thing on screen a splash's landing zone could be mistaken for.
+/// seconds a routine is being aimed, and only on the battle map, whose
+/// ground draws neither role — [`WARN`] there is a con rung or a hijacked
+/// companion's rung in the turn strip, and [`ATTENTION`] the brief `!` of a
+/// reaction, all marks on a body and never a wash on a cell — so there is no
+/// second field a splash's landing zone could be mistaken for.
 pub(crate) const AIM: Color = rgb(0xd6c542);
 /// orchid — **what the wild side has told you it is about to do**: a
 /// profiled hostile's published walk and the cell it will aim at, drawn on

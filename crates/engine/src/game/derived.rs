@@ -6,6 +6,10 @@ use crate::progression::{SpendError, StatOwner};
 use crate::resources::PendingProgramLevels;
 use crate::*;
 
+/// The attributes a program's level-ups raise, `(parity, analysis)` in the
+/// order `program_level_points` returns them.
+pub(crate) const LEVEL_ATTRIBUTES: [&str; 2] = ["parity", "analysis"];
+
 impl Game {
     /// `entity`'s maximum Power: its derived figure when it has one,
     /// `POWER_MAX` otherwise.
@@ -135,9 +139,12 @@ impl Game {
             self.apply_stat_spend(
                 entity,
                 &[
-                    (crate::attributes::AttributeId::from("parity"), gain.parity),
                     (
-                        crate::attributes::AttributeId::from("analysis"),
+                        crate::attributes::AttributeId::from(LEVEL_ATTRIBUTES[0]),
+                        gain.parity,
+                    ),
+                    (
+                        crate::attributes::AttributeId::from(LEVEL_ATTRIBUTES[1]),
                         gain.analysis,
                     ),
                 ],

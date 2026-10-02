@@ -2865,6 +2865,19 @@ pub struct ProgramManifest {
     /// rather than by an ownership check here, and an owned one that nothing
     /// has happened to yet is `Some` with an empty `memories`.
     pub mood: Option<ManifestMood>,
+    /// The points a seated program levels through. `None` for a program no
+    /// door has seated (a wild one), which has none to spend or hold.
+    pub points: Option<ProgramPoints>,
+}
+
+/// What the manifest's POINTS box reads: the attributes level-ups feed, the
+/// bank, and whether level-ups are being banked rather than spent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgramPoints {
+    /// `(name, value)` for the attributes a program's level-ups raise.
+    pub attributes: Vec<(String, i32)>,
+    pub banked: u32,
+    pub holding: bool,
 }
 
 /// What one owned program feels, as the manifest's MEMORIES box draws it: the

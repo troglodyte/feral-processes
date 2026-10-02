@@ -593,3 +593,25 @@ fn a_held_programs_derivation_survives_a_save_and_load() {
 
     assert_eq!(snapshot(&loaded, restored), before);
 }
+
+#[test]
+fn the_manifest_reports_a_seated_programs_points_and_hold() {
+    let mut game = game();
+    let program = seated_program(&mut game);
+    game.set_hold_points(program, true).unwrap();
+    game.world.get_mut::<StatPoints>(program).unwrap().0 = 3;
+
+    let points = program_manifest(&game, program)
+        .points
+        .expect("a seated program reports its points");
+    assert_eq!((points.banked, points.holding), (3, true));
+    let parity = attribute(&game, program, "parity");
+    assert!(points.attributes.contains(&("Parity".to_string(), parity)));
+}
+
+#[test]
+fn an_unseated_program_reports_no_points() {
+    let mut game = game();
+    let program = unseated_program(&mut game);
+    assert!(program_manifest(&game, program).points.is_none());
+}

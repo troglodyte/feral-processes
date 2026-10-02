@@ -53,6 +53,19 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.7
+
+**Entropy now changes how your attacks go: each point above 40 makes them
+more likely to land unchecked and more likely to fumble.** Before, Entropy
+did nothing and could not be bought, and every attack — yours and every
+program's — landed unchecked 8% of the time and fumbled 5%. Now your own
+Entropy moves both, up to 20% and 11% at Entropy 100, and it is offered on
+the Points screens beside the other attributes. Your class's starting Entropy
+counts too, so an existing character's odds shift when the save loads: a
+Leech's to about 11% and 7%, a Saboteur's to about 15% and 8%, a Bastion's to
+6% and 4%. Programs keep the old odds. The Attributes help page now says what
+each of your six attributes does.
+
 ## 0.14.6
 
 **Machines that feed each other now run as one production line, staffed by

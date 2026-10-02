@@ -53,6 +53,20 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.6
+
+**Machines that feed each other now run as one production line, staffed by
+one worker.** A Mining Node beside a Lathe, or a Power Conduit beside the
+Winding Node it powers, is a line: a standing job on any machine in it is set
+on all of them, the base roster shows it as one row naming the machine being
+worked, and a single program runs it, always on the machine nearest the
+finished product that can make progress and never leaving a wanted batch
+half-made. Before, every machine in a chain took a worker of its own; now the
+rest of the crew stays free, at the cost of throughput — a line of three
+makes less than three staffed machines did. Leave a gap between machines to
+split a line in two. Teardown Rigs always stand alone. The new Production
+lines help page explains it.
+
 ## 0.14.5
 
 **A battle map now tells you what its colours mean.** A key in the board's

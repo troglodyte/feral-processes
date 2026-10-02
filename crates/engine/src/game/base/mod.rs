@@ -21,6 +21,7 @@ pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;
 pub(crate) mod hauling;
+pub(crate) mod lines;
 pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;

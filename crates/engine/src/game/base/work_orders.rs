@@ -972,7 +972,7 @@ impl Game {
         if !walkers.is_empty() {
             self.drift_idle_staff(&walkers, &amenities, &bays);
         }
-        self.assign_base_labour(wanted, &staff, &amenities);
+        self.assign_base_labour(wanted, &lines, &staff, &amenities);
     }
 
     /// The posting half of `schedule_base_labour` alone, for a change the
@@ -995,7 +995,7 @@ impl Game {
         let wanted = self.base_wants(&lines);
         let staff = self.base_staff();
         let amenities = self.amenities();
-        self.assign_base_labour(wanted, &staff, &amenities);
+        self.assign_base_labour(wanted, &lines, &staff, &amenities);
     }
 
     /// Every want the base holds this pass, in priority order — **the
@@ -1056,7 +1056,12 @@ impl Game {
         for (site, kind) in self.dig_wants() {
             wanted.push((site, kind));
         }
-        wanted
+        // **Last, so it sees every want the base holds**, and the line's
+        // position is its first member's: collapsing earlier would let a
+        // later source add a second want for the same line.
+        let member_of = lines::membership(lines);
+        let holders = lines::line_holders(&mut self.world, &member_of);
+        lines::collapse(wanted, lines, |key| holders.get(&key).copied())
     }
 
     /// Steps 3 to 5 of `schedule_base_labour`'s doc, over `wanted` and the
@@ -1066,6 +1071,7 @@ impl Game {
     fn assign_base_labour(
         &mut self,
         mut wanted: Vec<(Entity, TaskKind)>,
+        lines: &[Line],
         staff: &[Entity],
         amenities: &offshift::Amenities,
     ) {
@@ -1235,6 +1241,7 @@ impl Game {
                 .get(&structure.kind)
                 .is_some_and(|d| d.stores)
         });
+        let member_of = lines::membership(lines);
         let mut pool: Vec<Entity> = Vec::new();
         let mut open = wanted.clone();
         for &worker in &on_shift {
@@ -1253,7 +1260,10 @@ impl Game {
                 pool.push(worker);
                 continue;
             }
-            if let Some(index) = held.and_then(|post| open.iter().position(|&p| p == post)) {
+            // **A line's worker holds the line's want, not just its own
+            // machine's**: the want names the active machine, which may not
+            // be the one this body is standing on while it carries.
+            if let Some(index) = held.and_then(|post| line_want_of(&member_of, &open, post)) {
                 open.remove(index);
             }
         }
@@ -1271,8 +1281,13 @@ impl Game {
             .map(|&w| self.world.get::<Task>(w).map(|t| (t.target, t.kind)))
             .collect();
         let mut holder: Vec<Option<usize>> = vec![None; open.len()];
-        for (index, post) in open.iter().enumerate() {
-            holder[index] = held.iter().position(|h| *h == Some(*post));
+        for (index, &post) in open.iter().enumerate() {
+            // **The holder of a line's want is whoever is posted to any
+            // member**, so the seat survives the active machine moving and
+            // the diff re-posts the same body rather than swapping two.
+            holder[index] = held
+                .iter()
+                .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)));
         }
         let by_want = {
             let game: &Game = self;
@@ -1281,7 +1296,7 @@ impl Game {
                 let worker = pool[body];
                 game.duty_admits_post(worker, post, kind)
                     && !game.refuses_post(worker, post, kind)
-                    && (holder[want] == Some(body)
+                    && (held[body] == Some((post, kind))
                         || kind == TaskKind::Guard
                         || fields.reaches(game, worker, post, kind))
             })
@@ -3092,4 +3107,32 @@ impl Game {
             })
             .map(|(item, _)| self.item_name(item).to_string())
     }
+}
+
+/// Whether a body posted at `held` already holds the want `post`: the same
+/// post, or — for a `GatherResource` on a line of two or more — any member
+/// of the same line.
+fn same_post(
+    member_of: &std::collections::HashMap<Entity, lines::LineKey>,
+    held: (Entity, TaskKind),
+    post: (Entity, TaskKind),
+) -> bool {
+    if held == post {
+        return true;
+    }
+    held.1 == TaskKind::GatherResource
+        && post.1 == TaskKind::GatherResource
+        && member_of
+            .get(&held.0)
+            .is_some_and(|line| member_of.get(&post.0) == Some(line))
+}
+
+/// Where in `open` the want a body posted at `held` is covering sits.
+fn line_want_of(
+    member_of: &std::collections::HashMap<Entity, lines::LineKey>,
+    open: &[(Entity, TaskKind)],
+    held: (Entity, TaskKind),
+) -> Option<usize> {
+    open.iter()
+        .position(|&post| same_post(member_of, held, post))
 }

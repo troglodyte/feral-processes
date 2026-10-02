@@ -175,6 +175,102 @@ pub(crate) fn membership(lines: &[Line]) -> HashMap<Entity, LineKey> {
         .collect()
 }
 
+/// What `collapse` reads of a worker's `Task`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Held {
+    pub target: Entity,
+    pub progress: u32,
+    pub required: u32,
+}
+
+/// The `GatherResource` task each line's worker holds, by line. A line has
+/// one worker, so a second holder (a save from before lines) is resolved by
+/// entity order rather than query order.
+pub(crate) fn line_holders(
+    world: &mut World,
+    member_of: &HashMap<Entity, LineKey>,
+) -> HashMap<LineKey, Held> {
+    let mut query = world.query::<(Entity, &Task)>();
+    let mut held: Vec<(Entity, Held)> = query
+        .iter(world)
+        .filter(|(_, t)| t.kind == TaskKind::GatherResource && member_of.contains_key(&t.target))
+        .map(|(e, t)| {
+            (
+                e,
+                Held {
+                    target: t.target,
+                    progress: t.progress,
+                    required: t.required,
+                },
+            )
+        })
+        .collect();
+    held.sort_by_key(|(e, _)| *e);
+    let mut by_line = HashMap::new();
+    for (_, task) in held {
+        by_line.entry(member_of[&task.target]).or_insert(task);
+    }
+    by_line
+}
+
+/// Folds every member's `GatherResource` want into one want per line
+/// (spec §3 steps 1 and 2).
+///
+/// The line takes the position of its first member want, so priority is
+/// untouched, and names its **active machine**, one of the members that
+/// itself wanted a body: an order for a middle product must not run the end
+/// machine. Wants for lines of one and every other kind pass through.
+///
+/// 1. A worker mid-cycle on a wanted member stays there, because `post_worker`
+///    resets progress and a switch would throw the cycle away.
+/// 2. Otherwise the wanted member furthest downstream.
+pub(crate) fn collapse(
+    wants: Vec<(Entity, TaskKind)>,
+    lines: &[Line],
+    holding: impl Fn(LineKey) -> Option<Held>,
+) -> Vec<(Entity, TaskKind)> {
+    let by_member: HashMap<Entity, usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.members.len() > 1)
+        .flat_map(|(i, l)| l.members.iter().map(move |&m| (m, i)))
+        .collect();
+
+    let mut out: Vec<(Entity, TaskKind)> = Vec::with_capacity(wants.len());
+    let mut slot: HashMap<usize, usize> = HashMap::new();
+    let mut wanted: HashMap<usize, Vec<Entity>> = HashMap::new();
+    for (machine, kind) in wants {
+        let line = (kind == TaskKind::GatherResource)
+            .then(|| by_member.get(&machine).copied())
+            .flatten();
+        let Some(line) = line else {
+            out.push((machine, kind));
+            continue;
+        };
+        wanted.entry(line).or_default().push(machine);
+        slot.entry(line).or_insert_with(|| {
+            out.push((machine, kind));
+            out.len() - 1
+        });
+    }
+    for (line, at) in slot {
+        let members = &wanted[&line];
+        let mid_cycle = holding(lines[line].key)
+            .filter(|t| members.contains(&t.target) && 0 < t.progress && t.progress < t.required);
+        out[at].0 = match mid_cycle {
+            Some(task) => task.target,
+            // `members` is in rank order, so the first wanted one is the
+            // furthest downstream.
+            None => *lines[line]
+                .members
+                .iter()
+                .find(|m| members.contains(m))
+                .expect("a line with a want has a wanted member"),
+        };
+    }
+    out
+}
+
 impl Game {
     /// Every line in the base, lines of one included, sorted by key.
     pub fn production_lines(&mut self) -> Vec<Line> {

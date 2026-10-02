@@ -425,15 +425,18 @@ fn put_output(game: &mut Game, machine: Entity, item: &str, qty: u32) {
 }
 
 /// Every want kind the scheduler has, at once: a build request (prepended),
-/// a burner short of fuel, a three-deep order, a standing job and two dig
-/// marks (appended last). Eight wants.
+/// a burner short of fuel, an order three machines make, a standing job and
+/// two dig marks (appended last). Eight wants. The three machines are Mining
+/// Nodes that touch, which feeds nothing: a feed-connected chain is one
+/// production line and one want, which would turn this gate into a test of
+/// seven bodies against six wants.
 struct MixedBase {
     game: Game,
     site: Entity,
     burner: Entity,
     mine: Entity,
-    lathe: Entity,
-    press: Entity,
+    mine_b: Entity,
+    mine_c: Entity,
     node: Entity,
     digs: Vec<Entity>,
 }
@@ -445,11 +448,10 @@ fn mixed_base(seed: u32) -> MixedBase {
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
-    let press = spawn_machine_at(&mut game, "disk_press", 4, 0);
+    let mine_b = spawn_machine_at(&mut game, "mining_node", 3, 0);
+    let mine_c = spawn_machine_at(&mut game, "mining_node", 4, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
-    put_output(&mut game, lathe, ids::BLANK_SUBSTRATE, 6);
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::ROUTINE_DISK), 30))
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5_000))
         .unwrap();
     let node = spawn_machine_at(&mut game, "research_node", 2, 3);
     game.set_standing_job(node, true, false).unwrap();
@@ -473,8 +475,8 @@ fn mixed_base(seed: u32) -> MixedBase {
         site,
         burner,
         mine,
-        lathe,
-        press,
+        mine_b,
+        mine_c,
         node,
         digs,
     }
@@ -491,8 +493,8 @@ fn an_all_checked_mixed_base_schedules_as_it_did_before_the_matching() {
         site,
         burner,
         mine,
-        lathe,
-        press,
+        mine_b,
+        mine_c,
         node,
         digs,
     } = mixed_base(20261001);
@@ -513,8 +515,8 @@ fn an_all_checked_mixed_base_schedules_as_it_did_before_the_matching() {
             Some((site, Construct)),
             Some((burner, GatherResource)),
             Some((mine, GatherResource)),
-            Some((lathe, GatherResource)),
-            Some((press, GatherResource)),
+            Some((mine_b, GatherResource)),
+            Some((mine_c, GatherResource)),
             Some((node, GatherResource)),
             Some((digs[0], Excavate)),
         ],
@@ -535,8 +537,8 @@ fn an_all_checked_mixed_base_schedules_as_it_did_before_the_matching() {
             Some((digs[1], Excavate)),
             Some((burner, GatherResource)),
             Some((mine, GatherResource)),
-            Some((lathe, GatherResource)),
-            Some((press, GatherResource)),
+            Some((mine_b, GatherResource)),
+            Some((mine_c, GatherResource)),
             Some((node, GatherResource)),
             Some((digs[0], Excavate)),
         ],

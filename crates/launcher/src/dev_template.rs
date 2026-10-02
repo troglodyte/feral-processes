@@ -208,7 +208,7 @@ pub fn capture(save_path: &Path, name: &str) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_engine::components::Rarity;
+    use feral_processes_engine::components::{Rarity, TaskKind};
 
     /// The regression gate for the whole directory: a `SaveData` change or a
     /// `SAVE_FORMAT_VERSION` bump that a template cannot survive fails here,
@@ -501,6 +501,20 @@ mod tests {
         let mut game = Game::load(&out, &assets_dir()).unwrap();
         let _ = std::fs::remove_file(&out);
 
+        let bay_entity = game
+            .structure_report()
+            .into_iter()
+            .find(|s| s.kind == "assembly_bay")
+            .expect("the template stands an Assembly Bay")
+            .entity;
+        let mining_entity = game
+            .structure_report()
+            .into_iter()
+            .find(|s| s.pos == (2, 0))
+            .expect("the template stands a Mining Node at (2, 0)")
+            .entity;
+        game.set_standing_job(bay_entity, true, false).unwrap();
+        game.set_standing_job(mining_entity, true, false).unwrap();
         let terminal_before = game
             .structure_report()
             .into_iter()
@@ -525,6 +539,25 @@ mod tests {
             bay.input,
             bay.output
         );
+
+        // The template's machines are two feed-connected lines (Mining Node
+        // and Refinery; Winding Node, Power Conduit and Assembly Bay), and a
+        // line under a standing job is one job for one worker: the programs
+        // it was saved with are not one post per machine.
+        for line in [&[(2, 0), (3, 0)][..], &[(4, 0), (4, 1), (4, 2)][..]] {
+            let workers: usize = game
+                .structure_report()
+                .iter()
+                .filter(|s| line.contains(&s.pos))
+                .map(|s| {
+                    s.assignees
+                        .iter()
+                        .filter(|a| a.kind == TaskKind::GatherResource)
+                        .count()
+                })
+                .sum();
+            assert_eq!(workers, 1, "the line through {line:?} wants one worker");
+        }
     }
 
     /// Loading is not the bar for `study` either: it exists so a session

@@ -419,3 +419,66 @@ fn a_line_whose_end_machine_lacks_an_ingredient_is_fetched_by_its_one_worker() {
         1
     );
 }
+
+/// A save from before lines (or a hand-posted line) can hold a body on every
+/// machine. Under a standing-job-only base the empty-queue guard would
+/// otherwise see every want covered and return before freeing the extras.
+#[test]
+fn a_line_already_holding_two_bodies_is_cut_back_to_one() {
+    let mut g = base_game(68);
+    let (mine, lathe, _press) = disk_line(&mut g);
+    let staff = hire(&mut g, 2);
+    g.assign_cronjob(staff[0], mine).unwrap();
+    g.assign_cronjob(staff[1], lathe).unwrap();
+    g.set_standing_job(mine, true, false).unwrap();
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    g.tick();
+    assert_eq!(gatherers(&mut g).len(), 1, "{:?}", gatherers(&mut g));
+}
+
+#[test]
+fn hand_posted_bodies_on_a_line_with_no_want_are_left_alone() {
+    let mut g = base_game(69);
+    let (mine, lathe, _press) = disk_line(&mut g);
+    let staff = hire(&mut g, 2);
+    g.assign_cronjob(staff[0], mine).unwrap();
+    g.assign_cronjob(staff[1], lathe).unwrap();
+    for _ in 0..3 {
+        g.tick();
+    }
+    assert_eq!(gatherers(&mut g).len(), 2, "the empty-queue guard stands");
+}
+
+#[test]
+fn a_staffed_line_keeps_its_body_on_its_active_machine_through_a_save_and_load() {
+    let mut g = base_game(71);
+    let (mine, lathe, _press) = disk_line(&mut g);
+    // Told apart after the load, which does not keep entity ids, by max hp.
+    let staff = [spawn_tamed(&mut g, 10, 3), spawn_tamed(&mut g, 11, 3)];
+    g.set_standing_job(mine, true, false).unwrap();
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    g.tick();
+    let (worker, target) = gatherers(&mut g)[0];
+    assert_eq!(
+        target, lathe,
+        "precondition: the active machine is the lathe"
+    );
+    let worker_hp = g.world.get::<Stats>(worker).unwrap().max_hp;
+    assert!(staff.contains(&worker));
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_line_save_{}.bin",
+        std::process::id()
+    ));
+    g.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    loaded.tick();
+
+    let held = gatherers(&mut loaded);
+    assert_eq!(held.len(), 1, "{held:?}");
+    let (body, machine) = held[0];
+    assert_eq!(loaded.world.get::<Stats>(body).unwrap().max_hp, worker_hp);
+    let at = *loaded.world.get::<Position>(machine).unwrap();
+    assert_eq!((at.x, at.y), (3, 0), "still on the lathe");
+}

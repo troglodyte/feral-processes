@@ -1406,9 +1406,27 @@ impl Game {
         let a_posted_body_is_off_duty = pool.iter().zip(&held).any(|(&worker, held)| {
             held.is_some_and(|(post, kind)| !self.duty_admits_post(worker, post, kind))
         });
+        // **And a worked line holding a second body**, from a save written
+        // before lines or from posting by hand. Every want is covered, so
+        // the guard would return with the extra body still on the line for
+        // the rest of the run. Asked only of lines the scheduler *wants*:
+        // bodies hand-posted to a line nothing wants are exactly what the
+        // empty-queue guard exists to leave alone.
+        let a_wanted_line_holds_two = open
+            .iter()
+            .zip(&by_want)
+            .filter(|(_, body)| body.is_some())
+            .any(|(&post, _)| {
+                posted
+                    .iter()
+                    .filter(|&&held| same_post(&member_of, held, post))
+                    .count()
+                    > 1
+            });
         if queue_is_empty
             && !a_posted_body_is_off_the_line
             && !a_posted_body_is_off_duty
+            && !a_wanted_line_holds_two
             && open
                 .iter()
                 .zip(&by_want)

@@ -522,3 +522,74 @@ fn retiering_a_seated_program_is_refused() {
     let program = seated_program(&mut game);
     game.retier_rarity(program, Rarity::Gold);
 }
+
+/// A real save and load, never RON alone: a skipped field is invisible to a
+/// round trip through the struct.
+#[test]
+fn a_held_programs_derivation_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("derived_program_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = game();
+    let program = seated_program(&mut game);
+    game.world
+        .entity_mut(program)
+        .insert(crate::components::KernelRing(
+            crate::tuning::KERNEL_RING_MAX,
+        ));
+    game.set_hold_points(program, true).unwrap();
+    feed_one_level(&mut game, program);
+    set_level(&mut game, program, crate::tuning::TALENT_START_LEVEL + 2);
+    let node = game.talent_tree(program).expect("a tree").tiers[0]
+        .0
+        .iter()
+        .find(|c| matches!(c.node, crate::talents::TalentNode::Stat { .. }))
+        .expect("the first tier offers a stat node")
+        .id
+        .clone();
+    game.take_talent(program, &node).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.add(ItemId::from("buffer_extension"), 1);
+        inv.add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    }
+    game.equip(program, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .unwrap();
+    game.refactor_companion(program, &ItemId::from("buffer_extension"))
+        .unwrap();
+    assert!(game.world.get::<StatPoints>(program).unwrap().0 > 0);
+    assert!(game.world.get::<BoughtStats>(program).is_some());
+    let id = game.world.get::<ProgramId>(program).unwrap().0;
+    let snapshot = |game: &Game, e: Entity| {
+        (
+            stats_of(game, e),
+            *game.world.get::<Derived>(e).unwrap(),
+            *game.world.get::<StatPoints>(e).unwrap(),
+            *game.world.get::<HoldPoints>(e).unwrap(),
+            game.world.get::<ProgramBase>(e).unwrap().0,
+            game.world.get::<Attributes>(e).cloned(),
+            (game.gear_bonus(e).atk, game.gear_bonus(e).mitigation),
+            game.world.get::<BoughtStats>(e).copied(),
+            game.world.get::<Talents>(e).map(|t| t.0.clone()),
+        )
+    };
+    let before = snapshot(&game, program);
+    let record = game.creature_save_for(program).unwrap();
+    assert_eq!(
+        (record.max_hp, record.atk, record.mitigation),
+        (0, 0, 0),
+        "a seated program's derived figures are not written"
+    );
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let mut query = loaded.world.query::<(Entity, &ProgramId)>();
+    let restored = query
+        .iter(&loaded.world)
+        .find(|(_, p)| p.0 == id)
+        .map(|(e, _)| e)
+        .expect("the program survives");
+
+    assert_eq!(snapshot(&loaded, restored), before);
+}

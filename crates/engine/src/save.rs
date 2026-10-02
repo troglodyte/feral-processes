@@ -455,10 +455,21 @@ pub struct CreatureSave {
     pub species: SpeciesId,
     pub position: (i32, i32),
     pub hp: i32,
+    /// `max_hp`, `atk` and `mitigation` are **skipped when the program is
+    /// seated** (`base` is `Some`): `Game::creature_save_for` writes 0 for a
+    /// seated program and `skip_serializing_if` drops the zero, because load
+    /// rebuilds them from `base`, attributes, gear and the perk receipt
+    /// (`Game::recompute_derived`) and a stored copy would go stale on a
+    /// retune. A wild or unseated creature still writes them. The value-based
+    /// skip is what avoids a split save type: no zero is ever a real figure
+    /// for a creature that keeps them.
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub max_hp: i32,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub atk: i32,
     /// Percentage points — see `PlayerSave::mitigation` for why this earned
     /// a version bump rather than a `#[serde(default)]`.
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub mitigation: i32,
     pub tamed: bool,
     /// What this program has left to spend on routine calls — see
@@ -959,6 +970,22 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub drop_trooper: bool,
+    /// The figures a seated program derives from — see
+    /// `components::ProgramBase`. `Some` marks the program seated: load
+    /// restores `ProgramBase` and `Derived` and recomputes, and **never
+    /// seats**, which would read `Stats` this record does not carry.
+    #[serde(default)]
+    pub base: Option<crate::progression::DerivedBase>,
+    /// Banked, unspent attribute points — see `components::StatPoints`.
+    #[serde(default)]
+    pub stat_points: u32,
+    /// Whether the program holds its points — see `components::HoldPoints`.
+    #[serde(default)]
+    pub hold_points: bool,
+}
+
+fn is_zero(n: &i32) -> bool {
+    *n == 0
 }
 
 /// `serde`'s default for an individual roll — the neutral 1.0, because a
@@ -1924,7 +1951,11 @@ pub struct SaveData {
 /// attributes, gear and perk receipt (`Game::recompute_derived`), so the
 /// stored numbers are a second copy that a retune would leave stale. A
 /// removed field is the case field-named RON does not excuse from a bump.
-pub const SAVE_FORMAT_VERSION: u32 = 33;
+/// 33 → 34: a seated program's `CreatureSave::{max_hp, atk, mitigation}` are
+/// no longer written (`skip_serializing_if`, derived on load from the new
+/// `base`, with `stat_points` and `hold_points` beside it). A v33 program has
+/// no base to derive from, and loading it would read its stats as zero.
+pub const SAVE_FORMAT_VERSION: u32 = 34;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2327,6 +2358,9 @@ mod tests {
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         }
     }
 

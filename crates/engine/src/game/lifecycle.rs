@@ -2318,7 +2318,20 @@ impl Game {
                 ctx.pending_patrols.push((entity.id(), tile, c.pursuing));
             }
         }
-        Some(entity.id())
+        let id = entity.id();
+        if let Some(base) = c.base.filter(|_| c.tamed) {
+            // Restored, never seated: the record carries no figures to seat
+            // from. Recompute last, once gear, the receipt and attributes are
+            // all in place.
+            self.world.entity_mut(id).insert((
+                crate::components::ProgramBase(base),
+                crate::components::Derived::default(),
+                crate::components::StatPoints(c.stat_points),
+                crate::components::HoldPoints(c.hold_points),
+            ));
+            self.recompute_derived(id);
+        }
+        Some(id)
     }
 
     /// One creature as the save format describes it, or `None` if `e` is not
@@ -2424,13 +2437,18 @@ impl Game {
             .get_resource::<crate::tactical::TacticalBattle>()
             .filter(|b| b.siege_pack > 0)
             .and_then(|b| crate::game::siege::persist::member_of(b, e));
+        let base = self
+            .world
+            .get::<crate::components::ProgramBase>(e)
+            .map(|b| b.0);
+        let seated = base.is_some();
         Some(save::CreatureSave {
             species,
             position: (pos.x, pos.y),
             hp: stats.hp,
-            max_hp: stats.max_hp,
-            atk: stats.atk,
-            mitigation: stats.mitigation,
+            max_hp: if seated { 0 } else { stats.max_hp },
+            atk: if seated { 0 } else { stats.atk },
+            mitigation: if seated { 0 } else { stats.mitigation },
             tamed: self.world.get::<Tamed>(e).is_some(),
             power: self
                 .world
@@ -2614,6 +2632,15 @@ impl Game {
                 .world
                 .get::<crate::components::DropTrooper>(e)
                 .is_some(),
+            base,
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(e)
+                .map_or(0, |p| p.0),
+            hold_points: self
+                .world
+                .get::<crate::components::HoldPoints>(e)
+                .is_some_and(|h| h.0),
         })
     }
 

@@ -400,6 +400,9 @@ fn a_rich_program_writes_every_field_it_was_given() {
         off_duties: _,
         staff_rank: _,
         drop_trooper: _,
+        base: _,
+        stat_points: _,
+        hold_points: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");

@@ -498,6 +498,9 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -573,6 +576,9 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     }
 }
 
@@ -690,6 +696,9 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -983,6 +992,9 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1088,6 +1100,9 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1242,6 +1257,9 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1383,6 +1401,9 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1509,6 +1530,9 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1635,6 +1659,9 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1750,6 +1777,9 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -2108,6 +2138,9 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2213,6 +2246,9 @@ pub(crate) fn app_with_companions_and_cargo(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2526,6 +2562,9 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         });
     }
     data.locale = if underground {
@@ -2979,6 +3018,9 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

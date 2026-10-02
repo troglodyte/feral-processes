@@ -270,7 +270,7 @@ pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f3
 }
 
 /// The stats an entity derives from before any attribute moves them.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DerivedBase {
     pub max_hp: i32,
     pub atk: i32,

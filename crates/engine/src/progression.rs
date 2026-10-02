@@ -611,6 +611,36 @@ mod tests {
         assert_eq!(high.extraction, MINING_EXTRACTION_CAP);
     }
 
+    /// Past the crit cap, a point of Entropy would buy fumble and nothing
+    /// else, so the two caps are set to land on the same point. Retuning
+    /// either `per_point` without the caps fails here.
+    #[test]
+    fn entropy_reaches_both_caps_at_the_same_point() {
+        let db = shipped_db();
+        let base = DerivedBase::player();
+        let points_to_cap = (0..1000)
+            .find(|n| {
+                derive(&base, &attrs_at_base(&db, &[("entropy", *n)]), &db).crit >= CRIT_CHANCE_MAX
+            })
+            .unwrap();
+        let at_cap = derive(
+            &base,
+            &attrs_at_base(&db, &[("entropy", points_to_cap)]),
+            &db,
+        );
+        assert!(
+            (at_cap.fumble - FUMBLE_CHANCE_MAX).abs() < 1e-6,
+            "{}",
+            at_cap.fumble
+        );
+        let below = derive(
+            &base,
+            &attrs_at_base(&db, &[("entropy", points_to_cap - 1)]),
+            &db,
+        );
+        assert!(below.fumble < FUMBLE_CHANCE_MAX);
+    }
+
     #[test]
     fn canonical_spend_is_the_old_per_level_growth() {
         let db = shipped_db();

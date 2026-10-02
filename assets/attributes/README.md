@@ -82,7 +82,7 @@ it, rounds once per stat, then clamps to the stat's range:
 | `StatusResist` | `tuning::STATUS_RESIST_MIN` (-50) to `STATUS_RESIST_MAX` (75), in percent; negative lengthens a status |
 | `Extraction` | 0 to `tuning::MINING_EXTRACTION_CAP` (0.10) |
 | `Crit` | 0 to `tuning::CRIT_CHANCE_MAX` (0.20); starts at `CRIT_CHANCE` (0.08) |
-| `Fumble` | 0 to `tuning::FUMBLE_CHANCE_MAX` (0.12); starts at `FUMBLE_CHANCE` (0.05) |
+| `Fumble` | 0 to `tuning::FUMBLE_CHANCE_MAX` (0.11); starts at `FUMBLE_CHANCE` (0.05) |
 
 The shipped effects:
 

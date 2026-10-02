@@ -4297,8 +4297,11 @@ pub const CRIT_CHANCE_MAX: f64 = 0.20;
 // the widest band in play and `HIT_CHANCE_MIN` is a plain hit for every
 // pairing — the band test fixtures force a landing into.
 const _: () = assert!(CRIT_CHANCE_MAX < HIT_CHANCE_MIN);
-/// Ceiling on a derived fumble band. The floor is zero.
-pub const FUMBLE_CHANCE_MAX: f64 = 0.12;
+/// Ceiling on a derived fumble band. The floor is zero. Set where the
+/// shipped Entropy reaches `CRIT_CHANCE_MAX` (100: 0.05 + 60 * 0.001), so no
+/// point of Entropy buys fumble alone. Pinned against the real asset by
+/// `entropy_reaches_both_caps_at_the_same_point`.
+pub const FUMBLE_CHANCE_MAX: f64 = 0.11;
 
 /// Where the four fumble rungs divide, against `d` — how deep into the
 /// fumble band the roll fell, in `[0, 1)`. Weighted so the deep rungs are

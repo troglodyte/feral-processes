@@ -211,7 +211,7 @@ themselves).
 | `machine` | The machine's own base-space tile, `[x, y]` — what tells one instance of a kind from another. |
 | `kind` | Its `StructureDef` id. |
 | `tier` | `StructureTier`, 1 if it has none. |
-| `worker_species` | The posted program's species, whose `base_int` feeds the reliability roll. `null` for the player, who has no species and works a node at exactly the roster average. |
+| `worker_species` | The posted program's species, whose Analysis feeds the reliability roll. `null` for the player, who has no species and works a node at exactly the roster average. |
 | `rolled` / `landed` | What the cycle produced against what reached the buffer. The difference is **the clog loss** — `deliver_payout` clamps against `output_room()`, and nothing else in the game records it. |
 | `ok` | `false` is a fizzle: a cycle that produced nothing. The only empirical route to `systems::mining_success_chance`. |
 

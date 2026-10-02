@@ -214,11 +214,28 @@ fn an_overspend_writes_nothing() {
 #[test]
 fn a_bad_row_refuses_the_whole_spend() {
     let mut game = Game::new(7012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Every shipped attribute has effects, so a flavour-only one is authored
+    // here for the NotBuyable row.
+    let dir = scratch_assets_dir("flavour_attribute");
+    std::fs::create_dir_all(&*dir).unwrap();
+    for entry in std::fs::read_dir(test_assets_dir().join("attributes")).unwrap() {
+        let path = entry.unwrap().path();
+        std::fs::copy(&path, dir.join(path.file_name().unwrap())).unwrap();
+    }
+    std::fs::write(
+        dir.join("flavour.ron"),
+        "(id: \"flavour\", name: \"Flavour\", legacy: \"x\", short: \"s\", \
+         meaning: \"m\", base: 10, spread: 0)",
+    )
+    .unwrap();
+    let (db, warnings) = crate::attributes::AttributeDb::load_dir(&dir).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    game.world.insert_resource(db);
     bank(&mut game, 6);
     let player = game.player_entity();
     let before = game.world.get::<Attributes>(player).cloned().unwrap();
     assert_eq!(
-        game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 1), ("entropy", 1)])),
+        game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 1), ("flavour", 1)])),
         Err(SpendError::NotBuyable)
     );
     assert_eq!(

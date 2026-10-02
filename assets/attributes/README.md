@@ -22,10 +22,10 @@ creature's attributes are flavour: no formula, roll or gate reads them. The
 player's are the stat allocation. Each point of an attribute above its
 catalogue `base` moves the derived stats its `effects` name, and
 `progression::derive` is the one function that turns a player's attributes
-into HP, attack, mitigation, decompiler skill, Max Power, status resist and
-extraction. The level-up and creation Points screens, `balance_sim` and the
-game itself all call it. An attribute with no `effects` is flavour only, as
-Entropy is today.
+into HP, attack, mitigation, decompiler skill, Max Power, status resist,
+extraction, crit and fumble. The level-up and creation Points screens,
+`balance_sim` and the game itself all call it. An attribute with no
+`effects` is flavour only; every shipped attribute has some.
 
 A creature's value is **minted once, from the place and the body, and stored**.
 The mint is a deterministic fold — the world seed, the tile the body spawned
@@ -59,7 +59,7 @@ Each file is one attribute:
 | `meaning` | The page's prose: what a high or low value says about this program. **Never what it does** — see below. |
 | `base` | The value a body with nothing authored for it mints around. **It is also the zero point of `effects`**: a player at `base` gets nothing from the attribute, and each point above it (or below, for a negative sum) moves the stats. Editing it therefore shifts every player's derived stats, not only new bodies. |
 | `spread` | How far either side of the base a creature's own value may land. `0` is legal and means every creature reads the same number. Keep it below `base`, or a creature can mint a negative attribute. The player has no spread; see below. |
-| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`; an unknown name makes the file malformed, and it is skipped with a warning. |
+| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`, `Crit`, `Fumble`; an unknown name makes the file malformed, and it is skipped with a warning. |
 | `does` | `#[serde(default)]` — the one sentence saying what the effects do, in the player's words, shown beside the attribute on the Points screens. |
 
 The first seven fields are required. `effects` and `does` default to empty,
@@ -81,6 +81,8 @@ it, rounds once per stat, then clamps to the stat's range:
 | `MaxPower` | at least `tuning::MIN_MAX_POWER` (20) |
 | `StatusResist` | `tuning::STATUS_RESIST_MIN` (-50) to `STATUS_RESIST_MAX` (75), in percent; negative lengthens a status |
 | `Extraction` | 0 to `tuning::MINING_EXTRACTION_CAP` (0.10) |
+| `Crit` | 0 to `tuning::CRIT_CHANCE_MAX` (0.20); starts at `CRIT_CHANCE` (0.08) |
+| `Fumble` | 0 to `tuning::FUMBLE_CHANCE_MAX` (0.12); starts at `FUMBLE_CHANCE` (0.05) |
 
 The shipped effects:
 
@@ -91,7 +93,7 @@ The shipped effects:
 | Analysis | +1 attack, +1 decompiler, +0.005 extraction |
 | Bandwidth | +2 max Power |
 | Persistence | +1% status resist |
-| Entropy | nothing (no `effects`) |
+| Entropy | +0.002 crit chance, +0.001 fumble chance |
 
 `tuning::CANONICAL_PARITY_PER_LEVEL` (4) and `CANONICAL_ANALYSIS_PER_LEVEL`
 (2) reproduce the old automatic per-level growth, and a compile-time assert
@@ -103,7 +105,7 @@ either `per_point` without those constants fails the build.
 **An attribute is buyable exactly when `effects` is non-empty**
 (`AttributeDef::buyable`). Only buyable attributes are listed on the
 creation and level-up Points screens, and a spend naming one that is not
-(Entropy) is refused with `NotBuyable`. There is no separate flag: give an
+is refused with `NotBuyable`. There is no separate flag: give an
 attribute an effect and it appears; remove them all and it is flavour again.
 Every buyable attribute must also author `does`, or the Points screen would
 have nothing to say beside the number.
@@ -121,7 +123,7 @@ The rule used to forbid the claim everywhere, because nothing implemented
 one. It is relaxed only in `does`, which is the sentence authored beside
 `effects` and so is a claim made where the mechanic lives: it should match
 the `effects` exactly, and a test that it exists is
-`entropy_is_not_buyable_and_every_buyable_attribute_says_what_it_does`.
+`every_shipped_attribute_is_buyable_and_says_what_it_does`.
 
 ## A seventh attribute is a file drop
 

@@ -2,10 +2,11 @@ use crate::attributes::{AttributeDb, AttributeId, DerivedStat};
 use crate::components::{Attributes, Experience, POWER_MAX, Stats};
 use crate::species::SpeciesDef;
 use crate::tuning::{
-    ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, DIFFICULTY_EASY_MAX,
-    EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL, HP_PER_LEVEL, MIN_MAX_POWER,
-    MINING_EXTRACTION_CAP, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL,
-    STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
+    ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, CRIT_CHANCE,
+    CRIT_CHANCE_MAX, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
+    FUMBLE_CHANCE, FUMBLE_CHANCE_MAX, HP_PER_LEVEL, MIN_MAX_POWER, MINING_EXTRACTION_CAP,
+    PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL, STATUS_RESIST_MAX,
+    STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 use std::collections::BTreeMap;
 
@@ -252,6 +253,8 @@ pub struct DerivedBase {
     pub max_power: f32,
     pub status_resist: i32,
     pub extraction: f32,
+    pub crit: f64,
+    pub fumble: f64,
 }
 
 impl DerivedBase {
@@ -265,6 +268,8 @@ impl DerivedBase {
             max_power: POWER_MAX,
             status_resist: 0,
             extraction: 0.0,
+            crit: CRIT_CHANCE,
+            fumble: FUMBLE_CHANCE,
         }
     }
 }
@@ -280,6 +285,11 @@ pub struct DerivedStats {
     pub max_power: f32,
     pub status_resist: i32,
     pub extraction: f32,
+    /// The crit band `battle::resolve_attack` reads, before its clamp to
+    /// the hit chance.
+    pub crit: f64,
+    /// The fumble band, before its clamp to `1 - hit chance`.
+    pub fumble: f64,
 }
 
 impl DerivedStats {
@@ -295,6 +305,8 @@ impl DerivedStats {
             S::MaxPower => self.max_power,
             S::StatusResist => self.status_resist as f32,
             S::Extraction => self.extraction,
+            S::Crit => self.crit as f32,
+            S::Fumble => self.fumble as f32,
         }
     }
 }
@@ -335,6 +347,8 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
             .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
         extraction: (base.extraction + sum(DerivedStat::Extraction))
             .clamp(0.0, MINING_EXTRACTION_CAP),
+        crit: (base.crit + sum(DerivedStat::Crit) as f64).clamp(0.0, CRIT_CHANCE_MAX),
+        fumble: (base.fumble + sum(DerivedStat::Fumble) as f64).clamp(0.0, FUMBLE_CHANCE_MAX),
     }
 }
 
@@ -484,6 +498,8 @@ mod tests {
         assert_eq!(d.max_power, POWER_MAX);
         assert_eq!(d.status_resist, 0);
         assert_eq!(d.extraction, 0.0);
+        assert_eq!(d.crit, CRIT_CHANCE);
+        assert_eq!(d.fumble, FUMBLE_CHANCE);
     }
 
     #[test]
@@ -518,8 +534,13 @@ mod tests {
         let persistence = derive(&base, &attrs_at_base(&db, &[("persistence", 7)]), &db);
         assert_eq!(persistence.status_resist, 7);
         assert_eq!(persistence.atk, at.atk);
-        let entropy = derive(&base, &attrs_at_base(&db, &[("entropy", 9)]), &db);
-        assert_eq!(entropy, at);
+        let entropy = derive(&base, &attrs_at_base(&db, &[("entropy", 10)]), &db);
+        // Volatility: both bands widen together.
+        assert!((entropy.crit - (CRIT_CHANCE + 0.02)).abs() < 1e-6);
+        assert!((entropy.fumble - (FUMBLE_CHANCE + 0.01)).abs() < 1e-6);
+        assert_eq!((entropy.max_hp, entropy.atk), (at.max_hp, at.atk));
+        assert_eq!(parity.crit, at.crit);
+        assert_eq!(parity.fumble, at.fumble);
     }
 
     /// Two half-point terms sum to a whole point: rounding each term first
@@ -563,6 +584,7 @@ mod tests {
                     ("footprint", -1000),
                     ("bandwidth", -1000),
                     ("persistence", -1000),
+                    ("entropy", -1000),
                 ],
             ),
             &db,
@@ -574,11 +596,17 @@ mod tests {
         assert_eq!(low.max_power, MIN_MAX_POWER);
         assert_eq!(low.status_resist, STATUS_RESIST_MIN);
         assert_eq!(low.extraction, 0.0);
+        assert_eq!((low.crit, low.fumble), (0.0, 0.0));
         let high = derive(
             &base,
-            &attrs_at_base(&db, &[("analysis", 1000), ("persistence", 1000)]),
+            &attrs_at_base(
+                &db,
+                &[("analysis", 1000), ("persistence", 1000), ("entropy", 1000)],
+            ),
             &db,
         );
+        assert_eq!(high.crit, CRIT_CHANCE_MAX);
+        assert_eq!(high.fumble, FUMBLE_CHANCE_MAX);
         assert_eq!(high.status_resist, STATUS_RESIST_MAX);
         assert_eq!(high.extraction, MINING_EXTRACTION_CAP);
     }

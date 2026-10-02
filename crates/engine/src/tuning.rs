@@ -4290,6 +4290,12 @@ pub const CRIT_ROLL_MULTIPLIER: i32 = 2;
 /// Clamped to at most `1 - hit_chance`, so a fumble is always a miss.
 pub const FUMBLE_CHANCE: f64 = 0.05;
 
+/// Ceiling on a derived crit band, so Entropy cannot buy crits as the
+/// default swing. The floor is zero.
+pub const CRIT_CHANCE_MAX: f64 = 0.20;
+/// Ceiling on a derived fumble band. The floor is zero.
+pub const FUMBLE_CHANCE_MAX: f64 = 0.12;
+
 /// Where the four fumble rungs divide, against `d` — how deep into the
 /// fumble band the roll fell, in `[0, 1)`. Weighted so the deep rungs are
 /// rare: Exposed below the first, Recoil below the second, Opening below the

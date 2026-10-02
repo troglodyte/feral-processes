@@ -53,6 +53,17 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.14.5
+
+**A battle map now tells you what its colours mean.** A key in the board's
+bottom-left corner names each wash on the ground — move, cover, danger,
+aim, hits — showing only the ones drawn at that moment, and the Battle maps
+help page explains each. The cells a routine will hit are now white, the
+aim cursor's own colour; they were a stronger shade of the danger zone's
+red, so the two read as one wherever they met. A body standing in cover now
+wears a small green sunrise in its top-right corner instead of a triangle
+that mirrored the difficulty mark opposite it.
+
 ## 0.14.4
 
 **A sulking program now acts on its grudge.** Once a program's grievance

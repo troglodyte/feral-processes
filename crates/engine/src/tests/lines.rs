@@ -582,3 +582,97 @@ fn a_structure_report_carries_its_line_key_only_for_a_line_of_two_or_more() {
     assert_eq!(key(mine), Some(LineKey((2, 0))));
     assert_eq!(key(alone), None);
 }
+
+// ---------------------------------------------------------------------
+// Review findings
+// ---------------------------------------------------------------------
+
+#[test]
+fn a_standing_job_on_a_conduit_beside_a_recharger_is_accepted() {
+    let mut g = base_game(90);
+    let conduit = spawn_machine_at(&mut g, "power_conduit", 4, 4);
+    let recharger = spawn_machine_at(&mut g, "recharger_node", 4, 5);
+    assert!(g.line_of(conduit).is_some());
+    assert_eq!(g.line_of(conduit), g.line_of(recharger));
+    g.set_standing_job(conduit, true, false)
+        .expect("the conduit is workable, and only it takes the flag");
+    assert_eq!(g.standing_job(conduit), Some((true, false)));
+    assert_eq!(g.standing_job(recharger), None, "nothing to work there");
+    assert!(g.set_standing_job(recharger, true, false).is_err());
+}
+
+#[test]
+fn a_guard_toggle_leaves_the_work_of_the_rest_of_a_merged_line_alone() {
+    let mut g = base_game(93);
+    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
+    g.set_standing_job(mine, true, false).unwrap();
+    // Built after, so the lathe joins a line whose other member is working
+    // while it has no job of its own.
+    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
+    assert_eq!(g.line_of(mine), g.line_of(lathe));
+    g.set_standing_job(lathe, false, true).unwrap();
+    assert_eq!(g.standing_job(lathe), Some((false, true)));
+    assert_eq!(g.standing_job(mine), Some((true, false)), "work untouched");
+}
+
+#[test]
+fn a_player_working_one_member_covers_the_whole_line_without_flicker() {
+    let mut g = base_game(91);
+    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
+    let staff = hire(&mut g, 1);
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    g.queue_work_order(WorkOrder::batch(ItemId::from(ids::BLANK_SUBSTRATE), 40))
+        .unwrap();
+    g.tick();
+    assert_eq!(posted(&g, staff[0]), Some(lathe), "precondition");
+    stand_in_base_at(&mut g, 1, 0);
+    g.work_structure(mine).unwrap();
+    let mut posted_ticks = 0;
+    for _ in 0..60 {
+        g.tick();
+        if posted(&g, staff[0]).is_some() {
+            posted_ticks += 1;
+        }
+    }
+    let player = g.player_entity();
+    assert!(
+        g.world
+            .get::<Task>(player)
+            .is_some_and(|t| t.target == mine),
+        "precondition: the player is still on the mine"
+    );
+    assert_eq!(
+        posted_ticks, 0,
+        "the player covers the line; the worker is free, not in and out"
+    );
+    assert_eq!(g.line_reports()[0].active, None, "staff report only");
+}
+
+#[test]
+fn a_staffed_line_is_not_a_run_of_idle_nodes() {
+    let mut g = base_game(92);
+    let (mine, lathe, _press) = disk_line(&mut g);
+    hire(&mut g, 3);
+    g.set_standing_job(mine, true, false).unwrap();
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut g, lathe, ids::BLANK_SUBSTRATE, 8);
+    g.tick();
+    assert_eq!(gatherers(&mut g).len(), 1);
+    let rows: Vec<String> = g.attention().into_iter().map(|r| r.text).collect();
+    assert!(
+        !rows.iter().any(|t| t.contains("without a program")),
+        "{rows:?}"
+    );
+}
+
+#[test]
+fn an_unstaffed_line_is_one_idle_node_not_one_per_machine() {
+    let mut g = base_game(94);
+    disk_line(&mut g);
+    let rows: Vec<String> = g.attention().into_iter().map(|r| r.text).collect();
+    assert!(
+        rows.iter().any(|t| t == "1 node without a program"),
+        "{rows:?}"
+    );
+}

@@ -183,17 +183,24 @@ pub(crate) struct Held {
     pub required: u32,
 }
 
-/// The `GatherResource` task each line's worker holds, by line. A line has
-/// one worker, so a second holder (a save from before lines) is resolved by
-/// entity order rather than query order.
+/// The `GatherResource` task each line's worker holds, by line. Read off
+/// `staff` alone: the player's own `work_structure` task is an outsider the
+/// scheduler routes around, never the line's worker. A line has one worker,
+/// so a second holder (a save from before lines) is resolved by entity order
+/// rather than query order.
 pub(crate) fn line_holders(
     world: &mut World,
     member_of: &HashMap<Entity, LineKey>,
+    staff: &[Entity],
 ) -> HashMap<LineKey, Held> {
     let mut query = world.query::<(Entity, &Task)>();
     let mut held: Vec<(Entity, Held)> = query
         .iter(world)
-        .filter(|(_, t)| t.kind == TaskKind::GatherResource && member_of.contains_key(&t.target))
+        .filter(|(e, t)| {
+            staff.contains(e)
+                && t.kind == TaskKind::GatherResource
+                && member_of.contains_key(&t.target)
+        })
         .map(|(e, t)| {
             (
                 e,
@@ -280,7 +287,8 @@ impl Game {
             .filter(|l| l.members.len() > 1)
             .collect();
         let member_of = membership(&lines);
-        let holders = line_holders(&mut self.world, &member_of);
+        let staff = self.base_staff();
+        let holders = line_holders(&mut self.world, &member_of, &staff);
         lines
             .into_iter()
             .map(|line| {

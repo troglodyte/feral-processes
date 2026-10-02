@@ -1732,6 +1732,37 @@ impl StructureReport {
     pub fn is_idle(&self) -> bool {
         self.workable && self.assignees.is_empty()
     }
+
+    /// Whether a production line has nobody on it: one worker runs the whole
+    /// line, so a staffed three-machine line has two machines with no
+    /// assignee that are not idle, and only a line with no body on *any*
+    /// member is.
+    pub fn line_is_idle<'a>(members: impl IntoIterator<Item = &'a StructureReport>) -> bool {
+        let mut any_workable = false;
+        for member in members {
+            if !member.assignees.is_empty() {
+                return false;
+            }
+            any_workable |= member.workable;
+        }
+        any_workable
+    }
+
+    /// How many things on the base want a program: every idle structure of
+    /// its own, and every idle *line* once however many machines it has.
+    pub fn idle_count(structures: &[StructureReport]) -> usize {
+        let alone = structures
+            .iter()
+            .filter(|s| s.line.is_none() && s.is_idle())
+            .count();
+        let keys: std::collections::BTreeSet<_> =
+            structures.iter().filter_map(|s| s.line).collect();
+        let lines = keys
+            .into_iter()
+            .filter(|&key| Self::line_is_idle(structures.iter().filter(|s| s.line == Some(key))))
+            .count();
+        alone + lines
+    }
 }
 
 /// Which condition an [`AttentionRow`] reports.

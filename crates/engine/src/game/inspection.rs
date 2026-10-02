@@ -1788,7 +1788,7 @@ impl Game {
             });
         }
 
-        let idle = structures.iter().filter(|s| s.is_idle()).count();
+        let idle = StructureReport::idle_count(&structures);
         if idle > 0 {
             let noun = if idle == 1 { "node" } else { "nodes" };
             rows.push(AttentionRow {

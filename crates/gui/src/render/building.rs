@@ -1426,7 +1426,7 @@ pub(super) fn draw_structures(
                 match lines.iter().find(|l| l.key == key) {
                     Some(line) => (
                         line_headline(line),
-                        if members.iter().any(|s| structure_is_idle(s)) {
+                        if StructureReport::line_is_idle(members.iter().copied()) {
                             YELLOW
                         } else {
                             TEXT

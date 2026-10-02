@@ -929,8 +929,8 @@ impl Game {
             return;
         }
         let lines = lines::lines_in(&mut self.world);
-        let wanted = self.base_wants(&lines);
         let staff = self.base_staff();
+        let wanted = self.base_wants(&lines, &staff);
         // **Before the drift and before the assignment.** The drift is what
         // walks an off-shift body to its amenity, so the marker has to be on
         // it by then; and the assignment reads the same marker to decide who
@@ -992,8 +992,8 @@ impl Game {
             return;
         }
         let lines = lines::lines_in(&mut self.world);
-        let wanted = self.base_wants(&lines);
         let staff = self.base_staff();
+        let wanted = self.base_wants(&lines, &staff);
         let amenities = self.amenities();
         self.assign_base_labour(wanted, &lines, &staff, &amenities);
     }
@@ -1001,7 +1001,7 @@ impl Game {
     /// Every want the base holds this pass, in priority order — **the
     /// priority is the position in this list**, and the matching fills it
     /// front to back.
-    fn base_wants(&mut self, lines: &[Line]) -> Vec<(Entity, TaskKind)> {
+    fn base_wants(&mut self, lines: &[Line], staff: &[Entity]) -> Vec<(Entity, TaskKind)> {
         // **Build requests come first, ahead of every work order.** The
         // priority *is* the position in this list — the matching below never
         // un-seats an earlier want for a later one — so this is the whole of
@@ -1060,7 +1060,7 @@ impl Game {
         // position is its first member's: collapsing earlier would let a
         // later source add a second want for the same line.
         let member_of = lines::membership(lines);
-        let holders = lines::line_holders(&mut self.world, &member_of);
+        let holders = lines::line_holders(&mut self.world, &member_of, staff);
         lines::collapse(wanted, lines, |key| holders.get(&key).copied())
     }
 
@@ -1116,7 +1116,16 @@ impl Game {
             .filter_map(|e| e.get::<Task>())
             .map(|t| (t.target, t.kind))
             .collect();
-        wanted.retain(|post| !outsiders.contains(post));
+        // **An outsider on any member covers the whole line**: the line's
+        // want names one machine, and an outsider on another member would
+        // otherwise leave the want standing, post a second body on the
+        // line, and be cut back again the next tick.
+        let member_of = lines::membership(lines);
+        wanted.retain(|post| {
+            !outsiders
+                .iter()
+                .any(|&outsider| same_post(&member_of, outsider, *post))
+        });
 
         // **One walk field per body, shared by every reach question below.**
         // `post_route` costs a walk per face and a plan can be a hundred
@@ -1241,7 +1250,6 @@ impl Game {
                 .get(&structure.kind)
                 .is_some_and(|d| d.stores)
         });
-        let member_of = lines::membership(lines);
         let mut pool: Vec<Entity> = Vec::new();
         let mut open = wanted.clone();
         for &worker in &on_shift {
@@ -1285,9 +1293,13 @@ impl Game {
             // **The holder of a line's want is whoever is posted to any
             // member**, so the seat survives the active machine moving and
             // the diff re-posts the same body rather than swapping two.
-            holder[index] = held
-                .iter()
-                .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)));
+            // The body on the want's own machine first, and only then one on
+            // another member, so two bodies on a line keep the one that
+            // is already where the line is working.
+            holder[index] = held.iter().position(|h| *h == Some(post)).or_else(|| {
+                held.iter()
+                    .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)))
+            });
         }
         let by_want = {
             let game: &Game = self;
@@ -2548,19 +2560,26 @@ impl Game {
                 return Err(format!("{name} can't be raided — it doesn't need a guard."));
             }
         }
-        // **Every member of the line takes the flag**, each checked on its
-        // own: a line is one job, so a toggle that reached only the row
-        // pressed would leave the rest to be staffed separately. `guard`
-        // stays per structure, because guarding is not production.
-        let members = self.line_members(structure);
-        if work && !members.iter().all(|&m| self.accepts_a_program(m)) {
+        // **The work flag reaches every workable member of the line**: a line
+        // is one job, so a toggle that reached only the row pressed would
+        // leave the rest to be staffed separately. A member that cannot be
+        // worked (a Recharger the fuel edge pulled in) is left as it is, and
+        // only the structure pressed is refused. The flag moves the others
+        // **only when the pressed machine's own flag changes** — the guard
+        // toggle passes that flag back unchanged, and writing it would switch
+        // off work the rest of a merged line still had. `guard` stays per
+        // structure, because guarding is not production.
+        if work && !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
-        for member in members {
+        let work_changed = work != self.standing_job(structure).is_some_and(|(w, _)| w);
+        for member in self.line_members(structure) {
             let member_guard = if member == structure {
                 guard
-            } else {
+            } else if work_changed && self.accepts_a_program(member) {
                 self.standing_job(member).is_some_and(|(_, g)| g)
+            } else {
+                continue;
             };
             let mut entity = self.world.entity_mut(member);
             if work || member_guard {

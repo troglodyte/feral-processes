@@ -1,5 +1,5 @@
 //! `Game`'s API onto the Base staff work table — phase 3 of work
-//! assignments (`docs/superpowers/specs/2026-09-27-work-assignments-design.md`
+//! assignments (`docs/superpowers/archive/specs/2026-09-27-work-assignments-design.md`
 //! §5). `work_table` is the one derivation; `set_duty`, `set_duty_column`
 //! and `move_staff_row` are its only writers.
 

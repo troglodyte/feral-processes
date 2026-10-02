@@ -1,5 +1,5 @@
 //! Calling a Drop Trooper into a battle map — drop pods phase B2
-//! (`docs/superpowers/specs/2026-09-27-drop-pods-design.md` §4–6).
+//! (`docs/superpowers/archive/specs/2026-09-27-drop-pods-design.md` §4–6).
 //!
 //! `reinforcement_pairing` is the one derivation of *who drops through
 //! which pod*: `reinforcement_refusal` asks it ahead of the charge and

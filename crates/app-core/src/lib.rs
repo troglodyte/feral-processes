@@ -2175,7 +2175,8 @@ pub enum Mode {
     Notification,
     /// The level-up summary, shown once a level lands and the player is
     /// back on the map — see `App::pending_level_up` and correction 8 of
-    /// `docs/superpowers/plans/2026-09-24-level-up-summary.md`.
+    /// `docs/superpowers/plans/2026-09-24-level-up-summary.md` (deleted;
+    /// `git show c272adee:<path>` reads it).
     ///
     /// Opened from inside `App::show_next_notification`, **ahead of** the
     /// notification queue it already gates: a level-up earned mid-fight

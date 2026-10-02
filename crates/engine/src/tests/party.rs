@@ -2440,10 +2440,10 @@ fn a_pinned_program_is_not_healed_by_a_rest() {
 // The sixth role: `ProgramRole::Outpost`
 //
 // The outposts plan's own census, run the way decision 2 ran `UnderStudy`'s
-// above: `docs/superpowers/plans/2026-09-23-outposts.md`, corrections 1 and
-// 2. `components::PostedAt` is the one authoritative fact; `program_role` is
-// the one reader of it, and the doors below are held by these tests and
-// nothing else.
+// above: `docs/superpowers/plans/2026-09-23-outposts.md` (deleted; `git show
+// c272adee:<path>` reads it), corrections 1 and 2. `components::PostedAt`
+// is the one authoritative fact; `program_role` is the one reader of it,
+// and the doors below are held by these tests and nothing else.
 // ---------------------------------------------------------------------
 
 #[test]

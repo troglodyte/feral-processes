@@ -34,7 +34,7 @@ pub enum ProgramRole {
     /// Posted at an outpost — `components::PostedAt`. Between `Sortie` and
     /// `UnderStudy` for `Sortie`'s own reason: this program is away from the
     /// base too, and its consequences are meant to be the same kind of
-    /// omissions — see `docs/superpowers/specs/2026-09-23-outposts-design.md`
+    /// omissions — see `docs/superpowers/archive/specs/2026-09-23-outposts-design.md`
     /// §6 and correction 1/2 of the outposts plan.
     ///
     /// The doors that already filter on `== Staff` (`dispatch_sortie`,

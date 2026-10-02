@@ -80,7 +80,7 @@ impl SpawnEscalation {
 ///
 /// Rarity and the wild routine pool only, deliberately: `Potential` mints
 /// fresh on every door, including a reinitialized program, per
-/// `docs/superpowers/specs/2026-09-28-reinitialization-protocol-design.md`
+/// `docs/superpowers/archive/specs/2026-09-28-reinitialization-protocol-design.md`
 /// — a `DownedProgram` record doesn't carry it, only what it *was* (rarity,
 /// the one routine it happened to be running), never what it might roll
 /// differently the second time.

@@ -1,5 +1,6 @@
 //! Outposts: the record's save form (Phase 1) and growth/production
-//! (Phase 2, Tasks 3–4) of `docs/superpowers/plans/2026-09-23-outposts.md`.
+//! (Phase 2, Tasks 3–4) of `docs/superpowers/plans/2026-09-23-outposts.md`
+//! (deleted; `git show c272adee:<path>` reads it).
 //! The refusal ladders in `Game::found_outpost`/`post_to_outpost` and the
 //! def loader in `outposts::OutpostDb` have their own inline unit tests;
 //! this file is the cross-cutting save/load round trip and the

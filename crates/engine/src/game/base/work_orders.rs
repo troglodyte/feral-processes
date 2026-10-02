@@ -1293,13 +1293,9 @@ impl Game {
             // **The holder of a line's want is whoever is posted to any
             // member**, so the seat survives the active machine moving and
             // the diff re-posts the same body rather than swapping two.
-            // The body on the want's own machine first, and only then one on
-            // another member, so two bodies on a line keep the one that
-            // is already where the line is working.
-            holder[index] = held.iter().position(|h| *h == Some(post)).or_else(|| {
-                held.iter()
-                    .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)))
-            });
+            holder[index] = held
+                .iter()
+                .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)));
         }
         let by_want = {
             let game: &Game = self;
@@ -2564,19 +2560,20 @@ impl Game {
         // is one job, so a toggle that reached only the row pressed would
         // leave the rest to be staffed separately. A member that cannot be
         // worked (a Recharger the fuel edge pulled in) is left as it is, and
-        // only the structure pressed is refused. The flag moves the others
-        // **only when the pressed machine's own flag changes** — the guard
-        // toggle passes that flag back unchanged, and writing it would switch
-        // off work the rest of a merged line still had. `guard` stays per
-        // structure, because guarding is not production.
+        // only the structure pressed is refused. Work is switched **off** on
+        // the others only when the pressed machine's own flag changes — the
+        // guard toggle passes that flag back unchanged, and writing it would
+        // switch off work the rest of a merged line still had. `guard` stays
+        // per structure, because guarding is not production.
         if work && !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
         let work_changed = work != self.standing_job(structure).is_some_and(|(w, _)| w);
+        let reaches_others = work || work_changed;
         for member in self.line_members(structure) {
             let member_guard = if member == structure {
                 guard
-            } else if work_changed && self.accepts_a_program(member) {
+            } else if reaches_others && self.accepts_a_program(member) {
                 self.standing_job(member).is_some_and(|(_, g)| g)
             } else {
                 continue;

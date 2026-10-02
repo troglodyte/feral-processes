@@ -58,7 +58,8 @@ pub(super) fn attribute_line(row: &CreationRow) -> Option<String> {
 /// The key line under the rows. `spends_pool` is creation: a pool that is
 /// lost if not spent, so the wizard moves on only once it is. Otherwise the
 /// points are banked and leaving keeps them.
-pub(super) fn footer(pool: u32, left: u32, spends_pool: bool) -> String {
+pub(super) fn footer(pool: u32, left: u32, spends_pool: bool, owner: Option<&str>) -> String {
+    let whose = owner.map(|name| format!(" for {name}")).unwrap_or_default();
     let keys = "Left/Right spends (Shift: all, Ctrl: half)";
     match spends_pool {
         true => format!(
@@ -66,7 +67,7 @@ pub(super) fn footer(pool: u32, left: u32, spends_pool: bool) -> String {
             pool - left
         ),
         false => format!(
-            "{left} of {pool} points left - {keys}; Enter confirms, Esc keeps the rest banked"
+            "{left} of {pool} points left{whose} - {keys}; Enter confirms, Esc keeps the rest banked"
         ),
     }
 }
@@ -82,18 +83,24 @@ pub(super) fn draw_allocate_stats(
     draw_popup(title, PopupSize::Large, rows, refusal, painter, m);
 }
 
-/// The popup's title: names the program whose points these are, and says
-/// nothing extra for the player's own.
-pub(super) fn allocate_stats_title(app: &App) -> String {
+/// The name of the program whose points these are, `None` for the player's
+/// own: the title and the footer both name it.
+fn allocation_owner(app: &App) -> Option<String> {
     let program = match app.stat_allocation.as_ref().map(|a| a.purpose()) {
         Some(AllocationFor::Owned(StatOwner::Program(e))) => Some(e),
         _ => None,
-    };
-    match program
-        .zip(app.game.as_ref())
-        .and_then(|(e, game)| game.manifest(e))
-    {
-        Some(view) => format!("Spend Stat Points - {}", view.name),
+    }?;
+    app.game
+        .as_ref()
+        .and_then(|game| game.manifest(program))
+        .map(|view| view.name)
+}
+
+/// The popup's title: names the program whose points these are, and says
+/// nothing extra for the player's own.
+pub(super) fn allocate_stats_title(app: &App) -> String {
+    match allocation_owner(app) {
+        Some(name) => format!("Spend Stat Points - {name}"),
         None => "Spend Stat Points".to_string(),
     }
 }
@@ -124,6 +131,7 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
         app.allocation_pool(),
         app.allocation_points_left(),
         false,
+        allocation_owner(app).as_deref(),
     )));
     rows
 }
@@ -259,6 +267,34 @@ mod tests {
             .map(super::super::popup::row_label_text)
             .collect();
         assert!(text.iter().any(|t| t.contains("AGAINST A TYPICAL ZONE 99")));
+    }
+
+    /// The footer names whose points are being spent, as the title does: a
+    /// program by name, the player by nothing.
+    #[test]
+    fn the_footer_names_the_program_whose_points_these_are() {
+        let mut game = super::super::test_support::game_with_a_single_program(7);
+        let program = game.owned_pets()[0].entity;
+        let name = game.manifest(program).unwrap().name;
+        let allocation = StatAllocation::new(
+            AllocationFor::Owned(StatOwner::Program(program)),
+            4,
+            game.derived_base(program),
+            game.attribute_db(),
+            game.attributes_of(program),
+        );
+        let mut app = shipped_app();
+        app.game = Some(game);
+        app.stat_allocation = Some(allocation);
+        app.mode = Mode::AllocateStats;
+
+        let text: Vec<String> = allocate_stats_rows(&app)
+            .iter()
+            .map(super::super::popup::row_label_text)
+            .collect();
+        let footer = text.iter().find(|t| t.contains("points left")).unwrap();
+        assert!(footer.contains(&format!("for {name}")), "{footer}");
+        assert!(allocate_stats_title(&app).ends_with(&name));
     }
 
     fn shipped_app() -> App {

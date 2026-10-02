@@ -267,7 +267,7 @@ fn footer(app: &App, step: CreationStep) -> String {
             app.creation_credits_left()
         ),
         CreationStep::Points => {
-            points::footer(CREATION_STAT_POINTS, app.creation_points_left(), true)
+            points::footer(CREATION_STAT_POINTS, app.creation_points_left(), true, None)
         }
         CreationStep::Perks => {
             // What the achievement ladder is about to add is named here

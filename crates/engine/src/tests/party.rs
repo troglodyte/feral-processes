@@ -2134,7 +2134,7 @@ fn a_fused_companion_joins_the_roster_with_a_full_reserve() {
         .expect("a fused program exists");
     assert_eq!(
         game.world.get::<PowerReserve>(child).map(|r| r.get()),
-        Some(POWER_MAX),
+        Some(game.max_power(child)),
         "a fused program must be able to run"
     );
 }

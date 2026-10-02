@@ -1479,9 +1479,28 @@ impl Game {
         fn fuse_stat(x: i32, y: i32) -> i32 {
             x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
-        let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
-        let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
-        let fused_def = fuse_stat(stats_a.mitigation, stats_b.mitigation);
+        // The receipt is taken out of each parent before the arithmetic and
+        // the dominant parent's put back on the child: a talent's stat is
+        // not fused (`fuse_stat` would half-count it) but travels with the
+        // talent, and the child's respec then has a receipt to subtract.
+        let bought_of = |game: &Self, e: Entity| {
+            game.world
+                .get::<crate::components::BoughtStats>(e)
+                .copied()
+                .unwrap_or_default()
+        };
+        let (bought_a, bought_b) = (bought_of(self, a), bought_of(self, b));
+        let fused_bought = if dominant == a { bought_a } else { bought_b };
+        let fused_hp = fuse_stat(
+            stats_a.max_hp - bought_a.max_hp,
+            stats_b.max_hp - bought_b.max_hp,
+        ) + fused_bought.max_hp;
+        let fused_atk =
+            fuse_stat(stats_a.atk - bought_a.atk, stats_b.atk - bought_b.atk) + fused_bought.atk;
+        let fused_def = fuse_stat(
+            stats_a.mitigation - bought_a.mitigation,
+            stats_b.mitigation - bought_b.mitigation,
+        ) + fused_bought.mitigation;
         let fused_potential = Potential::averaged(potential_a, potential_b);
         // The better of the two parents, the same shape `FusionCount` takes
         // (`max(a, b) + 1`) and for the same reason: fusing away an
@@ -1563,7 +1582,7 @@ impl Game {
             Refactors(fused_refactors),
             PurchasedTiers(fused_purchased),
         ));
-        fused.insert(parts);
+        fused.insert((parts, fused_bought));
         // After `parts`, which carries a fresh rank and no `Duties`:
         // overriding rather than folding the dominant parent's own back in.
         // `Duties` is left uninserted (not an empty one) when the parent had
@@ -1609,6 +1628,7 @@ impl Game {
             &species.attributes,
         );
         self.world.entity_mut(fused_entity).insert(fused_attrs);
+        self.seat_derived(fused_entity);
         self.install_innate_routines(fused_entity);
         self.log(match &final_name {
             Some(name) => format!(

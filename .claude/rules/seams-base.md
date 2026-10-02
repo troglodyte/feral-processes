@@ -409,3 +409,6 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A research node's subject gate is one term both the screen and the
   selection reach through**, `research_block_with`, outside the per-`ItemId`
   memo.
+- **A production line is derived from the grid every labour pass and staffed by
+  one worker who switches machines only at a cycle boundary; its edges call
+  `systems::feeds` over the pull's reach, and Teardown Rigs are never members.**

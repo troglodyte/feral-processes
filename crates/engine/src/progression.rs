@@ -44,6 +44,10 @@ pub struct LevelGain {
     /// Attribute points banked by `Growth::Points`, to spend on the Points
     /// screen. Zero for `Growth::Auto`.
     pub stat_points: u32,
+    /// Parity and Analysis points a `Growth::ProgramPoints` level-up earned
+    /// and `Game::apply_program_levels` has yet to place. Zero otherwise.
+    pub parity: u32,
+    pub analysis: u32,
 }
 
 /// How a level-up changes the levelled body's stats.
@@ -55,6 +59,25 @@ pub enum Growth {
     /// No stat changes: the player banks `STAT_POINTS_PER_LEVEL` a level and
     /// spends them, and `Game::recompute_derived` does the rest.
     Points,
+    /// A seated program's level-up: stats do not move and nothing heals here.
+    /// The points `program_level_points(multiplier, roll)` yields accumulate
+    /// on `LevelGain` for `Game::apply_program_levels`, which places them and
+    /// recomputes - so a caller without a `Game` (a bevy system) can still
+    /// level a seated program by handing it the gain.
+    ProgramPoints { multiplier: f32, roll: f32 },
+}
+
+/// The Parity and Analysis one level earns a seated program: the canonical
+/// split scaled by the species' growth multiplier `g` and the individual's
+/// growth `roll`. At roll 1 and every shipped `g` this is exactly
+/// `scaled_growth` of the old per-level HP and attack, since `Parity` buys 6
+/// HP and `Analysis` 1 attack.
+pub fn program_level_points(g: f32, roll: f32) -> (u32, u32) {
+    let scaled = |canonical: u32| (canonical as f32 * g * roll).round() as u32;
+    (
+        scaled(CANONICAL_PARITY_PER_LEVEL),
+        scaled(CANONICAL_ANALYSIS_PER_LEVEL),
+    )
 }
 
 impl LevelGain {
@@ -71,6 +94,8 @@ impl LevelGain {
         self.atk += other.atk;
         self.overflow += other.overflow;
         self.stat_points += other.stat_points;
+        self.parity += other.parity;
+        self.analysis += other.analysis;
     }
 
     /// The two rows a level-up's stat block always has, measured against
@@ -489,6 +514,12 @@ pub fn add_xp(
                 gain.atk += atk;
             }
             Growth::Points => gain.stat_points += STAT_POINTS_PER_LEVEL,
+            Growth::ProgramPoints { multiplier, roll } => {
+                let (parity, analysis) = program_level_points(multiplier, roll);
+                gain.parity += parity;
+                gain.analysis += analysis;
+                continue;
+            }
         }
         stats.hp = stats.max_hp;
     }
@@ -699,6 +730,56 @@ mod tests {
             STAT_POINTS_PER_LEVEL * 3
         );
     }
+    #[test]
+    fn program_points_equal_the_old_scaled_growth_at_roll_one() {
+        let db = shipped_db();
+        for g in [1.0f32, 1.25, 1.5, 2.0] {
+            let (parity, analysis) = program_level_points(g, 1.0);
+            let attrs = attrs_at_base(
+                &db,
+                &[("parity", parity as i32), ("analysis", analysis as i32)],
+            );
+            let d = derive(&DerivedBase::player(), &attrs, &db);
+            assert_eq!(
+                d.max_hp - PLAYER_BASE_STATS.max_hp,
+                scaled_growth(HP_PER_LEVEL, g),
+                "hp at g {g}"
+            );
+            assert_eq!(
+                d.atk - PLAYER_BASE_STATS.atk,
+                scaled_growth(ATK_PER_LEVEL, g),
+                "atk at g {g}"
+            );
+        }
+    }
+
+    #[test]
+    fn program_points_level_up_moves_no_stats_and_does_not_heal() {
+        let mut exp = Experience::default();
+        let mut stats = Stats {
+            hp: 3,
+            max_hp: 30,
+            atk: 5,
+            mitigation: 0,
+        };
+        let owed = exp.xp_to_next;
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            owed,
+            Growth::ProgramPoints {
+                multiplier: 1.5,
+                roll: 1.0,
+            },
+            None,
+            0,
+        );
+        assert_eq!(gain.levels, 1);
+        assert_eq!((gain.parity, gain.analysis), (6, 3));
+        assert_eq!((stats.hp, stats.max_hp, stats.atk), (3, 30, 5));
+        assert_eq!((gain.max_hp, gain.atk), (0, 0));
+    }
+
     use crate::tuning::{
         BASELINE_GROWTH_MULTIPLIER, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, TALENT_START_LEVEL,
         XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,

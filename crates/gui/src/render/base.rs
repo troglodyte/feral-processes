@@ -365,7 +365,7 @@ pub(super) fn draw_playing_base(
     // screen the player has since left.
     fx.set_map_click(None);
     if let Some(view) = board {
-        tactical::draw_tactical_map(
+        let washes = tactical::draw_tactical_map(
             &view,
             tactical_cursor,
             &tactical_preview,
@@ -395,6 +395,7 @@ pub(super) fn draw_playing_base(
         // reason — and a fight has no destination for a bearing to point
         // at, so the two can never want it at once.
         tactical::draw_turn_strip(&view, regions.map_pane, painter, m);
+        tactical::draw_wash_legend(&washes, regions.map_pane, painter, m);
         tactical::draw_round_banner(fx, regions.map_pane, painter, m);
     } else if let Some(view) = game.stack_view() {
         draw_stack(

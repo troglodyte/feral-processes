@@ -249,7 +249,9 @@
   re-deriving it makes lines that move nothing. Teardown Rigs are not members
   until a rig gate exists: the scheduler never staffs one, and a rig strips with
   each hopper entry's own tool, not `standing_tool`. The holder is read from staff only, and a
-  non-staff body (the player's own `work_structure`) on any member covers the
-  whole line through `same_post`: counting the player as holder aimed the want at
-  the player's machine, the outsider filter removed it, and the staff worker
+  non-staff body (the player's own `work_structure`) removes only its own member
+  from the line's candidates in `base_wants`, before `collapse` picks the active
+  machine, so the want falls to the next wanted member. Dropping the whole line
+  for any outsider stalled every other machine in it; counting the player as
+  holder aimed the want at the player's machine, the outsider filter removed it, and the staff worker
   flickered on and off.

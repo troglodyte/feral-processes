@@ -91,6 +91,19 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
         None => (BASELINE_GROWTH_MULTIPLIER, None),
     };
 
+    // A seated program levels through points, which `Game` places once at
+    // the end rather than level by level.
+    let seated = game
+        .world
+        .get::<crate::components::ProgramBase>(entity)
+        .is_some();
+    let growth = if seated {
+        let (multiplier, roll) = game.program_growth(entity);
+        progression::Growth::ProgramPoints { multiplier, roll }
+    } else {
+        progression::Growth::Auto { multiplier: growth }
+    };
+    let mut earned = progression::LevelGain::default();
     let mut query = game.world.query::<(&mut Experience, &mut Stats)>();
     let Ok((mut exp, mut stats)) = query.get_mut(&mut game.world, entity) else {
         return;
@@ -100,20 +113,13 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     // remainder a later kill would inherit.
     while exp.level < level {
         let owed = exp.xp_to_next.saturating_sub(exp.xp);
-        if progression::add_xp(
-            &mut exp,
-            &mut stats,
-            owed,
-            progression::Growth::Auto { multiplier: growth },
-            cap,
-            0,
-        )
-        .levels
-            == 0
-        {
+        let gain = progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0);
+        if gain.levels == 0 {
             break;
         }
+        earned.absorb(gain);
     }
+    game.apply_program_levels(entity, earned);
 
     if level > before {
         game.install_unlocked_routines(entity, before, level);
@@ -208,12 +214,6 @@ pub(crate) fn spawn_companion(game: &mut Game, species: &str, level: u32) -> Opt
     let pos = *game.world.get::<Position>(game.player_entity())?;
     let program = game.adopt_program(species, pos.x, pos.y, 1.0)?;
     set_level(game, program, level);
-    // `adopt_program` seated it at level 1, and `set_level` has since baked
-    // growth into `Stats` that the old base does not hold.
-    game.world
-        .entity_mut(program)
-        .remove::<crate::components::ProgramBase>();
-    game.seat_derived(program);
     Some(program)
 }
 

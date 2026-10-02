@@ -3,6 +3,7 @@
 
 use crate::components::{Attributes, Derived, HoldPoints, ProgramBase, StatPoints, Tamed};
 use crate::progression::{SpendError, StatOwner};
+use crate::resources::PendingProgramLevels;
 use crate::*;
 
 impl Game {
@@ -21,8 +22,15 @@ impl Game {
         owner: StatOwner,
         spend: &[(crate::attributes::AttributeId, u32)],
     ) -> Result<(), SpendError> {
-        let StatOwner::Player = owner;
-        let entity = self.player_entity();
+        let entity = match owner {
+            StatOwner::Player => self.player_entity(),
+            StatOwner::Program(program) => {
+                if self.world.get::<ProgramBase>(program).is_none() {
+                    return Err(SpendError::NoSuchTarget);
+                }
+                program
+            }
+        };
         let banked = self
             .world
             .get::<StatPoints>(entity)
@@ -81,6 +89,133 @@ impl Game {
             let raised = (stats.max_hp - max_hp_before).max(0);
             stats.hp = (stats.hp + raised).min(stats.max_hp);
         }
+    }
+
+    /// `(species growth multiplier, individual growth roll)` for `entity`,
+    /// the two factors `progression::program_level_points` takes.
+    pub(crate) fn program_growth(&self, entity: Entity) -> (f32, f32) {
+        let species = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.growth_multiplier)
+            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+        let roll = self
+            .world
+            .get::<Potential>(entity)
+            .map_or(Potential::NEUTRAL.growth_roll, |p| p.growth_roll);
+        (species, roll)
+    }
+
+    /// Places the points a `Growth::ProgramPoints` level-up earned and
+    /// returns `gain` with `max_hp`/`atk` filled in as the derived change, so
+    /// the log sites that read them stay right. Unheld, the points go into
+    /// `Attributes` and the figures recompute; held, they bank in
+    /// `StatPoints`. Either way a level full-heals. A no-op for an unseated
+    /// entity.
+    pub(crate) fn apply_program_levels(
+        &mut self,
+        entity: Entity,
+        mut gain: crate::progression::LevelGain,
+    ) -> crate::progression::LevelGain {
+        let Some(held) = self.world.get::<HoldPoints>(entity).map(|h| h.0) else {
+            return gain;
+        };
+        if gain.levels == 0 {
+            return gain;
+        }
+        let before = self.world.get::<Stats>(entity).copied();
+        if held {
+            let earned = gain.parity + gain.analysis;
+            if let Some(mut points) = self.world.get_mut::<StatPoints>(entity) {
+                points.0 += earned;
+            }
+            gain.stat_points += earned;
+        } else {
+            // The pool is empty of these points, so `apply_stat_spend`'s
+            // decrement floors at zero and only the attributes and the
+            // recompute do anything.
+            self.apply_stat_spend(
+                entity,
+                &[
+                    (crate::attributes::AttributeId::from("parity"), gain.parity),
+                    (
+                        crate::attributes::AttributeId::from("analysis"),
+                        gain.analysis,
+                    ),
+                ],
+            );
+        }
+        if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+            stats.hp = stats.max_hp;
+            if let Some(before) = before {
+                gain.max_hp = stats.max_hp - before.max_hp;
+                gain.atk = stats.atk - before.atk;
+            }
+        }
+        gain
+    }
+
+    /// Places the level-ups `task_progress_system` queued for seated
+    /// programs, then writes the stat block it could not: only now is there a
+    /// delta to show.
+    pub(crate) fn drain_program_levels(&mut self) {
+        let pending = std::mem::take(&mut self.world.resource_mut::<PendingProgramLevels>().0);
+        for (entity, gain) in pending {
+            let gain = self.apply_program_levels(entity, gain);
+            let Some(stats) = self.world.get::<Stats>(entity).copied() else {
+                continue;
+            };
+            for line in crate::progression::stat_block(&gain.stat_rows(&stats)) {
+                self.log_base_kind(MessageKind::LevelUp, line);
+            }
+        }
+    }
+
+    /// Turns holding on or off for a seated program. Turning it off spends
+    /// the bank at once in the growth split, so no points are stranded: as
+    /// many whole levels' worth as it holds, then the remainder into Parity.
+    pub fn set_hold_points(&mut self, entity: Entity, hold: bool) -> Result<(), SpendError> {
+        if self.world.get::<ProgramBase>(entity).is_none() {
+            return Err(SpendError::NoSuchTarget);
+        }
+        self.world.entity_mut(entity).insert(HoldPoints(hold));
+        if hold {
+            return Ok(());
+        }
+        let bank = self.world.get::<StatPoints>(entity).map_or(0, |p| p.0);
+        if bank == 0 {
+            return Ok(());
+        }
+        let (g, _) = self.program_growth(entity);
+        let (parity, analysis) = crate::progression::program_level_points(g, 1.0);
+        let per_level = parity + analysis;
+        let levels = bank.checked_div(per_level).unwrap_or(0);
+        let remainder = bank - levels * per_level;
+        self.apply_stat_spend(
+            entity,
+            &[
+                (
+                    crate::attributes::AttributeId::from("parity"),
+                    levels * parity + remainder,
+                ),
+                (
+                    crate::attributes::AttributeId::from("analysis"),
+                    levels * analysis,
+                ),
+            ],
+        );
+        Ok(())
+    }
+
+    /// How many seated programs hold banked points: what the Manifest
+    /// attention row counts.
+    pub(crate) fn programs_holding_points(&mut self) -> usize {
+        let mut query = self.world.query::<(&HoldPoints, &StatPoints)>();
+        query
+            .iter(&self.world)
+            .filter(|(hold, points)| hold.0 && points.0 > 0)
+            .count()
     }
 
     /// The catalogue as the Points screen previews against - a clone, so a

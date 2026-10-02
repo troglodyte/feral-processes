@@ -1181,6 +1181,7 @@ type WorkedNode = (
 /// `Tamed::owner` — it is a restriction on *which* workers run cronjobs, not
 /// data the loop reads.
 type CronjobWorker = (
+    Entity,
     &'static mut Task,
     &'static Creature,
     Option<&'static Potential>,
@@ -1193,6 +1194,7 @@ type CronjobWorker = (
     Option<&'static Needs>,
     Option<&'static crate::disposition::Disposition>,
     Option<&'static crate::situations::Situation>,
+    Option<&'static crate::components::ProgramBase>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -1233,6 +1235,9 @@ pub struct CronjobLookups<'w> {
     /// parameter for the same reason as the rest: `task_progress_system` is
     /// already at clippy's argument-count threshold.
     board: ResMut<'w, AlertBoard>,
+    /// Level-ups of seated workers, handed to `Game::drain_program_levels`.
+    /// Bundled here because the system is at clippy's argument threshold.
+    pending_levels: ResMut<'w, crate::resources::PendingProgramLevels>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -1282,6 +1287,7 @@ pub fn task_progress_system(
         research: mut active_research,
         research_defs: research_db,
         mut board,
+        mut pending_levels,
     } = db;
     // Copied out rather than captured: the record closures are `move`, and
     // capturing the `Res` handles themselves would move them out of the
@@ -1306,6 +1312,7 @@ pub fn task_progress_system(
         None => (0, 0, None),
     };
     for (
+        worker,
         mut task,
         creature,
         potential,
@@ -1318,6 +1325,7 @@ pub fn task_progress_system(
         worker_needs,
         disposition,
         situation,
+        seated,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -1543,14 +1551,24 @@ pub fn task_progress_system(
             let individual_roll = potential
                 .map(|p| p.growth_roll)
                 .unwrap_or(Potential::NEUTRAL.growth_roll);
-            let growth_multiplier = species_growth * individual_roll;
+            // A seated program's growth is points, which only `Game` can place:
+            // the gain waits in `PendingProgramLevels` for the drain after
+            // the schedule.
+            let growth = if seated.is_some() {
+                progression::Growth::ProgramPoints {
+                    multiplier: species_growth,
+                    roll: individual_roll,
+                }
+            } else {
+                progression::Growth::Auto {
+                    multiplier: species_growth * individual_roll,
+                }
+            };
             progression::add_xp(
                 &mut exp,
                 &mut stats,
                 WORK_XP_PER_CYCLE,
-                progression::Growth::Auto {
-                    multiplier: growth_multiplier,
-                },
+                growth,
                 // The zone cap, like every other XP site. `WORK_XP_LEVEL_CAP`
                 // above is a *separate* and lower gate and is not folded into
                 // it: that one is what stops a developed program being ground
@@ -1584,8 +1602,14 @@ pub fn task_progress_system(
                     exp.level
                 ),
             );
-            for line in progression::stat_block(&gain.stat_rows(&stats)) {
-                log.push_base_kind(MessageKind::LevelUp, line);
+            if seated.is_some() {
+                // Its stat block is written by the drain, once the points are
+                // placed and there is a delta to show.
+                pending_levels.0.push((worker, gain));
+            } else {
+                for line in progression::stat_block(&gain.stat_rows(&stats)) {
+                    log.push_base_kind(MessageKind::LevelUp, line);
+                }
             }
         }
     }

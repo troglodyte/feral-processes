@@ -529,6 +529,7 @@ impl Game {
         // Not a save field: a brawl lasts four to eight ticks and damage is
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
+        world.init_resource::<crate::resources::PendingProgramLevels>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());
@@ -1398,6 +1399,7 @@ impl Game {
         // Not a save field: a brawl lasts four to eight ticks and damage is
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
+        world.init_resource::<crate::resources::PendingProgramLevels>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());

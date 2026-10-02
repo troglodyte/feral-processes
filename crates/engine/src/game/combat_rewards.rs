@@ -1137,18 +1137,21 @@ impl Game {
             return;
         }
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
-        let species_growth = self
+        let (species_growth, individual_roll) = self.program_growth(companion);
+        let growth = if self
             .world
-            .get::<Creature>(companion)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|s| s.growth_multiplier)
-            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-        let individual_roll = self
-            .world
-            .get::<Potential>(companion)
-            .map(|p| p.growth_roll)
-            .unwrap_or(Potential::NEUTRAL.growth_roll);
-        let growth_multiplier = species_growth * individual_roll;
+            .get::<crate::components::ProgramBase>(companion)
+            .is_some()
+        {
+            progression::Growth::ProgramPoints {
+                multiplier: species_growth,
+                roll: individual_roll,
+            }
+        } else {
+            progression::Growth::Auto {
+                multiplier: species_growth * individual_roll,
+            }
+        };
         let before_level = self
             .world
             .get::<Experience>(companion)
@@ -1164,13 +1167,12 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                progression::Growth::Auto {
-                    multiplier: growth_multiplier,
-                },
+                growth,
                 Some(level_cap),
                 xp_boost_pct,
             )
         };
+        let gain = self.apply_program_levels(companion, gain);
         let level = self
             .world
             .get::<Experience>(companion)

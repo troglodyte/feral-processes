@@ -1864,6 +1864,21 @@ impl Game {
             });
         }
 
+        let holding = self.programs_holding_points();
+        if holding > 0 {
+            let noun = if holding == 1 {
+                "program has"
+            } else {
+                "programs have"
+            };
+            rows.push(AttentionRow {
+                kind: AttentionKind::ProgramPoints,
+                text: format!("{holding} {noun} points to spend (Manifest)"),
+                key: 'p',
+                threat: false,
+            });
+        }
+
         let (count, capacity) = (self.pet_count(), self.pet_capacity());
         if count > capacity {
             rows.push(AttentionRow {

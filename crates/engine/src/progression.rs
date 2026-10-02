@@ -8,6 +8,7 @@ use crate::tuning::{
     PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL, STATUS_RESIST_MAX,
     STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
+use bevy_ecs::entity::Entity;
 use std::collections::BTreeMap;
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
@@ -409,11 +410,12 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
     }
 }
 
-/// Whose attributes a spend raises. A companion variant joins it when
-/// programs are derived.
+/// Whose attributes a spend raises.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatOwner {
     Player,
+    /// A seated program; refused with `SpendError::NoSuchTarget` otherwise.
+    Program(Entity),
 }
 
 /// Why `Game::spend_stat_points` wrote nothing.

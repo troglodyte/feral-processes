@@ -371,6 +371,8 @@ impl AttackProfile {
             evasion: self.evasion,
             atk,
             range: self.range,
+            crit: crate::tuning::CRIT_CHANCE,
+            fumble: crate::tuning::FUMBLE_CHANCE,
         }
     }
 }

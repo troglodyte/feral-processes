@@ -161,6 +161,8 @@ impl Game {
             evasion,
             atk: self.effective_atk(entity),
             range: swing.range,
+            crit: crate::tuning::CRIT_CHANCE,
+            fumble: crate::tuning::FUMBLE_CHANCE,
         }
     }
 

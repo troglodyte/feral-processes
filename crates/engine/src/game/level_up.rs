@@ -137,6 +137,8 @@ impl Game {
             evasion: battle::evasion_of(median.base_speed, zone, 0),
             atk: wild.atk,
             range: median.natural_range(),
+            crit: crate::tuning::CRIT_CHANCE,
+            fumble: crate::tuning::FUMBLE_CHANCE,
         };
         (
             combatant,

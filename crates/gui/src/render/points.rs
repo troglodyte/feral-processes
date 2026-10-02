@@ -4,7 +4,8 @@
 //! Creation is a step of a popup with its own title and numbering;
 //! `draw_allocate_stats` is the whole popup for the level-up spend.
 
-use feral_processes_app_core::CreationRow;
+use feral_processes_app_core::{AllocationFor, CreationRow};
+use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::DerivedStat;
 
 use super::level_up::{duel_heading, duel_lines};
@@ -72,19 +73,29 @@ pub(super) fn footer(pool: u32, left: u32, spends_pool: bool) -> String {
 
 /// The level-up spend: `Mode::AllocateStats`.
 pub(super) fn draw_allocate_stats(
+    title: &str,
     rows: &[Row],
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    draw_popup(
-        "Spend Stat Points",
-        PopupSize::Large,
-        rows,
-        refusal,
-        painter,
-        m,
-    );
+    draw_popup(title, PopupSize::Large, rows, refusal, painter, m);
+}
+
+/// The popup's title: names the program whose points these are, and says
+/// nothing extra for the player's own.
+pub(super) fn allocate_stats_title(app: &App) -> String {
+    let program = match app.stat_allocation.as_ref().map(|a| a.purpose()) {
+        Some(AllocationFor::Owned(StatOwner::Program(e))) => Some(e),
+        _ => None,
+    };
+    match program
+        .zip(app.game.as_ref())
+        .and_then(|(e, game)| game.manifest(e))
+    {
+        Some(view) => format!("Spend Stat Points - {}", view.name),
+        None => "Spend Stat Points".to_string(),
+    }
 }
 
 /// The popup's rows, split out so the census can measure what is drawn.
@@ -121,8 +132,8 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
 mod tests {
     use super::*;
     use crate::paint::with_painter;
-    use feral_processes_app_core::{AllocationFor, StatAllocation};
-    use feral_processes_engine::{DifficultyMode, Game, StatOwner};
+    use feral_processes_app_core::StatAllocation;
+    use feral_processes_engine::{DifficultyMode, Game};
 
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -187,7 +198,8 @@ mod tests {
         let text = |app: &App| {
             let rows = allocate_stats_rows(app);
             let m = ui_metrics(900.0);
-            let (_, shapes) = with_painter(|p| draw_allocate_stats(&rows, None, p, &m));
+            let (_, shapes) =
+                with_painter(|p| draw_allocate_stats("Spend Stat Points", &rows, None, p, &m));
             crate::paint::painted_text(&shapes).join(" | ")
         };
         let fresh = text(&app);

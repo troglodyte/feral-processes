@@ -2389,21 +2389,11 @@ impl Game {
         })
     }
 
-    /// The manifest's POINTS box, for a seated program.
+    /// The bank and hold of a seated program, for the manifest.
     fn program_points(&self, entity: Entity) -> Option<ProgramPoints> {
         self.world.get::<crate::components::ProgramBase>(entity)?;
-        let attrs = self.attributes_of(entity);
-        let db = self.world.resource::<crate::attributes::AttributeDb>();
         Some(ProgramPoints {
-            attributes: crate::game::derived::LEVEL_ATTRIBUTES
-                .iter()
-                .filter_map(|id| db.get(&crate::attributes::AttributeId::from(*id)))
-                .map(|def| (def.name.clone(), attrs.get(&def.id).unwrap_or(def.base)))
-                .collect(),
-            banked: self
-                .world
-                .get::<crate::components::StatPoints>(entity)
-                .map_or(0, |p| p.0),
+            banked: self.stat_points_of(StatOwner::Program(entity)),
             holding: self
                 .world
                 .get::<crate::components::HoldPoints>(entity)

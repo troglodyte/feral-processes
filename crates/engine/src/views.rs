@@ -2870,12 +2870,10 @@ pub struct ProgramManifest {
     pub points: Option<ProgramPoints>,
 }
 
-/// What the manifest's POINTS box reads: the attributes level-ups feed, the
-/// bank, and whether level-ups are being banked rather than spent.
+/// What the manifest shows of a seated program's points: the bank, and
+/// whether level-ups are being banked rather than spent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProgramPoints {
-    /// `(name, value)` for the attributes a program's level-ups raise.
-    pub attributes: Vec<(String, i32)>,
     pub banked: u32,
     pub holding: bool,
 }

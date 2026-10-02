@@ -51,6 +51,7 @@ pub(super) fn social_sections(view: &SocialView) -> Vec<Section> {
             rows: relationships,
             full_width: true,
             overflow: 0,
+            hint: "",
         },
         Section {
             title: "KNOWN FOR",
@@ -60,6 +61,7 @@ pub(super) fn social_sections(view: &SocialView) -> Vec<Section> {
             ],
             full_width: true,
             overflow: 0,
+            hint: "",
         },
     ]
 }

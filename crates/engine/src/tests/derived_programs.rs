@@ -605,8 +605,6 @@ fn the_manifest_reports_a_seated_programs_points_and_hold() {
         .points
         .expect("a seated program reports its points");
     assert_eq!((points.banked, points.holding), (3, true));
-    let parity = attribute(&game, program, "parity");
-    assert!(points.attributes.contains(&("Parity".to_string(), parity)));
 }
 
 #[test]

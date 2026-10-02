@@ -924,6 +924,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::AllocateStats => points::allocate_stats_rows(app),
         _ => Vec::new(),
     };
+    let allocation_title = match app.mode {
+        Mode::AllocateStats => points::allocate_stats_title(app),
+        _ => String::new(),
+    };
     let staffing = match app.mode {
         Mode::StructureAssign => app.staffing(),
         _ => None,
@@ -1459,7 +1463,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::Perks => draw_perks_menu(game, &perk_previews, selected, refusal, painter, m),
-        Mode::AllocateStats => points::draw_allocate_stats(&allocation_rows, refusal, painter, m),
+        Mode::AllocateStats => {
+            points::draw_allocate_stats(&allocation_title, &allocation_rows, refusal, painter, m)
+        }
         Mode::RespecPerksConfirm => {
             let quote = game.respec_quote(RespecSubject::Perks);
             draw_respec_confirm(&quote, "perk", refusal, painter, m)

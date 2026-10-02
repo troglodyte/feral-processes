@@ -2,7 +2,7 @@
 //! `growth::Vitality`, and the one writer that keeps the map entities
 //! matching it.
 //!
-//! `docs/superpowers/specs/2026-09-25-settlement-footprint-design.md` §Testing.
+//! `docs/superpowers/archive/specs/2026-09-25-settlement-footprint-design.md` §Testing.
 //! `tests/settlement_growth.rs` already drives the growth latch itself;
 //! what is here is the square that latch now moves.
 

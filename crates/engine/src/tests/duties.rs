@@ -1,5 +1,5 @@
 //! `Duty`, `duty_admits` and `components::StaffRank` — phase 1 of work
-//! assignments (`docs/superpowers/specs/2026-09-27-work-assignments-design.md`).
+//! assignments (`docs/superpowers/archive/specs/2026-09-27-work-assignments-design.md`).
 //! No scheduler change lands here; these are the data model and the roster
 //! doors that mint a rank.
 

@@ -1,5 +1,5 @@
 //! A one-tile fixture on the zone surface where posted programs extract
-//! materials — see `docs/superpowers/specs/2026-09-23-outposts-design.md`.
+//! materials — see `docs/superpowers/archive/specs/2026-09-23-outposts-design.md`.
 //!
 //! `OutpostDef` and `OutpostDb::load_dir` follow `NeedDb`'s absent-is-silent
 //! pattern: no `assets/outposts/` directory means no outposts exist and the

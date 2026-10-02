@@ -106,7 +106,7 @@ The other twelve are already in `archive/specs/`:
 `2026-08-19-windows-and-macos-distribution`, `2026-08-21-item-quality` and
 `2026-08-23-rock-kinds-and-mining-mode`.
 
-## The plans have been deleted three times
+## The plans have been deleted five times
 
 Forty-six were deleted on 2026-08-13; forty-six more accumulated and
 forty-three of those were deleted on 2026-09-02; eighteen more accumulated and
@@ -121,6 +121,9 @@ went on 2026-09-18, each verified shipped against `crates/` and `assets/`. They 
 code they produced, nothing outside the directory cites one, and git history
 holds them: `git log --diff-filter=D -- 'docs/superpowers/plans/*'` finds the
 deletions and `git show <commit>^:<path>` reads any of them back.
+Eighteen more, 2026-09-23 to 2026-10-02, went on 2026-10-02, the same day as the
+spec archive below; three source comments that cited two of them now say
+`git show c272adee:<path>` reads them.
 `CLAUDE.md`'s **Process weight** section is the lesson that motivated it.
 
 The forty-seventh file in the first batch was not a plan and moved to
@@ -426,6 +429,28 @@ Built in `v0.14.1` and archived on landing: no source file cites its path.
 | Spec | What it designed | Evidence |
 | --- | --- | --- |
 | `2026-09-29-spend-preview-design` | Fight figures against a typical zone program on the Points screen (now → with the pending spend) and the Perks menu (one more level of the highlighted perk), and a read-back page after buying a perk; each preview is the real computation run inside a rolled-back trial | `Game::preview_stat_spend`/`preview_perk`/`buy_perk`, `crates/engine/src/game/preview.rs`, `Mode::PerkBought`, `crates/gui/src/render/perk_bought.rs`. Not yet played at the keyboard |
+
+## The specs archived on 2026-10-02
+
+Eleven specs that had shipped without moving, none of them in this file —
+the gap the 2026-09-06 and 2026-09-23 passes warned about, at its largest
+yet. Nine source doc comments cited five of their paths and were repointed
+in the same change, as the alert board's was. "Release" is the tag that
+shipped each, not the one containing the spec's first commit.
+
+| Spec | What it designed | Release |
+| --- | --- | --- |
+| `2026-09-23-outposts-design` | A grown extraction fixture on the zone surface, crewed by posted programs | `v0.13.230` |
+| `2026-09-24-level-up-summary-design` | A page after a level-up reading back what the levels changed (todo #57) | `v0.13.237` |
+| `2026-09-25-settlement-footprint-design` | Towns and cities take up a square sized by kind and vitality | `v0.13.243` |
+| `2026-09-25-travel-on-the-clock-design` | Walking is spent by the world clock instead of ticking it per step | `v0.13.243` |
+| `2026-09-26-auto-attack-routines-design` | Auto-attack and auto-resolve invoke routines, drinking a Power cell to afford one | `v0.13.245` |
+| `2026-09-27-drop-pods-design` | A base structure that calls one staff program into a tactical fight | `v0.13.245` |
+| `2026-09-27-work-assignments-design` | The Base staff screen becomes a work table that `schedule_base_labour` obeys | `v0.13.245` |
+| `2026-09-28-reinitialization-protocol-design` | A crafted consumable that boots a carried downed-program record as staff | `v0.14.0` |
+| `2026-09-28-respawn-routine-design` | An area routine raising fallen bodies as temporary fighters; the Spawn Priority perk | `v0.14.0` |
+| `2026-09-30-affix-modding-design` | Adding and removing affixes on owned gear; the Affixes research tree | `v0.14.2` |
+| `2026-10-02-production-lines-design` | One worker per production line; a line is derived, never stored | `v0.14.6` |
 
 ## Four rows that need a footnote
 

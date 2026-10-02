@@ -1,6 +1,6 @@
 //! Drop pods phase B2 — the Drop Trooper flag, the `call_reinforcements`
 //! routine and its teardown
-//! (`docs/superpowers/specs/2026-09-27-drop-pods-design.md`).
+//! (`docs/superpowers/archive/specs/2026-09-27-drop-pods-design.md`).
 
 use super::support::*;
 use super::tactical::{only_routine, tactical_fight, wait_for_turn};

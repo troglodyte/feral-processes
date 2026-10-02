@@ -1,6 +1,7 @@
 //! Placing, staffing, demolishing and upgrading base structures.
 
 use crate::*;
+use feral_processes_engine::{LineKey, LineReport, StructureReport};
 
 /// What `Mode::StructureAssign` is showing: the structure picked on the
 /// roster, and the standing instructions that can be set on it.
@@ -49,6 +50,77 @@ pub enum StaffAction {
     StandingGuard,
     /// Work it yourself, right now. Not a standing anything.
     WorkYourself,
+}
+
+/// One selectable row of the structure roster.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RosterRow {
+    /// An index into the `StructureReport` list.
+    Structure(usize),
+    /// A production line of two or more machines, drawn as one row.
+    Line(LineKey),
+}
+
+/// What the roster screen is made of: the reports and the row list that
+/// indexes them. Built once here so `handle_structures_key` and the gui's
+/// `draw_structures` cannot disagree about which row is which.
+pub struct Roster {
+    pub reports: Vec<StructureReport>,
+    pub lines: Vec<LineReport>,
+    pub rows: Vec<RosterRow>,
+}
+
+impl Roster {
+    pub fn of(game: &mut Game) -> Roster {
+        let reports = game.structure_report();
+        let lines = game.line_reports();
+        let rows = roster_rows(&reports, &lines);
+        Roster {
+            reports,
+            lines,
+            rows,
+        }
+    }
+
+    /// The row `entity` is drawn in.
+    pub fn row_of(&self, entity: Entity) -> Option<usize> {
+        let report = self.reports.iter().position(|s| s.entity == entity)?;
+        self.rows.iter().position(|row| match row {
+            RosterRow::Structure(i) => *i == report,
+            RosterRow::Line(key) => self.reports[report].line == Some(*key),
+        })
+    }
+
+    /// The structure Enter on `row` stages: the structure itself, or for a
+    /// line its first workable member in roster order, whose standing job
+    /// reaches the whole line.
+    pub fn target_of(&self, row: RosterRow) -> Option<&StructureReport> {
+        match row {
+            RosterRow::Structure(i) => self.reports.get(i),
+            RosterRow::Line(key) => self
+                .reports
+                .iter()
+                .find(|s| s.line == Some(key) && s.workable),
+        }
+    }
+}
+
+/// One row per structure, except that a line of two or more is one row at
+/// its first member's position and its other members get none.
+pub fn roster_rows(reports: &[StructureReport], lines: &[LineReport]) -> Vec<RosterRow> {
+    let mut seen: Vec<LineKey> = Vec::new();
+    let mut rows = Vec::with_capacity(reports.len());
+    for (i, s) in reports.iter().enumerate() {
+        match s.line.filter(|key| lines.iter().any(|l| l.key == *key)) {
+            None => rows.push(RosterRow::Structure(i)),
+            Some(key) if !seen.contains(&key) => {
+                seen.push(key);
+                rows.push(RosterRow::Line(key));
+            }
+            Some(_) => {}
+        }
+    }
+    rows
 }
 
 impl App {
@@ -159,10 +231,7 @@ impl App {
         if let Some(row) = self
             .game
             .as_mut()
-            .map(|g| g.structure_report())
-            .unwrap_or_default()
-            .iter()
-            .position(|s| s.entity == structure)
+            .and_then(|g| Roster::of(g).row_of(structure))
         {
             self.menu_selected = row;
         }

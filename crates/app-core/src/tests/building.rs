@@ -1781,3 +1781,53 @@ fn escaping_the_study_screen_pins_nobody() {
         "Esc must not have pinned anyone"
     );
 }
+
+/// Home, then the line: the Lathe and the Mining Node it is fed by fold into
+/// the one row the Lathe stands at.
+#[test]
+fn a_line_of_two_machines_is_one_roster_row() {
+    let mut app = app_inside_a_base_with_a_production_line(260);
+    let roster = Roster::of(app.game.as_mut().unwrap());
+    assert_eq!(roster.reports.len(), 3);
+    assert_eq!(roster.rows.len(), 2, "{:?}", roster.rows);
+    assert_eq!(roster.rows[0], RosterRow::Structure(0));
+    assert!(matches!(roster.rows[1], RosterRow::Line(_)));
+    assert_eq!(roster.lines.len(), 1);
+}
+
+#[test]
+fn a_line_of_one_keeps_the_rows_it_had() {
+    let mut app = app_inside_a_small_base_with_programs(261, false, 1);
+    let roster = Roster::of(app.game.as_mut().unwrap());
+    let all: Vec<_> = (0..roster.reports.len())
+        .map(RosterRow::Structure)
+        .collect();
+    assert_eq!(roster.rows, all);
+}
+
+#[test]
+fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
+    let mut app = app_inside_a_base_with_a_production_line(262);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureAssign, "{:?}", app.status_line);
+    let toggle = app
+        .staffing()
+        .unwrap()
+        .rows
+        .iter()
+        .position(|r| r.kind == StaffAction::StandingWork)
+        .expect("a line can be kept running");
+    app.handle_key(GameKey::Char(menu_shortcut(toggle)));
+
+    let game = app.game.as_mut().unwrap();
+    let members = game.line_reports().remove(0).members;
+    assert_eq!(members.len(), 2);
+    for m in members {
+        assert_eq!(game.standing_job(m).map(|(work, _)| work), Some(true));
+    }
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Structures);
+    assert_eq!(app.menu_selected, 1, "back on the line row");
+}

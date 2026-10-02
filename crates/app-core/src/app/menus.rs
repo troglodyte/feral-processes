@@ -2,6 +2,7 @@
 //! game-over page. The creation wizard the main menu opens is its own
 //! module, `app/creation.rs`.
 
+use crate::app::building::Roster;
 use crate::*;
 
 impl App {
@@ -344,12 +345,10 @@ impl App {
             self.close_screen();
             return;
         }
-        let report = self
-            .game
-            .as_mut()
-            .map(|g| g.structure_report())
-            .unwrap_or_default();
-        let Some(idx) = self.selected_index(key, report.len()) else {
+        let Some(roster) = self.game.as_mut().map(Roster::of) else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, roster.rows.len()) else {
             return;
         };
         // The picker this opens acts on the structure three ways, and
@@ -375,11 +374,15 @@ impl App {
             self.refuse("Not from out here — that's back at the base.");
             return;
         }
-        if !report[idx].workable {
+        let Some(target) = roster.target_of(roster.rows[idx]) else {
+            self.refuse("Nothing can be posted to that.");
+            return;
+        };
+        if !target.workable {
             self.refuse("Nothing can be posted to that.");
             return;
         }
-        self.pending_post_structure = Some(report[idx].entity);
+        self.pending_post_structure = Some(target.entity);
         self.mode = Mode::StructureAssign;
     }
 

@@ -10,7 +10,9 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
-pub use app::building::{StaffAction, StaffRow, Staffing, WorkOrderRow};
+pub use app::building::{
+    Roster, RosterRow, StaffAction, StaffRow, Staffing, WorkOrderRow, roster_rows,
+};
 pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;

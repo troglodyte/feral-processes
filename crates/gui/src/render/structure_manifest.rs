@@ -42,7 +42,10 @@ pub(super) fn draw_structure_manifest(
             TEXT
         },
     )];
-    let detail = structure_detail_lines(&report);
+    let line = report
+        .line
+        .and_then(|key| game.line_reports().into_iter().find(|l| l.key == key));
+    let detail = structure_detail_lines(&report, line.as_ref());
     if detail.is_empty() {
         rows.push(text_row("  nothing staged, nobody posted"));
     }

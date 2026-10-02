@@ -1060,8 +1060,29 @@ impl Game {
         // position is its first member's: collapsing earlier would let a
         // later source add a second want for the same line.
         let member_of = lines::membership(lines);
+        // **An outsider removes only its own member from the line's
+        // candidates**, before `collapse` picks the active machine, so the
+        // line's want falls to the next wanted member and the rest of the
+        // line keeps running. The want is gone only when every wanted member
+        // is held.
+        let outsiders = self.outsider_posts(staff);
+        wanted.retain(|post| {
+            !(member_of.contains_key(&post.0)
+                && post.1 == TaskKind::GatherResource
+                && outsiders.contains(post))
+        });
         let holders = lines::line_holders(&mut self.world, &member_of, staff);
         lines::collapse(wanted, lines, |key| holders.get(&key).copied())
+    }
+
+    /// The `(target, kind)` of every task held by a body outside `staff`.
+    fn outsider_posts(&mut self, staff: &[Entity]) -> Vec<(Entity, TaskKind)> {
+        self.world
+            .iter_entities()
+            .filter(|e| !staff.contains(&e.id()))
+            .filter_map(|e| e.get::<Task>())
+            .map(|t| (t.target, t.kind))
+            .collect()
     }
 
     /// Steps 3 to 5 of `schedule_base_labour`'s doc, over `wanted` and the
@@ -1109,23 +1130,9 @@ impl Game {
         // body the scheduler treats as permanent. Tested against the `staff`
         // list rather than a marker for the reason the list is sorted: it is
         // the one answer to who the pool is, and asking twice invites two.
-        let outsiders: Vec<(Entity, TaskKind)> = self
-            .world
-            .iter_entities()
-            .filter(|e| !staff.contains(&e.id()))
-            .filter_map(|e| e.get::<Task>())
-            .map(|t| (t.target, t.kind))
-            .collect();
-        // **An outsider on any member covers the whole line**: the line's
-        // want names one machine, and an outsider on another member would
-        // otherwise leave the want standing, post a second body on the
-        // line, and be cut back again the next tick.
+        let outsiders = self.outsider_posts(staff);
+        wanted.retain(|post| !outsiders.contains(post));
         let member_of = lines::membership(lines);
-        wanted.retain(|post| {
-            !outsiders
-                .iter()
-                .any(|&outsider| same_post(&member_of, outsider, *post))
-        });
 
         // **One walk field per body, shared by every reach question below.**
         // `post_route` costs a walk per face and a plan can be a hundred

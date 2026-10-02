@@ -1386,10 +1386,7 @@ pub(super) fn draw_structures(
         rows: roster,
     } = Roster::of(game);
     let assigned: usize = report.iter().map(|s| s.assignees.len()).sum();
-    let idle = report
-        .iter()
-        .filter(|s| s.workable && s.assignees.is_empty())
-        .count();
+    let idle = StructureReport::idle_count(&report);
     let (draw, supply) = game.base_power();
     let mut rows = vec![
         text_row(format!(
@@ -1416,8 +1413,12 @@ pub(super) fn draw_structures(
                 let s = &report[at];
                 (
                     structure_headline(s),
-                    if structure_is_idle(s) { YELLOW } else { TEXT },
-                    structure_detail_lines(s, None),
+                    if structure_is_idle(s, &[]) {
+                        YELLOW
+                    } else {
+                        TEXT
+                    },
+                    structure_detail_lines(s, None, structure_is_idle(s, &[])),
                 )
             }
             RosterRow::Line(key) => {
@@ -1511,9 +1512,15 @@ fn grid_header_row(draw: u32, supply: u32) -> Row {
 ///
 /// A call and not a second copy: `Game::attention` counts the same thing in
 /// the engine, so the two readers are in different crates and nothing would
-/// fail to compile if one drifted.
-pub(super) fn structure_is_idle(s: &StructureReport) -> bool {
-    s.is_idle()
+/// fail to compile if one drifted. `line` is the whole line when `s` is a
+/// member of one: a member of a staffed line has no assignee of its own and
+/// is not idle.
+pub(super) fn structure_is_idle(s: &StructureReport, line: &[&StructureReport]) -> bool {
+    if s.line.is_some() {
+        s.workable && StructureReport::line_is_idle(line.iter().copied())
+    } else {
+        s.is_idle()
+    }
 }
 
 /// The one-line summary of a structure: what it is, where, how far, and how
@@ -1542,6 +1549,7 @@ pub(super) fn structure_headline(s: &StructureReport) -> String {
 pub(super) fn structure_detail_lines(
     s: &StructureReport,
     line: Option<&LineReport>,
+    idle: bool,
 ) -> Vec<(String, Color)> {
     let mut lines = Vec::new();
     if let Some(line) = line {
@@ -1550,7 +1558,7 @@ pub(super) fn structure_detail_lines(
             TEXT_DIM,
         ));
     }
-    if structure_is_idle(s) {
+    if idle {
         lines.push(("  idle — nobody assigned".to_string(), YELLOW));
     }
     for a in &s.assignees {
@@ -2453,16 +2461,36 @@ mod tests {
         let line = line_report(None, None);
         let mut s = structure_report(MachineStatus::Running);
         s.line = Some(line.key);
-        let lines: Vec<String> = structure_detail_lines(&s, Some(&line))
+        let lines: Vec<String> = structure_detail_lines(&s, Some(&line), false)
             .into_iter()
             .map(|(l, _)| l)
             .collect();
         assert!(lines.contains(&"  Part of a line: Mining Node → Lathe → Disk Press.".to_string()));
         assert!(
-            structure_detail_lines(&structure_report(MachineStatus::Running), None)
+            structure_detail_lines(&structure_report(MachineStatus::Running), None, false)
                 .iter()
                 .all(|(l, _)| !l.contains("Part of a line"))
         );
+    }
+
+    #[test]
+    fn a_member_of_a_staffed_line_is_not_idle() {
+        let line = line_report(None, None);
+        let mut a = structure_report(MachineStatus::Running);
+        a.line = Some(line.key);
+        let mut b = a.clone();
+        b.assignees = vec![assignee(TaskKind::GatherResource)];
+        let members = [&a, &b];
+        assert!(!structure_is_idle(&a, &members));
+        assert!(
+            structure_detail_lines(&a, Some(&line), structure_is_idle(&a, &members))
+                .iter()
+                .all(|(l, _)| !l.contains("idle"))
+        );
+        b.assignees.clear();
+        let members = [&a, &b];
+        assert!(structure_is_idle(&a, &members));
+        assert_eq!(StructureReport::idle_count(&[a, b]), 1, "once per line");
     }
 
     /// A terminal says whether it can fire, and a structure that is not one
@@ -2472,7 +2500,7 @@ mod tests {
         let pod_lines = |pod| {
             let mut s = structure_report(MachineStatus::Running);
             s.pod = pod;
-            structure_detail_lines(&s, None)
+            structure_detail_lines(&s, None, false)
                 .into_iter()
                 .map(|(line, _)| line)
                 .filter(|line| line.contains("charged") || line.contains("recharging"))

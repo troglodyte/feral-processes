@@ -650,6 +650,26 @@ fn a_player_working_one_member_covers_the_whole_line_without_flicker() {
 }
 
 #[test]
+fn a_player_on_one_member_does_not_stall_the_rest_of_the_line() {
+    let mut g = base_game(95);
+    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
+    let staff = hire(&mut g, 2);
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    g.queue_work_order(WorkOrder::batch(ItemId::from(ids::BLANK_SUBSTRATE), 40))
+        .unwrap();
+    stand_in_base_at(&mut g, 1, 0);
+    g.work_structure(mine).unwrap();
+    for _ in 0..5 {
+        g.tick();
+    }
+    assert!(
+        staff.iter().any(|&s| posted(&g, s) == Some(lathe)),
+        "the lathe is still wanted while the player works the mine"
+    );
+}
+
+#[test]
 fn a_staffed_line_is_not_a_run_of_idle_nodes() {
     let mut g = base_game(92);
     let (mine, lathe, _press) = disk_line(&mut g);

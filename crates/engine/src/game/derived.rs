@@ -120,6 +120,8 @@ impl Game {
             max_power: 0.0,
             status_resist: 0,
             extraction: 0.0,
+            crit: 0.0,
+            fumble: 0.0,
         }
     }
 
@@ -173,6 +175,8 @@ impl Game {
             max_power: derived.max_power,
             status_resist: derived.status_resist,
             extraction: derived.extraction,
+            crit: derived.crit,
+            fumble: derived.fumble,
         });
     }
 }

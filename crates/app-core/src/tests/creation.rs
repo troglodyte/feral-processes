@@ -1902,8 +1902,8 @@ fn taking_a_preset_leaves_the_profiles_drawing_alone() {
 }
 
 /// The roll spends exactly the pool, and only on attributes the screen
-/// offers: a point on Entropy (no effects) would be a point the run never
-/// reads, and `apply_creation_stats` would silently drop it.
+/// offers: a point on an attribute with no effects would be a point the run
+/// never reads, and `apply_creation_stats` would silently drop it.
 #[test]
 fn the_rolled_spread_spends_the_pool_on_offered_attributes_only() {
     let mut app = opened("roll_buyable");

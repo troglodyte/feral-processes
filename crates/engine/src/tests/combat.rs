@@ -972,8 +972,8 @@ fn partys_swing_outcome(game: &Game) -> Option<SwingOutcome> {
 /// tests are pinning down.
 #[test]
 fn a_partys_crit_carries_the_swing_outcome() {
-    let (mut game, ..) = battle_for_swing_outcomes(52);
-    force_the_next_attack_to_crit(&mut game);
+    let (mut game, player, _) = battle_for_swing_outcomes(52);
+    force_the_next_attack_to_crit(&mut game, player);
     player_swings_at_group(&mut game, 0);
     assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Crit));
 }
@@ -988,8 +988,8 @@ fn a_partys_hit_carries_the_swing_outcome() {
 
 #[test]
 fn a_partys_fumble_carries_the_swing_outcome() {
-    let (mut game, ..) = battle_for_swing_outcomes(52);
-    force_the_next_attack_to_miss(&mut game);
+    let (mut game, player, _) = battle_for_swing_outcomes(52);
+    force_the_next_attack_to_miss(&mut game, player);
     player_swings_at_group(&mut game, 0);
     assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Fumble));
 }

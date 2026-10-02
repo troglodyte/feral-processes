@@ -152,6 +152,11 @@ impl Game {
         } else {
             evasion
         };
+        let derived = self
+            .world
+            .get::<crate::components::Derived>(entity)
+            .copied()
+            .unwrap_or_default();
         battle::Combatant {
             accuracy: battle::accuracy_of(
                 speed,
@@ -161,6 +166,8 @@ impl Game {
             evasion,
             atk: self.effective_atk(entity),
             range: swing.range,
+            crit: derived.crit,
+            fumble: derived.fumble,
         }
     }
 

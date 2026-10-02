@@ -1977,7 +1977,7 @@ impl Attributes {
 /// `progression::derive` answers beyond hp, attack, mitigation and
 /// Decompiler. Written only by `Game::recompute_derived`, and its absence
 /// means "not derived" - a companion reads the defaults (`POWER_MAX`, no
-/// resist, no extraction).
+/// resist, no extraction, the flat `CRIT_CHANCE` and `FUMBLE_CHANCE`).
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct Derived {
     pub max_power: f32,
@@ -1985,6 +1985,10 @@ pub struct Derived {
     pub status_resist: i32,
     /// The player's capped extra mining chance.
     pub extraction: f32,
+    /// The crit band `Game::combatant_profile` hands to the roll.
+    pub crit: f64,
+    /// The fumble band `Game::combatant_profile` hands to the roll.
+    pub fumble: f64,
 }
 
 impl Default for Derived {
@@ -1993,6 +1997,8 @@ impl Default for Derived {
             max_power: POWER_MAX,
             status_resist: 0,
             extraction: 0.0,
+            crit: crate::tuning::CRIT_CHANCE,
+            fumble: crate::tuning::FUMBLE_CHANCE,
         }
     }
 }

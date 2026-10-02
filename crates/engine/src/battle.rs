@@ -6,10 +6,10 @@ use crate::items::ItemId;
 use crate::species::{AffinityClass, SpeciesId};
 use crate::tuning::{
     ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, ATTACKER_ACCURACY_ADVANTAGE, BACK_SLOT_AGGRO_WEIGHT,
-    CRIT_CHANCE, CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
-    EXTRA_ATTACK_LEVEL, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE,
-    FUMBLE_RECOIL_FRACTION, FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN,
-    JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
+    CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
+    EXTRA_ATTACK_LEVEL, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_RECOIL_FRACTION,
+    FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE,
+    JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
     LOW_POWER_MIN_ATTACK_MULTIPLIER, MAX_ATTACKS_PER_ROUND,
 };
 
@@ -186,6 +186,13 @@ pub struct Combatant {
     /// see `accuracy_of`.
     pub atk: i32,
     pub range: DamageRange,
+    /// This attacker's crit band before the clamp to the hit chance. The
+    /// player's comes from Entropy; everyone else carries `CRIT_CHANCE`.
+    pub crit: f64,
+    /// This attacker's fumble band before the clamp to `1 - hit chance`.
+    /// The player's comes from Entropy; everyone else carries
+    /// `FUMBLE_CHANCE`.
+    pub fumble: f64,
 }
 
 /// How badly an attack went wrong. **Rungs replace rather than stack** — a
@@ -270,9 +277,9 @@ fn resolve_attack_inner(
     allow_fumble: bool,
 ) -> AttackOutcome {
     let h = hit_chance(attacker.accuracy, defender.evasion);
-    let crit = CRIT_CHANCE.min(h);
+    let crit = attacker.crit.min(h);
     let fumble = if allow_fumble {
-        FUMBLE_CHANCE.min(1.0 - h)
+        attacker.fumble.min(1.0 - h)
     } else {
         0.0
     };
@@ -340,12 +347,14 @@ fn fumble_rung(
 ///
 /// Deliberately excludes the fumble ladder: Recoil and Opening both land on
 /// the *attacker*, so neither is defender-facing damage, and the projection
-/// is therefore a mild overestimate of an attacker's net output. Named here
-/// rather than silently, in the same spirit as `TURN_CAP`'s note that Power
-/// decay is unmodelled.
+/// is therefore a mild overestimate of an attacker's net output. It also
+/// means a projection counts Entropy's wider crit band and not its wider
+/// fumble band, so Entropy reads as pure upside on every duel forecast.
+/// Named here rather than silently, in the same spirit as `TURN_CAP`'s note
+/// that Power decay is unmodelled.
 pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
     let h = hit_chance(attacker.accuracy, defender.evasion);
-    let crit = CRIT_CHANCE.min(h);
+    let crit = attacker.crit.min(h);
     let plain = h - crit;
     let mean = attacker.range.mean();
     let atk = attacker.atk as f64;
@@ -768,7 +777,9 @@ mod tests {
     // Only the caller of `jack_out_chance` draws against these; the function
     // itself takes luck as a parameter, so they aren't imported at module
     // scope.
-    use crate::tuning::{JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_MITIGATION_PERCENT};
+    use crate::tuning::{
+        CRIT_CHANCE, FUMBLE_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_MITIGATION_PERCENT,
+    };
 
     fn duel(ehp: f64, damage: f64) -> DuelSide {
         DuelSide { ehp, damage }
@@ -999,6 +1010,8 @@ mod tests {
             evasion,
             atk,
             range,
+            crit: CRIT_CHANCE,
+            fumble: FUMBLE_CHANCE,
         }
     }
 
@@ -1129,6 +1142,47 @@ mod tests {
             resolve_attack(attacker, defender, &mut rng),
             AttackOutcome::Fumble(_)
         ));
+    }
+
+    #[test]
+    fn the_attackers_own_crit_chance_sets_the_crit_band() {
+        let attacker = Combatant {
+            crit: 0.3,
+            ..combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 })
+        };
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        let mut rng = rng_whose_first_roll_is_in(0.1..0.3);
+        assert_eq!(
+            resolve_attack(attacker, defender, &mut rng),
+            AttackOutcome::Crit { dmg: 18 }
+        );
+    }
+
+    #[test]
+    fn the_attackers_own_fumble_chance_sets_the_fumble_band() {
+        let attacker = Combatant {
+            fumble: 0.0,
+            ..combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 })
+        };
+        let defender = combatant(12.0, 12.0, 3, DamageRange { min: 2, max: 2 });
+        let mut rng = rng_whose_first_roll_is_in((1.0 - FUMBLE_CHANCE)..1.0);
+        assert_eq!(
+            resolve_attack(attacker, defender, &mut rng),
+            AttackOutcome::Miss
+        );
+    }
+
+    #[test]
+    fn expected_damage_reads_the_attackers_crit_chance() {
+        let plain = combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 });
+        let critty = Combatant { crit: 0.3, ..plain };
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        // Every crit adds one more rolled 4 on top of a plain hit.
+        let gained = expected_damage(critty, defender) - expected_damage(plain, defender);
+        assert!(
+            (gained - (0.3 - CRIT_CHANCE) * 4.0).abs() < 1e-9,
+            "{gained}"
+        );
     }
 
     #[test]

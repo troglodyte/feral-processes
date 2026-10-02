@@ -123,6 +123,8 @@ pub enum DerivedStat {
     MaxPower,
     StatusResist,
     Extraction,
+    Crit,
+    Fumble,
 }
 
 impl DerivedStat {
@@ -136,6 +138,8 @@ impl DerivedStat {
             DerivedStat::MaxPower => "Max Power",
             DerivedStat::StatusResist => "Status resist",
             DerivedStat::Extraction => "Extraction",
+            DerivedStat::Crit => "Crit",
+            DerivedStat::Fumble => "Fumble",
         }
     }
 }
@@ -405,15 +409,15 @@ mod tests {
     }
 
     #[test]
-    fn entropy_is_not_buyable_and_every_buyable_attribute_says_what_it_does() {
+    fn every_shipped_attribute_is_buyable_and_says_what_it_does() {
         let db = shipped();
-        assert!(!db.get(&AttributeId::from("entropy")).unwrap().buyable());
         let buyable: Vec<&str> = db.buyable().map(|d| d.id.as_str()).collect();
         assert_eq!(
             buyable,
             vec![
                 "analysis",
                 "bandwidth",
+                "entropy",
                 "footprint",
                 "parity",
                 "persistence"

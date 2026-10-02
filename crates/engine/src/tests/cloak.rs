@@ -408,7 +408,7 @@ fn a_swing_that_missed_leaves_the_defenders_cloak_standing() {
     // The swinger's own, so the second assertion below is not vacuous: the
     // whole point of the pair is that a miss breaks one and not the other.
     game.arm_cloak(player, 5);
-    force_the_next_attack_to_miss(&mut game);
+    force_the_next_attack_to_miss(&mut game, player);
     let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
     let outcome = game.resolve_and_apply_attack(
         player,

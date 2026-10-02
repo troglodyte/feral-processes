@@ -520,7 +520,6 @@ mod tests {
         for bad in [
             player_spend(&[("parity", 5)]),
             player_spend(&[("parity", 7)]),
-            player_spend(&[("parity", 5), ("entropy", 1)]),
             player_spend(&[("parity", 5), ("nonesuch", 1)]),
         ] {
             let s = Scenario {

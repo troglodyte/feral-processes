@@ -813,21 +813,19 @@ mod tests {
     }
 
     /// The attribute-keyed spend's own fail-silent hazard: an id nothing
-    /// buys (a typo, or Entropy with no effects) would report the control.
+    /// buys (a typo) would report the control.
     #[test]
-    fn a_character_spec_naming_a_non_buyable_attribute_is_an_err() {
+    fn a_character_spec_naming_an_unknown_attribute_is_an_err() {
         use crate::arena::scenario::CharacterSpec;
-        for id in ["entropy", "no_such_attribute"] {
-            let mut s = fresh(1, 1);
-            s.character = CharacterSpec {
-                stats: [(id.into(), 1)].into(),
-                ..CharacterSpec::default()
-            };
-            let err = build_player(&s, &test_assets_dir())
-                .err()
-                .expect("should refuse");
-            assert!(err.contains(id), "{err}");
-        }
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            stats: [("no_such_attribute".into(), 1)].into(),
+            ..CharacterSpec::default()
+        };
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("no_such_attribute"), "{err}");
     }
 
     /// The perk basket's own overspend rule, `an_overspent_character_spec_

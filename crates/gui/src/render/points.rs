@@ -12,11 +12,11 @@ use super::popup::{PopupSize, Row, draw_popup, item_row, text_row};
 use super::*;
 
 /// One stat's before -> after, in the units the player reads it in.
-/// Extraction is a chance, so it reads as a percentage.
+/// Extraction, Crit and Fumble are chances, so they read as percentages.
 fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
     let label = stat.label();
     match stat {
-        DerivedStat::Extraction => {
+        DerivedStat::Extraction | DerivedStat::Crit | DerivedStat::Fumble => {
             format!(
                 "{label} {:.1}% \u{2192} {:.1}%",
                 before * 100.0,

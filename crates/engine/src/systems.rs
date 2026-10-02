@@ -230,7 +230,7 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 /// dull one worse. It enters as a **deviation**, not as an absolute: at the
 /// base the term is exactly zero, so a species file that never heard of the
 /// field extracts at the rate it always did.
-
+///
 /// `morale` is `Game::morale` for whoever is standing there — the signed sum
 /// of everything that program remembers. It reads as a **deviation from
 /// zero**, the same way `analysis_over_base` reads as one from the catalogue base, and

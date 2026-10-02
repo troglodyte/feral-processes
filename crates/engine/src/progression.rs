@@ -272,6 +272,21 @@ impl DerivedBase {
             fumble: FUMBLE_CHANCE,
         }
     }
+
+    /// The base a seated program derives from: the three `Stats` figures it
+    /// already holds (gear and `BoughtStats` already taken off) less what its
+    /// attributes contribute, so `derive` of it gives the same figures back.
+    /// Everything else starts where the player's does. Integer arithmetic on
+    /// the same `attribute_contribution` `derive` adds, so the round trip is
+    /// exact and no clamp can bite.
+    pub fn program(max_hp: i32, atk: i32, mitigation: i32, contribution: &DerivedStats) -> Self {
+        DerivedBase {
+            max_hp: max_hp - contribution.max_hp,
+            atk: atk - contribution.atk,
+            mitigation: mitigation - contribution.mitigation,
+            ..DerivedBase::player()
+        }
+    }
 }
 
 /// What `derive` answers: every stat an attribute can feed, already clamped
@@ -320,12 +335,13 @@ pub fn resisted_duration(duration: u32, status_resist: i32) -> u32 {
     (scaled.round() as u32).max(1)
 }
 
-/// The one formula. For each stat, `base + sum(per_point * (value - the
-/// attribute's catalogue base))`, rounded once per stat and then clamped to
-/// that stat's range. An attribute the store does not hold counts as its
-/// base and contributes nothing. Nothing else computes a derived stat: the
-/// game, the Points preview and `balance_sim` all call this.
-pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+/// What `attrs` add above their catalogue bases, per stat: the rounded sum of
+/// `per_point * (value - base)` with no base added and no range applied, so it
+/// can be negative. `derive` adds a base to it and clamps, and `Game::seat_derived`
+/// subtracts it from a program's stored figures to find the base they imply -
+/// one sum, so the two cannot disagree. Crit, fumble and extraction stay
+/// fractional, as they are in `derive`.
+pub fn attribute_contribution(attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
     let mut sums = BTreeMap::<DerivedStat, f32>::new();
     for def in db.iter() {
         let delta = attrs.get(&def.id).map_or(0, |v| v - def.base) as f32;
@@ -334,21 +350,37 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
         }
     }
     let sum = |stat: DerivedStat| sums.get(&stat).copied().unwrap_or(0.0);
-    let rounded = |base: i32, stat: DerivedStat| (base as f32 + sum(stat)).round() as i32;
+    let rounded = |stat: DerivedStat| sum(stat).round() as i32;
     DerivedStats {
-        max_hp: rounded(base.max_hp, DerivedStat::MaxHp).max(1),
-        atk: rounded(base.atk, DerivedStat::Atk).max(1),
-        mitigation: rounded(base.mitigation, DerivedStat::Mitigation).max(0),
-        decompiler: rounded(base.decompiler, DerivedStat::Decompiler).max(0),
-        max_power: (base.max_power + sum(DerivedStat::MaxPower))
-            .round()
-            .max(MIN_MAX_POWER),
-        status_resist: rounded(base.status_resist, DerivedStat::StatusResist)
+        max_hp: rounded(DerivedStat::MaxHp),
+        atk: rounded(DerivedStat::Atk),
+        mitigation: rounded(DerivedStat::Mitigation),
+        decompiler: rounded(DerivedStat::Decompiler),
+        max_power: sum(DerivedStat::MaxPower).round(),
+        status_resist: rounded(DerivedStat::StatusResist),
+        extraction: sum(DerivedStat::Extraction),
+        crit: sum(DerivedStat::Crit) as f64,
+        fumble: sum(DerivedStat::Fumble) as f64,
+    }
+}
+
+/// The one formula. For each stat, `base + attribute_contribution`, then
+/// clamped to that stat's range. An attribute the store does not hold counts
+/// as its base and contributes nothing. Nothing else computes a derived stat:
+/// the game, the Points preview and `balance_sim` all call this.
+pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+    let c = attribute_contribution(attrs, db);
+    DerivedStats {
+        max_hp: (base.max_hp + c.max_hp).max(1),
+        atk: (base.atk + c.atk).max(1),
+        mitigation: (base.mitigation + c.mitigation).max(0),
+        decompiler: (base.decompiler + c.decompiler).max(0),
+        max_power: (base.max_power + c.max_power).round().max(MIN_MAX_POWER),
+        status_resist: (base.status_resist + c.status_resist)
             .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
-        extraction: (base.extraction + sum(DerivedStat::Extraction))
-            .clamp(0.0, MINING_EXTRACTION_CAP),
-        crit: (base.crit + sum(DerivedStat::Crit) as f64).clamp(0.0, CRIT_CHANCE_MAX),
-        fumble: (base.fumble + sum(DerivedStat::Fumble) as f64).clamp(0.0, FUMBLE_CHANCE_MAX),
+        extraction: (base.extraction + c.extraction).clamp(0.0, MINING_EXTRACTION_CAP),
+        crit: (base.crit + c.crit).clamp(0.0, CRIT_CHANCE_MAX),
+        fumble: (base.fumble + c.fumble).clamp(0.0, FUMBLE_CHANCE_MAX),
     }
 }
 

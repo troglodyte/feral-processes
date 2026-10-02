@@ -3362,7 +3362,7 @@ impl Game {
     /// battle line, capped at `MAX_PARTY_SIZE` and entered through an
     /// explicit `add_to_party` — the program arrives owned and the player
     /// deploys it, like every other acquisition.
-    fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
+    pub(crate) fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
         let player = self.player_entity();
         let at = *self.world.get::<Position>(player)?;
         let program = self.spawn_wild_creature_scaled(species_id, at.x, at.y, 1.0, false)?;
@@ -3372,6 +3372,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
+        self.seat_derived(program);
         Some(self.creature_label(program))
     }
 }

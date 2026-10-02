@@ -2008,6 +2008,19 @@ impl Default for Derived {
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StatPoints(pub u32);
 
+/// The figures a seated program's attributes derive from: what `Stats` would
+/// be with every attribute at its catalogue base. Set once by
+/// `Game::seat_derived`, read through `Game::derived_base`. Its absence means
+/// the program is not derived (a wild one, or an old save before it is
+/// seated).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct ProgramBase(pub crate::progression::DerivedBase);
+
+/// Whether a derived program's unspent attribute points are held for the
+/// player to spend rather than spent for it.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HoldPoints(pub bool);
+
 /// What one owned program's reserves stand at. Minted empty at
 /// `Game::roster_parts` beside `Memories`, so the absence of this component
 /// means "not on the roster" rather than "needs nothing".

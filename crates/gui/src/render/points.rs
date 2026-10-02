@@ -134,7 +134,7 @@ mod tests {
             AllocationFor::Owned(StatOwner::Player),
             pool,
             game.attribute_db(),
-            game.player_attributes(),
+            game.attributes_of(game.player_entity()),
         )
     }
 

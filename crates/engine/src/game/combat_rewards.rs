@@ -1296,6 +1296,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(front).insert(parts);
         self.install_innate_routines(front);
+        self.seat_derived(front);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {
@@ -1453,6 +1454,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(lead).insert(parts);
         self.install_innate_routines(lead);
+        self.seat_derived(lead);
         self.log_kind(
             MessageKind::Outcome,
             "ICE breached! The program now runs under your control.",

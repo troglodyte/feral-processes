@@ -10,7 +10,7 @@
 //!
 //! **The preview is `progression::derive` called**, once on the opening
 //! attributes and once on those plus the spend, with the player's perk and
-//! gear bonus (`Game::player_stat_bonus`) added to both - so a
+//! gear bonus (`Game::stat_bonus`) added to both - so a
 //! before->after figure is the player's base stat now and after. It is not
 //! the HUD's effective figure: low-Power, program, buff and emulation
 //! adjustments and the mitigation cap apply on top, outside a spend.
@@ -99,7 +99,7 @@ impl StatAllocation {
         }
     }
 
-    /// Previews on top of `bonus`, `Game::player_stat_bonus` for a player
+    /// Previews on top of `bonus`, `Game::stat_bonus` for a player
     /// who already holds perks or gear.
     pub fn with_bonus(mut self, bonus: DerivedStats) -> Self {
         self.bonus = Some(bonus);
@@ -268,9 +268,9 @@ impl App {
                 AllocationFor::Owned(StatOwner::Player),
                 banked,
                 game.attribute_db(),
-                game.player_attributes(),
+                game.attributes_of(game.player_entity()),
             )
-            .with_bonus(game.player_stat_bonus()),
+            .with_bonus(game.stat_bonus(game.player_entity())),
         );
         self.allocation_spent.clear();
         self.allocation_origin = origin;

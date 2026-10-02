@@ -1,7 +1,7 @@
 //! The player's derived figures: `progression::derive` applied to the
 //! entity's attributes, written back through the one door.
 
-use crate::components::{Attributes, Derived, StatPoints};
+use crate::components::{Attributes, Derived, HoldPoints, ProgramBase, StatPoints, Tamed};
 use crate::progression::{SpendError, StatOwner};
 use crate::*;
 
@@ -91,27 +91,26 @@ impl Game {
             .clone()
     }
 
-    /// The player's attributes as they stand, the Points screen's "before".
-    pub fn player_attributes(&self) -> Attributes {
+    /// `entity`'s attributes as they stand, the Points screen's "before".
+    pub fn attributes_of(&self, entity: Entity) -> Attributes {
         self.world
-            .get::<Attributes>(self.player_entity())
+            .get::<Attributes>(entity)
             .cloned()
             .unwrap_or_default()
     }
 
-    /// What the player holds on top of their attributes' derivation - the
+    /// What `entity` holds on top of its attributes' derivation - the
     /// perk receipt and worn gear - so the Points screen can preview the
     /// figures the HUD will show. Read off the live stats rather than summed
     /// again, so it cannot drift from `recompute_derived`. Only the stats
     /// gear or a perk can move are non-zero.
-    pub fn player_stat_bonus(&self) -> crate::progression::DerivedStats {
-        let player = self.player_entity();
-        let derived = self.derived_stats(player);
+    pub fn stat_bonus(&self, entity: Entity) -> crate::progression::DerivedStats {
+        let derived = self.derived_stats(entity);
         let stats = *self
             .world
-            .get::<Stats>(player)
-            .expect("the player always has Stats");
-        let skill = self.world.get::<Decompiler>(player).map_or(0, |d| d.skill);
+            .get::<Stats>(entity)
+            .expect("an entity with a stat bonus has Stats");
+        let skill = self.world.get::<Decompiler>(entity).map_or(0, |d| d.skill);
         crate::progression::DerivedStats {
             max_hp: stats.max_hp - derived.max_hp,
             atk: stats.atk - derived.atk,
@@ -125,15 +124,70 @@ impl Game {
         }
     }
 
+    /// The base `entity` derives from: its `ProgramBase` when seated, the
+    /// player's otherwise. The one accessor, so no caller names
+    /// `DerivedBase::player()` for a program.
+    pub fn derived_base(&self, entity: Entity) -> crate::progression::DerivedBase {
+        self.world
+            .get::<ProgramBase>(entity)
+            .map_or_else(crate::progression::DerivedBase::player, |base| base.0)
+    }
+
     /// What `progression::derive` answers for `entity` right now.
     pub(crate) fn derived_stats(&self, entity: Entity) -> crate::progression::DerivedStats {
         crate::progression::derive(
-            &crate::progression::DerivedBase::player(),
+            &self.derived_base(entity),
             self.world
                 .get::<Attributes>(entity)
                 .unwrap_or(&Attributes::default()),
             self.world.resource::<crate::attributes::AttributeDb>(),
         )
+    }
+
+    /// Turns a tamed program with baked `Stats` into a derived one, working
+    /// backwards from its current figures: worn gear, the `BoughtStats`
+    /// receipt and what its attributes contribute are taken off, and what is
+    /// left is its `ProgramBase`. `Stats` is therefore the same before and
+    /// after for any figure in range (`derive` floors hp and attack at 1, which
+    /// a hand-built fixture can sit below), so current `hp` is untouched; only
+    /// Power can move, through recompute's clamp to the new maximum.
+    ///
+    /// A no-op for an untamed entity or one already seated, so every door
+    /// that makes a program calls it last without asking.
+    pub(crate) fn seat_derived(&mut self, entity: Entity) {
+        if self.world.get::<Tamed>(entity).is_none()
+            || self.world.get::<ProgramBase>(entity).is_some()
+        {
+            return;
+        }
+        let Some(stats) = self.world.get::<Stats>(entity).copied() else {
+            return;
+        };
+        let bought = self
+            .world
+            .get::<BoughtStats>(entity)
+            .copied()
+            .unwrap_or_default();
+        let gear = self.gear_bonus(entity);
+        let contribution = crate::progression::attribute_contribution(
+            self.world
+                .get::<Attributes>(entity)
+                .unwrap_or(&Attributes::default()),
+            self.world.resource::<crate::attributes::AttributeDb>(),
+        );
+        let base = crate::progression::DerivedBase::program(
+            stats.max_hp - bought.max_hp,
+            stats.atk - bought.atk - gear.atk,
+            stats.mitigation - bought.mitigation - gear.mitigation,
+            &contribution,
+        );
+        self.world.entity_mut(entity).insert((
+            ProgramBase(base),
+            Derived::default(),
+            StatPoints(0),
+            HoldPoints(false),
+        ));
+        self.recompute_derived(entity);
     }
 
     /// The only writer of derived values. Sets `Stats::{max_hp, atk,

@@ -2095,7 +2095,7 @@ fn a_captured_program_joins_the_roster_with_a_full_reserve() {
     );
     assert_eq!(
         game.world.get::<PowerReserve>(wild).map(|r| r.get()),
-        Some(POWER_MAX),
+        Some(game.max_power(wild).min(POWER_MAX)),
         "a captured program holds a full reserve"
     );
 }
@@ -2109,7 +2109,7 @@ fn an_adopted_program_joins_the_roster_with_a_full_reserve() {
         .expect("adoption succeeds");
     assert_eq!(
         game.world.get::<PowerReserve>(adopted).map(|r| r.get()),
-        Some(POWER_MAX)
+        Some(game.max_power(adopted).min(POWER_MAX))
     );
 }
 

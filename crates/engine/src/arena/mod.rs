@@ -208,6 +208,12 @@ pub(crate) fn spawn_companion(game: &mut Game, species: &str, level: u32) -> Opt
     let pos = *game.world.get::<Position>(game.player_entity())?;
     let program = game.adopt_program(species, pos.x, pos.y, 1.0)?;
     set_level(game, program, level);
+    // `adopt_program` seated it at level 1, and `set_level` has since baked
+    // growth into `Stats` that the old base does not hold.
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::ProgramBase>();
+    game.seat_derived(program);
     Some(program)
 }
 

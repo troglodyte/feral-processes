@@ -98,8 +98,13 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
         .get::<crate::components::ProgramBase>(entity)
         .is_some();
     let growth = if seated {
-        let (multiplier, roll) = game.program_growth(entity);
-        progression::Growth::ProgramPoints { multiplier, roll }
+        // Roll 1.0, the species curve: an arena fight measures the species,
+        // so the individual roll's luck must not leak into the figures.
+        let (multiplier, _) = game.program_growth(entity);
+        progression::Growth::ProgramPoints {
+            multiplier,
+            roll: 1.0,
+        }
     } else {
         progression::Growth::Auto { multiplier: growth }
     };

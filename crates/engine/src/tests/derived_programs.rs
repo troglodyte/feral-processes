@@ -447,7 +447,10 @@ fn an_arena_companion_levelled_after_adoption_grew_through_points() {
     let s = species(&game);
     let level_one = crate::arena::spawn_companion(&mut game, &s, 1).unwrap();
     let program = crate::arena::spawn_companion(&mut game, &s, 6).unwrap();
-    let (parity, _) = one_level(&game, program);
+    // The species curve, roll 1.0: an arena fight measures the species, so
+    // the individual roll's luck must not leak in.
+    let (g, _) = game.program_growth(program);
+    let (parity, _) = crate::progression::program_level_points(g, 1.0);
     assert_eq!(
         attribute(&game, program, "parity"),
         attribute(&game, level_one, "parity") + 5 * parity as i32

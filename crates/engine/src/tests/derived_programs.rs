@@ -613,3 +613,39 @@ fn an_unseated_program_reports_no_points() {
     let program = unseated_program(&mut game);
     assert!(program_manifest(&game, program).points.is_none());
 }
+
+/// Fuses a fresh pair in a fresh game, the first parent holding a bank of
+/// `levels` levels' points; `spend_first` spends the bank by hand before the
+/// fusion. Returns the child's stats.
+fn fuse_with_a_bank(levels: u32, spend_first: bool) -> Stats {
+    let mut game = game();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = seated_program(&mut game);
+    let b = seated_program(&mut game);
+    game.set_hold_points(a, true).unwrap();
+    let (parity, analysis) = one_level(&game, a);
+    game.world.get_mut::<StatPoints>(a).unwrap().0 = levels * (parity + analysis);
+    if spend_first {
+        game.set_hold_points(a, false).unwrap();
+    }
+    game.fuse_companions(a, b, None).unwrap();
+    let child = game
+        .owned_pets()
+        .into_iter()
+        .max_by_key(|p| p.fusions)
+        .unwrap()
+        .entity;
+    stats_of(&game, child)
+}
+
+#[test]
+fn fusing_a_held_parent_keeps_its_banked_points() {
+    let spent = fuse_with_a_bank(40, true);
+    let held = fuse_with_a_bank(40, false);
+    let empty = fuse_with_a_bank(0, false);
+    assert_eq!(held, spent, "a bank is spent, not lost, by fusion");
+    assert!(
+        held.max_hp > empty.max_hp,
+        "the bank must be worth something"
+    );
+}

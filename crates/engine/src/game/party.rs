@@ -1424,6 +1424,16 @@ impl Game {
         for e in [a, b] {
             self.strip_gear(e);
         }
+        // Also before the snapshot: a held parent's bank lives in
+        // `StatPoints`, which `fuse_stat` never reads, and the child seats
+        // with an empty one — so the bank is spent into the parent's
+        // attributes first, where `Stats` carries it across.
+        for e in [a, b] {
+            if self.stat_points_of(StatOwner::Program(e)) > 0 {
+                self.set_hold_points(e, false)
+                    .map_err(|_| "A program's points could not be spent.".to_string())?;
+            }
+        }
         let fused_depth = self.fusion_count(a).max(self.fusion_count(b)) + 1;
         let (species_a, exp_a, stats_a, potential_a) = (
             self.world.get::<Creature>(a).unwrap().species.clone(),

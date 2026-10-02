@@ -35,7 +35,7 @@ Decisions taken in the brainstorm:
 | Workers per line | **Exactly one.** More throughput means a second, separate line. |
 | How the worker spends its time | **Pull from the end**: work the furthest-downstream wanted machine that can progress. |
 | Where the worker stands | It **walks to the active machine's station**. |
-| Members | Work nodes, assemblers, Teardown Rigs, fuel burners (`power_upkeep`). |
+| Members | Work nodes, assemblers, fuel burners (`power_upkeep`). Teardown Rigs are not members: each stays a line of one. |
 | An ingredient no member makes | The line's worker fetches it from a Depot, through the existing fetch errand. |
 | Layout reward | The staff saving only. |
 
@@ -50,10 +50,13 @@ holds:
 - **Assembler:** A's product (`systems::produced_item`) is an ingredient of
   B's recipe (`systems::assembly_recipe`).
 - **Fuel:** A's product is B's `power_upkeep` fuel.
-- **Rig:** A is a Teardown Rig whose fitted tool's yield table
-  (`Hopper::standing_tool` resolved against `ToolDb`) includes an ingredient
-  or the fuel of B. `produced_item` ignores `strips` today, so this needs a
-  new `yields_of(rig)` helper. A rig with no tool fitted has no out-edges.
+
+**Rigs are not members.** A rig's `Stock.output` is within the pull's reach,
+but the scheduler never staffs a rig (`can_progress` is false for it, so its
+standing want is dropped), and a rig strips with each hopper entry's own tool,
+not `standing_tool`, so an edge built from `standing_tool` could claim a link
+that moves nothing. `produced_item` is `None` for a rig, so a rig has no
+edges and is a line of one. Admitting rigs waits for a rig gate.
 
 The edge is a **call into the same reach and recipe functions the pull
 uses**, never a re-derivation. A line's links therefore cannot disagree with
@@ -215,8 +218,7 @@ Engine unit tests, TDD, using `dev-saves/` templates where one fits and
 - Two touching Mining Nodes are two lines.
 - Mining → Lathe is one line, ranked Lathe 0 and Mining 1.
 - Fuel edge: a power-cell maker beside a burner joins its line.
-- Rig edge: present with a tool whose yields include the neighbour's
-  ingredient, absent with no tool fitted.
+- Rig: a Teardown Rig beside a machine is never in its line (a line of one).
 - Building a linking machine between two lines merges them; demolishing it
   splits them.
 - A modded cycle does not panic and ranks deterministically.
@@ -257,10 +259,4 @@ Engine unit tests, TDD, using `dev-saves/` templates where one fits and
   each other by adjacency drop to one worker per line on load. Their lines
   produce more slowly and the freed staff return to the pool. This follows
   from "automatic, exactly one". The CHANGELOG entry says so.
-- **Rig "can progress".** A rig's job is a hopper queue, not a recipe. The
-  plan must confirm how a rig's want is gated today and reuse that gate as
-  its candidacy test.
-- **Rig reach.** Confirm that `feeders_by_tile` and `plan_adjacent_take`
-  already let an assembler pull from a rig's `Stock.output`. If they do not,
-  a rig edge would show a link that moves nothing. In that case the rig edge
-  is dropped from scope rather than the pull widened silently.
+- **Rigs.** Resolved by excluding them (§2): no rig gate exists, so rigs stay lines of one.

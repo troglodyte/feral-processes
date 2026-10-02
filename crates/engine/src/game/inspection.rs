@@ -1456,10 +1456,7 @@ impl Game {
         let items = self.world.resource::<ItemDb>();
         let mut edges: HashMap<Entity, Vec<(i32, i32)>> = HashMap::new();
         for (entity, pos, kind) in &placed {
-            let Some(recipe) = db
-                .get(kind)
-                .and_then(|def| crate::systems::assembly_recipe(def, items))
-            else {
+            let Some(def) = db.get(kind) else {
                 continue;
             };
             for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
@@ -1469,8 +1466,7 @@ impl Game {
                 };
                 let feeds = db
                     .get(neighbour_kind)
-                    .and_then(crate::systems::produced_item)
-                    .is_some_and(|made| recipe.iter().any(|(want, _)| want == made));
+                    .is_some_and(|made| crate::systems::feeds_ingredient(made, def, items));
                 if !feeds {
                     continue;
                 }

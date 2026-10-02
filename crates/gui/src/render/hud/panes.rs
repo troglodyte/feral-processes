@@ -757,6 +757,7 @@ mod tests {
             },
             standing_tool: None,
             pod: None,
+            line: None,
         }
     }
 

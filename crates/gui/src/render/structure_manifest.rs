@@ -34,15 +34,24 @@ pub(super) fn draw_structure_manifest(
         return;
     };
 
+    let siblings: Vec<StructureReport> = match report.line {
+        Some(key) => game
+            .structure_report()
+            .into_iter()
+            .filter(|s| s.line == Some(key))
+            .collect(),
+        None => Vec::new(),
+    };
+    let siblings: Vec<&StructureReport> = siblings.iter().collect();
+    let idle = structure_is_idle(&report, &siblings);
     let mut rows = vec![Row::TextColored(
         structure_headline(&report),
-        if structure_is_idle(&report) {
-            YELLOW
-        } else {
-            TEXT
-        },
+        if idle { YELLOW } else { TEXT },
     )];
-    let detail = structure_detail_lines(&report);
+    let line = report
+        .line
+        .and_then(|key| game.line_reports().into_iter().find(|l| l.key == key));
+    let detail = structure_detail_lines(&report, line.as_ref(), idle);
     if detail.is_empty() {
         rows.push(text_row("  nothing staged, nobody posted"));
     }

@@ -681,6 +681,37 @@ pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&It
     def.assembles.as_ref().map(|a| &a.item)
 }
 
+/// True when `a`'s product is one of `b`'s assembly ingredients. The one
+/// definition of an ingredient edge: the map's drawn links and a production
+/// line's membership both call it, so they cannot disagree.
+pub(crate) fn feeds_ingredient(
+    a: &crate::structures::StructureDef,
+    b: &crate::structures::StructureDef,
+    items: &ItemDb,
+) -> bool {
+    let (Some(made), Some(recipe)) = (produced_item(a), assembly_recipe(b, items)) else {
+        return false;
+    };
+    recipe.iter().any(|(want, _)| want == made)
+}
+
+/// True when `a`'s product is the fuel `b` burns to stay running.
+pub(crate) fn feeds_fuel(
+    a: &crate::structures::StructureDef,
+    b: &crate::structures::StructureDef,
+) -> bool {
+    matches!((produced_item(a), &b.power_upkeep), (Some(made), Some(fuel)) if made == fuel)
+}
+
+/// Either feed edge: `a` makes something `b` takes in.
+pub(crate) fn feeds(
+    a: &crate::structures::StructureDef,
+    b: &crate::structures::StructureDef,
+    items: &ItemDb,
+) -> bool {
+    feeds_ingredient(a, b, items) || feeds_fuel(a, b)
+}
+
 /// Moves a machine to `next`, announcing it to the base feed only when the
 /// state actually changes.
 ///

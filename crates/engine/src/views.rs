@@ -1619,6 +1619,26 @@ pub struct WorkTable {
     pub unworked_total: usize,
 }
 
+/// One production line of two or more machines — see `Game::line_reports`.
+#[derive(Clone, Debug)]
+pub struct LineReport {
+    pub key: crate::game::base::lines::LineKey,
+    /// In feed order: sources first, the end of the line last.
+    pub members: Vec<Entity>,
+    /// Display names, parallel to `members`.
+    pub names: Vec<String>,
+    /// The member the line's one worker is posted on, if anyone is.
+    pub active: Option<Entity>,
+    /// The active machine's status, or with nobody posted the first
+    /// non-`Idle` member status from the end of the line.
+    pub status: MachineStatus,
+    /// An ingredient a `Starved` member lacks that no member makes and no
+    /// Depot holds.
+    pub missing: Option<ItemId>,
+    /// `missing` as the roster says it: "Compiler needs Bytecode Block".
+    pub missing_text: Option<String>,
+}
+
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {
@@ -1683,6 +1703,9 @@ pub struct StructureReport {
     /// A drop pod terminal's charge, `None` on every structure that is not
     /// one (`StructureDef::drop_pod`).
     pub pod: Option<PodState>,
+    /// The production line this structure belongs to, `Some` only for a line
+    /// of two or more.
+    pub line: Option<crate::game::base::lines::LineKey>,
 }
 
 /// Whether a drop pod terminal can fire. There is no "spent with nothing
@@ -1708,6 +1731,37 @@ impl StructureReport {
     /// compile when one drifted.
     pub fn is_idle(&self) -> bool {
         self.workable && self.assignees.is_empty()
+    }
+
+    /// Whether a production line has nobody on it: one worker runs the whole
+    /// line, so a staffed three-machine line has two machines with no
+    /// assignee that are not idle, and only a line with no body on *any*
+    /// member is.
+    pub fn line_is_idle<'a>(members: impl IntoIterator<Item = &'a StructureReport>) -> bool {
+        let mut any_workable = false;
+        for member in members {
+            if !member.assignees.is_empty() {
+                return false;
+            }
+            any_workable |= member.workable;
+        }
+        any_workable
+    }
+
+    /// How many things on the base want a program: every idle structure of
+    /// its own, and every idle *line* once however many machines it has.
+    pub fn idle_count(structures: &[StructureReport]) -> usize {
+        let alone = structures
+            .iter()
+            .filter(|s| s.line.is_none() && s.is_idle())
+            .count();
+        let keys: std::collections::BTreeSet<_> =
+            structures.iter().filter_map(|s| s.line).collect();
+        let lines = keys
+            .into_iter()
+            .filter(|&key| Self::line_is_idle(structures.iter().filter(|s| s.line == Some(key))))
+            .count();
+        alone + lines
     }
 }
 

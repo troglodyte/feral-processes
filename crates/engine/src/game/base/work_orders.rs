@@ -28,6 +28,7 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
+use crate::game::base::lines::{self, Line};
 use crate::game::base::offshift;
 use crate::game::base::repair;
 use crate::game::base::stock;
@@ -927,8 +928,9 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let wanted = self.base_wants();
+        let lines = lines::lines_in(&mut self.world);
         let staff = self.base_staff();
+        let wanted = self.base_wants(&lines, &staff);
         // **Before the drift and before the assignment.** The drift is what
         // walks an off-shift body to its amenity, so the marker has to be on
         // it by then; and the assignment reads the same marker to decide who
@@ -970,7 +972,7 @@ impl Game {
         if !walkers.is_empty() {
             self.drift_idle_staff(&walkers, &amenities, &bays);
         }
-        self.assign_base_labour(wanted, &staff, &amenities);
+        self.assign_base_labour(wanted, &lines, &staff, &amenities);
     }
 
     /// The posting half of `schedule_base_labour` alone, for a change the
@@ -989,16 +991,17 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let wanted = self.base_wants();
+        let lines = lines::lines_in(&mut self.world);
         let staff = self.base_staff();
+        let wanted = self.base_wants(&lines, &staff);
         let amenities = self.amenities();
-        self.assign_base_labour(wanted, &staff, &amenities);
+        self.assign_base_labour(wanted, &lines, &staff, &amenities);
     }
 
     /// Every want the base holds this pass, in priority order — **the
     /// priority is the position in this list**, and the matching fills it
     /// front to back.
-    fn base_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+    fn base_wants(&mut self, lines: &[Line], staff: &[Entity]) -> Vec<(Entity, TaskKind)> {
         // **Build requests come first, ahead of every work order.** The
         // priority *is* the position in this list — the matching below never
         // un-seats an earlier want for a later one — so this is the whole of
@@ -1035,7 +1038,7 @@ impl Game {
         // instruction says "keep this running", not "stand here regardless"
         // — while a guard job is not, because guarding produces nothing and
         // there is no cycle for a buffer to stall.
-        for (structure, kind) in self.standing_wants() {
+        for (structure, kind) in self.standing_wants(lines) {
             if wanted.iter().any(|&(e, _)| e == structure) {
                 continue;
             }
@@ -1053,7 +1056,33 @@ impl Game {
         for (site, kind) in self.dig_wants() {
             wanted.push((site, kind));
         }
-        wanted
+        // **Last, so it sees every want the base holds**, and the line's
+        // position is its first member's: collapsing earlier would let a
+        // later source add a second want for the same line.
+        let member_of = lines::membership(lines);
+        // **An outsider removes only its own member from the line's
+        // candidates**, before `collapse` picks the active machine, so the
+        // line's want falls to the next wanted member and the rest of the
+        // line keeps running. The want is gone only when every wanted member
+        // is held.
+        let outsiders = self.outsider_posts(staff);
+        wanted.retain(|post| {
+            !(member_of.contains_key(&post.0)
+                && post.1 == TaskKind::GatherResource
+                && outsiders.contains(post))
+        });
+        let holders = lines::line_holders(&mut self.world, &member_of, staff);
+        lines::collapse(wanted, lines, |key| holders.get(&key).copied())
+    }
+
+    /// The `(target, kind)` of every task held by a body outside `staff`.
+    fn outsider_posts(&mut self, staff: &[Entity]) -> Vec<(Entity, TaskKind)> {
+        self.world
+            .iter_entities()
+            .filter(|e| !staff.contains(&e.id()))
+            .filter_map(|e| e.get::<Task>())
+            .map(|t| (t.target, t.kind))
+            .collect()
     }
 
     /// Steps 3 to 5 of `schedule_base_labour`'s doc, over `wanted` and the
@@ -1063,6 +1092,7 @@ impl Game {
     fn assign_base_labour(
         &mut self,
         mut wanted: Vec<(Entity, TaskKind)>,
+        lines: &[Line],
         staff: &[Entity],
         amenities: &offshift::Amenities,
     ) {
@@ -1100,14 +1130,9 @@ impl Game {
         // body the scheduler treats as permanent. Tested against the `staff`
         // list rather than a marker for the reason the list is sorted: it is
         // the one answer to who the pool is, and asking twice invites two.
-        let outsiders: Vec<(Entity, TaskKind)> = self
-            .world
-            .iter_entities()
-            .filter(|e| !staff.contains(&e.id()))
-            .filter_map(|e| e.get::<Task>())
-            .map(|t| (t.target, t.kind))
-            .collect();
+        let outsiders = self.outsider_posts(staff);
         wanted.retain(|post| !outsiders.contains(post));
+        let member_of = lines::membership(lines);
 
         // **One walk field per body, shared by every reach question below.**
         // `post_route` costs a walk per face and a plan can be a hundred
@@ -1250,7 +1275,10 @@ impl Game {
                 pool.push(worker);
                 continue;
             }
-            if let Some(index) = held.and_then(|post| open.iter().position(|&p| p == post)) {
+            // **A line's worker holds the line's want, not just its own
+            // machine's**: the want names the active machine, which may not
+            // be the one this body is standing on while it carries.
+            if let Some(index) = held.and_then(|post| line_want_of(&member_of, &open, post)) {
                 open.remove(index);
             }
         }
@@ -1268,8 +1296,13 @@ impl Game {
             .map(|&w| self.world.get::<Task>(w).map(|t| (t.target, t.kind)))
             .collect();
         let mut holder: Vec<Option<usize>> = vec![None; open.len()];
-        for (index, post) in open.iter().enumerate() {
-            holder[index] = held.iter().position(|h| *h == Some(*post));
+        for (index, &post) in open.iter().enumerate() {
+            // **The holder of a line's want is whoever is posted to any
+            // member**, so the seat survives the active machine moving and
+            // the diff re-posts the same body rather than swapping two.
+            holder[index] = held
+                .iter()
+                .position(|h| h.is_some_and(|h| same_post(&member_of, h, post)));
         }
         let by_want = {
             let game: &Game = self;
@@ -1278,7 +1311,7 @@ impl Game {
                 let worker = pool[body];
                 game.duty_admits_post(worker, post, kind)
                     && !game.refuses_post(worker, post, kind)
-                    && (holder[want] == Some(body)
+                    && (held[body] == Some((post, kind))
                         || kind == TaskKind::Guard
                         || fields.reaches(game, worker, post, kind))
             })
@@ -1388,9 +1421,27 @@ impl Game {
         let a_posted_body_is_off_duty = pool.iter().zip(&held).any(|(&worker, held)| {
             held.is_some_and(|(post, kind)| !self.duty_admits_post(worker, post, kind))
         });
+        // **And a worked line holding a second body**, from a save written
+        // before lines or from posting by hand. Every want is covered, so
+        // the guard would return with the extra body still on the line for
+        // the rest of the run. Asked only of lines the scheduler *wants*:
+        // bodies hand-posted to a line nothing wants are exactly what the
+        // empty-queue guard exists to leave alone.
+        let a_wanted_line_holds_two = open
+            .iter()
+            .zip(&by_want)
+            .filter(|(_, body)| body.is_some())
+            .any(|(&post, _)| {
+                posted
+                    .iter()
+                    .filter(|&&held| same_post(&member_of, held, post))
+                    .count()
+                    > 1
+            });
         if queue_is_empty
             && !a_posted_body_is_off_the_line
             && !a_posted_body_is_off_duty
+            && !a_wanted_line_holds_two
             && open
                 .iter()
                 .zip(&by_want)
@@ -2512,14 +2563,37 @@ impl Game {
                 return Err(format!("{name} can't be raided — it doesn't need a guard."));
             }
         }
+        // **The work flag reaches every workable member of the line**: a line
+        // is one job, so a toggle that reached only the row pressed would
+        // leave the rest to be staffed separately. A member that cannot be
+        // worked (a Recharger the fuel edge pulled in) is left as it is, and
+        // only the structure pressed is refused. Work is switched **off** on
+        // the others only when the pressed machine's own flag changes — the
+        // guard toggle passes that flag back unchanged, and writing it would
+        // switch off work the rest of a merged line still had. `guard` stays
+        // per structure, because guarding is not production.
         if work && !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
-        let mut entity = self.world.entity_mut(structure);
-        if work || guard {
-            entity.insert(StandingJob { work, guard });
-        } else {
-            entity.remove::<StandingJob>();
+        let work_changed = work != self.standing_job(structure).is_some_and(|(w, _)| w);
+        let reaches_others = work || work_changed;
+        for member in self.line_members(structure) {
+            let member_guard = if member == structure {
+                guard
+            } else if reaches_others && self.accepts_a_program(member) {
+                self.standing_job(member).is_some_and(|(_, g)| g)
+            } else {
+                continue;
+            };
+            let mut entity = self.world.entity_mut(member);
+            if work || member_guard {
+                entity.insert(StandingJob {
+                    work,
+                    guard: member_guard,
+                });
+            } else {
+                entity.remove::<StandingJob>();
+            }
         }
         // Here and not in `post_worker`, which is the *scheduler's* door: its
         // only non-test caller is `schedule_base_labour`, which runs every
@@ -2581,16 +2655,28 @@ impl Game {
     /// Appended **after** every order in the queue and at the lowest
     /// priority, so a Research Node or a guarded Shield is filled only by a
     /// body no order needs — and gives that body up the moment one does.
-    fn standing_wants(&self) -> Vec<(Entity, TaskKind)> {
+    pub(crate) fn standing_wants(&self, lines: &[Line]) -> Vec<(Entity, TaskKind)> {
+        // A line stands if any member does: two lines joined by building
+        // between them run together with no flag migration.
+        let member_of = lines::membership(lines);
+        let standing_lines: std::collections::HashSet<lines::LineKey> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.get::<StandingJob>().is_some_and(|j| j.work))
+            .filter_map(|e| member_of.get(&e.id()).copied())
+            .collect();
         let mut jobs: Vec<(i32, i32, Entity, TaskKind)> = self
             .world
             .iter_entities()
             .filter_map(|e| {
-                let job = e.get::<StandingJob>()?;
+                let job = e.get::<StandingJob>();
                 let pos = e.get::<Position>()?;
-                let kind = if job.work {
+                let line_stands = member_of
+                    .get(&e.id())
+                    .is_some_and(|key| standing_lines.contains(key));
+                let kind = if line_stands || job.is_some_and(|j| j.work) {
                     TaskKind::GatherResource
-                } else if job.guard {
+                } else if job.is_some_and(|j| j.guard) {
                     TaskKind::Guard
                 } else {
                     return None;
@@ -3062,4 +3148,32 @@ impl Game {
             })
             .map(|(item, _)| self.item_name(item).to_string())
     }
+}
+
+/// Whether a body posted at `held` already holds the want `post`: the same
+/// post, or — for a `GatherResource` on a line of two or more — any member
+/// of the same line.
+fn same_post(
+    member_of: &std::collections::HashMap<Entity, lines::LineKey>,
+    held: (Entity, TaskKind),
+    post: (Entity, TaskKind),
+) -> bool {
+    if held == post {
+        return true;
+    }
+    held.1 == TaskKind::GatherResource
+        && post.1 == TaskKind::GatherResource
+        && member_of
+            .get(&held.0)
+            .is_some_and(|line| member_of.get(&post.0) == Some(line))
+}
+
+/// Where in `open` the want a body posted at `held` is covering sits.
+fn line_want_of(
+    member_of: &std::collections::HashMap<Entity, lines::LineKey>,
+    open: &[(Entity, TaskKind)],
+    held: (Entity, TaskKind),
+) -> Option<usize> {
+    open.iter()
+        .position(|&post| same_post(member_of, held, post))
 }

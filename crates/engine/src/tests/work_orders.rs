@@ -676,8 +676,11 @@ fn a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful() {
     );
 }
 
+/// A feed-connected run is one production line and one worker, who pulls
+/// from the end: with the whole line able to run, the body goes to the Disk
+/// Press and the other two stay free.
 #[test]
-fn three_staff_spread_across_a_running_line_without_doubling_up() {
+fn three_staff_on_a_running_line_post_one_body_on_the_deepest_machine() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
@@ -689,15 +692,14 @@ fn three_staff_spread_across_a_running_line_without_doubling_up() {
 
     game.tick();
 
-    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
-    posts.sort();
-    let mut expected = vec![mine, lathe, press];
-    expected.sort();
-    assert_eq!(posts, expected, "one body per machine, no machine twice");
+    let posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    assert_eq!(posts, vec![press], "one body per line, on its deepest end");
 }
 
+/// Scarcity no longer splits a line: two bodies against a three-machine line
+/// is still one post, and the second body is spare.
 #[test]
-fn two_staff_take_the_two_deepest_machines() {
+fn two_staff_on_a_running_line_post_one_body() {
     let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
@@ -709,15 +711,8 @@ fn two_staff_take_the_two_deepest_machines() {
 
     game.tick();
 
-    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
-    posts.sort();
-    let mut expected = vec![mine, lathe];
-    expected.sort();
-    assert_eq!(
-        posts, expected,
-        "scarce bodies go upstream first; the Disk Press waits"
-    );
-    assert!(posts.iter().all(|&p| p != press));
+    let posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    assert_eq!(posts, vec![press]);
 }
 
 /// **Every machine that makes the ordered item is a want, not the first
@@ -2294,43 +2289,43 @@ fn spare_staff_are_put_on_the_second_order() {
 /// already filled — `post_worker` displaces the body already standing
 /// there, so the base ends up with an idle program and the want below it,
 /// here the second order's own bench, unstaffed.
-/// The body count at the shared feeder stays 1 either way, which is why the
-/// assertion that discriminates is the one below it.
 #[test]
 fn a_machine_two_orders_want_is_posted_once() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let (mine, lathe, _press) = lay_disk_line(&mut game);
-    let annealer = spawn_machine_at(&mut game, "annealing_node", 2, 1);
-    // Both lines run off the Mining Node's output, so both orders reach it.
-    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
-    let staff = hire(&mut game, 3);
-    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+    place_home(&mut game);
+    // A Depot feeds both benches by stock rather than by touching, so each
+    // stays a line of one and the dedupe is what this exercises.
+    let depot = spawn_machine_at(&mut game, "depot", 6, 6);
+    put_output(&mut game, depot, ids::CORE_FRAGMENT, 40);
+    spawn_machine_at(&mut game, "mining_node", 6, 1);
+    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    let annealer = spawn_machine_at(&mut game, "annealing_node", 2, 3);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 30))
+        .unwrap();
+    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 20))
         .unwrap();
     game.queue_work_order(WorkOrder::batch(ItemId::from("annealed_core"), 30))
         .unwrap();
     let orders = game.work_orders().to_vec();
     assert!(
-        wants(&game, &orders[0]).iter().any(|&(e, _)| e == mine)
-            && wants(&game, &orders[1]).iter().any(|&(e, _)| e == mine),
-        "precondition: the Mining Node is a want of both orders"
+        wants(&game, &orders[0]).iter().any(|&(e, _)| e == lathe)
+            && wants(&game, &orders[1]).iter().any(|&(e, _)| e == lathe),
+        "precondition: the Lathe is a want of both orders"
     );
 
     game.tick();
 
     assert_eq!(
-        bodies_at(&mut game, mine),
+        bodies_at(&mut game, lathe),
         1,
         "one machine is one post however many orders want it"
     );
     let posts: Vec<Option<Entity>> = staff.iter().map(|&s| posted_at(&game, s)).collect();
     assert!(
-        posts.iter().all(|p| p.is_some()),
-        "a duplicated want left a body with nowhere to stand"
-    );
-    assert!(
-        posts.contains(&Some(lathe)) && posts.contains(&Some(annealer)),
-        "and the slot the duplicate would have eaten still reaches the second order's bench"
+        posts.contains(&Some(annealer)),
+        "and the slot a duplicate would have eaten still reaches the third order's bench"
     );
 }
 
@@ -2346,25 +2341,18 @@ fn the_front_order_still_fills_first_when_staff_are_scarce() {
     // Stocked, so the front order wants two machines and can use both
     // bodies by itself.
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
-    let staff = hire(&mut game, 2);
+    let staff = hire(&mut game, 1);
     game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
         .unwrap();
     game.queue_work_order(WorkOrder::batch(ItemId::from("logic_wafer"), 30))
         .unwrap();
-    let front = game.work_orders()[0].clone();
-    assert_eq!(
-        wants(&game, &front).len(),
-        staff.len(),
-        "precondition: the front order wants exactly what the base has"
-    );
 
     game.tick();
 
-    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
-    posts.sort();
-    let mut expected = vec![mine, lathe];
-    expected.sort();
-    assert_eq!(posts, expected, "both bodies belong to the front order");
+    // The front order's machines are one line and so one want, which the
+    // single body takes; the order behind it waits.
+    assert_eq!(posted_at(&game, staff[0]), Some(lathe));
+    assert_eq!(bodies_at(&mut game, mine), 0);
     assert_eq!(bodies_at(&mut game, scraper), 0);
     assert_eq!(bodies_at(&mut game, transcriber), 0);
 }
@@ -3008,8 +2996,8 @@ fn a_base_with_bodies_to_spare_is_short_of_none() {
 
     let demand = demand(&game);
     assert_eq!(
-        demand.wanted, 3,
-        "the whole line is running and wants a body"
+        demand.wanted, 1,
+        "the whole line is running and wants one body between its three machines"
     );
     assert_eq!(demand.staff, 4);
     assert_eq!(demand.shortfall(), 0);
@@ -3022,11 +3010,14 @@ fn a_base_with_bodies_to_spare_is_short_of_none() {
 fn a_base_short_of_bodies_reports_the_difference() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let (mine, lathe, _press) = lay_disk_line(&mut game);
-    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
-    put_output(&mut game, lathe, "blank_substrate", 6);
+    place_home(&mut game);
+    // Touching Mining Nodes feed nothing, so each is its own line and its
+    // own want; a feed-connected chain would be one want however long.
+    for x in 2..5 {
+        spawn_machine_at(&mut game, "mining_node", x, 0);
+    }
     hire(&mut game, 2);
-    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 30))
         .unwrap();
 
     game.tick();
@@ -3038,7 +3029,11 @@ fn a_base_short_of_bodies_reports_the_difference() {
          not what was filled"
     );
     assert_eq!(demand.staff, 2);
-    assert_eq!(demand.shortfall(), 1, "the Disk Press goes unstaffed");
+    assert_eq!(
+        demand.shortfall(),
+        1,
+        "the third Mining Node goes unstaffed"
+    );
 }
 
 /// The quiet state a player is most likely to have the screen open on, and

@@ -57,6 +57,7 @@ mod inspection;
 mod interactions;
 mod kit;
 mod level_up;
+mod lines;
 mod listen;
 mod memories;
 mod message_log;

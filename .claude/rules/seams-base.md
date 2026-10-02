@@ -409,3 +409,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A research node's subject gate is one term both the screen and the
   selection reach through**, `research_block_with`, outside the per-`ItemId`
   memo.
+- **A production line is derived from the grid every labour pass and staffed by
+  one worker who switches machines only at a cycle boundary; its edges call
+  `systems::feeds` over the pull's reach, Teardown Rigs are never members, and a body that is not staff (the player's own
+  `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**

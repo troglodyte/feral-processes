@@ -235,3 +235,23 @@
   `columns.len()` meaning "trooper" is the version that drifts. Its label is
   three letters because the widest shipped row leaves exactly that
   (`the_widest_base_staff_row_stays_inside_the_popup`).
+
+- **A production line is derived on every labour pass, never stored, and staffed
+  by one worker who leaves a machine only at a cycle boundary.** `lines::lines_in`
+  is computed once in `schedule_base_labour`/`reassign_base_labour` and passed
+  down; a cached line goes stale on the first place or demolish and posts a body
+  to a line that is gone. `lines::collapse` keeps one want per line at the active
+  machine, and `assign_base_labour` counts a body on *any* member as the line's
+  holder, so a move re-posts the same body; matching the exact target instead
+  swaps bodies on every move. Rule 1 (a holder mid-cycle stays put) is what keeps
+  half-made batches from being abandoned whenever a later machine can progress.
+  An edge is a call to `systems::feeds` over the pull's own `ORTHOGONAL` reach;
+  re-deriving it makes lines that move nothing. Teardown Rigs are not members
+  until a rig gate exists: the scheduler never staffs one, and a rig strips with
+  each hopper entry's own tool, not `standing_tool`. The holder is read from staff only, and a
+  non-staff body (the player's own `work_structure`) removes only its own member
+  from the line's candidates in `base_wants`, before `collapse` picks the active
+  machine, so the want falls to the next wanted member. Dropping the whole line
+  for any outsider stalled every other machine in it; counting the player as
+  holder aimed the want at the player's machine, the outsider filter removed it, and the staff worker
+  flickered on and off.

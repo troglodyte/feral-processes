@@ -5,12 +5,12 @@ use super::popup::*;
 use super::*;
 #[cfg(test)]
 use feral_processes_app_core::ProgramRole;
-use feral_processes_app_core::{PendingBuild, WorkOrderRow};
+use feral_processes_app_core::{PendingBuild, Roster, RosterRow, WorkOrderRow};
 use feral_processes_engine::components::BuildGoal;
 use feral_processes_engine::structures::StructureId;
 use feral_processes_engine::{
-    BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, OrderState,
-    WorkColumn, WorkRow, WorkSection, WorkTable, program_tier_required,
+    BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, LineReport,
+    OrderState, WorkColumn, WorkRow, WorkSection, WorkTable, program_tier_required,
 };
 
 /// One buildable structure as the build menu needs it: everything that
@@ -1380,12 +1380,13 @@ pub(super) fn draw_structures(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let report = game.structure_report();
+    let Roster {
+        reports: report,
+        lines,
+        rows: roster,
+    } = Roster::of(game);
     let assigned: usize = report.iter().map(|s| s.assignees.len()).sum();
-    let idle = report
-        .iter()
-        .filter(|s| s.workable && s.assignees.is_empty())
-        .count();
+    let idle = StructureReport::idle_count(&report);
     let (draw, supply) = game.base_power();
     let mut rows = vec![
         text_row(format!(
@@ -1400,19 +1401,49 @@ pub(super) fn draw_structures(
     if report.is_empty() {
         rows.push(text_row("You have deployed nothing yet."));
     }
-    for (i, s) in report.iter().enumerate() {
-        rows.push(colored_item_row(
-            structure_headline(s),
-            i == selected,
-            if structure_is_idle(s) { YELLOW } else { TEXT },
-        ));
+    for (i, row) in roster.iter().enumerate() {
         // A structure's sub-lines are `Row::Item` (never selected) rather than
         // `Row::Text` so they sit inside the popup's scrollable body:
         // `popup_layout` ends that body at the *last* Item and pins whatever
         // follows it as a footer, which would otherwise leave the final
         // structure's assignees stuck on screen while the list scrolled past
         // them.
-        for (line, color) in structure_detail_lines(s) {
+        let (headline, color, detail) = match *row {
+            RosterRow::Structure(at) => {
+                let s = &report[at];
+                (
+                    structure_headline(s),
+                    if structure_is_idle(s, &[]) {
+                        YELLOW
+                    } else {
+                        TEXT
+                    },
+                    structure_detail_lines(s, None, structure_is_idle(s, &[])),
+                )
+            }
+            RosterRow::Line(key) => {
+                let members: Vec<&StructureReport> =
+                    report.iter().filter(|s| s.line == Some(key)).collect();
+                match lines.iter().find(|l| l.key == key) {
+                    Some(line) => (
+                        line_headline(line),
+                        if StructureReport::line_is_idle(members.iter().copied()) {
+                            YELLOW
+                        } else {
+                            TEXT
+                        },
+                        members
+                            .iter()
+                            .flat_map(|s| s.assignees.iter())
+                            .map(|a| (format!("  {}", assignee_line(a)), TEXT_DIM))
+                            .collect(),
+                    ),
+                    None => continue,
+                }
+            }
+        };
+        rows.push(colored_item_row(headline, i == selected, color));
+        for (line, color) in detail {
             rows.push(colored_item_row(line, false, color));
         }
     }
@@ -1426,6 +1457,37 @@ pub(super) fn draw_structures(
         "Up/Down to scroll, Enter to staff, Esc to close."
     }));
     draw_popup("Structures", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// A production line's roster row: its machines in feed order, then what the
+/// line is doing (spec §5).
+pub(super) fn line_headline(line: &LineReport) -> String {
+    let doing = match (&line.missing_text, line.active) {
+        (Some(text), _) => text.clone(),
+        (None, Some(active)) => {
+            let name = line
+                .members
+                .iter()
+                .position(|&m| m == active)
+                .map_or("", |at| line.names[at].as_str());
+            format!("working {name}")
+        }
+        (None, None) => status_word(line.status).to_string(),
+    };
+    format!("{} · {doing}", line.names.join(" → "))
+}
+
+fn status_word(status: MachineStatus) -> &'static str {
+    match status {
+        MachineStatus::Running => "running",
+        MachineStatus::Starved => "starved",
+        MachineStatus::Clogged => "clogged",
+        MachineStatus::Unstaffed => "no one at it",
+        MachineStatus::Stranded => "cut off",
+        MachineStatus::Idle => "idle",
+        MachineStatus::Unpowered => "dark",
+        MachineStatus::Dry => "out of fuel",
+    }
 }
 
 /// The roster's second header row: the base's grid, red when it is short.
@@ -1450,9 +1512,15 @@ fn grid_header_row(draw: u32, supply: u32) -> Row {
 ///
 /// A call and not a second copy: `Game::attention` counts the same thing in
 /// the engine, so the two readers are in different crates and nothing would
-/// fail to compile if one drifted.
-pub(super) fn structure_is_idle(s: &StructureReport) -> bool {
-    s.is_idle()
+/// fail to compile if one drifted. `line` is the whole line when `s` is a
+/// member of one: a member of a staffed line has no assignee of its own and
+/// is not idle.
+pub(super) fn structure_is_idle(s: &StructureReport, line: &[&StructureReport]) -> bool {
+    if s.line.is_some() {
+        s.workable && StructureReport::line_is_idle(line.iter().copied())
+    } else {
+        s.is_idle()
+    }
 }
 
 /// The one-line summary of a structure: what it is, where, how far, and how
@@ -1478,9 +1546,19 @@ pub(super) fn structure_headline(s: &StructureReport) -> String {
 /// `CLAUDE.md` means by a mirror having to be a call. The two differ only in
 /// which `Row` kind they wrap these in — the roster needs `Row::Item` so its
 /// lines scroll, the sheet does not scroll at all.
-pub(super) fn structure_detail_lines(s: &StructureReport) -> Vec<(String, Color)> {
+pub(super) fn structure_detail_lines(
+    s: &StructureReport,
+    line: Option<&LineReport>,
+    idle: bool,
+) -> Vec<(String, Color)> {
     let mut lines = Vec::new();
-    if structure_is_idle(s) {
+    if let Some(line) = line {
+        lines.push((
+            format!("  Part of a line: {}.", line.names.join(" → ")),
+            TEXT_DIM,
+        ));
+    }
+    if idle {
         lines.push(("  idle — nobody assigned".to_string(), YELLOW));
     }
     for a in &s.assignees {
@@ -2337,7 +2415,82 @@ mod tests {
             assignees: Vec::new(),
             standing_tool: None,
             pod: None,
+            line: None,
         }
+    }
+
+    fn line_report(active: Option<usize>, missing_text: Option<&str>) -> LineReport {
+        let members: Vec<Entity> = (1..=3)
+            .map(Entity::from_raw_u32)
+            .map(Option::unwrap)
+            .collect();
+        LineReport {
+            key: feral_processes_engine::LineKey((0, 0)),
+            active: active.map(|i| members[i]),
+            members,
+            names: ["Mining Node", "Lathe", "Disk Press"]
+                .map(String::from)
+                .to_vec(),
+            status: MachineStatus::Starved,
+            missing: None,
+            missing_text: missing_text.map(String::from),
+        }
+    }
+
+    #[test]
+    fn a_line_row_names_the_machines_and_what_the_line_is_doing() {
+        assert_eq!(
+            line_headline(&line_report(Some(1), None)),
+            "Mining Node → Lathe → Disk Press · working Lathe"
+        );
+        assert_eq!(
+            line_headline(&line_report(
+                Some(1),
+                Some("Disk Press needs Core Fragment")
+            )),
+            "Mining Node → Lathe → Disk Press · Disk Press needs Core Fragment"
+        );
+        assert_eq!(
+            line_headline(&line_report(None, None)),
+            "Mining Node → Lathe → Disk Press · starved"
+        );
+    }
+
+    #[test]
+    fn a_machine_in_a_line_says_which() {
+        let line = line_report(None, None);
+        let mut s = structure_report(MachineStatus::Running);
+        s.line = Some(line.key);
+        let lines: Vec<String> = structure_detail_lines(&s, Some(&line), false)
+            .into_iter()
+            .map(|(l, _)| l)
+            .collect();
+        assert!(lines.contains(&"  Part of a line: Mining Node → Lathe → Disk Press.".to_string()));
+        assert!(
+            structure_detail_lines(&structure_report(MachineStatus::Running), None, false)
+                .iter()
+                .all(|(l, _)| !l.contains("Part of a line"))
+        );
+    }
+
+    #[test]
+    fn a_member_of_a_staffed_line_is_not_idle() {
+        let line = line_report(None, None);
+        let mut a = structure_report(MachineStatus::Running);
+        a.line = Some(line.key);
+        let mut b = a.clone();
+        b.assignees = vec![assignee(TaskKind::GatherResource)];
+        let members = [&a, &b];
+        assert!(!structure_is_idle(&a, &members));
+        assert!(
+            structure_detail_lines(&a, Some(&line), structure_is_idle(&a, &members))
+                .iter()
+                .all(|(l, _)| !l.contains("idle"))
+        );
+        b.assignees.clear();
+        let members = [&a, &b];
+        assert!(structure_is_idle(&a, &members));
+        assert_eq!(StructureReport::idle_count(&[a, b]), 1, "once per line");
     }
 
     /// A terminal says whether it can fire, and a structure that is not one
@@ -2347,7 +2500,7 @@ mod tests {
         let pod_lines = |pod| {
             let mut s = structure_report(MachineStatus::Running);
             s.pod = pod;
-            structure_detail_lines(&s)
+            structure_detail_lines(&s, None, false)
                 .into_iter()
                 .map(|(line, _)| line)
                 .filter(|line| line.contains("charged") || line.contains("recharging"))

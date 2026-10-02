@@ -3077,3 +3077,36 @@ pub(crate) fn app_at_a_mod_bench_carrying(
     stand_in_base(&mut app);
     app
 }
+
+/// The small base with a Lathe east of its Mining Node, so the two are one
+/// production line: Home, Lathe, Mining Node in roster order.
+pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = app_inside_a_small_base_with_programs(seed, false, 1);
+    let path = scratch_path("line_base", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let lathe = save::StructureSave {
+        kind: "lathe".to_string(),
+        position: (2, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+    };
+    data.structures.push(lathe);
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app
+}

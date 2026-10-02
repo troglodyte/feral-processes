@@ -1619,6 +1619,26 @@ pub struct WorkTable {
     pub unworked_total: usize,
 }
 
+/// One production line of two or more machines — see `Game::line_reports`.
+#[derive(Clone, Debug)]
+pub struct LineReport {
+    pub key: crate::game::base::lines::LineKey,
+    /// In feed order: sources first, the end of the line last.
+    pub members: Vec<Entity>,
+    /// Display names, parallel to `members`.
+    pub names: Vec<String>,
+    /// The member the line's one worker is posted on, if anyone is.
+    pub active: Option<Entity>,
+    /// The active machine's status, or with nobody posted the first
+    /// non-`Idle` member status from the end of the line.
+    pub status: MachineStatus,
+    /// An ingredient a `Starved` member lacks that no member makes and no
+    /// Depot holds.
+    pub missing: Option<ItemId>,
+    /// `missing` as the roster says it: "Compiler needs Bytecode Block".
+    pub missing_text: Option<String>,
+}
+
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {
@@ -1683,6 +1703,9 @@ pub struct StructureReport {
     /// A drop pod terminal's charge, `None` on every structure that is not
     /// one (`StructureDef::drop_pod`).
     pub pod: Option<PodState>,
+    /// The production line this structure belongs to, `Some` only for a line
+    /// of two or more.
+    pub line: Option<crate::game::base::lines::LineKey>,
 }
 
 /// Whether a drop pod terminal can fire. There is no "spent with nothing

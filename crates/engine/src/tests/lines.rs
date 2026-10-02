@@ -482,3 +482,88 @@ fn a_staffed_line_keeps_its_body_on_its_active_machine_through_a_save_and_load()
     let at = *loaded.world.get::<Position>(machine).unwrap();
     assert_eq!((at.x, at.y), (3, 0), "still on the lathe");
 }
+
+// ---------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------
+
+fn set_status(g: &mut Game, machine: Entity, status: MachineStatus) {
+    g.world.entity_mut(machine).insert(status);
+}
+
+#[test]
+fn a_line_report_lists_sources_first_and_names_them() {
+    let mut g = base_game(81);
+    let (mine, lathe, press) = disk_line(&mut g);
+    let reports = g.line_reports();
+    assert_eq!(reports.len(), 1, "lines of one are not reported");
+    assert_eq!(reports[0].members, vec![mine, lathe, press]);
+    assert_eq!(reports[0].names.len(), 3);
+    assert_eq!(reports[0].active, None);
+}
+
+#[test]
+fn a_line_reports_its_held_machine_as_active_and_its_status() {
+    let mut g = base_game(82);
+    let (mine, lathe, press) = disk_line(&mut g);
+    hire(&mut g, 1);
+    g.set_standing_job(mine, true, false).unwrap();
+    put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
+    g.tick();
+    set_status(&mut g, mine, MachineStatus::Running);
+    set_status(&mut g, lathe, MachineStatus::Clogged);
+    set_status(&mut g, press, MachineStatus::Idle);
+    let report = g.line_reports().remove(0);
+    assert_eq!(report.active, Some(lathe));
+    assert_eq!(
+        report.status,
+        MachineStatus::Clogged,
+        "the active machine's"
+    );
+}
+
+#[test]
+fn with_no_active_machine_the_status_is_the_first_non_idle_from_the_end() {
+    let mut g = base_game(83);
+    let (mine, lathe, press) = disk_line(&mut g);
+    set_status(&mut g, press, MachineStatus::Idle);
+    set_status(&mut g, lathe, MachineStatus::Starved);
+    set_status(&mut g, mine, MachineStatus::Running);
+    assert_eq!(g.line_reports()[0].status, MachineStatus::Starved);
+}
+
+#[test]
+fn missing_names_an_ingredient_no_member_makes_and_no_depot_holds() {
+    let mut g = base_game(84);
+    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
+    spawn_machine_at(&mut g, "disk_press", 2, 0);
+    set_status(&mut g, lathe, MachineStatus::Starved);
+    let report = g.line_reports().remove(0);
+    assert_eq!(report.missing, Some(ItemId::from(ids::CORE_FRAGMENT)));
+    let text = report.missing_text.expect("a name for the roster");
+    assert!(text.contains("needs"), "{text}");
+
+    let depot = spawn_machine_at(&mut g, "depot", 4, 0);
+    put_output(&mut g, depot, ids::CORE_FRAGMENT, 10);
+    assert_eq!(g.line_reports()[0].missing, None, "a depot holds it now");
+}
+
+#[test]
+fn an_ingredient_a_member_makes_is_not_missing() {
+    let mut g = base_game(85);
+    let (_mine, lathe, press) = disk_line(&mut g);
+    set_status(&mut g, press, MachineStatus::Starved);
+    set_status(&mut g, lathe, MachineStatus::Running);
+    assert_eq!(g.line_reports()[0].missing, None);
+}
+
+#[test]
+fn a_structure_report_carries_its_line_key_only_for_a_line_of_two_or_more() {
+    let mut g = base_game(86);
+    let (mine, _lathe, _press) = disk_line(&mut g);
+    let alone = spawn_machine_at(&mut g, "mining_node", 9, 9);
+    let rows = g.structure_report();
+    let key = |e| rows.iter().find(|r| r.entity == e).unwrap().line;
+    assert_eq!(key(mine), Some(LineKey((2, 0))));
+    assert_eq!(key(alone), None);
+}

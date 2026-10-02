@@ -1532,6 +1532,7 @@ impl Game {
                 });
         }
 
+        let line_of = crate::game::base::lines::membership(&self.production_lines());
         let mut report: Vec<StructureReport> = found
             .into_iter()
             .map(|(entity, kind, pos)| {
@@ -1580,6 +1581,7 @@ impl Game {
                                 .unwrap_or_else(|| id.0.clone())
                         }),
                     pod: self.pod_state(entity, pos),
+                    line: line_of.get(&entity).copied(),
                 }
             })
             .collect();

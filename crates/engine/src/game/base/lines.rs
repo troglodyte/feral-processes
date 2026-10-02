@@ -272,6 +272,94 @@ pub(crate) fn collapse(
 }
 
 impl Game {
+    /// Every line of two or more machines with its status, sorted by key.
+    pub fn line_reports(&mut self) -> Vec<LineReport> {
+        let lines: Vec<Line> = self
+            .production_lines()
+            .into_iter()
+            .filter(|l| l.members.len() > 1)
+            .collect();
+        let member_of = membership(&lines);
+        let holders = line_holders(&mut self.world, &member_of);
+        lines
+            .into_iter()
+            .map(|line| {
+                let active = holders.get(&line.key).map(|h| h.target);
+                let status_of = |m: Entity| self.world.get::<MachineStatus>(m).copied();
+                // `members` is end-of-line first.
+                let status = active
+                    .and_then(status_of)
+                    .or_else(|| {
+                        line.members
+                            .iter()
+                            .filter_map(|&m| status_of(m))
+                            .find(|s| *s != MachineStatus::Idle)
+                    })
+                    .unwrap_or(MachineStatus::Idle);
+                let missing = self.missing_ingredient(&line, status_of);
+                let missing_text = missing.as_ref().map(|(machine, item)| {
+                    format!(
+                        "{} needs {}",
+                        self.entity_label(*machine),
+                        self.item_name(item)
+                    )
+                });
+                let members: Vec<Entity> = line.members.iter().rev().copied().collect();
+                LineReport {
+                    key: line.key,
+                    names: members.iter().map(|&m| self.entity_label(m)).collect(),
+                    members,
+                    active,
+                    status,
+                    missing: missing.map(|(_, item)| item),
+                    missing_text,
+                }
+            })
+            .collect()
+    }
+
+    /// The first `Starved` member from the end of the line, and the first
+    /// ingredient of its recipe that nothing in the line makes, no Depot
+    /// holds (`work_orders::depot_holding`, the count `can_progress` reads),
+    /// and its own input does not already have a batch of.
+    fn missing_ingredient(
+        &self,
+        line: &Line,
+        status_of: impl Fn(Entity) -> Option<MachineStatus>,
+    ) -> Option<(Entity, ItemId)> {
+        let db = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        let defs: Vec<_> = line
+            .members
+            .iter()
+            .map(|&m| self.world.get::<Structure>(m).and_then(|s| db.get(&s.kind)))
+            .collect();
+        let made: Vec<&ItemId> = defs
+            .iter()
+            .flatten()
+            .filter_map(|d| crate::systems::produced_item(d))
+            .collect();
+        line.members
+            .iter()
+            .zip(&defs)
+            .filter(|(m, _)| status_of(**m) == Some(MachineStatus::Starved))
+            .find_map(|(&m, def)| {
+                let recipe = crate::systems::assembly_recipe((*def)?, items)?;
+                let held = self.world.get::<Stock>(m)?;
+                recipe
+                    .iter()
+                    .find(|(item, per_batch)| {
+                        !made.contains(&item)
+                            && !crate::game::base::work_orders::batch_within_reach(
+                                held.input.get(item).copied().unwrap_or(0),
+                                0,
+                                crate::game::base::work_orders::depot_holding(self, item),
+                                *per_batch,
+                            )
+                    })
+                    .map(|(item, _)| (m, item.clone()))
+            })
+    }
     /// Every line in the base, lines of one included, sorted by key.
     pub fn production_lines(&mut self) -> Vec<Line> {
         lines_in(&mut self.world)

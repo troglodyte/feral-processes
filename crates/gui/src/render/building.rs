@@ -2337,6 +2337,7 @@ mod tests {
             assignees: Vec::new(),
             standing_tool: None,
             pod: None,
+            line: None,
         }
     }
 

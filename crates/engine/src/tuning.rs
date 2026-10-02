@@ -4278,8 +4278,9 @@ pub const HIT_CHANCE_MAX: f64 = 0.95;
 
 /// The crit rate of every body without derived stats, and the player's at
 /// base Entropy (`progression::DerivedBase::player`). Clamped to at most the
-/// hit chance inside `battle::resolve_attack`, so a crit is always a hit. Gear crit is deferred — a `crit` field on `EquipmentStats` that
-/// nothing authors is an unused feature flag.
+/// hit chance inside `battle::resolve_attack`, so a crit is always a hit.
+/// Gear crit is deferred — a `crit` field on `EquipmentStats` that nothing
+/// authors is an unused feature flag.
 pub const CRIT_CHANCE: f64 = 0.08;
 /// What a crit multiplies. The **rolled portion only** — doubling the total
 /// would scale crits with levelling and with every `atk` source in the game.

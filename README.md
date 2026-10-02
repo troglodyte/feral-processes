@@ -12,32 +12,37 @@ img/            screenshots and clips
 .nojekyll       serve files as-is; do not run Jekyll over them
 ```
 
-## Adding a screenshot or a clip
+## Screenshots
 
-The media section has five placeholder slots (a gameplay clip, a battle map, a
-base running its chains, a town hub, and the roster). Each is a `<div class="ph">`
-block with an HTML comment above the section explaining the swap. To fill one:
+Every image in `img/` is a 1280×720 capture from the game itself, taken from
+a `main` checkout with a display:
 
-1. Drop the file into `img/`.
-2. Replace that whole `<div class="ph"> … </div>` block with:
-
-```html
-<figure class="shot">
-  <img src="img/your-file.png" alt="describe what it shows" loading="lazy">
-  <figcaption>Your caption.</figcaption>
-</figure>
+```sh
+cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 ```
 
-A GIF uses the same `<img>` tag. An mp4 uses:
+| image | how it was taken |
+|---|---|
+| `hero.png` | `--template siege` |
+| `base.png` | `--template chains` |
+| `staff.png` | `--template chains --keys "b 4"` |
+| `research.png` | `--template chains --keys "b 9"` |
+| `social.png` | `--template bonds --keys "p Enter M Tab"` |
+| `memories.png` | `--template bonds --keys "p Enter R"` |
+| `roster.png` | `--template bonds --keys "p Enter"` |
+| `downed.png` | `--template bonds --keys "D"` |
+| `towns.png` | `--template settlements` |
+| `stack.png` | `--template stack` |
+| `intrusion.png` | `FERAL_DEV_ARENA=1`, `--keys "R l Down×7 Enter f"` (dev-arenas `full-group.ron`) |
 
-```html
-<figure class="shot">
-  <video src="img/your-clip.mp4" autoplay muted loop playsinline></video>
-  <figcaption>Your caption.</figcaption>
-</figure>
-```
+Keys run before the first frame and no time passes, so a walk can't be
+scripted: a move key only queues the step. Never ship a `FERAL_DEV_REVEAL=1`
+shot, because it labels itself `[DEV REVEAL]`. A tactical battle map needs
+the Options toggle, which writes the real `profile.ron`, so there isn't one
+yet.
 
-Keep the `full` class on a block to make it span both gallery columns.
+To add one to the gallery, drop the PNG in `img/` and copy a `<figure
+class="shot">` block in the `#media` section. `full` spans both columns.
 
 ## Keeping it honest
 
@@ -48,14 +53,14 @@ rather than trusting the page:
 
 ```sh
 cd /path/to/main-checkout
-for d in species abilities items structures contracts research affixes perks; do
+for d in species abilities items structures contracts classes affixes perks; do
   printf '%-12s %s\n' "$d" "$(ls assets/$d/*.ron | wc -l)"
 done
 grep -m1 '^version' Cargo.toml
 ```
 
-The counts on the page as of v0.13.150: 17 species, 86 routines, 68 items,
-36 structures, 40 contracts, 34 research nodes, 20 affixes, 19 perks.
+The counts on the page as of v0.14.6: 17 species, 103 routines, 75 items,
+43 structures, 48 contracts, 8 classes, 23 affixes, 22 perks.
 
 The root `README.md` on `main` is carved out of the doc-update obligation and is
 already stale on several of these; do not copy its numbers. `docs/manual.md` is
@@ -73,8 +78,13 @@ Retired mechanics that earlier copy described, and that must stay off it:
   home and broken down with a tool.
 - Tactical battle maps are **opt-in and off by default**. Don't present them as
   the default combat model.
+- Production is **one worker per line** (0.14.6), not one per machine.
+- Research is an **active project** that consumes a pinned subject from
+  sector 2, not a bank of points.
+- Level-ups are **spent** (six points across the attributes, 0.14.0), not
+  automatic stat growth.
+- The GC Entropy Sweep is **rare and telegraphed**, not constant, and
+  sector 1 never sees one.
 
-Several of the systems the page describes — sorties, caravan routes, town raids
-and patrols, the extraction chain — shipped green and have had little or no
-screen time. The copy describes their mechanics, which are real; it does not
-claim they are tuned.
+The page names genres ("basebuilder", "staff management with memories and
+personalities", "old-school dungeon crawler"), never other games.

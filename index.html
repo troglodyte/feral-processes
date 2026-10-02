@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Feral Processes — tame rogue programs, compile a base, descend the Stack</title>
-<meta name="description" content="A Neuromancer/Tron-flavoured single-player sim in Rust. Tame the rogue programs you fight, compile them into a base with a crew of its own, deal with the towns on the Grid, and descend the Stack for what nothing up here will give you.">
+<meta name="description" content="A cyberpunk single-player sim in Rust: monster collecting, a basebuilder with staff who have memories and personalities, and an old-school dungeon crawl. Tame the rogue programs you fight, compile them into a base with a crew of its own, deal with the towns on the Grid, and descend the Stack for what nothing up here will give you.">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Feral Processes">
 <meta property="og:description" content="Tame rogue programs. Compile a base with a crew of its own. Trade with the Grid's towns, or make enemies of them. Descend the Stack.">
 <meta property="og:url" content="https://troglodyte.github.io/feral-processes/">
-<meta property="og:image" content="https://troglodyte.github.io/feral-processes/img/gameplay.png">
+<meta property="og:image" content="https://troglodyte.github.io/feral-processes/img/hero.png">
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d12'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' fill='%237c8cff' text-anchor='middle'%3E%26gt;%3C/text%3E%3C/svg%3E">
@@ -154,30 +154,12 @@ h1{
   box-shadow:0 26px 70px -30px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.02) inset;
 }
 .shot-hero{margin-top:66px;position:relative;z-index:1}
+.shot img{width:100%}
 .shot figcaption{
   font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);
   padding:11px 16px;border-top:1px solid var(--line-soft);
   background:var(--raise);text-align:left;
 }
-
-/* placeholder slots */
-.ph{
-  border:1px dashed #2f3650;border-radius:var(--radius);
-  background:
-    repeating-linear-gradient(135deg,rgba(124,140,255,.035) 0 12px,transparent 12px 24px),
-    var(--raise);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:40px 24px;gap:9px;min-height:210px;
-}
-.ph-icon{
-  width:42px;height:42px;border-radius:11px;
-  border:1px solid var(--line);background:var(--raise-2);
-  display:grid;place-items:center;color:var(--accent);font-size:19px;
-}
-.ph-title{font-weight:600;font-size:16px;color:var(--ink-dim)}
-.ph-note{font-family:var(--mono);font-size:12px;color:var(--ink-faint);max-width:420px}
-.ph-note code{color:var(--cyan);background:none;padding:0;font-size:12px}
-.ph-wide{aspect-ratio:43/18;min-height:0}
 
 /* ---------- sections ---------- */
 section{padding:96px 0;position:relative}
@@ -307,6 +289,7 @@ h2{
   padding:6px 11px;background:var(--raise);white-space:nowrap;
 }
 .chip b{color:var(--cyan);font-weight:500}
+.genres .chip{white-space:normal}
 
 /* footer */
 footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090b10}
@@ -335,9 +318,10 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     <div class="brand">&gt; feral<span>-</span>processes</div>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#crew">Crew</a>
+      <a href="#base">Base</a>
       <a href="#towns">Towns</a>
       <a href="#stack">The Stack</a>
-      <a href="#media">Media</a>
       <a href="#install">Install</a>
       <a class="nav-cta" href="https://github.com/troglodyte/feral-processes">GitHub ↗</a>
     </div>
@@ -347,7 +331,7 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
 <header class="hero">
   <div class="wrap">
     <div class="eyebrow">
-      <b>v0.13.150</b><i class="dot"></i>Rust<i class="dot"></i>Single-player<i class="dot shed"></i><span class="shed">Moddable</span>
+      <b>v0.14.6</b><i class="dot"></i>Rust<i class="dot"></i>Single-player<i class="dot shed"></i><span class="shed">Moddable</span>
     </div>
 
     <h1>Feral&nbsp;Processes</h1>
@@ -358,11 +342,21 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     </p>
 
     <p class="sub">
-      A Neuromancer/Tron-flavoured simulation of the Grid, blending Pokémon,
-      Palworld and Dwarf Fortress. Your crew has opinions about the work. The
-      towns out there have opinions about you. Built in Rust, with a headless
-      sim that stays fully decoupled from what draws it.
+      A cyberpunk simulation of the Grid. Collect the monsters you beat and
+      raise them. Build a base and staff it with programs who remember what
+      you did to them. Go down into first-person dungeons for the loot nothing
+      on the surface has. The sim is headless Rust, kept separate from the
+      renderer that draws it.
     </p>
+
+    <div class="chips genres" style="justify-content:center;margin:0 auto 34px;max-width:820px">
+      <span class="chip">monster <b>collecting</b></span>
+      <span class="chip"><b>basebuilder</b> with production lines</span>
+      <span class="chip"><b>staff management</b> with memories and personalities</span>
+      <span class="chip">old-school <b>dungeon crawler</b></span>
+      <span class="chip">turn-based <b>tactics</b></span>
+      <span class="chip">classic <b>RPG</b> character sheet</span>
+    </div>
 
     <div class="btns">
       <a class="btn btn-primary" href="#install">Get it →</a>
@@ -370,8 +364,8 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     </div>
 
     <figure class="shot shot-hero">
-      <img src="img/gameplay.png" alt="The surface map: the party on the Grid beside their base, with the log pane and status column" width="3440" height="1440">
-      <figcaption>The Grid — your base, your roster, and whatever is walking toward it.</figcaption>
+      <img src="img/hero.png" alt="The surface map: the player beside their base, with hostile programs walking in through the walls and the base panel warning of a siege" width="1280" height="720">
+      <figcaption>Siege forming. Wild programs walk into the base, and the machines stand in as cover.</figcaption>
     </figure>
   </div>
 </header>
@@ -386,100 +380,210 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     <div class="sec-head center">
       <p class="kicker">What you actually do</p>
       <h2>Fight it, compile it, put it to work</h2>
-      <p>Everything you beat is a candidate for your roster, and everything on
-         your roster is labour you are not spending yourself.</p>
+      <p>Anything you beat can join your roster, and everything on your
+         roster is labour you don't have to do yourself.</p>
     </div>
 
     <div class="grid">
       <div class="card">
         <span class="ic">01 — COMBAT</span>
         <h3>Intrusions</h3>
-        <p>Party-versus-party round battles with grouped enemies, where only the
-           front groups can reach you. Wear a hostile down and run Decompile on
-           it to add it to your roster; five can fight beside you at once.</p>
+        <p>Your party fights theirs in rounds, against grouped enemies, and only
+           the front groups can reach you. Wear a hostile down and Decompile it
+           to add it to your roster. Up to five can fight beside you. Press
+           <code>R</code> to fast-resolve a fight you already know you've won.</p>
       </div>
       <div class="card">
         <span class="ic">02 — BATTLE MAPS</span>
         <h3>Or fight it on a grid</h3>
-        <p>Switch tactical surface battles on and a pack met in the open opens a
-           board instead: cover, move-then-act turn order, routines with real
-           shapes and ranges, and full friendly fire. Walk off the edge to leave
-           a fight you don't want.</p>
+        <p>Turn on tactical battles and a fight in the open is played on a
+           board instead. It has cover, line of sight, opportunity attacks,
+           ranged and wide-swing weapons, and full friendly fire. Five wild
+           programs of one kind merge into a single squad that takes up four
+           tiles.</p>
       </div>
       <div class="card">
-        <span class="ic">03 — ROUTINES</span>
+        <span class="ic">03 — YOUR CHARACTER</span>
+        <h3>A character sheet you spend</h3>
+        <p>Pick one of eight classes. Each level gives you six points to put
+           into five attributes: Parity, Analysis, Footprint, Bandwidth and
+           Persistence. Before you commit, the Points screen shows how the spend
+           changes hit chance, damage per swing and swings-to-win. Perks and
+           talent trees sit on top of that.</p>
+      </div>
+      <div class="card">
+        <span class="ic">04 — ROUTINES</span>
         <h3>Routines, not spells</h3>
-        <p>Abilities install into slots that arrive in pairs, twelve the ceiling
-           for anybody. They come from species kits, the research tree, wild
-           carriers and etched disks — and some run straight from the map as
-           run-long buffs.</p>
+        <p>Routines install into slots that open as you level. There are
+           over a hundred. You can fork copies of yourself, raise the fallen as
+           temporary allies, teleport, or fight as a species whose image you've
+           learned. Some, like Prompt Injection and Hallucination, attack an
+           enemy's AI directly.</p>
       </div>
       <div class="card">
-        <span class="ic">04 — PRODUCTION</span>
-        <h3>Cronjobs and chains</h3>
-        <p>Post programs to structures and they work tick by tick wherever you
-           are. Machines feed each other by touching, so a production line is a
-           physical line laid across your base — and the whole grid runs on Power
-           Cells somebody has to keep stocked.</p>
+        <span class="ic">05 — PRODUCTION</span>
+        <h3>Lines, not single machines</h3>
+        <p>Machines feed each other by touching. Each connected run of machines
+           is one production line with one worker, who pulls from the end
+           nearest the finished product. Leave a gap to split a line in two and
+           each half gets its own worker.</p>
       </div>
       <div class="card">
-        <span class="ic">05 — YOUR CREW</span>
-        <h3>They have opinions about it</h3>
-        <p>Programs remember what happens to them — a machine that is always
-           backed up, a post nobody can reach, being mauled, winning against the
-           odds. Mood falls, and a sulking program refuses the job it resents.
-           Push it further and it downs tools entirely.</p>
-      </div>
-      <div class="card">
-        <span class="ic">06 — NEEDS</span>
-        <h3>Coherence and Slack</h3>
-        <p>Base staff burn two reserves as they work. A Sandbox and a Log
-           Analyzer Bay answer them, needing no worker and no input, and a
-           program running critical walks itself there and back without being
-           told.</p>
+        <span class="ic">06 — RESEARCH</span>
+        <h3>Study what you catch</h3>
+        <p>Research is a project, and Research Nodes work on it. Past the
+           first sector, a node needs a live subject pinned in the Research
+           Station's pen, and finishing the node uses the subject up. Most of
+           the tree stays hidden until a study turns it up.</p>
       </div>
       <div class="card">
         <span class="ic">07 — EXTRACTION</span>
         <h3>Take a program apart</h3>
-        <p>A beaten program is carried home whole — its level, its rarity, the
-           state you left it in — and broken down with a tool. Strip it for
-           components, tap its core, pull its gear, or read a routine off it and
-           keep the routine.</p>
+        <p>You carry a beaten program home whole, with its level, rarity and
+           condition. A Quarantine Rack holds it until a Teardown Rig breaks it
+           down. Strip it for components, tap its core, pull its gear, or
+           extract its image so you can fight as it later.</p>
       </div>
       <div class="card">
-        <span class="ic">08 — SORTIES</span>
-        <h3>Send a squad out</h3>
-        <p>Staff you are not fielding can be sent from a Dispatch Relay to a
-           named site, where they fight real battles off-screen and come home with
-           loot — or come home short. It costs you the bodies, the provisions and
-           a share of what the kills would have paid.</p>
+        <span class="ic">08 — AWAY TEAMS</span>
+        <h3>Sorties and honeypots</h3>
+        <p>Staff you aren't fielding can go on sorties from a Dispatch Relay.
+           They fight real battles off-screen and come home with loot, or come
+           home with fewer of them. Set a honeypot and it catches a weaker wild
+           program while you're out.</p>
       </div>
       <div class="card">
         <span class="ic">09 — STAKES</span>
         <h3>Permadeath, or Forgiving</h3>
-        <p>Chosen per run. On Forgiving a fallen program is benched rather than
-           destroyed and walks itself to a Repair Bay; on Permadeath a run that
-           flatlines seals its own save. Achievements are the one thing that
-           outlives a run, and they pay out at the start of the next.</p>
+        <p>You pick one per run. On Forgiving, a fallen program is benched, not
+           destroyed. On Permadeath, a run that flatlines seals its own save.
+           Achievements are the only thing that carries over between runs, and
+           they pay out at the start of the next one.</p>
       </div>
     </div>
 
     <div style="margin-top:56px">
       <div class="stats">
         <div class="stat"><b>17</b><span>Species</span></div>
-        <div class="stat"><b>86</b><span>Routines</span></div>
-        <div class="stat"><b>68</b><span>Items</span></div>
-        <div class="stat"><b>36</b><span>Structures</span></div>
-        <div class="stat"><b>40</b><span>Contracts</span></div>
-        <div class="stat"><b>34</b><span>Research nodes</span></div>
-        <div class="stat"><b>20</b><span>Gear affixes</span></div>
-        <div class="stat"><b>19</b><span>Perks</span></div>
+        <div class="stat"><b>103</b><span>Routines</span></div>
+        <div class="stat"><b>75</b><span>Items</span></div>
+        <div class="stat"><b>43</b><span>Structures</span></div>
+        <div class="stat"><b>48</b><span>Contracts</span></div>
+        <div class="stat"><b>8</b><span>Classes</span></div>
+        <div class="stat"><b>23</b><span>Gear affixes</span></div>
+        <div class="stat"><b>22</b><span>Perks</span></div>
       </div>
       <p class="note">
         Every one of those is a plain <code>.ron</code> file under
-        <code>assets/</code>. Drop another in and it is picked up next run — no
-        recompiling, no engine edits.
+        <code>assets/</code>. Add another and the game picks it up on the next
+        run. No recompiling, no engine edits.
       </p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     CREW
+     ============================================================ -->
+<section id="crew">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="kicker">Staff management</p>
+        <h2>Your crew remembers, and holds grudges</h2>
+        <p style="color:var(--ink-dim);font-size:18px;margin:0">
+          Every program you own has a personality, a memory and opinions about
+          the others. They notice when a machine is always backed up, when a
+          post is out of reach, when they get mauled, and when they win against
+          the odds. Fighting side by side builds friendships, and watching a
+          crewmate turn on one of you builds feuds.
+        </p>
+        <ul>
+          <li><b>A SOCIAL tab</b> for every program. Opinions run from Enemy to
+              Close, and you can read the conversations in the TALK tab.</li>
+          <li><b>Gossip and feuds.</b> Idle programs talk to each other, and
+              how sociable a program is shapes who it ends up liking.</li>
+          <li><b>Moods with reasons.</b> Standing next to a rival, an unpowered
+              post, or a long shift all show up as thoughts you can read.</li>
+          <li><b>Sulkers act out.</b> A sulking program refuses the job it
+              resents, sabotages its output and won't stand beside a rival.
+              Push it far enough and it stops working altogether.</li>
+          <li><b>Needs.</b> Base staff use up Coherence and Slack as they work,
+              and a program that runs low walks itself to a Sandbox or a Log
+              Analyzer Bay without being told.</li>
+        </ul>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <figure class="shot">
+          <img src="img/social.png" alt="A program's manifest on the SOCIAL tab, listing its relationships with crewmates and its known traits" width="1280" height="720" loading="lazy">
+          <figcaption>The SOCIAL tab: who it calls a friend, and what it's known for.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="img/memories.png" alt="A program's memories panel: a devoted mood, built from fighting beside its crewmates and one bad memory of a betrayal" width="1280" height="720" loading="lazy">
+          <figcaption>Memories, and the mood they add up to.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <figure class="shot" style="margin-top:48px">
+      <img src="img/staff.png" alt="The Base Staff table: every program with its current job and Operate, Guard, Dig and Build checkboxes" width="1280" height="720" loading="lazy">
+      <figcaption>Base Staff: one row per program, with what it's doing now and which kinds of work it may take.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     BASE
+     ============================================================ -->
+<section id="base">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="kicker">Basebuilding</p>
+      <h2>A base that works while you're away</h2>
+      <p>Mark sites, dig out the rock, lay out floors and walls, and set up
+         production lines. Work orders queue up the materials and can be
+         reordered, and Depots hold the stock that lines can't make themselves.
+         It all keeps running whether or not you're standing there.</p>
+    </div>
+
+    <div class="split" style="align-items:start">
+      <figure class="shot">
+        <img src="img/base.png" alt="A base on the surface map: production machines laid out in touching lines, with the base panel listing each machine and its program" width="1280" height="720" loading="lazy">
+        <figcaption>A staffed base: Mining Nodes, a Refinery, a Compiler and the lines that join them.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/research.png" alt="The research flow chart: boxes for each research node, wired together, with the selected node's cost and unlock shown beside it" width="1280" height="720" loading="lazy">
+        <figcaption>The research flow chart. Each node says what it unlocks before you commit to it.</figcaption>
+      </figure>
+    </div>
+
+    <div class="grid" style="margin-top:36px">
+      <div class="card">
+        <span class="ic">SIEGES</span>
+        <h3>They come to you</h3>
+        <p>From the second sector on, wild programs walk into your base. If
+           you're home, the fight plays out on a battle map built from your own
+           layout, and your machines are obstacles that can be smashed. If
+           you're away, it resolves without you, so build Turrets and Walls.</p>
+      </div>
+      <div class="card">
+        <span class="ic">GEAR</span>
+        <h3>A Mod Bench</h3>
+        <p>Add affixes to your gear and strip them off again. The bench has
+           its own research tree, and Deflection is a stat only gear can
+           give you.</p>
+      </div>
+      <div class="card">
+        <span class="ic">THREATS</span>
+        <h3>The GC Entropy Sweep</h3>
+        <p>Every so often the Grid's garbage collector sweeps through. It's
+           rare and you get a warning first, which leaves a few minutes to get
+           ready. The first sector never sees one.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -494,79 +598,76 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     <div class="sec-head">
       <p class="kicker">Settlements</p>
       <h2>The Grid has neighbours, and they keep score</h2>
-      <p>Towns stand where the world seed puts them, and you find one by walking
-         into it. Each has a counter that buys and sells, a temperament that
-         prices both directions, and a specialty it leads with. What it does for
-         you after that is entirely a matter of what you have done for it.</p>
+      <p>The world seed places the towns, and you find one by walking into it.
+         A town is a 3×3 block and a city can be up to 7×7. Each has a counter
+         that buys and sells, a temperament that sets prices both ways, and a
+         specialty it leads with. What it does for you after that depends on
+         what you've done for it.</p>
     </div>
 
     <div class="split" style="align-items:start">
       <div>
         <p style="color:var(--ink-dim);font-size:18px;margin:0 0 22px">
-          Standing is moved by <b style="color:var(--ink)">deeds, not points</b>.
-          Finish a job for a town, clear a nest near it, collapse a Stack on its
-          doorstep and it warms to you. Take a contract and abandon it and it
-          cools. Both ends of the ladder are reachable in a run.
+          Standing moves on <b style="color:var(--ink)">deeds, not points</b>.
+          Finish a job for a town, clear a nest near it or collapse a Stack on
+          its doorstep, and it warms to you. Take a contract and abandon it, and
+          it cools. You can reach either end of the ladder in one run.
         </p>
         <div class="ladder">
           <div class="rung hostile">
             <b>Hostile</b>
-            <span>The market is shut. It raids your base for a share of your
-                  banked salvage, puts patrols on the ground near you, and skims
-                  a cut off any caravan route that passes it.</span>
+            <span>Closes its market and raids your base for a share of your
+                  banked salvage. It also sends patrols near you and takes a
+                  cut from any caravan route that passes through.</span>
           </div>
           <div class="rung cold">
             <b>Cold</b>
-            <span>It will still trade, thinly, and posts a single job.</span>
+            <span>Still trades, but thinly, and posts a single job.</span>
           </div>
           <div class="rung neutral">
             <b>Neutral</b>
-            <span>Where every town starts. A counter and two jobs on the board.</span>
+            <span>Where every town starts: a counter and two jobs on the board.</span>
           </div>
           <div class="rung warm">
             <b>Warm</b>
-            <span>Three jobs, better prices, and its specialty leads what it
+            <span>Three jobs and better prices. Its specialty leads what it
                   posts.</span>
           </div>
           <div class="rung allied">
             <b>Allied</b>
-            <span>Four jobs, a detachment stationed near your base that blunts
-                  GC Entropy Sweeps, a program spared from its own staff on
-                  request, and a link that puts your party home and back
-                  out again for the ticks the walk would have cost.</span>
+            <span>Four jobs and a detachment stationed near your base. It will
+                  give you one of its own programs if you ask, and lend you a
+                  link home and back out again.</span>
           </div>
         </div>
       </div>
 
       <div>
+        <figure class="shot" style="margin-bottom:24px">
+          <img src="img/towns.png" alt="The surface map beside a town: a three-by-three block of town tiles in open ground, with the crew roster on the right" width="1280" height="720" loading="lazy">
+          <figcaption>A town on the Grid, one step from its counter.</figcaption>
+        </figure>
         <p style="color:var(--ink-dim);font-size:18px;margin:0 0 22px">
-          A town is not a fixed piece of scenery either. Every
-          <b style="color:var(--ink)">Server</b> on the map is due to mature into
-          a <b style="color:var(--ink)">Mainframe</b> city on a date the seed
-          already decided. Trading pulls that date forward — but only so far, so
-          money alone can never found one. A city you neglect starves back down
-          without ever reverting to what it was.
+          Towns change over time. Every <b style="color:var(--ink)">Server</b>
+          is due to grow into a <b style="color:var(--ink)">Mainframe</b> city
+          on a date the seed has already set. Trading brings that date forward,
+          but only so far, so money alone can't found one. A neglected city
+          starves back down without reverting to what it was.
         </p>
-        <p class="note" style="margin-top:0">
-          The world is one continuous map for the length of a run. A breach
-          raises the danger tier rather than rebuilding the sector, so your base,
-          your structures and every town you have found are all still exactly
-          where you left them on the far side.
-        </p>
-        <div style="display:flex;flex-direction:column;gap:18px;margin-top:28px">
+        <div style="display:flex;flex-direction:column;gap:18px">
         <div class="card">
-          <span class="ic">JOB BOARDS</span>
-          <h3>Work, posted locally</h3>
-          <p>A town's board draws on the same contract pool the Broker does,
-             but it leads with what it deals in and settles at its own counter.
-             A Materials town posts fetch jobs; a Programs town posts hunts.</p>
+          <span class="ic">OUTPOSTS</span>
+          <h3>Found your own</h3>
+          <p>Research Outpost Founding and you can plant an Outpost Kit out on
+             the surface. An outpost grows as you staff it, can be raided, and
+             can be the end of a caravan route.</p>
         </div>
         <div class="card">
           <span class="ic">CARAVAN ROUTES</span>
           <h3>Cargo that sells itself</h3>
-          <p>Load a manifest at the Dispatch Relay, name a town you know, and Credits
-             come home. Leave it standing and it keeps running until you sever
-             it — hostile ground on the way notwithstanding.</p>
+          <p>Load a manifest at the Dispatch Relay and name a town or outpost
+             you know, and Credits come home. A route keeps running until you
+             cut it, even across hostile ground.</p>
         </div>
         </div>
       </div>
@@ -584,32 +685,33 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
   <div class="wrap">
     <div class="split">
       <div>
-        <p class="kicker">Underground</p>
+        <p class="kicker">Old-school dungeon crawling</p>
         <h2>The place notices what you take from it</h2>
         <p style="color:var(--ink-dim);font-size:18px;margin:0">
-          Scattered across every zone are links down into <b style="color:var(--ink)">the
-          Stack</b> — procedurally generated frames drawn in first person, where the
-          fights are harder and the returns are better.
+          Every zone has links down into <b style="color:var(--ink)">the
+          Stack</b>. Its frames are procedurally generated and drawn in first
+          person, one step and one turn at a time, and you map them as you go.
+          The fights are harder down there and the rewards are better.
         </p>
         <ul>
-          <li><b>Doors, sealed vaults and caches</b> — and breakpoints, faults and
-              corrupted ground between them.</li>
-          <li><b>Orphaned programs</b> waiting to be adopted, their species pinned
-              to the frame and their stats to the moment you took them.</li>
-          <li><b>A seeded guardian</b> in the deepest room. Beat it and the stack
-              comes down, taking the way back out with it.</li>
-          <li><b>A Trace meter</b> that rises with everything you take. It is what
-              hunts you.</li>
+          <li><b>Doors, sealed vaults and caches</b>, with breakpoints, faults
+              and corrupted ground in between.</li>
+          <li><b>Orphaned programs</b> waiting to be adopted.</li>
+          <li><b>A seeded guardian</b> in the deepest room. Beat it and the
+              stack collapses, and the way back out goes with it.</li>
+          <li><b>A Trace meter</b> that rises with everything you take, and
+              it's what hunts you.</li>
         </ul>
         <p class="note" style="margin-top:28px">
-          Deeper zones double every wild stat, and the only way into one is a
-          portal you fund yourself — with fragments the Stack is the sole source of.
+          The world is one continuous map for the whole run. A breach raises the
+          danger tier rather than rebuilding the sector. The only way to breach
+          is a portal you pay for, using fragments that only the Stack drops.
         </p>
       </div>
       <div>
         <figure class="shot">
-          <img src="img/stack.png" alt="The Stack's first-person corridor view, with the party's map of the frame in the corner" width="3440" height="1440">
-          <figcaption>Depth 3 — the corridor ahead, and the frame you have mapped so far.</figcaption>
+          <img src="img/stack.png" alt="The Stack's first-person corridor view, with the party's map of the frame inset in the corner" width="1280" height="720" loading="lazy">
+          <figcaption>Depth 3 of 6: the corridor ahead, and the frame mapped so far.</figcaption>
         </figure>
       </div>
     </div>
@@ -619,75 +721,29 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
 <hr class="rule">
 
 <!-- ============================================================
-     MEDIA GALLERY
-
-     >>> TO ADD A SCREENSHOT OR CLIP <<<
-     1. Drop the file into  img/
-     2. Replace the matching <div class="ph"> ... </div> block below with:
-
-          <figure class="shot">
-            <img src="img/your-file.png" alt="describe it" loading="lazy">
-            <figcaption>Your caption.</figcaption>
-          </figure>
-
-     For a GIF, the same <img> tag works. For an mp4, use:
-
-          <figure class="shot">
-            <video src="img/your-clip.mp4" autoplay muted loop playsinline></video>
-            <figcaption>Your caption.</figcaption>
-          </figure>
-
-     Keep the .full class on a block to make it span both columns.
+     GALLERY — to add a shot, drop a PNG in img/ and copy a <figure>.
+     .full spans both columns.
      ============================================================ -->
 <section id="media">
   <div class="wrap">
     <div class="sec-head center">
-      <p class="kicker">Media</p>
+      <p class="kicker">Screens</p>
       <h2>More from the Grid</h2>
-      <p>Battles, base-building, towns and the deep frames — captures land here
-         as they are recorded.</p>
     </div>
 
     <div class="gallery">
-
-      <!-- SLOT 1 — hero clip, spans both columns -->
-      <div class="ph ph-wide full">
-        <div class="ph-icon">▶</div>
-        <div class="ph-title">Gameplay clip</div>
-        <div class="ph-note">
-          drop <code>img/gameplay.mp4</code> or <code>img/gameplay.gif</code>
-          and swap this block — see the comment above this section
-        </div>
-      </div>
-
-      <!-- SLOT 2 -->
-      <div class="ph">
-        <div class="ph-icon">▦</div>
-        <div class="ph-title">A fight on a battle map</div>
-        <div class="ph-note">drop <code>img/battle-map.png</code></div>
-      </div>
-
-      <!-- SLOT 3 -->
-      <div class="ph">
-        <div class="ph-icon">▦</div>
-        <div class="ph-title">A base running its chains</div>
-        <div class="ph-note">drop <code>img/base.png</code></div>
-      </div>
-
-      <!-- SLOT 4 -->
-      <div class="ph">
-        <div class="ph-icon">▦</div>
-        <div class="ph-title">A town hub and its standing</div>
-        <div class="ph-note">drop <code>img/town.png</code></div>
-      </div>
-
-      <!-- SLOT 5 -->
-      <div class="ph">
-        <div class="ph-icon">▦</div>
-        <div class="ph-title">The roster, its routines and its mood</div>
-        <div class="ph-note">drop <code>img/roster.png</code></div>
-      </div>
-
+      <figure class="shot full">
+        <img src="img/intrusion.png" alt="An intrusion battle: a pack of four Rootkits across the top, the party's four members and their gear along the bottom, and the command bar" width="1280" height="720" loading="lazy">
+        <figcaption>An intrusion: four Rootkits, one of them on point.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/roster.png" alt="The Party roster: each program with its level, integrity, attack, mitigation, power and current post" width="1280" height="720" loading="lazy">
+        <figcaption>The roster: who's in the party, and who's working.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/downed.png" alt="The Downed Programs list: three beaten programs held for extraction, each with its condition and rarity" width="1280" height="720" loading="lazy">
+        <figcaption>Downed programs held for extraction, with a boss among them.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
@@ -704,15 +760,15 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
         <p class="kicker">Install</p>
         <h2>Clone it and run it</h2>
         <p style="color:var(--ink-dim);font-size:18px;margin:0 0 8px">
-          You need the Rust toolchain. A debug build is a playable build here —
+          You need the Rust toolchain. The debug build is playable here, and
           <code style="font-family:var(--mono);font-size:15px;color:var(--cyan)">cargo run</code>
-          is how the game is meant to be started.
+          is the intended way to start the game.
         </p>
         <p class="note">
-          The binary resolves <code>assets/</code>, <code>saves/</code> and your
-          profile relative to the checkout at build time, so the clone needs to
-          stay put — even if you <code>cargo install --path crates/launcher</code>
-          to get it on your <code>PATH</code>.
+          The binary finds <code>assets/</code>, <code>saves/</code> and your
+          profile relative to the checkout it was built from. Leave the clone
+          where it is, even if you <code>cargo install --path crates/launcher</code>
+          to put it on your <code>PATH</code>.
         </p>
         <div class="btns" style="justify-content:flex-start;margin-top:32px">
           <a class="btn btn-primary" href="https://github.com/troglodyte/feral-processes">View on GitHub →</a>
@@ -734,15 +790,14 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
 
         <div class="code" style="margin-top:18px">
           <div class="code-bar"><i></i><i></i><i></i><span style="margin-left:6px">first run</span></div>
-<pre><span class="c"># New Game walks you through class, look,</span>
+<pre><span class="c"># New Game: difficulty, class, look,</span>
 <span class="c"># stats, a starting routine and a name</span>
 <span class="p">?</span>      the manual, in game
 <span class="p">1 2 3</span>  the BASE / CREW / PACK column
 <span class="p">4</span>      contracts
-<span class="p">L</span>      every save  <span class="c">(main menu)</span>
-<span class="p">A</span>      your achievements  <span class="c">(main menu)</span>
-
-<span class="c"># autosaves every 50 ticks, into saves/</span></pre>
+<span class="p">b</span>      base menu  <span class="c">(staff, research, work orders)</span>
+<span class="p">p</span>      party menu  <span class="c">(roster, routines, perks)</span>
+<span class="p">D</span>      downed programs</pre>
         </div>
       </div>
     </div>
@@ -759,11 +814,12 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     <div class="sec-head center">
       <p class="kicker">Moddable by design</p>
       <h2>Content is a file, not a code change</h2>
-      <p>Species, structures, items, routines, contracts, towns, sortie sites,
-         talents, research nodes, memories, needs and the rock underneath your
-         base are all plain <code>.ron</code> data. A malformed file is skipped
-         with a warning, never a crash — and a new field is always optional, so
-         nobody's mod stops parsing.</p>
+      <p>Species, structures, items, routines, contracts, towns, outposts,
+         sortie sites, classes, talents, research, memories, thoughts,
+         conversations, needs, attributes, floors and the rock under your base
+         are all plain <code>.ron</code> data. A malformed file is skipped with
+         a warning rather than crashing the game. New fields are always
+         optional, so existing mods keep parsing.</p>
     </div>
 
     <div class="code" style="max-width:760px;margin:0 auto">
@@ -775,7 +831,7 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     color: Magenta,
     base_hp: 96,
     base_atk: 18,
-    habitats: [StaticField, OpenGrid],
+    habitats: [Backplane, Deadlock],
     growth_multiplier: 1.4,
     moves: [
         (name: <span class="k">"Pointer Stab"</span>, power: 8, spread: 3),
@@ -791,33 +847,41 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
       <span class="chip">assets/<b>abilities</b></span>
       <span class="chip">assets/<b>contracts</b></span>
       <span class="chip">assets/<b>settlements</b></span>
+      <span class="chip">assets/<b>outposts</b></span>
       <span class="chip">assets/<b>sorties</b></span>
       <span class="chip">assets/<b>caravans</b></span>
       <span class="chip">assets/<b>research</b></span>
-      <span class="chip">assets/<b>talents</b></span>
       <span class="chip">assets/<b>classes</b></span>
+      <span class="chip">assets/<b>talents</b></span>
       <span class="chip">assets/<b>perks</b></span>
+      <span class="chip">assets/<b>attributes</b></span>
       <span class="chip">assets/<b>achievements</b></span>
       <span class="chip">assets/<b>memories</b></span>
+      <span class="chip">assets/<b>thoughts</b></span>
+      <span class="chip">assets/<b>interactions</b></span>
       <span class="chip">assets/<b>needs</b></span>
       <span class="chip">assets/<b>affixes</b></span>
       <span class="chip">assets/<b>tools</b></span>
+      <span class="chip">assets/<b>floors</b></span>
       <span class="chip">assets/<b>rock</b></span>
       <span class="chip">assets/<b>sprites</b></span>
       <span class="chip">assets/<b>help</b></span>
     </div>
 
     <p class="note" style="max-width:760px;margin:26px auto 0">
-      Drop a 16×16 PNG into <code>assets/sprites/</code> named for a species and
-      the map draws it in place of that glyph — tinted, so your art inherits the
-      danger colouring, the biome tint and the damage dimming for free.
+      Drop a 16×16 PNG named after a species into <code>assets/sprites/</code>
+      and the map draws it in place of the glyph. The sprite is tinted, so it
+      picks up the danger colouring, the biome tint and the damage dimming
+      automatically. Name it <code>&lt;name&gt;.colour.png</code> instead and it
+      keeps its own colours. You can also draw sprites in the game, in the Sprite Forge.
     </p>
 
     <p class="note" style="max-width:760px;margin:20px auto 0">
-      Difficulty tuning is deliberately <em>not</em> data. Every knob the engine
-      hardcodes — scaling curves, XP, drop rates, raid pressure, need decay — is a
-      documented constant in <code>crates/engine/src/tuning.rs</code>. Content is
-      moddable; how hard the game is, is not.
+      Difficulty tuning is deliberately <em>not</em> data. Every number the
+      engine hardcodes, from scaling curves and XP to drop rates, siege pressure
+      and need decay, is a documented constant in
+      <code>crates/engine/src/tuning.rs</code>. You can mod the content, but not
+      how hard the game is.
     </p>
   </div>
 </section>
@@ -830,9 +894,9 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     <div class="foot">
       <div class="foot-about">
         <div class="brand" style="margin-bottom:14px">&gt; feral<span>-</span>processes</div>
-        <p>A headless Rust ECS simulation with a Bevy renderer sitting on top of
-           it. Four crates, one game, and a rule that the renderer never touches
-           the world.</p>
+        <p>A headless Rust ECS simulation with a Bevy renderer on top. Four
+           crates, one game, and a rule that the renderer never touches the
+           world.</p>
       </div>
 
       <div>
@@ -859,7 +923,7 @@ footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090
     </div>
 
     <div class="foot-bottom">
-      <span>feral-processes v0.13.150</span>
+      <span>feral-processes v0.14.6</span>
       <span>built in Rust · bevy_ecs + bevy · single-player</span>
     </div>
   </div>

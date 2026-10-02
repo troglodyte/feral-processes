@@ -304,7 +304,8 @@ impl DerivedBase {
     /// attributes contribute, so `derive` of it gives the same figures back.
     /// Everything else starts where the player's does. Integer arithmetic on
     /// the same `attribute_contribution` `derive` adds, so the round trip is
-    /// exact and no clamp can bite.
+    /// exact for any figure `derive` can produce. `derive` floors hp and
+    /// attack at 1, so a hand-built figure below that comes back as 1.
     pub fn program(max_hp: i32, atk: i32, mitigation: i32, contribution: &DerivedStats) -> Self {
         DerivedBase {
             max_hp: max_hp - contribution.max_hp,

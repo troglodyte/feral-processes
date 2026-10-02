@@ -54,6 +54,41 @@ fn assert_seated_and_stable(game: &mut Game, program: Entity) {
     assert_eq!(stats_of(game, program), before);
 }
 
+/// Takes a seated program through the state a door's own seating call cannot
+/// be shown in: a receipt on the books and gear on its back. Seating it
+/// again from its baked figures must give those figures back and the base it
+/// already had.
+fn assert_reseating_with_gear_and_a_receipt_changes_no_stat(game: &mut Game, program: Entity) {
+    game.world.entity_mut(program).insert(BoughtStats {
+        atk: 3,
+        mitigation: 2,
+        max_hp: 7,
+        ..Default::default()
+    });
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(program, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .unwrap();
+    game.recompute_derived(program);
+    assert!(
+        game.gear_bonus(program).atk > 0,
+        "the fixture must wear something"
+    );
+    let before = stats_of(game, program);
+    let base = *game.world.get::<ProgramBase>(program).unwrap();
+    game.world
+        .entity_mut(program)
+        .remove::<(ProgramBase, Derived, StatPoints, HoldPoints)>();
+
+    game.seat_derived(program);
+
+    assert_eq!(stats_of(game, program), before);
+    assert_eq!(*game.world.get::<ProgramBase>(program).unwrap(), base);
+}
+
 #[test]
 fn seating_leaves_stats_alone_with_gear_worn_and_a_receipt() {
     let mut game = game();
@@ -140,6 +175,7 @@ fn adopt_program_seats() {
     let s = species(&game);
     let program = game.adopt_program(&s, 62, 62, 1.0).unwrap();
     assert_seated_and_stable(&mut game, program);
+    assert_reseating_with_gear_and_a_receipt_changes_no_stat(&mut game, program);
 }
 
 #[test]
@@ -476,6 +512,7 @@ fn a_fused_child_is_seated_and_stable() {
         .unwrap()
         .entity;
     assert_seated_and_stable(&mut game, child);
+    assert_reseating_with_gear_and_a_receipt_changes_no_stat(&mut game, child);
 }
 
 #[test]
@@ -651,4 +688,45 @@ fn fusing_a_held_parent_keeps_its_banked_points() {
         held.max_hp > empty.max_hp,
         "the bank must be worth something"
     );
+}
+
+#[test]
+fn a_decompiled_squad_lead_is_seated_with_its_stats_intact() {
+    let mut game = game();
+    let player = game.player_entity();
+    let s = species(&game);
+    let wild = game
+        .spawn_wild_creature_scaled(&s, 3, 3, 1.0, false)
+        .unwrap();
+    let squad = game
+        .world
+        .spawn(Squad {
+            members: vec![wild],
+            formation: Default::default(),
+        })
+        .insert(Stats {
+            hp: 1,
+            max_hp: 1,
+            atk: 0,
+            mitigation: 0,
+        })
+        .id();
+    let before = stats_of(&game, wild);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 1000;
+    let mut taken = false;
+    for _ in 0..50 {
+        if game.decompile_squad(squad, player) {
+            taken = true;
+            break;
+        }
+    }
+    assert!(taken, "a skill of 1000 decompiles within 50 rolls");
+    assert!(game.world.get::<crate::components::Tamed>(wild).is_some());
+    let after = stats_of(&game, wild);
+    assert_eq!(
+        (after.max_hp, after.atk, after.mitigation),
+        (before.max_hp, before.atk, before.mitigation)
+    );
+    assert_seated_and_stable(&mut game, wild);
 }

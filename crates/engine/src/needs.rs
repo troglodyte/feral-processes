@@ -143,7 +143,7 @@ impl NeedDb {
 /// Each def's `morale_weight` scaled linearly from full at `NEED_MIN` to
 /// nothing at `content`, so a satisfied need contributes exactly zero and a
 /// program with no `Needs` at all contributes exactly zero, without a branch
-/// at either site. `base_int`'s idiom, in the same expression.
+/// at either site. the Analysis term's idiom (`systems::mining_success_chance`), in the same expression.
 ///
 /// **A free function for `party::role_of`'s reason.** A bevy system has no
 /// `Game` to ask, and two folds would eventually disagree about whether an

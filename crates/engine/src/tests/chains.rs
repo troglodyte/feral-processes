@@ -694,8 +694,10 @@ fn a_sharper_program_mines_more_from_the_same_node() {
 
 /// A posted program's roll follows its *own* Analysis, not its species'
 /// catalogue figure: the same sharp species, given an absurdly low and an
-/// absurdly high attribute, mines nothing and mines every cycle. The
-/// extremes saturate the clamp so the answer does not depend on the stream.
+/// absurdly high attribute, mines nothing and mines something. The
+/// extremes saturate the clamp, so the low end is exactly zero whatever the
+/// stream and the high end is positive across the sample; the exact count
+/// is not asserted because it is bounded by the node's own cycle length.
 #[test]
 fn a_posted_programs_own_analysis_overrides_its_species() {
     let mut dull = 0;
@@ -705,7 +707,10 @@ fn a_posted_programs_own_analysis_overrides_its_species() {
         keen += units_mined_with("own_keen", "sharpmon", Some(1000), 100, seed);
     }
     assert_eq!(dull, 0, "an Analysis of -1000 can never land a cycle");
-    assert!(keen > 0, "an Analysis of 1000 lands every cycle");
+    assert!(
+        keen > 0,
+        "an Analysis of 1000 saturates the roll, so it mines"
+    );
 }
 
 /// A program can actually be posted to an assembler through the same

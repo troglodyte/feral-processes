@@ -2705,7 +2705,7 @@ mod tests {
         for level in [1, 2, 5, 12] {
             for keen in [0, 1, 4] {
                 for int_offset in [-4, 0, 3] {
-                    let base_int = int_offset;
+                    let base_int = int_offset; // Analysis over the catalogue base
                     let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0, 0.0);
                     let without = (MINING_SUCCESS_BASE
                         + level as f64 * MINING_SUCCESS_PER_LEVEL
@@ -2821,7 +2821,7 @@ mod tests {
         );
     }
 
-    /// The whole point of reading `base_int` as a deviation: a species that
+    /// The whole point of reading Analysis as a deviation: a species that
     /// declares nothing, a mod's species predating the field, and the player
     /// working the node themselves all sit at the baseline and must get the
     /// number the formula gave before the term existed. Asserted against the
@@ -2840,7 +2840,7 @@ mod tests {
     }
 
     #[test]
-    fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
+    fn each_point_of_analysis_moves_the_roll_by_its_tuning_constant() {
         let baseline = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.0);
         let sharp = mining_success_chance(1, 0, 4, 0.0, 0.0, 0.0);
         let dull = mining_success_chance(1, 0, -4, 0.0, 0.0, 0.0);
@@ -2856,9 +2856,9 @@ mod tests {
 
     /// `rng.random_bool` panics outside 0..=1, so both ends are a crash and
     /// not merely a wrong number. The low end is the one that isn't obvious:
-    /// nothing stops a mod authoring `base_int: -500`.
+    /// nothing stops a mod authoring an Analysis of -500.
     #[test]
-    fn base_int_cannot_push_the_roll_outside_a_probability() {
+    fn analysis_cannot_push_the_roll_outside_a_probability() {
         assert_eq!(
             mining_success_chance(1, 0, 10_000, 0.0, 0.0, 0.0),
             1.0,

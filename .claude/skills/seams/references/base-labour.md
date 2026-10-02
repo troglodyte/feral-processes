@@ -248,4 +248,8 @@
   An edge is a call to `systems::feeds` over the pull's own `ORTHOGONAL` reach;
   re-deriving it makes lines that move nothing. Teardown Rigs are not members
   until a rig gate exists: the scheduler never staffs one, and a rig strips with
-  each hopper entry's own tool, not `standing_tool`.
+  each hopper entry's own tool, not `standing_tool`. The holder is read from staff only, and a
+  non-staff body (the player's own `work_structure`) on any member covers the
+  whole line through `same_post`: counting the player as holder aimed the want at
+  the player's machine, the outsider filter removed it, and the staff worker
+  flickered on and off.

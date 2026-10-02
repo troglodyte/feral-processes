@@ -24,13 +24,10 @@ impl Game {
     ) -> Result<(), SpendError> {
         let entity = match owner {
             StatOwner::Player => self.player_entity(),
-            StatOwner::Program(program) => {
-                if self.world.get::<ProgramBase>(program).is_none() {
-                    return Err(SpendError::NoSuchTarget);
-                }
-                program
-            }
+            StatOwner::Program(program) => program,
         };
+        // Only a seated program has a pool, so this is also the check that the
+        // target is one.
         let banked = self
             .world
             .get::<StatPoints>(entity)

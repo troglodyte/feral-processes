@@ -458,3 +458,67 @@ fn an_arena_companion_levelled_after_adoption_grew_through_points() {
         game.derived_stats(program).max_hp
     );
 }
+
+#[test]
+fn a_fused_child_is_seated_and_stable() {
+    let mut game = game();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = seated_program(&mut game);
+    let b = seated_program(&mut game);
+    game.fuse_companions(a, b, None).unwrap();
+    let child = game
+        .owned_pets()
+        .into_iter()
+        .max_by_key(|p| p.fusions)
+        .unwrap()
+        .entity;
+    assert_seated_and_stable(&mut game, child);
+}
+
+#[test]
+fn spending_on_an_unseated_program_is_refused() {
+    let mut game = game();
+    let program = unseated_program(&mut game);
+    let before = game.world.get::<Attributes>(program).cloned();
+
+    let result = game.spend_stat_points(
+        crate::progression::StatOwner::Program(program),
+        &[(AttributeId::from("parity"), 1)],
+    );
+
+    assert_eq!(result, Err(crate::progression::SpendError::NoSuchTarget));
+    assert_eq!(game.world.get::<Attributes>(program).cloned(), before);
+}
+
+#[test]
+fn a_refactor_of_a_seated_program_survives_a_recompute() {
+    let mut game = game();
+    let program = seated_program(&mut game);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.add(ItemId::from("buffer_extension"), 1);
+        inv.add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    }
+    game.equip(program, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .unwrap();
+    let before = stats_of(&game, program);
+
+    game.refactor_companion(program, &ItemId::from("buffer_extension"))
+        .unwrap();
+
+    let after = stats_of(&game, program);
+    assert!(after.max_hp > before.max_hp);
+    assert_eq!(after.hp, before.hp + (after.max_hp - before.max_hp));
+    assert_eq!(after.atk, before.atk, "gear must not be scaled or lost");
+    assert_seated_and_stable(&mut game, program);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "seated program")]
+fn retiering_a_seated_program_is_refused() {
+    let mut game = game();
+    let program = seated_program(&mut game);
+    game.retier_rarity(program, Rarity::Gold);
+}

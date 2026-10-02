@@ -616,7 +616,7 @@ fn a_guard_toggle_leaves_the_work_of_the_rest_of_a_merged_line_alone() {
 }
 
 #[test]
-fn a_player_working_one_member_covers_the_whole_line_without_flicker() {
+fn a_player_working_one_member_keeps_the_line_worker_off_that_member() {
     let mut g = base_game(91);
     let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
     let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
@@ -628,25 +628,26 @@ fn a_player_working_one_member_covers_the_whole_line_without_flicker() {
     assert_eq!(posted(&g, staff[0]), Some(lathe), "precondition");
     stand_in_base_at(&mut g, 1, 0);
     g.work_structure(mine).unwrap();
-    let mut posted_ticks = 0;
+    let player = g.player_entity();
     for _ in 0..60 {
         g.tick();
-        if posted(&g, staff[0]).is_some() {
-            posted_ticks += 1;
-        }
+        assert_ne!(
+            posted(&g, staff[0]),
+            Some(mine),
+            "the player holds the mine"
+        );
+        assert_ne!(
+            g.line_reports()[0].active,
+            Some(mine),
+            "the line's active machine is read from staff only"
+        );
     }
-    let player = g.player_entity();
     assert!(
         g.world
             .get::<Task>(player)
             .is_some_and(|t| t.target == mine),
         "precondition: the player is still on the mine"
     );
-    assert_eq!(
-        posted_ticks, 0,
-        "the player covers the line; the worker is free, not in and out"
-    );
-    assert_eq!(g.line_reports()[0].active, None, "staff report only");
 }
 
 #[test]

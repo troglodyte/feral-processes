@@ -2,6 +2,7 @@
 //! groups into one job.
 
 use super::support::*;
+use crate::components::StaffRank;
 use crate::game::base::lines::LineKey;
 use crate::systems::{feeds, feeds_fuel, feeds_ingredient};
 use crate::*;
@@ -136,10 +137,17 @@ fn a_cycle_neither_panics_nor_reorders() {
         .enumerate()
         .map(|(i, e)| (*e, (i as i32, 0)))
         .collect();
-    // 0 -> 1 -> 2 -> 0
-    let edge = |a: usize, b: usize| (a + 1) % 3 == b;
-    let first = crate::game::base::lines::group(&nodes, edge);
-    let second = crate::game::base::lines::group(&nodes, edge);
+    // 0 -> 1 -> 2 -> 0, by entity, so the same graph can be handed over in
+    // another input order.
+    let by_entity = |e: Entity| es.iter().position(|&x| x == e).unwrap();
+    let edge_in = |nodes: &[(Entity, (i32, i32))]| {
+        let ids: Vec<usize> = nodes.iter().map(|(e, _)| by_entity(*e)).collect();
+        move |a: usize, b: usize| (ids[a] + 1) % 3 == ids[b]
+    };
+    let mut shuffled = nodes.clone();
+    shuffled.reverse();
+    let first = crate::game::base::lines::group(&nodes, edge_in(&nodes));
+    let second = crate::game::base::lines::group(&shuffled, edge_in(&shuffled));
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].members.len(), 3);
     assert_eq!(first[0].members, second[0].members);
@@ -302,11 +310,21 @@ fn an_order_for_a_middle_product_never_posts_the_end_machine() {
 fn mid_cycle_on_mining(g: &mut Game, staff: usize) -> (Entity, Entity, Entity) {
     let mine = spawn_machine_at(g, "mining_node", 2, 0);
     let lathe = spawn_machine_at(g, "lathe", 3, 0);
-    hire(g, staff);
+    let hired = hire(g, staff);
+    // The newest body is first in line, so the worker is the *highest*
+    // entity and a spare outranks it in the pool: only a holder that
+    // survives the active machine moving keeps it from being swapped out.
+    for (rank, &body) in hired.iter().rev().enumerate() {
+        g.world.entity_mut(body).insert(StaffRank(rank as u32));
+    }
     g.set_standing_job(mine, true, false).unwrap();
     g.tick();
     let (worker, target) = gatherers(g)[0];
     assert_eq!(target, mine, "precondition: only the mine can progress");
+    assert!(
+        staff == 1 || hired.iter().all(|&b| b <= worker),
+        "precondition: the worker is the highest entity"
+    );
     park_at_post(g, worker, mine);
     for _ in 0..200 {
         let t = g.world.get::<Task>(worker).unwrap();

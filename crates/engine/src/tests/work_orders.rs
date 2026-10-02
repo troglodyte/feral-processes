@@ -2289,37 +2289,43 @@ fn spare_staff_are_put_on_the_second_order() {
 /// already filled — `post_worker` displaces the body already standing
 /// there, so the base ends up with an idle program and the want below it,
 /// here the second order's own bench, unstaffed.
-/// A line is one post however many orders, and however many of its
-/// machines, want a body.
 #[test]
-fn a_line_two_orders_want_is_posted_once() {
+fn a_machine_two_orders_want_is_posted_once() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let (mine, _lathe, _press) = lay_disk_line(&mut game);
-    // Beside the Mining Node, so it joins the disk line: four machines, one
-    // line.
-    spawn_machine_at(&mut game, "annealing_node", 2, 1);
-    // Both lines run off the Mining Node's output, so both orders reach it.
-    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
-    let staff = hire(&mut game, 3);
-    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+    place_home(&mut game);
+    // A Depot feeds both benches by stock rather than by touching, so each
+    // stays a line of one and the dedupe is what this exercises.
+    let depot = spawn_machine_at(&mut game, "depot", 6, 6);
+    put_output(&mut game, depot, ids::CORE_FRAGMENT, 40);
+    spawn_machine_at(&mut game, "mining_node", 6, 1);
+    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    let annealer = spawn_machine_at(&mut game, "annealing_node", 2, 3);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 30))
+        .unwrap();
+    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 20))
         .unwrap();
     game.queue_work_order(WorkOrder::batch(ItemId::from("annealed_core"), 30))
         .unwrap();
     let orders = game.work_orders().to_vec();
     assert!(
-        wants(&game, &orders[0]).iter().any(|&(e, _)| e == mine)
-            && wants(&game, &orders[1]).iter().any(|&(e, _)| e == mine),
-        "precondition: the Mining Node is a want of both orders"
+        wants(&game, &orders[0]).iter().any(|&(e, _)| e == lathe)
+            && wants(&game, &orders[1]).iter().any(|&(e, _)| e == lathe),
+        "precondition: the Lathe is a want of both orders"
     );
 
     game.tick();
 
-    let posts: Vec<Option<Entity>> = staff.iter().map(|&s| posted_at(&game, s)).collect();
     assert_eq!(
-        posts.iter().filter(|p| p.is_some()).count(),
+        bodies_at(&mut game, lathe),
         1,
-        "both orders reach the one line, which is one post however many orders want it"
+        "one machine is one post however many orders want it"
+    );
+    let posts: Vec<Option<Entity>> = staff.iter().map(|&s| posted_at(&game, s)).collect();
+    assert!(
+        posts.contains(&Some(annealer)),
+        "and the slot a duplicate would have eaten still reaches the third order's bench"
     );
 }
 

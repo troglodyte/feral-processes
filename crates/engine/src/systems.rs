@@ -22,9 +22,9 @@ use crate::resources::{
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
-    BUILD_QUALITY_TICK_WEIGHT, DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS,
-    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_EXTRACTION_CAP, MINING_SUCCESS_BASE,
-    MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    BUILD_QUALITY_TICK_WEIGHT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS, MEMORY_MORALE_MAX_SHIFT,
+    MEMORY_MORALE_PER_POINT, MINING_EXTRACTION_CAP, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
+    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
     WANDER_COOLDOWN_MAX_TICKS, WANDER_COOLDOWN_MIN_TICKS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
@@ -222,17 +222,18 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 /// systems iterating worker programs, and the perk belongs to the player —
 /// callers read it once, outside their loop.
 ///
-/// `base_int` is whoever is actually working the node — the posted program's
-/// `SpeciesDef::base_int`, or `DEFAULT_BASE_INT` when the player is doing it
-/// themselves. It enters as a **deviation from that baseline**, not as an
-/// absolute: at the baseline the term is exactly zero, so a species file
-/// that never heard of the field extracts at the rate it always did. Making
-/// it absolute would silently re-rate every existing species and every mod
-/// by wiring alone, which is a change nobody asked for and nobody would see.
-///
+/// `analysis_over_base` is how far whoever is actually working the node sits
+/// from the Analysis attribute's catalogue base (`AttributeDb::analysis_base`):
+/// the posted program's Analysis less that base, or 0 when the player is doing
+/// it themselves. The player sitting exactly on the base is the design: it is
+/// what makes posting a sharp program better than doing the job yourself and a
+/// dull one worse. It enters as a **deviation**, not as an absolute: at the
+/// base the term is exactly zero, so a species file that never heard of the
+/// field extracts at the rate it always did.
+
 /// `morale` is `Game::morale` for whoever is standing there — the signed sum
 /// of everything that program remembers. It reads as a **deviation from
-/// zero**, the same way `base_int` reads as one from `DEFAULT_BASE_INT`, and
+/// zero**, the same way `analysis_over_base` reads as one from the catalogue base, and
 /// that is what buys three properties at once and none of them by a branch:
 /// a program with no memories contributes nothing, the player contributes
 /// nothing because the player has no `Memories` at all, and an
@@ -247,11 +248,11 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 ///
 /// Clamped at both ends because `GameRng::random_bool` panics outside
 /// 0..=1 — the low end matters, since nothing stops a mod authoring a
-/// deeply negative `base_int`.
+/// deeply negative `analysis_over_base`.
 pub(crate) fn mining_success_chance(
     level: u32,
     keen_scavenger_level: u32,
-    base_int: i32,
+    analysis_over_base: i32,
     morale: f32,
     strain: f32,
     extraction: f64,
@@ -259,7 +260,7 @@ pub(crate) fn mining_success_chance(
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
         + crate::perks::mining_roll_bonus(keen_scavenger_level)
-        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT
+        + analysis_over_base as f64 * MINING_SUCCESS_PER_INT
         + morale_shift(morale)
         + need_shift(strain)
         + extraction.clamp(0.0, f64::from(MINING_EXTRACTION_CAP)))
@@ -301,7 +302,7 @@ pub(crate) fn morale_shift(morale: f32) -> f64 {
 /// is the caller's job.
 ///
 /// Read as a **deviation from `DEFAULT_BASE_SPEED`**, exactly like
-/// `base_int`'s term in `mining_success_chance` above. A species at the
+/// `analysis_over_base`'s term in `mining_success_chance` above. A species at the
 /// baseline — and the player, who has no `Creature` and so takes the
 /// baseline from `Game::species_base_speed` — gets `base_ticks` back
 /// unchanged. That is what keeps a machine's shipped `ticks_per_unit`
@@ -350,7 +351,7 @@ pub(crate) fn work_ticks_at_speed(
 #[derive(Clone, Copy)]
 pub(crate) struct CycleModifiers {
     pub keen_scavenger_level: u32,
-    pub base_int: i32,
+    pub analysis_over_base: i32,
     /// `None` for the player working a node themselves, for a species the
     /// db has never heard of, and for anything outside the class system —
     /// all of which take the ordinary payout.
@@ -358,7 +359,7 @@ pub(crate) struct CycleModifiers {
     /// `Game::morale` for whoever is standing at the machine: the signed sum
     /// of everything that program remembers.
     ///
-    /// Beside `base_int` rather than beside the perk, because it is the same
+    /// Beside `analysis_over_base` rather than beside the perk, because it is the same
     /// shape of thing — it belongs to the body doing the work rather than to
     /// the player, and it decides whether the cycle lands rather than what a
     /// landed cycle is worth. **`0.0` is the baseline and not a missing
@@ -413,7 +414,7 @@ fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &Structure
 /// each reads `keen_scavenger_level` off the player for itself — the perk is
 /// the player's wherever the cycle is being run.
 ///
-/// `base_int` is the opposite: it belongs to whoever is standing there, so
+/// `analysis_over_base` is the opposite: it belongs to whoever is standing there, so
 /// the two callers genuinely differ on it rather than both reading the
 /// player. That difference is the feature — see each call site.
 pub(crate) fn resolve_gather_cycle(
@@ -429,7 +430,7 @@ pub(crate) fn resolve_gather_cycle(
         && !rng.0.random_bool(mining_success_chance(
             level,
             worker.keen_scavenger_level,
-            worker.base_int,
+            worker.analysis_over_base,
             worker.morale,
             worker.need_strain,
             worker.extraction,
@@ -1220,6 +1221,7 @@ pub struct CronjobLookups<'w> {
     /// where there was none rather than shifting what the world holds.
     memories: Res<'w, MemoryDb>,
     thoughts: Res<'w, crate::situations::ThoughtDb>,
+    attribute_defs: Res<'w, crate::attributes::AttributeDb>,
     clock: Res<'w, GameClock>,
     /// The other half of pricing what a worker brings to a cycle — see
     /// `CycleModifiers::need_strain`. Already a registered resource, so this
@@ -1283,6 +1285,7 @@ pub fn task_progress_system(
         power: grid,
         memories: memory_db,
         thoughts: thought_db,
+        attribute_defs,
         clock,
         needs: need_db,
         research: mut active_research,
@@ -1438,7 +1441,7 @@ pub fn task_progress_system(
         // `node_is_flat_payout` treats a structure kind the db has never
         // heard of.
         let worker_def = species_db.get(&creature.species);
-        let worker_int = crate::species::analysis_of(attributes, worker_def);
+        let worker_int = crate::species::analysis_of(attributes, worker_def, &attribute_defs);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
             tier,
@@ -1446,7 +1449,7 @@ pub fn task_progress_system(
             node_is_flat_payout(structure, &structure_db),
             CycleModifiers {
                 keen_scavenger_level,
-                base_int: worker_int,
+                analysis_over_base: worker_int - attribute_defs.analysis_base(),
                 class: worker_def.and_then(|d| d.affinity_class()),
                 // The same fold `Game::morale` is, through the shared free
                 // function rather than a copy of it: a worker with no
@@ -1765,7 +1768,7 @@ pub fn player_gather_system(
             node_is_flat_payout(structure, &structure_db),
             CycleModifiers {
                 keen_scavenger_level,
-                base_int: DEFAULT_BASE_INT,
+                analysis_over_base: 0,
                 // Same decision as the aptitude above: the player is in no
                 // class, so working a node yourself pays the ordinary curve
                 // and a Leech is a reason to hand the job over.
@@ -2281,7 +2284,7 @@ mod tests {
             flat_payout,
             CycleModifiers {
                 keen_scavenger_level: 0,
-                base_int: DEFAULT_BASE_INT,
+                analysis_over_base: 0,
                 class,
                 morale: 0.0,
                 need_strain: 0.0,
@@ -2702,12 +2705,12 @@ mod tests {
         for level in [1, 2, 5, 12] {
             for keen in [0, 1, 4] {
                 for int_offset in [-4, 0, 3] {
-                    let base_int = DEFAULT_BASE_INT + int_offset;
+                    let base_int = int_offset;
                     let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0, 0.0);
                     let without = (MINING_SUCCESS_BASE
                         + level as f64 * MINING_SUCCESS_PER_LEVEL
                         + crate::perks::mining_roll_bonus(keen)
-                        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
+                        + base_int as f64 * MINING_SUCCESS_PER_INT)
                         .clamp(0.0, 1.0);
                     assert_eq!(
                         with_morale, without,
@@ -2726,9 +2729,9 @@ mod tests {
     /// rises-with-morale test just as well.
     #[test]
     fn morale_moves_the_rate_both_ways_and_by_the_same_amount() {
-        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0, 0.0, 0.0);
-        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0, 0.0, 0.0);
+        let baseline = mining_success_chance(4, 0, 0, 0.0, 0.0, 0.0);
+        let content = mining_success_chance(4, 0, 0, 8.0, 0.0, 0.0);
+        let miserable = mining_success_chance(4, 0, 0, -8.0, 0.0, 0.0);
         assert!(
             content > baseline,
             "a program that remembers good things should extract more reliably"
@@ -2760,7 +2763,7 @@ mod tests {
         // And the finished chance stays inside what `random_bool` accepts,
         // which is the outer clamp's job and is asserted here so the two
         // cannot both be assumed.
-        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0, 0.0, 0.0);
+        let floored = mining_success_chance(1, 0, 0, -10_000.0, 0.0, 0.0);
         assert!((0.0..=1.0).contains(&floored));
     }
 
@@ -2769,17 +2772,10 @@ mod tests {
     /// sharpest species however much they spend.
     #[test]
     fn extraction_raises_the_chance_and_is_capped() {
-        let none = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-        let some = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.05);
-        let capped = mining_success_chance(
-            1,
-            0,
-            DEFAULT_BASE_INT,
-            0.0,
-            0.0,
-            f64::from(MINING_EXTRACTION_CAP),
-        );
-        let beyond = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 5.0);
+        let none = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.0);
+        let some = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.05);
+        let capped = mining_success_chance(1, 0, 0, 0.0, 0.0, f64::from(MINING_EXTRACTION_CAP));
+        let beyond = mining_success_chance(1, 0, 0, 0.0, 0.0, 5.0);
         assert!((some - none - 0.05).abs() < 1e-9, "{none} -> {some}");
         assert!(capped > some);
         assert_eq!(beyond, capped, "past the cap adds nothing");
@@ -2787,14 +2783,14 @@ mod tests {
             (capped - none - f64::from(MINING_EXTRACTION_CAP)).abs() < 1e-9,
             "the cap is the tuning constant"
         );
-        let negative = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, -1.0);
+        let negative = mining_success_chance(1, 0, 0, 0.0, 0.0, -1.0);
         assert_eq!(negative, none, "extraction never subtracts");
     }
 
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let level_1 = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.0);
+        let level_2 = mining_success_chance(2, 0, 0, 0.0, 0.0, 0.0);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -2804,7 +2800,7 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0),
+            mining_success_chance(100, 0, 0, 0.0, 0.0, 0.0),
             1.0,
             "chance should never exceed a sure thing"
         );
@@ -2812,14 +2808,14 @@ mod tests {
 
     #[test]
     fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
-        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
+        let plain = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.0);
+        let boosted = mining_success_chance(1, 3, 0, 0.0, 0.0, 0.0);
         assert!(
             (boosted - (plain + crate::perks::mining_roll_bonus(3))).abs() < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(
-            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0, 0.0, 0.0),
+            mining_success_chance(1, 1000, 0, 0.0, 0.0, 0.0),
             1.0,
             "the perk must not push the roll past a sure thing either"
         );
@@ -2837,8 +2833,7 @@ mod tests {
             let expected = crate::tuning::MINING_SUCCESS_BASE
                 + level as f64 * crate::tuning::MINING_SUCCESS_PER_LEVEL;
             assert!(
-                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0) - expected).abs()
-                    < f64::EPSILON,
+                (mining_success_chance(level, 0, 0, 0.0, 0.0, 0.0) - expected).abs() < f64::EPSILON,
                 "a baseline worker must contribute exactly nothing at level {level}"
             );
         }
@@ -2846,9 +2841,9 @@ mod tests {
 
     #[test]
     fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
-        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0, 0.0, 0.0);
-        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0, 0.0, 0.0);
+        let baseline = mining_success_chance(1, 0, 0, 0.0, 0.0, 0.0);
+        let sharp = mining_success_chance(1, 0, 4, 0.0, 0.0, 0.0);
+        let dull = mining_success_chance(1, 0, -4, 0.0, 0.0, 0.0);
         assert!(
             (sharp - (baseline + 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
             "each point above the baseline should add exactly its tuning constant"

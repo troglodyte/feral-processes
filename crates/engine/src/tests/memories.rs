@@ -1030,14 +1030,7 @@ fn mining_morale_is_game_morale() {
             .and_then(|n| n.level)
             .expect("mining_node.ron declares level: Some(1)");
         expected_chance.get_or_insert_with(|| {
-            crate::systems::mining_success_chance(
-                level,
-                0,
-                crate::tuning::DEFAULT_BASE_INT,
-                0.0,
-                0.0,
-                0.0,
-            )
+            crate::systems::mining_success_chance(level, 0, 0, 0.0, 0.0, 0.0)
         });
 
         for _ in 0..TICKS {

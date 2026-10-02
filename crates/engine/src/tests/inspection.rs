@@ -2203,19 +2203,20 @@ fn a_work_profile_carries_the_three_facts_that_decide_a_posting() {
         .into_iter()
         .find(|s| s.id == "rootkit")
         .expect("rootkit ships with the game");
+    let catalogue = game.attribute_db();
     assert_ne!(
         def.base_speed,
-        def.analysis(),
+        def.analysis(&catalogue),
         "the fixture stops distinguishing a swapped field the day these agree"
     );
     assert_ne!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
-    assert_ne!(def.analysis(), crate::tuning::DEFAULT_BASE_INT);
+    assert_ne!(def.analysis(&catalogue), catalogue.analysis_base());
 
     let profile = game
         .work_profile(program)
         .expect("a program of a shipped species has a work profile");
     assert_eq!(profile.speed, def.base_speed);
-    assert_eq!(profile.analysis, def.analysis());
+    assert_eq!(profile.analysis, def.analysis(&catalogue));
     assert_eq!(
         profile.class,
         Some(AffinityClass::Leech),

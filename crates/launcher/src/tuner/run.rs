@@ -33,7 +33,10 @@ impl PostCheck {
         let attributes = workspace.attribute_db()?;
         Ok(PostCheck {
             reach: feral_processes_engine::balance_sim::reach_rule_verdict(&db, &attributes),
-            aptitude: feral_processes_engine::species::extraction_aptitude_faults(db.all()),
+            aptitude: feral_processes_engine::species::extraction_aptitude_faults(
+                db.all(),
+                &attributes,
+            ),
         })
     }
 

@@ -1200,7 +1200,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                 // classless worker is what makes this the ordinary payout curve.
                 crate::systems::CycleModifiers {
                     keen_scavenger_level: 0,
-                    base_int: crate::tuning::DEFAULT_BASE_INT,
+                    analysis_over_base: 0,
                     class: None,
                     morale: 0.0,
                     need_strain: 0.0,

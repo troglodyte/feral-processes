@@ -2379,6 +2379,7 @@ impl Game {
                 analysis: crate::species::analysis_of(
                     self.world.get::<crate::components::Attributes>(entity),
                     Some(species),
+                    self.world.resource::<crate::attributes::AttributeDb>(),
                 ),
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
@@ -2444,6 +2445,7 @@ impl Game {
             analysis: crate::species::analysis_of(
                 self.world.get::<crate::components::Attributes>(creature),
                 Some(def),
+                self.world.resource::<crate::attributes::AttributeDb>(),
             ),
             class: def.affinity_class(),
         })

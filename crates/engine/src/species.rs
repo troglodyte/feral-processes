@@ -424,11 +424,11 @@ impl SpeciesDef {
     /// attribute's own catalogue base when it authors none. What an
     /// unseated program works a node at; a seated one reads its own
     /// `Attributes` through `analysis_of`.
-    pub fn analysis(&self) -> i32 {
+    pub fn analysis(&self, attributes: &crate::attributes::AttributeDb) -> i32 {
         self.attributes
             .get("analysis")
             .copied()
-            .unwrap_or(crate::tuning::DEFAULT_BASE_INT)
+            .unwrap_or_else(|| attributes.analysis_base())
     }
 
     /// The class this species reads as, or `None` for one that raises no
@@ -947,12 +947,14 @@ impl std::fmt::Display for AptitudeFault {
 /// than refusing a proposal whose other moves were fine.
 pub fn extraction_aptitude_faults<'a>(
     species: impl IntoIterator<Item = &'a SpeciesDef>,
+    attributes: &crate::attributes::AttributeDb,
 ) -> Vec<AptitudeFault> {
     let ordinary: Vec<&SpeciesDef> = species.into_iter().filter(|s| !s.is_boss).collect();
     if ordinary.is_empty() {
         return vec![AptitudeFault::TooFewBands { bands: 0 }];
     }
-    let mean = ordinary.iter().map(|s| s.analysis()).sum::<i32>() as f64 / ordinary.len() as f64;
+    let mean =
+        ordinary.iter().map(|s| s.analysis(attributes)).sum::<i32>() as f64 / ordinary.len() as f64;
 
     let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> = Default::default();
     for s in &ordinary {
@@ -967,13 +969,19 @@ pub fn extraction_aptitude_faults<'a>(
         faults.push(AptitudeFault::TooFewBands { bands: bands.len() });
     }
     for (band, members) in &bands {
-        if !members.iter().any(|s| (s.analysis() as f64) > mean) {
+        if !members
+            .iter()
+            .any(|s| (s.analysis(attributes) as f64) > mean)
+        {
             faults.push(AptitudeFault::BandAllDull {
                 band: band.clone(),
                 mean,
             });
         }
-        if !members.iter().any(|s| (s.analysis() as f64) < mean) {
+        if !members
+            .iter()
+            .any(|s| (s.analysis(attributes) as f64) < mean)
+        {
             faults.push(AptitudeFault::BandAllSharp {
                 band: band.clone(),
                 mean,
@@ -988,11 +996,15 @@ pub fn extraction_aptitude_faults<'a>(
         .iter()
         .map(|s| s.growth_multiplier)
         .fold(f32::MIN, f32::max);
-    let sharpest_overall = ordinary.iter().map(|s| s.analysis()).max().unwrap();
+    let sharpest_overall = ordinary
+        .iter()
+        .map(|s| s.analysis(attributes))
+        .max()
+        .unwrap();
     let sharpest_on_top_rung = ordinary
         .iter()
         .filter(|s| s.growth_multiplier == steepest)
-        .map(|s| s.analysis())
+        .map(|s| s.analysis(attributes))
         .max()
         .expect("the steepest band has members");
     if sharpest_on_top_rung >= sharpest_overall {
@@ -1005,17 +1017,18 @@ pub fn extraction_aptitude_faults<'a>(
 }
 
 /// The Analysis a program works a node at: its own attribute when it has
-/// one (seated), else its species' catalogue figure, else the baseline. The
+/// one (seated), else its species' catalogue figure, else the attribute's
+/// catalogue base. The
 /// one place that fallback chain lives, so a mining roll, an outpost
 /// crew roll and the Manifest cannot disagree about it.
 pub fn analysis_of(
     attributes: Option<&crate::components::Attributes>,
     def: Option<&SpeciesDef>,
+    catalogue: &crate::attributes::AttributeDb,
 ) -> i32 {
     attributes
         .and_then(|a| a.get(&crate::attributes::AttributeId::from("analysis")))
-        .or_else(|| def.map(SpeciesDef::analysis))
-        .unwrap_or(crate::tuning::DEFAULT_BASE_INT)
+        .unwrap_or_else(|| def.map_or_else(|| catalogue.analysis_base(), |d| d.analysis(catalogue)))
 }
 
 fn default_growth_multiplier() -> f32 {
@@ -1202,43 +1215,59 @@ impl SpeciesDb {
 
 #[cfg(test)]
 mod tests {
+    fn catalogue_with_analysis_base(base: i32) -> crate::attributes::AttributeDb {
+        let dir = crate::tests::support::scratch_assets_dir("species-analysis-base");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::fs::write(
+            dir.join("analysis.ron"),
+            format!(
+                "(id: \"analysis\", name: \"Analysis\", legacy: \"Intelligence\", short: \"s\", \
+                 meaning: \"m\", base: {base}, spread: 3)"
+            ),
+        )
+        .unwrap();
+        crate::attributes::AttributeDb::load_dir(&dir).unwrap().0
+    }
+
     #[test]
     fn analysis_reads_the_programs_own_attribute_before_its_species() {
         use crate::attributes::AttributeId;
+        let catalogue = catalogue_with_analysis_base(10);
         let mut def: SpeciesDef = ron::from_str(
             r#"(id: "t", name: "T", glyph: 't', color: Green, base_hp: 1, base_atk: 1,
                 base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
                 moves: [(name: "Poke", power: 1)], work_resource: None)"#,
         )
         .unwrap();
-        assert_eq!(analysis_of(None, None), crate::tuning::DEFAULT_BASE_INT);
-        assert_eq!(
-            analysis_of(None, Some(&def)),
-            crate::tuning::DEFAULT_BASE_INT
-        );
+        assert_eq!(analysis_of(None, None, &catalogue), 10);
+        assert_eq!(analysis_of(None, Some(&def), &catalogue), 10);
         def.attributes.insert("analysis".into(), 14);
-        assert_eq!(analysis_of(None, Some(&def)), 14);
+        assert_eq!(analysis_of(None, Some(&def), &catalogue), 14);
         let mut own = crate::components::Attributes::default();
         own.set(&AttributeId::from("analysis"), 17);
-        assert_eq!(analysis_of(Some(&own), Some(&def)), 17);
+        assert_eq!(analysis_of(Some(&own), Some(&def), &catalogue), 17);
         assert_eq!(
-            analysis_of(Some(&crate::components::Attributes::default()), Some(&def)),
+            analysis_of(
+                Some(&crate::components::Attributes::default()),
+                Some(&def),
+                &catalogue
+            ),
             14
         );
     }
 
     #[test]
-    fn the_baseline_is_the_analysis_catalogue_base() {
-        use std::path::Path;
-        let (db, _) = crate::attributes::AttributeDb::load_dir(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/attributes"),
+    fn a_modded_analysis_base_moves_the_fallback() {
+        let def: SpeciesDef = ron::from_str(
+            r#"(id: "t", name: "T", glyph: 't', color: Green, base_hp: 1, base_atk: 1,
+                base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)], work_resource: None)"#,
         )
         .unwrap();
-        let base = db
-            .get(&crate::attributes::AttributeId::from("analysis"))
-            .unwrap()
-            .base;
-        assert_eq!(base, crate::tuning::DEFAULT_BASE_INT);
+        let modded = catalogue_with_analysis_base(23);
+        assert_eq!(modded.analysis_base(), 23);
+        assert_eq!(def.analysis(&modded), 23);
+        assert_eq!(analysis_of(None, None, &modded), 23);
     }
 
     use super::*;
@@ -2040,7 +2069,11 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
 
-        let faults = crate::species::extraction_aptitude_faults(db.all());
+        let (attributes, _) = crate::attributes::AttributeDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/attributes"),
+        )
+        .unwrap();
+        let faults = crate::species::extraction_aptitude_faults(db.all(), &attributes);
         assert!(
             faults.is_empty(),
             "extraction aptitude has collapsed back into the difficulty ladder:\n{}",

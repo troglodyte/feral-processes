@@ -432,15 +432,23 @@ impl Game {
                 .world
                 .get::<Creature>(member)
                 .map(|c| c.species.clone());
-            let base_int = crate::species::analysis_of(
+            let catalogue = self.world.resource::<crate::attributes::AttributeDb>();
+            let analysis_over_base = crate::species::analysis_of(
                 self.world.get::<crate::components::Attributes>(member),
                 self.world
                     .get::<Creature>(member)
                     .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species)),
-            );
+                catalogue,
+            ) - catalogue.analysis_base();
             let level = tier_now as u32 + 1;
-            let chance =
-                mining_success_chance(level, keen_scavenger_level, base_int, 0.0, 0.0, 0.0);
+            let chance = mining_success_chance(
+                level,
+                keen_scavenger_level,
+                analysis_over_base,
+                0.0,
+                0.0,
+                0.0,
+            );
             let ok = self.world.resource_mut::<GameRng>().0.random_bool(chance);
             if !ok {
                 continue;

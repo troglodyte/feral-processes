@@ -10,7 +10,6 @@
     growth_multiplier: 1.5,
     habitats: [Deadlock],
     base_speed: 7,
-    base_int: 8,
     moves: [
         (name: "Barrier Slam", power: 9, spread: 2),
         (name: "Lockout", power: 7, spread: 1, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),

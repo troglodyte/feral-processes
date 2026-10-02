@@ -475,7 +475,7 @@ fn feeding_a_starved_machine_resumes_it_and_says_so() {
 }
 
 /// Two modded programs alike in every way the base economy has ever read —
-/// same stats, same lack of abilities — and differing only in `base_int`.
+/// same stats, same lack of abilities — and differing only in Analysis.
 /// Authored here rather than reusing shipped species so the assertion below
 /// survives any later retune of the roster.
 const SHARP_PROGRAM: &str = r#"(
@@ -488,7 +488,7 @@ const SHARP_PROGRAM: &str = r#"(
     base_mitigation: 2,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
-    base_int: 16,
+    attributes: {"analysis": 16},
     moves: [(name: "Poke", power: 3)],
     work_resource: None,
 )"#;
@@ -503,13 +503,13 @@ const DULL_PROGRAM: &str = r#"(
     base_mitigation: 2,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
-    base_int: 4,
+    attributes: {"analysis": 4},
     moves: [(name: "Poke", power: 3)],
     work_resource: None,
 )"#;
 
 /// Two more of the same, differing only in the affinity axis they raise —
-/// which is the whole of what names a class. Same `base_int` and the same
+/// which is the whole of what names a class. Same Analysis and the same
 /// (defaulted) `base_speed`, so a difference in what lands in the buffer is
 /// the class and can be nothing else.
 const DRAIN_PROGRAM: &str = r#"(
@@ -566,6 +566,18 @@ const MINING_SAMPLE_SEEDS: [u32; 5] = [4181, 991, 20_313, 77, 60_509];
 /// which is what makes the assertion about the class rather than about a
 /// lucky stream position.
 fn units_mined_by(tag: &str, species: &str, ticks: u32, seed: u32) -> u32 {
+    units_mined_with(tag, species, None, ticks, seed)
+}
+
+/// `units_mined_by`, with the worker given its own Analysis attribute as a
+/// seated program has one: it must override the species' catalogue figure.
+fn units_mined_with(
+    tag: &str,
+    species: &str,
+    own_analysis: Option<i32>,
+    ticks: u32,
+    seed: u32,
+) -> u32 {
     let dir = modded_assets_dir(
         tag,
         &[],
@@ -594,6 +606,17 @@ fn units_mined_by(tag: &str, species: &str, ticks: u32, seed: u32) -> u32 {
         "{species} did not load — check the fixture parses"
     );
     game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
+    // The fixture was minted as the generic species; swapping the species
+    // leaves those attributes behind, so strip them and let the catalogue
+    // fallback speak unless the caller supplies the program's own.
+    game.world
+        .entity_mut(worker)
+        .remove::<crate::components::Attributes>();
+    if let Some(value) = own_analysis {
+        let mut attributes = crate::components::Attributes::default();
+        attributes.set(&crate::attributes::AttributeId::from("analysis"), value);
+        game.world.entity_mut(worker).insert(attributes);
+    }
     stand_player_at_post(&mut game, node);
     game.assign_cronjob(worker, node)
         .expect("a Mining Node takes a posted program");
@@ -667,6 +690,22 @@ fn a_sharper_program_mines_more_from_the_same_node() {
          (sharp mined {sharp}, dull mined {dull} across {} seeds)",
         MINING_SAMPLE_SEEDS.len()
     );
+}
+
+/// A posted program's roll follows its *own* Analysis, not its species'
+/// catalogue figure: the same sharp species, given an absurdly low and an
+/// absurdly high attribute, mines nothing and mines every cycle. The
+/// extremes saturate the clamp so the answer does not depend on the stream.
+#[test]
+fn a_posted_programs_own_analysis_overrides_its_species() {
+    let mut dull = 0;
+    let mut keen = 0;
+    for seed in MINING_SAMPLE_SEEDS {
+        dull += units_mined_with("own_dull", "sharpmon", Some(-1000), 100, seed);
+        keen += units_mined_with("own_keen", "sharpmon", Some(1000), 100, seed);
+    }
+    assert_eq!(dull, 0, "an Analysis of -1000 can never land a cycle");
+    assert!(keen > 0, "an Analysis of 1000 lands every cycle");
 }
 
 /// A program can actually be posted to an assembler through the same

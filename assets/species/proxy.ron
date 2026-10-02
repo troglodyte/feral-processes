@@ -10,7 +10,6 @@
     growth_multiplier: 1.25,
     habitats: [Backplane, Deadlock],
     base_speed: 12,
-    base_int: 13,
     moves: [
         (name: "Backdoor", power: 12, spread: 3),
         (name: "Spoof", power: 9, spread: 2, ranged: true),

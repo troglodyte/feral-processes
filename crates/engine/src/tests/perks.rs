@@ -700,7 +700,7 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     // picks whichever species declares no abilities, and what that resolves
     // to is not this test's business — only that the cap is derived against
     // the aptitude doing the work.
-    let worker_int = generic_species().base_int;
+    let worker_int = generic_species().analysis();
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, worker_int);
     keep_the_sweep_off(&mut game, node);
 

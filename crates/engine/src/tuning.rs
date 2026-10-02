@@ -841,8 +841,10 @@ pub const DEFAULT_BASE_SPEED: i32 = 10;
 /// anything genuinely fast.
 pub const PLAYER_BASE_SPEED: i32 = 11;
 
-/// Extraction-aptitude baseline for a species whose `.ron` file omits
-/// `base_int`, **and** the value the player themselves works a node at.
+/// Extraction-aptitude baseline for a species whose `.ron` file authors no
+/// `analysis`, **and** the value the player themselves works a node at.
+/// Equals the Analysis attribute's catalogue base (a test holds them
+/// together).
 ///
 /// Deliberately one constant rather than the `DEFAULT_BASE_SPEED` /
 /// `PLAYER_BASE_SPEED` pair above. Those two differ and so earn separate
@@ -857,7 +859,7 @@ pub const PLAYER_BASE_SPEED: i32 = 11;
 ///
 /// It is also the zero point of `systems::mining_success_chance`'s fourth
 /// term, so an un-annotated mod species extracts at exactly the rate every
-/// species did before `base_int` existed.
+/// species did before Analysis drove mining.
 pub const DEFAULT_BASE_INT: i32 = 10;
 
 /// Each round every combatant rolls `base_speed + rng(0..=INITIATIVE_DIE)`
@@ -2283,7 +2285,7 @@ pub const WORK_RESOURCE_DROP: std::ops::RangeInclusive<u32> = 2..=4;
 pub const MINING_SUCCESS_BASE: f64 = 0.4;
 pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
 
-/// What one point of `SpeciesDef::base_int` **either side of**
+/// What one point of the Analysis attribute **either side of**
 /// `DEFAULT_BASE_INT` is worth on the mining roll. The shipped *non-boss*
 /// roster spans 5 to 15, so the fourth term ranges about -0.10 to +0.10 —
 /// enough that a Cipher and a Construct posted to the same Mk1 node visibly
@@ -2291,7 +2293,7 @@ pub const MINING_SUCCESS_PER_LEVEL: f64 = 0.1;
 /// worth `MINING_SUCCESS_PER_LEVEL` a step, still outruns species choice
 /// over a few upgrades. The two bosses run higher still (Overseer 16,
 /// Wintermute 18), but neither can ever be tamed or posted to a job, so
-/// their `base_int` never reaches this roll.
+/// their Analysis never reaches this roll.
 pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 
 /// What one point of `SpeciesDef::base_speed` **either side of**
@@ -4533,7 +4535,7 @@ pub const SABOTAGE_SALT: u64 = 0x5AB0_7A6E_5EED_0001;
 /// How far one point of `Game::morale` shifts a worker's extraction
 /// reliability, in `systems::mining_success_chance`.
 ///
-/// **Signed around a baseline of zero**, exactly like `base_int`'s term in
+/// **Signed around a baseline of zero**, exactly like Analysis's term in
 /// the same formula and `base_speed`'s in `work_ticks_at_speed`. A program
 /// with no memories, the player working a node themselves, and an
 /// `assets/memories/` that has been deleted all contribute precisely

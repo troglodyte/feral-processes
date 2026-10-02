@@ -9,7 +9,6 @@
     taming_difficulty: 0.35,
     habitats: [Backplane],
     base_speed: 6,
-    base_int: 5,
     moves: [
         (name: "Crash", power: 8, spread: 1),
         (name: "Lockdown", power: 5, spread: 1, effect: Some((kind: Stun, chance: 0.35, duration: 1, power: 0))),

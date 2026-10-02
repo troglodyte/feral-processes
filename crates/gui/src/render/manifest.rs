@@ -806,7 +806,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     // on one page reads as two different numbers.
     let mut work = vec![
         stat("Speed", p.base_speed.to_string()),
-        stat("Analysis", p.base_int.to_string()),
+        stat("Analysis", p.analysis.to_string()),
     ];
     if let Some(class) = p.base_job {
         work.push(stat("Base job", base_job_label(class)));
@@ -1112,7 +1112,7 @@ mod tests {
     /// (5, not 4) — see `work_rows_live_in_their_own_box_and_species_drops_
     /// below_its_cap` below, which is what would stop catching a species-box
     /// overflow if this quietly went back to `None`.
-    fn plain_program(base_speed: i32, base_int: i32) -> ProgramManifest {
+    fn plain_program(base_speed: i32, analysis: i32) -> ProgramManifest {
         ProgramManifest {
             species_name: Some("Testmon".to_string()),
             is_hostile: false,
@@ -1139,7 +1139,7 @@ mod tests {
             decompile_chance: None,
             growth_multiplier: 1.0,
             base_speed,
-            base_int,
+            analysis,
             affinities: vec![],
             // The two boss species are the only shipped programs with no
             // class, and a boss cannot be tamed or posted — so a job row is
@@ -1224,7 +1224,7 @@ mod tests {
         );
         assert!(
             work.iter().any(|l| l == "Analysis"),
-            "base_int is shown as Analysis: {work:?}"
+            "analysis is shown as Analysis: {work:?}"
         );
 
         let species = labels("SPECIES");
@@ -1726,7 +1726,7 @@ mod tests {
     fn worst_case_owned(moves: Vec<MoveDef>, memories: Vec<MemoryRow>) -> ProgramManifest {
         let mut program = owned_program(memories);
         program.base_speed = 14;
-        program.base_int = 12;
+        program.analysis = 12;
         program.base_job = Some(AffinityClass::Striker);
         program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
         program.ring = 3;
@@ -2015,7 +2015,7 @@ mod tests {
             memory("Jammed here", Some("Lathe"), -4.0),
         ]);
         program.base_speed = 14;
-        program.base_int = 12;
+        program.analysis = 12;
         program.moves = vec![MoveDef {
             name: "Strike".to_string(),
             power: 5,

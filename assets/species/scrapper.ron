@@ -10,7 +10,6 @@
     growth_multiplier: 1.25,
     habitats: [OpenGrid, NullSector],
     base_speed: 10,
-    base_int: 7,
     moves: [
         (name: "Ram", power: 8, spread: 2),
         (name: "Shock", power: 11, spread: 3),

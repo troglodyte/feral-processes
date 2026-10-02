@@ -1195,6 +1195,7 @@ type CronjobWorker = (
     Option<&'static crate::disposition::Disposition>,
     Option<&'static crate::situations::Situation>,
     Option<&'static crate::components::ProgramBase>,
+    Option<&'static crate::components::Attributes>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -1326,6 +1327,7 @@ pub fn task_progress_system(
         disposition,
         situation,
         seated,
+        attributes,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -1428,13 +1430,15 @@ pub fn task_progress_system(
             continue;
         }
         task.progress = 0;
-        // The posted program's own aptitude, which is the whole of what this
-        // parameter is for: who you post to a node now changes how often it
-        // fizzles. A species missing from the db is a hand-spawned test
-        // fixture and takes the baseline, the same way `node_is_flat_payout`
-        // already treats a structure kind the db has never heard of.
+        // The posted program's own Analysis, which is the whole of what this
+        // parameter is for: who you post to a node changes how often it
+        // fizzles, and a seated program's points move it. An unseated one
+        // reads its species' catalogue figure; a species missing from the db
+        // is a hand-spawned test fixture and takes the baseline, the same way
+        // `node_is_flat_payout` treats a structure kind the db has never
+        // heard of.
         let worker_def = species_db.get(&creature.species);
-        let worker_int = worker_def.map(|d| d.base_int).unwrap_or(DEFAULT_BASE_INT);
+        let worker_int = crate::species::analysis_of(attributes, worker_def);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
             tier,

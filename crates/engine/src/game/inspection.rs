@@ -2376,7 +2376,10 @@ impl Game {
                     }),
                 growth_multiplier: species.growth_multiplier,
                 base_speed: species.base_speed,
-                base_int: species.base_int,
+                analysis: crate::species::analysis_of(
+                    self.world.get::<crate::components::Attributes>(entity),
+                    Some(species),
+                ),
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
                 needs: self.need_rows(entity),
@@ -2425,7 +2428,10 @@ impl Game {
         let def = self.world.resource::<SpeciesDb>().get(species)?;
         Some(WorkProfile {
             speed: def.base_speed,
-            analysis: def.base_int,
+            analysis: crate::species::analysis_of(
+                self.world.get::<crate::components::Attributes>(creature),
+                Some(def),
+            ),
             class: def.affinity_class(),
         })
     }

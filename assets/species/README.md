@@ -73,7 +73,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // The same number also sets this species' pace at a machine: posted to
     // a cronjob, it scales how long a work cycle takes, read as a *distance
-    // from 10* exactly the way `base_int`, immediately below, explains for
+    // from 10* exactly the way the Analysis attribute explains for
     // extraction odds — 10 costs nothing either side, above it is faster,
     // below it is slower. The shipped extremes: Construct at 6 takes a
     // fifth longer per cycle (a Mining Node's 10 ticks becomes 12, a
@@ -115,32 +115,6 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the same 2..8 bounds a derived figure is: a body that cannot move at all
     // is one a fight cannot finish around.
     movement: Some(5),  // or `None`, the default, to derive it from base_speed
-
-    // Optional; can be left out entirely (defaults to 10). How good this
-    // species is at *extracting* — posted to a Mining Node or any other
-    // producing structure, it changes how often a cycle fizzles rather than
-    // what a successful one pays out. The shipped roster spans 5 (Construct
-    // and Glitch, neither of them thinkers) to 15 (SubProcess); the player
-    // works a node at 10.
-    //
-    // That reliability roll only exists at all on a structure whose `work`
-    // def sets `level` (see assets/structures/README.md) — a Power Conduit's
-    // `work` has no `level`, so every cycle there is a guaranteed yield and
-    // base_int has nothing to act on. It only matters at a producer that
-    // opted into the chancier variant.
-    //
-    // The number is read as a *distance from 10*, not as an absolute, which
-    // is worth knowing before you tune it: 10 contributes exactly nothing,
-    // above it helps and below it hurts. That is why a species file written
-    // before this field existed doesn't merely keep parsing — it keeps
-    // extracting at precisely the rate it always did.
-    //
-    // Deliberately not tied to how tough the species is. A Sprite out-mines
-    // a Sentinel, and the roster is authored so every difficulty tier has
-    // both a sharp program and a dull one on it. If you are adding species,
-    // keep that true: aptitude that climbs with tier is just the difficulty
-    // ladder wearing a second name, and the player learns nothing from it.
-    base_int: 12,
 
     // A species' basic attacks: what it swings when it has no Special to run.
     // This is still the shape to author them in, and a mod's file needs no
@@ -408,8 +382,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // It is a base the body mints a *spread* around, not the number the
     // body ends up with, and it is read once at the spawn: editing it does
-    // not change a body that already exists. Nothing reads an attribute
-    // for a mechanic — they are what the dossier page shows.
+    // not change a body that already exists.
+    //
+    // `analysis` is also this species' extraction aptitude: posted to a
+    // Mining Node or any other producing structure, a program's own Analysis
+    // (its attribute once it has one, else this figure, else 10) changes how
+    // often a cycle fizzles rather than what a success pays. Read as a
+    // distance from 10, so 10 costs nothing, above helps and below hurts. It
+    // replaces the old `base_int` field, which a species file may no longer
+    // author. Keep it cutting across the difficulty ladder: every tier
+    // should have both a sharp and a dull program on it.
     //
     // All seventeen shipped species author all five shipped attributes,
     // held by `every_shipped_species_authors_every_attribute` in

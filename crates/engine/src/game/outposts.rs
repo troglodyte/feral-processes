@@ -18,7 +18,7 @@ use crate::resources::{GameRng, Outposts};
 use crate::species::SpeciesDb;
 use crate::systems::mining_success_chance;
 use crate::tuning::{
-    DEFAULT_BASE_INT, MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
+    MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
     OUTPOST_GROWTH_PER_CREW, OUTPOST_MAX_INTEGRITY, OUTPOST_MIN_ANCHOR_DISTANCE,
     OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
@@ -432,11 +432,12 @@ impl Game {
                 .world
                 .get::<Creature>(member)
                 .map(|c| c.species.clone());
-            let base_int = species_id
-                .as_deref()
-                .and_then(|id| self.world.resource::<SpeciesDb>().get(id))
-                .map(|s| s.base_int)
-                .unwrap_or(DEFAULT_BASE_INT);
+            let base_int = crate::species::analysis_of(
+                self.world.get::<crate::components::Attributes>(member),
+                self.world
+                    .get::<Creature>(member)
+                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species)),
+            );
             let level = tier_now as u32 + 1;
             let chance =
                 mining_success_chance(level, keen_scavenger_level, base_int, 0.0, 0.0, 0.0);

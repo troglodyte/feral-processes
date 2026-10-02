@@ -311,20 +311,17 @@ fn mid_cycle_on_mining(g: &mut Game, staff: usize) -> (Entity, Entity, Entity) {
     let mine = spawn_machine_at(g, "mining_node", 2, 0);
     let lathe = spawn_machine_at(g, "lathe", 3, 0);
     let hired = hire(g, staff);
-    // The newest body is first in line, so the worker is the *highest*
-    // entity and a spare outranks it in the pool: only a holder that
-    // survives the active machine moving keeps it from being swapped out.
-    for (rank, &body) in hired.iter().rev().enumerate() {
-        g.world.entity_mut(body).insert(StaffRank(rank as u32));
-    }
     g.set_standing_job(mine, true, false).unwrap();
     g.tick();
     let (worker, target) = gatherers(g)[0];
     assert_eq!(target, mine, "precondition: only the mine can progress");
-    assert!(
-        staff == 1 || hired.iter().all(|&b| b <= worker),
-        "precondition: the worker is the highest entity"
-    );
+    // The spares go ahead of the worker in the pool, so only a holder that
+    // survives the active machine moving keeps the worker from being swapped
+    // out for the first body in line.
+    for (rank, &body) in hired.iter().filter(|&&b| b != worker).enumerate() {
+        g.world.entity_mut(body).insert(StaffRank(rank as u32));
+    }
+    g.world.entity_mut(worker).insert(StaffRank(staff as u32));
     park_at_post(g, worker, mine);
     for _ in 0..200 {
         let t = g.world.get::<Task>(worker).unwrap();

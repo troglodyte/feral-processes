@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use bevy_ecs::entity::Entity;
+use bevy_ecs::world::World;
 
 use crate::game::base::collect::{ORTHOGONAL, feeders_by_tile};
 use crate::*;
@@ -127,44 +128,57 @@ fn rank_from(
     state[at] = Visit::Done;
 }
 
+/// Every line in the base, lines of one included, sorted by key.
+///
+/// Built over the same `(Entity, &Structure, &Position), With<Stock>`
+/// population `assembler_system` pulls through, with neighbours found by
+/// `ORTHOGONAL` in `feeders_by_tile`'s map. A free function over the world
+/// because the labour pass has no `Game` to call a method on.
+pub(crate) fn lines_in(world: &mut World) -> Vec<Line> {
+    let mut query = world.query_filtered::<(Entity, &Structure, &Position), With<Stock>>();
+    let mut placed: Vec<(Entity, (i32, i32), StructureId)> = query
+        .iter(world)
+        .map(|(e, s, p)| (e, (p.x, p.y), s.kind.clone()))
+        .collect();
+    placed.sort_by_key(|(_, tile, _)| *tile);
+    let by_tile = feeders_by_tile(query.iter(world));
+    let index: HashMap<Entity, usize> = placed
+        .iter()
+        .enumerate()
+        .map(|(i, (e, _, _))| (*e, i))
+        .collect();
+
+    let db = world.resource::<StructureDb>();
+    let items = world.resource::<ItemDb>();
+    let defs: Vec<_> = placed.iter().map(|(_, _, k)| db.get(k)).collect();
+    let nodes: Vec<(Entity, (i32, i32))> = placed.iter().map(|(e, tile, _)| (*e, *tile)).collect();
+
+    group(&nodes, |a, b| {
+        let (ax, ay) = nodes[a].1;
+        let adjacent = ORTHOGONAL.iter().any(|(dx, dy)| {
+            by_tile
+                .get(&(ax + dx, ay + dy))
+                .is_some_and(|e| index[e] == b)
+        });
+        adjacent
+            && matches!((defs[a], defs[b]), (Some(da), Some(db)) if crate::systems::feeds(da, db, items))
+    })
+}
+
+/// Which line each member of a line of two or more belongs to. A line of one
+/// is absent, which is what lets every reader treat it as "today's rule".
+pub(crate) fn membership(lines: &[Line]) -> HashMap<Entity, LineKey> {
+    lines
+        .iter()
+        .filter(|l| l.members.len() > 1)
+        .flat_map(|l| l.members.iter().map(|&m| (m, l.key)))
+        .collect()
+}
+
 impl Game {
     /// Every line in the base, lines of one included, sorted by key.
-    ///
-    /// Built over the same `(Entity, &Structure, &Position), With<Stock>`
-    /// population `assembler_system` pulls through, with neighbours found by
-    /// `ORTHOGONAL` in `feeders_by_tile`'s map.
     pub fn production_lines(&mut self) -> Vec<Line> {
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Structure, &Position), With<Stock>>();
-        let mut placed: Vec<(Entity, (i32, i32), StructureId)> = query
-            .iter(&self.world)
-            .map(|(e, s, p)| (e, (p.x, p.y), s.kind.clone()))
-            .collect();
-        placed.sort_by_key(|(_, tile, _)| *tile);
-        let by_tile = feeders_by_tile(query.iter(&self.world));
-        let index: HashMap<Entity, usize> = placed
-            .iter()
-            .enumerate()
-            .map(|(i, (e, _, _))| (*e, i))
-            .collect();
-
-        let db = self.world.resource::<StructureDb>();
-        let items = self.world.resource::<ItemDb>();
-        let defs: Vec<_> = placed.iter().map(|(_, _, k)| db.get(k)).collect();
-        let nodes: Vec<(Entity, (i32, i32))> =
-            placed.iter().map(|(e, tile, _)| (*e, *tile)).collect();
-
-        group(&nodes, |a, b| {
-            let (ax, ay) = nodes[a].1;
-            let adjacent = ORTHOGONAL.iter().any(|(dx, dy)| {
-                by_tile
-                    .get(&(ax + dx, ay + dy))
-                    .is_some_and(|e| index[e] == b)
-            });
-            adjacent
-                && matches!((defs[a], defs[b]), (Some(da), Some(db)) if crate::systems::feeds(da, db, items))
-        })
+        lines_in(&mut self.world)
     }
 
     /// The line `machine` belongs to, `Some` only for a line of two or more.
@@ -173,5 +187,14 @@ impl Game {
             .into_iter()
             .find(|l| l.members.len() > 1 && l.members.contains(&machine))
             .map(|l| l.key)
+    }
+
+    /// `machine`'s whole line, or just `machine` when it is a line of one.
+    pub(crate) fn line_members(&mut self, machine: Entity) -> Vec<Entity> {
+        self.production_lines()
+            .into_iter()
+            .find(|l| l.members.contains(&machine))
+            .map(|l| l.members)
+            .unwrap_or_else(|| vec![machine])
     }
 }

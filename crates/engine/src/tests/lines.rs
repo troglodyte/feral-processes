@@ -145,3 +145,59 @@ fn a_cycle_neither_panics_nor_reorders() {
     assert_eq!(first[0].members, second[0].members);
     assert_eq!(first[0].rank, second[0].rank);
 }
+
+// ---------------------------------------------------------------------
+// Standing jobs reach the line
+// ---------------------------------------------------------------------
+
+#[test]
+fn a_standing_job_on_one_member_reaches_the_whole_line() {
+    let mut g = game();
+    let mining = spawn_machine_at(&mut g, "mining_node", 0, 0);
+    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
+    g.set_standing_job(lathe, true, true).unwrap();
+    assert_eq!(g.standing_job(lathe), Some((true, true)));
+    assert_eq!(
+        g.standing_job(mining),
+        Some((true, false)),
+        "guard stays per structure"
+    );
+    g.set_standing_job(mining, false, false).unwrap();
+    assert_eq!(g.standing_job(mining), None);
+    assert_eq!(g.standing_job(lathe), Some((false, true)));
+}
+
+#[test]
+fn a_standing_job_on_a_line_of_one_is_as_before() {
+    let mut g = game();
+    let mining = spawn_machine_at(&mut g, "mining_node", 0, 0);
+    let other = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    g.set_standing_job(mining, true, false).unwrap();
+    assert_eq!(g.standing_job(other), None);
+}
+
+#[test]
+fn a_merged_line_with_one_flagged_member_wants_every_member() {
+    let mut g = game();
+    let compiler = spawn_machine_at(&mut g, "compiler", 0, 0);
+    let lathe = spawn_machine_at(&mut g, "lathe", 2, 0);
+    let far = spawn_machine_at(&mut g, "mining_node", 3, 0);
+    g.set_standing_job(lathe, true, false).unwrap();
+    assert_eq!(g.standing_job(far), Some((true, false)));
+    assert_eq!(g.standing_job(compiler), None);
+
+    let between = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    let lines = g.production_lines();
+    let mut wanted: Vec<Entity> = g
+        .standing_wants(&lines)
+        .into_iter()
+        .map(|(e, kind)| {
+            assert_eq!(kind, TaskKind::GatherResource);
+            e
+        })
+        .collect();
+    wanted.sort();
+    let mut all = vec![compiler, lathe, far, between];
+    all.sort();
+    assert_eq!(wanted, all);
+}

@@ -28,6 +28,7 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
+use crate::game::base::lines::{self, Line};
 use crate::game::base::offshift;
 use crate::game::base::repair;
 use crate::game::base::stock;
@@ -927,7 +928,8 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let wanted = self.base_wants();
+        let lines = lines::lines_in(&mut self.world);
+        let wanted = self.base_wants(&lines);
         let staff = self.base_staff();
         // **Before the drift and before the assignment.** The drift is what
         // walks an off-shift body to its amenity, so the marker has to be on
@@ -989,7 +991,8 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let wanted = self.base_wants();
+        let lines = lines::lines_in(&mut self.world);
+        let wanted = self.base_wants(&lines);
         let staff = self.base_staff();
         let amenities = self.amenities();
         self.assign_base_labour(wanted, &staff, &amenities);
@@ -998,7 +1001,7 @@ impl Game {
     /// Every want the base holds this pass, in priority order — **the
     /// priority is the position in this list**, and the matching fills it
     /// front to back.
-    fn base_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+    fn base_wants(&mut self, lines: &[Line]) -> Vec<(Entity, TaskKind)> {
         // **Build requests come first, ahead of every work order.** The
         // priority *is* the position in this list — the matching below never
         // un-seats an earlier want for a later one — so this is the whole of
@@ -1035,7 +1038,7 @@ impl Game {
         // instruction says "keep this running", not "stand here regardless"
         // — while a guard job is not, because guarding produces nothing and
         // there is no cycle for a buffer to stall.
-        for (structure, kind) in self.standing_wants() {
+        for (structure, kind) in self.standing_wants(lines) {
             if wanted.iter().any(|&(e, _)| e == structure) {
                 continue;
             }
@@ -2512,14 +2515,29 @@ impl Game {
                 return Err(format!("{name} can't be raided — it doesn't need a guard."));
             }
         }
-        if work && !self.accepts_a_program(structure) {
+        // **Every member of the line takes the flag**, each checked on its
+        // own: a line is one job, so a toggle that reached only the row
+        // pressed would leave the rest to be staffed separately. `guard`
+        // stays per structure, because guarding is not production.
+        let members = self.line_members(structure);
+        if work && !members.iter().all(|&m| self.accepts_a_program(m)) {
             return Err("That structure can't be worked.".into());
         }
-        let mut entity = self.world.entity_mut(structure);
-        if work || guard {
-            entity.insert(StandingJob { work, guard });
-        } else {
-            entity.remove::<StandingJob>();
+        for member in members {
+            let member_guard = if member == structure {
+                guard
+            } else {
+                self.standing_job(member).is_some_and(|(_, g)| g)
+            };
+            let mut entity = self.world.entity_mut(member);
+            if work || member_guard {
+                entity.insert(StandingJob {
+                    work,
+                    guard: member_guard,
+                });
+            } else {
+                entity.remove::<StandingJob>();
+            }
         }
         // Here and not in `post_worker`, which is the *scheduler's* door: its
         // only non-test caller is `schedule_base_labour`, which runs every
@@ -2581,16 +2599,28 @@ impl Game {
     /// Appended **after** every order in the queue and at the lowest
     /// priority, so a Research Node or a guarded Shield is filled only by a
     /// body no order needs — and gives that body up the moment one does.
-    fn standing_wants(&self) -> Vec<(Entity, TaskKind)> {
+    pub(crate) fn standing_wants(&self, lines: &[Line]) -> Vec<(Entity, TaskKind)> {
+        // A line stands if any member does: two lines joined by building
+        // between them run together with no flag migration.
+        let member_of = lines::membership(lines);
+        let standing_lines: std::collections::HashSet<lines::LineKey> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.get::<StandingJob>().is_some_and(|j| j.work))
+            .filter_map(|e| member_of.get(&e.id()).copied())
+            .collect();
         let mut jobs: Vec<(i32, i32, Entity, TaskKind)> = self
             .world
             .iter_entities()
             .filter_map(|e| {
-                let job = e.get::<StandingJob>()?;
+                let job = e.get::<StandingJob>();
                 let pos = e.get::<Position>()?;
-                let kind = if job.work {
+                let line_stands = member_of
+                    .get(&e.id())
+                    .is_some_and(|key| standing_lines.contains(key));
+                let kind = if line_stands || job.is_some_and(|j| j.work) {
                     TaskKind::GatherResource
-                } else if job.guard {
+                } else if job.is_some_and(|j| j.guard) {
                     TaskKind::Guard
                 } else {
                     return None;

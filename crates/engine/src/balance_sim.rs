@@ -365,14 +365,20 @@ impl AttackProfile {
 
     /// `stats` and this profile as the `battle::Combatant` the real
     /// arithmetic takes.
+    ///
+    /// Both sides roll the underived bands: a hostile has no `Derived`, and
+    /// `canonical_spend` buys no Entropy, so the modelled player sits at its
+    /// base. A canonical spend that bought Entropy would have to thread
+    /// `derive`'s crit and fumble through here.
     fn combatant(self, atk: i32) -> crate::battle::Combatant {
+        let underived = crate::components::Derived::default();
         crate::battle::Combatant {
             accuracy: self.accuracy,
             evasion: self.evasion,
             atk,
             range: self.range,
-            crit: crate::tuning::CRIT_CHANCE,
-            fumble: crate::tuning::FUMBLE_CHANCE,
+            crit: underived.crit,
+            fumble: underived.fumble,
         }
     }
 }

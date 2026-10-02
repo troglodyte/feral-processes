@@ -3192,12 +3192,18 @@ pub(crate) fn equip_armor(game: &mut Game, wearer: Entity, item: &str) {
 /// plain hit — not a crit, not a fumble — whoever is swinging at whom.
 ///
 /// **Matchup-independent by construction, which is why it is reliable.**
-/// `resolve_attack` reads one `f64` and bands it: below `CRIT_CHANCE` is a
-/// crit, below the hit chance is a hit, at or above `1 - FUMBLE_CHANCE` is a
-/// fumble, and the rest is a miss. `hit_chance` is clamped to at least
-/// `HIT_CHANCE_MIN`, which sits above `CRIT_CHANCE`, so a first draw anywhere
-/// in `[CRIT_CHANCE, HIT_CHANCE_MIN)` is a plain hit against *every* pairing
-/// of combatants. No test using this has to know what it is fighting.
+/// `resolve_attack` reads one `f64` and bands it: below the attacker's crit
+/// band is a crit, below the hit chance is a hit, at or above `1 -` the
+/// fumble band is a fumble, and the rest is a miss. The band starts at the
+/// widest crit band any body in the game carries (Entropy can widen the
+/// player's past `CRIT_CHANCE`), and `hit_chance` is clamped to at least
+/// `HIT_CHANCE_MIN`, which `tuning.rs` asserts sits above every crit band, so
+/// a first draw in it is a plain hit against *every* pairing of combatants.
+/// No test using this has to know what it is fighting.
+///
+/// Starting at the widest band present rather than at `CRIT_CHANCE_MAX`
+/// keeps the band — and so the seed it picks — unchanged for every game
+/// whose bodies sit at or below base Entropy.
 ///
 /// Only the next roll. A round that resolves several attacks gets one forced
 /// swing and then the stream as it falls — a test needing more than that
@@ -3206,20 +3212,27 @@ pub(crate) fn equip_armor(game: &mut Game, wearer: Entity, item: &str) {
 /// A test fixture rather than a production hook, deliberately: nothing in the
 /// engine may reach for a way to make a swing land.
 pub(crate) fn force_the_next_attack_to_land(game: &mut Game) {
-    seed_the_next_roll_into(
-        game,
-        crate::tuning::CRIT_CHANCE..crate::tuning::HIT_CHANCE_MIN,
-    );
+    let widest_crit = game
+        .world
+        .query::<&crate::components::Derived>()
+        .iter(&game.world)
+        .map(|d| d.crit)
+        .fold(crate::tuning::CRIT_CHANCE, f64::max);
+    seed_the_next_roll_into(game, widest_crit..crate::tuning::HIT_CHANCE_MIN);
 }
 
-/// The other matchup-independent corner: the next attack crits.
+/// `attacker`'s next attack crits, whoever it is aimed at.
 ///
-/// `0.0..CRIT_CHANCE` is the band `resolve_attack` checks first, ahead of
-/// `hit_chance`'s clamp even being consulted, so — like
-/// `force_the_next_attack_to_land`'s band — no test using this has to know
-/// what it is fighting.
-pub(crate) fn force_the_next_attack_to_crit(game: &mut Game) {
-    seed_the_next_roll_into(game, 0.0..crate::tuning::CRIT_CHANCE);
+/// Takes the attacker because a crit band is derived (Entropy) and can be
+/// narrower than `CRIT_CHANCE`. The defender is not needed: the band is
+/// clamped to the hit chance, which never falls below `HIT_CHANCE_MIN`.
+pub(crate) fn force_the_next_attack_to_crit(game: &mut Game, attacker: Entity) {
+    let crit = game
+        .combatant_profile(attacker, battle::Swing::default())
+        .crit
+        .min(crate::tuning::HIT_CHANCE_MIN);
+    assert!(crit > 0.0, "this attacker has no crit band to force");
+    seed_the_next_roll_into(game, 0.0..crit);
 }
 
 /// Reseeds `resources::GameRng` so `attacker`'s next `swing` at `defender`
@@ -3260,15 +3273,19 @@ pub(crate) fn force_the_next_attack_to_miss_plainly(
 /// The mirror of `force_the_next_attack_to_land`: the next attack fumbles,
 /// and so deals nothing to its target.
 ///
-/// Aimed at the fumble band rather than the plain-miss one because that band
-/// is the one that cannot vanish. `fumble` is `min(FUMBLE_CHANCE, 1 - h)` and
-/// `h` is clamped to at most `HIT_CHANCE_MAX`, so `1 - h` is never below
-/// `FUMBLE_CHANCE` and a draw at or above `1 - FUMBLE_CHANCE` always fumbles.
-/// The plain-miss band `[h, 1 - FUMBLE_CHANCE)` is empty when `h` reaches its
-/// ceiling.
-#[allow(dead_code)]
-pub(crate) fn force_the_next_attack_to_miss(game: &mut Game) {
-    seed_the_next_roll_into(game, (1.0 - crate::tuning::FUMBLE_CHANCE)..1.0);
+/// Aimed at the fumble band rather than the plain-miss one because the
+/// plain-miss band is empty when `h` reaches its ceiling. The fumble band is
+/// `min(attacker's fumble, 1 - h)`, and `h` is clamped to at most
+/// `HIT_CHANCE_MAX`, so capping the attacker's band at `1 - HIT_CHANCE_MAX`
+/// gives a band that fumbles against every defender. Takes the attacker
+/// because a fumble band is derived (Entropy).
+pub(crate) fn force_the_next_attack_to_miss(game: &mut Game, attacker: Entity) {
+    let fumble = game
+        .combatant_profile(attacker, battle::Swing::default())
+        .fumble
+        .min(1.0 - crate::tuning::HIT_CHANCE_MAX);
+    assert!(fumble > 0.0, "this attacker has no fumble band to force");
+    seed_the_next_roll_into(game, (1.0 - fumble)..1.0);
 }
 
 /// Sets up `BattleState::round_targets` the way `Game::battle_resolve_round`

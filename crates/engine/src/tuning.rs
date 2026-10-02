@@ -4276,23 +4276,27 @@ pub const HIT_CHANCE_MIN: f64 = 0.25;
 /// See `HIT_CHANCE_MIN`. Below 1.0 so no matchup is a guaranteed landing.
 pub const HIT_CHANCE_MAX: f64 = 0.95;
 
-/// Flat crit rate, symmetric between the player and hostiles. Clamped to at
-/// most the hit chance inside `battle::resolve_attack`, so a crit is always a
-/// hit. Gear crit is deferred — a `crit` field on `EquipmentStats` that
+/// The crit rate of every body without derived stats, and the player's at
+/// base Entropy (`progression::DerivedBase::player`). Clamped to at most the
+/// hit chance inside `battle::resolve_attack`, so a crit is always a hit. Gear crit is deferred — a `crit` field on `EquipmentStats` that
 /// nothing authors is an unused feature flag.
 pub const CRIT_CHANCE: f64 = 0.08;
 /// What a crit multiplies. The **rolled portion only** — doubling the total
 /// would scale crits with levelling and with every `atk` source in the game.
 pub const CRIT_ROLL_MULTIPLIER: i32 = 2;
 
-/// Flat fumble rate, symmetric between the player and hostiles, on its own
-/// constant so it can be split per side later without touching resolution.
-/// Clamped to at most `1 - hit_chance`, so a fumble is always a miss.
+/// The fumble rate of every body without derived stats, and the player's at
+/// base Entropy. Clamped to at most `1 - hit_chance`, so a fumble is always a
+/// miss.
 pub const FUMBLE_CHANCE: f64 = 0.05;
 
 /// Ceiling on a derived crit band, so Entropy cannot buy crits as the
 /// default swing. The floor is zero.
 pub const CRIT_CHANCE_MAX: f64 = 0.20;
+// Below the hit floor, so a crit band never reaches it and a draw between
+// the widest band in play and `HIT_CHANCE_MIN` is a plain hit for every
+// pairing — the band test fixtures force a landing into.
+const _: () = assert!(CRIT_CHANCE_MAX < HIT_CHANCE_MIN);
 /// Ceiling on a derived fumble band. The floor is zero.
 pub const FUMBLE_CHANCE_MAX: f64 = 0.12;
 

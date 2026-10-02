@@ -132,13 +132,14 @@ impl Game {
         let median =
             crate::balance_sim::median_ordinary_species(self.world.resource::<SpeciesDb>());
         let wild = crate::balance_sim::wild_stats_at_zone(median, zone);
+        let underived = crate::components::Derived::default();
         let combatant = battle::Combatant {
             accuracy: battle::accuracy_of(median.base_speed, zone, 0),
             evasion: battle::evasion_of(median.base_speed, zone, 0),
             atk: wild.atk,
             range: median.natural_range(),
-            crit: crate::tuning::CRIT_CHANCE,
-            fumble: crate::tuning::FUMBLE_CHANCE,
+            crit: underived.crit,
+            fumble: underived.fumble,
         };
         (
             combatant,

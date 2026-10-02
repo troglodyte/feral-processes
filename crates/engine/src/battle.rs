@@ -347,7 +347,9 @@ fn fumble_rung(
 ///
 /// Deliberately excludes the fumble ladder: Recoil and Opening both land on
 /// the *attacker*, so neither is defender-facing damage, and the projection
-/// is therefore a mild overestimate of an attacker's net output. Named here
+/// is therefore a mild overestimate of an attacker's net output. It also
+/// means a projection counts Entropy's wider crit band and not its wider
+/// fumble band, so Entropy reads as pure upside on every duel forecast. Named here
 /// rather than silently, in the same spirit as `TURN_CAP`'s note that Power
 /// decay is unmodelled.
 pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {

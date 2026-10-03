@@ -18,7 +18,7 @@ commit `79c36246`; line numbers drift, grep the symbol.
 | Interact key | `P` (UPPERCASE), at a siphon orthogonally adjacent to the party in base space | Map-screen uppercase keys already bound in `app-core/src/app/playing.rs`: `D`(219) `L`(328) `N`(338) `F`(537, rig) `Z`(752, hidden). `T`, `W` are hidden keys (`crates/engine/EASTER_EGGS.md`). `P` is unbound on the map (outposts/level_up use it only inside their own modes). Shape copies `F`/`open_rig_tool` and `Game::adjacent_teardown_rigs` (`game/extraction.rs:1018`), not the `b` group menu that `Study a program` uses. |
 | `power_regen` gating | **No.** `is_fuelled` is untouched; occupancy gates `supply` only | A siphon has no `power_regen`, and `power_regen_system` (`systems.rs:2197`) skips defs without it before it asks `is_fuelled`. |
 | Save bump | **No `SAVE_FORMAT_VERSION` bump** (stays 34) | The save is field-named RON (`save.rs:1973` `ron::ser::to_string_pretty`; bincode died at 0.8.0, `save.rs:1846`). `save.rs:638-700` states the rule for each sibling additive tether (`study_station`, `outpost`): `#[serde(default)]` is enough, "no bump". The `serde(default)` caveat in the docs applies to the pre-0.8 positional format only. |
-| `SIPHON_GRUDGE_PERIOD` | `500` ticks (2x `MEMORY_POSTING_PERIOD` = 250, `tuning.rs:4585`) | "Builds over a long hold": a stretch memory, one strike per period. |
+| `SIPHON_GRUDGE_PERIOD` | `1000` ticks (4x `MEMORY_POSTING_PERIOD` = 250, `tuning.rs:4585`; user chose the slower build 2026-10-03) | "Builds over a long hold": a stretch memory, one strike per period. |
 | `siphoned` memory | `valence: -6.0`, `strike_cap: 9`, `half_life: 2500`, `subject: BaseTile`, `mood` default | See derivation below. |
 | `SIPHON_RELEASE_INTEGRITY_LOSS` | `0.75` (f32 fraction of `max_hp`), new HP floored at 1 | Spec section 5. |
 
@@ -33,7 +33,7 @@ Morale ladder (`tuning.rs`): `MORALE_SULKS_AT = -8` (4896), `MORALE_DOWNS_TOOLS_
   `MORALE_DOWNS_TOOLS_AT` at the cap (-54): "builds to low mood", one strike alone (-6) does not sulk.
   Amiable at the cap -32.4 (sulks, never downs tools); Abrasive -75.6 (just past lashing out).
   It therefore crosses the tantrum line on its own, which is what justifies the by-name exemption.
-- Full cap takes 9 x 500 = 4500 ticks held. While held, every strike resets the clock, so decay is
+- Full cap takes 9 x 1000 = 9000 ticks held. While held, every strike resets the clock, so decay is
   irrelevant to the hold; `half_life` only sets the way back.
 - Way back: from -54 to `MORALE_RECOVERED_AT` (-6) is log2(9) = 3.17 half-lives, about 7900 ticks at 2500.
   Longer than `unslotted` (2000) because this one is the player's deliberate price.
@@ -107,7 +107,7 @@ Gate: `cargo test -p feral-processes-engine siphon party study building`; clippy
 ## Phase 3 — the grudge
 
 - `assets/memories/siphoned.ron`: id `siphoned`, name "Held in a Siphon", blurb "Pinned in the wall and left to run the base." (measured by the census: keep the blurb's length near `frayed_here`'s), `valence: -6.0`, `half_life: 2500`, `subject: BaseTile`, `strike_cap: 9`. A header comment with the derivation above (comment style of `unslotted.ron`).
-- `tuning.rs`: `pub const SIPHON_GRUDGE_PERIOD: u64 = 500;` documented as a stretch memory's write period and why not `MEMORY_POSTING_PERIOD`.
+- `tuning.rs`: `pub const SIPHON_GRUDGE_PERIOD: u64 = 1000;` documented as a stretch memory's write period and why not `MEMORY_POSTING_PERIOD`.
 - `crates/engine/src/game/memories.rs`: `pub(crate) fn note_siphoned(&mut self)` beside `note_unslotted` (346): period gate on `GameClock::tick % SIPHON_GRUDGE_PERIOD`; collect every `(program, siphon)` first (`remember` takes `&mut self`), then `remember(program, "siphoned", MemorySubject::BaseTile { x, y })` at the siphon's `Position` (the 250-line `note_postings` shows the BaseTile shape). Call it from `game/turn.rs` right after `note_unslotted()` (~348) with a one-line comment.
 - `crates/engine/src/tests/assets.rs` `MEMORY_TRIGGERS` (~2960): add `("siphoned", K::BaseTile)` with the `Game::note_siphoned` comment.
 - `crates/engine/src/tests/disposition.rs:310` `worst_single_grudge`: exempt `siphoned` beside `unslotted` (`matches!(id, "unslotted" | "siphoned")`), and extend the doc paragraph with the reason (preventable: release it).

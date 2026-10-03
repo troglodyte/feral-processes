@@ -955,6 +955,26 @@ impl Game {
         (!parts.is_empty()).then(|| parts.join(", "))
     }
 
+    /// The statuses `entity` carries as structured tags, in the order they
+    /// were armed. A status whose def is gone is skipped, like `status_label`.
+    pub(crate) fn status_tags(&self, entity: Entity) -> Vec<StatusTagView> {
+        let Some(statuses) = self.world.get::<StatusEffects>(entity) else {
+            return Vec::new();
+        };
+        let db = self.world.resource::<StatusDb>();
+        statuses
+            .active
+            .iter()
+            .filter_map(|a| {
+                Some(StatusTagView {
+                    tag: db.get(&a.id)?.tag.clone(),
+                    stacks: a.stacks,
+                    remaining: a.remaining,
+                })
+            })
+            .collect()
+    }
+
     /// Adds `creature` (a tamed program you own) to your active battle
     /// party (see `resources::Party`), up to `MAX_PARTY_SIZE` at once.
     /// Clears an in-progress cronjob task on it first — a program can only

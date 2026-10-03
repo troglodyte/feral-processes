@@ -891,7 +891,7 @@ impl Game {
             mitigation: stats.mitigation,
             is_boss,
             engaged,
-            status_effect: self.status_label(front),
+            statuses: self.status_tags(front),
             // No odds against a boss, because there is no attempt to
             // make — `battle_set_action` refuses the target outright.
             decompile_chance: catalyst_potency
@@ -932,7 +932,7 @@ impl Game {
             max_hp: stats.max_hp,
             atk: self.effective_atk(entity),
             mitigation: self.effective_mitigation(entity),
-            status_effect: self.status_label(entity),
+            statuses: self.status_tags(entity),
             power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
             max_power: self.max_power(entity),
             planned,

@@ -2202,7 +2202,7 @@ impl Game {
             .power(),
             accuracy: self.manifest_accuracy(entity),
             evasion: self.manifest_evasion(entity),
-            status_effect: self.status_label(entity),
+            statuses: self.status_tags(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Player(PlayerManifest {
@@ -2328,7 +2328,7 @@ impl Game {
             power: stats.power(),
             accuracy: self.manifest_accuracy(entity),
             evasion: self.manifest_evasion(entity),
-            status_effect: self.status_label(entity),
+            statuses: self.status_tags(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Program(Box::new(ProgramManifest {

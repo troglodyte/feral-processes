@@ -1980,3 +1980,36 @@ fn the_landing_round_exemption_is_per_entry() {
         "venom ticks, the freshly landed bleed does not"
     );
 }
+
+#[test]
+fn status_tags_list_each_status_with_its_tag_stacks_and_rounds() {
+    let mut game = Game::new(7301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 3 },
+        StatusBehaviour::DamagePerRound,
+    );
+    assert!(game.status_tags(wild).is_empty());
+    let venom = StatusId::from("venom");
+    game.arm_status(wild, &venom, 4, 2);
+    game.arm_status(wild, &venom, 4, 2);
+    game.arm_status(wild, &StatusId::from("stun"), 1, 0);
+    let tags = game.status_tags(wild);
+    assert_eq!(
+        tags,
+        vec![
+            StatusTagView {
+                tag: "TST".into(),
+                stacks: 2,
+                remaining: 4
+            },
+            StatusTagView {
+                tag: "STN".into(),
+                stacks: 1,
+                remaining: 1
+            },
+        ]
+    );
+}

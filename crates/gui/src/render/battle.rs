@@ -5,6 +5,7 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
+use feral_processes_engine::StatusTagView;
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
@@ -31,11 +32,31 @@ pub(super) fn action_bar_line(options: &[ActionOption], party_commands: &[PartyC
     actions.join("   ")
 }
 
-fn status_tag(status: &Option<String>) -> String {
-    status
-        .as_ref()
-        .map(|s| format!(" [{s}]"))
-        .unwrap_or_default()
+/// One status as drawn: its tag, with the stack count only once there is
+/// more than one — `PSN` then `PSN×3`.
+pub(super) fn status_tag_text(status: &StatusTagView) -> String {
+    if status.stacks > 1 {
+        format!("{}×{}", status.tag, status.stacks)
+    } else {
+        status.tag.clone()
+    }
+}
+
+/// Every status on a body, space-separated; empty for none.
+pub(super) fn status_tags_text(statuses: &[StatusTagView]) -> String {
+    statuses
+        .iter()
+        .map(status_tag_text)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn status_tag(statuses: &[StatusTagView]) -> String {
+    if statuses.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", status_tags_text(statuses))
+    }
 }
 
 /// Pads `s` to exactly `width` monospace cells, truncating with `…` when it
@@ -84,8 +105,8 @@ const HP_W: usize = 9;
 const STAT_W: usize = 3;
 /// Widest value is `ENGAGED`.
 const REACH_W: usize = 7;
-/// Widest condition the engine words is `LEAKING (12)` — see
-/// `Game::status_label`. Anything longer clips rather than shifting DECOMP.
+/// Room for about three tags (`BLD×3 STN EXP`) — see `Game::status_tags`.
+/// Anything longer clips rather than shifting DECOMP.
 const STATUS_W: usize = 13;
 /// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
 const DECOMP_W: usize = 6;
@@ -325,15 +346,15 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 g.mitigation,
                 if g.engaged { "ENGAGED" } else { "BACK" },
                 &hostile_tail(
-                    // The engine owns the wording of a condition
-                    // ("Bleeding (2)"); upper-casing is presentation, but
-                    // abbreviating a vocabulary this renderer does not define
-                    // would not be. `OK` rather than blank, because an empty
-                    // cell in a ledger reads as missing data.
-                    &g.status_effect
-                        .as_deref()
-                        .map(str::to_uppercase)
-                        .unwrap_or_else(|| "OK".to_string()),
+                    // The tags are the status defs' own; this renderer
+                    // defines no vocabulary of its own. `OK` rather than
+                    // blank, because an empty cell in a ledger reads as
+                    // missing data.
+                    &if g.statuses.is_empty() {
+                        "OK".to_string()
+                    } else {
+                        status_tags_text(&g.statuses)
+                    },
                     &odds_cell(g.decompile_chance),
                 ),
             ),
@@ -468,7 +489,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                     &format!(
                         "{}{}",
                         p.planned.as_deref().unwrap_or("—"),
-                        status_tag(&p.status_effect),
+                        status_tag(&p.statuses),
                     ),
                 ),
             ),
@@ -709,6 +730,25 @@ pub(super) fn draw_battle_item_menu(
 mod tests {
     use super::*;
     use feral_processes_engine::components::POWER_MAX;
+
+    fn tag(tag: &str, stacks: u32) -> StatusTagView {
+        StatusTagView {
+            tag: tag.into(),
+            stacks,
+            remaining: 2,
+        }
+    }
+
+    #[test]
+    fn a_status_tag_shows_its_stack_count_only_above_one() {
+        assert_eq!(status_tag_text(&tag("PSN", 1)), "PSN");
+        assert_eq!(status_tag_text(&tag("PSN", 3)), "PSN×3");
+        assert_eq!(
+            status_tags_text(&[tag("PSN", 3), tag("STN", 1)]),
+            "PSN×3 STN"
+        );
+        assert_eq!(status_tags_text(&[]), "");
+    }
 
     /// A refused menu pick ("Requires Automation first.") only reaches the
     /// player through `App::status_line`, and every gameplay menu draws a

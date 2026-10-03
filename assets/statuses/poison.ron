@@ -1,0 +1,12 @@
+// Deals its power per stack at the end of every round. Each landing adds a
+// stack, so a second dose before the first wears off hurts twice as much.
+(
+    id: "poison",
+    name: "Poisoned",
+    tag: "PSN",
+    stacking: Stack(max: 5),
+    behaviours: [DamagePerRound],
+    inflict: "{target} is poisoned!",
+    tick: "{target} takes {n} Integrity from the poison.",
+    expire: "{target} flushes the poison out.",
+)

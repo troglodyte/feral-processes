@@ -347,3 +347,12 @@
   `quality_label` speak. **The trap is the RNG stream**: `roll_potential`
   going from four draws to six moved every seeded spawn, and ten tests were
   re-baselined by seed or fixture, never by assertion.
+
+- **A held program is `ProgramRole::Siphoned` and grid supply is counted off the
+  `Siphoned` marker, so removing the marker is the whole release; every despawn
+  path for a siphon must release first.** `release_siphon_at` is the one
+  release a despawn calls: `remove_structure` and `damage_structure` (a raid
+  destroying the siphon) both despawn the structure, and a path that skips it
+  leaves the program holding a dangling `Entity` forever, supplying nothing and
+  never freed. The plan found the second path (raid destruction) that the spec
+  named only as deconstruct.

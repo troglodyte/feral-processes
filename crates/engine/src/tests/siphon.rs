@@ -768,3 +768,9 @@ fn ticking_through_a_grudge_period_strikes_the_held_program() {
         "a tick crossing the period writes one strike"
     );
 }
+
+#[test]
+fn the_release_quote_is_the_charged_price() {
+    let left = ((1.0 - SIPHON_RELEASE_INTEGRITY_LOSS) * 100.0).round() as u32;
+    assert_eq!(Game::siphon_release_ceiling_percent(), left);
+}

@@ -1493,9 +1493,16 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
 /// own shape: a caller that needs the party inside calls `stand_in_base`
 /// itself, since the row this fixture exists for is `Locality::Base`.
 pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
+    app_owning_a_program_and_a_station_of("research_station", "research_node", seed)
+}
+
+/// `app_owning_a_program_and_a_research_station`'s fixture with the standing
+/// structure's kind chosen — one program on the staff and one `kind` at
+/// base-space `(2, 0)`, so `stand_beside_the_compiler` puts the party next to it.
+pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = scratch_path("research_station", seed);
+    let path = scratch_path(label, seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
@@ -1577,7 +1584,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
     data.structures.push(save::StructureSave {
-        kind: "research_node".to_string(),
+        kind: kind.to_string(),
         position: (2, 0),
         durability: None,
         tier: None,

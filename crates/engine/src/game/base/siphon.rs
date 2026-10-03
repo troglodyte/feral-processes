@@ -83,6 +83,14 @@ impl Game {
         Ok(())
     }
 
+    /// The most Integrity, as a percentage of `max_hp`, a program can come
+    /// out of a siphon with — what the release row quotes. Asked of
+    /// `siphon_release_hp` at full health, so the figure on screen and the
+    /// price charged are one rule.
+    pub fn siphon_release_ceiling_percent() -> u32 {
+        siphon_release_hp(100, 100) as u32
+    }
+
     /// Whoever `siphon` is holding, if anyone.
     pub fn siphon_holder(&self, siphon: Entity) -> Option<Entity> {
         self.world

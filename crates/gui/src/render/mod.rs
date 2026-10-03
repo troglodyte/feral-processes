@@ -110,7 +110,7 @@ use battle::{
 };
 use building::{
     build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
-    draw_build_program, draw_pin_subject, draw_remove_confirm, draw_remove_menu,
+    draw_build_program, draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon,
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
     draw_work_order_quantity, draw_work_orders,
 };
@@ -981,6 +981,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DepotFilter => app.depot_filter.clone(),
         _ => None,
     };
+    let siphon = app.siphon;
     let rig_tool = match app.mode {
         Mode::RigTool => app.rig_tool.clone(),
         _ => None,
@@ -1123,6 +1124,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::BuildProgram => draw_build_program(game, build_commit, selected, refusal, painter, m),
         Mode::PinSubject => draw_pin_subject(game, selected, refusal, painter, m),
+        Mode::Siphon => draw_siphon(game, siphon, selected, refusal, painter, m),
         Mode::Transfer => draw_transfer(
             &transfer_entries,
             app.basket_room,
@@ -1602,7 +1604,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 125] = [
+    const ALL_MODES: [Mode; 126] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1631,6 +1633,7 @@ mod tests {
         Mode::BuildDirection,
         Mode::BuildProgram,
         Mode::PinSubject,
+        Mode::Siphon,
         Mode::DevConsole,
         Mode::Craft,
         Mode::CraftQuantity,

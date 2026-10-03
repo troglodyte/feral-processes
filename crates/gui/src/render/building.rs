@@ -750,6 +750,94 @@ pub(super) fn draw_pin_subject(
     );
 }
 
+/// The rows of `Mode::Siphon`, `draw_pin_subject`'s shape: an occupied
+/// siphon is the one row that releases its holder and quotes the price, an
+/// empty one is the staff picker. Which of the two is `App::handle_siphon_key`'s
+/// own read of `Game::siphon_holder`, so the row drawn is the row resolved.
+///
+/// The quoted figure comes from `Game::siphon_release_ceiling_percent`, the
+/// rule the release itself charges, never a literal here.
+fn siphon_rows(holder: Option<&str>, staff: &[String], selected: usize, left_pct: u32) -> Vec<Row> {
+    if let Some(name) = holder {
+        return vec![item_row(
+            format!(
+                "[{}] Release {name} (it comes out at {left_pct}% Integrity or less)",
+                menu_shortcut(0)
+            ),
+            selected == 0,
+        )];
+    }
+    if staff.is_empty() {
+        return vec![text_row("(nobody on the base staff to hold)")];
+    }
+    staff
+        .iter()
+        .enumerate()
+        .map(|(i, name)| item_row(format!("[{}] {name}", menu_shortcut(i)), i == selected))
+        .collect()
+}
+
+/// `Mode::Siphon`.
+pub(super) fn draw_siphon(
+    game: &mut Game,
+    siphon: Option<Entity>,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let holder = siphon
+        .and_then(|s| game.siphon_holder(s))
+        .map(|e| game.creature_label(e));
+    let staff: Vec<String> = if holder.is_some() {
+        Vec::new()
+    } else {
+        game.base_staff()
+            .into_iter()
+            .map(|e| game.creature_label(e))
+            .collect()
+    };
+    let rows = siphon_rows(
+        holder.as_deref(),
+        &staff,
+        selected,
+        Game::siphon_release_ceiling_percent(),
+    );
+    draw_popup("Power Siphon", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+#[cfg(test)]
+mod siphon_tests {
+    use super::*;
+
+    /// `draw_row` clips vertically only, so a release row wider than its
+    /// popup loses the price off the right edge. The widest name a program
+    /// can carry is a custom one, so the row is measured at that.
+    #[test]
+    fn the_release_row_fits_its_popup_and_quotes_the_charged_price() {
+        let name = "W".repeat(24);
+        let pct = Game::siphon_release_ceiling_percent();
+        let rows = siphon_rows(Some(&name), &[], 0, pct);
+        let Row::Item { text, .. } = &rows[0] else {
+            panic!("the release is an item row");
+        };
+        assert!(text.contains(&format!("{pct}%")));
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(text, m.font_size);
+            assert!(drawn <= room, "overflows by {:.0}px:\n{text}", drawn - room);
+        });
+    }
+
+    #[test]
+    fn an_empty_siphon_lists_the_staff_and_an_empty_staff_says_so() {
+        let staff = vec!["aa".to_string(), "bb".to_string()];
+        assert_eq!(siphon_rows(None, &staff, 1, 25).len(), 2);
+        assert!(matches!(siphon_rows(None, &[], 0, 25)[0], Row::Text(_)));
+    }
+}
+
 /// The roster's standing-instruction toggles for the structure highlighted
 /// there: keep it running, keep it guarded, or work it yourself right now.
 ///

@@ -1030,11 +1030,13 @@ mod tests {
     /// A bare base-staff program — `spawn_tamed`'s shape in
     /// `tests::support`, restated because that module's helpers are
     /// `pub(super)` to `crate::tests` and this file's own inline tests are
-    /// a sibling module tree, `found_outpost`'s tests' own precedent.
+    /// a sibling module tree, `found_outpost`'s tests' own precedent. Seated
+    /// last, like every real door, so it derives its stats like a real one.
     fn staff(game: &mut Game) -> Entity {
         let species = game.species_defs().into_iter().next().unwrap();
         let parts = game.roster_parts();
-        game.world
+        let entity = game
+            .world
             .spawn((
                 crate::components::Creature {
                     species: species.id.clone(),
@@ -1048,7 +1050,9 @@ mod tests {
                 },
                 parts,
             ))
-            .id()
+            .id();
+        game.seat_derived(entity);
+        entity
     }
 
     /// Founds an outpost far enough from the anchor and stands the player on

@@ -33,12 +33,12 @@ pub(super) fn action_bar_line(options: &[ActionOption], party_commands: &[PartyC
 }
 
 /// One status as drawn: its tag, with the stack count only once there is
-/// more than one — `PSN` then `PSN×3`.
+/// more than one, then the rounds left — `BLD (2)` then `PSN×3 (2)`.
 pub(super) fn status_tag_text(status: &StatusTagView) -> String {
     if status.stacks > 1 {
-        format!("{}×{}", status.tag, status.stacks)
+        format!("{}×{} ({})", status.tag, status.stacks, status.remaining)
     } else {
-        status.tag.clone()
+        format!("{} ({})", status.tag, status.remaining)
     }
 }
 
@@ -105,7 +105,7 @@ const HP_W: usize = 9;
 const STAT_W: usize = 3;
 /// Widest value is `ENGAGED`.
 const REACH_W: usize = 7;
-/// Room for about three tags (`BLD×3 STN EXP`) — see `Game::status_tags`.
+/// Room for one stacked tag (`PSN×3 (2)`) — see `Game::status_tags`.
 /// Anything longer clips rather than shifting DECOMP.
 const STATUS_W: usize = 13;
 /// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
@@ -741,11 +741,11 @@ mod tests {
 
     #[test]
     fn a_status_tag_shows_its_stack_count_only_above_one() {
-        assert_eq!(status_tag_text(&tag("PSN", 1)), "PSN");
-        assert_eq!(status_tag_text(&tag("PSN", 3)), "PSN×3");
+        assert_eq!(status_tag_text(&tag("PSN", 1)), "PSN (2)");
+        assert_eq!(status_tag_text(&tag("PSN", 3)), "PSN×3 (2)");
         assert_eq!(
             status_tags_text(&[tag("PSN", 3), tag("STN", 1)]),
-            "PSN×3 STN"
+            "PSN×3 (2) STN (2)"
         );
         assert_eq!(status_tags_text(&[]), "");
     }

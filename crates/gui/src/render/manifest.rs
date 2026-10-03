@@ -2496,7 +2496,6 @@ mod tests {
             atk: 4,
             mitigation: 2,
             power: 12,
-            status: None,
             ability: "priority_boost".to_string(),
             gear: String::new(),
         }];

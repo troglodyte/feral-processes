@@ -39,7 +39,7 @@ stack.
 
 ## Stacking
 
-`Refresh` re-arming restarts the status. `Stack(max: N)` adds a stack up to
+`Refresh` re-arming keeps the larger of the remaining rounds and the power. `Stack(max: N)` adds a stack up to
 `N`.
 
 ## Shipped

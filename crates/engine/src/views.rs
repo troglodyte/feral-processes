@@ -992,10 +992,6 @@ pub struct CompanionInfo {
     pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
-    /// The companion's current battle status condition, if any (see
-    /// `status_label`) — e.g. "Bleeding (2)". Always `None` outside a
-    /// battle, since status effects are scoped to a single intrusion.
-    pub status: Option<String>,
     /// Terse name of what commanding this companion in battle would do
     /// right now (e.g. "Rally") — see `Game::companion_ability_label`.
     /// Shown wherever a companion is listed outside battle, so the player

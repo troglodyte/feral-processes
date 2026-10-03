@@ -28,7 +28,8 @@ impl From<&str> for StatusId {
 /// How re-arming a status already carried combines with it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StatusStacking {
-    /// The new application replaces the old one.
+    /// One entry stays; re-arming keeps the larger of the remaining rounds and
+    /// the power.
     Refresh,
     /// Each application adds a stack, up to `max`.
     Stack { max: u32 },
@@ -125,6 +126,14 @@ impl StatusDb {
                     "skipped duplicate status {:?} in {path:?}: an earlier file already defines it",
                     def.id.0
                 )),
+                Ok(StatusDef {
+                    stacking: StatusStacking::Stack { max: 0 },
+                    id,
+                    ..
+                }) => warnings.push(format!(
+                    "skipped status {:?} in {path:?}: Stack max must be at least 1",
+                    id.0
+                )),
                 Ok(def) => {
                     db.defs.insert(def.id.clone(), def);
                 }
@@ -206,6 +215,14 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         let def = db.get(&StatusId::from("poison")).expect("loaded");
         assert_eq!(def.stacking, StatusStacking::Stack { max: 5 });
+    }
+
+    #[test]
+    fn a_stack_def_with_max_zero_is_skipped_and_warned() {
+        let body = def_text("dud", "Dud").replace("Refresh", "Stack(max: 0)");
+        let (db, warnings) = load("statuses_stack_zero", &[("dud.ron", body)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(db.get(&StatusId::from("dud")).is_none());
     }
 
     #[test]

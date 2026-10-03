@@ -566,7 +566,6 @@ impl Game {
             atk: stats.atk,
             mitigation: stats.mitigation,
             power: stats.power(),
-            status: self.status_label(entity),
             ability: self.ability_label(entity),
             gear: self.gear_tag(entity),
         })
@@ -941,22 +940,8 @@ impl Game {
         subjects
     }
 
-    /// Display string for the status conditions `entity` carries, if any —
-    /// e.g. "Bleeding (2), Stunned (1)", each number being battle rounds
-    /// remaining. `None` if it carries none.
-    pub(crate) fn status_label(&self, entity: Entity) -> Option<String> {
-        let statuses = self.world.get::<StatusEffects>(entity)?;
-        let db = self.world.resource::<StatusDb>();
-        let parts: Vec<String> = statuses
-            .active
-            .iter()
-            .filter_map(|a| Some(format!("{} ({})", db.get(&a.id)?.name, a.remaining)))
-            .collect();
-        (!parts.is_empty()).then(|| parts.join(", "))
-    }
-
     /// The statuses `entity` carries as structured tags, in the order they
-    /// were armed. A status whose def is gone is skipped, like `status_label`.
+    /// were armed. A status whose def is gone is skipped.
     pub(crate) fn status_tags(&self, entity: Entity) -> Vec<StatusTagView> {
         let Some(statuses) = self.world.get::<StatusEffects>(entity) else {
             return Vec::new();

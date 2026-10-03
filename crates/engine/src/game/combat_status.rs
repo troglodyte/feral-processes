@@ -47,7 +47,7 @@ impl Game {
     /// Logs the landing line of status `id` on `target_label`, in `kind`
     /// styling when given. The one function a move's rider and an ability's
     /// `Debuff` both call, so the two cannot word the same status differently.
-    /// Silent for an id with no definition — `arm_status` has already said so.
+    /// Silent for an id with no definition — `arm_status` armed nothing for it.
     pub(crate) fn log_status_landing(
         &mut self,
         id: &StatusId,
@@ -69,8 +69,8 @@ impl Game {
     }
 
     /// Arms status `id` on `entity` for `duration` rounds and marks it as
-    /// landed this round. An id the `StatusDb` does not define is a logged
-    /// no-op. Already carried and `Refresh`: the larger remaining duration
+    /// landed this round. An id the `StatusDb` does not define is a silent
+    /// no-op, since loading already warned. Already carried and `Refresh`: the larger remaining duration
     /// and power win, one entry stays. `Stack{max}`: one more stack up to
     /// `max`, and the new duration and power replace the old. Not carried: a
     /// new entry with one stack.
@@ -87,7 +87,6 @@ impl Game {
     /// combatant.
     pub(crate) fn arm_status(&mut self, entity: Entity, id: &StatusId, duration: u32, power: i32) {
         if !self.world.resource::<StatusDb>().contains(id) {
-            self.log(format!("Unknown status {:?} — nothing applied.", id.0));
             return;
         }
         let resist = self
@@ -437,10 +436,10 @@ impl Game {
     /// kinds have no per-tick effect of their own — they're read on demand
     /// by `field_buff_power` instead — so they fall through the wildcard.
     ///
-    /// `Regen` is a heal, not damage, so it writes `Stats::hp` directly
-    /// rather than going through `apply_damage` — that function is the
-    /// only path that *lowers* HP, and routing a heal through it would
-    /// break that invariant. `Trickle` writes `PowerReserve`, which only
+    /// `Regen` is a heal, not damage, so it goes through `restore_hp`
+    /// (which honours `HealBlock`) rather than `apply_damage` — that
+    /// function is the only path that *lowers* HP, and routing a heal
+    /// through it would break that invariant. `Trickle` writes `PowerReserve`, which only
     /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
     /// exactly that reason) — a companion carrying one is not an error, the
     /// write simply has nothing to land on.

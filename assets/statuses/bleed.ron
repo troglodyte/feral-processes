@@ -1,0 +1,11 @@
+// Deals its power in damage at the end of every round it is active.
+(
+    id: "bleed",
+    name: "Bleeding",
+    tag: "BLD",
+    stacking: Refresh,
+    behaviours: [DamagePerRound],
+    inflict: "{target} starts leaking!",
+    tick: "{target} leaks {n} Integrity.",
+    expire: "{target}'s leak is plugged.",
+)

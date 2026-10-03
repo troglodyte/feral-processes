@@ -48,6 +48,7 @@ pub mod sociability;
 pub mod sorties;
 pub mod species;
 pub mod stack;
+pub mod statuses;
 pub mod structures;
 pub mod systems;
 pub mod tactical;

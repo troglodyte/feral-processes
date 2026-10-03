@@ -1,0 +1,10 @@
+// The afflicted side loses its next action.
+(
+    id: "stun",
+    name: "Stunned",
+    tag: "STN",
+    stacking: Refresh,
+    behaviours: [SkipTurn],
+    inflict: "{target} stalls out!",
+    expire: "{target} resumes.",
+)

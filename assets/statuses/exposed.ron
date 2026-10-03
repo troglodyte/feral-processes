@@ -1,0 +1,11 @@
+// Cuts the afflicted side's Evasion by half. Armed by the first rung of the
+// fumble ladder.
+(
+    id: "exposed",
+    name: "Exposed",
+    tag: "EXP",
+    stacking: Refresh,
+    behaviours: [EvasionCut(50)],
+    inflict: "{target} is left unpatched!",
+    expire: "{target} re-validates.",
+)

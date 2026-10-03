@@ -56,7 +56,6 @@ spec resolves to a release tag.
 | `2026-10-01-interactions-design` | **built**, unplayed; path-pinned | `v0.14.2`; `crates/engine/src/interactions.rs`, `crates/engine/src/sociability.rs`, `assets/interactions/` |
 | `2026-10-01-conversations-design` | **built**, unplayed; path-pinned | `v0.14.3`; `ConversationRecord` in `crates/engine/src/interactions.rs`, `crates/gui/src/render/talk.rs`, `exchanges` in `assets/interactions/` |
 | `2026-10-01-sulking-behaviours-design` | **built**, unplayed; path-pinned | `note_sabotage` and `ConsumeSource::Sabotage` in `crates/engine/`; `rival_beside` in `crates/engine/src/game/base/morale.rs`; `sulking` in `crates/engine/src/interactions.rs` |
-| `2026-10-03-power-siphon-design` | **built on branch `power-siphon`, unlanded**, unplayed; archive on landing | `Game::siphon_program`/`release_siphoned`/`release_siphon_at` in `crates/engine/src/game/base/siphon.rs`, `ProgramRole::Siphoned`, `StructureDef::siphons`, `siphoned` memory, `Mode::Siphon`. Plan `plans/2026-10-03-power-siphon.md` stays until landing: prior plans are deleted at landing, not on ship |
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
@@ -453,6 +452,7 @@ shipped each, not the one containing the spec's first commit.
 | `2026-09-30-affix-modding-design` | Adding and removing affixes on owned gear; the Affixes research tree | `v0.14.2` |
 | `2026-10-02-production-lines-design` | One worker per production line; a line is derived, never stored | `v0.14.6` |
 | `2026-10-02-derived-programs-design` | Owned programs derive their stats from attributes; a level grants attribute points a program can hold and spend; mining reads the program's own Analysis | `v0.15.0`; `ProgramBase` in `crates/engine/src/components.rs`, `Game::seat_derived`, save format 34, `docs/measurements/2026-10-02-derived-programs.md` |
+| `2026-10-03-power-siphon-design` | A base structure that holds a staff program and supplies +4 grid power while it is held; the program builds a grudge and comes out at 25% Integrity or less | `v0.15.1`; `crates/engine/src/game/base/siphon.rs`, `ProgramRole::Siphoned`, `StructureDef::siphons`, `assets/memories/siphoned.ron`, `Mode::Siphon` |
 
 ## Four rows that need a footnote
 

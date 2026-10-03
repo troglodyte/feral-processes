@@ -64,6 +64,37 @@ pub struct StatusDef {
     pub expire: String,
 }
 
+impl StatusDef {
+    /// The line for arming this status on `target`.
+    pub fn inflict_line(&self, target: &str) -> String {
+        fill(&self.inflict, target, None)
+    }
+
+    /// The line for one round of `DamagePerRound` dealing `n`.
+    pub fn tick_line(&self, target: &str, n: i32) -> String {
+        fill(&self.tick, target, Some(n))
+    }
+
+    /// The line for this status running out on `target`.
+    pub fn expire_line(&self, target: &str) -> String {
+        fill(&self.expire, target, None)
+    }
+
+    pub fn has_behaviour(&self, pred: impl Fn(&StatusBehaviour) -> bool) -> bool {
+        self.behaviours.iter().any(pred)
+    }
+}
+
+/// The one place a log template's placeholders are substituted, so a move's
+/// landing line and an ability's cannot come to read differently.
+fn fill(template: &str, target: &str, n: Option<i32>) -> String {
+    let line = template.replace("{target}", target);
+    match n {
+        Some(n) => line.replace("{n}", &n.to_string()),
+        None => line,
+    }
+}
+
 /// Every status the game knows, loaded from `assets/statuses/`.
 #[derive(Resource, Default, Clone)]
 pub struct StatusDb {
@@ -105,6 +136,16 @@ impl StatusDb {
 
     pub fn get(&self, id: &StatusId) -> Option<&StatusDef> {
         self.defs.get(id)
+    }
+
+    /// The party-panel name of `id`, or the raw id for one with no definition
+    /// — a label that still says *something* about a bad reference.
+    pub fn name_of<'a>(&'a self, id: &'a StatusId) -> &'a str {
+        self.get(id).map_or(id.0.as_str(), |def| def.name.as_str())
+    }
+
+    pub fn contains(&self, id: &StatusId) -> bool {
+        self.defs.contains_key(id)
     }
 }
 

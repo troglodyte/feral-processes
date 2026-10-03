@@ -62,8 +62,8 @@ scoring high on that feature *more* likely.
 | `move_power_rel` | This move's power over the biggest power in this species' own moveset. Relative, so it means the same thing for a modded roster. |
 | `move_ranged` | 1 if the move reaches past the front line. |
 | `move_has_effect` | 1 if the move carries a status effect at all. |
-| `move_effect_stun` | 1 if that effect is `Stun`. |
-| `move_effect_bleed` | 1 if that effect is `Bleed`. |
+| `move_effect_stun` | 1 if that effect's status skips a turn. |
+| `move_effect_bleed` | 1 if that effect's status deals damage per round. |
 | `move_effect_chance` | The effect's own `chance` from the species file, 0 if there is no effect. |
 | `target_hp_frac` | The target's current HP over its maximum. Negative weight = finish the wounded. |
 | `target_is_player` | 1 if the target is the player rather than a companion. |

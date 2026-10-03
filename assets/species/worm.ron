@@ -11,7 +11,7 @@
     habitats: [NullSector, OpenGrid],
     base_speed: 9,
     moves: [
-        (name: "Replicate", power: 5, spread: 1, ranged: true, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),
+        (name: "Replicate", power: 5, spread: 1, ranged: true, effect: Some((kind: "bleed", chance: 0.4, duration: 2, power: 3))),
         (name: "Burrow Strike", power: 8, spread: 2),
     ],
     work_resource: Some("core_fragment"),

@@ -1639,17 +1639,11 @@ impl Game {
                 } => {
                     self.arm_status(
                         recipient,
-                        *kind,
+                        kind,
                         *duration,
                         abilities::scaled_hp_power(*power, level, affinity),
                     );
-                    match kind {
-                        StatusKind::Bleed => self.log(format!("{name} springs a leak in {on}!")),
-                        StatusKind::Stun => self.log(format!("{name} stalls {on} out!")),
-                        StatusKind::Exposed => {
-                            self.log(format!("{name} strips {on}'s validation!"))
-                        }
-                    }
+                    self.log_status_landing(kind, &on, None);
                 }
                 AbilityEffect::Damage {
                     power,
@@ -1759,10 +1753,10 @@ impl Game {
                     let had_status = self
                         .world
                         .get::<StatusEffects>(recipient)
-                        .is_some_and(|s| s.active.is_some());
+                        .is_some_and(|s| !s.active.is_empty());
                     if had_status {
                         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                            statuses.active = None;
+                            statuses.active.clear();
                         }
                         self.log(format!("{name} flushes the corruption from {on}."));
                     }

@@ -3514,17 +3514,34 @@ struct AssetDbs {
 /// this check would turn a modder's incomplete item set into a panic mid-play
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
-    let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    let (mut abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    // Absent-is-silent: an empty catalogue arms nothing. Loaded straight after
+    // `abilities` and before anything derived from them (etched disks, basic
+    // attacks), so a rider naming a status that does not exist is dropped
+    // before a copy of it is made.
+    let (statuses, status_warnings) =
+        crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
+    warnings.extend(status_warnings);
+    warnings.extend(abilities.drop_unknown_status_riders(&statuses));
+    for (name, id) in [
+        ("exposed fumble rung", crate::tuning::FUMBLE_EXPOSED_STATUS),
+        ("crash fumble rung", crate::tuning::FUMBLE_CRASH_STATUS),
+    ] {
+        if !statuses.contains(&crate::statuses::StatusId::from(id)) {
+            warnings.push(format!(
+                "the {name} arms status {id:?}, which is not defined — it will do nothing"
+            ));
+        }
+    }
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.
     let (tools, tools_warnings) = ToolDb::load_dir(&assets_dir.join("tools"))?;
     warnings.extend(tools_warnings);
-    // `mut` is only used by the `#[cfg(test)]` fixture insertion below.
-    #[cfg_attr(not(test), allow(unused_mut))]
     let (mut species, species_warnings) =
         SpeciesDb::load_dir(&assets_dir.join("species"), &abilities)?;
     warnings.extend(species_warnings);
+    warnings.extend(species.drop_unknown_status_riders(&statuses));
     // The blank fixture companion joins every test-built db, rather than
     // being registered onto one `Game`, because `Game::load` rebuilds the
     // db from the asset directory: a species registered after `new` is
@@ -3613,10 +3630,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (memories, memory_warnings) =
         crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
     warnings.extend(memory_warnings);
-    // Absent-is-silent again: an empty catalogue arms nothing.
-    let (statuses, status_warnings) =
-        crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
-    warnings.extend(status_warnings);
     // Same absent-is-silent rule again — see `ThoughtDb`'s own doc. An empty
     // catalogue fires no thought, so every program's situational term is zero
     // and the game is the pre-situation game.

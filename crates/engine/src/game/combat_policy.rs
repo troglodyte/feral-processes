@@ -227,8 +227,16 @@ impl Game {
         );
         f.set(Feature::MoveRanged, mv.ranged as u8 as f32);
         f.set(Feature::MoveHasEffect, status.is_some() as u8 as f32);
-        let stun_move = matches!(&status, Some(e) if e.kind == StatusKind::Stun);
-        let bleed_move = matches!(&status, Some(e) if e.kind == StatusKind::Bleed);
+        let carries = |pred: fn(&StatusBehaviour) -> bool| {
+            status.as_ref().is_some_and(|e| {
+                self.world
+                    .resource::<StatusDb>()
+                    .get(&e.kind)
+                    .is_some_and(|def| def.has_behaviour(pred))
+            })
+        };
+        let stun_move = carries(|b| matches!(b, StatusBehaviour::SkipTurn));
+        let bleed_move = carries(|b| matches!(b, StatusBehaviour::DamagePerRound));
         f.set(Feature::MoveEffectStun, stun_move as u8 as f32);
         f.set(Feature::MoveEffectBleed, bleed_move as u8 as f32);
         f.set(
@@ -259,12 +267,8 @@ impl Game {
             Feature::TargetDefRel,
             (mitigation as f32 / MAX_MITIGATION_PERCENT as f32).clamp(0.0, 1.0),
         );
-        let status = self
-            .world
-            .get::<StatusEffects>(target)
-            .and_then(|s| s.active);
-        let stunned = matches!(status, Some(a) if a.kind == StatusKind::Stun);
-        let bleeding = matches!(status, Some(a) if a.kind == StatusKind::Bleed);
+        let stunned = self.is_stunned(target);
+        let bleeding = self.has_behaviour(target, |b| matches!(b, StatusBehaviour::DamagePerRound));
         f.set(Feature::TargetStunned, stunned as u8 as f32);
         f.set(Feature::TargetBleeding, bleeding as u8 as f32);
         f.set(

@@ -105,11 +105,13 @@ way deleting the Currency item does.
     //
     //     Optionally carries a status rider, which lands only on a hit:
     //       Damage(power: 6, spread: 2, status: Some((
-    //           kind: Bleed, chance: 0.5, duration: 2, power: 2,
+    //           kind: "bleed", chance: 0.5, duration: 2, power: 2,
     //       )))
-    //     `chance` is 0.0-1.0. `kind` is `Bleed` or `Stun`; `power` is the
-    //     per-round bleed damage and is unused (but still required — use 0)
-    //     for `Stun`.
+    //     `chance` is 0.0-1.0. `kind` is the id of a status in
+    //     `assets/statuses/` (`"bleed"`, `"stun"`, `"exposed"`); `power` is
+    //     the per-round damage of a `DamagePerRound` status and ignored by
+    //     the others. An id no status file defines drops the rider at load,
+    //     with a warning.
     //
     //   Heal(power: 8, spread: 2)
     //     Restores Integrity, capped at the recipient's maximum. `power` is
@@ -144,7 +146,7 @@ way deleting the Currency item does.
     //     Defend stance is itself a buff — so a sap landing on a bracing
     //     member overwrites its stance and it stops defending.
     //
-    //   Debuff(kind: Stun, power: 0, duration: 1)
+    //   Debuff(kind: "stun", power: 0, duration: 1)
     //     Inflicts a status condition. Same `kind`/`power` rules as the
     //     rider above. A combatant carries at most one status at a time; a
     //     fresh application overwrites whatever was active.

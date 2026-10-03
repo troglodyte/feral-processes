@@ -3,7 +3,7 @@
     name: "Hard Lock Single v2.0",
     description: "Stall one target for 2 rounds",
     target: OneEnemyGroupFront,
-    effect: Debuff(kind: Stun, power: 0, duration: 2),
+    effect: Debuff(kind: "stun", power: 0, duration: 2),
     cooldown: 4,
     power_cost: 10.0,
     wild_weight: 6,

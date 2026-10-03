@@ -5,8 +5,9 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::abilities::{AbilityDef, AbilityEffect, AbilityTarget, AffinityKind};
-use crate::components::{GlyphColor, StatusKind};
+use crate::components::GlyphColor;
 use crate::items::ItemId;
+use crate::statuses::StatusId;
 use crate::world::Biome;
 
 pub type SpeciesId = String;
@@ -31,13 +32,12 @@ fn default_learn_level() -> u32 {
 /// damage — see `components::StatusEffects`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MoveEffect {
-    pub kind: StatusKind,
+    pub kind: StatusId,
     /// Chance (0.0-1.0) this effect actually applies when the move lands.
     pub chance: f32,
     /// How many battle rounds the effect lasts.
     pub duration: u32,
-    /// Bleed damage dealt per round; unused (but still required in the
-    /// `.ron` file — use 0) for `Stun`.
+    /// Damage per round for a `DamagePerRound` status; ignored by the rest.
     #[serde(default)]
     pub power: i32,
 }
@@ -1097,6 +1097,39 @@ impl SpeciesDb {
 
     pub fn get(&self, id: &str) -> Option<&SpeciesDef> {
         self.species.get(id)
+    }
+
+    /// Drops every move rider naming a status `statuses` does not define,
+    /// one warning each. The move still hits; only the status is lost —
+    /// `AbilityDb::drop_unknown_status_riders` is the same rule for
+    /// abilities. Species are visited in id order so the warnings are stable.
+    pub fn drop_unknown_status_riders(
+        &mut self,
+        statuses: &crate::statuses::StatusDb,
+    ) -> Vec<String> {
+        let mut ids: Vec<SpeciesId> = self.species.keys().cloned().collect();
+        ids.sort();
+        let mut warnings = Vec::new();
+        for id in ids {
+            let Some(def) = self.species.get_mut(&id) else {
+                continue;
+            };
+            for mv in &mut def.moves {
+                if mv
+                    .effect
+                    .as_ref()
+                    .is_some_and(|e| !statuses.contains(&e.kind))
+                {
+                    let kind = mv.effect.take().map(|e| e.kind);
+                    warnings.push(format!(
+                        "species {id:?}: move {:?} names unknown status {:?} — rider dropped",
+                        mv.name,
+                        kind.map(|k| k.0).unwrap_or_default()
+                    ));
+                }
+            }
+        }
+        warnings
     }
 
     /// Adds `def`, replacing any species already under its id.

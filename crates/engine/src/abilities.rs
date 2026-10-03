@@ -4,8 +4,9 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::components::{BuffKind, FieldBuffKind, FieldScope, StatusKind};
+use crate::components::{BuffKind, FieldBuffKind, FieldScope};
 use crate::species::MoveEffect;
+use crate::statuses::StatusId;
 
 pub type AbilityId = String;
 
@@ -468,7 +469,7 @@ pub enum AbilityEffect {
         duration: u32,
     },
     Debuff {
-        kind: StatusKind,
+        kind: StatusId,
         power: i32,
         duration: u32,
     },
@@ -1588,6 +1589,43 @@ impl AbilityDb {
         Ok((db, warnings))
     }
 
+    /// Drops every `Damage` rider naming a status `statuses` does not define,
+    /// one warning each; `SpeciesDb::drop_unknown_status_riders` is the same
+    /// rule for moves. A `Debuff` *is* its status, so there is no rider to
+    /// drop: it is warned about and arms nothing at use.
+    pub fn drop_unknown_status_riders(
+        &mut self,
+        statuses: &crate::statuses::StatusDb,
+    ) -> Vec<String> {
+        let mut ids: Vec<AbilityId> = self.abilities.keys().cloned().collect();
+        ids.sort();
+        let mut warnings = Vec::new();
+        for id in ids {
+            let Some(def) = self.abilities.get_mut(&id) else {
+                continue;
+            };
+            match &mut def.effect {
+                AbilityEffect::Damage { status, .. }
+                    if status.as_ref().is_some_and(|e| !statuses.contains(&e.kind)) =>
+                {
+                    let kind = status.take().map(|e| e.kind);
+                    warnings.push(format!(
+                        "ability {id:?}: names unknown status {:?} — rider dropped",
+                        kind.map(|k| k.0).unwrap_or_default()
+                    ));
+                }
+                AbilityEffect::Debuff { kind, .. } if !statuses.contains(kind) => {
+                    warnings.push(format!(
+                        "ability {id:?}: names unknown status {:?} — it will do nothing",
+                        kind.0
+                    ));
+                }
+                _ => {}
+            }
+        }
+        warnings
+    }
+
     /// Replaces one def, for a test that needs an ability the shipped
     /// catalogue cannot express — `Board::from_rows`' reason. The floor a
     /// hostile's cooldown is armed at is only observable on a battle-legal
@@ -1680,7 +1718,12 @@ pub fn install_starter(game: &mut crate::Game, routine: Option<&AbilityId>) {
 /// A free function rather than a `Game` method because the creation wizard
 /// prices its routine rows before any `Game` exists — `Game::
 /// routine_effect_label` is a call to this, not a second copy.
-pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
+pub fn effect_label(
+    def: &AbilityDef,
+    level: u32,
+    affinity: f32,
+    statuses: &crate::statuses::StatusDb,
+) -> String {
     match &def.effect {
         AbilityEffect::Damage {
             power,
@@ -1699,7 +1742,7 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
                 line.push_str(&format!(
                     ", {:.0}% to inflict {}",
                     status.chance * 100.0,
-                    status.kind.label()
+                    statuses.name_of(&status.kind)
                 ));
             }
             line
@@ -1727,7 +1770,7 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
             duration,
         } => format!(
             "Inflicts {} ({}) for {duration} rounds",
-            kind.label(),
+            statuses.name_of(kind),
             scaled_hp_power(*power, level, affinity)
         ),
         AbilityEffect::Drain {
@@ -1870,6 +1913,7 @@ pub fn range_label(range: crate::battle::DamageRange) -> String {
 /// `classes::affinity_with_perk`.
 pub fn starter_rows(
     db: &AbilityDb,
+    statuses: &crate::statuses::StatusDb,
     affinity: impl Fn(AffinityKind) -> f32,
 ) -> Vec<crate::views::StarterRoutineRow> {
     db.all()
@@ -1885,6 +1929,7 @@ pub fn starter_rows(
                     Some(kind) => affinity(kind),
                     None => crate::tuning::AFFINITY_NEUTRAL,
                 },
+                statuses,
             ),
             power_cost: routine_power_cost(def),
         })
@@ -2456,7 +2501,7 @@ mod tests {
 
     #[test]
     fn only_magnitude_carrying_effects_have_an_affinity_category() {
-        use crate::components::{BuffKind, StatusKind};
+        use crate::components::BuffKind;
         assert_eq!(
             AbilityEffect::Heal {
                 power: 8,
@@ -2485,7 +2530,7 @@ mod tests {
         );
         assert_eq!(
             AbilityEffect::Debuff {
-                kind: StatusKind::Stun,
+                kind: StatusId::from("stun"),
                 power: 0,
                 duration: 1
             }

@@ -233,8 +233,7 @@ impl Game {
             .filter(|&e| {
                 self.world
                     .get::<StatusEffects>(e)
-                    .and_then(|s| s.active.as_ref())
-                    .is_some_and(|status| status.landed_this_round)
+                    .is_some_and(|s| s.active.iter().any(|a| a.landed_this_round))
             })
             .collect()
     }

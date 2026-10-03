@@ -1204,12 +1204,13 @@ fn a_stunned_striker_does_not_take_its_second_swing() {
     stats.max_hp = 9_000;
     stats.hp = 9_000;
     game.world.entity_mut(player).insert(StatusEffects {
-        active: Some(ActiveStatus {
-            kind: StatusKind::Stun,
+        active: vec![ActiveStatus {
+            id: crate::statuses::StatusId::from("stun"),
             remaining: 1,
             power: 0,
+            stacks: 1,
             landed_this_round: false,
-        }),
+        }],
     });
 
     player_swings_at_group(&mut game, 0);

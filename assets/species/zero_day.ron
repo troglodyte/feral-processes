@@ -11,7 +11,7 @@
     habitats: [Deadlock, NullSector],
     base_speed: 10,
     moves: [
-        (name: "Fray", power: 9, spread: 2, effect: Some((kind: Bleed, chance: 0.45, duration: 3, power: 4))),
+        (name: "Fray", power: 9, spread: 2, effect: Some((kind: "bleed", chance: 0.45, duration: 3, power: 4))),
         (name: "Static Burst", power: 7, spread: 2, ranged: true),
     ],
     work_resource: None,

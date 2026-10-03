@@ -3,7 +3,7 @@
     name: "Hard Lock Everyone",
     description: "Stall every hostile program for 1 round",
     target: AllEnemies,
-    effect: Debuff(kind: Stun, power: 0, duration: 1),
+    effect: Debuff(kind: "stun", power: 0, duration: 1),
     cooldown: 5,
     power_cost: 15.0,
     research_zone: 3,

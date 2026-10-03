@@ -2232,12 +2232,13 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
     enlist(&mut game, companion);
     if stunned {
         game.world.entity_mut(companion).insert(StatusEffects {
-            active: Some(ActiveStatus {
-                kind: StatusKind::Stun,
+            active: vec![ActiveStatus {
+                id: crate::statuses::StatusId::from("stun"),
                 remaining: 1,
                 power: 0,
+                stacks: 1,
                 landed_this_round: false,
-            }),
+            }],
         });
     }
 

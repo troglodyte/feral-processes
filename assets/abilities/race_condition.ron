@@ -3,7 +3,7 @@
     name: "Hard Lock Group",
     description: "Stall every member of one group for 1 round",
     target: WholeEnemyGroup,
-    effect: Debuff(kind: Stun, power: 0, duration: 1),
+    effect: Debuff(kind: "stun", power: 0, duration: 1),
     cooldown: 4,
     power_cost: 13.0,
     wild_weight: 5,

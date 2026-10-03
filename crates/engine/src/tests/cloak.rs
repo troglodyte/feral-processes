@@ -233,7 +233,7 @@ fn running_a_debuff_breaks_the_invokers_cloak_though_it_deals_no_damage() {
 
     let debuff = AbilityDef {
         effect: AbilityEffect::Debuff {
-            kind: StatusKind::Bleed,
+            kind: crate::statuses::StatusId::from("bleed"),
             power: 1,
             duration: 2,
         },

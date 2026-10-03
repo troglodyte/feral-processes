@@ -1277,7 +1277,7 @@ impl Game {
         // mirrored buff or a routine's own cooldown would otherwise ride
         // into the roster and never tick again.
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(front) {
-            s.active = None;
+            s.active.clear();
         }
         if let Some(mut b) = self.world.get_mut::<CombatBuff>(front) {
             b.active = None;
@@ -1435,7 +1435,7 @@ impl Game {
             .entity_mut(lead)
             .remove::<(Hostile, WanderAi, NestGuardian, TownPatrol, Pursuing)>();
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(lead) {
-            s.active = None;
+            s.active.clear();
         }
         if let Some(mut b) = self.world.get_mut::<CombatBuff>(lead) {
             b.active = None;

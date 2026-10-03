@@ -4011,6 +4011,7 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
     let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (classes, _) =
         crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+    let statuses = game.world.resource::<StatusDb>().clone();
     for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
         if !def.starter {
             continue;
@@ -4029,8 +4030,8 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
             def.id
         );
         assert_ne!(
-            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL),
-            crate::abilities::effect_label(def, 1, raised),
+            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL, &statuses),
+            crate::abilities::effect_label(def, 1, raised, &statuses),
             "starter {:?} prints the same numbers at {} and at {raised} — its magnitude \
              cannot be scaled, so the Routine step teaches nothing for the {axis:?} axis",
             def.id,

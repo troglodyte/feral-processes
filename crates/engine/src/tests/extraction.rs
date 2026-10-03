@@ -2479,7 +2479,7 @@ fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
         name: "Fixture Passive Single",
         description: "A passive test fixture — triggers rather than being run.",
         target: OneEnemyGroupFront,
-        effect: Debuff(kind: Bleed, power: 1, duration: 1),
+        effect: Debuff(kind: "bleed", power: 1, duration: 1),
         cooldown: 4,
         power_cost: 0.0,
         triggers: Some(RoundStart),

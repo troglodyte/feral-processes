@@ -584,8 +584,8 @@ fn a_shipped_granting_weapon_lands_its_condition_in_a_real_round() {
         .iter()
         .flat_map(|grp| grp.members.iter())
         .filter_map(|&e| game.world.get::<StatusEffects>(e))
-        .filter_map(|s| s.active.as_ref())
-        .any(|status| status.kind == StatusKind::Bleed);
+        .flat_map(|s| s.active.iter())
+        .any(|status| status.id == crate::statuses::StatusId::from("bleed"));
     assert!(
         bleeding,
         "the round opened and nothing on the other side is bleeding"

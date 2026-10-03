@@ -941,16 +941,18 @@ impl Game {
         subjects
     }
 
-    /// Display string for `entity`'s current active status condition, if
-    /// any — e.g. "Leaking (2)" or "Stalled (1)", the number being battle
-    /// rounds remaining. `None` if it has no active condition.
+    /// Display string for the status conditions `entity` carries, if any —
+    /// e.g. "Bleeding (2), Stunned (1)", each number being battle rounds
+    /// remaining. `None` if it carries none.
     pub(crate) fn status_label(&self, entity: Entity) -> Option<String> {
-        let active = self.world.get::<StatusEffects>(entity)?.active?;
-        Some(match active.kind {
-            StatusKind::Bleed => format!("Leaking ({})", active.remaining),
-            StatusKind::Stun => format!("Stalled ({})", active.remaining),
-            StatusKind::Exposed => format!("Exposed ({})", active.remaining),
-        })
+        let statuses = self.world.get::<StatusEffects>(entity)?;
+        let db = self.world.resource::<StatusDb>();
+        let parts: Vec<String> = statuses
+            .active
+            .iter()
+            .filter_map(|a| Some(format!("{} ({})", db.get(&a.id)?.name, a.remaining)))
+            .collect();
+        (!parts.is_empty()).then(|| parts.join(", "))
     }
 
     /// Adds `creature` (a tamed program you own) to your active battle

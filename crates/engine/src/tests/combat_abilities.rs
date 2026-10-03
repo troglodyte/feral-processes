@@ -1001,12 +1001,13 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
     let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let _ = battle_with_a_pack_of(&mut game, 1, 200);
-    game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
-        kind: StatusKind::Bleed,
+    game.world.get_mut::<StatusEffects>(player).unwrap().active = vec![ActiveStatus {
+        id: crate::statuses::StatusId::from("bleed"),
         remaining: 3,
         power: 4,
+        stacks: 1,
         landed_this_round: false,
-    });
+    }];
 
     let ability = crate::abilities::AbilityDef {
         id: "test_cleanse".into(),
@@ -1033,7 +1034,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
             .get::<StatusEffects>(player)
             .unwrap()
             .active
-            .is_none(),
+            .is_empty(),
         "cleanse must clear the condition"
     );
 
@@ -1295,7 +1296,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Debuff {
-            kind: StatusKind::Bleed,
+            kind: crate::statuses::StatusId::from("bleed"),
             power: 2,
             duration: 3,
         },
@@ -1319,6 +1320,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
             .get::<StatusEffects>(enemies[0])
             .unwrap()
             .active
+            .first()
             .unwrap()
             .power,
         crate::abilities::scaled_hp_power(2, 20, crate::tuning::AFFINITY_NEUTRAL),

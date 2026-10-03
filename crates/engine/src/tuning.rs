@@ -4294,9 +4294,11 @@ pub const FUMBLE_RUNG_THRESHOLDS: [f64; 3] = [0.55, 0.85, 0.97];
 /// Fraction of a fresh roll of the fumbler's own damage range that the
 /// Recoil rung deals to the fumbler.
 pub const FUMBLE_RECOIL_FRACTION: f32 = 0.5;
-/// Percentage points of evasion the Exposed rung strips from the fumbler
-/// until their next turn.
-pub const EXPOSED_EVASION_PERCENT: i32 = 50;
+/// The status the Exposed rung arms on the fumbler. What it does (the
+/// evasion cut) is that status's own definition in `assets/statuses/`.
+pub const FUMBLE_EXPOSED_STATUS: &str = "exposed";
+/// The status the Crash rung arms on the fumbler.
+pub const FUMBLE_CRASH_STATUS: &str = "stun";
 /// Percentage points of evasion a defender in partial cover gains against
 /// the body shooting at them.
 ///

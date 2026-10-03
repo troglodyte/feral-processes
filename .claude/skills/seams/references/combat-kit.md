@@ -190,3 +190,12 @@
   which program you wield is what the feature is worth.
   `wieldable_routines` excludes `field_only` and `Decompile`. The `W` key is
   an easter egg and a test holds the help text to never naming it.
+
+- **`arm_status` is the sole writer of a body's `StatusEffects`, and
+  `restore_hp` the sole heal path.** Besides Cleanse and
+  `clear_battle_status_effects`, nothing else touches the list: `arm_status`
+  is where the id resolves, `status_resist` scales the duration and the def's
+  stacking applies, and a second writer skips one of them or sets
+  `landed_this_round` wrong. `HealBlock` is read only inside `restore_hp`, so
+  a heal or drain that edits `Stats.hp` directly walks around Locked without
+  a test failing. Full argument: graph `seam:status-effects-arm-status-is-the-sole-writer-and-restore-hp-the-heal-chokepoint`.

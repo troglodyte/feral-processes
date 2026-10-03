@@ -168,7 +168,7 @@ is skipped with a warning logged in-game rather than crashing startup.
         // a missed or fumbled move inflicts nothing.
         //
         // `kind` is the id of a file in `assets/statuses/` (shipped:
-        // `"bleed"`, `"stun"`, `"exposed"`); what each does is defined there.
+        // `"bleed"`, `"stun"`, `"exposed"`, `"poison"`, `"throttled"`, `"locked"`); what each does is defined there.
         // `power` is the per-round damage of a damage-per-round status and
         // ignored by the rest. An unknown id drops the rider at load, with a
         // warning.

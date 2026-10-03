@@ -147,9 +147,12 @@ way deleting the Currency item does.
     //     member overwrites its stance and it stops defending.
     //
     //   Debuff(kind: "stun", power: 0, duration: 1)
-    //     Inflicts a status condition. Same `kind`/`power` rules as the
-    //     rider above. A combatant carries at most one status at a time; a
-    //     fresh application overwrites whatever was active.
+    //     Inflicts a status condition. `kind` is the id of a file in
+    //     `assets/statuses/` (shipped: bleed, stun, exposed, poison,
+    //     throttled, locked); an unknown id is warned about at load and
+    //     arms nothing. A combatant carries several different statuses at
+    //     once; re-arming one it already has follows that status's
+    //     `stacking` (see `assets/statuses/README.md`).
     //     `duration` counts the rounds *after* the one the condition landed
     //     in, for both a `Debuff` and a `Damage` rider: `duration: 1` stuns
     //     the victim for the following round, and a `duration: 3` bleed

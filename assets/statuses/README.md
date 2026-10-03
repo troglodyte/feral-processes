@@ -41,3 +41,17 @@ stack.
 
 `Refresh` re-arming restarts the status. `Stack(max: N)` adds a stack up to
 `N`.
+
+## Shipped
+
+| id | tag | behaviour | stacking |
+| --- | --- | --- | --- |
+| `bleed` | BLD | damage per round | Refresh |
+| `stun` | STN | skip the next action | Refresh |
+| `exposed` | EXP | evasion cut by half | Refresh |
+| `poison` | PSN | damage per round | Stack(max: 5) |
+| `throttled` | THR | attack down 25% | Refresh |
+| `locked` | LCK | no healing | Refresh |
+
+Every shipped status must be armed by some move, ability or fumble rung; a
+census test fails on one nothing uses.

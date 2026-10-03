@@ -1311,8 +1311,11 @@ fn a_second_fumble_rung_lands_beside_the_first() {
     game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Crash);
     assert!(game.is_stunned(fumbler));
     assert_eq!(
-        game.status_label(fumbler).as_deref(),
-        Some("Exposed (1), Stunned (1)"),
+        game.status_tags(fumbler)
+            .iter()
+            .map(|s| s.tag.as_str())
+            .collect::<Vec<_>>(),
+        ["EXP", "STN"],
         "rungs no longer replace each other: statuses coexist"
     );
 }
@@ -1610,16 +1613,17 @@ fn status_ids(game: &Game, entity: Entity) -> Vec<String> {
 }
 
 #[test]
-fn arming_an_unknown_status_id_is_a_logged_no_op() {
+fn arming_an_unknown_status_id_is_a_silent_no_op() {
     let mut game = Game::new(794, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
     game.arm_status(wild, &crate::statuses::StatusId::from("no_such"), 3, 1);
     assert!(status_ids(&game, wild).is_empty());
     assert!(
-        game.message_log(usize::MAX)
+        !game
+            .message_log(usize::MAX)
             .iter()
             .any(|e| e.text.contains("no_such")),
-        "an unknown id must be logged, not swallowed"
+        "loading warns about bad ids; the player's log stays free of them"
     );
 }
 
@@ -2012,4 +2016,70 @@ fn status_tags_list_each_status_with_its_tag_stacks_and_rounds() {
             },
         ]
     );
+}
+
+/// A modded potion carries a heal; `HealBlock` has to stop it, because
+/// `consume_item` routes through `restore_hp` like every other heal.
+#[test]
+fn a_locked_body_gets_nothing_from_a_healing_item() {
+    let dir = assets_dir_with_extra_item(
+        "locked_potion",
+        "test_potion.ron",
+        r#"(
+    id: "test_potion",
+    name: "Test Potion",
+    description: "Test fixture: a plain heal.",
+    value: Some(5),
+    consume: Some((heal: 10)),
+)"#,
+    );
+    let mut game = Game::new(796, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    let potion = ItemId::from("test_potion");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(potion.clone(), 2);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = stats.max_hp - 10;
+    }
+    let hurt = game.world.get::<Stats>(player).unwrap().hp;
+
+    // Outside a battle the player has no status store; give them one.
+    game.world
+        .entity_mut(player)
+        .insert(StatusEffects::default());
+    game.arm_status(player, &StatusId::from("locked"), 3, 1);
+    assert!(game.consume_item(player, &potion));
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, hurt);
+
+    game.world
+        .get_mut::<StatusEffects>(player)
+        .unwrap()
+        .active
+        .clear();
+    assert!(game.consume_item(player, &potion));
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        hurt + 10,
+        "the item does heal when nothing blocks it"
+    );
+}
+
+/// The tactical map reads statuses off the body view, so a poisoned body's
+/// view must carry the same tags `status_tags` gives.
+#[test]
+fn a_tactical_body_view_carries_its_statuses() {
+    let mut game = Game::new(797, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 4000);
+    let hostile = pack[0];
+    game.arm_status(hostile, &StatusId::from("poison"), 3, 2);
+    let view = game.tactical_view().expect("a fight is open");
+    let body = view.bodies.iter().find(|b| b.entity == hostile).unwrap();
+    assert_eq!(body.statuses, game.status_tags(hostile));
+    assert_eq!(body.statuses.len(), 1);
+    let player = view.bodies.iter().find(|b| b.is_player).unwrap();
+    assert!(player.statuses.is_empty());
 }

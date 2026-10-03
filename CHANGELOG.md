@@ -53,6 +53,18 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.1
+
+**You can build a Power Siphon and pin one of your base staff programs into
+it to run the base: it adds 4 to the grid for as long as the program is
+held.** Walk up to the siphon and press `P` to choose a staff program, or to
+release the one inside. A held program does no other work and resents it —
+the longer it stays, the lower its mood sinks, until it sulks and eventually
+refuses work — and it comes out at a quarter of its Integrity or less. The
+grudge fades on its own once it is released. If the siphon is torn down or
+destroyed, its program is released the same way. There is no cap on how many
+you build; the cost is the programs you give up.
+
 ## 0.15.0
 
 **Your programs now grow through their attributes, and you can choose where

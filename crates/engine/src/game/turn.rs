@@ -1568,7 +1568,8 @@ impl Game {
                     ProgramRole::Sortie
                     | ProgramRole::Outpost
                     | ProgramRole::Staff
-                    | ProgramRole::UnderStudy,
+                    | ProgramRole::UnderStudy
+                    | ProgramRole::Siphoned,
                 ) => false,
                 None => false,
             };

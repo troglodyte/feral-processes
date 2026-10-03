@@ -460,6 +460,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),
+            "power_siphon".to_string(),
             "quarantine_rack".to_string(),
             "recharger_node".to_string(),
             "refinery".to_string(),

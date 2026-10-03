@@ -717,6 +717,17 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
+        // Selling would vanish a held program from the siphon with nothing said.
+        if self
+            .world
+            .get::<crate::components::Siphoned>(creature)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::HELD_IN_SIPHON
+            ));
+        }
         // `sell_companion` has no other away-role refusal — a party slot, a
         // cronjob and a guard post are all silently cancelled and announced
         // through `sale_detachments` — but a posted crew member has to be

@@ -62,10 +62,21 @@ pub enum ProgramRole {
     /// not by this enum. `Outpost` above widened the same three matches a
     /// second time.
     UnderStudy,
+    /// Held in a Power Siphon — `components::Siphoned`. Between `UnderStudy`
+    /// and `Staff`: a body locked into a machine is out of the pool, takes no
+    /// job and walks nowhere, and its consequences are omissions the same way.
+    /// The doors that compare `== Staff` refuse it for free; the ones that
+    /// never asked a role (`add_companion`, `wield_program`, a fusion, a
+    /// sale, a spend) each carry an explicit "Release it first." refusal.
+    Siphoned,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
     Staff,
 }
+
+/// The refusal every door that never asked a role gives a held program,
+/// after its name (`fuse_companions`) or alone.
+pub(crate) const HELD_IN_SIPHON: &str = "held in a Power Siphon. Release it first.";
 
 /// `name` with its zone appended (`"Scrapper 2"`) when there is one.
 fn zone_tagged(name: String, zone: Option<u32>) -> String {
@@ -111,7 +122,8 @@ impl ProgramRole {
             ProgramRole::Sortie => 2,
             ProgramRole::Outpost => 3,
             ProgramRole::UnderStudy => 4,
-            ProgramRole::Staff => 5,
+            ProgramRole::Siphoned => 5,
+            ProgramRole::Staff => 6,
         }
     }
 }
@@ -123,6 +135,7 @@ impl ProgramRole {
 pub(crate) struct RoleMarkers {
     pub posted_at_outpost: bool,
     pub under_study: bool,
+    pub siphoned: bool,
 }
 
 /// The role rule itself, over values rather than a `Game`.
@@ -156,6 +169,9 @@ pub(crate) fn role_of(
     }
     if markers.under_study {
         return Some(ProgramRole::UnderStudy);
+    }
+    if markers.siphoned {
+        return Some(ProgramRole::Siphoned);
     }
     Some(ProgramRole::Staff)
 }
@@ -213,6 +229,7 @@ pub struct Roles<'w, 's> {
     /// is pinned is per-entity state, not a resource, and every caller here
     /// already has the entity in hand to look it up against.
     under_study: Query<'w, 's, (), With<crate::components::UnderStudy>>,
+    siphoned: Query<'w, 's, (), With<crate::components::Siphoned>>,
 }
 
 impl Roles<'_, '_> {
@@ -227,6 +244,7 @@ impl Roles<'_, '_> {
             RoleMarkers {
                 posted_at_outpost: self.posted.contains(creature),
                 under_study: self.under_study.contains(creature),
+                siphoned: self.siphoned.contains(creature),
             },
         )
     }
@@ -841,6 +859,11 @@ impl Game {
             })
             .filter(|p| {
                 self.world
+                    .get::<crate::components::Siphoned>(p.entity)
+                    .is_none()
+            })
+            .filter(|p| {
+                self.world
                     .get::<crate::components::PostedAt>(p.entity)
                     .is_none()
             })
@@ -996,6 +1019,13 @@ impl Game {
                 "That program is pinned in a Research Station's pen. Unpin it first.".into(),
             );
         }
+        if self
+            .world
+            .get::<crate::components::Siphoned>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {HELD_IN_SIPHON}"));
+        }
         // Same shape, one role over: `role_of` would answer `Staff` were
         // this check skipped, since `PostedAt` is checked *before* it in
         // `role_of`'s chain, and the party push would leave the marker on a
@@ -1063,6 +1093,10 @@ impl Game {
                     .world
                     .get::<crate::components::UnderStudy>(creature)
                     .is_some(),
+                siphoned: self
+                    .world
+                    .get::<crate::components::Siphoned>(creature)
+                    .is_some(),
             },
         )
     }
@@ -1125,6 +1159,13 @@ impl Game {
         }
         if self.wielded_program() == Some(creature) {
             return Err("You're already wielding that program.".into());
+        }
+        if self
+            .world
+            .get::<crate::components::Siphoned>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {HELD_IN_SIPHON}"));
         }
         // `role_of` never sees a `Task` here, so a posted crew member reads
         // as `Outpost` rather than `Staff` and nothing below would refuse it
@@ -1400,6 +1441,12 @@ impl Game {
                 return Err(format!(
                     "{name} is pinned in a Research Station's pen and can't be fused."
                 ));
+            }
+        }
+        for e in [a, b] {
+            if self.world.get::<crate::components::Siphoned>(e).is_some() {
+                let name = self.creature_label(e);
+                return Err(format!("{name} is {HELD_IN_SIPHON}"));
             }
         }
         // Neither half may be posted at an outpost either, `UnderStudy`'s
@@ -1777,6 +1824,11 @@ impl Game {
         // for the identical exclusion, so the picker cannot offer a spend
         // this door then silently declines.
         if self.world.get::<crate::components::UnderStudy>(e).is_some() {
+            return None;
+        }
+        // Held in a Power Siphon — the same exclusion again: a spend would
+        // despawn a body the siphon still counts as its supply.
+        if self.world.get::<crate::components::Siphoned>(e).is_some() {
             return None;
         }
         // Posted at an outpost — `programs_for_build`'s identical exclusion

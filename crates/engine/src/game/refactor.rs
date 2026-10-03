@@ -249,6 +249,16 @@ impl Game {
         {
             return Err("You don't control that program.".into());
         }
+        if self
+            .world
+            .get::<crate::components::Siphoned>(target)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::HELD_IN_SIPHON
+            ));
+        }
         // The outposts plan's own census: `open_kernel_ring` checked
         // neither role before this, and nothing else here would refuse a
         // posted crew member spending a Privilege Ring while away.

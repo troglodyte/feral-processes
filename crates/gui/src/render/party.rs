@@ -299,6 +299,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::Sortie => "Away on a sortie",
         ProgramRole::Outpost => "Posted at an outpost",
         ProgramRole::UnderStudy => "Under study",
+        ProgramRole::Siphoned => "Held in Power Siphon",
         ProgramRole::Staff => "Base staff",
     }
 }

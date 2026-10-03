@@ -1969,6 +1969,11 @@ impl Game {
         } else {
             base + bonus + field_bonus + self.wielded_stat_bonus().1
         };
+        // Scaled before the cap, so a status cannot lift a total past it.
+        let total = self.status_scaled(entity, total, |b| match b {
+            StatusBehaviour::MitigationPercent(n) => Some(*n),
+            _ => None,
+        });
         total.clamp(0, MAX_MITIGATION_PERCENT)
     }
 

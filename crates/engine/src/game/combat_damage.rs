@@ -161,7 +161,10 @@ impl Game {
                 self.accuracy_bonus(entity) + swing.accuracy,
             ),
             evasion,
-            atk: self.effective_atk(entity),
+            atk: self.status_scaled(entity, self.effective_atk(entity), |b| match b {
+                StatusBehaviour::AtkPercent(n) => Some(*n),
+                _ => None,
+            }),
             range: swing.range,
             crit: derived.crit,
             fumble: derived.fumble,
@@ -423,7 +426,15 @@ impl Game {
     /// figure instead let a heal claim twenty points on a target with three
     /// to spare, which reads as the heal having been wasted by the game
     /// rather than by the player's timing.
+    ///
+    /// A body carrying a `HealBlock` status restores nothing; the caller's
+    /// log then reads "for 0", the same words a full-health target gets.
+    /// Every in-battle heal and drain must come through here, or the block
+    /// has a hole in it.
     pub(crate) fn restore_hp(&mut self, target: Entity, amount: i32) -> i32 {
+        if self.has_behaviour(target, |b| matches!(b, StatusBehaviour::HealBlock)) {
+            return 0;
+        }
         let restored = {
             let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
                 return 0;

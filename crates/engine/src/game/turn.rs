@@ -1334,10 +1334,8 @@ impl Game {
         if let Some(mut needs) = self.world.get_mut::<PowerReserve>(who) {
             needs.restore(effect.power, max);
         }
-        if effect.heal != 0
-            && let Some(mut stats) = self.world.get_mut::<Stats>(who)
-        {
-            stats.hp = (stats.hp + effect.heal).min(stats.max_hp);
+        if effect.heal != 0 {
+            self.restore_hp(who, effect.heal);
         }
         let name = self.item_name(id).to_string();
         if let Some(buff) = effect.prebattle_buff {

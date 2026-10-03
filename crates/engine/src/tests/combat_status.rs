@@ -1,6 +1,7 @@
 //! Status effects: how stun and bleed tick down, and when they clear.
 
 use super::support::*;
+use crate::statuses::{StatusBehaviour, StatusDef, StatusId, StatusStacking};
 use crate::tuning::WILD_ABILITY_CHANCE;
 use crate::*;
 
@@ -1695,4 +1696,201 @@ fn an_unknown_status_on_a_species_move_is_dropped_with_a_warning() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("no_such"));
     assert!(db.get(&id).unwrap().moves[0].effect.is_none());
+}
+
+// ------------------------------------------------ percent and heal behaviours
+
+/// Puts a one-behaviour, `Refresh` status named `id` into the world's
+/// `StatusDb`; no shipped file uses the new behaviours yet.
+fn define_status(game: &mut Game, id: &str, stacking: StatusStacking, b: StatusBehaviour) {
+    game.world
+        .resource_mut::<crate::statuses::StatusDb>()
+        .insert(StatusDef {
+            id: StatusId::from(id),
+            name: id.into(),
+            tag: "TST".into(),
+            stacking,
+            behaviours: vec![b],
+            inflict: "{target} is tested.".into(),
+            tick: "{target} takes {n}.".into(),
+            expire: "{target} is done.".into(),
+        });
+}
+
+fn profile_atk(game: &Game, entity: Entity) -> i32 {
+    game.combatant_profile(entity, battle::Swing::default()).atk
+}
+
+#[test]
+fn atk_percent_scales_the_combatant_profile_attack() {
+    let mut game = Game::new(7101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().atk = 20;
+    let base = profile_atk(&game, wild);
+    define_status(
+        &mut game,
+        "weak",
+        StatusStacking::Refresh,
+        StatusBehaviour::AtkPercent(-25),
+    );
+    game.arm_status(wild, &StatusId::from("weak"), 3, 0);
+    assert_eq!(
+        profile_atk(&game, wild),
+        (base as f64 * 0.75).round() as i32
+    );
+}
+
+#[test]
+fn a_deep_atk_cut_floors_attack_at_zero() {
+    let mut game = Game::new(7102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().atk = 20;
+    define_status(
+        &mut game,
+        "crush",
+        StatusStacking::Refresh,
+        StatusBehaviour::AtkPercent(-200),
+    );
+    game.arm_status(wild, &StatusId::from("crush"), 3, 0);
+    assert_eq!(
+        profile_atk(&game, wild),
+        0,
+        "a stack must not invert attack"
+    );
+}
+
+#[test]
+fn mitigation_percent_scales_effective_mitigation_and_floors_at_zero() {
+    let mut game = Game::new(7103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().mitigation = 40;
+    define_status(
+        &mut game,
+        "soft",
+        StatusStacking::Refresh,
+        StatusBehaviour::MitigationPercent(-50),
+    );
+    define_status(
+        &mut game,
+        "melt",
+        StatusStacking::Refresh,
+        StatusBehaviour::MitigationPercent(-200),
+    );
+    assert_eq!(game.effective_mitigation(wild), 40);
+    game.arm_status(wild, &StatusId::from("soft"), 3, 0);
+    assert_eq!(game.effective_mitigation(wild), 20);
+    game.arm_status(wild, &StatusId::from("melt"), 3, 0);
+    assert_eq!(game.effective_mitigation(wild), 0, "-250% floors at 0");
+}
+
+#[test]
+fn heal_block_zeroes_restore_hp_and_unblocked_heals_still_land() {
+    let mut game = Game::new(7104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 50;
+    }
+    assert_eq!(game.restore_hp(player, 10), 10);
+    define_status(
+        &mut game,
+        "lock",
+        StatusStacking::Refresh,
+        StatusBehaviour::HealBlock,
+    );
+    game.arm_status(player, &StatusId::from("lock"), 3, 0);
+    assert_eq!(game.restore_hp(player, 10), 0);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 60);
+}
+
+fn heal_block_battle(game: &mut Game) -> (Entity, Vec<Entity>) {
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 200;
+        stats.hp = 50;
+        stats.atk = 10;
+    }
+    define_status(
+        game,
+        "lock",
+        StatusStacking::Refresh,
+        StatusBehaviour::HealBlock,
+    );
+    game.arm_status(player, &StatusId::from("lock"), 3, 0);
+    (player, enemies)
+}
+
+fn test_ability(
+    effect: crate::abilities::AbilityEffect,
+    target: crate::abilities::AbilityTarget,
+) -> crate::abilities::AbilityDef {
+    crate::abilities::AbilityDef {
+        id: "test_heal_block".into(),
+        name: "Test".into(),
+        description: "d".into(),
+        target,
+        effect,
+        cooldown: 1,
+        accuracy: 0,
+        power_cost: 0.0,
+        wild_weight: 0,
+        research_zone: 0,
+        exclusive: false,
+        starter: false,
+        ranged: false,
+        boss_drop: None,
+        triggers: None,
+        shape: None,
+        range: None,
+    }
+}
+
+#[test]
+fn heal_block_zeroes_a_heal_ability() {
+    let mut game = Game::new(7105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, _) = heal_block_battle(&mut game);
+    let ability = test_ability(
+        crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 0,
+        },
+        crate::abilities::AbilityTarget::OneAlly,
+    );
+    game.use_ability(&ability, player, "You", &[player]);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 50);
+}
+
+#[test]
+fn heal_block_zeroes_a_drain_but_the_damage_still_lands() {
+    let mut game = Game::new(7106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, enemies) = heal_block_battle(&mut game);
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    let ability = test_ability(
+        crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            spread: 0,
+            heal_fraction: 0.5,
+        },
+        crate::abilities::AbilityTarget::OneEnemyGroupFront,
+    );
+    force_the_next_attack_to_land(&mut game);
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    assert!(game.world.get::<Stats>(enemies[0]).unwrap().hp < before);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 50);
+}
+
+#[test]
+fn heal_block_zeroes_regen_ticks() {
+    let mut game = Game::new(7107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, _) = heal_block_battle(&mut game);
+    game.arm_field_buff(player, routine(FieldBuffKind::Regen, 4));
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        50,
+        "regen is a heal"
+    );
 }

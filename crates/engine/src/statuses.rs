@@ -134,6 +134,13 @@ impl StatusDb {
         Ok((db, warnings))
     }
 
+    /// Adds or replaces a def, so a test can carry a status no shipped file
+    /// defines.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: StatusDef) {
+        self.defs.insert(def.id.clone(), def);
+    }
+
     pub fn get(&self, id: &StatusId) -> Option<&StatusDef> {
         self.defs.get(id)
     }

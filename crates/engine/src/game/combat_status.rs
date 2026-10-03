@@ -135,6 +135,19 @@ impl Game {
             .sum()
     }
 
+    /// `value` scaled by `(100 + sum of f) %`, floored at 0 so a deep enough
+    /// cut zeroes a stat but never inverts it. The one place a percent
+    /// behaviour is turned into a number, for attack and mitigation alike.
+    pub(crate) fn status_scaled(
+        &self,
+        entity: Entity,
+        value: i32,
+        f: impl Fn(&StatusBehaviour) -> Option<i32>,
+    ) -> i32 {
+        let percent = (100 + self.status_sum(entity, f)).max(0);
+        (value as f64 * percent as f64 / 100.0).round() as i32
+    }
+
     /// Whether any status `entity` carries has a behaviour `pred` accepts.
     pub(crate) fn has_behaviour(
         &self,
@@ -429,10 +442,8 @@ impl Game {
     fn apply_field_buff_tick(&mut self, entity: Entity, kind: FieldBuffKind, power: i32) {
         match kind {
             FieldBuffKind::Regen => {
-                if self.creature_alive(entity)
-                    && let Some(mut stats) = self.world.get_mut::<Stats>(entity)
-                {
-                    stats.hp = (stats.hp + power).min(stats.max_hp);
+                if self.creature_alive(entity) {
+                    self.restore_hp(entity, power);
                 }
             }
             FieldBuffKind::Trickle => {

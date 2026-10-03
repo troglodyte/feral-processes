@@ -220,6 +220,9 @@ pub(crate) struct CreatureRestore {
     /// in `resources::Outposts` keyed by tile, not an entity, so unlike
     /// `pending_study` there is nothing else to wait on.
     pub(crate) pending_outpost_crew: Vec<(Entity, (i32, i32))>,
+    /// Programs held in a Power Siphon, with the tile it stands on —
+    /// `pending_study`'s deferral, since a siphon is a structure.
+    pub(crate) pending_siphon: Vec<(Entity, (i32, i32))>,
     /// `(siege_order, member, siege_cell)` — `sortie_members`' shape,
     /// applied to `game::siege::persist::restore` rather than
     /// `restore_sorties`: entity ids aren't stable across a save/load round
@@ -267,6 +270,7 @@ impl CreatureRestore {
             pending_patrols: Vec::new(),
             pending_study: Vec::new(),
             pending_outpost_crew: Vec::new(),
+            pending_siphon: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_stolen_from: Vec::new(),
             pending_ranks: Vec::new(),
@@ -1248,6 +1252,30 @@ impl Game {
         }
     }
 
+    /// Reattaches `components::Siphoned` now that structures are restored —
+    /// `attach_pinned_subjects`' shape. **A tile naming no structure, one that
+    /// no longer declares `siphons`, or a siphon an earlier claimant already
+    /// holds drops the hold silently**: the program comes back as ordinary
+    /// `Staff`, which is what releasing it would have left it as, minus the
+    /// integrity cost a load has no business charging.
+    fn attach_siphoned(
+        &mut self,
+        pending: Vec<(Entity, (i32, i32))>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        for (program, tile) in pending {
+            let Some(&siphon) = structure_positions.get(&tile) else {
+                continue;
+            };
+            if !self.is_siphon(siphon) || self.siphon_holder(siphon).is_some() {
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::Siphoned { siphon });
+        }
+    }
+
     /// Reattaches `components::PostedAt` now that `resources::Outposts` is
     /// restored — `attach_pinned_subjects`' shape, but with nothing to wait
     /// on: an outpost is a record keyed by tile, not a structure entity, so
@@ -1732,6 +1760,7 @@ impl Game {
             pending_patrols,
             pending_study,
             pending_outpost_crew,
+            pending_siphon,
             pending_siege_members,
             pending_stolen_from,
             pending_ranks,
@@ -1771,6 +1800,7 @@ impl Game {
 
         game.attach_cronjobs(pending_cronjobs, &structure_positions);
         game.attach_pinned_subjects(pending_study, &structure_positions);
+        game.attach_siphoned(pending_siphon, &structure_positions);
         game.attach_stolen_from(pending_stolen_from, &structure_positions);
         // After structures load, `attach_stolen_from`'s own reason: a
         // siege re-seats every structure still standing as a body on the
@@ -2284,6 +2314,12 @@ impl Game {
                 // shouldn't co-occur in a save this build writes, but an
                 // older or hand-edited one could carry both.
                 ctx.pending_outpost_crew.push((creature_id, tile));
+            } else if let Some(tile) = c.siphon {
+                // After `study_station` and `outpost`, before `cronjob`:
+                // `Game::siphon_program` frees the program's `Task`, so a
+                // held program is never also posted, and where a hand-edited
+                // save says both, the hold is the tether that survives.
+                ctx.pending_siphon.push((creature_id, tile));
             } else if let Some(cronjob) = c.cronjob.clone() {
                 ctx.pending_cronjobs.push((creature_id, cronjob));
             }
@@ -2446,6 +2482,14 @@ impl Game {
             .map(|u| u.station)
             .and_then(|station| self.world.get::<Position>(station))
             .map(|station_pos| (station_pos.x, station_pos.y));
+        // The siphon's tile, `study_station`'s reason: entity ids aren't
+        // stable across a save/load round trip.
+        let siphon = self
+            .world
+            .get::<crate::components::Siphoned>(e)
+            .map(|s| s.siphon)
+            .and_then(|siphon| self.world.get::<Position>(siphon))
+            .map(|pos| (pos.x, pos.y));
         // `(order, cell)` in an in-progress siege — `None` whenever there is
         // no open `TacticalBattle`, the one open is not a siege
         // (`siege_pack == 0`, that field's own "not a siege" answer), or `e`
@@ -2544,6 +2588,7 @@ impl Game {
                 .world
                 .get::<crate::components::PostedAt>(e)
                 .map(|p| p.0),
+            siphon,
             pursuing: self.world.get::<Pursuing>(e).is_some(),
             boss: self.world.get::<Boss>(e).is_some(),
             carrying: self

@@ -129,7 +129,7 @@ impl Game {
         }
     }
 
-    fn is_siphon(&self, structure: Entity) -> bool {
+    pub(crate) fn is_siphon(&self, structure: Entity) -> bool {
         self.world
             .get::<Structure>(structure)
             .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))

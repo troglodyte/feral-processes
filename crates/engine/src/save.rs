@@ -677,6 +677,22 @@ pub struct CreatureSave {
     /// it had.
     #[serde(default)]
     pub outpost: Option<(i32, i32)>,
+    /// The Power Siphon tile this program is held in, if it is
+    /// `ProgramRole::Siphoned` — `components::Siphoned`'s structure,
+    /// identified by its own tile for `study_station`'s reason: entity ids
+    /// aren't stable across a save/load round trip. `None` for a program
+    /// that isn't held.
+    ///
+    /// Resolved after `restore_structures`, `study_station`'s deferral. **A
+    /// tile resolving to no structure, or to one that no longer declares
+    /// `siphons`, drops the hold silently**, and so does a second claimant on
+    /// a siphon already held: the program comes back as ordinary `Staff`.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** (the save is field-named RON) — an older save simply carries no
+    /// held programs, which is what it had.
+    #[serde(default)]
+    pub siphon: Option<(i32, i32)>,
     /// Whether this creature is currently `Pursuing` the player — see that
     /// component's docs. Meaningless unless one of the two tethers above is
     /// also `Some`.
@@ -2334,6 +2350,7 @@ mod tests {
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

@@ -1911,6 +1911,7 @@ impl Game {
             pending_patrols,
             pending_study,
             pending_outpost_crew,
+            pending_siphon,
             pending_siege_members,
             pending_stolen_from,
             pending_ranks,
@@ -1984,6 +1985,10 @@ impl Game {
         // be the same kind of stale invariant `pending_study` guards
         // against.
         drop(pending_outpost_crew);
+        // And once more for a held program: `commit_program` refuses one, so
+        // a snapshot never carries `siphon`, and re-holding it here would
+        // skip the checks `siphon_program` runs — revalidated by hand.
+        drop(pending_siphon);
         // The wield first, and the two arms are exclusive by construction:
         // `wield_program` stands a member down, so a snapshot is never both
         // wielded and holding a slot.

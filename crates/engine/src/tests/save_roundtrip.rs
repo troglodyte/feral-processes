@@ -176,14 +176,20 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         .get_mut::<Needs>(member)
         .unwrap()
         .set(&need, 42.0);
+    // Reseated at chosen figures (`spawn_tamed` seats at its own, and a bare
+    // `Stats` write is overwritten by recompute), so the saved `base` has
+    // distinct values to get wrong. The bank and hold flag come after: seating
+    // zeroes them.
+    reseat_with_stats(game, member, 30, 6, 40);
+    game.world.entity_mut(member).insert((
+        crate::components::StatPoints(9),
+        crate::components::HoldPoints(true),
+    ));
     // Damaged, so a builder that wrote `max_hp` into `hp` (or the reverse)
-    // has two different numbers to get wrong. `mitigation` is set for the
-    // same reason — `spawn_tamed` leaves it at 1, which is close enough to
-    // several other fields to be worth moving.
+    // has two different numbers to get wrong.
     {
         let mut stats = game.world.get_mut::<Stats>(member).unwrap();
         stats.hp = stats.max_hp - 13;
-        stats.mitigation = 17;
     }
 
     game.world.entity_mut(worker).insert((
@@ -414,7 +420,27 @@ fn a_rich_program_writes_every_field_it_was_given() {
         (0, 0, 0),
         "derived figures are not stored"
     );
-    assert!(saved.base.is_some(), "base");
+    let base = saved.base.expect("a seated program writes its base");
+    let derived = crate::progression::derive(
+        &base,
+        game.world
+            .get::<crate::components::Attributes>(member)
+            .unwrap(),
+        game.world.resource::<crate::attributes::AttributeDb>(),
+    );
+    let receipt = *game.world.get::<BoughtStats>(member).unwrap();
+    let gear = game.gear_bonus(member);
+    assert_eq!(
+        (
+            derived.max_hp + receipt.max_hp,
+            derived.atk + receipt.atk + gear.atk,
+            derived.mitigation + receipt.mitigation + gear.mitigation
+        ),
+        (live.max_hp, live.atk, live.mitigation),
+        "the saved base derives the live stats"
+    );
+    assert_eq!(saved.stat_points, 9, "stat_points");
+    assert!(saved.hold_points, "hold_points");
     assert_ne!(saved.hp, live.max_hp, "the fixture damaged it");
     assert!(saved.tamed, "tamed");
     assert_eq!(saved.power, 41.5, "power");

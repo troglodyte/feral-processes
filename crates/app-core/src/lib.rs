@@ -1636,6 +1636,12 @@ pub enum Mode {
     /// two** — `Game::pinned_subject` decides which of the two the screen
     /// is showing, so there is nowhere for that rule to be stated twice.
     PinSubject,
+    /// The Power Siphon beside the party: a staff picker when it is empty,
+    /// one release row when it holds a program. `Game::siphon_holder` picks
+    /// which, for the same reason as `PinSubject`'s single row — the screen
+    /// and the key read one call. Nothing is written until a row resolves,
+    /// so Esc simply closes it.
+    Siphon,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -2302,6 +2308,9 @@ impl Mode {
             // Opened from the base menu, `BuildProgram`'s own reason —
             // never reachable mid-battle at all.
             | Mode::PinSubject
+            // Opened from the map with `P` beside the machine, `RigTool`'s
+            // reason — never layers over a fight.
+            | Mode::Siphon
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
@@ -2931,6 +2940,10 @@ pub struct App {
     /// Session state, `depot_filter`'s reason — the screen acts on a
     /// machine, so it is re-read after every edit rather than restored.
     pub rig_tool: Option<RigToolScreen>,
+    /// The Power Siphon `Mode::Siphon` is acting on. Re-validated against
+    /// `Game::adjacent_siphons` on every key, since the machine can be
+    /// destroyed or walked away from while the screen is open.
+    pub siphon: Option<Entity>,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

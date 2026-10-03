@@ -413,3 +413,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   one worker who switches machines only at a cycle boundary; its edges call
   `systems::feeds` over the pull's reach, Teardown Rigs are never members, and a body that is not staff (the player's own
   `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**
+- **A held program is `ProgramRole::Siphoned` and grid supply is counted off the `Siphoned` marker, so removing the marker is the whole release; every despawn path for a siphon must release first.**

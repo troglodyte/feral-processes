@@ -5940,6 +5940,7 @@ mod tests {
                 patrol_position: None,
                 study_station: None,
                 outpost: None,
+                siphon: None,
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,

@@ -48,7 +48,7 @@ Three tiers, and which one you want depends on what you are doing:
 
 | subsystem | reference | seams |
 |---|---|---:|
-| the base: structures, building & raids | `references/base-structures.md` | 24 |
+| the base: structures, building & raids | `references/base-structures.md` | 25 |
 | the base: labour scheduling & postings (assignment, wander, one-body-per-cell) | `references/base-labour.md` | 17 |
 | the base: production chains, machines, hauling, depots & the transfer screen | `references/base-production.md` | 38 |
 | the base: digging, rock & the base grid | `references/base-digging.md` | 17 |

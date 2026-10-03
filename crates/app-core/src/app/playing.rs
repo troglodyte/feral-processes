@@ -535,6 +535,11 @@ impl App {
                 // beside you" on the transfer picker, where `[F]` opens a
                 // Depot's filter.
                 GameKey::Char('F') => self.open_rig_tool(),
+                // `P` because it is unbound on the map: `D`, `L`, `N`, `F`
+                // and `Z` are taken, and `T` and `W` are hidden keys
+                // `no_shipped_help_page_names_a_hidden_key` forbids a page
+                // from naming. Uppercase, as every map action is.
+                GameKey::Char('P') => self.open_siphon(),
                 GameKey::Char('c') => {
                     let offer = game.transfer_offer();
                     let carriers = game.rack_offer();

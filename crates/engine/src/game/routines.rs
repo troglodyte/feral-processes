@@ -735,6 +735,16 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
+        if self
+            .world
+            .get::<crate::components::Siphoned>(creature)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::HELD_IN_SIPHON
+            ));
+        }
         // This despawns `creature` below (`dissolve_tamed_program`), and a
         // posted crew member despawned mid-shift would strand its outpost
         // counting a body that no longer exists — the outposts plan's own

@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::*;
 
-use crate::components::{Position, PowerFuel, Structure};
+use crate::components::{Position, PowerFuel, Siphoned, Structure};
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::structures::{StructureDb, StructureDef};
@@ -47,6 +47,9 @@ pub(crate) struct PowerLedger {
 /// writers of a structure's component list insert it and a fixture that
 /// hand-spawns a bare `Structure` should read as never having been wired up
 /// rather than as running on free power.
+///
+/// Siphon occupancy is deliberately not part of this predicate: it gates
+/// `supply` alone, in `ledger`.
 pub(crate) fn is_fuelled(def: &StructureDef, fuel: Option<&PowerFuel>) -> bool {
     def.power_upkeep.is_none() || fuel.is_some_and(|f| f.ticks_left > 0)
 }
@@ -130,6 +133,10 @@ pub(crate) fn grid_rung(def: &StructureDef, chain: &HashMap<ItemId, u32>) -> Opt
 /// supplier's fuel buys. `systems::power_grid_system` spends and refuels
 /// **before** calling this, so the figure is always this tick's.
 ///
+/// A structure with `StructureDef::siphons` counts toward `supply` only
+/// while some program's `Siphoned` points at it, so an empty siphon supplies
+/// 0 and draws 0.
+///
 /// A structure whose def is missing from `db` contributes nothing to either
 /// sum and is never dark — the same "an unknown kind is inert" shape the
 /// neighbouring base systems already use, rather than a panic.
@@ -139,6 +146,12 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
     // (entity, rung, (x, y), draw) for every deployed machine, collected
     // before the cut runs so the sort sees the whole base at once.
     let mut machines: Vec<(Entity, u32, (i32, i32), u32)> = Vec::new();
+    // The siphons some program currently holds, collected up front so the
+    // loop below asks a set rather than scanning every program per structure.
+    let occupied: HashSet<Entity> = world
+        .iter_entities()
+        .filter_map(|e| e.get::<Siphoned>().map(|s| s.siphon))
+        .collect();
 
     for entity_ref in world.iter_entities() {
         let Some(structure) = entity_ref.get::<Structure>() else {
@@ -148,8 +161,13 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
             continue;
         };
         // A burner supplies nothing while it is dry — see `is_fuelled`, the
-        // one predicate this and `systems::power_regen_system` both ask.
-        if is_fuelled(def, entity_ref.get::<PowerFuel>()) {
+        // one predicate this and `systems::power_regen_system` both ask. A
+        // siphon additionally supplies only while a program holds it; that
+        // gate lives here, not in `is_fuelled`, because a siphon has no
+        // `power_regen` for the regen system to ask about.
+        if is_fuelled(def, entity_ref.get::<PowerFuel>())
+            && (!def.siphons || occupied.contains(&entity_ref.id()))
+        {
             supply += def.power_supply;
         }
         if def.runs_a_job() {

@@ -2212,6 +2212,17 @@ pub struct UnderStudy {
     pub station: Entity,
 }
 
+/// A tamed program held in a Power Siphon — the grid's supply from that
+/// siphon is counted off this marker, so a siphon with no holder supplies
+/// nothing.
+///
+/// `siphon` is the structure `Entity`, the same shape as
+/// `UnderStudy::station`: the program points at the machine holding it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Siphoned {
+    pub siphon: Entity,
+}
+
 /// A tamed program posted at an outpost — `Game::post_to_outpost`'s one
 /// door, and the only fact this feature stores about who is standing there.
 ///

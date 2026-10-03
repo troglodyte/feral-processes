@@ -506,6 +506,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -584,6 +585,7 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -704,6 +706,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1000,6 +1003,7 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1108,6 +1112,7 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             patrol_position: None,
             study_station: None,
             outpost: Some(target),
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -1265,6 +1270,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: true,
         carrying: None,
         carrying_program: None,
@@ -1409,6 +1415,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1486,9 +1493,16 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
 /// own shape: a caller that needs the party inside calls `stand_in_base`
 /// itself, since the row this fixture exists for is `Locality::Base`.
 pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
+    app_owning_a_program_and_a_station_of("research_station", "research_node", seed)
+}
+
+/// `app_owning_a_program_and_a_research_station`'s fixture with the standing
+/// structure's kind chosen — one program on the staff and one `kind` at
+/// base-space `(2, 0)`, so `stand_beside_the_compiler` puts the party next to it.
+pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = scratch_path("research_station", seed);
+    let path = scratch_path(label, seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
@@ -1538,6 +1552,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1569,7 +1584,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
     data.structures.push(save::StructureSave {
-        kind: "research_node".to_string(),
+        kind: kind.to_string(),
         position: (2, 0),
         durability: None,
         tier: None,
@@ -1667,6 +1682,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -1785,6 +1801,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,
@@ -2146,6 +2163,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -2254,6 +2272,7 @@ pub(crate) fn app_with_companions_and_cargo(
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -2570,6 +2589,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,
@@ -3026,6 +3046,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         patrol_position: None,
         study_station: None,
         outpost: None,
+        siphon: None,
         pursuing: false,
         carrying: None,
         carrying_program: None,

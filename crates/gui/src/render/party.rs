@@ -299,6 +299,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::Sortie => "Away on a sortie",
         ProgramRole::Outpost => "Posted at an outpost",
         ProgramRole::UnderStudy => "Under study",
+        ProgramRole::Siphoned => "Held in Power Siphon",
         ProgramRole::Staff => "Base staff",
     }
 }
@@ -783,7 +784,8 @@ mod tests {
         let pets = vec![
             pet("aa", ProgramRole::Sortie),
             pet("bb", ProgramRole::UnderStudy),
-            pet("cc", ProgramRole::Staff),
+            pet("cc", ProgramRole::Siphoned),
+            pet("dd", ProgramRole::Staff),
         ];
         let rows = companion_page_rows(&pets, 0);
         let headings: Vec<&str> = rows
@@ -795,7 +797,12 @@ mod tests {
             .collect();
         assert_eq!(
             headings,
-            vec!["Away on a sortie", "Under study", "Base staff"],
+            vec![
+                "Away on a sortie",
+                "Under study",
+                "Held in Power Siphon",
+                "Base staff"
+            ],
             "the pinned run needs its own heading between the other two"
         );
     }
@@ -1476,6 +1483,7 @@ mod tests {
             patrol_position: None,
             study_station: None,
             outpost: None,
+            siphon: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

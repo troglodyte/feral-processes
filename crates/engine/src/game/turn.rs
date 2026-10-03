@@ -346,6 +346,8 @@ impl Game {
         // program has gone without a slot. Order-free against the three
         // above — it writes a `Nothing` memory no other pass reads.
         self.note_unslotted();
+        // A hold is a stretch too, on its own slower period.
+        self.note_siphoned();
         // Beside `note_strandings` and for its reason: `needs_tick_system`
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.
@@ -675,6 +677,10 @@ impl Game {
             for worker in workers {
                 self.world.entity_mut(worker).remove::<Task>();
             }
+            // Every despawn door lets go of what the structure held first,
+            // or the holder keeps a marker to a dead entity.
+            self.release_siphon_at(entity);
+            self.release_study_station(entity);
             self.world.despawn(entity);
         }
     }
@@ -1568,7 +1574,8 @@ impl Game {
                     ProgramRole::Sortie
                     | ProgramRole::Outpost
                     | ProgramRole::Staff
-                    | ProgramRole::UnderStudy,
+                    | ProgramRole::UnderStudy
+                    | ProgramRole::Siphoned,
                 ) => false,
                 None => false,
             };

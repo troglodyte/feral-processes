@@ -381,6 +381,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         patrol_position: _,
         study_station: _,
         outpost: _,
+        siphon: _,
         pursuing: _,
         carrying: _,
         carrying_program: _,
@@ -482,6 +483,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(saved.patrol_position.is_none(), "patrol_position");
     assert!(saved.study_station.is_none(), "study_station");
     assert!(saved.outpost.is_none(), "outpost");
+    assert!(saved.siphon.is_none(), "siphon");
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
     assert!(saved.carrying_program.is_none(), "carrying_program");
@@ -1485,4 +1487,200 @@ fn a_build_sites_tamed_program_without_a_base_is_refused_on_load() {
         .expect("a held program without a base must not load");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(err.to_string().contains("no base"), "{err}");
+}
+
+// ---------------------------------------------------------------------
+// `CreatureSave::siphon` (Power Siphon, phase 4) — real save/load round
+// trips, since a RON dump alone cannot catch a field that is skipped.
+// ---------------------------------------------------------------------
+
+fn siphon_supply(game: &Game) -> u32 {
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    crate::game::base::power::ledger(&game.world, db, items).supply
+}
+
+fn siphon_grudge_strikes(game: &Game, who: Entity) -> Vec<u32> {
+    game.world
+        .get::<Memories>(who)
+        .map(|m| {
+            m.0.iter()
+                .filter(|m| m.def.as_str() == "siphoned")
+                .map(|m| m.strikes)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Saves `game` to a temp file named for `tag`, optionally rewrites the RON
+/// text, and loads it back.
+fn reload_with(game: &mut Game, tag: &str, edit: impl FnOnce(String) -> String) -> Game {
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_siphon_{tag}_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, edit(text)).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let _ = std::fs::remove_file(&path);
+    loaded
+}
+
+fn named_program(game: &mut Game, name: &str) -> Entity {
+    game.owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains(name))
+        .unwrap_or_else(|| panic!("{name} is back on the roster"))
+        .entity
+}
+
+#[test]
+fn a_siphoned_program_stays_held_through_save_and_load() {
+    let mut game = Game::new(20261003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let siphon = spawn_structure_at(&mut game, "power_siphon", 3, 3);
+    let program = spawn_tamed(&mut game, 100, 5);
+    game.world.get_mut::<Position>(program).unwrap().x = 6;
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.siphon_program(program, siphon).unwrap();
+    game.world.resource_mut::<GameClock>().tick = crate::tuning::SIPHON_GRUDGE_PERIOD;
+    game.note_siphoned();
+    let supply_before = siphon_supply(&game);
+    let strikes_before = siphon_grudge_strikes(&game, program);
+    assert_eq!(strikes_before.len(), 1, "the fixture holds a grudge");
+
+    let mut loaded = reload_with(&mut game, "held", |t| t);
+
+    let back = named_program(&mut loaded, "Analyst");
+    assert_eq!(
+        loaded.program_role(back),
+        Some(ProgramRole::Siphoned),
+        "a held program reloads held"
+    );
+    let reloaded = loaded
+        .find_blocking_structure_at(3, 3)
+        .expect("the siphon reloads standing");
+    assert_eq!(
+        loaded
+            .world
+            .get::<crate::components::Siphoned>(back)
+            .map(|s| s.siphon),
+        Some(reloaded),
+        "the hold resolves to the reloaded siphon's own entity"
+    );
+    assert_eq!(loaded.siphon_holder(reloaded), Some(back));
+    assert_eq!(siphon_supply(&loaded), supply_before, "supply is unchanged");
+    assert_eq!(siphon_grudge_strikes(&loaded, back), strikes_before);
+}
+
+#[test]
+fn an_old_save_with_no_siphon_key_loads() {
+    let mut game = Game::new(20261004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+
+    let mut loaded = reload_with(&mut game, "legacy", |text| {
+        assert!(text.contains("siphon:"), "the key must be there to remove");
+        let stripped: String = text
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("siphon:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !stripped.contains("siphon:"),
+            "the fixture must actually remove the key or the test proves nothing"
+        );
+        stripped
+    });
+
+    let back = named_program(&mut loaded, "Analyst");
+    assert_eq!(loaded.program_role(back), Some(ProgramRole::Staff));
+}
+
+#[test]
+fn a_save_naming_a_tile_with_no_siphon_drops_the_hold_silently() {
+    let mut game = Game::new(20261005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let siphon = spawn_structure_at(&mut game, "power_siphon", 3, 3);
+    let program = spawn_tamed(&mut game, 100, 5);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.siphon_program(program, siphon).unwrap();
+    // The siphon's tile is what the save writes; a hand edit moves it to a
+    // tile nobody is standing on.
+    let mut loaded = reload_with(&mut game, "empty_tile", |text| {
+        let at = "siphon: Some((3, 3))";
+        assert!(text.contains(at), "the writer must have named the tile");
+        text.replace(at, "siphon: Some((77, 77))")
+    });
+
+    let back = named_program(&mut loaded, "Analyst");
+    assert_eq!(loaded.program_role(back), Some(ProgramRole::Staff));
+}
+
+#[test]
+fn a_save_naming_a_tile_with_a_non_siphon_structure_drops_the_hold() {
+    let mut game = Game::new(20261004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let siphon = spawn_structure_at(&mut game, "power_siphon", 3, 3);
+    spawn_structure_at(&mut game, "data_cache", 5, 5);
+    let program = spawn_tamed(&mut game, 100, 5);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.siphon_program(program, siphon).unwrap();
+    // The tile now names a standing structure that holds nothing.
+    let mut loaded = reload_with(&mut game, "wrong_structure", |text| {
+        let at = "siphon: Some((3, 3))";
+        assert!(text.contains(at), "the writer must have named the tile");
+        text.replace(at, "siphon: Some((5, 5))")
+    });
+
+    let back = named_program(&mut loaded, "Analyst");
+    assert_eq!(loaded.program_role(back), Some(ProgramRole::Staff));
+}
+
+#[test]
+fn a_siphon_naming_two_programs_holds_only_one() {
+    let mut game = Game::new(20261006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let siphon = spawn_structure_at(&mut game, "power_siphon", 3, 3);
+    let first = spawn_tamed(&mut game, 100, 5);
+    let second = spawn_tamed(&mut game, 100, 5);
+    game.rename_companion(first, Some("Alpha".to_string()))
+        .unwrap();
+    game.rename_companion(second, Some("Bravo".to_string()))
+        .unwrap();
+    game.siphon_program(first, siphon).unwrap();
+    // Hand-edited: a second program also claims the tile. `siphon_program`
+    // would refuse it, so write the marker directly.
+    game.world
+        .entity_mut(second)
+        .insert(crate::components::Siphoned { siphon });
+
+    let mut loaded = reload_with(&mut game, "two", |t| t);
+
+    let ids: Vec<Entity> = ["Alpha", "Bravo"]
+        .iter()
+        .map(|n| named_program(&mut loaded, n))
+        .collect();
+    let roles: Vec<_> = ids.iter().map(|e| loaded.program_role(*e)).collect();
+    assert_eq!(
+        roles
+            .iter()
+            .filter(|r| **r == Some(ProgramRole::Siphoned))
+            .count(),
+        1,
+        "exactly one claimant keeps the hold: {roles:?}"
+    );
+    assert_eq!(
+        roles
+            .iter()
+            .filter(|r| **r == Some(ProgramRole::Staff))
+            .count(),
+        1,
+        "the other comes back as staff: {roles:?}"
+    );
 }

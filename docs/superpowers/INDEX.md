@@ -452,6 +452,7 @@ shipped each, not the one containing the spec's first commit.
 | `2026-09-30-affix-modding-design` | Adding and removing affixes on owned gear; the Affixes research tree | `v0.14.2` |
 | `2026-10-02-production-lines-design` | One worker per production line; a line is derived, never stored | `v0.14.6` |
 | `2026-10-02-derived-programs-design` | Owned programs derive their stats from attributes; a level grants attribute points a program can hold and spend; mining reads the program's own Analysis | `v0.15.0`; `ProgramBase` in `crates/engine/src/components.rs`, `Game::seat_derived`, save format 34, `docs/measurements/2026-10-02-derived-programs.md` |
+| `2026-10-03-power-siphon-design` | A base structure that holds a staff program and supplies +4 grid power while it is held; the program builds a grudge and comes out at 25% Integrity or less | `v0.15.1`; `crates/engine/src/game/base/siphon.rs`, `ProgramRole::Siphoned`, `StructureDef::siphons`, `assets/memories/siphoned.ron`, `Mode::Siphon` |
 
 ## Four rows that need a footnote
 

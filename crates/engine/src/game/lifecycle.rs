@@ -1316,7 +1316,13 @@ impl Game {
         // Every door seats a tamed program and the writer always records its
         // `base`, so a tamed record without one cannot have come from this
         // build; loading it would read its stats as zero.
-        if let Some(c) = data.creatures.iter().find(|c| c.tamed && c.base.is_none()) {
+        let held = data.build_sites.iter().filter_map(|b| b.program.as_ref());
+        if let Some(c) = data
+            .creatures
+            .iter()
+            .chain(held)
+            .find(|c| c.tamed && c.base.is_none())
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!(

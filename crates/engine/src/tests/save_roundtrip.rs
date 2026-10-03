@@ -1454,3 +1454,35 @@ fn a_tamed_record_without_a_base_is_refused_on_load() {
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(err.to_string().contains("no base"), "{err}");
 }
+
+/// The same refusal for a program an order is holding: `BuildSiteSave::program`
+/// is a `CreatureSave` too, and a refund would otherwise seat nothing.
+#[test]
+fn a_build_sites_tamed_program_without_a_base_is_refused_on_load() {
+    let dir = scratch_assets_dir("build_site_program_without_base");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 30, 6);
+    let snapshot = game.creature_save_for(program).expect("snapshot");
+    game.world.spawn((
+        BuildSite {
+            program: Some(snapshot),
+            ..BuildSite::new("fabricator".to_string(), vec![])
+        },
+        Position { x: 1, y: 1 },
+    ));
+    game.save(&path).expect("save");
+    let mut data = crate::save::load_from_file(&path).expect("read back");
+    let held = data.build_sites[0].program.as_mut().expect("held program");
+    assert!(held.base.is_some(), "the writer records the base");
+    held.base = None;
+    crate::save::save_to_file(&path, &data).expect("write");
+
+    let err = Game::load(&path, &test_assets_dir())
+        .err()
+        .expect("a held program without a base must not load");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("no base"), "{err}");
+}

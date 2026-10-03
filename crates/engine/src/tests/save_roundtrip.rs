@@ -1622,6 +1622,27 @@ fn a_save_naming_a_tile_with_no_siphon_drops_the_hold_silently() {
 }
 
 #[test]
+fn a_save_naming_a_tile_with_a_non_siphon_structure_drops_the_hold() {
+    let mut game = Game::new(20261004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let siphon = spawn_structure_at(&mut game, "power_siphon", 3, 3);
+    spawn_structure_at(&mut game, "data_cache", 5, 5);
+    let program = spawn_tamed(&mut game, 100, 5);
+    game.rename_companion(program, Some("Analyst".to_string()))
+        .expect("named");
+    game.siphon_program(program, siphon).unwrap();
+    // The tile now names a standing structure that holds nothing.
+    let mut loaded = reload_with(&mut game, "wrong_structure", |text| {
+        let at = "siphon: Some((3, 3))";
+        assert!(text.contains(at), "the writer must have named the tile");
+        text.replace(at, "siphon: Some((5, 5))")
+    });
+
+    let back = named_program(&mut loaded, "Analyst");
+    assert_eq!(loaded.program_role(back), Some(ProgramRole::Staff));
+}
+
+#[test]
 fn a_siphon_naming_two_programs_holds_only_one() {
     let mut game = Game::new(20261006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);

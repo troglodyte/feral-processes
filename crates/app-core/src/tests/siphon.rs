@@ -108,6 +108,23 @@ fn esc_leaves_the_siphon_screen_writing_nothing() {
 }
 
 #[test]
+fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
+    let mut app = app_beside_a_siphon(9106);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+    app.handle_key(GameKey::Char('P'));
+    assert_eq!(app.mode, Mode::Siphon);
+
+    // Walked away while the screen was open.
+    stand_in_base_at(&mut app, 40, 40);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.siphon.is_none());
+    let game = app.game.as_mut().unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+}
+
+#[test]
 fn p_is_unbound_in_the_stack_block() {
     let mut app = app_underground(9105);
     assert_eq!(app.mode, Mode::Playing);

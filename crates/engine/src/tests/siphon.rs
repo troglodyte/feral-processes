@@ -122,7 +122,7 @@ fn hp(game: &Game, program: Entity) -> i32 {
 }
 
 fn expected_after_release(hp: i32, max_hp: i32) -> i32 {
-    (hp - (max_hp as f32 * SIPHON_RELEASE_INTEGRITY_LOSS) as i32).max(1)
+    (hp - (max_hp as f32 * SIPHON_RELEASE_INTEGRITY_LOSS).ceil() as i32).max(1)
 }
 
 /// Asserts `siphon_program` refused with `fragment` in its message and wrote
@@ -328,6 +328,22 @@ fn release_hp_is_three_quarters_of_max_and_never_below_one() {
 }
 
 #[test]
+fn a_full_health_release_leaves_at_most_a_quarter_whatever_the_max_hp() {
+    // Truncating the loss left 10/38 and 13/49, past the quoted quarter.
+    assert_eq!(siphon_release_hp(38, 38), 9);
+    assert_eq!(siphon_release_hp(49, 49), 12);
+    assert_eq!(siphon_release_hp(1, 1), 1);
+    assert_eq!(siphon_release_hp(100, 100), 25);
+    for max_hp in 4..300 {
+        let left = siphon_release_hp(max_hp, max_hp);
+        assert!(
+            left * 4 <= max_hp,
+            "{left} of {max_hp} is more than a quarter"
+        );
+    }
+}
+
+#[test]
 fn release_takes_75_percent_of_max_hp_and_never_below_one() {
     let (mut game, siphon, program) = base_with_a_siphon();
     game.siphon_program(program, siphon).unwrap();
@@ -474,6 +490,18 @@ fn a_held_program_cannot_be_pinned_for_study_or_dispatched() {
     let err = game.pin_subject(program, station).unwrap_err();
     assert!(err.contains("base staff"), "unexpected error: {err}");
     assert!(game.world.get::<components::UnderStudy>(program).is_none());
+
+    let (mut game, siphon, program) = base_with_a_siphon();
+    super::routes::deploy_relay(&mut game);
+    game.siphon_program(program, siphon).unwrap();
+    let site = game.sortie_board().expect("a Relay stands")[0].id.clone();
+    let before = game.world.resource::<Sorties>().0.len();
+    assert!(matches!(
+        game.dispatch_sortie(&site, &[program]),
+        Err(crate::game::sortie::SortieRefusal::NotStaff(_))
+    ));
+    assert_eq!(game.world.resource::<Sorties>().0.len(), before);
+    assert!(held(&game, program), "refusal leaves the hold alone");
 }
 
 #[test]
@@ -773,4 +801,99 @@ fn ticking_through_a_grudge_period_strikes_the_held_program() {
 fn the_release_quote_is_the_charged_price() {
     let left = ((1.0 - SIPHON_RELEASE_INTEGRITY_LOSS) * 100.0).round() as u32;
     assert_eq!(Game::siphon_release_ceiling_percent(), left);
+}
+
+/// A sulking program siphoned beside an amenity is frozen mid-errand. The
+/// marker it carried must not outlive the hold: `note_respites` would keep
+/// writing `unwound_at` for it, topping the fondness up for the whole hold.
+#[test]
+fn a_held_program_that_was_sulking_collects_no_respite_and_downs_tools() {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    place_home(&mut game);
+    spawn_structure_at(&mut game, "defrag_bay", 4, 0);
+    {
+        let mut at = game.world.get_mut::<Position>(program).unwrap();
+        at.x = 3;
+        at.y = 0;
+    }
+    game.world.entity_mut(program).insert(Disposition::Steady);
+    super::respite::sulk(&mut game, program);
+    game.siphon_program(program, siphon).unwrap();
+    assert!(
+        game.world.get::<Disgruntled>(program).is_none(),
+        "a held program is out of the role system, mood marker included"
+    );
+
+    let (_, cap, _) = grudge_def(&game);
+    let start = game.current_tick();
+    for _ in 0..SIPHON_GRUDGE_PERIOD * cap as u64 {
+        game.tick();
+    }
+    assert!(game.current_tick() >= start + SIPHON_GRUDGE_PERIOD * cap as u64);
+    assert!(held(&game, program));
+    let unwound = game
+        .world
+        .get::<Memories>(program)
+        .map(|m| m.0.iter().any(|m| m.def.as_str() == "unwound_at"))
+        .unwrap_or(false);
+    assert!(!unwound, "a held program takes no respite");
+    assert!(game.morale(program) <= MORALE_DOWNS_TOOLS_AT);
+}
+
+#[test]
+fn holding_a_program_that_carries_a_kill_puts_the_kill_back() {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    let player = game.player_entity();
+    let shelved = game
+        .world
+        .get::<components::DownedPrograms>(player)
+        .unwrap()
+        .0
+        .len();
+    game.world
+        .entity_mut(program)
+        .insert(components::CarryingProgram(crate::items::DownedProgram {
+            species: "scrapper".to_string(),
+            level: 5,
+            rarity: crate::components::Rarity::Ordinary,
+            boss: false,
+            condition: 70,
+            carried: None,
+        }));
+
+    game.siphon_program(program, siphon).unwrap();
+
+    assert!(
+        game.world
+            .get::<components::CarryingProgram>(program)
+            .is_none()
+    );
+    assert_eq!(
+        game.world
+            .get::<components::DownedPrograms>(player)
+            .unwrap()
+            .0
+            .len(),
+        shelved + 1,
+        "the kill comes back to the pack rather than vanishing"
+    );
+}
+
+#[test]
+fn a_temporary_siphon_expiring_releases_its_program_hurt() {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    game.world
+        .entity_mut(siphon)
+        .insert(components::Temporary { ticks_remaining: 1 });
+    game.siphon_program(program, siphon).unwrap();
+
+    game.age_temporary_structures();
+
+    assert!(
+        game.world.get_entity(siphon).is_err(),
+        "the siphon burned out"
+    );
+    assert!(!held(&game, program), "no marker to a dead entity");
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert_eq!(hp(&game, program), 25);
 }

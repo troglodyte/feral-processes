@@ -325,26 +325,6 @@ impl crate::Game {
         }
     }
 
-    /// Remembers, every `MEMORY_POSTING_PERIOD` ticks, which programs the
-    /// roster has no slot for: everyone owned past `pet_capacity`, newest
-    /// first by `ProgramId`, gets a strike of `unslotted`.
-    ///
-    /// **This is what slots cost now that they are not a door.** A capture
-    /// past `pet_capacity` succeeds (`roster_room` answers the hard
-    /// ceiling), and the price is this grudge walking the overflow down the
-    /// morale ladder into tantrums, whose `turned_on_me` then sours the
-    /// programs that *do* hold a slot.
-    ///
-    /// **Seniority, not role, decides who is slotted**, because a slot is a
-    /// place to run and the party runs somewhere too — so a new capture in
-    /// the party is unslotted and a veteran at a machine is not. `ProgramId`
-    /// is minted in order at `roster_parts` and saved, so the order survives
-    /// a reload; an `Entity` would not.
-    ///
-    /// **On a period rather than an edge**, `note_postings`' argument: going
-    /// without a slot is a stretch, and nothing tells its first tick from its
-    /// thousandth. Gated on `base_is_established`, `fray`'s grace — a young
-    /// base is exempt from what its programs lack.
     /// Remembers, every `SIPHON_GRUDGE_PERIOD` ticks, being held in a Power
     /// Siphon: each held program gets a strike of `siphoned` against the
     /// siphon's tile.
@@ -374,6 +354,26 @@ impl crate::Game {
         }
     }
 
+    /// Remembers, every `MEMORY_POSTING_PERIOD` ticks, which programs the
+    /// roster has no slot for: everyone owned past `pet_capacity`, newest
+    /// first by `ProgramId`, gets a strike of `unslotted`.
+    ///
+    /// **This is what slots cost now that they are not a door.** A capture
+    /// past `pet_capacity` succeeds (`roster_room` answers the hard
+    /// ceiling), and the price is this grudge walking the overflow down the
+    /// morale ladder into tantrums, whose `turned_on_me` then sours the
+    /// programs that *do* hold a slot.
+    ///
+    /// **Seniority, not role, decides who is slotted**, because a slot is a
+    /// place to run and the party runs somewhere too — so a new capture in
+    /// the party is unslotted and a veteran at a machine is not. `ProgramId`
+    /// is minted in order at `roster_parts` and saved, so the order survives
+    /// a reload; an `Entity` would not.
+    ///
+    /// **On a period rather than an edge**, `note_postings`' argument: going
+    /// without a slot is a stretch, and nothing tells its first tick from its
+    /// thousandth. Gated on `base_is_established`, `fray`'s grace — a young
+    /// base is exempt from what its programs lack.
     pub(crate) fn note_unslotted(&mut self) {
         let now = self.world.resource::<GameClock>().tick;
         if !now.is_multiple_of(MEMORY_POSTING_PERIOD) || !self.base_is_established() {

@@ -11,11 +11,12 @@ use crate::tuning::SIPHON_RELEASE_INTEGRITY_LOSS;
 use crate::*;
 
 /// Integrity a program has left after a siphon lets go of it: three
-/// quarters of `max_hp` comes off, floored at 1 so a release never kills.
+/// quarters of `max_hp` comes off, rounded up so what is left never exceeds
+/// a quarter, and floored at 1 so a release never kills.
 ///
 /// Pure so the API and its tests ask one rule.
 pub(crate) fn siphon_release_hp(hp: i32, max_hp: i32) -> i32 {
-    let loss = (max_hp as f32 * SIPHON_RELEASE_INTEGRITY_LOSS) as i32;
+    let loss = (max_hp as f32 * SIPHON_RELEASE_INTEGRITY_LOSS).ceil() as i32;
     (hp - loss).max(1)
 }
 
@@ -56,13 +57,19 @@ impl Game {
         // A posted program is `Staff`, so the role check never saw its
         // `Task`: freeing it here is what stops the scheduler's stale post
         // (`pin_subject`'s reason). A carried kill is put back first, as a
-        // demolition does, rather than destroyed with the component.
+        // demolition does, rather than destroyed with the component. The mood
+        // and need errands go with the post: `update_disgruntled` only visits
+        // `base_staff`, so a marker left here would never clear and
+        // `note_respites`, which selects on it, would top `unwound_at` up for
+        // the whole hold.
         self.return_carried_program(program);
         self.world
             .entity_mut(program)
             .insert(components::Siphoned { siphon })
             .remove::<Task>()
-            .remove::<Carrying>();
+            .remove::<Carrying>()
+            .remove::<components::Disgruntled>()
+            .remove::<components::OffShift>();
         let name = self.creature_label(program);
         self.log(format!("{name} is locked into the Power Siphon."));
         Ok(())

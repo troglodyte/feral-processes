@@ -677,6 +677,10 @@ impl Game {
             for worker in workers {
                 self.world.entity_mut(worker).remove::<Task>();
             }
+            // Every despawn door lets go of what the structure held first,
+            // or the holder keeps a marker to a dead entity.
+            self.release_siphon_at(entity);
+            self.release_study_station(entity);
             self.world.despawn(entity);
         }
     }

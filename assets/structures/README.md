@@ -684,6 +684,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `footprint * footprint > 1` for that cell to exist at all. This is
     // the Research Station's own field.
     studies: true,
+
+    // Optional; can be left out entirely (defaults to false). Whether this
+    // structure holds a tamed program pinned into the grid: its
+    // `power_supply` counts only while a program is loaded, and an empty one
+    // supplies nothing. This is the Power Siphon's own field.
+    siphons: true,
 )
 ```
 

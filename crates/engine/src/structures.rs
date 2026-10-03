@@ -657,6 +657,13 @@ pub struct StructureDef {
     /// file, including any mod, keeps parsing as a machine with no pen.
     #[serde(default)]
     pub studies: bool,
+    /// Whether this structure holds a tamed program pinned into the grid, its
+    /// `power_supply` counted only while one is held — see
+    /// `game::base::power::ledger`. Data decides which structure does this,
+    /// not a kind name in Rust. `#[serde(default)]` so every existing
+    /// structure file, including any mod, keeps parsing as an ordinary one.
+    #[serde(default)]
+    pub siphons: bool,
 }
 
 fn default_durability() -> u32 {

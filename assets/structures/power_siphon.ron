@@ -1,0 +1,11 @@
+(
+    id: "power_siphon",
+    name: "Power Siphon",
+    description: "Pins a staff program into the Grid and runs the base off it. Walk up to it and press P to load or release.",
+    glyph: 'G',
+    color: Yellow,
+    build_cost: [("core_fragment", 24), ("bytecode_block", 4)],
+    work: None,
+    power_supply: 4,
+    siphons: true,
+)

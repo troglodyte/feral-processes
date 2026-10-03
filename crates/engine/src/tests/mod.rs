@@ -95,6 +95,7 @@ mod settlement_patrols;
 mod settlement_relations;
 mod settlements;
 mod siege;
+mod siphon;
 mod situations;
 mod sorties;
 mod spawning;

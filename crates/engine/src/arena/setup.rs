@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use super::scenario::{OpponentSpec, PlayerSource, Scenario};
-use super::{set_player_level, spawn_companion};
+use super::{set_player_level, spawn_companion, spawn_companion_spending};
 use crate::battle::EnemyGroup;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
@@ -112,8 +112,16 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             game.world.insert_resource(Locale::Base { x: 0, y: 0 });
             let party = (|game: &mut Game| -> Result<(), String> {
                 for row in &scenario.party {
-                    let program = spawn_companion(game, &row.species, row.level)
-                        .ok_or_else(|| format!("unknown companion species `{}`", row.species))?;
+                    let program = match &row.spend {
+                        Some(attribute) => {
+                            spawn_companion_spending(game, &row.species, row.level, attribute)?
+                        }
+                        None => {
+                            spawn_companion(game, &row.species, row.level).ok_or_else(|| {
+                                format!("unknown companion species `{}`", row.species)
+                            })?
+                        }
+                    };
                     game.add_companion(program)
                         .map_err(|e| format!("party `{}`: {e}", row.species))?;
                     // After the join: `Game::equip` checks the wearer is owned.
@@ -440,6 +448,7 @@ mod tests {
                 rarity: Rarity::Ordinary,
                 affixes: Vec::new(),
             }],
+            spend: None,
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -469,6 +478,7 @@ mod tests {
                 species: "glitch".into(),
                 level: 4,
                 equip,
+                spend: None,
             }];
             let game = build_player(&s, &test_assets_dir()).unwrap();
             let program = game.world.resource::<Party>().0[0];
@@ -505,6 +515,7 @@ mod tests {
                 rarity: Rarity::Ordinary,
                 affixes: Vec::new(),
             }],
+            spend: None,
         }];
 
         let err = build_player(&s, &test_assets_dir())
@@ -514,12 +525,31 @@ mod tests {
     }
 
     #[test]
+    fn a_party_rows_spend_reaches_the_staged_companion() {
+        let footprint = crate::attributes::AttributeId::from("footprint");
+        let staged = |spend: Option<crate::attributes::AttributeId>| {
+            let mut s = fresh(10, 2);
+            s.party = vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 8,
+                equip: Vec::new(),
+                spend,
+            }];
+            let game = build_player(&s, &test_assets_dir()).unwrap();
+            let program = game.world.resource::<Party>().0[0];
+            game.attributes_of(program).get(&footprint).unwrap()
+        };
+        assert!(staged(Some(footprint.clone())) > staged(None));
+    }
+
+    #[test]
     fn a_party_row_becomes_a_party_member_at_the_requested_level() {
         let mut s = fresh(10, 2);
         s.party = vec![CompanionSpec {
             species: "glitch".into(),
             level: 4,
             equip: Vec::new(),
+            spend: None,
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -550,6 +580,7 @@ mod tests {
             species: "glitch".into(),
             level: target,
             equip: Vec::new(),
+            spend: None,
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -578,6 +609,7 @@ mod tests {
             species: "glitch".into(),
             level: developed,
             equip: Vec::new(),
+            spend: None,
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();

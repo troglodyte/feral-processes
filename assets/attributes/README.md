@@ -17,9 +17,12 @@ apart from what it can do in a fight. Every creature and the player carry one
 value per attribute, and you read them on the dossier page — `[D]` from a
 program's manifest.
 
-**Only the player's numbers are read, and only through `effects`.** A
-creature's attributes are flavour: no formula, roll or gate reads them. The
-player's are the stat allocation. Each point of an attribute above its
+**Numbers are read only through `effects`, and by one exception.** The
+player's are the stat allocation, and a seated program's work the same way.
+The exception is Analysis on a posted program: its own value (falling back to
+its species' catalogue figure) drives the mining roll through
+`species::analysis_of`; its Extraction effect is the player's alone, so a
+program never counts Analysis twice. Each point of an attribute above its
 catalogue `base` moves the derived stats its `effects` name, and
 `progression::derive` is the one function that turns a player's attributes
 into HP, attack, mitigation, decompiler skill, Max Power, status resist,

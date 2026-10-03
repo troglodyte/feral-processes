@@ -1509,6 +1509,14 @@ pub struct BattleRewards {
     pub decompile_verdict: Option<String>,
 }
 
+/// Level-ups a bevy system earned for seated programs, waiting for `Game` to
+/// place the points. `task_progress_system` has no `&mut Game`, and
+/// `Game::apply_program_levels` needs one, so the gain is queued and
+/// `Game::tick` drains it right after the schedule runs. Never saved: it is
+/// empty at every tick boundary.
+#[derive(Resource, Default)]
+pub struct PendingProgramLevels(pub Vec<(Entity, crate::progression::LevelGain)>);
+
 /// One fighter's experience over a whole fight.
 ///
 /// The deltas sum because `progression::LevelGain::stat_rows` recovers each

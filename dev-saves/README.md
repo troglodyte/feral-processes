@@ -12,6 +12,14 @@ cargo run -- --template extraction   # regenerate the world and play it
 cargo run --bin savetool -- template # what's available
 ```
 
+## Migrated at v34: seated programs
+
+`SAVE_FORMAT_VERSION` 34 gave every tamed program a `base`, `stat_points` and
+`hold_points`, and stopped writing its `max_hp`/`atk`/`mitigation`. Load never
+seats, so each template's tamed programs were seated once (`Game::seat_derived`
+on the loaded template, which leaves `Stats` unchanged) and the three keys
+swapped for the resulting `base`. Wild creatures are untouched.
+
 ## Migrated at v33: derived stats, canonical attributes
 
 `SAVE_FORMAT_VERSION` 33 removed `max_hp`/`atk`/`mitigation`/`decompiler` from

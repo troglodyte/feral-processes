@@ -5964,6 +5964,9 @@ mod tests {
                 off_duties: Vec::new(),
                 staff_rank: None,
                 drop_trooper: false,
+                base: crate::render::test_support::tamed_base(),
+                stat_points: 0,
+                hold_points: false,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         let mut game = Game::load(&path, &test_assets()).unwrap();

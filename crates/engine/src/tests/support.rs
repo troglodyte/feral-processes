@@ -58,7 +58,6 @@ pub(crate) fn generic_species() -> SpeciesDef {
         taming_difficulty: 0.5,
         habitats: Vec::new(),
         base_speed: crate::tuning::DEFAULT_BASE_SPEED,
-        base_int: crate::tuning::DEFAULT_BASE_INT,
         movement: None,
         moves: vec![crate::species::MoveDef {
             name: "Test Strike".to_string(),
@@ -2039,7 +2038,25 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     );
     game.world.entity_mut(entity).insert(attrs);
     game.install_innate_routines(entity);
+    // Last, like every real door: a seated program's figures derive from its
+    // base, so a fixture that seated early would have its setup recomputed.
+    game.seat_derived(entity);
     entity
+}
+
+/// Gives a seated program exactly these figures: unseats it, writes `Stats`
+/// and seats it again, so the base is derived from the figures asked for. A
+/// write to `Stats` alone is discarded by the next recompute.
+pub(super) fn reseat_with_stats(game: &mut Game, entity: Entity, max_hp: i32, atk: i32, def: i32) {
+    game.world
+        .entity_mut(entity)
+        .remove::<crate::components::ProgramBase>();
+    let mut s = game.world.get_mut::<Stats>(entity).unwrap();
+    s.hp = max_hp;
+    s.max_hp = max_hp;
+    s.atk = atk;
+    s.mitigation = def;
+    game.seat_derived(entity);
 }
 
 /// `spawn_tamed` with a `ZonePortal` set, so a test can pin the depth a

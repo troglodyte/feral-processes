@@ -709,6 +709,12 @@ impl Game {
     /// `hp = max_hp` raises HP, which is why this stays clear of
     /// `apply_damage`'s rule that it is the only path allowed to lower it.
     pub(crate) fn retier_rarity(&mut self, entity: Entity, new: Rarity) -> Rarity {
+        debug_assert!(
+            self.world
+                .get::<crate::components::ProgramBase>(entity)
+                .is_none(),
+            "a seated program derives its figures; scaling its Stats would be overwritten"
+        );
         let old = self
             .world
             .get::<Rarity>(entity)

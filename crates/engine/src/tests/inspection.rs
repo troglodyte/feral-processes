@@ -2192,24 +2192,31 @@ fn a_work_profile_carries_the_three_facts_that_decide_a_posting() {
     let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 20, 5);
     game.world.get_mut::<Creature>(program).unwrap().species = "rootkit".to_string();
+    // Unseated, no attributes of its own: the profile falls back to the
+    // species' catalogue Analysis.
+    game.world
+        .entity_mut(program)
+        .remove::<crate::components::Attributes>();
 
     let def = game
         .species_defs()
         .into_iter()
         .find(|s| s.id == "rootkit")
         .expect("rootkit ships with the game");
+    let catalogue = game.attribute_db();
     assert_ne!(
-        def.base_speed, def.base_int,
+        def.base_speed,
+        def.analysis(&catalogue),
         "the fixture stops distinguishing a swapped field the day these agree"
     );
     assert_ne!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
-    assert_ne!(def.base_int, crate::tuning::DEFAULT_BASE_INT);
+    assert_ne!(def.analysis(&catalogue), catalogue.analysis_base());
 
     let profile = game
         .work_profile(program)
         .expect("a program of a shipped species has a work profile");
     assert_eq!(profile.speed, def.base_speed);
-    assert_eq!(profile.analysis, def.base_int);
+    assert_eq!(profile.analysis, def.analysis(&catalogue));
     assert_eq!(
         profile.class,
         Some(AffinityClass::Leech),
@@ -2220,6 +2227,18 @@ fn a_work_profile_carries_the_three_facts_that_decide_a_posting() {
 /// `None` rather than a defaulted profile: a species the db has never heard
 /// of is a mod that failed to load, and quoting it the roster's baseline
 /// numbers would be inventing them.
+#[test]
+fn a_work_profile_reads_a_programs_own_analysis_over_its_species() {
+    let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    game.world.get_mut::<Creature>(program).unwrap().species = "rootkit".to_string();
+    let mut own = crate::components::Attributes::default();
+    own.set(&crate::attributes::AttributeId::from("analysis"), 21);
+    game.world.entity_mut(program).insert(own);
+
+    assert_eq!(game.work_profile(program).unwrap().analysis, 21);
+}
+
 #[test]
 fn a_work_profile_is_none_for_a_species_the_db_never_heard_of() {
     let mut game = Game::new(3211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

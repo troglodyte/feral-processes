@@ -2496,7 +2496,7 @@ fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
         growth_multiplier: 1.25,
         habitats: [OpenGrid],
         base_speed: 10,
-        base_int: 7,
+        attributes: {"analysis": 7},
         moves: [(name: "Ram", power: 8, spread: 2)],
         work_resource: None,
         can_nest: false,

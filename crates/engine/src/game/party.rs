@@ -1415,6 +1415,34 @@ impl Game {
                 ));
             }
         }
+        // Every refusal precedes the first mutation below (the gear strip and
+        // the held-bank spend), so a refused fusion leaves both parents as
+        // they were. The dominant parent — whose species and level the child
+        // takes — is also the one whose *development* it inherits. A ring cost a
+        // lair guardian and the talents cost the levels it bought, so neither
+        // may evaporate here; and taking only one parent's is what stops fusion
+        // being a way to launder two developed programs into one.
+        let exp_a = *self.world.get::<Experience>(a).unwrap();
+        let exp_b = *self.world.get::<Experience>(b).unwrap();
+        let (species_id, level, dominant) = if exp_a.level >= exp_b.level {
+            (
+                self.world.get::<Creature>(a).unwrap().species.clone(),
+                exp_a.level,
+                a,
+            )
+        } else {
+            (
+                self.world.get::<Creature>(b).unwrap().species.clone(),
+                exp_b.level,
+                b,
+            )
+        };
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species_id)
+            .cloned()
+            .ok_or_else(|| "That species is no longer available.".to_string())?;
         // Before the snapshot below, and that ordering is the whole
         // correctness argument: `fuse_stat` combines both parents' `Stats`
         // into the child's, so a gear bonus still sitting in one of them is
@@ -1424,35 +1452,31 @@ impl Game {
         for e in [a, b] {
             self.strip_gear(e);
         }
+        // Also before the snapshot: a held parent's bank lives in
+        // `StatPoints`, which `fuse_stat` never reads, and the child seats
+        // with an empty one — so the bank is spent into the parent's
+        // attributes first, where `Stats` carries it across.
+        for e in [a, b] {
+            if self.stat_points_of(StatOwner::Program(e)) > 0 {
+                self.set_hold_points(e, false)
+                    .map_err(|_| "A program's points could not be spent.".to_string())?;
+            }
+        }
         let fused_depth = self.fusion_count(a).max(self.fusion_count(b)) + 1;
-        let (species_a, exp_a, stats_a, potential_a) = (
-            self.world.get::<Creature>(a).unwrap().species.clone(),
-            *self.world.get::<Experience>(a).unwrap(),
+        let (stats_a, potential_a) = (
             *self.world.get::<Stats>(a).unwrap(),
             self.world
                 .get::<Potential>(a)
                 .copied()
                 .unwrap_or(Potential::NEUTRAL),
         );
-        let (species_b, exp_b, stats_b, potential_b) = (
-            self.world.get::<Creature>(b).unwrap().species.clone(),
-            *self.world.get::<Experience>(b).unwrap(),
+        let (stats_b, potential_b) = (
             *self.world.get::<Stats>(b).unwrap(),
             self.world
                 .get::<Potential>(b)
                 .copied()
                 .unwrap_or(Potential::NEUTRAL),
         );
-        // The dominant parent — whose species and level the child takes — is
-        // also the one whose *development* it inherits. A ring cost a lair
-        // guardian and the talents cost the levels it bought, so neither may
-        // evaporate here; and taking only one parent's is what stops fusion
-        // being a way to launder two developed programs into one.
-        let (species_id, level, dominant) = if exp_a.level >= exp_b.level {
-            (species_a, exp_a.level, a)
-        } else {
-            (species_b, exp_b.level, b)
-        };
         let fused_ring = self.world.get::<KernelRing>(dominant).copied();
         let fused_talents = self.world.get::<Talents>(dominant).cloned();
         // The dominant parent's own place in line and job restrictions,
@@ -1469,19 +1493,31 @@ impl Game {
             .world
             .get::<crate::components::StaffRank>(dominant)
             .copied();
-        let species = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .cloned()
-            .ok_or_else(|| "That species is no longer available.".to_string())?;
-
         fn fuse_stat(x: i32, y: i32) -> i32 {
             x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
-        let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
-        let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
-        let fused_def = fuse_stat(stats_a.mitigation, stats_b.mitigation);
+        // The receipt is taken out of each parent before the arithmetic and
+        // the dominant parent's put back on the child: a talent's stat is
+        // not fused (`fuse_stat` would half-count it) but travels with the
+        // talent, and the child's respec then has a receipt to subtract.
+        let bought_of = |game: &Self, e: Entity| {
+            game.world
+                .get::<crate::components::BoughtStats>(e)
+                .copied()
+                .unwrap_or_default()
+        };
+        let (bought_a, bought_b) = (bought_of(self, a), bought_of(self, b));
+        let fused_bought = if dominant == a { bought_a } else { bought_b };
+        let fused_hp = fuse_stat(
+            stats_a.max_hp - bought_a.max_hp,
+            stats_b.max_hp - bought_b.max_hp,
+        ) + fused_bought.max_hp;
+        let fused_atk =
+            fuse_stat(stats_a.atk - bought_a.atk, stats_b.atk - bought_b.atk) + fused_bought.atk;
+        let fused_def = fuse_stat(
+            stats_a.mitigation - bought_a.mitigation,
+            stats_b.mitigation - bought_b.mitigation,
+        ) + fused_bought.mitigation;
         let fused_potential = Potential::averaged(potential_a, potential_b);
         // The better of the two parents, the same shape `FusionCount` takes
         // (`max(a, b) + 1`) and for the same reason: fusing away an
@@ -1563,7 +1599,7 @@ impl Game {
             Refactors(fused_refactors),
             PurchasedTiers(fused_purchased),
         ));
-        fused.insert(parts);
+        fused.insert((parts, fused_bought));
         // After `parts`, which carries a fresh rank and no `Duties`:
         // overriding rather than folding the dominant parent's own back in.
         // `Duties` is left uninserted (not an empty one) when the parent had
@@ -1609,6 +1645,7 @@ impl Game {
             &species.attributes,
         );
         self.world.entity_mut(fused_entity).insert(fused_attrs);
+        self.seat_derived(fused_entity);
         self.install_innate_routines(fused_entity);
         self.log(match &final_name {
             Some(name) => format!(

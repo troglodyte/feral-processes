@@ -1129,7 +1129,7 @@ fn buying_a_programs_zone_tiers_does_not_raise_what_a_trader_pays() {
     let mut game = Game::new(133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 2;
+    reseat_with_stats(&mut game, pet, 60, 8, 2);
     game.world.entity_mut(pet).insert(ZonePortal(1));
     let unbumped = game.program_payout(market, pet).unwrap();
 

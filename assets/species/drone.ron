@@ -9,7 +9,6 @@
     taming_difficulty: 0.15,
     habitats: [OpenGrid, Backplane],
     base_speed: 8,
-    base_int: 7,
     moves: [
         (name: "Buzz", power: 4, spread: 1),
         (name: "Recon Ping", power: 3, spread: 1, ranged: true),

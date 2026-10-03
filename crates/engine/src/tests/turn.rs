@@ -278,7 +278,7 @@ fn resting_repairs_the_party_and_leaves_base_staff_to_the_repair_bay() {
     // would strand a staff program that spent Power defending a sweep.
     assert_eq!(
         game.world.get::<PowerReserve>(staff).unwrap().get(),
-        100.0,
+        game.max_power(staff),
         "a staff program's Power is still refilled"
     );
 }

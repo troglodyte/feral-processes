@@ -9,11 +9,12 @@
 //! re-implements the ceiling rule or the preview.
 //!
 //! **The preview is `progression::derive` called**, once on the opening
-//! attributes and once on those plus the spend, with the player's perk and
-//! gear bonus (`Game::player_stat_bonus`) added to both - so a
-//! before->after figure is the player's base stat now and after. It is not
-//! the HUD's effective figure: low-Power, program, buff and emulation
-//! adjustments and the mitigation cap apply on top, outside a spend.
+//! attributes and once on those plus the spend, from the owner's own
+//! `DerivedBase` with its perk and gear bonus (`Game::stat_bonus`) added to
+//! both - so a before->after figure is that owner's base stat now and
+//! after. It is not the HUD's effective figure: low-Power, program, buff
+//! and emulation adjustments and the mitigation cap apply on top, outside a
+//! spend.
 
 use std::collections::BTreeMap;
 
@@ -51,6 +52,8 @@ impl AllocationFor {
 pub struct StatAllocation {
     purpose: AllocationFor,
     pool: u32,
+    /// What the derivation starts from: the player's, or the program's own.
+    base: DerivedBase,
     rows: Vec<AttributeDef>,
     db: AttributeDb,
     start: Attributes,
@@ -87,11 +90,18 @@ pub(crate) fn spent_cost(purpose: AllocationFor, spent: &BTreeMap<AttributeId, u
 impl StatAllocation {
     /// `start` is the attributes the spend lands on. Only attributes with
     /// effects are offered - a point on the others would buy nothing.
-    pub fn new(purpose: AllocationFor, pool: u32, db: AttributeDb, start: Attributes) -> Self {
+    pub fn new(
+        purpose: AllocationFor,
+        pool: u32,
+        base: DerivedBase,
+        db: AttributeDb,
+        start: Attributes,
+    ) -> Self {
         let rows = db.buyable().cloned().collect();
         Self {
             purpose,
             pool,
+            base,
             rows,
             db,
             start,
@@ -99,7 +109,7 @@ impl StatAllocation {
         }
     }
 
-    /// Previews on top of `bonus`, `Game::player_stat_bonus` for a player
+    /// Previews on top of `bonus`, `Game::stat_bonus` for a player
     /// who already holds perks or gear.
     pub fn with_bonus(mut self, bonus: DerivedStats) -> Self {
         self.bonus = Some(bonus);
@@ -151,9 +161,8 @@ impl StatAllocation {
 
     /// One row per offered attribute, in id order.
     pub fn rows(&self, spent: &BTreeMap<AttributeId, u32>) -> Vec<CreationRow> {
-        let base = DerivedBase::player();
-        let before = derive(&base, &self.start, &self.db);
-        let after = derive(&base, &self.spent_attributes(spent), &self.db);
+        let before = derive(&self.base, &self.start, &self.db);
+        let after = derive(&self.base, &self.spent_attributes(spent), &self.db);
         self.rows
             .iter()
             .map(|def| {
@@ -251,26 +260,36 @@ pub enum AllocationOrigin {
     LevelUp,
     /// The Perks screen (`S`): both keys go back to it.
     Perks,
+    /// A program's Manifest (`S` on its Stats tab): both keys go back to the
+    /// sheet, whose subject and tab are still `App`'s. `parked` is the
+    /// roster row the sheet was holding in `menu_selected`, which the
+    /// screen's own cursor borrows meanwhile.
+    Manifest { parked: usize },
 }
 
 impl App {
-    /// Opens `Mode::AllocateStats` on the player's banked points, or says
-    /// why not. The one writer of `stat_allocation`.
-    pub(crate) fn open_stat_allocation(&mut self, origin: AllocationOrigin) {
+    /// Opens `Mode::AllocateStats` on `owner`'s banked points, or says why
+    /// not. The one writer of `stat_allocation`.
+    pub(crate) fn open_stat_allocation(&mut self, owner: StatOwner, origin: AllocationOrigin) {
         let Some(game) = &self.game else { return };
-        let banked = game.player_status().stat_points;
+        let banked = game.stat_points_of(owner);
         if banked == 0 {
             self.refuse("No stat points to spend.");
             return;
         }
+        let entity = match owner {
+            StatOwner::Player => game.player_entity(),
+            StatOwner::Program(program) => program,
+        };
         self.stat_allocation = Some(
             StatAllocation::new(
-                AllocationFor::Owned(StatOwner::Player),
+                AllocationFor::Owned(owner),
                 banked,
+                game.derived_base(entity),
                 game.attribute_db(),
-                game.player_attributes(),
+                game.attributes_of(entity),
             )
-            .with_bonus(game.player_stat_bonus()),
+            .with_bonus(game.stat_bonus(entity)),
         );
         self.allocation_spent.clear();
         self.allocation_origin = origin;
@@ -283,7 +302,13 @@ impl App {
     /// The one writer of `allocation_duel`: the fight the pending spend
     /// would give, read from the engine on every change to the spend.
     fn refresh_allocation_duel(&mut self) {
-        if self.stat_allocation.is_none() {
+        // The duel is the player against a typical foe, so only the
+        // player's own spend has one to show.
+        let for_player = matches!(
+            self.stat_allocation.as_ref().map(|a| a.purpose()),
+            Some(AllocationFor::Owned(StatOwner::Player))
+        );
+        if !for_player {
             self.allocation_duel = None;
             return;
         }
@@ -348,8 +373,12 @@ impl App {
             .iter()
             .map(|(id, points)| (id.clone(), *points))
             .collect();
+        let Some(AllocationFor::Owned(owner)) = self.stat_allocation.as_ref().map(|a| a.purpose())
+        else {
+            return;
+        };
         let Some(game) = &mut self.game else { return };
-        match game.spend_stat_points(StatOwner::Player, &spend) {
+        match game.spend_stat_points(owner, &spend) {
             Ok(()) => self.leave_allocation(true),
             Err(why) => self.refuse(format!("Cannot spend those points: {why:?}.")),
         }
@@ -369,6 +398,10 @@ impl App {
             .map_or(0, |g| g.player_status().perk_points);
         self.refresh_allocation_duel();
         match (self.allocation_origin, committed) {
+            (AllocationOrigin::Manifest { parked }, _) => {
+                self.menu_selected = parked;
+                self.mode = Mode::Manifest;
+            }
             (AllocationOrigin::Perks, _) => self.open_perks(),
             (AllocationOrigin::LevelUp, true) if perk_points > 0 => self.open_perks(),
             (AllocationOrigin::LevelUp, _) => {

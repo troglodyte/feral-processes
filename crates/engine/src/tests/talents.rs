@@ -120,10 +120,8 @@ fn a_stat_node_on_a_small_program_still_gains_a_whole_point() {
     let pet = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(pet).insert(KernelRing(1));
     set_level(&mut game, pet, TALENT_START_LEVEL + 1);
-    {
-        let mut stats = game.world.get_mut::<Stats>(pet).unwrap();
-        stats.atk = 3;
-    }
+    let max_hp = game.world.get::<Stats>(pet).unwrap().max_hp;
+    reseat_with_stats(&mut game, pet, max_hp, 3, 1);
 
     game.take_talent(pet, &TalentId::from(GEN_ATK)).unwrap();
 

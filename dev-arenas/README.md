@@ -199,6 +199,10 @@ equip: [(item: "arc_lance", affixes: ["honed", "honed", "of_static"])],
 
 // A companion takes the same `equip` rows the player does:
 party: [(species: "scrapper", level: 12, equip: [(item: "arc_lance")])],
+
+// `spend` puts every point a companion's levels earn into one attribute
+// instead of its Parity/Analysis split (unknown or unbuyable: refused):
+party: [(species: "scrapper", level: 12, spend: Some("footprint"))],
 ```
 
 `tier`, `rarity` and `affixes` are what make one *copy* of an item different

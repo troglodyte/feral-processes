@@ -197,6 +197,16 @@ impl AttributeDb {
         self.defs.get(id)
     }
 
+    /// The catalogue's Analysis base: the figure a program with no authored
+    /// Analysis works a node at, and the zero point of the mining roll's
+    /// aptitude term. Read here rather than copied into a constant, so a mod
+    /// that retunes the attribute moves both together. 0 when the catalogue
+    /// has no Analysis at all, where nothing derives from it either.
+    pub fn analysis_base(&self) -> i32 {
+        self.get(&AttributeId::from("analysis"))
+            .map_or(0, |def| def.base)
+    }
+
     /// Only the attributes a point can be spent on, in id order.
     pub fn buyable(&self) -> impl Iterator<Item = &AttributeDef> {
         self.iter().filter(|d| d.buyable())
@@ -360,6 +370,17 @@ mod tests {
             );
             assert!(!def.legacy.is_empty(), "{id} must name its old-school word");
         }
+    }
+
+    #[test]
+    fn the_analysis_base_is_read_from_the_catalogue() {
+        let modded = load(&[(
+            "analysis.ron",
+            def_text("analysis", "Analysis").replace("base: 50", "base: 23"),
+        )])
+        .0;
+        assert_eq!(modded.analysis_base(), 23);
+        assert_eq!(AttributeDb::default().analysis_base(), 0);
     }
 
     fn shipped() -> AttributeDb {

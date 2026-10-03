@@ -87,6 +87,10 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // program you were reading.
             | (Mode::Manifest, Mode::Dossier)
             | (Mode::Dossier, Mode::Manifest)
+            // `S` on a program's Stats tab lends the highlight to the Points
+            // screen's cursor; `leave_allocation` puts the parked row back
+            // and this keeps the loop above from zeroing it again.
+            | (Mode::AllocateStats, Mode::Manifest)
             // M2, final review: the picker has 49 rows and no scroll, so
             // losing the highlight on Esc from the editor means you cannot
             // edit row 30, back out, and press `t` on the same row.

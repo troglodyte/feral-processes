@@ -20,7 +20,10 @@ use crate::battle::{DamageRange, accuracy_of, evasion_of, expected_damage};
 use crate::components::Attributes;
 use crate::components::Stats;
 use crate::items::EquipmentStats;
-use crate::progression::{DerivedBase, canonical_spend, derive, stats_after_levels};
+use crate::progression::{
+    DerivedBase, DerivedStats, attribute_contribution, canonical_spend, derive,
+    program_level_points,
+};
 use crate::resources::ZoneLevel;
 use crate::species::{SpeciesDb, SpeciesDef};
 use crate::tuning::PLAYER_BASE_STATS;
@@ -133,6 +136,8 @@ fn player_profile(
         accuracy: accuracy_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_accuracy),
         evasion: evasion_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_evasion),
         range,
+        crit: crate::tuning::CRIT_CHANCE,
+        fumble: crate::tuning::FUMBLE_CHANCE,
     }
 }
 
@@ -165,17 +170,61 @@ fn player_stats_after_levels(levels_gained: u32, attrs: &AttributeDb) -> Stats {
     }
 }
 
-/// A companion tamed from `species` while breached into `zone` — it starts
-/// with zone-scaled base stats (a tamed creature keeps whatever stats it
-/// spawned with) and is then leveled to `level` on top of that, mirroring
-/// how `Experience::default()` plus `progression::add_xp` actually grows a
-/// tamed creature.
-fn companion_stats(species: &SpeciesDef, caught_zone: u32, level: u32) -> Stats {
-    stats_after_levels(
-        wild_stats_at_zone(species, caught_zone),
-        level.saturating_sub(1),
-        species.growth_multiplier,
-    )
+/// A companion tamed from `species` while breached into `zone`, `level`
+/// levels in: seated the way `Game::seat_derived` seats a program (base =
+/// the zone-scaled catalogue stats less what its authored attributes
+/// contribute), then given `program_level_points(g, 1.0)` a level and run
+/// through `derive`. A test holds HP, ATK and mitigation equal to the flat
+/// `stats_after_levels` this replaced.
+fn companion_derived(
+    species: &SpeciesDef,
+    caught_zone: u32,
+    level: u32,
+    attrs: &AttributeDb,
+) -> DerivedStats {
+    let mut store = crate::attributes::authored_or_base(attrs, &species.attributes);
+    let wild = wild_stats_at_zone(species, caught_zone);
+    let base = DerivedBase::program(
+        wild.max_hp,
+        wild.atk,
+        wild.mitigation,
+        &attribute_contribution(&store, attrs),
+    );
+    let levels = level.saturating_sub(1);
+    let (parity, analysis) = program_level_points(species.growth_multiplier, 1.0);
+    for (id, per_level) in [("parity", parity), ("analysis", analysis)] {
+        let id = crate::attributes::AttributeId::from(id);
+        let held = store.get(&id).unwrap_or(0);
+        store.set(&id, held + (levels * per_level) as i32);
+    }
+    derive(&base, &store, attrs)
+}
+
+fn companion_stats(
+    species: &SpeciesDef,
+    caught_zone: u32,
+    level: u32,
+    attrs: &AttributeDb,
+) -> Stats {
+    let derived = companion_derived(species, caught_zone, level, attrs);
+    Stats {
+        hp: derived.max_hp,
+        max_hp: derived.max_hp,
+        atk: derived.atk,
+        mitigation: derived.mitigation,
+    }
+}
+
+/// What a companion of `species` swings with: its mean move band, and the
+/// crit and fumble its Entropy derives.
+fn companion_profile(species: &SpeciesDef, level: u32, attrs: &AttributeDb) -> AttackProfile {
+    let derived = companion_derived(species, 1, level, attrs);
+    AttackProfile {
+        range: average_move_range(species),
+        crit: derived.crit,
+        fumble: derived.fumble,
+        ..AttackProfile::wild(species, level)
+    }
 }
 
 /// A deterministic stand-in for the real move selection
@@ -347,6 +396,11 @@ pub struct AttackProfile {
     pub accuracy: f64,
     pub evasion: f64,
     pub range: DamageRange,
+    /// The crit and fumble bands this body swings with: the underived ones
+    /// for a hostile and the modelled player, `derive`'s for a seated
+    /// companion (see `companion_profile`).
+    pub crit: f64,
+    pub fumble: f64,
 }
 
 impl AttackProfile {
@@ -360,25 +414,25 @@ impl AttackProfile {
                 .first()
                 .map(|mv| mv.range())
                 .unwrap_or_default(),
+            crit: crate::tuning::CRIT_CHANCE,
+            fumble: crate::tuning::FUMBLE_CHANCE,
         }
     }
 
     /// `stats` and this profile as the `battle::Combatant` the real
     /// arithmetic takes.
     ///
-    /// Both sides roll the underived bands: a hostile has no `Derived`, and
-    /// `canonical_spend` buys no Entropy, so the modelled player sits at its
-    /// base. A canonical spend that bought Entropy would have to thread
-    /// `derive`'s crit and fumble through here.
+    /// A hostile has no `Derived` and `canonical_spend` buys no Entropy, so
+    /// those sides carry the underived bands; a companion's come from its
+    /// species' Entropy.
     fn combatant(self, atk: i32) -> crate::battle::Combatant {
-        let underived = crate::components::Derived::default();
         crate::battle::Combatant {
             accuracy: self.accuracy,
             evasion: self.evasion,
             atk,
             range: self.range,
-            crit: underived.crit,
-            fumble: underived.fumble,
+            crit: self.crit,
+            fumble: self.fumble,
         }
     }
 }
@@ -509,6 +563,7 @@ pub fn reach_rule_verdict(db: &SpeciesDb, attrs: &AttributeDb) -> ReachRuleVerdi
                         party,
                         REACH_RULE_ZONE,
                         companion_level_for_player_level(level),
+                        attrs,
                     )
                 })
                 .collect();
@@ -516,10 +571,7 @@ pub fn reach_rule_verdict(db: &SpeciesDb, attrs: &AttributeDb) -> ReachRuleVerdi
                 player,
                 unarmed_player_profile(level),
                 &companions,
-                AttackProfile {
-                    range: average_move_range(party),
-                    ..AttackProfile::wild(party, companion_level_for_player_level(level))
-                },
+                companion_profile(party, companion_level_for_player_level(level), attrs),
                 groups,
             )
             .player_won
@@ -793,16 +845,13 @@ pub fn min_level_to_clear_zone(
         player.mitigation += gear_mitigation;
         let companion_level = companion_level_for_player_level(level);
         let companions: Vec<Stats> = (0..companion_count)
-            .map(|_| companion_stats(party_species, zone, companion_level))
+            .map(|_| companion_stats(party_species, zone, companion_level, attrs))
             .collect();
         let outcome = simulate_roster_fight(
             player,
             player_profile(level, gear_accuracy, gear_evasion, swing),
             &companions,
-            AttackProfile {
-                range: average_move_range(party_species),
-                ..AttackProfile::wild(party_species, companion_level)
-            },
+            companion_profile(party_species, companion_level, attrs),
             &groups,
         );
         if outcome.player_won {
@@ -815,6 +864,7 @@ pub fn min_level_to_clear_zone(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::progression::stats_after_levels;
     use crate::tuning::{BASE_PET_CAPACITY, MAX_PARTY_SIZE};
     use std::path::Path;
 
@@ -848,6 +898,53 @@ mod tests {
                 n + 1
             );
         }
+    }
+
+    /// A seated companion's HP, ATK and mitigation must equal what the flat
+    /// `stats_after_levels` gave, for every shipped species at every zone
+    /// the sim models and every level the sim searches.
+    #[test]
+    fn a_derived_companion_equals_the_old_flat_growth() {
+        let attrs = shipped_attribute_db();
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for species in db.all() {
+            for zone in 1..=10 {
+                for level in 1..=MAX_LEVEL_SEARCHED {
+                    assert_eq!(
+                        companion_stats(species, zone, level, &attrs),
+                        stats_after_levels(
+                            wild_stats_at_zone(species, zone),
+                            level - 1,
+                            species.growth_multiplier
+                        ),
+                        "{} zone {zone} level {level}",
+                        species.id
+                    );
+                }
+            }
+        }
+    }
+
+    /// A companion's crit and fumble come from its species' Entropy, the
+    /// same `derive` the game reads.
+    #[test]
+    fn a_companions_crit_and_fumble_follow_its_species_entropy() {
+        let attrs = shipped_attribute_db();
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let mut off_base = 0;
+        for species in db.all() {
+            let entropy = species.attributes.get("entropy").copied();
+            let profile = companion_profile(species, 5, &attrs);
+            let store = crate::attributes::authored_or_base(&attrs, &species.attributes);
+            let expected = derive(&DerivedBase::player(), &store, &attrs);
+            assert_eq!(profile.crit, expected.crit, "{}", species.id);
+            assert_eq!(profile.fumble, expected.fumble, "{}", species.id);
+            if entropy.is_some_and(|e| e != attrs.get(&"entropy".into()).unwrap().base) {
+                assert_ne!(profile.crit, crate::tuning::CRIT_CHANCE, "{}", species.id);
+                off_base += 1;
+            }
+        }
+        assert!(off_base > 0, "no shipped species departs from base Entropy");
     }
 
     /// The shipped ability set, which `SpeciesDb::load_dir` validates

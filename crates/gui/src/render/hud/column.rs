@@ -112,9 +112,10 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         // tab to answer it from — `RaidIncoming`'s reason again.
         | AttentionKind::OutpostTrend
         | AttentionKind::OutpostDark => InfoTab::Base,
-        AttentionKind::PerkPoints | AttentionKind::StatPoints | AttentionKind::Unslotted => {
-            InfoTab::Crew
-        }
+        AttentionKind::PerkPoints
+        | AttentionKind::StatPoints
+        | AttentionKind::ProgramPoints
+        | AttentionKind::Unslotted => InfoTab::Crew,
     }
 }
 

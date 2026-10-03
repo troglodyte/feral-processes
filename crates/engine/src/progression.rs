@@ -8,6 +8,7 @@ use crate::tuning::{
     PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL, STATUS_RESIST_MAX,
     STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
+use bevy_ecs::entity::Entity;
 use std::collections::BTreeMap;
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
@@ -44,6 +45,10 @@ pub struct LevelGain {
     /// Attribute points banked by `Growth::Points`, to spend on the Points
     /// screen. Zero for `Growth::Auto`.
     pub stat_points: u32,
+    /// Parity and Analysis points a `Growth::ProgramPoints` level-up earned
+    /// and `Game::apply_program_levels` has yet to place. Zero otherwise.
+    pub parity: u32,
+    pub analysis: u32,
 }
 
 /// How a level-up changes the levelled body's stats.
@@ -55,6 +60,25 @@ pub enum Growth {
     /// No stat changes: the player banks `STAT_POINTS_PER_LEVEL` a level and
     /// spends them, and `Game::recompute_derived` does the rest.
     Points,
+    /// A seated program's level-up: stats do not move and nothing heals here.
+    /// The points `program_level_points(multiplier, roll)` yields accumulate
+    /// on `LevelGain` for `Game::apply_program_levels`, which places them and
+    /// recomputes - so a caller without a `Game` (a bevy system) can still
+    /// level a seated program by handing it the gain.
+    ProgramPoints { multiplier: f32, roll: f32 },
+}
+
+/// The Parity and Analysis one level earns a seated program: the canonical
+/// split scaled by the species' growth multiplier `g` and the individual's
+/// growth `roll`. At roll 1 and every shipped `g` this is exactly
+/// `scaled_growth` of the old per-level HP and attack, since `Parity` buys 6
+/// HP and `Analysis` 1 attack.
+pub fn program_level_points(g: f32, roll: f32) -> (u32, u32) {
+    let scaled = |canonical: u32| (canonical as f32 * g * roll).round() as u32;
+    (
+        scaled(CANONICAL_PARITY_PER_LEVEL),
+        scaled(CANONICAL_ANALYSIS_PER_LEVEL),
+    )
 }
 
 impl LevelGain {
@@ -71,6 +95,8 @@ impl LevelGain {
         self.atk += other.atk;
         self.overflow += other.overflow;
         self.stat_points += other.stat_points;
+        self.parity += other.parity;
+        self.analysis += other.analysis;
     }
 
     /// The two rows a level-up's stat block always has, measured against
@@ -244,7 +270,7 @@ pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f3
 }
 
 /// The stats an entity derives from before any attribute moves them.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DerivedBase {
     pub max_hp: i32,
     pub atk: i32,
@@ -270,6 +296,22 @@ impl DerivedBase {
             extraction: 0.0,
             crit: CRIT_CHANCE,
             fumble: FUMBLE_CHANCE,
+        }
+    }
+
+    /// The base a seated program derives from: the three `Stats` figures it
+    /// already holds (gear and `BoughtStats` already taken off) less what its
+    /// attributes contribute, so `derive` of it gives the same figures back.
+    /// Everything else starts where the player's does. Integer arithmetic on
+    /// the same `attribute_contribution` `derive` adds, so the round trip is
+    /// exact for any figure `derive` can produce. `derive` floors hp and
+    /// attack at 1, so a hand-built figure below that comes back as 1.
+    pub fn program(max_hp: i32, atk: i32, mitigation: i32, contribution: &DerivedStats) -> Self {
+        DerivedBase {
+            max_hp: max_hp - contribution.max_hp,
+            atk: atk - contribution.atk,
+            mitigation: mitigation - contribution.mitigation,
+            ..DerivedBase::player()
         }
     }
 }
@@ -320,12 +362,13 @@ pub fn resisted_duration(duration: u32, status_resist: i32) -> u32 {
     (scaled.round() as u32).max(1)
 }
 
-/// The one formula. For each stat, `base + sum(per_point * (value - the
-/// attribute's catalogue base))`, rounded once per stat and then clamped to
-/// that stat's range. An attribute the store does not hold counts as its
-/// base and contributes nothing. Nothing else computes a derived stat: the
-/// game, the Points preview and `balance_sim` all call this.
-pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+/// What `attrs` add above their catalogue bases, per stat: the rounded sum of
+/// `per_point * (value - base)` with no base added and no range applied, so it
+/// can be negative. `derive` adds a base to it and clamps, and `Game::seat_derived`
+/// subtracts it from a program's stored figures to find the base they imply -
+/// one sum, so the two cannot disagree. Crit, fumble and extraction stay
+/// fractional, as they are in `derive`.
+pub fn attribute_contribution(attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
     let mut sums = BTreeMap::<DerivedStat, f32>::new();
     for def in db.iter() {
         let delta = attrs.get(&def.id).map_or(0, |v| v - def.base) as f32;
@@ -334,29 +377,46 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
         }
     }
     let sum = |stat: DerivedStat| sums.get(&stat).copied().unwrap_or(0.0);
-    let rounded = |base: i32, stat: DerivedStat| (base as f32 + sum(stat)).round() as i32;
+    let rounded = |stat: DerivedStat| sum(stat).round() as i32;
     DerivedStats {
-        max_hp: rounded(base.max_hp, DerivedStat::MaxHp).max(1),
-        atk: rounded(base.atk, DerivedStat::Atk).max(1),
-        mitigation: rounded(base.mitigation, DerivedStat::Mitigation).max(0),
-        decompiler: rounded(base.decompiler, DerivedStat::Decompiler).max(0),
-        max_power: (base.max_power + sum(DerivedStat::MaxPower))
-            .round()
-            .max(MIN_MAX_POWER),
-        status_resist: rounded(base.status_resist, DerivedStat::StatusResist)
-            .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
-        extraction: (base.extraction + sum(DerivedStat::Extraction))
-            .clamp(0.0, MINING_EXTRACTION_CAP),
-        crit: (base.crit + sum(DerivedStat::Crit) as f64).clamp(0.0, CRIT_CHANCE_MAX),
-        fumble: (base.fumble + sum(DerivedStat::Fumble) as f64).clamp(0.0, FUMBLE_CHANCE_MAX),
+        max_hp: rounded(DerivedStat::MaxHp),
+        atk: rounded(DerivedStat::Atk),
+        mitigation: rounded(DerivedStat::Mitigation),
+        decompiler: rounded(DerivedStat::Decompiler),
+        max_power: sum(DerivedStat::MaxPower).round(),
+        status_resist: rounded(DerivedStat::StatusResist),
+        extraction: sum(DerivedStat::Extraction),
+        crit: sum(DerivedStat::Crit) as f64,
+        fumble: sum(DerivedStat::Fumble) as f64,
     }
 }
 
-/// Whose attributes a spend raises. A companion variant joins it when
-/// programs are derived.
+/// The one formula. For each stat, `base + attribute_contribution`, then
+/// clamped to that stat's range. An attribute the store does not hold counts
+/// as its base and contributes nothing. Nothing else computes a derived stat:
+/// the game, the Points preview and `balance_sim` all call this.
+pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> DerivedStats {
+    let c = attribute_contribution(attrs, db);
+    DerivedStats {
+        max_hp: (base.max_hp + c.max_hp).max(1),
+        atk: (base.atk + c.atk).max(1),
+        mitigation: (base.mitigation + c.mitigation).max(0),
+        decompiler: (base.decompiler + c.decompiler).max(0),
+        max_power: (base.max_power + c.max_power).round().max(MIN_MAX_POWER),
+        status_resist: (base.status_resist + c.status_resist)
+            .clamp(STATUS_RESIST_MIN, STATUS_RESIST_MAX),
+        extraction: (base.extraction + c.extraction).clamp(0.0, MINING_EXTRACTION_CAP),
+        crit: (base.crit + c.crit).clamp(0.0, CRIT_CHANCE_MAX),
+        fumble: (base.fumble + c.fumble).clamp(0.0, FUMBLE_CHANCE_MAX),
+    }
+}
+
+/// Whose attributes a spend raises.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatOwner {
     Player,
+    /// A seated program; refused with `SpendError::NoSuchTarget` otherwise.
+    Program(Entity),
 }
 
 /// Why `Game::spend_stat_points` wrote nothing.
@@ -457,6 +517,12 @@ pub fn add_xp(
                 gain.atk += atk;
             }
             Growth::Points => gain.stat_points += STAT_POINTS_PER_LEVEL,
+            Growth::ProgramPoints { multiplier, roll } => {
+                let (parity, analysis) = program_level_points(multiplier, roll);
+                gain.parity += parity;
+                gain.analysis += analysis;
+                continue;
+            }
         }
         stats.hp = stats.max_hp;
     }
@@ -667,6 +733,56 @@ mod tests {
             STAT_POINTS_PER_LEVEL * 3
         );
     }
+    #[test]
+    fn program_points_equal_the_old_scaled_growth_at_roll_one() {
+        let db = shipped_db();
+        for g in [1.0f32, 1.25, 1.5, 2.0] {
+            let (parity, analysis) = program_level_points(g, 1.0);
+            let attrs = attrs_at_base(
+                &db,
+                &[("parity", parity as i32), ("analysis", analysis as i32)],
+            );
+            let d = derive(&DerivedBase::player(), &attrs, &db);
+            assert_eq!(
+                d.max_hp - PLAYER_BASE_STATS.max_hp,
+                scaled_growth(HP_PER_LEVEL, g),
+                "hp at g {g}"
+            );
+            assert_eq!(
+                d.atk - PLAYER_BASE_STATS.atk,
+                scaled_growth(ATK_PER_LEVEL, g),
+                "atk at g {g}"
+            );
+        }
+    }
+
+    #[test]
+    fn program_points_level_up_moves_no_stats_and_does_not_heal() {
+        let mut exp = Experience::default();
+        let mut stats = Stats {
+            hp: 3,
+            max_hp: 30,
+            atk: 5,
+            mitigation: 0,
+        };
+        let owed = exp.xp_to_next;
+        let gain = add_xp(
+            &mut exp,
+            &mut stats,
+            owed,
+            Growth::ProgramPoints {
+                multiplier: 1.5,
+                roll: 1.0,
+            },
+            None,
+            0,
+        );
+        assert_eq!(gain.levels, 1);
+        assert_eq!((gain.parity, gain.analysis), (6, 3));
+        assert_eq!((stats.hp, stats.max_hp, stats.atk), (3, 30, 5));
+        assert_eq!((gain.max_hp, gain.atk), (0, 0));
+    }
+
     use crate::tuning::{
         BASELINE_GROWTH_MULTIPLIER, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, TALENT_START_LEVEL,
         XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,

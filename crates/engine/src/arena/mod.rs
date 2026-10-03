@@ -91,6 +91,24 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
         None => (BASELINE_GROWTH_MULTIPLIER, None),
     };
 
+    // A seated program levels through points, which `Game` places once at
+    // the end rather than level by level.
+    let seated = game
+        .world
+        .get::<crate::components::ProgramBase>(entity)
+        .is_some();
+    let growth = if seated {
+        // Roll 1.0, the species curve: an arena fight measures the species,
+        // so the individual roll's luck must not leak into the figures.
+        let (multiplier, _) = game.program_growth(entity);
+        progression::Growth::ProgramPoints {
+            multiplier,
+            roll: 1.0,
+        }
+    } else {
+        progression::Growth::Auto { multiplier: growth }
+    };
+    let mut earned = progression::LevelGain::default();
     let mut query = game.world.query::<(&mut Experience, &mut Stats)>();
     let Ok((mut exp, mut stats)) = query.get_mut(&mut game.world, entity) else {
         return;
@@ -100,20 +118,13 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     // remainder a later kill would inherit.
     while exp.level < level {
         let owed = exp.xp_to_next.saturating_sub(exp.xp);
-        if progression::add_xp(
-            &mut exp,
-            &mut stats,
-            owed,
-            progression::Growth::Auto { multiplier: growth },
-            cap,
-            0,
-        )
-        .levels
-            == 0
-        {
+        let gain = progression::add_xp(&mut exp, &mut stats, owed, growth, cap, 0);
+        if gain.levels == 0 {
             break;
         }
+        earned.absorb(gain);
     }
+    game.apply_program_levels(entity, earned);
 
     if level > before {
         game.install_unlocked_routines(entity, before, level);
@@ -209,6 +220,35 @@ pub(crate) fn spawn_companion(game: &mut Game, species: &str, level: u32) -> Opt
     let program = game.adopt_program(species, pos.x, pos.y, 1.0)?;
     set_level(game, program, level);
     Some(program)
+}
+
+/// `spawn_companion`, but every point a level earns goes into `attribute`
+/// rather than the species' Parity/Analysis split: the program holds its
+/// points while levelling and spends the whole bank at the end. Refused when
+/// the attribute is unknown or not buyable, like `set_player_level`'s pattern, so a
+/// sweep cannot quietly measure the default.
+pub(crate) fn spawn_companion_spending(
+    game: &mut Game,
+    species: &str,
+    level: u32,
+    attribute: &crate::attributes::AttributeId,
+) -> Result<Entity, String> {
+    let program = spawn_companion(game, species, 1)
+        .ok_or_else(|| format!("unknown companion species `{species}`"))?;
+    game.world
+        .entity_mut(program)
+        .insert(components::HoldPoints(true));
+    set_level(game, program, level);
+    let bank = game
+        .world
+        .get::<components::StatPoints>(program)
+        .map_or(0, |p| p.0);
+    game.spend_stat_points(StatOwner::Program(program), &[(attribute.clone(), bank)])
+        .map_err(|e| format!("spend `{attribute}` on `{species}`: {e:?}"))?;
+    game.world
+        .entity_mut(program)
+        .insert(components::HoldPoints(false));
+    Ok(program)
 }
 
 /// A fight set up and open, with nobody having acted yet.
@@ -571,6 +611,41 @@ mod tests {
             !game.world.get::<Routines>(program).unwrap().0.is_empty(),
             "a companion arrives with its innate routines"
         );
+    }
+
+    #[test]
+    fn a_companion_spend_puts_every_levels_points_in_the_named_attribute() {
+        let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species = a_species(&game);
+        let parity = crate::attributes::AttributeId::from("parity");
+        let footprint = crate::attributes::AttributeId::from("footprint");
+        let default = spawn_companion(&mut game, &species, 8).unwrap();
+        let spent = spawn_companion_spending(&mut game, &species, 8, &footprint).unwrap();
+
+        let held = |game: &Game, e: Entity, id: &crate::attributes::AttributeId| {
+            game.attributes_of(e).get(id).unwrap()
+        };
+        assert!(
+            held(&game, spent, &parity) < held(&game, default, &parity),
+            "the default spend buys Parity and the Footprint one does not"
+        );
+        assert!(held(&game, spent, &footprint) > held(&game, default, &footprint));
+        assert_eq!(
+            game.world
+                .get::<crate::components::StatPoints>(spent)
+                .unwrap()
+                .0,
+            0
+        );
+        assert_eq!(game.world.get::<Experience>(spent).unwrap().level, 8);
+    }
+
+    #[test]
+    fn a_spend_naming_an_unknown_attribute_is_refused() {
+        let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let species = a_species(&game);
+        let unknown = crate::attributes::AttributeId::from("not_an_attribute");
+        assert!(spawn_companion_spending(&mut game, &species, 3, &unknown).is_err());
     }
 
     #[test]

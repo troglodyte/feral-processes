@@ -1864,6 +1864,21 @@ impl Game {
             });
         }
 
+        let holding = self.programs_holding_points();
+        if holding > 0 {
+            let noun = if holding == 1 {
+                "program has"
+            } else {
+                "programs have"
+            };
+            rows.push(AttentionRow {
+                kind: AttentionKind::ProgramPoints,
+                text: format!("{holding} {noun} points to spend (Manifest)"),
+                key: 'p',
+                threat: false,
+            });
+        }
+
         let (count, capacity) = (self.pet_count(), self.pet_capacity());
         if count > capacity {
             rows.push(AttentionRow {
@@ -2361,12 +2376,29 @@ impl Game {
                     }),
                 growth_multiplier: species.growth_multiplier,
                 base_speed: species.base_speed,
-                base_int: species.base_int,
+                analysis: crate::species::analysis_of(
+                    self.world.get::<crate::components::Attributes>(entity),
+                    Some(species),
+                    self.world.resource::<crate::attributes::AttributeDb>(),
+                ),
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
                 needs: self.need_rows(entity),
                 mood: self.manifest_mood(entity),
+                points: self.program_points(entity),
             })),
+        })
+    }
+
+    /// The bank and hold of a seated program, for the manifest.
+    fn program_points(&self, entity: Entity) -> Option<ProgramPoints> {
+        self.world.get::<crate::components::ProgramBase>(entity)?;
+        Some(ProgramPoints {
+            banked: self.stat_points_of(StatOwner::Program(entity)),
+            holding: self
+                .world
+                .get::<crate::components::HoldPoints>(entity)
+                .is_some_and(|h| h.0),
         })
     }
 
@@ -2410,7 +2442,11 @@ impl Game {
         let def = self.world.resource::<SpeciesDb>().get(species)?;
         Some(WorkProfile {
             speed: def.base_speed,
-            analysis: def.base_int,
+            analysis: crate::species::analysis_of(
+                self.world.get::<crate::components::Attributes>(creature),
+                Some(def),
+                self.world.resource::<crate::attributes::AttributeDb>(),
+            ),
             class: def.affinity_class(),
         })
     }

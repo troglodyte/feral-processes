@@ -9,7 +9,6 @@
     taming_difficulty: 0.2,
     habitats: [OpenGrid, Backplane],
     base_speed: 14,
-    base_int: 11,
     moves: [
         (name: "Ping", power: 5, spread: 2, ranged: true),
         (name: "Pulse", power: 8, spread: 3),

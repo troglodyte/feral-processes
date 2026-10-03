@@ -320,6 +320,7 @@ impl Game {
         // the base has finished its own beat.
         self.run_outposts();
         self.schedule.run(&mut self.world);
+        self.drain_program_levels();
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an
         // *edge*, and one tick later there is nothing left to read it off.

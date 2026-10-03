@@ -1137,18 +1137,11 @@ impl Game {
             return;
         }
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
-        let species_growth = self
-            .world
-            .get::<Creature>(companion)
-            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|s| s.growth_multiplier)
-            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-        let individual_roll = self
-            .world
-            .get::<Potential>(companion)
-            .map(|p| p.growth_roll)
-            .unwrap_or(Potential::NEUTRAL.growth_roll);
-        let growth_multiplier = species_growth * individual_roll;
+        let (species_growth, individual_roll) = self.program_growth(companion);
+        let growth = progression::Growth::ProgramPoints {
+            multiplier: species_growth,
+            roll: individual_roll,
+        };
         let before_level = self
             .world
             .get::<Experience>(companion)
@@ -1164,13 +1157,12 @@ impl Game {
                 &mut exp,
                 &mut stats,
                 amount,
-                progression::Growth::Auto {
-                    multiplier: growth_multiplier,
-                },
+                growth,
                 Some(level_cap),
                 xp_boost_pct,
             )
         };
+        let gain = self.apply_program_levels(companion, gain);
         let level = self
             .world
             .get::<Experience>(companion)
@@ -1296,6 +1288,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(front).insert(parts);
         self.install_innate_routines(front);
+        self.seat_derived(front);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {
@@ -1453,6 +1446,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(lead).insert(parts);
         self.install_innate_routines(lead);
+        self.seat_derived(lead);
         self.log_kind(
             MessageKind::Outcome,
             "ICE breached! The program now runs under your control.",

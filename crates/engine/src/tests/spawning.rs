@@ -972,6 +972,12 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
             },
         ))
         .id();
+    for e in [low_roll, high_roll] {
+        game.world
+            .entity_mut(e)
+            .insert(crate::components::Attributes::default());
+        game.seat_derived(e);
+    }
     enlist(&mut game, low_roll);
     enlist(&mut game, high_roll);
 
@@ -1735,6 +1741,9 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: None,
+            stat_points: 0,
+            hold_points: false,
         }],
         structures: Vec::new(),
         nests: Vec::new(),

@@ -177,8 +177,19 @@ impl Game {
         self.apply_equipment_delta(target, gear, -1);
         let stats = *self.world.get::<Stats>(target).unwrap();
         let after = refactored(&stats, &upgrade, tier);
-        *self.world.get_mut::<Stats>(target).unwrap() = after;
+        // A seated program's figures are recomputed from its base, which
+        // would discard a write to `Stats`; the refactor is permanent, so
+        // its delta joins the base instead.
         self.apply_equipment_delta(target, gear, 1);
+        let mut base = self
+            .world
+            .get_mut::<crate::components::ProgramBase>(target)
+            .unwrap();
+        base.0.max_hp += after.max_hp - stats.max_hp;
+        base.0.atk += after.atk - stats.atk;
+        base.0.mitigation += after.mitigation - stats.mitigation;
+        self.recompute_derived(target);
+        self.world.get_mut::<Stats>(target).unwrap().hp = after.hp.min(after.max_hp);
         if upgrade.zone_bump {
             // Recorded, not merely applied: `program_payout` divides bought
             // tiers back out, or twelve printable Core Fragments would buy a

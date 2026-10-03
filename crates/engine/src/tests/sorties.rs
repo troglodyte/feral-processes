@@ -1139,8 +1139,14 @@ fn provisions_restore_integrity_between_battles() {
             .world
             .get_mut::<crate::components::Stats>(member)
             .unwrap();
+        let raised = 4_000 - stats.max_hp;
         stats.max_hp = 4_000;
         stats.hp = 2_000;
+        // A seated program's max HP is its base's derivation, which a level
+        // earned mid-trip recomputes; the base carries the depth too.
+        if let Some(mut base) = game.world.get_mut::<crate::components::ProgramBase>(member) {
+            base.0.max_hp += raised;
+        }
     }
     let hurt: Vec<i32> = squad
         .iter()

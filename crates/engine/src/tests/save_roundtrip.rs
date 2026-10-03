@@ -176,14 +176,20 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         .get_mut::<Needs>(member)
         .unwrap()
         .set(&need, 42.0);
+    // Reseated at chosen figures (`spawn_tamed` seats at its own, and a bare
+    // `Stats` write is overwritten by recompute), so the saved `base` has
+    // distinct values to get wrong. The bank and hold flag come after: seating
+    // zeroes them.
+    reseat_with_stats(game, member, 30, 6, 40);
+    game.world.entity_mut(member).insert((
+        crate::components::StatPoints(9),
+        crate::components::HoldPoints(true),
+    ));
     // Damaged, so a builder that wrote `max_hp` into `hp` (or the reverse)
-    // has two different numbers to get wrong. `mitigation` is set for the
-    // same reason — `spawn_tamed` leaves it at 1, which is close enough to
-    // several other fields to be worth moving.
+    // has two different numbers to get wrong.
     {
         let mut stats = game.world.get_mut::<Stats>(member).unwrap();
         stats.hp = stats.max_hp - 13;
-        stats.mitigation = 17;
     }
 
     game.world.entity_mut(worker).insert((
@@ -400,15 +406,42 @@ fn a_rich_program_writes_every_field_it_was_given() {
         off_duties: _,
         staff_rank: _,
         drop_trooper: _,
+        base: _,
+        stat_points: _,
+        hold_points: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");
     assert_eq!(saved.position, (position.x, position.y), "position");
     assert_eq!(saved.hp, live.hp, "hp");
-    assert_eq!(saved.max_hp, live.max_hp, "max_hp");
-    assert_ne!(saved.hp, saved.max_hp, "the fixture damaged it");
-    assert_eq!(saved.atk, live.atk, "atk");
-    assert_eq!(saved.mitigation, 17, "mitigation");
+    // A seated program writes no derived figures: they come back from `base`.
+    assert_eq!(
+        (saved.max_hp, saved.atk, saved.mitigation),
+        (0, 0, 0),
+        "derived figures are not stored"
+    );
+    let base = saved.base.expect("a seated program writes its base");
+    let derived = crate::progression::derive(
+        &base,
+        game.world
+            .get::<crate::components::Attributes>(member)
+            .unwrap(),
+        game.world.resource::<crate::attributes::AttributeDb>(),
+    );
+    let receipt = *game.world.get::<BoughtStats>(member).unwrap();
+    let gear = game.gear_bonus(member);
+    assert_eq!(
+        (
+            derived.max_hp + receipt.max_hp,
+            derived.atk + receipt.atk + gear.atk,
+            derived.mitigation + receipt.mitigation + gear.mitigation
+        ),
+        (live.max_hp, live.atk, live.mitigation),
+        "the saved base derives the live stats"
+    );
+    assert_eq!(saved.stat_points, 9, "stat_points");
+    assert!(saved.hold_points, "hold_points");
+    assert_ne!(saved.hp, live.max_hp, "the fixture damaged it");
     assert!(saved.tamed, "tamed");
     assert_eq!(saved.power, 41.5, "power");
     assert_eq!(saved.level, 6, "level");
@@ -1392,4 +1425,64 @@ fn no_bolt_survives_a_save_and_load() {
         loaded.take_bolts().is_empty(),
         "a blow in flight was written into the save"
     );
+}
+
+/// Every door seats a tamed program and the writer always records `base`, so
+/// a tamed record without one is a malformed file, not an old one.
+#[test]
+fn a_tamed_record_without_a_base_is_refused_on_load() {
+    let dir = scratch_assets_dir("tamed_without_base");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_tamed(&mut game, 30, 6);
+    game.save(&path).expect("save");
+    let mut data = crate::save::load_from_file(&path).expect("read back");
+    let record = data
+        .creatures
+        .iter_mut()
+        .find(|c| c.tamed)
+        .expect("the program is in the file");
+    assert!(record.base.is_some(), "the writer records the base");
+    record.base = None;
+    crate::save::save_to_file(&path, &data).expect("write");
+
+    let err = Game::load(&path, &test_assets_dir())
+        .err()
+        .expect("a tamed record without a base must not load");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("no base"), "{err}");
+}
+
+/// The same refusal for a program an order is holding: `BuildSiteSave::program`
+/// is a `CreatureSave` too, and a refund would otherwise seat nothing.
+#[test]
+fn a_build_sites_tamed_program_without_a_base_is_refused_on_load() {
+    let dir = scratch_assets_dir("build_site_program_without_base");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 30, 6);
+    let snapshot = game.creature_save_for(program).expect("snapshot");
+    game.world.spawn((
+        BuildSite {
+            program: Some(snapshot),
+            ..BuildSite::new("fabricator".to_string(), vec![])
+        },
+        Position { x: 1, y: 1 },
+    ));
+    game.save(&path).expect("save");
+    let mut data = crate::save::load_from_file(&path).expect("read back");
+    let held = data.build_sites[0].program.as_mut().expect("held program");
+    assert!(held.base.is_some(), "the writer records the base");
+    held.base = None;
+    crate::save::save_to_file(&path, &data).expect("write");
+
+    let err = Game::load(&path, &test_assets_dir())
+        .err()
+        .expect("a held program without a base must not load");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("no base"), "{err}");
 }

@@ -4,7 +4,8 @@
 //! Creation is a step of a popup with its own title and numbering;
 //! `draw_allocate_stats` is the whole popup for the level-up spend.
 
-use feral_processes_app_core::CreationRow;
+use feral_processes_app_core::{AllocationFor, CreationRow};
+use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::DerivedStat;
 
 use super::level_up::{duel_heading, duel_lines};
@@ -57,7 +58,8 @@ pub(super) fn attribute_line(row: &CreationRow) -> Option<String> {
 /// The key line under the rows. `spends_pool` is creation: a pool that is
 /// lost if not spent, so the wizard moves on only once it is. Otherwise the
 /// points are banked and leaving keeps them.
-pub(super) fn footer(pool: u32, left: u32, spends_pool: bool) -> String {
+pub(super) fn footer(pool: u32, left: u32, spends_pool: bool, owner: Option<&str>) -> String {
+    let whose = owner.map(|name| format!(" for {name}")).unwrap_or_default();
     let keys = "Left/Right spends (Shift: all, Ctrl: half)";
     match spends_pool {
         true => format!(
@@ -65,26 +67,42 @@ pub(super) fn footer(pool: u32, left: u32, spends_pool: bool) -> String {
             pool - left
         ),
         false => format!(
-            "{left} of {pool} points left - {keys}; Enter confirms, Esc keeps the rest banked"
+            "{left} of {pool} points left{whose} - {keys}; Enter confirms, Esc keeps the rest banked"
         ),
     }
 }
 
 /// The level-up spend: `Mode::AllocateStats`.
 pub(super) fn draw_allocate_stats(
+    title: &str,
     rows: &[Row],
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    draw_popup(
-        "Spend Stat Points",
-        PopupSize::Large,
-        rows,
-        refusal,
-        painter,
-        m,
-    );
+    draw_popup(title, PopupSize::Large, rows, refusal, painter, m);
+}
+
+/// The name of the program whose points these are, `None` for the player's
+/// own: the title and the footer both name it.
+fn allocation_owner(app: &App) -> Option<String> {
+    let program = match app.stat_allocation.as_ref().map(|a| a.purpose()) {
+        Some(AllocationFor::Owned(StatOwner::Program(e))) => Some(e),
+        _ => None,
+    }?;
+    app.game
+        .as_ref()
+        .and_then(|game| game.manifest(program))
+        .map(|view| view.name)
+}
+
+/// The popup's title: names the program whose points these are, and says
+/// nothing extra for the player's own.
+pub(super) fn allocate_stats_title(app: &App) -> String {
+    match allocation_owner(app) {
+        Some(name) => format!("Spend Stat Points - {name}"),
+        None => "Spend Stat Points".to_string(),
+    }
 }
 
 /// The popup's rows, split out so the census can measure what is drawn.
@@ -113,6 +131,7 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
         app.allocation_pool(),
         app.allocation_points_left(),
         false,
+        allocation_owner(app).as_deref(),
     )));
     rows
 }
@@ -121,8 +140,8 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
 mod tests {
     use super::*;
     use crate::paint::with_painter;
-    use feral_processes_app_core::{AllocationFor, StatAllocation};
-    use feral_processes_engine::{DifficultyMode, Game, StatOwner};
+    use feral_processes_app_core::StatAllocation;
+    use feral_processes_engine::{DifficultyMode, Game};
 
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -133,8 +152,9 @@ mod tests {
         StatAllocation::new(
             AllocationFor::Owned(StatOwner::Player),
             pool,
+            game.derived_base(game.player_entity()),
             game.attribute_db(),
-            game.player_attributes(),
+            game.attributes_of(game.player_entity()),
         )
     }
 
@@ -186,7 +206,8 @@ mod tests {
         let text = |app: &App| {
             let rows = allocate_stats_rows(app);
             let m = ui_metrics(900.0);
-            let (_, shapes) = with_painter(|p| draw_allocate_stats(&rows, None, p, &m));
+            let (_, shapes) =
+                with_painter(|p| draw_allocate_stats("Spend Stat Points", &rows, None, p, &m));
             crate::paint::painted_text(&shapes).join(" | ")
         };
         let fresh = text(&app);
@@ -246,6 +267,34 @@ mod tests {
             .map(super::super::popup::row_label_text)
             .collect();
         assert!(text.iter().any(|t| t.contains("AGAINST A TYPICAL ZONE 99")));
+    }
+
+    /// The footer names whose points are being spent, as the title does: a
+    /// program by name, the player by nothing.
+    #[test]
+    fn the_footer_names_the_program_whose_points_these_are() {
+        let mut game = super::super::test_support::game_with_a_single_program(7);
+        let program = game.owned_pets()[0].entity;
+        let name = game.manifest(program).unwrap().name;
+        let allocation = StatAllocation::new(
+            AllocationFor::Owned(StatOwner::Program(program)),
+            4,
+            game.derived_base(program),
+            game.attribute_db(),
+            game.attributes_of(program),
+        );
+        let mut app = shipped_app();
+        app.game = Some(game);
+        app.stat_allocation = Some(allocation);
+        app.mode = Mode::AllocateStats;
+
+        let text: Vec<String> = allocate_stats_rows(&app)
+            .iter()
+            .map(super::super::popup::row_label_text)
+            .collect();
+        let footer = text.iter().find(|t| t.contains("points left")).unwrap();
+        assert!(footer.contains(&format!("for {name}")), "{footer}");
+        assert!(allocate_stats_title(&app).ends_with(&name));
     }
 
     fn shipped_app() -> App {

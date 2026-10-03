@@ -633,6 +633,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
+        self.seat_derived(program);
         Some(program)
     }
 

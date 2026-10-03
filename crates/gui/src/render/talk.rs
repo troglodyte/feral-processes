@@ -66,6 +66,7 @@ fn conversations_section(rows: Vec<SectionRow>) -> Section {
         rows,
         full_width: true,
         overflow: 0,
+        hint: "",
     }
 }
 

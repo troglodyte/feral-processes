@@ -451,6 +451,7 @@ shipped each, not the one containing the spec's first commit.
 | `2026-09-28-respawn-routine-design` | An area routine raising fallen bodies as temporary fighters; the Spawn Priority perk | `v0.14.0` |
 | `2026-09-30-affix-modding-design` | Adding and removing affixes on owned gear; the Affixes research tree | `v0.14.2` |
 | `2026-10-02-production-lines-design` | One worker per production line; a line is derived, never stored | `v0.14.6` |
+| `2026-10-02-derived-programs-design` | Owned programs derive their stats from attributes; a level grants attribute points a program can hold and spend; mining reads the program's own Analysis | `v0.15.0`; `ProgramBase` in `crates/engine/src/components.rs`, `Game::seat_derived`, save format 34, `docs/measurements/2026-10-02-derived-programs.md` |
 
 ## Four rows that need a footnote
 

@@ -1,8 +1,9 @@
 //! The player's derived figures: `progression::derive` applied to the
 //! entity's attributes, written back through the one door.
 
-use crate::components::{Attributes, Derived, StatPoints};
+use crate::components::{Attributes, Derived, HoldPoints, ProgramBase, StatPoints, Tamed};
 use crate::progression::{SpendError, StatOwner};
+use crate::resources::PendingProgramLevels;
 use crate::*;
 
 impl Game {
@@ -21,8 +22,12 @@ impl Game {
         owner: StatOwner,
         spend: &[(crate::attributes::AttributeId, u32)],
     ) -> Result<(), SpendError> {
-        let StatOwner::Player = owner;
-        let entity = self.player_entity();
+        let entity = match owner {
+            StatOwner::Player => self.player_entity(),
+            StatOwner::Program(program) => program,
+        };
+        // Only a seated program has a pool, so this is also the check that the
+        // target is one.
         let banked = self
             .world
             .get::<StatPoints>(entity)
@@ -83,6 +88,142 @@ impl Game {
         }
     }
 
+    /// `(species growth multiplier, individual growth roll)` for `entity`,
+    /// the two factors `progression::program_level_points` takes.
+    pub(crate) fn program_growth(&self, entity: Entity) -> (f32, f32) {
+        let species = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.growth_multiplier)
+            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+        let roll = self
+            .world
+            .get::<Potential>(entity)
+            .map_or(Potential::NEUTRAL.growth_roll, |p| p.growth_roll);
+        (species, roll)
+    }
+
+    /// Places the points a `Growth::ProgramPoints` level-up earned and
+    /// returns `gain` with `max_hp`/`atk` filled in as the derived change, so
+    /// the log sites that read them stay right. Unheld, the points go into
+    /// `Attributes` and the figures recompute; held, they bank in
+    /// `StatPoints`. Either way a level full-heals. A no-op for an unseated
+    /// entity.
+    pub(crate) fn apply_program_levels(
+        &mut self,
+        entity: Entity,
+        mut gain: crate::progression::LevelGain,
+    ) -> crate::progression::LevelGain {
+        let Some(held) = self.world.get::<HoldPoints>(entity).map(|h| h.0) else {
+            return gain;
+        };
+        if gain.levels == 0 {
+            return gain;
+        }
+        let before = self.world.get::<Stats>(entity).copied();
+        if held {
+            let earned = gain.parity + gain.analysis;
+            if let Some(mut points) = self.world.get_mut::<StatPoints>(entity) {
+                points.0 += earned;
+            }
+            gain.stat_points += earned;
+        } else {
+            // The pool is empty of these points, so `apply_stat_spend`'s
+            // decrement floors at zero and only the attributes and the
+            // recompute do anything.
+            self.apply_stat_spend(
+                entity,
+                &[
+                    (crate::attributes::AttributeId::from("parity"), gain.parity),
+                    (
+                        crate::attributes::AttributeId::from("analysis"),
+                        gain.analysis,
+                    ),
+                ],
+            );
+        }
+        if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+            stats.hp = stats.max_hp;
+            if let Some(before) = before {
+                gain.max_hp = stats.max_hp - before.max_hp;
+                gain.atk = stats.atk - before.atk;
+            }
+        }
+        gain
+    }
+
+    /// Places the level-ups `task_progress_system` queued for seated
+    /// programs, then writes the stat block it could not: only now is there a
+    /// delta to show.
+    pub(crate) fn drain_program_levels(&mut self) {
+        let pending = std::mem::take(&mut self.world.resource_mut::<PendingProgramLevels>().0);
+        for (entity, gain) in pending {
+            let gain = self.apply_program_levels(entity, gain);
+            let Some(stats) = self.world.get::<Stats>(entity).copied() else {
+                continue;
+            };
+            for line in crate::progression::stat_block(&gain.stat_rows(&stats)) {
+                self.log_base_kind(MessageKind::LevelUp, line);
+            }
+        }
+    }
+
+    /// Turns holding on or off for a seated program. Turning it off spends
+    /// the bank at once in the growth split, so no points are stranded: as
+    /// many whole levels' worth as it holds, then the remainder into Parity.
+    pub fn set_hold_points(&mut self, entity: Entity, hold: bool) -> Result<(), SpendError> {
+        if self.world.get::<ProgramBase>(entity).is_none() {
+            return Err(SpendError::NoSuchTarget);
+        }
+        self.world.entity_mut(entity).insert(HoldPoints(hold));
+        if hold {
+            return Ok(());
+        }
+        let bank = self.world.get::<StatPoints>(entity).map_or(0, |p| p.0);
+        if bank == 0 {
+            return Ok(());
+        }
+        let (g, _) = self.program_growth(entity);
+        let (parity, analysis) = crate::progression::program_level_points(g, 1.0);
+        let per_level = parity + analysis;
+        let levels = bank.checked_div(per_level).unwrap_or(0);
+        let remainder = bank - levels * per_level;
+        self.apply_stat_spend(
+            entity,
+            &[
+                (
+                    crate::attributes::AttributeId::from("parity"),
+                    levels * parity + remainder,
+                ),
+                (
+                    crate::attributes::AttributeId::from("analysis"),
+                    levels * analysis,
+                ),
+            ],
+        );
+        Ok(())
+    }
+
+    /// How many seated programs hold banked points: what the Manifest
+    /// attention row counts.
+    pub(crate) fn programs_holding_points(&mut self) -> usize {
+        let mut query = self.world.query::<(&HoldPoints, &StatPoints)>();
+        query
+            .iter(&self.world)
+            .filter(|(hold, points)| hold.0 && points.0 > 0)
+            .count()
+    }
+
+    /// Unspent points `owner` has banked, 0 for one that holds none.
+    pub fn stat_points_of(&self, owner: StatOwner) -> u32 {
+        let entity = match owner {
+            StatOwner::Player => self.player_entity(),
+            StatOwner::Program(program) => program,
+        };
+        self.world.get::<StatPoints>(entity).map_or(0, |p| p.0)
+    }
+
     /// The catalogue as the Points screen previews against - a clone, so a
     /// frontend holds no borrow on `Game`, `attribute_defs`' reason.
     pub fn attribute_db(&self) -> crate::attributes::AttributeDb {
@@ -91,27 +232,26 @@ impl Game {
             .clone()
     }
 
-    /// The player's attributes as they stand, the Points screen's "before".
-    pub fn player_attributes(&self) -> Attributes {
+    /// `entity`'s attributes as they stand, the Points screen's "before".
+    pub fn attributes_of(&self, entity: Entity) -> Attributes {
         self.world
-            .get::<Attributes>(self.player_entity())
+            .get::<Attributes>(entity)
             .cloned()
             .unwrap_or_default()
     }
 
-    /// What the player holds on top of their attributes' derivation - the
+    /// What `entity` holds on top of its attributes' derivation - the
     /// perk receipt and worn gear - so the Points screen can preview the
     /// figures the HUD will show. Read off the live stats rather than summed
     /// again, so it cannot drift from `recompute_derived`. Only the stats
     /// gear or a perk can move are non-zero.
-    pub fn player_stat_bonus(&self) -> crate::progression::DerivedStats {
-        let player = self.player_entity();
-        let derived = self.derived_stats(player);
+    pub fn stat_bonus(&self, entity: Entity) -> crate::progression::DerivedStats {
+        let derived = self.derived_stats(entity);
         let stats = *self
             .world
-            .get::<Stats>(player)
-            .expect("the player always has Stats");
-        let skill = self.world.get::<Decompiler>(player).map_or(0, |d| d.skill);
+            .get::<Stats>(entity)
+            .expect("an entity with a stat bonus has Stats");
+        let skill = self.world.get::<Decompiler>(entity).map_or(0, |d| d.skill);
         crate::progression::DerivedStats {
             max_hp: stats.max_hp - derived.max_hp,
             atk: stats.atk - derived.atk,
@@ -125,15 +265,70 @@ impl Game {
         }
     }
 
+    /// The base `entity` derives from: its `ProgramBase` when seated, the
+    /// player's otherwise. The one accessor, so no caller names
+    /// `DerivedBase::player()` for a program.
+    pub fn derived_base(&self, entity: Entity) -> crate::progression::DerivedBase {
+        self.world
+            .get::<ProgramBase>(entity)
+            .map_or_else(crate::progression::DerivedBase::player, |base| base.0)
+    }
+
     /// What `progression::derive` answers for `entity` right now.
     pub(crate) fn derived_stats(&self, entity: Entity) -> crate::progression::DerivedStats {
         crate::progression::derive(
-            &crate::progression::DerivedBase::player(),
+            &self.derived_base(entity),
             self.world
                 .get::<Attributes>(entity)
                 .unwrap_or(&Attributes::default()),
             self.world.resource::<crate::attributes::AttributeDb>(),
         )
+    }
+
+    /// Turns a tamed program with baked `Stats` into a derived one, working
+    /// backwards from its current figures: worn gear, the `BoughtStats`
+    /// receipt and what its attributes contribute are taken off, and what is
+    /// left is its `ProgramBase`. `Stats` is therefore the same before and
+    /// after for any figure in range (`derive` floors hp and attack at 1, which
+    /// a hand-built fixture can sit below), so current `hp` is untouched; only
+    /// Power can move, through recompute's clamp to the new maximum.
+    ///
+    /// A no-op for an untamed entity or one already seated, so every door
+    /// that makes a program calls it last without asking.
+    pub(crate) fn seat_derived(&mut self, entity: Entity) {
+        if self.world.get::<Tamed>(entity).is_none()
+            || self.world.get::<ProgramBase>(entity).is_some()
+        {
+            return;
+        }
+        let Some(stats) = self.world.get::<Stats>(entity).copied() else {
+            return;
+        };
+        let bought = self
+            .world
+            .get::<BoughtStats>(entity)
+            .copied()
+            .unwrap_or_default();
+        let gear = self.gear_bonus(entity);
+        let contribution = crate::progression::attribute_contribution(
+            self.world
+                .get::<Attributes>(entity)
+                .unwrap_or(&Attributes::default()),
+            self.world.resource::<crate::attributes::AttributeDb>(),
+        );
+        let base = crate::progression::DerivedBase::program(
+            stats.max_hp - bought.max_hp,
+            stats.atk - bought.atk - gear.atk,
+            stats.mitigation - bought.mitigation - gear.mitigation,
+            &contribution,
+        );
+        self.world.entity_mut(entity).insert((
+            ProgramBase(base),
+            Derived::default(),
+            StatPoints(0),
+            HoldPoints(false),
+        ));
+        self.recompute_derived(entity);
     }
 
     /// The only writer of derived values. Sets `Stats::{max_hp, atk,

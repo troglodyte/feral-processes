@@ -54,6 +54,15 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-10-02 — What a program's level points buy, and the mining spread](2026-10-02-derived-programs.md)
+  — the default Parity/Analysis split beats all-Parity, all-Footprint and
+  all-Bandwidth in all six cells (levels 10 and 20, `g` 1.0 / 1.25 / 1.5),
+  42-64% against 0-28%, because each single-attribute spend drops the other
+  half of what a level buys. `balance_sim` curves did not move. A posted
+  program's mining chance spans 0.12 across a species' Analysis spread and
+  a default-spend rootkit is at a certain success by level 10. Nothing
+  retuned.
+
 - [2026-09-29 — What a level's six stat points buy, and where each class starts](2026-09-29-level-up-stat-spend.md)
   — all-Parity beats the canonical 4 Parity + 2 Analysis by 23pp at level 15
   and 15pp at 20 (46.5% vs 23.5%, 81.0% vs 66.2%), any Parity-free spend

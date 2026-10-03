@@ -262,10 +262,8 @@ fn stat_points(app: &App) -> u32 {
 }
 
 fn attribute(app: &App, id: &str) -> i32 {
-    app.game
-        .as_ref()
-        .unwrap()
-        .player_attributes()
+    let game = app.game.as_ref().unwrap();
+    game.attributes_of(game.player_entity())
         .get(&id.into())
         .unwrap()
 }

@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::components::Rarity;
+use feral_processes_engine::progression::DerivedBase;
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save::{self, CreatureSave};
 use feral_processes_engine::stack::{Dir, FrameSpec, generate};
@@ -245,6 +246,37 @@ pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
     app
+}
+
+/// An app owning one seated program that has `banked` points, held or not,
+/// written onto its save record and reloaded - `app_owning_a_developed_program`'s
+/// route, for the same reason. Returns the program.
+pub(crate) fn app_owning_a_program_with_points(
+    seed: u32,
+    banked: u32,
+    hold: bool,
+) -> (App, Entity) {
+    let assets_dir = test_assets_dir();
+    let mut app = app_owning_distant_programs(seed, 1);
+    let path = scratch_path("program_points", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    for c in data.creatures.iter_mut().filter(|c| c.tamed) {
+        // A record with a base is what load restores as seated. Its attack
+        // is not the player's, so a preview that assumed the player's base
+        // would read a different figure.
+        let mut base = feral_processes_engine::progression::DerivedBase::player();
+        base.atk += 7;
+        c.base = Some(base);
+        c.stat_points = banked;
+        c.hold_points = hold;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    // The player is the first subject, so the program is the second.
+    let program = app.game.as_mut().unwrap().manifest_subjects()[1];
+    (app, program)
 }
 
 /// An app whose player already holds `programs` in
@@ -498,6 +530,9 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: tamed_base(10, 3, 2),
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -573,6 +608,9 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     }
 }
 
@@ -690,6 +728,9 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -983,6 +1024,9 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 2),
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1088,6 +1132,9 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: tamed_base(10, 3, 2),
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1242,6 +1289,9 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: None,
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1383,6 +1433,9 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 1),
+        stat_points: 0,
+        hold_points: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1509,6 +1562,9 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 1),
+        stat_points: 0,
+        hold_points: false,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1635,6 +1691,9 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 1),
+        stat_points: 0,
+        hold_points: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1750,6 +1809,9 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 2),
+        stat_points: 0,
+        hold_points: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -2108,6 +2170,9 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: if tamed { tamed_base(10, 3, 2) } else { None },
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2213,6 +2278,9 @@ pub(crate) fn app_with_companions_and_cargo(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: tamed_base(30, 3, 1),
+            stat_points: 0,
+            hold_points: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2526,6 +2594,9 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
+            base: tamed_base(10, 3, 1),
+            stat_points: 0,
+            hold_points: false,
         });
     }
     data.locale = if underground {
@@ -2979,6 +3050,9 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(10, 3, 2),
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -3109,4 +3183,15 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
     app
+}
+
+/// The `base` a hand-written tamed `CreatureSave` needs: `Game::load` refuses
+/// an owned program without one, and these figures are what it derives from.
+pub(crate) fn tamed_base(max_hp: i32, atk: i32, mitigation: i32) -> Option<DerivedBase> {
+    Some(DerivedBase {
+        max_hp,
+        atk,
+        mitigation,
+        ..DerivedBase::player()
+    })
 }

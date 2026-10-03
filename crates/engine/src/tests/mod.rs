@@ -39,6 +39,7 @@ mod crafting;
 mod creation;
 mod depot_filter;
 mod derived;
+mod derived_programs;
 mod descriptions;
 mod difficulty;
 mod disposition;

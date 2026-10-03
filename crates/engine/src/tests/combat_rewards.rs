@@ -457,6 +457,12 @@ fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp(
     };
     let baseline = spawn(&mut game, baseline_id);
     let boosted = spawn(&mut game, boosted_id);
+    for e in [baseline, boosted] {
+        game.world
+            .entity_mut(e)
+            .insert(crate::components::Attributes::default());
+        game.seat_derived(e);
+    }
     enlist(&mut game, baseline);
     enlist(&mut game, boosted);
 

@@ -259,22 +259,6 @@ pub struct SpeciesDef {
     /// average.
     #[serde(default = "default_base_speed")]
     pub base_speed: i32,
-    /// How good a member of this species is at *extracting* — the fourth
-    /// term in `systems::mining_success_chance`, so it moves how often a
-    /// worked node fizzles rather than what a successful cycle pays.
-    ///
-    /// Read as a **deviation from `tuning::DEFAULT_BASE_INT`**, which is why
-    /// `#[serde(default)]` here is stronger than the usual modding promise:
-    /// an existing species file (including a mod's) doesn't merely keep
-    /// parsing, it keeps extracting at precisely its old rate, because the
-    /// term it contributes is zero.
-    ///
-    /// Not on `Stats`, and that is a decision rather than a shortcut: a stat
-    /// grows on level-up, so a level-20 bruiser would out-think a level-1
-    /// specialist and role would collapse back into tier — the confound this
-    /// field exists to remove. A species' aptitude is fixed to the species.
-    #[serde(default = "default_base_int")]
-    pub base_int: i32,
     /// What a member of this species may spend on movement in one tactical
     /// turn, in place of the figure `base_speed` derives — see
     /// `tactical::reach::allowance`. Read in tactical battles and nowhere
@@ -434,6 +418,17 @@ impl SpeciesDef {
         self.moves
             .first()
             .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range())
+    }
+
+    /// This species' catalogue Analysis: its authored `analysis` base, or the
+    /// attribute's own catalogue base when it authors none. What an
+    /// unseated program works a node at; a seated one reads its own
+    /// `Attributes` through `analysis_of`.
+    pub fn analysis(&self, attributes: &crate::attributes::AttributeDb) -> i32 {
+        self.attributes
+            .get("analysis")
+            .copied()
+            .unwrap_or_else(|| attributes.analysis_base())
     }
 
     /// The class this species reads as, or `None` for one that raises no
@@ -884,7 +879,7 @@ pub fn stat_shape_faults(species: &SpeciesDef) -> Vec<ShapeFault> {
 /// Ways a roster's extraction aptitude has collapsed back into its
 /// difficulty ladder.
 ///
-/// The point of `base_int` is a species axis that is **not** the ladder
+/// The point of the Analysis attribute is a species axis that is **not** the ladder
 /// wearing another name. `growth_multiplier` is the ladder, so what has to
 /// hold is that aptitude cuts across it.
 #[derive(Clone, Debug, PartialEq)]
@@ -934,7 +929,7 @@ impl std::fmt::Display for AptitudeFault {
 /// difficulty ladder.
 ///
 /// Bosses are filtered out here rather than by the caller: they can never
-/// be posted to a node, so their `base_int` is flavour and must not be able
+/// be posted to a node, so their Analysis is flavour and must not be able
 /// to carry this either way.
 ///
 /// Deliberately not "INT is uncorrelated with tier" — a correlation
@@ -952,12 +947,14 @@ impl std::fmt::Display for AptitudeFault {
 /// than refusing a proposal whose other moves were fine.
 pub fn extraction_aptitude_faults<'a>(
     species: impl IntoIterator<Item = &'a SpeciesDef>,
+    attributes: &crate::attributes::AttributeDb,
 ) -> Vec<AptitudeFault> {
     let ordinary: Vec<&SpeciesDef> = species.into_iter().filter(|s| !s.is_boss).collect();
     if ordinary.is_empty() {
         return vec![AptitudeFault::TooFewBands { bands: 0 }];
     }
-    let mean = ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
+    let mean =
+        ordinary.iter().map(|s| s.analysis(attributes)).sum::<i32>() as f64 / ordinary.len() as f64;
 
     let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> = Default::default();
     for s in &ordinary {
@@ -972,13 +969,19 @@ pub fn extraction_aptitude_faults<'a>(
         faults.push(AptitudeFault::TooFewBands { bands: bands.len() });
     }
     for (band, members) in &bands {
-        if !members.iter().any(|s| (s.base_int as f64) > mean) {
+        if !members
+            .iter()
+            .any(|s| (s.analysis(attributes) as f64) > mean)
+        {
             faults.push(AptitudeFault::BandAllDull {
                 band: band.clone(),
                 mean,
             });
         }
-        if !members.iter().any(|s| (s.base_int as f64) < mean) {
+        if !members
+            .iter()
+            .any(|s| (s.analysis(attributes) as f64) < mean)
+        {
             faults.push(AptitudeFault::BandAllSharp {
                 band: band.clone(),
                 mean,
@@ -993,11 +996,15 @@ pub fn extraction_aptitude_faults<'a>(
         .iter()
         .map(|s| s.growth_multiplier)
         .fold(f32::MIN, f32::max);
-    let sharpest_overall = ordinary.iter().map(|s| s.base_int).max().unwrap();
+    let sharpest_overall = ordinary
+        .iter()
+        .map(|s| s.analysis(attributes))
+        .max()
+        .unwrap();
     let sharpest_on_top_rung = ordinary
         .iter()
         .filter(|s| s.growth_multiplier == steepest)
-        .map(|s| s.base_int)
+        .map(|s| s.analysis(attributes))
         .max()
         .expect("the steepest band has members");
     if sharpest_on_top_rung >= sharpest_overall {
@@ -1009,16 +1016,27 @@ pub fn extraction_aptitude_faults<'a>(
     faults
 }
 
+/// The Analysis a program works a node at: its own attribute when it has
+/// one (seated), else its species' catalogue figure, else the attribute's
+/// catalogue base. The
+/// one place that fallback chain lives, so a mining roll, an outpost
+/// crew roll and the Manifest cannot disagree about it.
+pub fn analysis_of(
+    attributes: Option<&crate::components::Attributes>,
+    def: Option<&SpeciesDef>,
+    catalogue: &crate::attributes::AttributeDb,
+) -> i32 {
+    attributes
+        .and_then(|a| a.get(&crate::attributes::AttributeId::from("analysis")))
+        .unwrap_or_else(|| def.map_or_else(|| catalogue.analysis_base(), |d| d.analysis(catalogue)))
+}
+
 fn default_growth_multiplier() -> f32 {
     crate::tuning::BASELINE_GROWTH_MULTIPLIER
 }
 
 fn default_base_speed() -> i32 {
     crate::tuning::DEFAULT_BASE_SPEED
-}
-
-fn default_base_int() -> i32 {
-    crate::tuning::DEFAULT_BASE_INT
 }
 
 #[derive(Resource, Default)]
@@ -1197,6 +1215,61 @@ impl SpeciesDb {
 
 #[cfg(test)]
 mod tests {
+    fn catalogue_with_analysis_base(base: i32) -> crate::attributes::AttributeDb {
+        let dir = crate::tests::support::scratch_assets_dir("species-analysis-base");
+        std::fs::create_dir_all(&*dir).unwrap();
+        std::fs::write(
+            dir.join("analysis.ron"),
+            format!(
+                "(id: \"analysis\", name: \"Analysis\", legacy: \"Intelligence\", short: \"s\", \
+                 meaning: \"m\", base: {base}, spread: 3)"
+            ),
+        )
+        .unwrap();
+        crate::attributes::AttributeDb::load_dir(&dir).unwrap().0
+    }
+
+    #[test]
+    fn analysis_reads_the_programs_own_attribute_before_its_species() {
+        use crate::attributes::AttributeId;
+        let catalogue = catalogue_with_analysis_base(10);
+        let mut def: SpeciesDef = ron::from_str(
+            r#"(id: "t", name: "T", glyph: 't', color: Green, base_hp: 1, base_atk: 1,
+                base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)], work_resource: None)"#,
+        )
+        .unwrap();
+        assert_eq!(analysis_of(None, None, &catalogue), 10);
+        assert_eq!(analysis_of(None, Some(&def), &catalogue), 10);
+        def.attributes.insert("analysis".into(), 14);
+        assert_eq!(analysis_of(None, Some(&def), &catalogue), 14);
+        let mut own = crate::components::Attributes::default();
+        own.set(&AttributeId::from("analysis"), 17);
+        assert_eq!(analysis_of(Some(&own), Some(&def), &catalogue), 17);
+        assert_eq!(
+            analysis_of(
+                Some(&crate::components::Attributes::default()),
+                Some(&def),
+                &catalogue
+            ),
+            14
+        );
+    }
+
+    #[test]
+    fn a_modded_analysis_base_moves_the_fallback() {
+        let def: SpeciesDef = ron::from_str(
+            r#"(id: "t", name: "T", glyph: 't', color: Green, base_hp: 1, base_atk: 1,
+                base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)], work_resource: None)"#,
+        )
+        .unwrap();
+        let modded = catalogue_with_analysis_base(23);
+        assert_eq!(modded.analysis_base(), 23);
+        assert_eq!(def.analysis(&modded), 23);
+        assert_eq!(analysis_of(None, None, &modded), 23);
+    }
+
     use super::*;
     use std::path::Path;
 
@@ -1583,51 +1656,6 @@ mod tests {
         )
         .expect("a species file with no base_speed must still parse");
         assert_eq!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
-    }
-
-    /// Same modding contract as `base_speed` above, and one step stronger:
-    /// the baseline is not merely *a* value a mod lands on, it is the value
-    /// at which `mining_success_chance`'s deviation term is zero. A species
-    /// file predating this field therefore extracts at exactly the rate it
-    /// did before the field existed.
-    #[test]
-    fn base_int_defaults_when_a_species_file_omits_it() {
-        let omitted: SpeciesDef = ron::from_str(
-            r#"(
-                id: "testmon",
-                name: "Testmon",
-                glyph: 't',
-                color: Green,
-                base_hp: 10,
-                base_atk: 1,
-                base_mitigation: 1,
-                taming_difficulty: 0.5,
-                habitats: [OpenGrid],
-                moves: [(name: "Poke", power: 1)],
-                work_resource: None,
-            )"#,
-        )
-        .expect("a species file with no base_int must still parse");
-        assert_eq!(omitted.base_int, crate::tuning::DEFAULT_BASE_INT);
-
-        let declared: SpeciesDef = ron::from_str(
-            r#"(
-                id: "testmon",
-                name: "Testmon",
-                glyph: 't',
-                color: Green,
-                base_hp: 10,
-                base_atk: 1,
-                base_mitigation: 1,
-                taming_difficulty: 0.5,
-                habitats: [OpenGrid],
-                base_int: 14,
-                moves: [(name: "Poke", power: 1)],
-                work_resource: None,
-            )"#,
-        )
-        .expect("a species file declaring base_int must parse");
-        assert_eq!(declared.base_int, 14);
     }
 
     #[test]
@@ -2023,7 +2051,7 @@ mod tests {
         assert_eq!(get("wintermute"), 2.0);
     }
 
-    /// The point of `base_int` is a species axis that is **not** the ladder
+    /// The point of the Analysis attribute is a species axis that is **not** the ladder
     /// wearing another name. Growth multiplier is the ladder, so the property
     /// asserted here is that aptitude cuts across it.
     ///
@@ -2041,7 +2069,11 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
 
-        let faults = crate::species::extraction_aptitude_faults(db.all());
+        let (attributes, _) = crate::attributes::AttributeDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/attributes"),
+        )
+        .unwrap();
+        let faults = crate::species::extraction_aptitude_faults(db.all(), &attributes);
         assert!(
             faults.is_empty(),
             "extraction aptitude has collapsed back into the difficulty ladder:\n{}",

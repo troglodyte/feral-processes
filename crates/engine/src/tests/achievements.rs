@@ -389,15 +389,19 @@ fn a_starting_program_arrives_holding_a_full_reserve() {
     game.grant_profile_rewards();
 
     let player = game.player_entity();
-    let reserves: Vec<f32> = game
+    let reserves: Vec<(f32, Entity)> = game
         .world
         .iter_entities()
         .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
-        .filter_map(|e| e.get::<PowerReserve>().map(|r| r.get()))
+        .filter_map(|e| e.get::<PowerReserve>().map(|r| (r.get(), e.id())))
         .collect();
+    assert_eq!(reserves.len(), 1);
+    let (reserve, program) = reserves[0];
+    // A seated program's maximum is its Bandwidth's, which may sit under the
+    // flat default, and its reserve is clamped to it.
     assert_eq!(
-        reserves,
-        vec![POWER_MAX],
+        reserve,
+        game.max_power(program).min(POWER_MAX),
         "the program a profile hands you must arrive able to run"
     );
 }

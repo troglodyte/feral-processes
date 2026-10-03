@@ -1787,6 +1787,9 @@ pub enum AttentionKind {
     PerkPoints,
     /// Attribute points banked by levelling and not yet spent.
     StatPoints,
+    /// A held program has levelled and banked points for the player to spend
+    /// from the Manifest.
+    ProgramPoints,
     /// The roster has outgrown `Game::pet_capacity`, and the programs past
     /// it are earning `unslotted`. Past, not at: a roster filling its slots
     /// exactly has nothing wrong with it, since slots are not a door.
@@ -2827,11 +2830,11 @@ pub struct ProgramManifest {
     pub decompile_chance: Option<f32>,
     pub growth_multiplier: f32,
     pub base_speed: i32,
-    /// Drawn as "Analysis" — `base_int` is the field name, not the word the
-    /// player reads. Shown beside `base_speed` in the manifest's WORK box
+    /// The program's own Analysis attribute (its species' catalogue figure
+    /// while unseated). Shown beside `base_speed` in the manifest's WORK box
     /// rather than in SPECIES, because both are about what this program is
     /// like to *post* somewhere.
-    pub base_int: i32,
+    pub analysis: i32,
     /// Categories this species is not neutral in, in `AffinityKind` order.
     /// Empty for a species that declares nothing, so the screen omits the
     /// section entirely rather than drawing five rows of 1.00.
@@ -2862,6 +2865,17 @@ pub struct ProgramManifest {
     /// rather than by an ownership check here, and an owned one that nothing
     /// has happened to yet is `Some` with an empty `memories`.
     pub mood: Option<ManifestMood>,
+    /// The points a seated program levels through. `None` for a program no
+    /// door has seated (a wild one), which has none to spend or hold.
+    pub points: Option<ProgramPoints>,
+}
+
+/// What the manifest shows of a seated program's points: the bank, and
+/// whether level-ups are being banked rather than spent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgramPoints {
+    pub banked: u32,
+    pub holding: bool,
 }
 
 /// What one owned program feels, as the manifest's MEMORIES box draws it: the
@@ -2982,10 +2996,9 @@ pub struct WorkProfile {
     /// `tuning::DEFAULT_BASE_SPEED` as the baseline that leaves a machine's
     /// shipped `ticks_per_unit` unchanged (see `systems::work_ticks_at_speed`).
     pub speed: i32,
-    /// `SpeciesDef::base_int`, the extraction aptitude — how often a cycle
-    /// lands rather than fizzles. Named for the word the player reads
-    /// ("Analysis") rather than the field, the choice `ManifestEntry`
-    /// already documents.
+    /// The extraction aptitude — how often a cycle lands rather than
+    /// fizzles: the program's own Analysis attribute, or its species'
+    /// catalogue figure while unseated.
     pub analysis: i32,
     /// The species' base job, or `None` for a boss and for anything else
     /// outside the class system. Carried as the class rather than a finished

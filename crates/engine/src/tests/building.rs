@@ -529,27 +529,31 @@ fn cronjob_assignment_survives_save_and_load() {
         .next()
         .expect("at least one species");
     let player = game.player_entity();
-    game.world.spawn((
-        Creature {
-            species: species.id.clone(),
-        },
-        Position { x: 3, y: 4 },
-        Stats {
-            hp: 10,
-            max_hp: 10,
-            atk: 1,
-            mitigation: 1,
-        },
-        Tamed { owner: player },
-        Experience::default(),
-        PowerReserve::default(),
-        Task {
-            kind: TaskKind::GatherResource,
-            target: structure,
-            progress: 3,
-            required: 6,
-        },
-    ));
+    let worker = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position { x: 3, y: 4 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                mitigation: 1,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+            PowerReserve::default(),
+            Task {
+                kind: TaskKind::GatherResource,
+                target: structure,
+                progress: 3,
+                required: 6,
+            },
+        ))
+        .id();
+    game.seat_derived(worker);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_cronjob_test_{}_{}.bin",
@@ -1200,7 +1204,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                 // classless worker is what makes this the ordinary payout curve.
                 crate::systems::CycleModifiers {
                     keen_scavenger_level: 0,
-                    base_int: crate::tuning::DEFAULT_BASE_INT,
+                    analysis_over_base: 0,
                     class: None,
                     morale: 0.0,
                     need_strain: 0.0,

@@ -535,7 +535,7 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// a parameter rather than the baseline: the roll it is capping now includes
 /// the worker's own aptitude, so deriving against the player while a *dull*
 /// program does the job under-buys and leaves cycles fizzling. The player
-/// working the node passes `DEFAULT_BASE_INT`, being the baseline by
+/// working the node passes 0, being the baseline by
 /// definition; a posted program passes its own species'.
 fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i32) {
     let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int, 0.0, 0.0, 0.0))
@@ -585,7 +585,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
         "a fresh node has to roll at all for the perk to be measurable against it"
     );
 
-    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, crate::tuning::DEFAULT_BASE_INT);
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, 0);
     keep_the_sweep_off(&mut game, node);
 
     game.work_structure(node)
@@ -625,7 +625,7 @@ fn extraction_reaches_the_roll_when_you_work_a_node_yourself() {
         let node = deploy_upgradeable_node(&mut game);
         keep_the_sweep_off(&mut game, node);
         let player = game.player_entity();
-        let base_int = crate::tuning::DEFAULT_BASE_INT;
+        let base_int = 0;
         let levels = (1..)
             .find(|&l| {
                 crate::systems::mining_success_chance(1, l, base_int, 0.0, 0.0, 0.0) >= 1.0 - 0.09
@@ -700,7 +700,8 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     // picks whichever species declares no abilities, and what that resolves
     // to is not this test's business — only that the cap is derived against
     // the aptitude doing the work.
-    let worker_int = generic_species().base_int;
+    let worker_int =
+        generic_species().analysis(&game.attribute_db()) - game.attribute_db().analysis_base();
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, worker_int);
     keep_the_sweep_off(&mut game, node);
 

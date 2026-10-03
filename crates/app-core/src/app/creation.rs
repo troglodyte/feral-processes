@@ -49,6 +49,7 @@ use crate::app::stat_allocation::{AllocationFor, StatAllocation, spend_adjustmen
 use crate::*;
 use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::items::ItemId;
+use feral_processes_engine::progression::DerivedBase;
 use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS};
 
 /// The (glyph, sprite name) pairs the Icon step offers.
@@ -232,6 +233,7 @@ impl App {
         StatAllocation::new(
             AllocationFor::Creation,
             CREATION_STAT_POINTS,
+            DerivedBase::player(),
             self.creation_catalogue.attribute_db(),
             self.creation_catalogue
                 .start_attributes(self.creation_choice.class),

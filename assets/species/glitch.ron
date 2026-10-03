@@ -9,7 +9,6 @@
     taming_difficulty: 0.15,
     habitats: [OpenGrid, NullSector],
     base_speed: 11,
-    base_int: 5,
     moves: [
         (name: "Flicker", power: 4, spread: 1),
         (name: "Static Burst", power: 6, spread: 2, ranged: true),

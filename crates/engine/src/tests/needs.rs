@@ -1061,7 +1061,7 @@ fn a_program_out_of_reach_is_not_named() {
 
 use crate::needs::strain;
 use crate::systems::{mining_success_chance, need_shift};
-use crate::tuning::{DEFAULT_BASE_INT, NEED_STRAIN_MAX_SHIFT};
+use crate::tuning::NEED_STRAIN_MAX_SHIFT;
 
 /// Full reserves are the baseline and contribute **exactly** nothing, so the
 /// shipped extraction rates mean what they have always meant.
@@ -1112,9 +1112,9 @@ fn an_unresolvable_need_is_skipped_rather_than_counted() {
 /// needs extracts at exactly today's shipped rate.
 #[test]
 fn a_drained_program_extracts_less_reliably_and_a_full_one_is_unchanged() {
-    let full = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-    let today = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0, 0.0);
-    let drained = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, -12.0, 0.0);
+    let full = mining_success_chance(4, 0, 0, 0.0, 0.0, 0.0);
+    let today = mining_success_chance(4, 0, 0, 0.0, 0.0, 0.0);
+    let drained = mining_success_chance(4, 0, 0, 0.0, -12.0, 0.0);
 
     assert_eq!(full, today, "zero strain is the shipped rate, untouched");
     assert!(

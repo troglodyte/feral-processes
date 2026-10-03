@@ -126,9 +126,10 @@ fn recompute_clamps_hp_and_power_but_never_refills() {
 #[test]
 fn recompute_is_a_no_op_on_a_body_without_derived() {
     let mut game = Game::new(7006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let species = game.species_defs()[0].id.to_string();
-    let companion = game.adopt_program(&species, pos.x, pos.y, 1.0).unwrap();
+    let companion = game
+        .spawn_wild_creature_scaled(&species, 60, 60, 1.0, false)
+        .unwrap();
     let before = stats_of(&game, companion);
     game.recompute_derived(companion);
     assert_eq!(stats_of(&game, companion), before);
@@ -421,7 +422,7 @@ fn the_stat_bonus_is_what_gear_and_perks_add_to_the_derivation() {
     set_attribute(&mut game, "analysis", 14);
     game.recompute_derived(player);
 
-    let bonus = game.player_stat_bonus();
+    let bonus = game.stat_bonus(game.player_entity());
     let derived = game.derived_stats(player);
     let stats = stats_of(&game, player);
     assert!(bonus.atk > 0, "the fixture must add Atk: {bonus:?}");

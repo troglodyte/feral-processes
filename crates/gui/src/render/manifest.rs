@@ -139,7 +139,8 @@ pub(super) fn draw_manifest(
 /// Every key the sheet answers, since this line is the only place any of
 /// them is advertised. `[D]` is unconditional: `Game::dossier_report`
 /// answers for any body the sheet itself can show. `[R]` is
-/// `ManifestView::remembers`, the answer app-core refuses on.
+/// `ManifestView::remembers`, the answer app-core refuses on. `[H]` and `[S]`
+/// are not here: the DEVELOPMENT box carries its own hint.
 fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
     let mut footer = Vec::new();
     if nav.cyclable {
@@ -312,6 +313,16 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
         painter.ui(
             format!(" +{}", section.overflow),
             rect.x + m.inset + title_w,
+            rect.y + m.line_height,
+            m.small(),
+            TEXT_DIM,
+        );
+    }
+    if !section.hint.is_empty() {
+        let hint_w = painter.measure_ui_advance(section.hint, m.small());
+        painter.ui(
+            section.hint,
+            rect.x + rect.w - m.inset - hint_w,
             rect.y + m.line_height,
             m.small(),
             TEXT_DIM,
@@ -521,6 +532,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
         rows: section_rows(combat),
         full_width: false,
         overflow: 0,
+        hint: "",
     }];
     match &view.subject {
         ManifestSubject::Player(p) => player_sections(&mut sections, p),
@@ -546,6 +558,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
             // nothing a drop can roll needs cutting at all.
             full_width: matches!(&view.subject, ManifestSubject::Player(_)),
             overflow: 0,
+            hint: "",
         });
     }
     if !view.routines.is_empty() {
@@ -571,6 +584,7 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
             ),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
     sections
@@ -613,6 +627,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
         ),
         full_width: false,
         overflow: 0,
+        hint: "",
     });
 
     if !p.perks.is_empty() {
@@ -626,6 +641,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
             ),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
     // What this run holds, as opposed to what the player *is*. Credits and
@@ -663,6 +679,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
             ),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
 
@@ -671,6 +688,7 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
         rows: section_rows(run),
         full_width: false,
         overflow: 0,
+        hint: "",
     });
 }
 
@@ -738,6 +756,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             ),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
 
@@ -753,6 +772,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             ),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
 
@@ -795,6 +815,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         rows: section_rows(species),
         full_width: false,
         overflow: 0,
+        hint: "",
     });
 
     // What this program is like to *post* somewhere, as opposed to what it
@@ -806,7 +827,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     // on one page reads as two different numbers.
     let mut work = vec![
         stat("Speed", p.base_speed.to_string()),
-        stat("Analysis", p.base_int.to_string()),
+        stat("Analysis", p.analysis.to_string()),
     ];
     if let Some(class) = p.base_job {
         work.push(stat("Base job", base_job_label(class)));
@@ -850,6 +871,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         rows: section_rows(work),
         full_width: false,
         overflow: 0,
+        hint: "",
     });
 
     // What this program is carrying, under what it adds up to.
@@ -866,26 +888,49 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             rows: section_rows(mood_rows(mood)),
             full_width: false,
             overflow: 0,
+            hint: "",
         });
     }
 
-    // Only for a program that has been developed, the way the `fused` and
-    // `upgraded` header tags only show once they mean something: an
-    // undeveloped program's box would be three rows of zero on a page whose
-    // column budget is already the tightest thing in the renderer.
-    if p.ring > 0 || p.talents_earned > 0 {
+    // Only for a program that has been developed or that has points to
+    // hold and spend, the way the `fused` and `upgraded` header tags only
+    // show once they mean something: an undeveloped wild program's box would
+    // be rows of zero on a page whose column budget is already the tightest
+    // thing in the renderer. The bank lives here rather than in a box of its
+    // own because the page has no row to spare at 1280x720 (measured: one
+    // more row of any box overflows the fullest program page), so the ring
+    // and the ceiling it buys share a row.
+    if p.ring > 0 || p.talents_earned > 0 || p.points.is_some() {
+        let mut rows = vec![
+            stat(
+                "Kernel rings",
+                format!("{}/{} (to Lv {})", p.ring, p.max_ring, p.level_cap),
+            ),
+            stat(
+                "Talents",
+                format!("{}/{} spent", p.talents_spent, p.talents_earned),
+            ),
+        ];
+        if let Some(points) = &p.points {
+            rows.push(stat(
+                "Points",
+                if points.holding {
+                    format!("{} (holding)", points.banked)
+                } else {
+                    points.banked.to_string()
+                },
+            ));
+        }
         sections.push(Section {
             title: "DEVELOPMENT",
-            rows: section_rows(vec![
-                stat("Kernel rings", format!("{}/{}", p.ring, p.max_ring)),
-                stat("Level ceiling", p.level_cap.to_string()),
-                stat(
-                    "Talents",
-                    format!("{}/{} spent", p.talents_spent, p.talents_earned),
-                ),
-            ]),
+            rows: section_rows(rows),
             full_width: false,
             overflow: 0,
+            hint: if p.points.is_some() {
+                "[H] hold  [S] spend"
+            } else {
+                ""
+            },
         });
     }
 
@@ -907,6 +952,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
             // that, rather than the arithmetic.
             full_width: false,
             overflow: p.moves.len().saturating_sub(MAX_MOVE_ROWS),
+            hint: "",
         });
     }
 }
@@ -1098,6 +1144,7 @@ mod tests {
     use crate::paint::with_painter;
     use crate::render::manifest_layout::manifest_layout;
     use crate::text::ui_metrics;
+    use feral_processes_engine::ProgramPoints;
 
     /// A `ProgramManifest` for a species that declares no *box-level*
     /// optionals (no POTENTIAL, no AFFINITIES), so the only boxes
@@ -1112,7 +1159,7 @@ mod tests {
     /// (5, not 4) — see `work_rows_live_in_their_own_box_and_species_drops_
     /// below_its_cap` below, which is what would stop catching a species-box
     /// overflow if this quietly went back to `None`.
-    fn plain_program(base_speed: i32, base_int: i32) -> ProgramManifest {
+    fn plain_program(base_speed: i32, analysis: i32) -> ProgramManifest {
         ProgramManifest {
             species_name: Some("Testmon".to_string()),
             is_hostile: false,
@@ -1139,7 +1186,7 @@ mod tests {
             decompile_chance: None,
             growth_multiplier: 1.0,
             base_speed,
-            base_int,
+            analysis,
             affinities: vec![],
             // The two boss species are the only shipped programs with no
             // class, and a boss cannot be tamed or posted — so a job row is
@@ -1156,6 +1203,8 @@ mod tests {
             // without the MEMORIES box moving under it. `owned_program`
             // below is the fixture that carries one.
             mood: None,
+            // `None` for `mood`'s reason: the wild program is unseated.
+            points: None,
         }
     }
 
@@ -1169,6 +1218,10 @@ mod tests {
                 sum: -11.0,
                 band: morale_band(-11.0),
                 memories,
+            }),
+            points: Some(ProgramPoints {
+                banked: 3,
+                holding: true,
             }),
             ..plain_program(6, 6)
         }
@@ -1224,7 +1277,7 @@ mod tests {
         );
         assert!(
             work.iter().any(|l| l == "Analysis"),
-            "base_int is shown as Analysis: {work:?}"
+            "analysis is shown as Analysis: {work:?}"
         );
 
         let species = labels("SPECIES");
@@ -1726,7 +1779,7 @@ mod tests {
     fn worst_case_owned(moves: Vec<MoveDef>, memories: Vec<MemoryRow>) -> ProgramManifest {
         let mut program = owned_program(memories);
         program.base_speed = 14;
-        program.base_int = 12;
+        program.analysis = 12;
         program.base_job = Some(AffinityClass::Striker);
         program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
         program.ring = 3;
@@ -2015,7 +2068,7 @@ mod tests {
             memory("Jammed here", Some("Lathe"), -4.0),
         ]);
         program.base_speed = 14;
-        program.base_int = 12;
+        program.analysis = 12;
         program.moves = vec![MoveDef {
             name: "Strike".to_string(),
             power: 5,
@@ -2565,6 +2618,31 @@ mod tests {
         };
         assert!(footer_text(&nav, true).contains("[R] memories"));
         assert!(!footer_text(&nav, false).contains("[R]"));
+    }
+
+    /// A seated program's DEVELOPMENT box carries its bank, says when the
+    /// bank is held and hints `[H]` and `[S]`; an unseated, undeveloped one
+    /// has no such box.
+    #[test]
+    fn a_seated_programs_development_box_carries_its_points() {
+        let game = census_game();
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &owned_program(vec![]));
+        let dev = sections
+            .iter()
+            .find(|s| s.title == "DEVELOPMENT")
+            .expect("a seated program draws DEVELOPMENT");
+        assert!(
+            dev.rows
+                .contains(&SectionRow::Stat("Points".into(), "3 (holding)".into())),
+            "{:?}",
+            dev.rows
+        );
+        assert_eq!(dev.hint, "[H] hold  [S] spend");
+
+        let mut wild = Vec::new();
+        program_sections(&mut wild, &game, &plain_program(6, 6));
+        assert!(wild.iter().all(|s| s.title != "DEVELOPMENT"));
     }
 
     /// The footer is one unwrapped line, so with every key offered it has to

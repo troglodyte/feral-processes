@@ -529,6 +529,7 @@ impl Game {
         // Not a save field: a brawl lasts four to eight ticks and damage is
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
+        world.init_resource::<crate::resources::PendingProgramLevels>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());
@@ -1312,6 +1313,24 @@ impl Game {
                 format!("that run is over — it {reason}. Its signal is gone from the Grid."),
             ));
         }
+        // Every door seats a tamed program and the writer always records its
+        // `base`, so a tamed record without one cannot have come from this
+        // build; loading it would read its stats as zero.
+        let held = data.build_sites.iter().filter_map(|b| b.program.as_ref());
+        if let Some(c) = data
+            .creatures
+            .iter()
+            .chain(held)
+            .find(|c| c.tamed && c.base.is_none())
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "save is malformed: owned program {:?} has no base to derive its stats from",
+                    c.species
+                ),
+            ));
+        }
         let AssetDbs {
             abilities: ability_db,
             tools: tool_db,
@@ -1398,6 +1417,7 @@ impl Game {
         // Not a save field: a brawl lasts four to eight ticks and damage is
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
+        world.init_resource::<crate::resources::PendingProgramLevels>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();
         world.insert_resource(BoltQueue::default());
@@ -2316,7 +2336,21 @@ impl Game {
                 ctx.pending_patrols.push((entity.id(), tile, c.pursuing));
             }
         }
-        Some(entity.id())
+        let id = entity.id();
+        if let Some(base) = c.base.filter(|_| c.tamed) {
+            // Restored, never seated: the record carries no figures to seat
+            // from, and `Game::load` refuses a tamed record without a base.
+            // Recompute last, once gear, the receipt and attributes are
+            // all in place.
+            self.world.entity_mut(id).insert((
+                crate::components::ProgramBase(base),
+                crate::components::Derived::default(),
+                crate::components::StatPoints(c.stat_points),
+                crate::components::HoldPoints(c.hold_points),
+            ));
+            self.recompute_derived(id);
+        }
+        Some(id)
     }
 
     /// One creature as the save format describes it, or `None` if `e` is not
@@ -2422,13 +2456,18 @@ impl Game {
             .get_resource::<crate::tactical::TacticalBattle>()
             .filter(|b| b.siege_pack > 0)
             .and_then(|b| crate::game::siege::persist::member_of(b, e));
+        let base = self
+            .world
+            .get::<crate::components::ProgramBase>(e)
+            .map(|b| b.0);
+        let seated = base.is_some();
         Some(save::CreatureSave {
             species,
             position: (pos.x, pos.y),
             hp: stats.hp,
-            max_hp: stats.max_hp,
-            atk: stats.atk,
-            mitigation: stats.mitigation,
+            max_hp: if seated { 0 } else { stats.max_hp },
+            atk: if seated { 0 } else { stats.atk },
+            mitigation: if seated { 0 } else { stats.mitigation },
             tamed: self.world.get::<Tamed>(e).is_some(),
             power: self
                 .world
@@ -2612,6 +2651,15 @@ impl Game {
                 .world
                 .get::<crate::components::DropTrooper>(e)
                 .is_some(),
+            base,
+            stat_points: self
+                .world
+                .get::<crate::components::StatPoints>(e)
+                .map_or(0, |p| p.0),
+            hold_points: self
+                .world
+                .get::<crate::components::HoldPoints>(e)
+                .is_some_and(|h| h.0),
         })
     }
 
@@ -3362,7 +3410,7 @@ impl Game {
     /// battle line, capped at `MAX_PARTY_SIZE` and entered through an
     /// explicit `add_to_party` — the program arrives owned and the player
     /// deploys it, like every other acquisition.
-    fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
+    pub(crate) fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
         let player = self.player_entity();
         let at = *self.world.get::<Position>(player)?;
         let program = self.spawn_wild_creature_scaled(species_id, at.x, at.y, 1.0, false)?;
@@ -3372,6 +3420,7 @@ impl Game {
         let parts = self.roster_parts();
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
+        self.seat_derived(program);
         Some(self.creature_label(program))
     }
 }

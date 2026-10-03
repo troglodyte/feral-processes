@@ -321,6 +321,11 @@ pub struct CompanionSpec {
     /// every measurement taken against it in one direction.
     #[serde(default)]
     pub equip: Vec<EquipSpec>,
+    /// Put every point a level earns into this attribute instead of the
+    /// species' Parity/Analysis split - the program's Points screen, staged.
+    /// An unknown or unbuyable attribute refuses the scenario.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spend: Option<crate::attributes::AttributeId>,
 }
 
 /// Hand-written for the same reason `Scenario`'s is: `level` has a meaning
@@ -332,6 +337,7 @@ impl Default for CompanionSpec {
             species: SpeciesId::default(),
             level: one(),
             equip: Vec::new(),
+            spend: None,
         }
     }
 }

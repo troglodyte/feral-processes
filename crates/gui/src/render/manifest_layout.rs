@@ -19,6 +19,9 @@ pub(super) struct Section {
     /// Rows the box had no room for, drawn as "+N" after the title — for a
     /// box whose cap is too small to spend a row on saying so (MOVES).
     pub(super) overflow: usize,
+    /// Keys the box answers, drawn on the title line after the title: the
+    /// page's footer has no room left for them. Empty for none.
+    pub(super) hint: &'static str,
 }
 
 /// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
@@ -363,6 +366,7 @@ mod tests {
                 .collect(),
             full_width,
             overflow: 0,
+            hint: "",
         }
     }
 
@@ -414,8 +418,8 @@ mod tests {
             // this box belongs in the same worst case as those three and not
             // in a variant of its own.
             section("MEMORIES", 1 + MANIFEST_MEMORY_ROWS, false),
-            // Rings, ceiling and talents. Emitted only for a developed
-            // program, which is exactly what a worst case is.
+            // Rings with the ceiling they buy, talents, and the bank.
+            // Emitted for every seated program and any developed one.
             section("DEVELOPMENT", 3, false),
             // One row per occupied `EquipmentSlot`, so `EquipmentSlot::ALL`
             // is the cap. Any program the player owns can wear gear as of

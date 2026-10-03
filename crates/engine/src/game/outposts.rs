@@ -18,7 +18,7 @@ use crate::resources::{GameRng, Outposts};
 use crate::species::SpeciesDb;
 use crate::systems::mining_success_chance;
 use crate::tuning::{
-    DEFAULT_BASE_INT, MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
+    MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
     OUTPOST_GROWTH_PER_CREW, OUTPOST_MAX_INTEGRITY, OUTPOST_MIN_ANCHOR_DISTANCE,
     OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
@@ -432,14 +432,23 @@ impl Game {
                 .world
                 .get::<Creature>(member)
                 .map(|c| c.species.clone());
-            let base_int = species_id
-                .as_deref()
-                .and_then(|id| self.world.resource::<SpeciesDb>().get(id))
-                .map(|s| s.base_int)
-                .unwrap_or(DEFAULT_BASE_INT);
+            let catalogue = self.world.resource::<crate::attributes::AttributeDb>();
+            let analysis_over_base = crate::species::analysis_of(
+                self.world.get::<crate::components::Attributes>(member),
+                self.world
+                    .get::<Creature>(member)
+                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species)),
+                catalogue,
+            ) - catalogue.analysis_base();
             let level = tier_now as u32 + 1;
-            let chance =
-                mining_success_chance(level, keen_scavenger_level, base_int, 0.0, 0.0, 0.0);
+            let chance = mining_success_chance(
+                level,
+                keen_scavenger_level,
+                analysis_over_base,
+                0.0,
+                0.0,
+                0.0,
+            );
             let ok = self.world.resource_mut::<GameRng>().0.random_bool(chance);
             if !ok {
                 continue;
@@ -1021,11 +1030,13 @@ mod tests {
     /// A bare base-staff program — `spawn_tamed`'s shape in
     /// `tests::support`, restated because that module's helpers are
     /// `pub(super)` to `crate::tests` and this file's own inline tests are
-    /// a sibling module tree, `found_outpost`'s tests' own precedent.
+    /// a sibling module tree, `found_outpost`'s tests' own precedent. Seated
+    /// last, like every real door, so it derives its stats like a real one.
     fn staff(game: &mut Game) -> Entity {
         let species = game.species_defs().into_iter().next().unwrap();
         let parts = game.roster_parts();
-        game.world
+        let entity = game
+            .world
             .spawn((
                 crate::components::Creature {
                     species: species.id.clone(),
@@ -1039,7 +1050,9 @@ mod tests {
                 },
                 parts,
             ))
-            .id()
+            .id();
+        game.seat_derived(entity);
+        entity
     }
 
     /// Founds an outpost far enough from the anchor and stands the player on

@@ -186,6 +186,9 @@ pub(super) fn game_with_a_rare_party_companion(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(),
+        stat_points: 0,
+        hold_points: false,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
@@ -281,6 +284,9 @@ pub(super) fn game_with_tweaked_programs(
         off_duties: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
+        base: tamed_base(),
+        stat_points: 0,
+        hold_points: false,
     };
     for &(wielded, name) in programs {
         let mut save = program(wielded, name);
@@ -487,4 +493,16 @@ pub(super) fn playing_app_around(game: Game) -> App {
     app.game = Some(game);
     app.mode = feral_processes_app_core::Mode::Playing;
     app
+}
+
+/// The `base` every hand-written tamed record here needs: `Game::load`
+/// refuses an owned program without one. Matches the 10 / 3 / 2 figures
+/// the records carry.
+pub(crate) fn tamed_base() -> Option<feral_processes_engine::progression::DerivedBase> {
+    Some(feral_processes_engine::progression::DerivedBase {
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        ..feral_processes_engine::progression::DerivedBase::player()
+    })
 }

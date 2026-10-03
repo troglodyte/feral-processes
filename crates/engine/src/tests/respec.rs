@@ -392,3 +392,31 @@ fn a_pre_respec_save_seeds_its_overflow_price_from_the_perks_it_holds() {
         "an old save's escalator is seeded from the perks it is holding"
     );
 }
+
+#[test]
+fn a_fused_childs_talent_respec_refunds_the_stat_exactly() {
+    let mut game = funded(16);
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = developed(&mut game, crate::tuning::TALENT_START_LEVEL + 2);
+    let b = spawn_tamed(&mut game, 10, 3);
+    let (before_a, before_b) = (max_hp(&game, a), max_hp(&game, b));
+    game.take_talent(a, &crate::talents::TalentId::from(GEN_HP))
+        .unwrap();
+    assert!(max_hp(&game, a) > before_a);
+
+    game.fuse_companions(a, b, None).unwrap();
+    let child = game
+        .owned_pets()
+        .into_iter()
+        .max_by_key(|p| p.fusions)
+        .unwrap()
+        .entity;
+    game.respec_talents(child).unwrap();
+
+    let (hi, lo) = (before_a.max(before_b), before_a.min(before_b));
+    assert_eq!(
+        max_hp(&game, child),
+        hi + lo / crate::tuning::FUSION_LESSER_STAT_DIVISOR,
+        "the talent's stat must come back out of the fused child"
+    );
+}

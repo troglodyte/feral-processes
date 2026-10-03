@@ -53,6 +53,21 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.0
+
+**Your programs now grow through their attributes, and you can choose where
+a program's level-up points go.** Before, each level added fixed HP and
+attack and a program's attributes did nothing. Now a level gives a program
+Parity and Analysis points by default, and its attributes set its HP, attack,
+Power, how often its attacks land unchecked or fumble, and how long statuses
+hold on it. On a program's Manifest, the Stats tab lets you hold its points
+with `H` and spend them with `S` on the same Points screen you use for
+yourself; turning the hold off spends any banked points the default way, so
+an ignored program is never weaker. A program posted to mine now mines at its
+own Analysis, so a levelled miner succeeds more often. Fusing two programs
+keeps any points a parent was holding. **Saves from earlier versions no
+longer load.**
+
 ## 0.14.7
 
 **Entropy now changes how your attacks go: each point above 40 makes them

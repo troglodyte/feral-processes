@@ -154,6 +154,12 @@ impl StatusDb {
     pub fn contains(&self, id: &StatusId) -> bool {
         self.defs.contains_key(id)
     }
+
+    /// Every id, for the census over shipped content.
+    #[cfg(test)]
+    pub(crate) fn ids(&self) -> impl Iterator<Item = &StatusId> {
+        self.defs.keys()
+    }
 }
 
 #[cfg(test)]

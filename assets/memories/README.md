@@ -145,6 +145,7 @@ but not what makes a program remember.
 | `frayed_here` | − | `BaseTile` | running a need down beside an amenity that could restore it and cannot be walked to |
 | `ran_down` | − | `Nothing` | running a need down with nothing in the base that services it at all |
 | `unslotted` | − | `Nothing` | a stretch of being owned past the roster's slots, newest programs first |
+| `siphoned` | − | `BaseTile` | a stretch of being held in a Power Siphon, once per 1000 ticks, against the siphon's tile |
 | `vented` | + | `Nothing` | coming out of a tantrum you started |
 | `turned_on_me` | − | `Program` | being the one a tantrum was aimed at, about whoever aimed it |
 | `settled_in` | + | `Structure` | a stretch of service at a machine that is running |
@@ -195,14 +196,17 @@ responsible, which is what `Nothing` buys: the player may not have researched
 the building, may not have the materials, and has never been told they want
 one. Neither is written until the base has grown past a grace threshold.
 
-**`unslotted` is the one kind that crosses the tantrum line on its own.**
-Every other grudge, at its strike cap and felt by the disposition that
-feels grudges hardest, stays short of downing tools — that takes a pattern,
-not one thing the player could not prevent. A roster past its slots is
-always preventable (build a Data Cache), and slots are no longer a door a
-capture is refused at: the overflow brawling is what they cost instead. The
-exemption is by name, in `tests/disposition.rs`, so a second kind cannot
-join it by accident.
+**`unslotted` and `siphoned` are the two kinds that cross the tantrum line on
+their own.** Every other grudge, at its strike cap and felt by the
+disposition that feels grudges hardest, stays short of downing tools — that
+takes a pattern, not one thing the player could not prevent. A roster past
+its slots is always preventable (build a Data Cache), and slots are no
+longer a door a capture is refused at: the overflow brawling is what they
+cost instead. A hold in a Power Siphon is preventable too, and by one
+action: release the program. Its cap (-6 x 9 = -54) builds over nine
+1000-tick periods and takes a Steady program past downing tools. Both
+exemptions are by name, in `tests/disposition.rs`, so a third kind cannot
+join them by accident.
 
 **`turned_on_me` is the one negative `Program` memory**, and it is worth
 saying because the other two are both fond — the subject does not imply

@@ -5755,6 +5755,13 @@ pub const STUDY_DISCOVERY_CHANCE: f64 = 0.35;
 pub const SIPHON_RELEASE_INTEGRITY_LOSS: f32 = 0.75;
 const _: () = assert!(SIPHON_RELEASE_INTEGRITY_LOSS > 0.0 && SIPHON_RELEASE_INTEGRITY_LOSS < 1.0);
 
+/// Ticks between strikes of the `siphoned` memory on a held program
+/// (`Game::note_siphoned`). A stretch memory like `MEMORY_POSTING_PERIOD`'s,
+/// but four times slower: the grudge is meant to build over a long hold, and
+/// at the strike cap it takes nine of these (9000 ticks) to arrive. At the
+/// posting period a hold would be a tantrum within one afternoon.
+pub const SIPHON_GRUDGE_PERIOD: u64 = 4 * MEMORY_POSTING_PERIOD;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Player emulation
 // ─────────────────────────────────────────────────────────────────────────

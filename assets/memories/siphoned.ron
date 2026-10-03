@@ -1,0 +1,27 @@
+// Locked into a Power Siphon: a program pinned in the wall to run the base.
+// The power is the player's gain; this is the price the program keeps.
+//
+// A stretch memory written once per `SIPHON_GRUDGE_PERIOD` (1000 ticks), so
+// it builds over a long hold. At the cap it is -6 x 9 = -54: a Steady
+// program sulks after two strikes (-12 crosses `MORALE_SULKS_AT`, -8) and
+// downs tools at the cap (-54 past `MORALE_DOWNS_TOOLS_AT`, -50); an
+// Abrasive one reaches -75.6, just past lashing out. One strike alone (-6)
+// does not sulk. It crosses the tantrum line on its own, which is why
+// `tests/disposition.rs` exempts it by name beside `unslotted`: the hold is
+// preventable, release it.
+//
+// Every strike while held resets the clock, so decay only sets the way back:
+// from -54 to `MORALE_RECOVERED_AT` (-6) is log2(9) = 3.17 half-lives, about
+// 7900 ticks at 2500. Slower than `unslotted` because this one is the
+// player's deliberate price.
+//
+// `BaseTile`, `note_postings`' subject: the siphon's own tile.
+(
+    id: "siphoned",
+    name: "Held in a Siphon",
+    blurb: "Pinned in the wall and left to run the base.",
+    valence: -6.0,
+    half_life: 2500,
+    subject: BaseTile,
+    strike_cap: 9,
+)

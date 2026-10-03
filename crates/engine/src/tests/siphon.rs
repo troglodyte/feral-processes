@@ -618,3 +618,153 @@ fn the_roster_files_a_held_program_under_its_own_role() {
         .expect("a held program is still on the roster");
     assert_eq!(row.role, ProgramRole::Siphoned);
 }
+
+// ---------------------------------------------------------------------
+// Phase 3: the grudge
+// ---------------------------------------------------------------------
+
+use crate::components::{Disgruntled, Memories, MemorySubject};
+use crate::disposition::Disposition;
+use crate::memories::MemoryDb;
+use crate::tuning::{
+    MORALE_DOWNS_TOOLS_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT, SIPHON_GRUDGE_PERIOD,
+};
+
+fn wind_to(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+fn siphoned_entries(game: &Game, who: Entity) -> Vec<(MemorySubject, u32)> {
+    game.world
+        .get::<Memories>(who)
+        .map(|m| {
+            m.0.iter()
+                .filter(|m| m.def.as_str() == "siphoned")
+                .map(|m| (m.subject.clone(), m.strikes))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn grudge_def(game: &Game) -> (f32, u32, u64) {
+    let def = game
+        .world
+        .resource::<MemoryDb>()
+        .get(&crate::memories::MemoryId::from("siphoned"))
+        .expect("the shipped catalogue defines siphoned");
+    (def.valence, def.strike_cap, def.half_life)
+}
+
+/// A held, Steady program, and the clock walked through `periods` grudge
+/// periods the way `tick_inner` would reach them.
+fn held_for(periods: u64) -> (Game, Entity, Entity) {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    game.world.entity_mut(program).insert(Disposition::Steady);
+    game.siphon_program(program, siphon).unwrap();
+    for n in 1..=periods {
+        wind_to(&mut game, n * SIPHON_GRUDGE_PERIOD);
+        game.note_siphoned();
+    }
+    (game, siphon, program)
+}
+
+#[test]
+fn a_held_program_remembers_the_siphon_on_the_grudge_period_only() {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    let spot = *game.world.get::<Position>(siphon).unwrap();
+    let idle = spawn_tamed(&mut game, 100, 5);
+
+    // Empty siphon: nothing to remember, even on the period.
+    wind_to(&mut game, SIPHON_GRUDGE_PERIOD);
+    game.note_siphoned();
+    assert!(siphoned_entries(&game, program).is_empty());
+
+    game.siphon_program(program, siphon).unwrap();
+    wind_to(&mut game, SIPHON_GRUDGE_PERIOD + 1);
+    game.note_siphoned();
+    assert!(siphoned_entries(&game, program).is_empty(), "off-period");
+
+    wind_to(&mut game, 2 * SIPHON_GRUDGE_PERIOD);
+    game.note_siphoned();
+    assert_eq!(
+        siphoned_entries(&game, program),
+        vec![(
+            MemorySubject::BaseTile {
+                x: spot.x,
+                y: spot.y
+            },
+            1
+        )]
+    );
+
+    wind_to(&mut game, 3 * SIPHON_GRUDGE_PERIOD);
+    game.note_siphoned();
+    assert_eq!(siphoned_entries(&game, program).len(), 1, "one record");
+    assert_eq!(
+        siphoned_entries(&game, program)[0].1,
+        2,
+        "one strike per period"
+    );
+    assert!(
+        siphoned_entries(&game, idle).is_empty(),
+        "staff are not held"
+    );
+}
+
+#[test]
+fn one_period_of_holding_does_not_yet_sulk() {
+    let (game, _, program) = held_for(1);
+    assert!(game.morale(program) > MORALE_SULKS_AT);
+    assert!(game.morale(program) < 0.0, "but it is a grudge");
+}
+
+#[test]
+fn after_a_capped_hold_morale_is_past_sulks_and_downs_tools_for_a_steady_program() {
+    let (_, cap, _) = grudge_def(&game());
+    let (game, _, program) = held_for(cap as u64);
+    let (valence, cap, _) = grudge_def(&game);
+    let felt = Disposition::Steady.felt(valence * cap as f32);
+    assert!(
+        felt <= MORALE_DOWNS_TOOLS_AT,
+        "the shipped numbers cross the line"
+    );
+    assert!(game.morale(program) <= MORALE_SULKS_AT);
+    assert!(game.morale(program) <= MORALE_DOWNS_TOOLS_AT);
+}
+
+#[test]
+fn after_release_morale_climbs_back_as_the_grudge_decays() {
+    let (_, cap, _) = grudge_def(&game());
+    let (mut game, _, program) = held_for(cap as u64);
+    let (_, _, half_life) = grudge_def(&game);
+
+    game.release_siphoned(program).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    game.update_disgruntled(&[program]);
+    assert!(
+        game.world.get::<Disgruntled>(program).is_some(),
+        "the grudge has a visible consequence"
+    );
+
+    let now = game.current_tick();
+    wind_to(&mut game, now + 4 * half_life);
+    assert!(game.morale(program) > MORALE_RECOVERED_AT);
+    game.update_disgruntled(&[program]);
+    assert!(game.world.get::<Disgruntled>(program).is_none());
+}
+
+/// The wiring, not the function: `tick` itself must reach `note_siphoned`.
+#[test]
+fn ticking_through_a_grudge_period_strikes_the_held_program() {
+    let (mut game, siphon, program) = base_with_a_siphon();
+    game.siphon_program(program, siphon).unwrap();
+    wind_to(&mut game, SIPHON_GRUDGE_PERIOD - 2);
+    for _ in 0..4 {
+        game.tick();
+    }
+    assert_eq!(
+        siphoned_entries(&game, program).len(),
+        1,
+        "a tick crossing the period writes one strike"
+    );
+}

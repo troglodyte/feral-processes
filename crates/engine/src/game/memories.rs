@@ -10,7 +10,9 @@ use crate::components::{
 };
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{GameClock, Party};
-use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD, MEMORY_POSTING_PERIOD};
+use crate::tuning::{
+    MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD, MEMORY_POSTING_PERIOD, SIPHON_GRUDGE_PERIOD,
+};
 use bevy_ecs::prelude::{Entity, Mut, With};
 
 /// What one `Game::remember` did.
@@ -343,6 +345,35 @@ impl crate::Game {
     /// without a slot is a stretch, and nothing tells its first tick from its
     /// thousandth. Gated on `base_is_established`, `fray`'s grace — a young
     /// base is exempt from what its programs lack.
+    /// Remembers, every `SIPHON_GRUDGE_PERIOD` ticks, being held in a Power
+    /// Siphon: each held program gets a strike of `siphoned` against the
+    /// siphon's tile.
+    ///
+    /// **A stretch, `note_postings`' shape**: nothing tells the first tick of
+    /// a hold from the thousandth, so `strikes` measures time held. The
+    /// period is the slower `SIPHON_GRUDGE_PERIOD` so the grudge builds over
+    /// a long hold. The pairs are collected first because `remember` takes
+    /// `&mut self`; a marker whose siphon has no `Position` (a dangling
+    /// pointer) is skipped.
+    pub(crate) fn note_siphoned(&mut self) {
+        let now = self.world.resource::<GameClock>().tick;
+        if !now.is_multiple_of(SIPHON_GRUDGE_PERIOD) {
+            return;
+        }
+        let held: Vec<(Entity, i32, i32)> = self
+            .world
+            .query::<(Entity, &crate::components::Siphoned)>()
+            .iter(&self.world)
+            .filter_map(|(program, s)| {
+                let at = self.world.get::<Position>(s.siphon)?;
+                Some((program, at.x, at.y))
+            })
+            .collect();
+        for (program, x, y) in held {
+            self.remember(program, "siphoned", MemorySubject::BaseTile { x, y });
+        }
+    }
+
     pub(crate) fn note_unslotted(&mut self) {
         let now = self.world.resource::<GameClock>().tick;
         if !now.is_multiple_of(MEMORY_POSTING_PERIOD) || !self.base_is_established() {

@@ -2975,6 +2975,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // period: a stretch of having no slot, not an edge. Blames nothing,
         // `ran_down`'s reason — the missing room is the player's to build.
         ("unslotted", K::Nothing),
+        // `Game::note_siphoned`, off `tick_inner` on its own slower
+        // `SIPHON_GRUDGE_PERIOD`: a stretch of being held in a Power Siphon,
+        // keyed to the siphon's base tile.
+        ("siphoned", K::BaseTile),
         // `Game::damage_structure`, on both branches. The one work memory
         // that is an edge rather than a stretch of service, because a sweep
         // is an event and a posting is a standing state.

@@ -306,12 +306,15 @@ fn sour_to(game: &mut Game, who: Entity, target: f32) {
 /// protects a program from one thing the player could not prevent; a roster
 /// past its slots is always the player's to fix with a Data Cache, and
 /// making the overflow brawl on its own is the whole of what slots cost now
-/// that they are not a door (`Game::note_unslotted`).
+/// that they are not a door (`Game::note_unslotted`). **`siphoned` is exempt
+/// for the same reason**: a hold in a Power Siphon is the player's choice
+/// and its end is one `release_siphoned` away, so it is preventable and may
+/// brawl on its own.
 fn worst_single_grudge(game: &Game) -> f32 {
     game.world
         .resource::<crate::memories::MemoryDb>()
         .all()
-        .filter(|def| def.id.as_str() != "unslotted")
+        .filter(|def| !matches!(def.id.as_str(), "unslotted" | "siphoned"))
         .map(|def| {
             crate::disposition::Disposition::Abrasive
                 .felt(def.valence * def.strike_cap as f32)
@@ -953,4 +956,24 @@ fn a_lashing_out_program_has_still_downed_its_tools() {
         Some(Grievance::LashingOut)
     );
     assert!(game.has_downed_tools(worker));
+}
+
+/// `siphoned` is the second kind exempt from `worst_single_grudge`, and it
+/// must really need the exemption: at its cap a Steady program is past
+/// downing tools and an Abrasive one past lashing out, so the rule above
+/// would otherwise fail on it. The exemption is by name, not by shape.
+#[test]
+fn the_disposition_exemption_names_siphoned() {
+    let game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .get(&crate::memories::MemoryId::from("siphoned"))
+        .expect("the shipped catalogue defines siphoned");
+    let capped = def.valence * def.strike_cap as f32;
+    assert!(Disposition::Steady.felt(capped) <= MORALE_DOWNS_TOOLS_AT);
+    assert!(
+        worst_single_grudge(&game) < Disposition::Abrasive.felt(capped).abs(),
+        "siphoned must be exempt from the worst-single-grudge rule"
+    );
 }

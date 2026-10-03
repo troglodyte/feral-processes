@@ -528,6 +528,23 @@ fn a_fused_child_is_seated_and_stable() {
 }
 
 #[test]
+fn a_refused_fusion_leaves_the_held_bank_and_hold_flag_alone() {
+    let mut game = game();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = seated_program(&mut game);
+    let b = seated_program(&mut game);
+    game.world
+        .entity_mut(a)
+        .insert((StatPoints(4), HoldPoints(true)));
+    // Both parents are the same species, so removing it refuses at the last
+    // check the fusion makes.
+    game.world.resource_mut::<SpeciesDb>().retain(|_| false);
+    assert!(game.fuse_companions(a, b, None).is_err());
+    assert_eq!(game.world.get::<StatPoints>(a), Some(&StatPoints(4)));
+    assert_eq!(game.world.get::<HoldPoints>(a), Some(&HoldPoints(true)));
+}
+
+#[test]
 fn spending_on_an_unseated_program_is_refused() {
     let mut game = game();
     let program = unseated_program(&mut game);

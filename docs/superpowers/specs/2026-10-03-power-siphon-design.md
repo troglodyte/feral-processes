@@ -55,8 +55,8 @@ takes a program off a machine. That is what caps the count instead of
 
 New `StructureDef` field `siphons: bool`, `#[serde(default)]`, documented in
 `assets/structures/README.md`. Supply is the existing `power_supply`, so
-tuning it is a data edit. Build cost is a starting number for the plan to
-check against the Line Driver (30 fragments + 6 grain).
+tuning it is a data edit. Build cost is user-chosen (cheaper than the
+Line Driver's 30 fragments + 6 grain; the real cost is the program).
 
 ### 2. Holding — the `UnderStudy` pattern
 
@@ -107,7 +107,7 @@ is released, it fades by `half_life` with no new code.
 
 ### 5. Release cost
 
-On release the program loses `SIPHON_RELEASE_INTEGRITY_LOSS` (a share of
+On release the program loses `SIPHON_RELEASE_INTEGRITY_LOSS` (75% of
 `max_hp`, in `tuning.rs`), floored at 1 HP. It does not die. A Repair Bay
 heals it through existing rules.
 

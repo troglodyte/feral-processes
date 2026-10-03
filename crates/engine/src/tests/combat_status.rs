@@ -1553,3 +1553,30 @@ fn a_body_without_derived_takes_the_full_duration() {
     assert!(game.world.get::<crate::components::Derived>(wild).is_none());
     assert_eq!(remaining_after_arming(&mut game, wild, 5), 5);
 }
+
+/// `Game::new` and `Game::load` each destructure `AssetDbs`, so a database
+/// wired into one door can silently miss the other.
+#[test]
+fn a_new_and_a_loaded_game_both_carry_the_status_db() {
+    use crate::statuses::{StatusDb, StatusId};
+    let dir = scratch_assets_dir("status_db_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.world
+            .resource::<StatusDb>()
+            .get(&StatusId::from("bleed"))
+            .is_some()
+    );
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert!(
+        loaded
+            .world
+            .resource::<StatusDb>()
+            .get(&StatusId::from("stun"))
+            .is_some()
+    );
+}

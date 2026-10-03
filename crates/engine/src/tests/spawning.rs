@@ -972,6 +972,12 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
             },
         ))
         .id();
+    for e in [low_roll, high_roll] {
+        game.world
+            .entity_mut(e)
+            .insert(crate::components::Attributes::default());
+        game.seat_derived(e);
+    }
     enlist(&mut game, low_roll);
     enlist(&mut game, high_roll);
 

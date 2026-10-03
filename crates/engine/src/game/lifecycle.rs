@@ -1313,6 +1313,18 @@ impl Game {
                 format!("that run is over — it {reason}. Its signal is gone from the Grid."),
             ));
         }
+        // Every door seats a tamed program and the writer always records its
+        // `base`, so a tamed record without one cannot have come from this
+        // build; loading it would read its stats as zero.
+        if let Some(c) = data.creatures.iter().find(|c| c.tamed && c.base.is_none()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "save is malformed: owned program {:?} has no base to derive its stats from",
+                    c.species
+                ),
+            ));
+        }
         let AssetDbs {
             abilities: ability_db,
             tools: tool_db,
@@ -2321,7 +2333,8 @@ impl Game {
         let id = entity.id();
         if let Some(base) = c.base.filter(|_| c.tamed) {
             // Restored, never seated: the record carries no figures to seat
-            // from. Recompute last, once gear, the receipt and attributes are
+            // from, and `Game::load` refuses a tamed record without a base.
+            // Recompute last, once gear, the receipt and attributes are
             // all in place.
             self.world.entity_mut(id).insert((
                 crate::components::ProgramBase(base),

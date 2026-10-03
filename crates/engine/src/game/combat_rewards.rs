@@ -1138,19 +1138,9 @@ impl Game {
         }
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let (species_growth, individual_roll) = self.program_growth(companion);
-        let growth = if self
-            .world
-            .get::<crate::components::ProgramBase>(companion)
-            .is_some()
-        {
-            progression::Growth::ProgramPoints {
-                multiplier: species_growth,
-                roll: individual_roll,
-            }
-        } else {
-            progression::Growth::Auto {
-                multiplier: species_growth * individual_roll,
-            }
+        let growth = progression::Growth::ProgramPoints {
+            multiplier: species_growth,
+            roll: individual_roll,
         };
         let before_level = self
             .world

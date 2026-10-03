@@ -1500,7 +1500,7 @@ mod tests {
             off_duties: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
-            base: None,
+            base: crate::render::test_support::tamed_base(),
             stat_points: 0,
             hold_points: false,
         };

@@ -610,29 +610,33 @@ fn a_creatures_potential_survives_save_and_load() {
     let mut game = Game::new(423, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
     let species = game.species_defs().into_iter().next().unwrap();
-    game.world.spawn((
-        Creature {
-            species: species.id.clone(),
-        },
-        Position { x: 3, y: 3 },
-        Stats {
-            hp: 10,
-            max_hp: 10,
-            atk: 1,
-            mitigation: 1,
-        },
-        Potential {
-            hp_roll: 1.15,
-            atk_roll: 0.85,
-            def_roll: 1.05,
-            growth_roll: 1.2,
-            assembly_roll: 1.0,
-            extraction_roll: 1.0,
-        },
-        Tamed { owner: player },
-        Experience::default(),
-        PowerReserve::default(),
-    ));
+    let companion = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                mitigation: 1,
+            },
+            Potential {
+                hp_roll: 1.15,
+                atk_roll: 0.85,
+                def_roll: 1.05,
+                growth_roll: 1.2,
+                assembly_roll: 1.0,
+                extraction_roll: 1.0,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+            PowerReserve::default(),
+        ))
+        .id();
+    game.seat_derived(companion);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_potential_test_{}.bin",
@@ -2195,7 +2199,7 @@ fn rest_refills_a_drained_companions_reserve() {
 
     assert_eq!(
         game.world.get::<PowerReserve>(companion).map(|r| r.get()),
-        Some(POWER_MAX)
+        Some(game.max_power(companion))
     );
 }
 

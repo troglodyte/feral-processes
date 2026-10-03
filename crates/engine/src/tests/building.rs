@@ -529,27 +529,31 @@ fn cronjob_assignment_survives_save_and_load() {
         .next()
         .expect("at least one species");
     let player = game.player_entity();
-    game.world.spawn((
-        Creature {
-            species: species.id.clone(),
-        },
-        Position { x: 3, y: 4 },
-        Stats {
-            hp: 10,
-            max_hp: 10,
-            atk: 1,
-            mitigation: 1,
-        },
-        Tamed { owner: player },
-        Experience::default(),
-        PowerReserve::default(),
-        Task {
-            kind: TaskKind::GatherResource,
-            target: structure,
-            progress: 3,
-            required: 6,
-        },
-    ));
+    let worker = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position { x: 3, y: 4 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                mitigation: 1,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+            PowerReserve::default(),
+            Task {
+                kind: TaskKind::GatherResource,
+                target: structure,
+                progress: 3,
+                required: 6,
+            },
+        ))
+        .id();
+    game.seat_derived(worker);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_cronjob_test_{}_{}.bin",

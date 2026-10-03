@@ -408,10 +408,14 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert_eq!(saved.species, species, "species");
     assert_eq!(saved.position, (position.x, position.y), "position");
     assert_eq!(saved.hp, live.hp, "hp");
-    assert_eq!(saved.max_hp, live.max_hp, "max_hp");
-    assert_ne!(saved.hp, saved.max_hp, "the fixture damaged it");
-    assert_eq!(saved.atk, live.atk, "atk");
-    assert_eq!(saved.mitigation, 17, "mitigation");
+    // A seated program writes no derived figures: they come back from `base`.
+    assert_eq!(
+        (saved.max_hp, saved.atk, saved.mitigation),
+        (0, 0, 0),
+        "derived figures are not stored"
+    );
+    assert!(saved.base.is_some(), "base");
+    assert_ne!(saved.hp, live.max_hp, "the fixture damaged it");
     assert!(saved.tamed, "tamed");
     assert_eq!(saved.power, 41.5, "power");
     assert_eq!(saved.level, 6, "level");
@@ -1395,4 +1399,32 @@ fn no_bolt_survives_a_save_and_load() {
         loaded.take_bolts().is_empty(),
         "a blow in flight was written into the save"
     );
+}
+
+/// Every door seats a tamed program and the writer always records `base`, so
+/// a tamed record without one is a malformed file, not an old one.
+#[test]
+fn a_tamed_record_without_a_base_is_refused_on_load() {
+    let dir = scratch_assets_dir("tamed_without_base");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_tamed(&mut game, 30, 6);
+    game.save(&path).expect("save");
+    let mut data = crate::save::load_from_file(&path).expect("read back");
+    let record = data
+        .creatures
+        .iter_mut()
+        .find(|c| c.tamed)
+        .expect("the program is in the file");
+    assert!(record.base.is_some(), "the writer records the base");
+    record.base = None;
+    crate::save::save_to_file(&path, &data).expect("write");
+
+    let err = Game::load(&path, &test_assets_dir())
+        .err()
+        .expect("a tamed record without a base must not load");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("no base"), "{err}");
 }

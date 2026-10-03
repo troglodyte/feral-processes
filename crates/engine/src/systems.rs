@@ -1195,7 +1195,6 @@ type CronjobWorker = (
     Option<&'static Needs>,
     Option<&'static crate::disposition::Disposition>,
     Option<&'static crate::situations::Situation>,
-    Option<&'static crate::components::ProgramBase>,
     Option<&'static crate::components::Attributes>,
 );
 
@@ -1269,7 +1268,7 @@ pub struct CronjobLookups<'w> {
 type CronjobPlayer<'w> = (Option<&'w FieldBuff>, Option<&'w Perks>, &'w mut Inventory);
 
 pub fn task_progress_system(
-    mut tasks: Query<CronjobWorker, With<Tamed>>,
+    mut tasks: Query<CronjobWorker, (With<Tamed>, With<crate::components::ProgramBase>)>,
     mut nodes: Query<WorkedNode>,
     mut player: Query<CronjobPlayer, With<Player>>,
     db: CronjobLookups,
@@ -1329,7 +1328,6 @@ pub fn task_progress_system(
         worker_needs,
         disposition,
         situation,
-        seated,
         attributes,
     ) in &mut tasks
     {
@@ -1435,9 +1433,8 @@ pub fn task_progress_system(
         task.progress = 0;
         // The posted program's own Analysis, which is the whole of what this
         // parameter is for: who you post to a node changes how often it
-        // fizzles, and a seated program's points move it. An unseated one
-        // reads its species' catalogue figure; a species missing from the db
-        // is a hand-spawned test fixture and takes the baseline, the same way
+        // fizzles, and a seated program's points move it. A species missing
+        // from the db is a hand-spawned test fixture and takes the baseline, the same way
         // `node_is_flat_payout` treats a structure kind the db has never
         // heard of.
         let worker_def = species_db.get(&creature.species);
@@ -1561,15 +1558,9 @@ pub fn task_progress_system(
             // A seated program's growth is points, which only `Game` can place:
             // the gain waits in `PendingProgramLevels` for the drain after
             // the schedule.
-            let growth = if seated.is_some() {
-                progression::Growth::ProgramPoints {
-                    multiplier: species_growth,
-                    roll: individual_roll,
-                }
-            } else {
-                progression::Growth::Auto {
-                    multiplier: species_growth * individual_roll,
-                }
+            let growth = progression::Growth::ProgramPoints {
+                multiplier: species_growth,
+                roll: individual_roll,
             };
             progression::add_xp(
                 &mut exp,
@@ -1609,15 +1600,9 @@ pub fn task_progress_system(
                     exp.level
                 ),
             );
-            if seated.is_some() {
-                // Its stat block is written by the drain, once the points are
-                // placed and there is a delta to show.
-                pending_levels.0.push((worker, gain));
-            } else {
-                for line in progression::stat_block(&gain.stat_rows(&stats)) {
-                    log.push_base_kind(MessageKind::LevelUp, line);
-                }
-            }
+            // Its stat block is written by the drain, once the points are
+            // placed and there is a delta to show.
+            pending_levels.0.push((worker, gain));
         }
     }
 }

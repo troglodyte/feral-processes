@@ -692,6 +692,10 @@ impl Game {
             .bodies()
             .map(|(entity, _)| entity)
             .filter(|&e| e != player && !party.contains(&e))
+            // A reinforcement is sent home (out of `Party`) before the
+            // nemesis sweep reads this, and is still on the board; owned
+            // programs are never the other side.
+            .filter(|&e| self.world.get::<Tamed>(e).is_none())
             .filter(|&e| self.creature_alive(e))
             .collect()
     }

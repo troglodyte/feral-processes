@@ -39,11 +39,7 @@ fn stats(game: &Game, pet: Entity) -> (i32, i32, i32, i32) {
 }
 
 fn set_stats(game: &mut Game, pet: Entity, hp: i32, atk: i32, def: i32) {
-    let mut s = game.world.get_mut::<Stats>(pet).unwrap();
-    s.hp = hp;
-    s.max_hp = hp;
-    s.atk = atk;
-    s.mitigation = def;
+    reseat_with_stats(game, pet, hp, atk, def);
 }
 
 #[test]

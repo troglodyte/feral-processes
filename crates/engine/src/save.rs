@@ -460,7 +460,7 @@ pub struct CreatureSave {
     /// seated program and `skip_serializing_if` drops the zero, because load
     /// rebuilds them from `base`, attributes, gear and the perk receipt
     /// (`Game::recompute_derived`) and a stored copy would go stale on a
-    /// retune. A wild or unseated creature still writes them. The value-based
+    /// retune. A wild creature still writes them. The value-based
     /// skip is what avoids a split save type: no zero is ever a real figure
     /// for a creature that keeps them.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -973,7 +973,8 @@ pub struct CreatureSave {
     /// The figures a seated program derives from — see
     /// `components::ProgramBase`. `Some` marks the program seated: load
     /// restores `ProgramBase` and `Derived` and recomputes, and **never
-    /// seats**, which would read `Stats` this record does not carry.
+    /// seats**, which would read `Stats` this record does not carry. A tamed
+    /// record without it is malformed and `Game::load` refuses it.
     #[serde(default)]
     pub base: Option<crate::progression::DerivedBase>,
     /// Banked, unspent attribute points — see `components::StatPoints`.

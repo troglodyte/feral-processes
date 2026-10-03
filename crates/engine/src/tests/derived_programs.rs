@@ -482,10 +482,22 @@ fn an_arena_companion_levelled_after_adoption_grew_through_points() {
     let mut game = game();
     let s = species(&game);
     let level_one = crate::arena::spawn_companion(&mut game, &s, 1).unwrap();
-    let program = crate::arena::spawn_companion(&mut game, &s, 6).unwrap();
+    let program = crate::arena::spawn_companion(&mut game, &s, 1).unwrap();
+    // A roll far enough from 1.0 that it rounds to a different split, or the
+    // test could not tell the arena ignoring the roll from using it.
+    game.world
+        .get_mut::<crate::components::Potential>(program)
+        .unwrap()
+        .growth_roll = 2.0;
+    let (g, _) = game.program_growth(program);
+    assert_ne!(
+        crate::progression::program_level_points(g, 2.0),
+        crate::progression::program_level_points(g, 1.0),
+        "the rolled split must differ from the species curve"
+    );
+    crate::arena::set_level(&mut game, program, 6);
     // The species curve, roll 1.0: an arena fight measures the species, so
     // the individual roll's luck must not leak in.
-    let (g, _) = game.program_growth(program);
     let (parity, _) = crate::progression::program_level_points(g, 1.0);
     assert_eq!(
         attribute(&game, program, "parity"),

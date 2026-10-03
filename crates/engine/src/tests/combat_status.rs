@@ -1894,3 +1894,89 @@ fn heal_block_zeroes_regen_ticks() {
         "regen is a heal"
     );
 }
+
+// ------------------------------------------------------------------ stacking
+
+fn stack_of(game: &Game, entity: Entity, id: &str) -> ActiveStatus {
+    game.world
+        .get::<StatusEffects>(entity)
+        .unwrap()
+        .active
+        .iter()
+        .find(|a| a.id.0 == id)
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn re_arming_a_stacking_status_adds_a_stack_up_to_its_max_and_takes_the_new_figures() {
+    let mut game = Game::new(7201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 2 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    game.arm_status(wild, &id, 5, 9);
+    game.arm_status(wild, &id, 2, 3);
+    let held = stack_of(&game, wild, "venom");
+    assert_eq!(held.stacks, 2);
+    assert_eq!(
+        (held.remaining, held.power),
+        (2, 3),
+        "the new figures replace"
+    );
+    assert!(held.landed_this_round);
+    game.arm_status(wild, &id, 2, 3);
+    assert_eq!(stack_of(&game, wild, "venom").stacks, 2, "capped at max");
+    assert_eq!(
+        game.world.get::<StatusEffects>(wild).unwrap().active.len(),
+        1
+    );
+}
+
+#[test]
+fn a_stacked_damage_status_deals_power_times_stacks() {
+    let mut game = Game::new(7202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    for _ in 0..3 {
+        game.arm_status(wild, &id, 4, 2);
+    }
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(game.world.get::<Stats>(wild).unwrap().hp, hp - 6);
+}
+
+#[test]
+fn the_landing_round_exemption_is_per_entry() {
+    let mut game = Game::new(7203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let venom = StatusId::from("venom");
+    let bleed = StatusId::from("bleed");
+    game.arm_status(wild, &venom, 4, 2);
+    game.tick_status_effects(wild, "Wild"); // venom's landing round
+    game.arm_status(wild, &bleed, 4, 5);
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(
+        game.world.get::<Stats>(wild).unwrap().hp,
+        hp - 2,
+        "venom ticks, the freshly landed bleed does not"
+    );
+}

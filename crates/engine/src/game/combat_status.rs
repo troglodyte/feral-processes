@@ -5,6 +5,7 @@
 //! and battle teardown in `combat_teardown.rs`; this file is what those
 //! three read and write *through*.
 
+use crate::statuses::StatusStacking;
 use crate::tuning::DEFEND_MITIGATION_BONUS;
 use crate::*;
 
@@ -70,8 +71,9 @@ impl Game {
     /// Arms status `id` on `entity` for `duration` rounds and marks it as
     /// landed this round. An id the `StatusDb` does not define is a logged
     /// no-op. Already carried and `Refresh`: the larger remaining duration
-    /// and power win, one entry stays. Not carried: a new entry with one
-    /// stack.
+    /// and power win, one entry stays. `Stack{max}`: one more stack up to
+    /// `max`, and the new duration and power replace the old. Not carried: a
+    /// new entry with one stack.
     ///
     /// The only writer of `StatusEffects::active` outside the two that
     /// clear it (`Cleanse` and `end_battle`), which is what makes
@@ -93,14 +95,27 @@ impl Game {
             .get::<crate::components::Derived>(entity)
             .map_or(0, |d| d.status_resist);
         let remaining = crate::progression::resisted_duration(duration, resist);
+        let stacking = self
+            .world
+            .resource::<StatusDb>()
+            .get(id)
+            .map(|def| def.stacking);
         let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) else {
             return;
         };
-        // `Stack{max}` joins the arm below when it ships.
         match statuses.active.iter_mut().find(|a| a.id == *id) {
             Some(held) => {
-                held.remaining = held.remaining.max(remaining);
-                held.power = held.power.max(power);
+                match stacking {
+                    Some(StatusStacking::Stack { max }) => {
+                        held.stacks = (held.stacks + 1).min(max);
+                        held.remaining = remaining;
+                        held.power = power;
+                    }
+                    _ => {
+                        held.remaining = held.remaining.max(remaining);
+                        held.power = held.power.max(power);
+                    }
+                }
                 held.landed_this_round = true;
             }
             None => statuses.active.push(ActiveStatus {

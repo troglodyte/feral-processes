@@ -371,7 +371,7 @@ impl Game {
         // could ever reveal.
         self.break_cloak(target);
         if dealt > 0 {
-            self.cue_tactical_fx(target, TacticalFxKind::Hit);
+            self.cue_tactical_fx(target, TacticalFxKind::Hit(dealt));
         }
         dealt
     }
@@ -444,7 +444,7 @@ impl Game {
             stats.hp - before
         };
         if restored > 0 {
-            self.cue_tactical_fx(target, TacticalFxKind::Heal);
+            self.cue_tactical_fx(target, TacticalFxKind::Heal(restored));
         }
         restored
     }

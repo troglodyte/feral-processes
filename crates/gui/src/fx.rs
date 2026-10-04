@@ -113,17 +113,13 @@ pub const DESTROYED_FLASH_SECONDS: f64 = 0.70;
 /// now stands and a hit-length blink is gone before the eye finds it.
 pub const LANDING_FLASH_SECONDS: f64 = DESTROYED_FLASH_SECONDS;
 
-/// How long a heal mark lives — it bounces and fades over the same span,
-/// since a bounce that outlasted its own fade would end on a visible snap
-/// rather than dying out with it.
-pub const HEAL_MARK_SECONDS: f64 = 0.9;
-/// How many times a heal mark bounces in its life. Two full arcs of one
-/// sine period each — `heal_mark_height`'s reason for taking `abs` rather
-/// than a bare sine, which would carry the mark *below* its rest position
-/// for the second half of every arc instead of bouncing off it.
-const HEAL_MARK_BOUNCES: f32 = 2.0;
-/// How high a heal mark bounces, as a fraction of a tile.
-const HEAL_MARK_HEIGHT: f32 = 0.55;
+/// How long a battle map's `-N`/`+N` lives — it rises and fades over the
+/// same span, since a rise that outlasted its own fade would end on a
+/// visible snap rather than dying out with it.
+const NUMBER_MARK_SECONDS: f64 = 0.9;
+/// How far a battle map's number rises over its life, as a fraction of a
+/// tile.
+const NUMBER_MARK_RISE: f32 = 0.55;
 
 /// How long one green `+` over a body a Repair Bay is mending takes to float
 /// up and fade out, and how far it floats as a share of the tile. The next
@@ -596,18 +592,16 @@ fn spark_alpha(t: f32) -> f32 {
     (1.0 - t).clamp(0.0, 1.0)
 }
 
-/// How high a heal mark sits above its rest position at `t`, which runs
-/// 0..1 across `HEAL_MARK_SECONDS`. `abs` of a sine rather than the sine
-/// itself, so the curve touches the rest position at the start, the middle
-/// and the end and never dips below it — two arcs read as a bounce, where a
-/// signed sine would read as a mark swinging under the floor.
-fn heal_mark_height(t: f32) -> f32 {
-    HEAL_MARK_HEIGHT * (std::f32::consts::PI * HEAL_MARK_BOUNCES * t).sin().abs()
+/// How far along its rise a floating mark is at `t`, 0..1 across its life:
+/// eased out, so it pops off the body and slows as it fades. The one curve
+/// a Repair Bay's `+` and a battle map's numbers both rise on.
+fn float_rise(t: f32) -> f32 {
+    1.0 - (1.0 - t).powi(2)
 }
 
 /// How high a reaction's `!` sits above its rest position at `t`: a snap
 /// up over `REACTION_MARK_RISE`, then held while it fades — a pop rather
-/// than a heal's bounce, so the two marks never read as the same news.
+/// than a number's steady rise, so the two never read as the same news.
 fn reaction_mark_height(t: f32) -> f32 {
     REACTION_MARK_HEIGHT * (t / REACTION_MARK_RISE).min(1.0)
 }
@@ -620,8 +614,7 @@ fn recovery_float(time: f64, phase_key: u64) -> (f32, f32) {
     let turns =
         time / RECOVERY_FLOAT_SECONDS + (phase_key % PHASE_KEYS) as f64 * STAFFED_BOB_PHASE_STEP;
     let t = turns.fract() as f32;
-    let eased = 1.0 - (1.0 - t).powi(2);
-    (RECOVERY_FLOAT_RISE * eased, cell_mark_alpha(t))
+    (RECOVERY_FLOAT_RISE * float_rise(t), cell_mark_alpha(t))
 }
 
 /// A cell mark fades linearly across its whole life, `draw_floats`' own
@@ -692,14 +685,17 @@ struct CellMark {
     start: f64,
 }
 
-/// What a `CellMark` is, and so everything about how it draws. The glyph,
+/// What a `CellMark` is, and so everything about how it draws. The text,
 /// the hue, the life and the motion are the whole of the difference between
 /// two marks, which is why they are one list and one draw.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MarkKind {
-    /// A green `+` bouncing over a body that was healed. `HEALTHY` rather
+    /// A red `-N` rising off a body that was hit, in the hit's own wash
+    /// colour so the number and the flash read as one blow.
+    Damage(i32),
+    /// A green `+N` rising off a body that was healed. `HEALTHY` rather
     /// than a new palette role — Integrity coming back is what it means.
-    Heal,
+    Heal(i32),
     /// A `!` popping over a body that took an opportunity swing.
     /// `ATTENTION`, not `THREAT`: the reactor may be on the player's side,
     /// and `THREAT` is reserved for a structure taking a hit.
@@ -707,30 +703,32 @@ enum MarkKind {
 }
 
 impl MarkKind {
-    fn glyph(self) -> &'static str {
+    fn text(self) -> String {
         match self {
-            MarkKind::Heal => "+",
-            MarkKind::Reaction => "!",
+            MarkKind::Damage(n) => format!("-{n}"),
+            MarkKind::Heal(n) => format!("+{n}"),
+            MarkKind::Reaction => "!".to_string(),
         }
     }
 
     fn color(self) -> Color {
         match self {
-            MarkKind::Heal => palette::HEALTHY,
+            MarkKind::Damage(_) => FLASH_RED,
+            MarkKind::Heal(_) => palette::HEALTHY,
             MarkKind::Reaction => palette::ATTENTION,
         }
     }
 
     fn seconds(self) -> f64 {
         match self {
-            MarkKind::Heal => HEAL_MARK_SECONDS,
+            MarkKind::Damage(_) | MarkKind::Heal(_) => NUMBER_MARK_SECONDS,
             MarkKind::Reaction => REACTION_MARK_SECONDS,
         }
     }
 
     fn height(self, t: f32) -> f32 {
         match self {
-            MarkKind::Heal => heal_mark_height(t),
+            MarkKind::Damage(_) | MarkKind::Heal(_) => NUMBER_MARK_RISE * float_rise(t),
             MarkKind::Reaction => reaction_mark_height(t),
         }
     }
@@ -945,14 +943,21 @@ impl Fx {
             // that table to reuse and gets its own list instead.
             for cue in tactical_fx {
                 match cue.kind {
-                    TacticalFxKind::Hit => self.tactical_flashes.push(TileFlash {
+                    TacticalFxKind::Hit(dealt) => {
+                        self.tactical_flashes.push(TileFlash {
+                            pos: cue.pos,
+                            kind: EffectKind::Hit,
+                            start: now,
+                        });
+                        self.cell_marks.push(CellMark {
+                            pos: cue.pos,
+                            kind: MarkKind::Damage(dealt),
+                            start: now,
+                        });
+                    }
+                    TacticalFxKind::Heal(restored) => self.cell_marks.push(CellMark {
                         pos: cue.pos,
-                        kind: EffectKind::Hit,
-                        start: now,
-                    }),
-                    TacticalFxKind::Heal => self.cell_marks.push(CellMark {
-                        pos: cue.pos,
-                        kind: MarkKind::Heal,
+                        kind: MarkKind::Heal(restored),
                         start: now,
                     }),
                     TacticalFxKind::Reaction => self.cell_marks.push(CellMark {
@@ -1147,7 +1152,7 @@ impl Fx {
     }
 
     /// Draws every cell mark currently over a body on a tactical battle
-    /// map — a heal's `+`, a reaction's `!` — centred the way
+    /// map — a hit's `-N`, a heal's `+N`, a reaction's `!` — centred the way
     /// `draw_walkers` centres a glyph on measured ink, lifted by its kind's
     /// own height curve and faded by `cell_mark_alpha`.
     pub fn draw_cell_marks(
@@ -1162,14 +1167,14 @@ impl Fx {
             if !(0.0..1.0).contains(&t) {
                 continue;
             }
-            let glyph = mark.kind.glyph();
+            let text = mark.kind.text();
             let (ox, oy) = to_px(mark.pos);
-            let dims = painter.measure_map(glyph, glyph_px);
+            let dims = painter.measure_map(&text, glyph_px);
             let x = ox + (tile_px - dims.width) / 2.0;
             let y = oy + (tile_px + dims.height) / 2.0 - mark.kind.height(t) * tile_px;
             let base = mark.kind.color();
             let color = Color::new(base.r, base.g, base.b, cell_mark_alpha(t));
-            painter.map(glyph, x, y, glyph_px, color);
+            painter.map(&text, x, y, glyph_px, color);
         }
     }
 
@@ -2339,6 +2344,23 @@ mod tests {
             fx.centred_bob(entity),
             staffed_bob_offset(fx.now, entity.to_bits()) - half,
             "and the accessor is that curve, not a second one"
+        );
+    }
+
+    #[test]
+    fn a_battle_number_only_ever_rises() {
+        let heights: Vec<f32> = (0..=10)
+            .map(|i| MarkKind::Damage(1).height(i as f32 / 10.0))
+            .collect();
+        assert_eq!(heights[0], 0.0, "it starts on the body: {heights:?}");
+        assert!(
+            heights.windows(2).all(|w| w[1] > w[0]),
+            "it must climb every frame, never bounce: {heights:?}"
+        );
+        assert_eq!(
+            MarkKind::Damage(1).height(0.5),
+            MarkKind::Heal(1).height(0.5),
+            "a hit's number and a heal's are one motion"
         );
     }
 

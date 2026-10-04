@@ -914,13 +914,15 @@ impl BoltQueue {
 /// out in the zone.
 ///
 /// **A `kind` field, where `BoltCue` has none.** A hit and a heal draw
-/// nothing alike — a red wash with a spark burst against a green mark that
-/// bounces — so folding the two into one shapeless cue would only hand the
+/// nothing alike — a red wash with a spark burst against a green mark —
+/// so folding the two into one shapeless cue would only hand the
 /// renderer back the branch this field already is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TacticalFxKind {
-    Hit,
-    Heal,
+    /// What actually came off, after mitigation — the `-N` the board floats.
+    Hit(i32),
+    /// What actually landed under the cap — the `+N` the board floats.
+    Heal(i32),
     /// A body took an opportunity swing, cued at the *reactor's* cell
     /// before the blow — the swing itself sounds and streaks like any
     /// other, so this is the one thing that says it was an interrupt.

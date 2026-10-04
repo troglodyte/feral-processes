@@ -3056,13 +3056,15 @@ fn a_landed_swing_queues_a_hit_cue_at_the_defenders_cell() {
     // enough blow reaps the defender off the board entirely, and the cue's
     // own cell was captured before that could happen.
     let cues = game.take_tactical_fx();
-    assert_eq!(
-        cues,
-        vec![crate::resources::TacticalFxCue {
-            pos: (1, 0),
-            kind: crate::resources::TacticalFxKind::Hit,
-        }],
-        "a landed blow must cue exactly one hit at the defender's cell"
+    assert!(
+        matches!(
+            cues.as_slice(),
+            [crate::resources::TacticalFxCue {
+                pos: (1, 0),
+                kind: crate::resources::TacticalFxKind::Hit(dealt),
+            }] if *dealt > 0
+        ),
+        "a landed blow must cue exactly one hit at the defender's cell: {cues:?}"
     );
 }
 
@@ -3116,10 +3118,8 @@ fn a_heal_queues_a_heal_cue_at_the_recipients_cell() {
 
     let cues = game.take_tactical_fx();
     assert!(
-        cues.contains(&crate::resources::TacticalFxCue {
-            pos: beside,
-            kind: crate::resources::TacticalFxKind::Heal,
-        }),
+        cues.iter().any(|c| c.pos == beside
+            && matches!(c.kind, crate::resources::TacticalFxKind::Heal(n) if n > 0)),
         "the healed hostile's cell must carry a heal cue: {cues:?}"
     );
 }
@@ -3139,6 +3139,45 @@ fn a_heal_that_restores_nothing_cues_no_tactical_fx() {
     assert!(
         game.take_tactical_fx().is_empty(),
         "a no-op heal must not have cued anything"
+    );
+}
+
+/// A hit cue carries what came off after mitigation, and a heal cue what
+/// landed under the cap — the figures the board floats over the body, so a
+/// number printing the *requested* amount would claim damage never taken.
+#[test]
+fn a_cue_carries_the_landed_amount_not_the_requested_one() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let target = pack[0];
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(target)
+        .expect("the hostile was not seated");
+    game.world.get_mut::<Stats>(target).unwrap().mitigation = 50;
+
+    let dealt = game.apply_damage(target, 10);
+    assert!(
+        (1..10).contains(&dealt),
+        "fixture: mitigation must cut the blow without zeroing it, got {dealt}"
+    );
+    let max = game.world.get::<Stats>(target).unwrap().max_hp;
+    game.world.get_mut::<Stats>(target).unwrap().hp = max - 3;
+    assert_eq!(game.restore_hp(target, 10), 3, "fixture: the cap must bite");
+
+    assert_eq!(
+        game.take_tactical_fx(),
+        vec![
+            crate::resources::TacticalFxCue {
+                pos: at,
+                kind: crate::resources::TacticalFxKind::Hit(dealt),
+            },
+            crate::resources::TacticalFxCue {
+                pos: at,
+                kind: crate::resources::TacticalFxKind::Heal(3),
+            },
+        ]
     );
 }
 

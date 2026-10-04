@@ -683,8 +683,8 @@ pub(super) fn draw_tactical_map(
         )
     });
 
-    // A green `+` bouncing over anyone just healed, a `!` over anyone who
-    // just took an opportunity swing.
+    // A red `-N` rising off anyone just hit, a green `+N` off anyone just
+    // healed, a `!` over anyone who just took an opportunity swing.
     fx.draw_cell_marks(painter, tile_px, glyph_px, |cell| {
         tile_origin_px(
             cell,
@@ -2473,7 +2473,7 @@ mod tests {
             FrameCues {
                 tactical_fx: vec![TacticalFxCue {
                     pos: cell,
-                    kind: TacticalFxKind::Hit,
+                    kind: TacticalFxKind::Hit(7),
                 }],
                 ..Default::default()
             },
@@ -2490,12 +2490,17 @@ mod tests {
             1,
             "a landed blow must wash the cell it landed on"
         );
+        assert!(
+            painted_text(&shapes).iter().any(|t| t == "-7"),
+            "a landed blow must float what it dealt: {:?}",
+            painted_text(&shapes)
+        );
     }
 
-    /// A heal on a battle map draws a `+` over the recipient's own cell —
+    /// A heal on a battle map floats `+N` over the recipient's own cell —
     /// the same real-map assertion the hit test above makes.
     #[test]
-    fn a_tactical_heal_draws_a_plus_over_the_recipients_cell() {
+    fn a_tactical_heal_floats_its_amount_over_the_recipients_cell() {
         use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
 
         let mut game = fighting();
@@ -2508,7 +2513,7 @@ mod tests {
             FrameCues {
                 tactical_fx: vec![TacticalFxCue {
                     pos: cell,
-                    kind: TacticalFxKind::Heal,
+                    kind: TacticalFxKind::Heal(5),
                 }],
                 ..Default::default()
             },
@@ -2518,8 +2523,8 @@ mod tests {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
-            painted_text(&shapes).iter().any(|t| t == "+"),
-            "a heal cue must draw a + over the healed body: {:?}",
+            painted_text(&shapes).iter().any(|t| t == "+5"),
+            "a heal cue must float what it restored over the healed body: {:?}",
             painted_text(&shapes)
         );
     }
@@ -2556,7 +2561,7 @@ mod tests {
             "a reaction cue must draw a ! over the reactor: {text:?}"
         );
         assert!(
-            !text.iter().any(|t| t == "+"),
+            !text.iter().any(|t| t.starts_with('+')),
             "and not a heal's mark: {text:?}"
         );
     }

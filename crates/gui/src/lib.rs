@@ -1170,7 +1170,7 @@ mod tests {
             frame_cues(
                 vec![SoundEvent::Hit],
                 &[],
-                &[cue(TacticalFxKind::Hit)],
+                &[cue(TacticalFxKind::Hit(4))],
                 false
             ),
             vec![SoundEvent::Hit],
@@ -1540,7 +1540,7 @@ mod tests {
         let mut fx = Fx::new();
         let cue = TacticalFxCue {
             pos: (2, 3),
-            kind: TacticalFxKind::Hit,
+            kind: TacticalFxKind::Hit(4),
         };
         fx.begin_frame(
             0.0,

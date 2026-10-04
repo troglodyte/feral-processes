@@ -69,8 +69,9 @@ impl Game {
     }
 
     /// Arms status `id` on `entity` for `duration` rounds and marks it as
-    /// landed this round, except a re-dose of a `Stack` entry. An id the `StatusDb` does not define is a silent
-    /// no-op, since loading already warned. Already carried and `Refresh`: the larger remaining duration
+    /// landed this round, except a re-dose of a `Stack` entry. An id the
+    /// `StatusDb` does not define is a silent no-op, since loading already
+    /// warned. Already carried and `Refresh`: the larger remaining duration
     /// and power win, one entry stays. `Stack{max}`: one more stack up to
     /// `max`, and the new duration and power replace the old. Not carried: a
     /// new entry with one stack.

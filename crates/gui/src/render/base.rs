@@ -1399,7 +1399,7 @@ fn draw_surface_map(
             if let Some((done, color)) = cell_bar(structure, building, staff) {
                 draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
             }
-            // How full a Depot is, along the top edge — after the outline for
+            // How full a Depot is, up the right edge — after the outline for
             // the progress bar's reason, since the shield pulse draws a wall
             // along that edge too. See `draw_depot_fill`.
             draw_depot_fill(
@@ -4783,17 +4783,23 @@ mod tests {
         assert_eq!(bar_widths(Some(-1.0)), vec![track]);
     }
 
-    /// A Depot's bar is the progress bar's own track turned to the top
-    /// edge, so the two read as one kind of mark and never share pixels on
-    /// a Depot being upgraded.
+    /// A Depot's bar is the progress bar's own track stood upright on the
+    /// right edge, so the two read as one kind of mark, and it stops above
+    /// the job bar so they never share pixels on a Depot being upgraded.
     #[test]
-    fn a_depots_bar_mirrors_the_progress_bar_on_the_top_edge() {
+    fn a_depots_bar_stands_on_the_right_edge_above_the_progress_bar() {
         for tile_px in [CELL, CELL * 2.0, CELL * 3.0] {
-            let top = depot_fill_rect(0.0, 0.0, tile_px);
+            let side = depot_fill_rect(0.0, 0.0, tile_px);
             let bottom = progress_bar_rect(0.0, 0.0, tile_px);
-            assert_eq!((top.x, top.w, top.h), (bottom.x, bottom.w, bottom.h));
-            assert_eq!(top.y, tile_px - 1.0 - (bottom.y + bottom.h));
-            assert!(top.y + top.h < bottom.y, "the two bars overlap");
+            assert_eq!(side.w, bottom.h, "same thickness as the job bar");
+            assert_eq!(side.y, bottom.x, "same inset from the top edge");
+            assert_eq!(
+                side.x + side.w,
+                bottom.x + bottom.w,
+                "same inset from the right edge"
+            );
+            assert!(side.y + side.h < bottom.y, "the two bars overlap");
+            assert!(side.h > side.w, "the bar stands upright");
         }
     }
 
@@ -4822,7 +4828,7 @@ mod tests {
     /// track so it reads as a Depot you can read the level of.
     #[test]
     fn a_depots_bar_fills_in_proportion_and_an_empty_one_keeps_its_track() {
-        let widths = |held| {
+        let heights = |held| {
             let (_, shapes) = with_painter(|p| {
                 draw_depot_fill(
                     p,
@@ -4833,21 +4839,26 @@ mod tests {
                     1.0,
                 )
             });
-            let mut w: Vec<f32> = shapes
+            let mut r: Vec<(f32, f32)> = shapes
                 .iter()
                 .filter_map(|cs| match &cs.shape {
-                    bevy_egui::egui::Shape::Rect(r) => Some(r.rect.width()),
+                    bevy_egui::egui::Shape::Rect(r) => Some((r.rect.top(), r.rect.height())),
                     _ => None,
                 })
                 .collect();
-            w.sort_by(|a, b| a.partial_cmp(b).expect("no NaN widths"));
-            w
+            r.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("no NaN heights"));
+            r
         };
-        let track = depot_fill_rect(0.0, 0.0, CELL).w;
-        assert_eq!(widths(0), vec![track]);
-        assert_eq!(widths(50), vec![track, track]);
-        let half = widths(25);
-        assert!((half[0] - track / 2.0).abs() < 0.01, "{half:?}");
+        let track = depot_fill_rect(0.0, 0.0, CELL);
+        let whole = (track.y, track.h);
+        assert_eq!(heights(0), vec![whole]);
+        assert_eq!(heights(50), vec![whole, whole]);
+        let half = heights(25);
+        assert!((half[0].1 - track.h / 2.0).abs() < 0.01, "{half:?}");
+        assert!(
+            (half[0].0 + half[0].1 - (track.y + track.h)).abs() < 0.01,
+            "the fill rises from the bottom of its track: {half:?}"
+        );
         let (_, none) = with_painter(|p| draw_depot_fill(p, None, 0.0, 0.0, CELL, 1.0));
         assert!(none.is_empty(), "not a Depot, no bar");
     }

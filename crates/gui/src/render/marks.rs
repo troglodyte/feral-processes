@@ -388,14 +388,22 @@ pub(super) fn draw_progress_bar(
         painter,
         progress_bar_rect(px, py, tile_px),
         done,
+        Grows::Right,
         color,
         vig,
     );
 }
 
+/// Which way a tile bar's fill grows along its track.
+#[derive(Clone, Copy)]
+enum Grows {
+    Right,
+    Up,
+}
+
 /// A track and a clamped fill in `bar` — the one body both tile bars draw
 /// through, so the Depot's reads as the same kind of mark as a job's.
-fn draw_bar(painter: &Painter, bar: Rect, done: f32, color: Color, vig: f32) {
+fn draw_bar(painter: &Painter, bar: Rect, done: f32, grows: Grows, color: Color, vig: f32) {
     painter.rect(
         bar.x,
         bar.y,
@@ -403,22 +411,37 @@ fn draw_bar(painter: &Painter, bar: Rect, done: f32, color: Color, vig: f32) {
         bar.h,
         at_level(hud::palette::BAR_TROUGH, vig),
     );
-    let filled = bar.w * done.clamp(0.0, 1.0);
-    if filled > 0.0 {
-        painter.rect(bar.x, bar.y, filled, bar.h, at_level(color, vig));
+    let done = done.clamp(0.0, 1.0);
+    let fill = match grows {
+        Grows::Right => Rect::new(bar.x, bar.y, bar.w * done, bar.h),
+        Grows::Up => {
+            let h = bar.h * done;
+            Rect::new(bar.x, bar.y + bar.h - h, bar.w, h)
+        }
+    };
+    if fill.w > 0.0 && fill.h > 0.0 {
+        painter.rect(fill.x, fill.y, fill.w, fill.h, at_level(color, vig));
     }
 }
 
 /// A Depot turns yellow once this share of its room or less is left.
 const DEPOT_NEAR_FULL_PERCENT: u32 = 10;
 
-/// Where a Depot's fill bar sits — `progress_bar_rect` reflected onto the
-/// top edge. The top edge is the rarity bar's, but rarity is an actor's and
-/// a body never stops on a structure, so on a Depot it is free; the bottom
-/// edge stays the job bar's, which a Depot being upgraded still needs.
+/// Where a Depot's fill bar sits — the progress bar's thickness and inset
+/// stood upright along the right edge, filling upward like a tank. The top
+/// edge is where a structure's damage reads, so a level drawn there competed
+/// with it; the bottom edge stays the job bar's, which a Depot being
+/// upgraded still needs, so the gauge stops an inset above that bar's top.
 pub(super) fn depot_fill_rect(px: f32, py: f32, tile_px: f32) -> Rect {
-    let bar = progress_bar_rect(px, py, tile_px);
-    Rect::new(bar.x, py + PROGRESS_BAR_INSET, bar.w, bar.h)
+    let size = tile_px - 1.0;
+    let top = py + PROGRESS_BAR_INSET;
+    let bottom = progress_bar_rect(px, py, tile_px).y - PROGRESS_BAR_INSET;
+    Rect::new(
+        px + size - PROGRESS_BAR_INSET - PROGRESS_BAR_PX,
+        top,
+        PROGRESS_BAR_PX,
+        bottom - top,
+    )
 }
 
 /// The `[GRID]` readout's three roles over a Depot's room: `OFFLINE` when
@@ -458,6 +481,7 @@ pub(super) fn draw_depot_fill(
         painter,
         depot_fill_rect(px, py, tile_px),
         done,
+        Grows::Up,
         depot_fill_color(fill),
         vig,
     );

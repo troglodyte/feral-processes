@@ -69,7 +69,7 @@ impl Game {
     }
 
     /// Arms status `id` on `entity` for `duration` rounds and marks it as
-    /// landed this round. An id the `StatusDb` does not define is a silent
+    /// landed this round, except a re-dose of a `Stack` entry. An id the `StatusDb` does not define is a silent
     /// no-op, since loading already warned. Already carried and `Refresh`: the larger remaining duration
     /// and power win, one entry stays. `Stack{max}`: one more stack up to
     /// `max`, and the new duration and power replace the old. Not carried: a
@@ -105,6 +105,8 @@ impl Game {
         match statuses.active.iter_mut().find(|a| a.id == *id) {
             Some(held) => {
                 match stacking {
+                    // Not re-flagged: a poisoner re-dosing every round would
+                    // otherwise never see its existing stacks tick.
                     Some(StatusStacking::Stack { max }) => {
                         held.stacks = (held.stacks + 1).min(max);
                         held.remaining = remaining;
@@ -113,9 +115,9 @@ impl Game {
                     _ => {
                         held.remaining = held.remaining.max(remaining);
                         held.power = held.power.max(power);
+                        held.landed_this_round = true;
                     }
                 }
-                held.landed_this_round = true;
             }
             None => statuses.active.push(ActiveStatus {
                 id: id.clone(),

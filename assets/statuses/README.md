@@ -42,6 +42,10 @@ stack.
 `Refresh` re-arming keeps the larger of the remaining rounds and the power. `Stack(max: N)` adds a stack up to
 `N`.
 
+A freshly applied status skips its first end-of-round tick, and so does a
+`Refresh` re-apply. A `Stack` re-dose does not, so the stacks already held keep
+ticking.
+
 ## Shipped
 
 | id | tag | behaviour | stacking |

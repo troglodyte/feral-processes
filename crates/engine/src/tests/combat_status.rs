@@ -1962,6 +1962,42 @@ fn a_stacked_damage_status_deals_power_times_stacks() {
 }
 
 #[test]
+fn re_dosing_a_stacking_status_keeps_its_existing_stacks_ticking() {
+    let mut game = Game::new(7204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    game.arm_status(wild, &id, 4, 2); // round 1
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.arm_status(wild, &id, 4, 2); // round 2: re-dose
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(
+        game.world.get::<Stats>(wild).unwrap().hp,
+        hp - 4,
+        "power x stacks, so a poisoner re-dosing every round still deals damage"
+    );
+}
+
+#[test]
+fn re_arming_a_refresh_status_still_skips_that_rounds_tick() {
+    let mut game = Game::new(7205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let id = StatusId::from("bleed");
+    game.arm_status(wild, &id, 4, 5);
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.arm_status(wild, &id, 4, 5); // re-applied in round 2
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(game.world.get::<Stats>(wild).unwrap().hp, hp);
+}
+
+#[test]
 fn the_landing_round_exemption_is_per_entry() {
     let mut game = Game::new(7203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);

@@ -112,7 +112,10 @@ pub struct StatusEffects { pub active: Vec<ActiveStatus> } // ≤ 1 entry per id
   - `Refresh`: `remaining = max(old, new)`, `power = max(old, new)`.
   - `Stack{max}`: `stacks = min(stacks + 1, max)`, `remaining = new`,
     `power = new`.
-  - Either way `landed_this_round = true` on that entry.
+  - `landed_this_round = true` on a freshly pushed entry and on a `Refresh`
+    re-apply. A `Stack` re-dose leaves the flag alone: a poisoner re-dosing
+    every round would otherwise never deal damage, since each re-flag skips
+    that round's tick.
 - **`tick_status_effects`** walks every entry at the existing end-of-round
   hook (`tick_one_combatant`, both battle models): landed-this-round entries
   only clear the flag; others apply `DamagePerRound`, decrement, and are

@@ -53,6 +53,21 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.2
+
+**A program can carry several status effects at once, Poison now stacks up
+to five times, and two new effects arrive: Throttled, which cuts attack by a
+quarter, and Locked, which blocks all healing.** Before, a body held one
+effect and a second replaced the first — a fumble that left you Exposed and
+then Stunned kept only the stun. Now both stay, each counting down on its
+own, and the battle screens list them all with their rounds left (`PSN×3
+(2)`). Data Poisoning applies the stacking Poison; the research tree adds
+Thermal Throttle and Write Lock. Locked stops every heal, including Regen
+and healing items, which used to go around the check.
+
+Status effects are now data files in `assets/statuses/`, so a mod can add
+one without touching code.
+
 ## 0.15.1
 
 **You can build a Power Siphon and pin one of your base staff programs into

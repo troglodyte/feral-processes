@@ -288,6 +288,10 @@ impl App {
             return;
         }
         if self.manifest_tab == ManifestTab::Stats {
+            if key == GameKey::Char('L') && self.manifest_is_own() {
+                self.reopen_level_up();
+                return;
+            }
             if key == GameKey::Char('H') {
                 self.toggle_hold_points();
                 return;
@@ -317,6 +321,13 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// Whether the sheet is the player's own, the one face `L` answers on.
+    pub fn manifest_is_own(&self) -> bool {
+        self.game
+            .as_ref()
+            .is_some_and(|g| self.pending_manifest == Some(g.player_entity()))
     }
 
     /// Only an owned program has SOCIAL and TALK faces; on anyone else the key is

@@ -403,11 +403,8 @@ impl App {
                 self.mode = Mode::Manifest;
             }
             (AllocationOrigin::Perks, _) => self.open_perks(),
-            (AllocationOrigin::LevelUp, true) if perk_points > 0 => self.open_perks(),
-            (AllocationOrigin::LevelUp, _) => {
-                self.mode = Mode::Playing;
-                self.show_next_notification();
-            }
+            (AllocationOrigin::LevelUp, true) if perk_points > 0 => self.open_level_up_perks(),
+            (AllocationOrigin::LevelUp, _) => self.leave_level_up_flow(),
         }
     }
 }

@@ -428,3 +428,147 @@ fn the_preview_carries_what_perks_and_gear_add() {
     app.handle_key(GameKey::Enter);
     assert_eq!(after, hud(&app));
 }
+
+/// Opens the player's own sheet through the picker, whose first row is you.
+fn open_own_manifest(app: &mut App) {
+    app.mode = Mode::ManifestPick;
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::Manifest, "{:?}", app.status_line);
+    let player = app.game.as_ref().unwrap().player_entity();
+    assert_eq!(app.pending_manifest, Some(player));
+}
+
+/// Sets the player's banked stat and Perk Points through the save,
+/// `about_to_level`'s idiom; `App` state, the kept report included, rides
+/// across the reload.
+fn set_banked_points(app: &mut App, stat: u32, perk: u32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("level_up_spent", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.stat_points = stat;
+    data.player.perk_points = perk;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
+/// Closing the page with points unspent keeps it: `L` on your own sheet
+/// shows the same level again, and `Esc` there goes back to the sheet
+/// rather than to the map.
+#[test]
+fn l_on_your_manifest_reopens_a_page_closed_unspent() {
+    let mut app = app_about_to_level(9520);
+    win_it_and_leave_results(&mut app);
+    let to_level = app.pending_level_up.as_ref().unwrap().to_level;
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    open_own_manifest(&mut app);
+    assert!(app.level_up_reopenable());
+    app.handle_key(GameKey::Char('L'));
+
+    assert_eq!(app.mode, Mode::LevelUp, "{:?}", app.status_line);
+    assert_eq!(app.pending_level_up.as_ref().unwrap().to_level, to_level);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Manifest);
+    assert!(app.level_up_reopenable(), "Esc again keeps it");
+}
+
+/// Spending from a reopened page comes back to the sheet: the commit goes
+/// on to Perks while Perk Points are left, and Perks' `Esc` returns to the
+/// sheet. Reopening again shows the unspent figures as they are now, not
+/// as they were at the level.
+#[test]
+fn spending_from_a_reopened_page_returns_to_the_sheet_with_fresh_counts() {
+    let mut app = app_about_to_level(9521);
+    win_it_and_leave_results(&mut app);
+    app.handle_key(GameKey::Esc);
+    open_own_manifest(&mut app);
+    app.handle_key(GameKey::Char('L'));
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    app.menu_selected = allocation_row(&app, "parity");
+    app.handle_key(GameKey::ShiftRight);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(stat_points(&app), 0);
+    assert_eq!(app.mode, Mode::Perks, "Perk Points are still unspent");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Manifest);
+
+    app.handle_key(GameKey::Char('L'));
+    assert_eq!(app.mode, Mode::LevelUp, "{:?}", app.status_line);
+    let report = app.pending_level_up.as_ref().unwrap();
+    assert_eq!(report.stat_points_unspent, 0);
+    assert!(report.perk_points_unspent > 0);
+}
+
+/// `Esc` on the Points screen opened from a reopened page goes back to the
+/// sheet, not the map.
+#[test]
+fn esc_on_points_from_a_reopened_page_returns_to_the_sheet() {
+    let mut app = app_about_to_level(9522);
+    win_it_and_leave_results(&mut app);
+    app.handle_key(GameKey::Esc);
+    open_own_manifest(&mut app);
+    app.handle_key(GameKey::Char('L'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+/// With nothing left to spend the option is greyed and `L` does not open
+/// the page.
+#[test]
+fn l_does_nothing_once_nothing_is_left_to_spend() {
+    let mut app = app_about_to_level(9523);
+    win_it_and_leave_results(&mut app);
+    app.handle_key(GameKey::Esc);
+    set_banked_points(&mut app, 0, 0);
+    open_own_manifest(&mut app);
+
+    assert!(!app.level_up_reopenable());
+    app.handle_key(GameKey::Char('L'));
+
+    assert_eq!(app.mode, Mode::Manifest);
+    assert!(app.pending_level_up.is_none());
+}
+
+/// Before any level there is no page to reopen.
+#[test]
+fn l_does_nothing_before_any_level() {
+    let mut app = test_app(9524);
+    open_own_manifest(&mut app);
+
+    assert!(!app.level_up_reopenable());
+    app.handle_key(GameKey::Char('L'));
+
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+/// `L` is the player's: on a program's sheet it opens nothing, even with a
+/// page kept and points to spend. The kept page is carried over from a
+/// levelled fixture, since the one that owns a program never levels.
+#[test]
+fn l_on_a_programs_sheet_does_nothing() {
+    let mut levelled = app_about_to_level(9525);
+    win_it_and_leave_results(&mut levelled);
+    levelled.handle_key(GameKey::Esc);
+    let mut app = app_owning_distant_programs(9525, 1);
+    app.last_level_up = levelled.last_level_up.take();
+    set_banked_points(&mut app, 1, 0);
+    open_own_manifest(&mut app);
+    assert!(app.level_up_reopenable());
+
+    app.handle_key(GameKey::Right);
+    let player = app.game.as_ref().unwrap().player_entity();
+    assert_ne!(app.pending_manifest, Some(player));
+    app.handle_key(GameKey::Char('L'));
+
+    assert_eq!(app.mode, Mode::Manifest);
+}

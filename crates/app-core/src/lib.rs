@@ -20,14 +20,15 @@ pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevCon
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
+/// One name rather than `pub mod app`: `train` needs the JSONL writer and
+/// nothing else of app-core's internals.
+pub use app::level_up::LevelUpOrigin;
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::sprite_forge::{
     PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
     SpriteWrite, SubjectTint,
 };
-/// One name rather than `pub mod app`: `train` needs the JSONL writer and
-/// nothing else of app-core's internals.
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::telemetry::append_records;
 pub use feral_processes_engine::ProgramRole;
@@ -2668,11 +2669,19 @@ pub struct App {
     /// writer is `App::show_next_notification`; a second one is three
     /// distinct failures inherited, `GearInspect`'s rule.
     pub pending_notification: Option<feral_processes_engine::notifications::Notification>,
-    /// The report on screen in `Mode::LevelUp`. The **one** writer is
+    /// The report on screen in `Mode::LevelUp`. Written by
     /// `App::show_next_notification`, `pending_notification`'s own rule —
     /// and it is checked first, so a level earned in the same tick a
-    /// notification queued takes the screen before the notification does.
+    /// notification queued takes the screen before the notification does —
+    /// and by `App::reopen_level_up`, from `last_level_up`.
     pub pending_level_up: Option<LevelUpReport>,
+    /// The latest level-up page, kept once it closes so `L` on your own
+    /// Manifest can show it again while points are left to spend. The
+    /// engine hands each report over once, so this is the only copy. Not
+    /// saved: a reload loses the page, never the points.
+    pub last_level_up: Option<LevelUpReport>,
+    /// Where `Mode::LevelUp` and the screens it opens go back to.
+    pub level_up_origin: LevelUpOrigin,
     /// The Points screen on show in `Mode::AllocateStats`. Its **one**
     /// writer is `App::open_stat_allocation`.
     pub stat_allocation: Option<StatAllocation>,

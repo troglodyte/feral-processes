@@ -72,6 +72,8 @@ impl App {
             pending_description: None,
             pending_notification: None,
             pending_level_up: None,
+            last_level_up: None,
+            level_up_origin: LevelUpOrigin::default(),
             stat_allocation: None,
             allocation_duel: None,
             perk_previews: Vec::new(),
@@ -526,6 +528,7 @@ impl App {
         let Some(game) = &mut self.game else { return };
         if let Some(report) = game.take_level_up_report() {
             self.pending_level_up = Some(report);
+            self.level_up_origin = LevelUpOrigin::Map;
             self.mode = Mode::LevelUp;
             return;
         }

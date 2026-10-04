@@ -24,7 +24,7 @@ pub(crate) mod icon_editor;
 pub(crate) mod input;
 mod inspection;
 mod inventory;
-mod level_up;
+pub(crate) mod level_up;
 mod lifecycle;
 mod menus;
 mod mod_copy;

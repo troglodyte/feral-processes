@@ -125,14 +125,16 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
     }
     // The Perks step alone explains the row under the cursor, because the
     // nineteen perk *names* are opaque and their descriptions are far too
-    // wide to sit on the rows. One line, so the screen keeps its promise
-    // of no scroll — nineteen rows plus this plus the footer is 22 of the
-    // 28 `popup_max_rows` allows.
+    // wide to sit on the rows. Wrapped, since the longest runs to four
+    // lines — and those four are why this step gives up the spacer above
+    // the footer: with it, nineteen rows plus a refusal reach the 28
+    // `popup_max_rows` allows at 1280x720 and the screen with no scroll
+    // scrolls. `every_perk_description_fits_the_creation_screen` holds it.
     if step == CreationStep::Perks
         && let Some(CreationRow::Perk { row, .. }) = rows.get(selected)
     {
         drawn.push(text_row(""));
-        drawn.push(text_row(row.description.clone()));
+        drawn.extend(description_rows(&row.description));
     }
     // The Colour step explains itself once a drawing exists — the drawn
     // icon then owns the map tile and the swatch stops meaning what every
@@ -146,7 +148,9 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         drawn.push(text_row(""));
         drawn.extend(description_rows(&note));
     }
-    drawn.push(text_row(""));
+    if step != CreationStep::Perks {
+        drawn.push(text_row(""));
+    }
     drawn.push(text_row(footer(app, step)));
     drawn
 }
@@ -754,6 +758,57 @@ mod tests {
                         );
                     }
                     walk_past(&mut app, *step);
+                }
+            });
+        }
+    }
+
+    /// The Perks step draws the description of whichever perk is under the
+    /// cursor, so the two censuses above — which measure each step with the
+    /// cursor where it lands — only ever saw the first perk's. This walks
+    /// the cursor over every perk and holds each description to both the
+    /// width and the height ceilings; the Scheduler's ran off the panel.
+    #[test]
+    fn every_perk_description_fits_the_creation_screen() {
+        const REFUSAL: &str = "Requires Zone 3 first.";
+        for (screen_w, screen_h) in [(1280.0f32, 720.0f32), (1440.0, 900.0)] {
+            let mut app = wizard_app_with_maximal_profile(&format!("perk_desc_{screen_h}"));
+            for step in CreationStep::ALL.iter() {
+                if *step == CreationStep::Perks {
+                    break;
+                }
+                walk_past(&mut app, *step);
+            }
+            assert_eq!(app.creation_step(), CreationStep::Perks);
+            let m = ui_metrics(screen_h);
+            let body = super::super::popup::popup_body_width(screen_w, PopupSize::Large, &m);
+            let perks = app.creation_rows().len();
+            assert!(perks > 1, "the Perks step offered no perks to walk");
+            crate::paint::with_painter(|p| {
+                for selected in 0..perks {
+                    app.menu_selected = selected;
+                    let drawn = step_rows(&app, CreationStep::Perks);
+                    for row in &drawn {
+                        let label = super::super::popup::row_label_text(row);
+                        let width = p.measure_ui_advance(&label, m.font_size);
+                        assert!(
+                            width <= body,
+                            "perk {selected} draws a {width}px row inside a {body}px body \
+                             at {screen_w}x{screen_h}: {label:?}"
+                        );
+                    }
+                    assert!(
+                        !super::super::popup::popup_scrolls(
+                            screen_h,
+                            PopupSize::Large,
+                            &drawn,
+                            Some(REFUSAL),
+                            &m,
+                        ),
+                        "perk {selected}'s description makes the Perks step scroll \
+                         at {screen_w}x{screen_h} with {} rows",
+                        drawn.len()
+                    );
                 }
             });
         }

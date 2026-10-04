@@ -213,6 +213,7 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 discoverable: false,
                 unlocks_fusion: false,
                 opens_affix_tree: false,
+                decompiler: None,
             }
         })
         .collect()

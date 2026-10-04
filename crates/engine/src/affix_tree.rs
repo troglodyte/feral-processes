@@ -58,6 +58,7 @@ pub fn synthesise_nodes(affixes: &AffixDb) -> Vec<ResearchDef> {
                 teaches: None,
                 opens_routine_tree: false,
                 opens_affix_tree: false,
+                decompiler: None,
                 requires_subject: false,
                 // Hidden until a study attempt finds it, as a base bench is.
                 discoverable: true,

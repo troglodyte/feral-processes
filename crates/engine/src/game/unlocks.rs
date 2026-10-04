@@ -7,7 +7,30 @@ use crate::tuning::DEFAULT_TAMING_DIFFICULTY;
 use crate::*;
 use std::collections::HashSet;
 
+/// How far and how wide `decompile` reaches, folded from research. See
+/// `Game::decompile_reach`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DecompileReach {
+    /// Battle-map aim range; `None` when no researched node extends it.
+    pub range: Option<u32>,
+    /// Blast radius; 0 means a single program.
+    pub radius: u32,
+}
+
 impl Game {
+    /// The one door every reader of decompile's research-extended reach goes
+    /// through: the max of each field over the researched base-tree nodes.
+    pub fn decompile_reach(&self) -> DecompileReach {
+        let db = self.world.resource::<crate::research::ResearchDb>();
+        db.all()
+            .filter(|def| self.node_researched(def))
+            .filter_map(|def| def.decompiler.as_ref())
+            .fold(DecompileReach::default(), |reach, up| DecompileReach {
+                range: reach.range.max(up.range.filter(|r| *r > 0)),
+                radius: reach.radius.max(up.radius.unwrap_or(0)),
+            })
+    }
+
     /// How many levels of `perk` the player has bought — 0 if none.
     pub fn player_perk_level(&self, perk: Perk) -> u32 {
         self.player_perks().map(|p| p.level(perk)).unwrap_or(0)

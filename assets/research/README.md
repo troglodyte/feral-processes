@@ -151,6 +151,19 @@ Core Fragments.
     // start, so deleting the flagged node does not strand a run.
     opens_affix_tree: true,
 
+    // Optional; defaults to none. Extends the `decompile` routine once the
+    // node is researched. Both fields are optional and are the new figure,
+    // not a bonus: with several nodes researched the largest of each wins.
+    //   range:  how far decompile can be aimed on a battle map (the group
+    //           model has no distances, so it ignores this)
+    //   radius: decompile rolls a capture against every hostile program
+    //           within this many cells of the aim, one taming catalyst each;
+    //           in the group model, against every program in the target
+    //           group. Radius 1 and above behave the same there.
+    // A node granting nothing (no field, or 0) is skipped with a warning.
+    // Authored with explicit options: `decompiler: Some((range: Some(4)))`.
+    decompiler: Some((range: Some(4))),
+
     // Optional; defaults to false. Set this on the one node that should
     // unlock fusing two tamed programs together (the shipped tree sets it
     // on `program_refactoring`). Until a loaded node carrying it is

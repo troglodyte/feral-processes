@@ -155,6 +155,28 @@ pub struct ResearchDef {
     /// start (`Game::affix_tree_open`).
     #[serde(default)]
     pub opens_affix_tree: bool,
+    /// Extends the `decompile` routine: how far it can be aimed on a battle
+    /// map and how wide an area it rolls over. `Game::decompile_reach` folds
+    /// every researched node's figures by max. A node granting nothing is
+    /// skipped at load.
+    #[serde(default)]
+    pub decompiler: Option<DecompilerUpgrade>,
+}
+
+/// What a research node adds to `decompile`. Each field is the new figure,
+/// not a bonus: two nodes fold by max.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct DecompilerUpgrade {
+    #[serde(default)]
+    pub range: Option<u32>,
+    #[serde(default)]
+    pub radius: Option<u32>,
+}
+
+impl DecompilerUpgrade {
+    fn grants_nothing(&self) -> bool {
+        self.range.unwrap_or(0) == 0 && self.radius.unwrap_or(0) == 0
+    }
 }
 
 #[derive(Resource, Default)]
@@ -196,6 +218,12 @@ impl ResearchDb {
                     // borrows it while `unlocks_tools` is borrowed
                     // mutably — same shape as `SpeciesDb::load_dir`.
                     let id = def.id.clone();
+                    if def.decompiler.as_ref().is_some_and(|d| d.grants_nothing()) {
+                        warnings.push(format!(
+                            "skipped research {id:?}: its decompiler field grants nothing"
+                        ));
+                        continue;
+                    }
                     def.unlocks_tools.retain(|tool| {
                         let known = tools.get(tool.as_str()).is_some();
                         if !known {
@@ -473,6 +501,40 @@ mod tests {
             "the node's other unlocks are untouched"
         );
         assert_eq!(warnings.len(), 1, "the dropped id explains itself");
+    }
+
+    #[test]
+    fn a_decompiler_node_that_grants_nothing_is_skipped_with_a_warning() {
+        let node = |id: &str, field: &str| {
+            format!(r#"(id: "{id}", name: "N", description: "d", cost: 5, decompiler: {field})"#)
+        };
+        let (db, warnings) = load(
+            "decompiler_empty",
+            &[
+                ("automation", VALID),
+                ("none", &node("none", "Some(())")),
+                (
+                    "zeros",
+                    &node("zeros", "Some((range: Some(0), radius: Some(0)))"),
+                ),
+                ("good", &node("good", "Some((range: Some(4)))")),
+            ],
+        );
+        assert!(db.get("none").is_none());
+        assert!(db.get("zeros").is_none());
+        assert_eq!(
+            warnings.len(),
+            2,
+            "each empty node explains itself: {warnings:?}"
+        );
+        assert!(db.get("automation").is_some(), "siblings still load");
+        assert_eq!(
+            db.get("good").unwrap().decompiler,
+            Some(DecompilerUpgrade {
+                range: Some(4),
+                radius: None
+            })
+        );
     }
 
     #[test]

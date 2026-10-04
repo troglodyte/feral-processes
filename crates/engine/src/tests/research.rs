@@ -1,6 +1,7 @@
 //! The research tree and the recipes and structures it gates.
 
 use super::support::*;
+use crate::DecompileReach;
 use crate::base_grid::BaseGrid;
 use crate::items::DownedProgram;
 use crate::views::{PinMark, ResearchReadout};
@@ -3348,4 +3349,87 @@ fn an_idle_station_with_a_subject_pinned_uncovers_a_node_on_its_own() {
         game.world.get::<Stats>(subject).is_some(),
         "discovery is free — the subject survives every attempt"
     );
+}
+
+/// Marks `id` researched with a decompiler grant, overwriting whatever the
+/// shipped node says, so the fold is tested against stated figures.
+fn research_decompiler(game: &mut Game, id: &str, grant: crate::research::DecompilerUpgrade) {
+    let mut db = game.world.resource_mut::<crate::research::ResearchDb>();
+    let mut def = db.get("routine_fabrication").unwrap().clone();
+    def.id = id.to_string();
+    def.requires.clear();
+    def.decompiler = Some(grant);
+    db.insert_for_test(def);
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .insert(id.to_string());
+}
+
+#[test]
+fn decompile_reach_is_empty_with_nothing_researched() {
+    let game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(
+        game.decompile_reach(),
+        DecompileReach {
+            range: None,
+            radius: 0
+        }
+    );
+}
+
+#[test]
+fn decompile_reach_folds_researched_nodes_by_max_per_field() {
+    use crate::research::DecompilerUpgrade as U;
+    let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    research_decompiler(
+        &mut game,
+        "t_a",
+        U {
+            range: Some(4),
+            radius: None,
+        },
+    );
+    research_decompiler(
+        &mut game,
+        "t_b",
+        U {
+            range: Some(6),
+            radius: Some(1),
+        },
+    );
+    research_decompiler(
+        &mut game,
+        "t_c",
+        U {
+            range: Some(2),
+            radius: Some(2),
+        },
+    );
+    assert_eq!(
+        game.decompile_reach(),
+        DecompileReach {
+            range: Some(6),
+            radius: 2
+        }
+    );
+}
+
+#[test]
+fn decompile_reach_ignores_an_unresearched_node() {
+    use crate::research::DecompilerUpgrade as U;
+    let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    research_decompiler(
+        &mut game,
+        "t_a",
+        U {
+            range: Some(4),
+            radius: None,
+        },
+    );
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .remove("t_a");
+    assert_eq!(game.decompile_reach().range, None);
 }

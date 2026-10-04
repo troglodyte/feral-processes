@@ -908,6 +908,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let pending_field_routine = app.pending_field_routine;
     let pending_downed_program = app.pending_downed_program_index;
     let pending_structure = app.pending_structure.clone();
+    let build_category = app.build_category;
     let pending_item = app.pending_inventory_item.clone();
     let mod_copy = app.mod_copy.clone();
     let pending_inspect = app.pending_inspect.clone();
@@ -1120,7 +1121,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DevConsole => {
             draw_dev_console(App::dev_console_rows(), selected, refusal, painter, m)
         }
-        Mode::Build => draw_build_menu(game, selected, refusal, painter, m),
+        Mode::Build => draw_build_menu(game, build_category, selected, refusal, painter, m),
         Mode::BuildDirection => {
             draw_build_direction(game, pending_structure.as_deref(), refusal, painter, m)
         }

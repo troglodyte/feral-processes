@@ -5,9 +5,11 @@ use super::popup::*;
 use super::*;
 #[cfg(test)]
 use feral_processes_app_core::ProgramRole;
-use feral_processes_app_core::{PendingBuild, Roster, RosterRow, WorkOrderRow};
+use feral_processes_app_core::{
+    BuildMenu, BuildRow, PendingBuild, Roster, RosterRow, WorkOrderRow,
+};
 use feral_processes_engine::components::BuildGoal;
-use feral_processes_engine::structures::StructureId;
+use feral_processes_engine::structures::{StructureDef, StructureId};
 use feral_processes_engine::{
     BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, LineReport,
     OrderState, WorkColumn, WorkRow, WorkSection, WorkTable, program_tier_required,
@@ -38,6 +40,18 @@ pub(super) struct BuildEntry {
 
 /// The heading a group opens with, or `None` for Home — a single structure
 /// under a "Shelter" banner is a heading longer than the thing it labels.
+fn category_name(category: StructureCategory) -> &'static str {
+    match category {
+        StructureCategory::Home => "Home",
+        StructureCategory::Extractor => "Extractors",
+        StructureCategory::Assembler => "Assemblers",
+        StructureCategory::Utility => "Utility",
+        StructureCategory::EntityHealth => "Entity Health",
+        StructureCategory::Trade => "Trade",
+        StructureCategory::Defence => "Defence",
+    }
+}
+
 fn category_heading(category: StructureCategory) -> Option<&'static str> {
     match category {
         StructureCategory::Home => None,
@@ -99,13 +113,7 @@ pub(super) fn build_menu_rows(
     selected: usize,
     shortfall: Option<&str>,
 ) -> Vec<Row> {
-    let mut rows = vec![text_row("Esc to cancel; Up/Down + Enter also work")];
-    if let Some(line) = shortfall {
-        // ORANGE and a `Row::Text`, so it is pinned above the scrolling list
-        // it is about rather than paging away from it — and so it never
-        // joins the `Row::Item` span a keypress is resolved against.
-        rows.push(Row::TextColored(line.to_string(), ORANGE));
-    }
+    let mut rows = build_menu_preamble(shortfall);
     let mut current: Option<StructureCategory> = None;
     for (i, entry) in entries.iter().enumerate() {
         if current != Some(entry.category) {
@@ -115,34 +123,96 @@ pub(super) fn build_menu_rows(
                 rows.push(colored_item_row(heading, false, TEXT_DIM));
             }
         }
-        let label = match entry.deployed {
-            0 => format!("[{}] {} - {}", menu_shortcut(i), entry.name, entry.cost),
-            n => format!(
-                "[{}] {} ({n}) - {}",
-                menu_shortcut(i),
-                entry.name,
-                entry.cost
-            ),
-        };
-        let affordable = shortfall.is_none() || !entry.needs_program;
-        rows.push(match affordable {
-            true => item_row(label, i == selected),
-            // `spent_item_row` rather than a hidden row: still selectable,
-            // still navigated past, and reading as something there is no
-            // point picking right now.
-            false => spent_item_row(label, i == selected),
-        });
-        // Through `description_rows` rather than one indented `format!`: the
-        // shipped descriptions run to 300 characters against a body of about
-        // 114, and the wrapped lines have to stay `Row::Item` for the reason
-        // above.
-        rows.extend(description_rows(&entry.description));
+        push_entry_rows(&mut rows, entry, i, i == selected, shortfall);
+    }
+    rows
+}
+
+/// What both levels of the deploy menu open with. Esc goes back on either —
+/// out of a category to the list of them, or from there to the base menu.
+fn build_menu_preamble(shortfall: Option<&str>) -> Vec<Row> {
+    let mut rows = vec![text_row("Esc to go back; Up/Down + Enter also work")];
+    if let Some(line) = shortfall {
+        // ORANGE and a `Row::Text`, so it is pinned above the scrolling list
+        // it is about rather than paging away from it — and so it never
+        // joins the `Row::Item` span a keypress is resolved against.
+        rows.push(Row::TextColored(line.to_string(), ORANGE));
+    }
+    rows
+}
+
+fn push_entry_rows(
+    rows: &mut Vec<Row>,
+    entry: &BuildEntry,
+    i: usize,
+    selected: bool,
+    shortfall: Option<&str>,
+) {
+    let label = match entry.deployed {
+        0 => format!("[{}] {} - {}", menu_shortcut(i), entry.name, entry.cost),
+        n => format!(
+            "[{}] {} ({n}) - {}",
+            menu_shortcut(i),
+            entry.name,
+            entry.cost
+        ),
+    };
+    let affordable = shortfall.is_none() || !entry.needs_program;
+    rows.push(match affordable {
+        true => item_row(label, selected),
+        // `spent_item_row` rather than a hidden row: still selectable,
+        // still navigated past, and reading as something there is no
+        // point picking right now.
+        false => spent_item_row(label, selected),
+    });
+    // Through `description_rows` rather than one indented `format!`: the
+    // shipped descriptions run to 300 characters against a body of about
+    // 114, and the wrapped lines have to stay `Row::Item` for the reason
+    // `build_menu_rows` gives.
+    rows.extend(description_rows(&entry.description));
+}
+
+/// One row of the deploy menu's top level, everything that needed a `Game`
+/// already worked out.
+pub(super) enum BuildLine {
+    Structure(BuildEntry),
+    Category {
+        category: StructureCategory,
+        count: usize,
+    },
+}
+
+/// The deploy menu's top level: the Home with its cost and description, as
+/// in a category, and one row per category naming how many it holds. A
+/// category row carries no description — the heading that opens the
+/// category says what its machines have in common.
+pub(super) fn build_top_rows(
+    lines: &[BuildLine],
+    selected: usize,
+    shortfall: Option<&str>,
+) -> Vec<Row> {
+    let mut rows = build_menu_preamble(shortfall);
+    for (i, line) in lines.iter().enumerate() {
+        match line {
+            BuildLine::Structure(entry) => {
+                push_entry_rows(&mut rows, entry, i, i == selected, shortfall)
+            }
+            BuildLine::Category { category, count } => rows.push(item_row(
+                format!(
+                    "[{}] {} ({count})",
+                    menu_shortcut(i),
+                    category_name(*category)
+                ),
+                i == selected,
+            )),
+        }
     }
     rows
 }
 
 pub(super) fn draw_build_menu(
     game: &mut Game,
+    open: Option<StructureCategory>,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -150,22 +220,6 @@ pub(super) fn draw_build_menu(
 ) {
     let status = game.player_status();
     let stock = game.base_stock();
-    let defs = game.buildable_structure_defs();
-    let entries: Vec<BuildEntry> = defs
-        .iter()
-        .map(|def| {
-            let raw_cost = game.structure_build_cost(def);
-            let cost = build_cost_display(game, &raw_cost, &status.inventory, &stock);
-            BuildEntry {
-                name: def.name.clone(),
-                cost: build_cost_label(&cost),
-                deployed: game.deployed_count(&def.id),
-                description: def.description.clone(),
-                category: def.category(),
-                needs_program: def.needs_program(),
-            }
-        })
-        .collect();
     // `Game::programs_for_build` and not `owned_pets`, because it is the one
     // derivation of what qualifies — the same call the picker draws and
     // `App::handle_build_program_key` indexes. A menu greyed off a different
@@ -183,7 +237,46 @@ pub(super) fn draw_build_menu(
             true => DEPLOY_NEEDS_A_SECOND_PROGRAM,
             false => DEPLOY_NEEDS_A_PROGRAM,
         });
-    let rows = build_menu_rows(&entries, selected, shortfall);
+    let menu = BuildMenu::of(game, open);
+    let entry = |def: &StructureDef| {
+        let raw_cost = game.structure_build_cost(def);
+        let cost = build_cost_display(game, &raw_cost, &status.inventory, &stock);
+        BuildEntry {
+            name: def.name.clone(),
+            cost: build_cost_label(&cost),
+            deployed: game.deployed_count(&def.id),
+            description: def.description.clone(),
+            category: def.category(),
+            needs_program: def.needs_program(),
+        }
+    };
+    let rows = match open {
+        Some(_) => {
+            let entries: Vec<BuildEntry> = menu
+                .rows
+                .iter()
+                .filter_map(|r| match r {
+                    BuildRow::Structure(i) => Some(entry(&menu.defs[*i])),
+                    BuildRow::Category(_) => None,
+                })
+                .collect();
+            build_menu_rows(&entries, selected, shortfall)
+        }
+        None => {
+            let lines: Vec<BuildLine> = menu
+                .rows
+                .iter()
+                .map(|r| match r {
+                    BuildRow::Structure(i) => BuildLine::Structure(entry(&menu.defs[*i])),
+                    BuildRow::Category(c) => BuildLine::Category {
+                        category: *c,
+                        count: menu.defs.iter().filter(|d| d.category() == *c).count(),
+                    },
+                })
+                .collect();
+            build_top_rows(&lines, selected, shortfall)
+        }
+    };
     draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -1987,6 +2080,33 @@ mod tests {
             .collect()
     }
 
+    /// The top level lists the Home as the structure it is and every other
+    /// category as one row naming how many it holds — numbered on one run of
+    /// shortcuts, so key `2` is the first category.
+    #[test]
+    fn the_deploy_menu_top_level_names_each_category_and_its_count() {
+        let home = shipped_entries()
+            .into_iter()
+            .find(|e| e.category == StructureCategory::Home)
+            .expect("the Home ships");
+        let lines = [
+            BuildLine::Structure(home),
+            BuildLine::Category {
+                category: StructureCategory::Extractor,
+                count: 4,
+            },
+            BuildLine::Category {
+                category: StructureCategory::Defence,
+                count: 1,
+            },
+        ];
+        let rows = build_top_rows(&lines, 1, None);
+        let texts: Vec<&str> = rows.iter().map(row_text).collect();
+        assert!(texts.iter().any(|t| t.starts_with("[1] Home")), "{texts:?}");
+        assert!(texts.contains(&"[2] Extractors (4)"), "{texts:?}");
+        assert!(texts.contains(&"[3] Defence (1)"), "{texts:?}");
+    }
+
     /// The shipped description that runs longest, which is the one both
     /// deploy screens have to survive.
     fn widest_shipped_description() -> String {
@@ -3241,10 +3361,17 @@ mod build_program_tests {
             "precondition: one owned program is the roster floor, not an empty roster"
         );
 
-        // The deploy menu: one line for the screen, and every non-Home row
-        // dimmed.
+        // The deploy menu, opened on the Mining Node's category: one line
+        // for the screen, and every non-Home row dimmed.
         let (_, shapes) = crate::paint::with_painter(|p| {
-            draw_build_menu(&mut game, 0, None, p, &m);
+            draw_build_menu(
+                &mut game,
+                Some(StructureCategory::Extractor),
+                0,
+                None,
+                p,
+                &m,
+            );
         });
         let drawn = crate::paint::painted_text(&shapes);
         let says = |drawn: &[String], want: &str| drawn.iter().any(|t| t.contains(want));

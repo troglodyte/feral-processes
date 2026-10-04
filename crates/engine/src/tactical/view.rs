@@ -468,7 +468,12 @@ impl Game {
             return Vec::new();
         };
         let battle = self.world.resource::<TacticalBattle>();
-        reach::shape_cells(&battle.board, from, aim, ability.tactical_shape())
+        reach::shape_cells(
+            &battle.board,
+            from,
+            aim,
+            self.routine_tactical_shape(&ability),
+        )
     }
 
     /// Where a `Radius` routine's centre may legally be placed, aimed from
@@ -501,11 +506,11 @@ impl Game {
         let Some(ability) = self.actor_abilities(actor).into_iter().nth(index) else {
             return Vec::new();
         };
-        let shape = ability.tactical_shape();
+        let shape = self.routine_tactical_shape(&ability);
         if !matches!(shape, AbilityShape::Radius { .. }) {
             return Vec::new();
         }
-        let range = ability.tactical_range();
+        let range = self.routine_tactical_range(&ability);
         let battle = self.world.resource::<TacticalBattle>();
         let board = &battle.board;
         let actor_cells = battle.cells_of(actor);

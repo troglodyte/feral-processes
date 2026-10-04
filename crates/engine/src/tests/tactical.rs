@@ -7986,3 +7986,293 @@ mod engagement {
         assert!(dividers[1].contains("round 3"), "{dividers:?}");
     }
 }
+
+/// `Game::routine_tactical_range`/`routine_tactical_shape`: decompile's
+/// research reach, read by the door, the aim outline and the preview alike.
+/// Catalysts spent are what is counted, since a capture caps at 95% and a
+/// roll cannot be forced.
+mod decompile_reach {
+    use super::*;
+    use crate::items::ids::ICE_BREAKER;
+    use crate::research::DecompilerUpgrade;
+    use crate::tactical::reach;
+    use crate::tests::support::{held, research_decompiler, set_inventory, spawn_tamed};
+
+    fn grant(game: &mut Game, range: Option<u32>, radius: Option<u32>) {
+        research_decompiler(game, "test_reach", DecompilerUpgrade { range, radius });
+    }
+
+    /// A fight of `hostiles` bodies on a lot of hp, the player holding only
+    /// decompile and `catalysts` of them, on the player's turn.
+    fn ready(game: &mut Game, hostiles: usize, catalysts: u32) -> Vec<Entity> {
+        let pack = tactical_fight(game, hostiles, 400);
+        let player = game.player_entity();
+        only_routine(game, player, "decompile");
+        set_inventory(game, &[(ICE_BREAKER, catalysts)]);
+        assert!(wait_for_turn(game, player));
+        pack
+    }
+
+    fn catalysts(game: &Game) -> u32 {
+        held(game, &crate::ItemId::from(ICE_BREAKER))
+    }
+
+    fn cell(game: &Game, body: Entity) -> (i32, i32) {
+        game.world
+            .resource::<TacticalBattle>()
+            .cell_of(body)
+            .expect("seated")
+    }
+
+    /// The first free walkable cell `d` from `from` that `from` can see.
+    fn free_cell_at(game: &Game, from: (i32, i32), d: u32) -> (i32, i32) {
+        let battle = game.world.resource::<TacticalBattle>();
+        battle
+            .board
+            .cells()
+            .map(|(c, _)| c)
+            .find(|&c| {
+                reach::distance(from, c) == d
+                    && battle.board.walkable(c.0, c.1)
+                    && battle.occupant(c).is_none()
+                    && reach::line_of_sight(&battle.board, from, c)
+            })
+            .expect("a free cell at that distance")
+    }
+
+    /// Seats `body` on a free cell `d` from `from`.
+    fn put_at(game: &mut Game, body: Entity, from: (i32, i32), d: u32) -> (i32, i32) {
+        let at = free_cell_at(game, from, d);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, at)
+        );
+        at
+    }
+
+    /// Hostiles `a` and `b` and a friendly, all beside `a`, with the player
+    /// one cell from `a` and the rest of the pack parked out of the blast.
+    fn blast_of_three(game: &mut Game, pack: &[Entity]) -> ((i32, i32), Entity) {
+        let player = game.player_entity();
+        let from = cell(game, player);
+        let a = put_at(game, pack[0], from, 1);
+        put_at(game, pack[1], a, 1);
+        let friend = game
+            .world
+            .spawn((
+                Creature {
+                    species: generic_species().id,
+                },
+                Stats {
+                    hp: 50,
+                    max_hp: 50,
+                    atk: 1,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        let friend_at = free_cell_at(game, a, 1);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(friend, friend_at)
+        );
+        for &far in &pack[2..] {
+            let spot = game
+                .world
+                .resource::<TacticalBattle>()
+                .board
+                .cells()
+                .map(|(c, _)| c)
+                .find(|&c| {
+                    reach::distance(a, c) >= 4
+                        && game
+                            .world
+                            .resource::<TacticalBattle>()
+                            .occupant(c)
+                            .is_none()
+                        && game
+                            .world
+                            .resource::<TacticalBattle>()
+                            .board
+                            .walkable(c.0, c.1)
+                })
+                .expect("room away from the blast");
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(far, spot);
+        }
+        (a, friend)
+    }
+
+    #[test]
+    fn a_capture_aimed_four_cells_out_needs_range_research() {
+        let mut game = game();
+        let pack = ready(&mut game, 1, 5);
+        let from = cell(&game, game.player_entity());
+        let at = put_at(&mut game, pack[0], from, 4);
+
+        assert!(
+            !game.tactical_use_routine(0, at),
+            "range 4 without research"
+        );
+        assert_eq!(catalysts(&game), 5, "a refusal spends nothing");
+
+        grant(&mut game, Some(4), None);
+        assert!(game.tactical_use_routine(0, at));
+        assert_eq!(catalysts(&game), 4);
+    }
+
+    #[test]
+    fn the_aim_outline_and_blast_preview_follow_the_research() {
+        let mut game = game();
+        ready(&mut game, 1, 5);
+        let from = cell(&game, game.player_entity());
+        let far = free_cell_at(&game, from, 4);
+        assert!(
+            game.tactical_placeable_cells(0).is_empty(),
+            "a Single has no outline"
+        );
+
+        grant(&mut game, Some(4), Some(1));
+        assert!(
+            game.tactical_placeable_cells(0).contains(&far),
+            "the outline stops short of the researched range"
+        );
+        assert!(
+            game.tactical_shape_cells(0, far).len() > 1,
+            "the preview is still a single cell"
+        );
+    }
+
+    #[test]
+    fn a_blast_rolls_each_hostile_once_and_leaves_the_friendly_alone() {
+        let mut game = game();
+        let pack = ready(&mut game, 3, 50);
+        let (a, friend) = blast_of_three(&mut game, &pack);
+        grant(&mut game, None, Some(1));
+
+        assert!(game.tactical_use_routine(0, a));
+        assert_eq!(catalysts(&game), 48, "two hostiles, one catalyst each");
+        assert!(game.world.get::<crate::components::Tamed>(friend).is_none());
+        assert!(
+            game.world
+                .get_resource::<TacticalBattle>()
+                .is_none_or(|b| b.cell_of(friend).is_some()),
+            "the friendly left the board"
+        );
+    }
+
+    #[test]
+    fn one_catalyst_is_one_roll() {
+        let mut game = game();
+        let pack = ready(&mut game, 3, 1);
+        let (a, _) = blast_of_three(&mut game, &pack);
+        grant(&mut game, None, Some(1));
+
+        assert!(game.tactical_use_routine(0, a));
+        assert_eq!(catalysts(&game), 0);
+        assert!(
+            !log_texts(&game).iter().any(|l| l.contains("fizzles")),
+            "the loop rolled on with none left"
+        );
+    }
+
+    #[test]
+    fn a_roster_with_one_place_stops_after_a_capture() {
+        let mut game = game();
+        for _ in 1..crate::tuning::ROSTER_HARD_CAP {
+            spawn_tamed(&mut game, 10, 3);
+        }
+        assert_eq!(game.roster_room(), 1);
+        let pack = ready(&mut game, 3, 50);
+        let (a, _) = blast_of_three(&mut game, &pack);
+        for &h in &pack {
+            game.world.get_mut::<Stats>(h).unwrap().hp = 1;
+        }
+        game.world
+            .get_mut::<crate::components::Decompiler>(game.player_entity())
+            .unwrap()
+            .skill = 2000;
+        grant(&mut game, None, Some(1));
+
+        assert!(game.tactical_use_routine(0, a));
+        assert_eq!(game.roster_room(), 0, "the first roll should have landed");
+        assert_eq!(catalysts(&game), 49, "the loop rolled past a full roster");
+    }
+
+    #[test]
+    fn an_empty_cell_beside_a_hostile_is_a_legal_aim_only_with_radius() {
+        let mut game = game();
+        let pack = ready(&mut game, 1, 5);
+        let from = cell(&game, game.player_entity());
+        let at = put_at(&mut game, pack[0], from, 1);
+        let beside_it = free_cell_at(&game, at, 1);
+        assert!(reach::distance(from, beside_it) <= 2);
+
+        grant(&mut game, Some(2), None);
+        assert!(
+            !game.tactical_use_routine(0, beside_it),
+            "Single, empty cell"
+        );
+
+        grant(&mut game, Some(2), Some(1));
+        assert!(game.tactical_use_routine(0, beside_it));
+        assert_eq!(catalysts(&game), 4);
+    }
+
+    #[test]
+    fn a_squad_in_the_blast_is_one_roll() {
+        let mut game = game();
+        crate::tests::support::spawn_data_cache(&mut game, 1);
+        let pack = tactical_pack(&mut game, 9, 40);
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        let player = game.player_entity();
+        only_routine(&mut game, player, "decompile");
+        set_inventory(&mut game, &[(ICE_BREAKER, 50)]);
+        assert!(wait_for_turn(&mut game, player));
+        let at = cell(&game, squad);
+        let spot = beside(&game, at).expect("room beside the squad");
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(player, spot);
+        grant(&mut game, None, Some(2));
+        let (bodies, covered) = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let blast = reach::shape_cells(
+                &battle.board,
+                spot,
+                at,
+                crate::abilities::AbilityShape::Radius { radius: 2 },
+            );
+            let hit: Vec<Vec<(i32, i32)>> = battle
+                .bodies()
+                .filter(|&(e, _)| game.world.get::<Hostile>(e).is_some())
+                .map(|(e, _)| battle.cells_of(e))
+                .filter(|cells| cells.iter().any(|c| blast.contains(c)))
+                .collect();
+            (hit.len(), hit.iter().map(Vec::len).sum::<usize>())
+        };
+        assert!(
+            covered > bodies,
+            "fixture: the squad must cover several cells"
+        );
+
+        assert!(game.tactical_use_routine(0, at));
+        assert_eq!(
+            catalysts(&game),
+            50 - bodies as u32,
+            "a squad is one body, one roll"
+        );
+    }
+}

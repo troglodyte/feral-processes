@@ -35,6 +35,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A routine's `shape:` and `range:` are read in tactical fights alone, and
   `AbilityDef::tactical_shape`/`tactical_range` is the one place an authored
   figure and the one derived from `AbilityTarget` are reconciled.**
+- **`AbilityDef::tactical_*` reconciles authored and derived;
+  `Game::routine_tactical_*` is the one door that layers research on top, and
+  every reader that can see a decompile calls it.**
 - **`use_ability` is the door the two combat models share; each converts its
   own aim, and full friendly fire is `reach::recipients` never reading
   `Hostile`.**

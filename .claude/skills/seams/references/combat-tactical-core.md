@@ -86,6 +86,21 @@
   `ranged`, a yes-or-no about the front line in the *group* model.
   See `seam:a-routines-geometry-is-authored-or-derived-and-one-door` for the argument.
 
+- **`AbilityDef::tactical_*` reconciles authored and derived;
+  `Game::routine_tactical_*` is the one door that layers research on top, and
+  every reader that can see a decompile calls it.** Decompile's range and
+  blast radius come from research (`Game::decompile_reach`), which is
+  per-player state a def cannot see, so the def's own figure is stale for the
+  one effect and still right for every other. A reader left on
+  `def.tactical_range()` compiles, then offers an aim the door refuses or
+  refuses one the outline draws. The readers are `tactical_use_routine`'s
+  refusals, `run_tactical_routine`'s shape and `view.rs`'s two; `ai.rs` is
+  left on the def because `ready_from_candidates` never lets a decompile
+  reach an AI chooser, so admitting one there moves it. Who a blast captures
+  is `capture_targets`, read by the refusal and the resolution alike.
+  See `seam:game-routine-tactical-is-the-one-door-that-layers-research-on-a`
+  for the argument.
+
 - **`use_ability` is the door the two combat models share; each converts its
   own aim, and full friendly fire is `reach::recipients` never reading
   `Hostile`.** The design named `ability_recipients` as the shared door and

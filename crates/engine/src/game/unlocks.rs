@@ -1,6 +1,7 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
+use crate::abilities::{AbilityDef, AbilityEffect, AbilityRange, AbilityShape};
 use crate::resources::ActiveResearch;
 use crate::taming::{DecompilerBonuses, TargetResistance};
 use crate::tuning::DEFAULT_TAMING_DIFFICULTY;
@@ -29,6 +30,37 @@ impl Game {
                 range: reach.range.max(up.range.filter(|r| *r > 0)),
                 radius: reach.radius.max(up.radius.unwrap_or(0)),
             })
+    }
+
+    /// How far `def` may be aimed on a battle map, with decompile's research
+    /// layered over `AbilityDef::tactical_range`.
+    ///
+    /// **The one door every reader that can see a decompile asks**, beside
+    /// `routine_tactical_shape`: reading `def.tactical_range()` instead
+    /// would let the refusal, the aim outline and the preview disagree about
+    /// where a capture may land. Any other effect is `tactical_range`'s own
+    /// answer.
+    pub fn routine_tactical_range(&self, def: &AbilityDef) -> AbilityRange {
+        let base = def.tactical_range();
+        match (&def.effect, self.decompile_reach().range) {
+            (AbilityEffect::Decompile, Some(range)) => AbilityRange {
+                min: base.min,
+                max: base.max.max(range),
+            },
+            _ => base,
+        }
+    }
+
+    /// What `def` covers on a battle map: `AbilityDef::tactical_shape`, or a
+    /// blast of the researched radius for a decompile. `routine_tactical_range`'s
+    /// rule and its reason.
+    pub fn routine_tactical_shape(&self, def: &AbilityDef) -> AbilityShape {
+        match def.effect {
+            AbilityEffect::Decompile if self.decompile_reach().radius > 0 => AbilityShape::Radius {
+                radius: self.decompile_reach().radius,
+            },
+            _ => def.tactical_shape(),
+        }
     }
 
     /// How many levels of `perk` the player has bought — 0 if none.

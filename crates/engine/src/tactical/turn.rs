@@ -1123,7 +1123,7 @@ impl Game {
             return false;
         }
         let actor_cells = self.world.resource::<TacticalBattle>().cells_of(actor);
-        if !reach::in_range(&actor_cells, aim, ability.tactical_range()) {
+        if !reach::in_range(&actor_cells, aim, self.routine_tactical_range(&ability)) {
             return false;
         }
         // The other half of "may this be aimed there", and a refusal rather
@@ -1136,7 +1136,7 @@ impl Game {
             &self.world.resource::<TacticalBattle>().board,
             from,
             aim,
-            ability.tactical_shape(),
+            self.routine_tactical_shape(&ability),
         ) {
             return false;
         }
@@ -1152,17 +1152,7 @@ impl Game {
         // then be swept by `finish_fight`'s unconditional sweep out from
         // under the player.
         if matches!(ability.effect, AbilityEffect::Decompile)
-            && self
-                .world
-                .resource::<TacticalBattle>()
-                .occupant(aim)
-                .is_none_or(|body| {
-                    self.world.get::<Hostile>(body).is_none()
-                        || self
-                            .world
-                            .get::<crate::components::Summoned>(body)
-                            .is_some()
-                })
+            && self.capture_targets(actor, &ability, aim).is_empty()
         {
             return false;
         }
@@ -1179,7 +1169,7 @@ impl Game {
         // drop it there, so it needs the refusal here or it would spend the
         // Power, the cooldown and the turn tampering with nobody.
         if matches!(ability.effect, AbilityEffect::Tamper { .. })
-            && ability.tactical_shape() == AbilityShape::Single
+            && self.routine_tactical_shape(&ability) == AbilityShape::Single
             && self
                 .world
                 .resource::<TacticalBattle>()
@@ -1224,6 +1214,52 @@ impl Game {
         }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true
+    }
+
+    /// Every program a decompile aimed at `aim` may capture, nearest the aim
+    /// first and then in initiative order.
+    ///
+    /// **The refusal and the resolution both read this**, so a blast the door
+    /// accepts is the blast that rolls. A body is capturable when it is
+    /// `Hostile` and not `Summoned` (`roster_parts` never asks, so a raised
+    /// body would join the roster and be swept from under the player); a
+    /// squad is one body however many cells it covers.
+    fn capture_targets(&self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) -> Vec<Entity> {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let cells = reach::shape_cells(
+            &battle.board,
+            from,
+            aim,
+            self.routine_tactical_shape(ability),
+        );
+        let mut found: Vec<(u32, usize, Entity)> = battle
+            .bodies()
+            .map(|(body, _)| body)
+            .filter(|&body| {
+                body != actor
+                    && self.world.get::<Hostile>(body).is_some()
+                    && self
+                        .world
+                        .get::<crate::components::Summoned>(body)
+                        .is_none()
+            })
+            .filter_map(|body| {
+                let footprint = battle.cells_of(body);
+                footprint.iter().any(|c| cells.contains(c)).then(|| {
+                    let order = battle
+                        .initiative()
+                        .iter()
+                        .position(|&e| e == body)
+                        .unwrap_or(usize::MAX);
+                    (reach::gap(&footprint, &[aim]), order, body)
+                })
+            })
+            .collect();
+        found.sort_by_key(|&(gap, order, _)| (gap, order));
+        found.into_iter().map(|(_, _, body)| body).collect()
     }
 
     /// Whether a free walkable cell can still be found for a body seated
@@ -1339,19 +1375,24 @@ impl Game {
         }
 
         let name = self.creature_label(actor);
-        // A capture is aimed at a body rather than resolved over an area:
-        // `decompile_body` turns one program, and a blast that turned every
-        // program it touched would be a different mechanic. The group model
-        // reaches the same function through a group index — see
-        // `Game::attempt_decompile`.
+        // A capture is aimed at a body rather than resolved over
+        // `reach::recipients`: `decompile_body` turns one program. With area
+        // research the blast is a list of such captures, one catalyst and one
+        // roll each, nearest the aim first. The group model reaches the same
+        // function through a group index — see `Game::attempt_decompile`.
         if matches!(ability.effect, AbilityEffect::Decompile) {
             let player = self.player_entity();
-            let target = self
-                .world
-                .resource::<TacticalBattle>()
-                .occupant(aim)
-                .filter(|&e| e != actor && self.world.get::<Hostile>(e).is_some());
-            if let Some(target) = target {
+            for target in self.capture_targets(actor, ability, aim) {
+                // Re-read each time round, `provoke`'s rule: a capture can
+                // close the fight, and the roster and the catalysts are
+                // spent as the loop goes.
+                let on_board = self
+                    .world
+                    .get_resource::<TacticalBattle>()
+                    .is_some_and(|b| b.cell_of(target).is_some());
+                if !on_board || self.taming_catalyst().is_none() || self.roster_room() == 0 {
+                    break;
+                }
                 // A squad's capture pulls its lead out and keeps fighting —
                 // the squad itself stays on the board (unless the capture's
                 // own damage just killed it, which the ordinary reap below
@@ -1444,7 +1485,7 @@ impl Game {
             // out.
             self.use_ability(ability, actor, &name, &[actor]);
         } else {
-            let shape = ability.tactical_shape();
+            let shape = self.routine_tactical_shape(ability);
             // Taken **before** the routine resolves: it can kill its own
             // invoker, and neither the cell it ran from nor the side it was on
             // can be asked of a body the reap has taken off the board.

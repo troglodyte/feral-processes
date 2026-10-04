@@ -58,7 +58,7 @@ Three tiers, and which one you want depends on what you are doing:
 | combat: attack resolution, mitigation, XP, levels, talents & the cap | `references/combat-progression.md` | 24 |
 | combat: spawning, bosses, difficulty & the roster doors | `references/combat-spawning.md` | 13 |
 | combat: battle flow, rewards, arena, rest & pursuit | `references/combat-battle.md` | 24 |
-| combat: tactical battles — turn flow, movement & targeting | `references/combat-tactical-core.md` | 24 |
+| combat: tactical battles — turn flow, movement & targeting | `references/combat-tactical-core.md` | 25 |
 | combat: tactical battles — reactions, fx, AI aim & squads | `references/combat-tactical-actions.md` | 18 |
 | items, gear copies, quality, crafting, the caravan, the economy | `references/items.md` | 34 |
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |

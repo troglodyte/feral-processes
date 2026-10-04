@@ -869,19 +869,28 @@ fn draw_body(
             },
         );
     }
-    // Status tags ride the bottom edge, above the HP bar's row, in the same
-    // terse words the brawl panel uses.
+    // Status tags ride the bottom edge, above the HP bar's row, left-aligned
+    // and clipped to the footprint's width. A folded squad's mark owns the
+    // bottom-right corner, so the tag stops short of it; the compact form
+    // (no rounds left) is what fits.
     if !body.statuses.is_empty() {
-        let text = super::battle::status_tags_text(&body.statuses);
+        let text = super::battle::status_tags_compact_text(&body.statuses);
         let size = (glyph_px / 2).max(1);
-        let dims = painter.measure_map(&text, size);
         let bar = marks::tactical_hp_bar_rect(px, py, cell_px);
-        painter.map(
-            &text,
-            px + (cell_px - dims.width) / 2.0,
-            bar.y - 1.0,
-            size,
-            palette::EMPHASIS,
+        let right = if body.squad.is_some() {
+            marks::squad_mark_rect(px, py, cell_px).x
+        } else {
+            px + bar.w
+        };
+        let dims = painter.measure_map(&text, size);
+        painter.clipped(
+            px,
+            bar.y - dims.height - 1.0,
+            right - px,
+            dims.height + 2.0,
+            |p| {
+                p.map(&text, px + 1.0, bar.y - 1.0, size, palette::EMPHASIS);
+            },
         );
     }
     // A folded squad's own mark, bottom-right — see `marks::squad_mark_rect`

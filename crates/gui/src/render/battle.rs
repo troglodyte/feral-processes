@@ -42,6 +42,26 @@ pub(super) fn status_tag_text(status: &StatusTagView) -> String {
     }
 }
 
+/// `status_tag_text` without the rounds left — `BLD`, `PSN×3` — for the
+/// battle map, where a body's footprint has no room for the `(2)`.
+pub(super) fn status_tag_compact_text(status: &StatusTagView) -> String {
+    if status.stacks > 1 {
+        format!("{}×{}", status.tag, status.stacks)
+    } else {
+        status.tag.to_string()
+    }
+}
+
+/// Every status on a body in the compact form, space-separated; empty for
+/// none.
+pub(super) fn status_tags_compact_text(statuses: &[StatusTagView]) -> String {
+    statuses
+        .iter()
+        .map(status_tag_compact_text)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Every status on a body, space-separated; empty for none.
 pub(super) fn status_tags_text(statuses: &[StatusTagView]) -> String {
     statuses
@@ -748,6 +768,17 @@ mod tests {
             "PSN×3 (2) STN (2)"
         );
         assert_eq!(status_tags_text(&[]), "");
+    }
+
+    #[test]
+    fn the_compact_status_tag_drops_the_rounds_and_keeps_the_stacks() {
+        assert_eq!(status_tag_compact_text(&tag("BLD", 1)), "BLD");
+        assert_eq!(status_tag_compact_text(&tag("PSN", 3)), "PSN×3");
+        assert_eq!(
+            status_tags_compact_text(&[tag("PSN", 3), tag("STN", 1)]),
+            "PSN×3 STN"
+        );
+        assert_eq!(status_tags_compact_text(&[]), "");
     }
 
     /// A refused menu pick ("Requires Automation first.") only reaches the

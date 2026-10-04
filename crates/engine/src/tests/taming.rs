@@ -955,3 +955,114 @@ fn a_successful_decompile_writes_its_deed() {
             .contains(&crate::contracts::Deed::Tamed)
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Decompiler research: area on the group model.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A one-group fight of `n` scrappers, with `catalysts` breakers in hand and
+/// a near-certain capture chance. Which programs land is the RNG's business;
+/// every test below counts catalysts spent, which is one per roll whatever
+/// the outcome.
+fn area_fight(seed: u32, n: usize, catalysts: u32) -> (Game, Vec<Entity>) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let members: Vec<Entity> = (0..n)
+        .map(|_| {
+            let e = spawn_wild_without_routine(&mut game, "scrapper", pos.x, pos.y);
+            game.world.get_mut::<Stats>(e).unwrap().hp = 1;
+            e
+        })
+        .collect();
+    let species = game
+        .world
+        .get::<Creature>(members[0])
+        .unwrap()
+        .species
+        .clone();
+    insert_battle_with_groups(
+        &mut game,
+        player,
+        vec![crate::battle::EnemyGroup {
+            species,
+            members: members.clone(),
+        }],
+    );
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, catalysts)]);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+    (game, members)
+}
+
+fn breakers(game: &Game) -> u32 {
+    held(game, &ItemId::from(ids::ICE_BREAKER))
+}
+
+fn with_radius(game: &mut Game, radius: u32) {
+    research_decompiler(
+        game,
+        "t_area",
+        crate::research::DecompilerUpgrade {
+            range: None,
+            radius: Some(radius),
+        },
+    );
+}
+
+#[test]
+fn without_area_research_a_group_decompile_rolls_the_front_program_once() {
+    let (mut game, _) = area_fight(901, 3, 5);
+    let player = game.player_entity();
+    game.attempt_decompile(0, player);
+    assert_eq!(breakers(&game), 4, "one roll, one catalyst");
+}
+
+#[test]
+fn area_research_rolls_every_program_in_the_group_one_catalyst_each() {
+    let (mut game, _) = area_fight(902, 3, 5);
+    with_radius(&mut game, 1);
+    let player = game.player_entity();
+    game.attempt_decompile(0, player);
+    assert_eq!(breakers(&game), 2, "three programs, three catalysts");
+}
+
+#[test]
+fn area_decompile_stops_when_the_catalysts_run_out() {
+    let (mut game, _) = area_fight(903, 4, 2);
+    with_radius(&mut game, 1);
+    let player = game.player_entity();
+    game.attempt_decompile(0, player);
+    assert_eq!(breakers(&game), 0, "two catalysts, two rolls");
+}
+
+#[test]
+fn area_decompile_stops_when_the_roster_is_full() {
+    for seed in 0..30 {
+        let (mut game, _) = area_fight(910 + seed, 3, 5);
+        with_radius(&mut game, 1);
+        while game.roster_room() > 1 {
+            spawn_tamed(&mut game, 10, 1);
+        }
+        let before = game.pet_count();
+        let player = game.player_entity();
+        game.attempt_decompile(0, player);
+        assert!(
+            game.pet_count() <= before + 1,
+            "seed {seed}: the roster took more than the one place it had"
+        );
+    }
+}
+
+#[test]
+fn area_decompile_skips_a_cloaked_program() {
+    let (mut game, members) = area_fight(904, 3, 5);
+    with_radius(&mut game, 1);
+    game.arm_cloak(members[1], 3);
+    let player = game.player_entity();
+    game.attempt_decompile(0, player);
+    assert_eq!(breakers(&game), 3, "two exposed programs, two rolls");
+    assert!(
+        game.world.get::<Hostile>(members[1]).is_some(),
+        "the cloaked program was never rolled against"
+    );
+}

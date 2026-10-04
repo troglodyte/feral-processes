@@ -1212,7 +1212,14 @@ impl Game {
     /// while only one catalyst is held, both pass the per-slot check, and the
     /// first to resolve spends the only copy. Without this guard the second
     /// would hit an `expect` instead of a refusal.
+    ///
+    /// **With area research** (`Game::decompile_reach`, radius 1 or more)
+    /// every program in the group gets one roll, one catalyst each — see
+    /// `decompile_group`. Without it this is the front program alone.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
+        if self.decompile_reach().radius >= 1 {
+            return self.decompile_group(group, player);
+        }
         let Some(front) = self.front_of_group(group) else {
             return false;
         };
@@ -1224,6 +1231,58 @@ impl Game {
             return true;
         }
         self.log("Another rogue program from the pack engages!");
+        false
+    }
+
+    /// The area form of `attempt_decompile`: one roll for each program that
+    /// stood in `group` when the attempt began, front first and cloaked ones
+    /// skipped (all of them, when every member is cloaked — the never-empty
+    /// rule of `front_of_group`).
+    ///
+    /// **The members are a snapshot, not "the front until it is empty".** A
+    /// failed roll leaves its program standing, so a loop keyed on the front
+    /// would roll the same one forever. Stops early on no catalyst or no
+    /// roster room. Reports whether the fight ended.
+    fn decompile_group(&mut self, group: usize, player: Entity) -> bool {
+        let Some(members) = self
+            .world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.groups.get(group))
+            .map(|g| g.members.clone())
+        else {
+            return false;
+        };
+        let exposed: Vec<Entity> = members
+            .iter()
+            .copied()
+            .filter(|&e| !self.is_cloaked(e))
+            .collect();
+        let rolled = if exposed.is_empty() { members } else { exposed };
+
+        let mut captured = false;
+        for target in rolled {
+            if self.taming_catalyst().is_none() || self.roster_room() == 0 {
+                break;
+            }
+            if !self.decompile_body(target, player) {
+                continue;
+            }
+            captured = true;
+            let slot = self
+                .world
+                .get_resource::<BattleState>()
+                .and_then(|b| b.groups.get(group))
+                .and_then(|g| g.members.iter().position(|&m| m == target));
+            if let Some(slot) = slot
+                && self.remove_member(group, slot)
+            {
+                self.end_battle(player, Some(target));
+                return true;
+            }
+        }
+        if captured {
+            self.log("Another rogue program from the pack engages!");
+        }
         false
     }
 

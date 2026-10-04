@@ -3351,21 +3351,6 @@ fn an_idle_station_with_a_subject_pinned_uncovers_a_node_on_its_own() {
     );
 }
 
-/// Marks `id` researched with a decompiler grant, overwriting whatever the
-/// shipped node says, so the fold is tested against stated figures.
-fn research_decompiler(game: &mut Game, id: &str, grant: crate::research::DecompilerUpgrade) {
-    let mut db = game.world.resource_mut::<crate::research::ResearchDb>();
-    let mut def = db.get("routine_fabrication").unwrap().clone();
-    def.id = id.to_string();
-    def.requires.clear();
-    def.decompiler = Some(grant);
-    db.insert_for_test(def);
-    game.world
-        .resource_mut::<crate::resources::Research>()
-        .0
-        .insert(id.to_string());
-}
-
 #[test]
 fn decompile_reach_is_empty_with_nothing_researched() {
     let game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

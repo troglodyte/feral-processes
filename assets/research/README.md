@@ -132,7 +132,7 @@ Core Fragments.
     //
     // Independent of `requires_subject` on purpose. That one says buying
     // this costs a program; this one says the node is hidden until found. A
-    // node may be either, both or neither. The twenty shipped nodes that set
+    // node may be either, both or neither. The shipped nodes that set
     // this are every `requires_subject` node except `routine_fabrication`
     // and `program_refactoring`, which stay visible so the routine tree and
     // fusion keep arriving when they do today.

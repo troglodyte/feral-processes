@@ -5020,7 +5020,7 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     );
 }
 
-/// **The 24/5 split: every shipped node with `min_zone >= 2` declares
+/// **The 25/5 split: every shipped node with `min_zone >= 2` declares
 /// `requires_subject`, and the only nodes that do not are the five that get
 /// a base running from turn one.** A node above zone 1 that forgot the field
 /// would ship free of the study cost the feature exists to charge; one of the
@@ -5064,8 +5064,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 31,
-        "expected the shipped base tree's 31 nodes; a count that moved means a node was \
+        checked, 32,
+        "expected the shipped base tree's 32 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5417,6 +5417,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "paging",
             "segmentation",
             "shard_mapping",
+            "siphoning",
             "virtual_memory",
             "weapon_bench",
         ],

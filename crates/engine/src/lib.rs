@@ -48,6 +48,7 @@ pub mod sociability;
 pub mod sorties;
 pub mod species;
 pub mod stack;
+pub mod statuses;
 pub mod structures;
 pub mod systems;
 pub mod tactical;
@@ -89,8 +90,8 @@ use components::{
     MachineStatus, Memories, Memory, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player,
     PlayerIdentity, Position, Potential, PowerReserve, ProgramId, PurchasedTiers, Pursuing, Rarity,
     ReachCharge, Refactors, ResourceNode, Routines, Squad, StackSpawn, StandingJob, Stats,
-    StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents,
-    Tamed, Tampered, Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
+    StatusEffects, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed,
+    Tampered, Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::auto_resolve::AutoResolve;
 pub use game::base::lines::LineKey;
@@ -143,6 +144,7 @@ pub use resources::{
     TacticalFxCue, TacticalFxKind, TransitCue, Visit, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
+pub use statuses::{StatusBehaviour, StatusDb, StatusId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 use tools::ToolDb;
 pub use views::*;

@@ -18,7 +18,7 @@ use crate::abilities::{
 use crate::battle::BattleAction;
 use crate::components::{
     AbilityCooldowns, ActiveStatus, Creature, GlyphColor, Position, PowerReserve, Routines, Stats,
-    StatusEffects, StatusKind, Tampered,
+    StatusEffects, Tampered,
 };
 use crate::items::ItemId;
 use crate::resources::{DifficultyMode, Party, Sorties};
@@ -1969,12 +1969,13 @@ fn decoys_are_gone_when_the_fight_ends() {
     game.world
         .get_mut::<StatusEffects>(bleeding)
         .unwrap()
-        .active = Some(ActiveStatus {
-        kind: StatusKind::Bleed,
+        .active = vec![ActiveStatus {
+        id: crate::statuses::StatusId::from("bleed"),
         remaining: 4,
         power: 20,
+        stacks: 1,
         landed_this_round: false,
-    });
+    }];
 
     let round = game.world.resource::<TacticalBattle>().round;
     while game.world.resource::<TacticalBattle>().round == round {
@@ -2014,10 +2015,11 @@ fn marooned_with(kinds: &[TamperKind]) -> (Game, Entity) {
 }
 
 fn stunned(game: &Game, body: Entity) -> bool {
-    game.world
-        .get::<StatusEffects>(body)
-        .and_then(|s| s.active.as_ref())
-        .is_some_and(|a| a.kind == StatusKind::Stun)
+    game.world.get::<StatusEffects>(body).is_some_and(|s| {
+        s.active
+            .iter()
+            .any(|a| a.id == crate::statuses::StatusId::from("stun"))
+    })
 }
 
 /// Stands `body` on a random cell that will take it. Bounded, so a board

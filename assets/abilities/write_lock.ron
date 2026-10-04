@@ -1,0 +1,10 @@
+(
+    id: "write_lock",
+    name: "Write Lock Single",
+    description: "One target cannot be healed for 3 rounds",
+    target: OneEnemyGroupFront,
+    effect: Debuff(kind: "locked", power: 0, duration: 3),
+    cooldown: 3,
+    power_cost: 6.0,
+    research_zone: 3,
+)

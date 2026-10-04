@@ -99,7 +99,7 @@ impl Game {
     /// A call, not a copy: `abilities::effect_label` owns the body, because
     /// the creation wizard prices its routine rows with no `Game` to ask.
     fn routine_effect_label(&self, def: &AbilityDef, level: u32, affinity: f32) -> String {
-        crate::abilities::effect_label(def, level, affinity)
+        crate::abilities::effect_label(def, level, affinity, self.world.resource::<StatusDb>())
     }
 
     /// The starter pool for the creation wizard's Routine step — every
@@ -116,9 +116,11 @@ impl Game {
     /// can't be called here. Every row still reads through the one clamped
     /// class-plus-perk formula either path uses.
     pub fn starter_routine_rows(&self, class: Option<PlayerClass>) -> Vec<StarterRoutineRow> {
-        crate::abilities::starter_rows(self.world.resource::<AbilityDb>(), |kind| {
-            self.player_affinity_for(class, kind)
-        })
+        crate::abilities::starter_rows(
+            self.world.resource::<AbilityDb>(),
+            self.world.resource::<StatusDb>(),
+            |kind| self.player_affinity_for(class, kind),
+        )
     }
 
     /// Whether `entity` is a program the player controls — `Tamed`, or the

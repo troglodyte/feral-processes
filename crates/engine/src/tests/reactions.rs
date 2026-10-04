@@ -218,7 +218,7 @@ fn a_reaction_never_fumbles() {
         assert!(
             game.world
                 .get::<StatusEffects>(hostile)
-                .is_none_or(|effects| effects.active.is_none()),
+                .is_none_or(|effects| effects.active.is_empty()),
             "a reaction left its own swinger marked: an Exposed or a Crash rung"
         );
         assert_eq!(game.tactical_step((1, 0)), StepOutcome::Moved);

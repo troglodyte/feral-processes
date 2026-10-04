@@ -195,13 +195,12 @@ pub struct Combatant {
     pub fumble: f64,
 }
 
-/// How badly an attack went wrong. **Rungs replace rather than stack** — a
-/// cumulative top rung is a run-ender. Which rung comes from how deep into
+/// How badly an attack went wrong. Each roll lands one rung; two rolls'
+/// status rungs coexist, as any two different statuses do. Which rung comes from how deep into
 /// the fumble band the roll fell, so it needs no second draw.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FumbleRung {
-    /// Evasion cut by `EXPOSED_EVASION_PERCENT` until the fumbler's next
-    /// turn.
+    /// Arms `tuning::FUMBLE_EXPOSED_STATUS` on the fumbler.
     Exposed,
     /// `FUMBLE_RECOIL_FRACTION` of a fresh roll of the fumbler's own range,
     /// dealt to the fumbler.

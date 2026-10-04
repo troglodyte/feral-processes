@@ -334,8 +334,8 @@ fn a_modded_species_with_more_moves_still_scores() {
     moves: [
         (name: "One", power: 3),
         (name: "Two", power: 6, ranged: true),
-        (name: "Three", power: 9, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
-        (name: "Four", power: 12, effect: Some((kind: Bleed, chance: 0.4, duration: 2, power: 3))),
+        (name: "Three", power: 9, effect: Some((kind: "stun", chance: 0.3, duration: 1, power: 0))),
+        (name: "Four", power: 12, effect: Some((kind: "bleed", chance: 0.4, duration: 2, power: 3))),
         (name: "Five", power: 15, ranged: true),
         (name: "Six", power: 18),
         (name: "Seven", power: 21, ranged: true),

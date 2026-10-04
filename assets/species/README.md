@@ -162,21 +162,18 @@ is skipped with a warning logged in-game rather than crashing startup.
         // rounds, on top of its direct damage. Those rounds are the ones
         // *after* the round it landed in — a `duration: 1` stun costs its
         // victim the next round's action, not a round it may already have
-        // acted in. A combatant can only carry one status condition at a
-        // time — a fresh one overwrites whatever was active. A status only
-        // lands on a *hit*: a missed or fumbled move inflicts nothing.
+        // acted in. A combatant carries each status at most once and
+        // several different ones at a time; re-applying one it already carries
+        // keeps the larger duration and power. A status only lands on a *hit*:
+        // a missed or fumbled move inflicts nothing.
         //
-        //   Bleed    deals `power` extra damage at the end of every round it
-        //            is active
-        //   Stun     costs the afflicted side their next action (`power` is
-        //            required by the schema but unused — set it to 0)
-        //   Exposed  cuts the afflicted side's Evasion, so they are easier to
-        //            hit until it clears (`power` unused — set it to 0). The
-        //            fumble ladder arms this on a botched swing, and a move
-        //            may inflict it too: a debuffer species needs no engine
-        //            change.
+        // `kind` is the id of a file in `assets/statuses/` (shipped:
+        // `"bleed"`, `"stun"`, `"exposed"`, `"poison"`, `"throttled"`, `"locked"`); what each does is defined there.
+        // `power` is the per-round damage of a damage-per-round status and
+        // ignored by the rest. An unknown id drops the rider at load, with a
+        // warning.
         (name: "Corrupted Move", power: 6, spread: 2, effect: Some((
-            kind: Bleed,       // or `Stun`, or `Exposed`
+            kind: "bleed",     // any id in assets/statuses/
             chance: 0.4,
             duration: 3,
             power: 3,

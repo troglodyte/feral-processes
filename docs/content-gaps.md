@@ -100,10 +100,11 @@ Recorded so the next survey doesn't rediscover them as opportunities.
   `pet_slot_bonus` (read flat at `game/catalog.rs:200`) do not consult tier.
   They scale by building *more* of them — additive across every deployed
   structure — which already works.
-- **New buff or status kinds are Rust.** `BuffKind` is Atk/Def
-  (`components.rs:417`); `StatusKind` is Bleed/Stun (`components.rs:385`). A
-  third variant means a hook in a formula, not a file — the same seam as
-  `Perk`.
+- **New buff kinds are Rust; new status conditions are data.** `BuffKind` is
+  Atk/Def (`components.rs:417`) and a third variant means a hook in a formula,
+  not a file — the same seam as `Perk`. A status is a file in
+  `assets/statuses/` composing the closed behaviour list; only a new
+  *behaviour* is Rust.
 - **`SpeciesDef::equipment_drop` being unused is not a gap.** The inverse
   seam, `ItemDef::droppable`, is used by all 31 gear items and both are
   merged per kill (`Game::equipment_drops_for`). The item-side direction won;

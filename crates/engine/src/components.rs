@@ -1129,50 +1129,20 @@ pub struct Task {
     pub required: u32,
 }
 
-/// A status condition a battle `MoveDef::effect` can inflict on a combatant.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum StatusKind {
-    /// Deals `ActiveStatus::power` damage at the end of every round it's
-    /// active.
-    Bleed,
-    /// Causes the afflicted side to lose their next action in battle.
-    Stun,
-    /// Cuts the afflicted side's Evasion by `EXPOSED_EVASION_PERCENT` — see
-    /// `Game::combatant_profile`. Armed by the first rung of the fumble
-    /// ladder, and **free for content**: `MoveEffect` already lets any
-    /// species move inflict a status from `.ron`, so a debuffer species
-    /// costs no Rust the day this exists.
-    ///
-    /// It belongs in `StatusEffects` — conditions inflicted on you, always
-    /// unwanted — rather than in `CombatBuff`, which holds one *wanted* buff
-    /// at a time.
-    Exposed,
-}
-
-impl StatusKind {
-    /// How the condition reads on a screen. A taxonomy label rather than
-    /// authored content — the same call `Rarity::label` makes — so a
-    /// routine's inspect line and the log that announces the condition
-    /// cannot come to call it two different things.
-    pub fn label(self) -> &'static str {
-        match self {
-            StatusKind::Bleed => "Bleed",
-            StatusKind::Stun => "Stun",
-            StatusKind::Exposed => "Exposed",
-        }
-    }
-}
-
-/// One combatant's currently active status condition, and how long it has
-/// left.
-#[derive(Clone, Copy, Debug)]
+/// One status condition a combatant is carrying, and how long it has left.
+/// What it does is the `StatusDef` its `id` names — see `statuses`.
+#[derive(Clone, Debug)]
 pub struct ActiveStatus {
-    pub kind: StatusKind,
+    pub id: crate::statuses::StatusId,
     /// Battle rounds remaining, ticked down at the end of every round bar
     /// the one it landed in — see `landed_this_round`.
     pub remaining: u32,
-    /// Bleed damage dealt per round; unused for `Stun`.
+    /// What a `DamagePerRound` status deals per round per stack; unused by
+    /// the other behaviours.
     pub power: i32,
+    /// How many applications this entry holds. Always 1 for a `Refresh`
+    /// status.
+    pub stacks: u32,
     /// True from being armed until the first `Game::tick_status_effects`
     /// after it, which spends itself clearing this flag and does nothing
     /// else — the round a condition lands in is not one of the rounds it
@@ -1186,18 +1156,16 @@ pub struct ActiveStatus {
     /// rounds" of bleed dealt its first tick instantly and showed two.
     ///
     /// `Game::arm_status` is the only thing that sets it, which is why that
-    /// is the only way to write `StatusEffects::active`.
+    /// is the only way to add to `StatusEffects::active`.
     pub landed_this_round: bool,
 }
 
-/// A creature or the player can carry at most one status condition at a
-/// time — a fresh application overwrites whatever was active, mirroring a
-/// classic single-status-condition model rather than a stacking one.
-/// Scoped to a single intrusion: cleared whenever a battle ends, however it
+/// Every status condition a creature or the player is carrying, at most one
+/// entry per `StatusId`. Scoped to a single intrusion: cleared whenever a battle ends, however it
 /// ends (kill, tame, flee, or the player going down).
-#[derive(Component, Default, Clone, Copy)]
+#[derive(Component, Default, Clone)]
 pub struct StatusEffects {
-    pub active: Option<ActiveStatus>,
+    pub active: Vec<ActiveStatus>,
 }
 
 /// Which stat a companion's rally/shield temporarily boosts — see
@@ -1211,8 +1179,8 @@ pub enum BuffKind {
 }
 
 impl BuffKind {
-    /// The stat this raises, as a screen names it. `StatusKind::label`'s
-    /// twin, and the word the combat log already uses.
+    /// The stat this raises, as a screen names it — the word the combat log
+    /// already uses.
     pub fn label(self) -> &'static str {
         match self {
             BuffKind::Atk => "Attack",

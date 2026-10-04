@@ -1,0 +1,10 @@
+// The afflicted side cannot be healed or drained back to health.
+(
+    id: "locked",
+    name: "Locked",
+    tag: "LCK",
+    stacking: Refresh,
+    behaviours: [HealBlock],
+    inflict: "{target} is locked out of repairs!",
+    expire: "{target} accepts repairs again.",
+)

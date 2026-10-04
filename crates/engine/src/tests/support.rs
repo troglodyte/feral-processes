@@ -562,6 +562,10 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // banks points that only an attribute with effects can absorb. An
         // install without them levels a player who never grows.
         "attributes",
+        // An absent directory loads an empty `StatusDb` silently, so a
+        // scratch install without it arms nothing and every status test on
+        // it passes vacuously.
+        "statuses",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();
@@ -2232,12 +2236,13 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
     enlist(&mut game, companion);
     if stunned {
         game.world.entity_mut(companion).insert(StatusEffects {
-            active: Some(ActiveStatus {
-                kind: StatusKind::Stun,
+            active: vec![ActiveStatus {
+                id: crate::statuses::StatusId::from("stun"),
                 remaining: 1,
                 power: 0,
+                stacks: 1,
                 landed_this_round: false,
-            }),
+            }],
         });
     }
 

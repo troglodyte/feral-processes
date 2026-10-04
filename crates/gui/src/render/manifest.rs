@@ -287,8 +287,8 @@ fn draw_header(
             tags.push(format!("Pets {}/{}", p.pet_count, p.pet_capacity));
         }
     }
-    if let Some(status) = &view.status_effect {
-        tags.push(status.clone());
+    if !view.statuses.is_empty() {
+        tags.push(super::battle::status_tags_text(&view.statuses));
     }
     painter.ui(
         tags.join("   "),
@@ -1391,7 +1391,7 @@ mod tests {
             power: 15,
             accuracy: 12.5,
             evasion: 9.5,
-            status_effect: None,
+            statuses: Vec::new(),
             routines: vec![feral_processes_engine::RoutineSlotView {
                 index: 0,
                 ability: None,
@@ -2385,7 +2385,7 @@ mod tests {
             power: 44,
             accuracy: 14.0,
             evasion: 11.5,
-            status_effect: None,
+            statuses: Vec::new(),
             routines: Vec::new(),
             equipment: Vec::new(),
             subject: ManifestSubject::Player(player),
@@ -2496,7 +2496,6 @@ mod tests {
             atk: 4,
             mitigation: 2,
             power: 12,
-            status: None,
             ability: "priority_boost".to_string(),
             gear: String::new(),
         }];

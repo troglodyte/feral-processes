@@ -1,6 +1,7 @@
 //! Status effects: how stun and bleed tick down, and when they clear.
 
 use super::support::*;
+use crate::statuses::{StatusBehaviour, StatusDef, StatusId, StatusStacking};
 use crate::tuning::WILD_ABILITY_CHANCE;
 use crate::*;
 
@@ -34,12 +35,13 @@ fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
         ))
         .id();
     insert_battle(&mut game, player, vec![wild]);
-    game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
-        kind: StatusKind::Stun,
+    game.world.get_mut::<StatusEffects>(player).unwrap().active = vec![ActiveStatus {
+        id: crate::statuses::StatusId::from("stun"),
         remaining: 1,
         power: 0,
+        stacks: 1,
         landed_this_round: false,
-    });
+    }];
 
     let wild_hp_before = game.world.get::<Stats>(wild).unwrap().hp;
     player_attacks(&mut game);
@@ -54,7 +56,7 @@ fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
             .get::<StatusEffects>(player)
             .unwrap()
             .active
-            .is_none(),
+            .is_empty(),
         "the stun should clear after its one round elapses"
     );
 }
@@ -86,12 +88,13 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
                 mitigation: 0,
             },
             StatusEffects {
-                active: Some(ActiveStatus {
-                    kind: StatusKind::Bleed,
+                active: vec![ActiveStatus {
+                    id: crate::statuses::StatusId::from("bleed"),
                     remaining: 2,
                     power: 5,
+                    stacks: 1,
                     landed_this_round: false,
-                }),
+                }],
             },
         ))
         .id();
@@ -144,6 +147,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
             .get::<StatusEffects>(wild)
             .unwrap()
             .active
+            .first()
             .unwrap()
             .remaining,
         1
@@ -163,7 +167,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
             .get::<StatusEffects>(wild)
             .unwrap()
             .active
-            .is_none(),
+            .is_empty(),
         "bleed should clear once its duration elapses"
     );
 }
@@ -198,12 +202,13 @@ fn status_effects_are_cleared_once_the_battle_ends() {
         ))
         .id();
     insert_battle(&mut game, player, vec![wild]);
-    game.world.get_mut::<StatusEffects>(player).unwrap().active = Some(ActiveStatus {
-        kind: StatusKind::Bleed,
+    game.world.get_mut::<StatusEffects>(player).unwrap().active = vec![ActiveStatus {
+        id: crate::statuses::StatusId::from("bleed"),
         remaining: 5,
         power: 1,
+        stacks: 1,
         landed_this_round: false,
-    });
+    }];
 
     // 1 HP wild creature dies to the player's first attack, ending the battle.
     player_attacks(&mut game);
@@ -217,7 +222,7 @@ fn status_effects_are_cleared_once_the_battle_ends() {
             .get::<StatusEffects>(player)
             .unwrap()
             .active
-            .is_none(),
+            .is_empty(),
         "leftover status effects should be cleared once the battle ends, however it ends"
     );
 }
@@ -513,11 +518,8 @@ fn a_carrier_spends_its_round_on_its_routine_instead_of_a_move() {
 
     assert!(
         matches!(
-            game.world.get::<StatusEffects>(player).unwrap().active,
-            Some(ActiveStatus {
-                kind: StatusKind::Stun,
-                ..
-            })
+            game.world.get::<StatusEffects>(player).unwrap().active.as_slice(),
+            [ActiveStatus { id, .. }] if id.0 == "stun"
         ),
         "Hard Lock stuns — a move could not have done this"
     );
@@ -687,12 +689,13 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
                 power: 9,
             },
         );
-        game.world.get_mut::<StatusEffects>(e).unwrap().active = Some(ActiveStatus {
-            kind: StatusKind::Bleed,
+        game.world.get_mut::<StatusEffects>(e).unwrap().active = vec![ActiveStatus {
+            id: crate::statuses::StatusId::from("bleed"),
             remaining: 3,
             power: 2,
+            stacks: 1,
             landed_this_round: false,
-        });
+        }];
         game.world.entity_mut(e).insert(AbilityCooldowns(
             std::iter::once(("kernel_panic".to_string(), 3)).collect(),
         ));
@@ -710,7 +713,7 @@ fn ending_a_battle_clears_every_hostiles_combat_state() {
         assert!(
             game.world
                 .get::<StatusEffects>(e)
-                .is_none_or(|s| s.active.is_none()),
+                .is_none_or(|s| s.active.is_empty()),
             "and a bleed left running would tick outside any battle"
         );
         assert!(
@@ -1133,7 +1136,7 @@ fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
     game.apply_status_effect(
         wild,
         &species::MoveEffect {
-            kind: StatusKind::Bleed,
+            kind: crate::statuses::StatusId::from("bleed"),
             chance: 1.0,
             duration: 2,
             power: 5,
@@ -1158,7 +1161,7 @@ fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
             .get::<StatusEffects>(wild)
             .unwrap()
             .active
-            .is_none(),
+            .is_empty(),
         "and it clears once both of those rounds have passed"
     );
 }
@@ -1263,7 +1266,7 @@ fn exposed_cuts_the_fumblers_evasion() {
     let clean = game
         .combatant_profile(victim, battle::Swing::default())
         .evasion;
-    game.arm_status(victim, StatusKind::Exposed, 1, 0);
+    game.arm_status(victim, &crate::statuses::StatusId::from("exposed"), 1, 0);
     let exposed = game
         .combatant_profile(victim, battle::Swing::default())
         .evasion;
@@ -1298,9 +1301,9 @@ fn a_crash_fumble_costs_the_fumbler_their_next_action() {
     assert!(game.is_stunned(fumbler));
 }
 
-/// Rungs replace rather than stack — a cumulative top rung is a run-ender.
+/// Different rungs arm different statuses, and a body now carries several.
 #[test]
-fn a_second_fumble_replaces_the_first_rung() {
+fn a_second_fumble_rung_lands_beside_the_first() {
     let mut game = Game::new(783, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let fumbler = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
     let target = game.player_entity();
@@ -1308,9 +1311,12 @@ fn a_second_fumble_replaces_the_first_rung() {
     game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Crash);
     assert!(game.is_stunned(fumbler));
     assert_eq!(
-        game.status_label(fumbler).as_deref(),
-        Some("Stalled (1)"),
-        "one status at a time — the second must clobber the first"
+        game.status_tags(fumbler)
+            .iter()
+            .map(|s| s.tag.as_str())
+            .collect::<Vec<_>>(),
+        ["EXP", "STN"],
+        "rungs no longer replace each other: statuses coexist"
     );
 }
 
@@ -1496,11 +1502,24 @@ fn the_evasion_raise_reaches_the_roll() {
 }
 
 fn remaining_after_arming(game: &mut Game, target: Entity, duration: u32) -> u32 {
-    game.arm_status(target, StatusKind::Stun, duration, 0);
+    // Re-arming a carried status keeps the larger duration, so each reading
+    // starts from a clean body.
+    game.world
+        .get_mut::<StatusEffects>(target)
+        .unwrap()
+        .active
+        .clear();
+    game.arm_status(
+        target,
+        &crate::statuses::StatusId::from("stun"),
+        duration,
+        0,
+    );
     game.world
         .get::<StatusEffects>(target)
         .unwrap()
         .active
+        .first()
         .unwrap()
         .remaining
 }
@@ -1552,4 +1571,551 @@ fn a_body_without_derived_takes_the_full_duration() {
     let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
     assert!(game.world.get::<crate::components::Derived>(wild).is_none());
     assert_eq!(remaining_after_arming(&mut game, wild, 5), 5);
+}
+
+/// `Game::new` and `Game::load` each destructure `AssetDbs`, so a database
+/// wired into one door can silently miss the other.
+#[test]
+fn a_new_and_a_loaded_game_both_carry_the_status_db() {
+    use crate::statuses::{StatusDb, StatusId};
+    let dir = scratch_assets_dir("status_db_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.world
+            .resource::<StatusDb>()
+            .get(&StatusId::from("bleed"))
+            .is_some()
+    );
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert!(
+        loaded
+            .world
+            .resource::<StatusDb>()
+            .get(&StatusId::from("stun"))
+            .is_some()
+    );
+}
+
+// ------------------------------------------------------- data-defined ids
+
+fn status_ids(game: &Game, entity: Entity) -> Vec<String> {
+    game.world
+        .get::<StatusEffects>(entity)
+        .unwrap()
+        .active
+        .iter()
+        .map(|a| a.id.0.clone())
+        .collect()
+}
+
+#[test]
+fn arming_an_unknown_status_id_is_a_silent_no_op() {
+    let mut game = Game::new(794, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.arm_status(wild, &crate::statuses::StatusId::from("no_such"), 3, 1);
+    assert!(status_ids(&game, wild).is_empty());
+    assert!(
+        !game
+            .message_log(usize::MAX)
+            .iter()
+            .any(|e| e.text.contains("no_such")),
+        "loading warns about bad ids; the player's log stays free of them"
+    );
+}
+
+#[test]
+fn re_arming_a_refresh_status_keeps_the_larger_duration_and_power() {
+    let mut game = Game::new(795, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let bleed = crate::statuses::StatusId::from("bleed");
+    game.arm_status(wild, &bleed, 3, 5);
+    game.arm_status(wild, &bleed, 1, 9);
+    let active = &game.world.get::<StatusEffects>(wild).unwrap().active;
+    assert_eq!(active.len(), 1, "one entry per id");
+    assert_eq!((active[0].remaining, active[0].power), (3, 9));
+    assert_eq!(active[0].stacks, 1);
+}
+
+#[test]
+fn two_different_statuses_coexist_and_tick_independently() {
+    let mut game = Game::new(796, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.arm_status(wild, &crate::statuses::StatusId::from("bleed"), 3, 4);
+    game.arm_status(wild, &crate::statuses::StatusId::from("stun"), 1, 0);
+    assert_eq!(status_ids(&game, wild), ["bleed", "stun"]);
+    // The landing round is exempt for both.
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(game.world.get::<Stats>(wild).unwrap().hp, hp);
+    game.tick_status_effects(wild, "Wild");
+    assert!(
+        game.world.get::<Stats>(wild).unwrap().hp < hp,
+        "bleed ticked"
+    );
+    assert_eq!(status_ids(&game, wild), ["bleed"], "stun expired alone");
+    assert_eq!(
+        game.world.get::<StatusEffects>(wild).unwrap().active[0].remaining,
+        2
+    );
+}
+
+#[test]
+fn battle_teardown_clears_every_status() {
+    let mut game = Game::new(797, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_status(player, &crate::statuses::StatusId::from("bleed"), 3, 1);
+    game.arm_status(player, &crate::statuses::StatusId::from("exposed"), 3, 0);
+    game.clear_battle_status_effects(player, None);
+    assert!(status_ids(&game, player).is_empty());
+}
+
+#[test]
+fn an_unknown_status_on_a_species_move_is_dropped_with_a_warning() {
+    use crate::species::{MoveDef, MoveEffect};
+    let mut def = generic_species();
+    def.moves = vec![MoveDef {
+        name: "Poke".into(),
+        power: 1,
+        spread: 0,
+        effect: Some(MoveEffect {
+            kind: crate::statuses::StatusId::from("no_such"),
+            chance: 1.0,
+            duration: 2,
+            power: 0,
+        }),
+        ranged: false,
+    }];
+    let id = def.id.clone();
+    let mut db = crate::species::SpeciesDb::default();
+    db.insert(def);
+    let (statuses, _) = crate::statuses::StatusDb::load_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/statuses"),
+    )
+    .unwrap();
+    let warnings = db.drop_unknown_status_riders(&statuses);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("no_such"));
+    assert!(db.get(&id).unwrap().moves[0].effect.is_none());
+}
+
+// ------------------------------------------------ percent and heal behaviours
+
+/// Puts a one-behaviour, `Refresh` status named `id` into the world's
+/// `StatusDb`; no shipped file uses the new behaviours yet.
+fn define_status(game: &mut Game, id: &str, stacking: StatusStacking, b: StatusBehaviour) {
+    game.world
+        .resource_mut::<crate::statuses::StatusDb>()
+        .insert(StatusDef {
+            id: StatusId::from(id),
+            name: id.into(),
+            tag: "TST".into(),
+            stacking,
+            behaviours: vec![b],
+            inflict: "{target} is tested.".into(),
+            tick: "{target} takes {n}.".into(),
+            expire: "{target} is done.".into(),
+        });
+}
+
+fn profile_atk(game: &Game, entity: Entity) -> i32 {
+    game.combatant_profile(entity, battle::Swing::default()).atk
+}
+
+#[test]
+fn atk_percent_scales_the_combatant_profile_attack() {
+    let mut game = Game::new(7101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().atk = 20;
+    let base = profile_atk(&game, wild);
+    define_status(
+        &mut game,
+        "weak",
+        StatusStacking::Refresh,
+        StatusBehaviour::AtkPercent(-25),
+    );
+    game.arm_status(wild, &StatusId::from("weak"), 3, 0);
+    assert_eq!(
+        profile_atk(&game, wild),
+        (base as f64 * 0.75).round() as i32
+    );
+}
+
+#[test]
+fn a_deep_atk_cut_floors_attack_at_zero() {
+    let mut game = Game::new(7102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().atk = 20;
+    define_status(
+        &mut game,
+        "crush",
+        StatusStacking::Refresh,
+        StatusBehaviour::AtkPercent(-200),
+    );
+    game.arm_status(wild, &StatusId::from("crush"), 3, 0);
+    assert_eq!(
+        profile_atk(&game, wild),
+        0,
+        "a stack must not invert attack"
+    );
+}
+
+#[test]
+fn mitigation_percent_scales_effective_mitigation_and_floors_at_zero() {
+    let mut game = Game::new(7103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    game.world.get_mut::<Stats>(wild).unwrap().mitigation = 40;
+    define_status(
+        &mut game,
+        "soft",
+        StatusStacking::Refresh,
+        StatusBehaviour::MitigationPercent(-50),
+    );
+    define_status(
+        &mut game,
+        "melt",
+        StatusStacking::Refresh,
+        StatusBehaviour::MitigationPercent(-200),
+    );
+    assert_eq!(game.effective_mitigation(wild), 40);
+    game.arm_status(wild, &StatusId::from("soft"), 3, 0);
+    assert_eq!(game.effective_mitigation(wild), 20);
+    game.arm_status(wild, &StatusId::from("melt"), 3, 0);
+    assert_eq!(game.effective_mitigation(wild), 0, "-250% floors at 0");
+}
+
+#[test]
+fn heal_block_zeroes_restore_hp_and_unblocked_heals_still_land() {
+    let mut game = Game::new(7104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 50;
+    }
+    assert_eq!(game.restore_hp(player, 10), 10);
+    define_status(
+        &mut game,
+        "lock",
+        StatusStacking::Refresh,
+        StatusBehaviour::HealBlock,
+    );
+    game.arm_status(player, &StatusId::from("lock"), 3, 0);
+    assert_eq!(game.restore_hp(player, 10), 0);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 60);
+}
+
+fn heal_block_battle(game: &mut Game) -> (Entity, Vec<Entity>) {
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 200;
+        stats.hp = 50;
+        stats.atk = 10;
+    }
+    define_status(
+        game,
+        "lock",
+        StatusStacking::Refresh,
+        StatusBehaviour::HealBlock,
+    );
+    game.arm_status(player, &StatusId::from("lock"), 3, 0);
+    (player, enemies)
+}
+
+fn test_ability(
+    effect: crate::abilities::AbilityEffect,
+    target: crate::abilities::AbilityTarget,
+) -> crate::abilities::AbilityDef {
+    crate::abilities::AbilityDef {
+        id: "test_heal_block".into(),
+        name: "Test".into(),
+        description: "d".into(),
+        target,
+        effect,
+        cooldown: 1,
+        accuracy: 0,
+        power_cost: 0.0,
+        wild_weight: 0,
+        research_zone: 0,
+        exclusive: false,
+        starter: false,
+        ranged: false,
+        boss_drop: None,
+        triggers: None,
+        shape: None,
+        range: None,
+    }
+}
+
+#[test]
+fn heal_block_zeroes_a_heal_ability() {
+    let mut game = Game::new(7105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, _) = heal_block_battle(&mut game);
+    let ability = test_ability(
+        crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 0,
+        },
+        crate::abilities::AbilityTarget::OneAlly,
+    );
+    game.use_ability(&ability, player, "You", &[player]);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 50);
+}
+
+#[test]
+fn heal_block_zeroes_a_drain_but_the_damage_still_lands() {
+    let mut game = Game::new(7106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, enemies) = heal_block_battle(&mut game);
+    let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    let ability = test_ability(
+        crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            spread: 0,
+            heal_fraction: 0.5,
+        },
+        crate::abilities::AbilityTarget::OneEnemyGroupFront,
+    );
+    force_the_next_attack_to_land(&mut game);
+    game.use_ability(&ability, player, "You", &[enemies[0]]);
+    assert!(game.world.get::<Stats>(enemies[0]).unwrap().hp < before);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 50);
+}
+
+#[test]
+fn heal_block_zeroes_regen_ticks() {
+    let mut game = Game::new(7107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (player, _) = heal_block_battle(&mut game);
+    game.arm_field_buff(player, routine(FieldBuffKind::Regen, 4));
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        50,
+        "regen is a heal"
+    );
+}
+
+// ------------------------------------------------------------------ stacking
+
+fn stack_of(game: &Game, entity: Entity, id: &str) -> ActiveStatus {
+    game.world
+        .get::<StatusEffects>(entity)
+        .unwrap()
+        .active
+        .iter()
+        .find(|a| a.id.0 == id)
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn re_arming_a_stacking_status_adds_a_stack_up_to_its_max_and_takes_the_new_figures() {
+    let mut game = Game::new(7201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 2 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    game.arm_status(wild, &id, 5, 9);
+    game.arm_status(wild, &id, 2, 3);
+    let held = stack_of(&game, wild, "venom");
+    assert_eq!(held.stacks, 2);
+    assert_eq!(
+        (held.remaining, held.power),
+        (2, 3),
+        "the new figures replace"
+    );
+    assert!(held.landed_this_round);
+    game.arm_status(wild, &id, 2, 3);
+    assert_eq!(stack_of(&game, wild, "venom").stacks, 2, "capped at max");
+    assert_eq!(
+        game.world.get::<StatusEffects>(wild).unwrap().active.len(),
+        1
+    );
+}
+
+#[test]
+fn a_stacked_damage_status_deals_power_times_stacks() {
+    let mut game = Game::new(7202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    for _ in 0..3 {
+        game.arm_status(wild, &id, 4, 2);
+    }
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(game.world.get::<Stats>(wild).unwrap().hp, hp - 6);
+}
+
+#[test]
+fn re_dosing_a_stacking_status_keeps_its_existing_stacks_ticking() {
+    let mut game = Game::new(7204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let id = StatusId::from("venom");
+    game.arm_status(wild, &id, 4, 2); // round 1
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.arm_status(wild, &id, 4, 2); // round 2: re-dose
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(
+        game.world.get::<Stats>(wild).unwrap().hp,
+        hp - 4,
+        "power x stacks, so a poisoner re-dosing every round still deals damage"
+    );
+}
+
+#[test]
+fn re_arming_a_refresh_status_still_skips_that_rounds_tick() {
+    let mut game = Game::new(7205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let id = StatusId::from("bleed");
+    game.arm_status(wild, &id, 4, 5);
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.arm_status(wild, &id, 4, 5); // re-applied in round 2
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(game.world.get::<Stats>(wild).unwrap().hp, hp);
+}
+
+#[test]
+fn the_landing_round_exemption_is_per_entry() {
+    let mut game = Game::new(7203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    let venom = StatusId::from("venom");
+    let bleed = StatusId::from("bleed");
+    game.arm_status(wild, &venom, 4, 2);
+    game.tick_status_effects(wild, "Wild"); // venom's landing round
+    game.arm_status(wild, &bleed, 4, 5);
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    assert_eq!(
+        game.world.get::<Stats>(wild).unwrap().hp,
+        hp - 2,
+        "venom ticks, the freshly landed bleed does not"
+    );
+}
+
+#[test]
+fn status_tags_list_each_status_with_its_tag_stacks_and_rounds() {
+    let mut game = Game::new(7301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 3 },
+        StatusBehaviour::DamagePerRound,
+    );
+    assert!(game.status_tags(wild).is_empty());
+    let venom = StatusId::from("venom");
+    game.arm_status(wild, &venom, 4, 2);
+    game.arm_status(wild, &venom, 4, 2);
+    game.arm_status(wild, &StatusId::from("stun"), 1, 0);
+    let tags = game.status_tags(wild);
+    assert_eq!(
+        tags,
+        vec![
+            StatusTagView {
+                tag: "TST".into(),
+                stacks: 2,
+                remaining: 4
+            },
+            StatusTagView {
+                tag: "STN".into(),
+                stacks: 1,
+                remaining: 1
+            },
+        ]
+    );
+}
+
+/// A modded potion carries a heal; `HealBlock` has to stop it, because
+/// `consume_item` routes through `restore_hp` like every other heal.
+#[test]
+fn a_locked_body_gets_nothing_from_a_healing_item() {
+    let dir = assets_dir_with_extra_item(
+        "locked_potion",
+        "test_potion.ron",
+        r#"(
+    id: "test_potion",
+    name: "Test Potion",
+    description: "Test fixture: a plain heal.",
+    value: Some(5),
+    consume: Some((heal: 10)),
+)"#,
+    );
+    let mut game = Game::new(796, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    let potion = ItemId::from("test_potion");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(potion.clone(), 2);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = stats.max_hp - 10;
+    }
+    let hurt = game.world.get::<Stats>(player).unwrap().hp;
+
+    // Outside a battle the player has no status store; give them one.
+    game.world
+        .entity_mut(player)
+        .insert(StatusEffects::default());
+    game.arm_status(player, &StatusId::from("locked"), 3, 1);
+    assert!(game.consume_item(player, &potion));
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, hurt);
+
+    game.world
+        .get_mut::<StatusEffects>(player)
+        .unwrap()
+        .active
+        .clear();
+    assert!(game.consume_item(player, &potion));
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        hurt + 10,
+        "the item does heal when nothing blocks it"
+    );
+}
+
+/// The tactical map reads statuses off the body view, so a poisoned body's
+/// view must carry the same tags `status_tags` gives.
+#[test]
+fn a_tactical_body_view_carries_its_statuses() {
+    let mut game = Game::new(797, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 4000);
+    let hostile = pack[0];
+    game.arm_status(hostile, &StatusId::from("poison"), 3, 2);
+    let view = game.tactical_view().expect("a fight is open");
+    let body = view.bodies.iter().find(|b| b.entity == hostile).unwrap();
+    assert_eq!(body.statuses, game.status_tags(hostile));
+    assert_eq!(body.statuses.len(), 1);
+    let player = view.bodies.iter().find(|b| b.is_player).unwrap();
+    assert!(player.statuses.is_empty());
 }

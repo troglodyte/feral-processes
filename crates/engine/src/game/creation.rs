@@ -362,6 +362,7 @@ pub struct CreationCatalogue {
     classes: crate::classes::ClassDb,
     items: crate::items_db::ItemDb,
     abilities: crate::abilities::AbilityDb,
+    statuses: crate::statuses::StatusDb,
     perks: crate::perks::PerkDb,
     attributes: crate::attributes::AttributeDb,
 }
@@ -376,6 +377,7 @@ impl CreationCatalogue {
     /// for kit *names* only, and every kit names an authored item.
     pub fn load(assets_dir: &std::path::Path) -> std::io::Result<Self> {
         let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+        let (statuses, _) = crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
         let (items, _) = crate::items_db::ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
         // Absent-is-silent, `ClassDb`'s own contract: an empty catalogue
         // leaves the class step with no rows, which is the pre-class game.
@@ -387,6 +389,7 @@ impl CreationCatalogue {
             classes,
             items,
             abilities,
+            statuses,
             perks,
             attributes,
         })
@@ -446,7 +449,7 @@ impl CreationCatalogue {
     /// `Game::starter_routine_rows`' own derivation, with no perk term
     /// because a player being created has no unlocked perks yet.
     pub fn starter_rows(&self, class: Option<PlayerClass>) -> Vec<crate::views::StarterRoutineRow> {
-        crate::abilities::starter_rows(&self.abilities, |kind| {
+        crate::abilities::starter_rows(&self.abilities, &self.statuses, |kind| {
             crate::classes::affinity_with_perk(
                 crate::classes::class_affinity(&self.classes, class, kind),
                 None,

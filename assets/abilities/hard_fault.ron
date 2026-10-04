@@ -8,7 +8,7 @@
     // debuff without the duration.
     description: "Stall every hostile program for 2 rounds",
     target: AllEnemies,
-    effect: Debuff(kind: Stun, power: 0, duration: 2),
+    effect: Debuff(kind: "stun", power: 0, duration: 2),
     cooldown: 5,
     power_cost: 20.0,
     exclusive: true,

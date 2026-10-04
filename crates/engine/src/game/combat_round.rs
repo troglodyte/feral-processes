@@ -891,7 +891,7 @@ impl Game {
             mitigation: stats.mitigation,
             is_boss,
             engaged,
-            status_effect: self.status_label(front),
+            statuses: self.status_tags(front),
             // No odds against a boss, because there is no attempt to
             // make — `battle_set_action` refuses the target outright.
             decompile_chance: catalyst_potency
@@ -932,7 +932,7 @@ impl Game {
             max_hp: stats.max_hp,
             atk: self.effective_atk(entity),
             mitigation: self.effective_mitigation(entity),
-            status_effect: self.status_label(entity),
+            statuses: self.status_tags(entity),
             power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
             max_power: self.max_power(entity),
             planned,
@@ -1639,17 +1639,11 @@ impl Game {
                 } => {
                     self.arm_status(
                         recipient,
-                        *kind,
+                        kind,
                         *duration,
                         abilities::scaled_hp_power(*power, level, affinity),
                     );
-                    match kind {
-                        StatusKind::Bleed => self.log(format!("{name} springs a leak in {on}!")),
-                        StatusKind::Stun => self.log(format!("{name} stalls {on} out!")),
-                        StatusKind::Exposed => {
-                            self.log(format!("{name} strips {on}'s validation!"))
-                        }
-                    }
+                    self.log_status_landing(kind, &on, None);
                 }
                 AbilityEffect::Damage {
                     power,
@@ -1759,10 +1753,10 @@ impl Game {
                     let had_status = self
                         .world
                         .get::<StatusEffects>(recipient)
-                        .is_some_and(|s| s.active.is_some());
+                        .is_some_and(|s| !s.active.is_empty());
                     if had_status {
                         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                            statuses.active = None;
+                            statuses.active.clear();
                         }
                         self.log(format!("{name} flushes the corruption from {on}."));
                     }
@@ -1975,6 +1969,11 @@ impl Game {
         } else {
             base + bonus + field_bonus + self.wielded_stat_bonus().1
         };
+        // Scaled before the cap, so a status cannot lift a total past it.
+        let total = self.status_scaled(entity, total, |b| match b {
+            StatusBehaviour::MitigationPercent(n) => Some(*n),
+            _ => None,
+        });
         total.clamp(0, MAX_MITIGATION_PERCENT)
     }
 

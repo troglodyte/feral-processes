@@ -3,7 +3,7 @@
     name: "Bit Rot Single v1.0",
     description: "One target leaks 2 Integrity a round for 3 rounds",
     target: OneEnemyGroupFront,
-    effect: Debuff(kind: Bleed, power: 2, duration: 3),
+    effect: Debuff(kind: "bleed", power: 2, duration: 3),
     cooldown: 1,
     power_cost: 5.0,
 )

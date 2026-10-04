@@ -2227,12 +2227,13 @@ fn a_bleed_that_kills_the_player_at_a_round_boundary_ends_the_fight() {
     game.world
         .get_mut::<crate::components::StatusEffects>(player)
         .unwrap()
-        .active = Some(crate::components::ActiveStatus {
-        kind: crate::components::StatusKind::Bleed,
+        .active = vec![crate::components::ActiveStatus {
+        id: crate::statuses::StatusId::from("bleed"),
         remaining: 4,
         power: 20,
+        stacks: 1,
         landed_this_round: false,
-    });
+    }];
 
     let round = game.tactical_view().expect("the fight closed").round;
     for _ in 0..64 {
@@ -6489,14 +6490,13 @@ mod squads {
                 crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0)),
             )
             .evasion;
-        game.arm_status(squad, crate::components::StatusKind::Exposed, 2, 0);
+        game.arm_status(squad, &crate::statuses::StatusId::from("exposed"), 2, 0);
 
         assert_eq!(
             game.world
                 .get::<StatusEffects>(squad)
-                .and_then(|s| s.active)
-                .map(|a| a.kind),
-            Some(crate::components::StatusKind::Exposed),
+                .and_then(|s| s.active.first().map(|a| a.id.clone())),
+            Some(crate::statuses::StatusId::from("exposed")),
             "the condition had nowhere to live on the squad"
         );
         let exposed = game

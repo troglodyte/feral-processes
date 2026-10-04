@@ -3,7 +3,7 @@
     name: "Bit Rot Everyone",
     description: "Leaves every hostile program on the field leaking for 4 rounds",
     target: AllEnemies,
-    effect: Debuff(kind: Bleed, power: 2, duration: 4),
+    effect: Debuff(kind: "bleed", power: 2, duration: 4),
     cooldown: 5,
     power_cost: 16.0,
     wild_weight: 4,

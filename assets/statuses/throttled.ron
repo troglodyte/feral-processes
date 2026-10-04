@@ -1,0 +1,10 @@
+// Cuts the afflicted side's attack by a quarter.
+(
+    id: "throttled",
+    name: "Throttled",
+    tag: "THR",
+    stacking: Refresh,
+    behaviours: [AtkPercent(-25)],
+    inflict: "{target} is throttled!",
+    expire: "{target} runs at full speed again.",
+)

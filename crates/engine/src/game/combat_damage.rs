@@ -138,20 +138,17 @@ impl Game {
         let level = self.ability_user_level(entity);
         let speed = self.combat_speed(entity);
         let evasion = battle::evasion_of(speed, level, gear.evasion);
-        // The Exposed rung's whole cost. Read here rather than folded into
-        // `evasion_of` because it is entity state rather than a property of
-        // the numbers, and `evasion_of` is what `balance_sim` calls with no
-        // ECS to ask.
-        let exposed = self
-            .world
-            .get::<StatusEffects>(entity)
-            .and_then(|s| s.active)
-            .is_some_and(|a| a.kind == StatusKind::Exposed);
-        let evasion = if exposed {
-            evasion * (100 - crate::tuning::EXPOSED_EVASION_PERCENT) as f64 / 100.0
-        } else {
-            evasion
-        };
+        // Status evasion cuts (Exposed's whole cost). Read here rather than
+        // folded into `evasion_of` because it is entity state rather than a
+        // property of the numbers, and `evasion_of` is what `balance_sim`
+        // calls with no ECS to ask.
+        let cut = self
+            .status_sum(entity, |b| match b {
+                StatusBehaviour::EvasionCut(n) => Some(*n),
+                _ => None,
+            })
+            .clamp(0, 100);
+        let evasion = evasion * (100 - cut) as f64 / 100.0;
         let derived = self
             .world
             .get::<crate::components::Derived>(entity)
@@ -164,7 +161,10 @@ impl Game {
                 self.accuracy_bonus(entity) + swing.accuracy,
             ),
             evasion,
-            atk: self.effective_atk(entity),
+            atk: self.status_scaled(entity, self.effective_atk(entity), |b| match b {
+                StatusBehaviour::AtkPercent(n) => Some(*n),
+                _ => None,
+            }),
             range: swing.range,
             crit: derived.crit,
             fumble: derived.fumble,
@@ -220,10 +220,9 @@ impl Game {
 
     /// Lands one rung of the fumble ladder on `fumbler`.
     ///
-    /// **Rungs replace rather than stack.** `StatusEffects` holds one
-    /// condition at a time and both status rungs go through `arm_status`, so
-    /// a second fumble clobbers the first rather than compounding it — a
-    /// cumulative top rung is a run-ender.
+    /// Both status rungs go through `arm_status`, so a second fumble's
+    /// status joins the first if it is a different one, and refreshes it
+    /// (never lengthens past the larger duration) if it is the same.
     ///
     /// The Opening rung's damage was already rolled inside
     /// `battle::resolve_attack`, non-recursively, so a fumbled free swing
@@ -240,7 +239,7 @@ impl Game {
             battle::FumbleRung::Exposed => {
                 self.arm_status(
                     fumbler,
-                    StatusKind::Exposed,
+                    &StatusId::from(crate::tuning::FUMBLE_EXPOSED_STATUS),
                     crate::tuning::EXPOSED_DURATION_ROUNDS,
                     0,
                 );
@@ -253,7 +252,7 @@ impl Game {
             battle::FumbleRung::Crash => {
                 self.arm_status(
                     fumbler,
-                    StatusKind::Stun,
+                    &StatusId::from(crate::tuning::FUMBLE_CRASH_STATUS),
                     crate::tuning::CRASH_DURATION_ROUNDS,
                     0,
                 );
@@ -427,7 +426,15 @@ impl Game {
     /// figure instead let a heal claim twenty points on a target with three
     /// to spare, which reads as the heal having been wasted by the game
     /// rather than by the player's timing.
+    ///
+    /// A body carrying a `HealBlock` status restores nothing; the caller's
+    /// log then reads "for 0", the same words a full-health target gets.
+    /// Every in-battle heal and drain must come through here, or the block
+    /// has a hole in it.
     pub(crate) fn restore_hp(&mut self, target: Entity, amount: i32) -> i32 {
+        if self.has_behaviour(target, |b| matches!(b, StatusBehaviour::HealBlock)) {
+            return 0;
+        }
         let restored = {
             let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
                 return 0;

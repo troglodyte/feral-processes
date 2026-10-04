@@ -91,6 +91,10 @@ pub struct TacticalBody {
     /// so the renderer's palette swap stays a draw-time decision and the
     /// authored hue underneath is never lost.
     pub respawned: bool,
+    /// The battle statuses this body carries — `Game::status_tags`, the same
+    /// list the brawl and examine views read, so the map cannot word a
+    /// status differently from them.
+    pub statuses: Vec<crate::StatusTagView>,
     /// `Some` exactly when this body is a folded `Squad`.
     ///
     /// **The name is not carried here.** `TacticalBody::label` already has
@@ -571,6 +575,7 @@ impl Game {
             in_cover: attacker.is_some_and(|a| self.body_in_cover(a, entity)),
             footprint,
             respawned: self.world.get::<Respawned>(entity).is_some(),
+            statuses: self.status_tags(entity),
             squad,
         }
     }

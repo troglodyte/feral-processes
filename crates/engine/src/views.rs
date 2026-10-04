@@ -970,6 +970,16 @@ pub struct TalentOption {
     pub takeable: bool,
 }
 
+/// One status a body carries, for the battle roster and manifest: the
+/// def's short tag plus what the renderer needs to say how deep it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusTagView {
+    pub tag: String,
+    pub stacks: u32,
+    /// Battle rounds left.
+    pub remaining: u32,
+}
+
 /// Snapshot of the player's active companion, shown in the status panel
 /// and during an intrusion.
 pub struct CompanionInfo {
@@ -982,10 +992,6 @@ pub struct CompanionInfo {
     pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
-    /// The companion's current battle status condition, if any (see
-    /// `status_label`) — e.g. "Bleeding (2)". Always `None` outside a
-    /// battle, since status effects are scoped to a single intrusion.
-    pub status: Option<String>,
     /// Terse name of what commanding this companion in battle would do
     /// right now (e.g. "Rally") — see `Game::companion_ability_label`.
     /// Shown wherever a companion is listed outside battle, so the player
@@ -1912,7 +1918,7 @@ pub struct EnemyGroupView {
     /// act through a ranged move, and renderers dim it to make that legible
     /// rather than leaving the player to infer it from the log.
     pub engaged: bool,
-    pub status_effect: Option<String>,
+    pub statuses: Vec<StatusTagView>,
     /// Estimated chance (0.0-1.0) a decompile attempt against *this* group's
     /// front member would succeed, given its current HP fraction, its
     /// species' difficulty, and the potency of the catalyst the attempt
@@ -1943,7 +1949,7 @@ pub struct PartySlotView {
     pub atk: i32,
     /// **Percentage points** — see `components::Stats::mitigation`.
     pub mitigation: i32,
-    pub status_effect: Option<String>,
+    pub statuses: Vec<StatusTagView>,
     /// What this member has left to spend on routines, or `None` for one
     /// holding no reserve at all. Every roster member carries one
     /// (`Game::roster_parts`), and it is what that member's own Specials and
@@ -2585,9 +2591,9 @@ pub struct ManifestView {
     pub accuracy: f32,
     /// See `accuracy`.
     pub evasion: f32,
-    /// Active battle status condition, e.g. "Bleeding (2)" — see
-    /// `Game::status_label`. Always `None` outside an intrusion.
-    pub status_effect: Option<String>,
+    /// Active battle statuses — see `Game::status_tags`. Always empty
+    /// outside an intrusion.
+    pub statuses: Vec<StatusTagView>,
     /// Every routine slot, filled or empty. Reuses `RoutineSlotView` rather
     /// than a parallel type, so the manifest and the routines menu cannot
     /// disagree about what is installed.

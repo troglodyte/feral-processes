@@ -174,11 +174,14 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
 
     let debuff = ability(&game, "memory_leak");
     game.use_ability(&debuff, player, "TestBot", &[wild]);
-    let active = game.world.get::<StatusEffects>(wild).unwrap().active;
+    let active = &game.world.get::<StatusEffects>(wild).unwrap().active;
     assert!(
-        active.is_some_and(|a| a.kind == StatusKind::Bleed
-            && a.power == crate::abilities::scaled_hp_power(2, 1, crate::tuning::AFFINITY_NEUTRAL)
-            && a.remaining == 3),
+        active
+            .iter()
+            .any(|a| a.id == crate::statuses::StatusId::from("bleed")
+                && a.power
+                    == crate::abilities::scaled_hp_power(2, 1, crate::tuning::AFFINITY_NEUTRAL)
+                && a.remaining == 3),
         "Debuff should inflict the status condition memory_leak declares"
     );
 }

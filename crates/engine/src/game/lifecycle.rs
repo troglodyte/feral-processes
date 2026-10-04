@@ -470,6 +470,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             memories: memory_db,
+            statuses: status_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -512,6 +513,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
+        world.insert_resource(status_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -1367,6 +1369,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             memories: memory_db,
+            statuses: status_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -1427,6 +1430,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
+        world.insert_resource(status_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -3480,6 +3484,7 @@ struct AssetDbs {
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
+    statuses: crate::statuses::StatusDb,
     thoughts: crate::situations::ThoughtDb,
     interactions: crate::interactions::InteractionDb,
     needs: crate::needs::NeedDb,
@@ -3509,17 +3514,34 @@ struct AssetDbs {
 /// this check would turn a modder's incomplete item set into a panic mid-play
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
-    let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    let (mut abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    // Absent-is-silent: an empty catalogue arms nothing. Loaded straight after
+    // `abilities` and before anything derived from them (etched disks, basic
+    // attacks), so a rider naming a status that does not exist is dropped
+    // before a copy of it is made.
+    let (statuses, status_warnings) =
+        crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
+    warnings.extend(status_warnings);
+    warnings.extend(abilities.drop_unknown_status_riders(&statuses));
+    for (name, id) in [
+        ("exposed fumble rung", crate::tuning::FUMBLE_EXPOSED_STATUS),
+        ("crash fumble rung", crate::tuning::FUMBLE_CRASH_STATUS),
+    ] {
+        if !statuses.contains(&crate::statuses::StatusId::from(id)) {
+            warnings.push(format!(
+                "the {name} arms status {id:?}, which is not defined — it will do nothing"
+            ));
+        }
+    }
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.
     let (tools, tools_warnings) = ToolDb::load_dir(&assets_dir.join("tools"))?;
     warnings.extend(tools_warnings);
-    // `mut` is only used by the `#[cfg(test)]` fixture insertion below.
-    #[cfg_attr(not(test), allow(unused_mut))]
     let (mut species, species_warnings) =
         SpeciesDb::load_dir(&assets_dir.join("species"), &abilities)?;
     warnings.extend(species_warnings);
+    warnings.extend(species.drop_unknown_status_riders(&statuses));
     // The blank fixture companion joins every test-built db, rather than
     // being registered onto one `Game`, because `Game::load` rebuilds the
     // db from the asset directory: a species registered after `new` is
@@ -3686,6 +3708,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         contracts,
         descriptions,
         memories,
+        statuses,
         thoughts,
         interactions,
         needs,

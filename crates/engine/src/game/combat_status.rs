@@ -5,6 +5,7 @@
 //! and battle teardown in `combat_teardown.rs`; this file is what those
 //! three read and write *through*.
 
+use crate::statuses::StatusStacking;
 use crate::tuning::DEFEND_MITIGATION_BONUS;
 use crate::*;
 
@@ -17,10 +18,10 @@ impl Game {
             .is_some_and(|a| a.kind == BuffKind::Mitigation && a.power == DEFEND_MITIGATION_BONUS)
     }
 
-    /// Rolls `effect.chance`; on success, overwrites `target`'s active
-    /// status condition (see `StatusEffects`) and logs it. A miss is
-    /// silent — the move's direct damage still landed, it just didn't also
-    /// inflict its status this time.
+    /// Rolls `effect.chance`; on success, arms the rider's status on
+    /// `target` (see `arm_status`) and logs the status's own landing line. A
+    /// miss is silent — the move's direct damage still landed, it just didn't
+    /// also inflict its status this time.
     ///
     /// `kind` is the log styling for the condition line, taken from the caller
     /// because both sides of a fight inflict conditions and only the caller
@@ -39,19 +40,41 @@ impl Game {
         if !applied {
             return;
         }
-        self.arm_status(target, effect.kind, effect.duration, effect.power);
-        match effect.kind {
-            StatusKind::Bleed => self.log_kind(kind, format!("{target_label} starts leaking!")),
-            StatusKind::Stun => self.log_kind(kind, format!("{target_label} stalls out!")),
-            StatusKind::Exposed => {
-                self.log_kind(kind, format!("{target_label} is left unpatched!"))
-            }
+        self.arm_status(target, &effect.kind, effect.duration, effect.power);
+        self.log_status_landing(&effect.kind, target_label, Some(kind));
+    }
+
+    /// Logs the landing line of status `id` on `target_label`, in `kind`
+    /// styling when given. The one function a move's rider and an ability's
+    /// `Debuff` both call, so the two cannot word the same status differently.
+    /// Silent for an id with no definition — `arm_status` armed nothing for it.
+    pub(crate) fn log_status_landing(
+        &mut self,
+        id: &StatusId,
+        target_label: &str,
+        kind: Option<MessageKind>,
+    ) {
+        let Some(line) = self
+            .world
+            .resource::<StatusDb>()
+            .get(id)
+            .map(|def| def.inflict_line(target_label))
+        else {
+            return;
+        };
+        match kind {
+            Some(kind) => self.log_kind(kind, line),
+            None => self.log(line),
         }
     }
 
-    /// Arms `kind` on `entity` for `duration` rounds, overwriting whatever
-    /// condition it was carrying (see `StatusEffects` — one slot, no
-    /// stacking) and marking it as landed this round.
+    /// Arms status `id` on `entity` for `duration` rounds and marks it as
+    /// landed this round, except a re-dose of a `Stack` entry. An id the
+    /// `StatusDb` does not define is a silent no-op, since loading already
+    /// warned. Already carried and `Refresh`: the larger remaining duration
+    /// and power win, one entry stays. `Stack{max}`: one more stack up to
+    /// `max`, and the new duration and power replace the old. Not carried: a
+    /// new entry with one stack.
     ///
     /// The only writer of `StatusEffects::active` outside the two that
     /// clear it (`Cleanse` and `end_battle`), which is what makes
@@ -63,86 +86,150 @@ impl Game {
     /// `StatusEffects` component — a condition needs somewhere to live, and
     /// the caller has no better answer than the target simply not being a
     /// combatant.
-    pub(crate) fn arm_status(
-        &mut self,
-        entity: Entity,
-        kind: StatusKind,
-        duration: u32,
-        power: i32,
-    ) {
+    pub(crate) fn arm_status(&mut self, entity: Entity, id: &StatusId, duration: u32, power: i32) {
+        if !self.world.resource::<StatusDb>().contains(id) {
+            return;
+        }
         let resist = self
             .world
             .get::<crate::components::Derived>(entity)
             .map_or(0, |d| d.status_resist);
-        if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
-            statuses.active = Some(ActiveStatus {
-                kind,
-                remaining: crate::progression::resisted_duration(duration, resist),
+        let remaining = crate::progression::resisted_duration(duration, resist);
+        let stacking = self
+            .world
+            .resource::<StatusDb>()
+            .get(id)
+            .map(|def| def.stacking);
+        let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) else {
+            return;
+        };
+        match statuses.active.iter_mut().find(|a| a.id == *id) {
+            Some(held) => {
+                match stacking {
+                    // Not re-flagged: a poisoner re-dosing every round would
+                    // otherwise never see its existing stacks tick.
+                    Some(StatusStacking::Stack { max }) => {
+                        held.stacks = (held.stacks + 1).min(max);
+                        held.remaining = remaining;
+                        held.power = power;
+                    }
+                    _ => {
+                        held.remaining = held.remaining.max(remaining);
+                        held.power = held.power.max(power);
+                        held.landed_this_round = true;
+                    }
+                }
+            }
+            None => statuses.active.push(ActiveStatus {
+                id: id.clone(),
+                remaining,
                 power,
+                stacks: 1,
                 landed_this_round: true,
-            });
+            }),
         }
     }
 
-    /// Whether `entity` currently has an active `Stun` status. Doesn't
-    /// consume it — the end-of-round tick does that, and the round the stun
-    /// landed in is exempt (see `ActiveStatus::landed_this_round`), so a
-    /// stun always survives into a round the victim has yet to act in.
-    pub(crate) fn is_stunned(&self, entity: Entity) -> bool {
-        self.world
-            .get::<StatusEffects>(entity)
-            .and_then(|s| s.active)
-            .is_some_and(|a| a.kind == StatusKind::Stun)
+    /// Sums `f` over every behaviour of every status `entity` carries, each
+    /// value times that entry's stacks. `f` picks out the behaviours it cares
+    /// about and returns their number: `|b| match b { EvasionCut(n) =>
+    /// Some(*n), _ => None }`. A carried id with no definition contributes
+    /// nothing.
+    pub(crate) fn status_sum(
+        &self,
+        entity: Entity,
+        f: impl Fn(&StatusBehaviour) -> Option<i32>,
+    ) -> i32 {
+        let Some(statuses) = self.world.get::<StatusEffects>(entity) else {
+            return 0;
+        };
+        let db = self.world.resource::<StatusDb>();
+        statuses
+            .active
+            .iter()
+            .filter_map(|a| db.get(&a.id).map(|def| (def, a.stacks as i32)))
+            .map(|(def, stacks)| def.behaviours.iter().filter_map(&f).sum::<i32>() * stacks)
+            .sum()
     }
 
-    /// End-of-round status upkeep for one combatant: `Bleed` deals its
-    /// damage, then the active effect's remaining-rounds counter ticks
-    /// down, clearing it once it hits 0.
+    /// `value` scaled by `(100 + sum of f) %`, floored at 0 so a deep enough
+    /// cut zeroes a stat but never inverts it. The one place a percent
+    /// behaviour is turned into a number, for attack and mitigation alike.
+    pub(crate) fn status_scaled(
+        &self,
+        entity: Entity,
+        value: i32,
+        f: impl Fn(&StatusBehaviour) -> Option<i32>,
+    ) -> i32 {
+        let percent = (100 + self.status_sum(entity, f)).max(0);
+        (value as f64 * percent as f64 / 100.0).round() as i32
+    }
+
+    /// Whether any status `entity` carries has a behaviour `pred` accepts.
+    pub(crate) fn has_behaviour(
+        &self,
+        entity: Entity,
+        pred: impl Fn(&StatusBehaviour) -> bool,
+    ) -> bool {
+        let Some(statuses) = self.world.get::<StatusEffects>(entity) else {
+            return false;
+        };
+        let db = self.world.resource::<StatusDb>();
+        statuses
+            .active
+            .iter()
+            .filter_map(|a| db.get(&a.id))
+            .any(|def| def.has_behaviour(&pred))
+    }
+
+    /// Whether `entity` carries a `SkipTurn` status. Doesn't consume it — the
+    /// end-of-round tick does that, and the round the stun landed in is
+    /// exempt (see `ActiveStatus::landed_this_round`), so a stun always
+    /// survives into a round the victim has yet to act in.
+    pub(crate) fn is_stunned(&self, entity: Entity) -> bool {
+        self.has_behaviour(entity, |b| matches!(b, StatusBehaviour::SkipTurn))
+    }
+
+    /// End-of-round status upkeep for one combatant, per entry: a
+    /// `DamagePerRound` status deals `power × stacks` and logs its tick line,
+    /// then the remaining-rounds counter ticks down, dropping the entry (with
+    /// its expiry line) once it hits 0.
     ///
-    /// The first call after a condition is armed does neither, and only
-    /// clears `ActiveStatus::landed_this_round` — see that field for why a
+    /// The first call after an entry is armed does neither, and only clears
+    /// `ActiveStatus::landed_this_round` — see that field for why a
     /// condition's own landing round must not be charged to it.
     pub(crate) fn tick_status_effects(&mut self, entity: Entity, label: &str) {
-        let Some(active) = self
+        let Some(entries) = self
             .world
             .get::<StatusEffects>(entity)
-            .and_then(|s| s.active)
+            .map(|s| s.active.clone())
         else {
             return;
         };
-
-        if active.landed_this_round {
-            if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
-                statuses.active = Some(ActiveStatus {
-                    landed_this_round: false,
-                    ..active
-                });
+        let mut kept = Vec::with_capacity(entries.len());
+        for mut entry in entries {
+            if entry.landed_this_round {
+                entry.landed_this_round = false;
+                kept.push(entry);
+                continue;
             }
-            return;
+            let def = self.world.resource::<StatusDb>().get(&entry.id).cloned();
+            if let Some(def) = &def
+                && def.has_behaviour(|b| matches!(b, StatusBehaviour::DamagePerRound))
+            {
+                let n = entry.power * entry.stacks as i32;
+                self.apply_damage(entity, n);
+                self.log(def.tick_line(label, n));
+            }
+            entry.remaining = entry.remaining.saturating_sub(1);
+            if entry.remaining > 0 {
+                kept.push(entry);
+            } else if let Some(def) = &def {
+                self.log(def.expire_line(label));
+            }
         }
-
-        if active.kind == StatusKind::Bleed {
-            self.apply_damage(entity, active.power);
-            self.log(format!("{label} leaks {} Integrity.", active.power));
-        }
-
-        let remaining = active.remaining.saturating_sub(1);
         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(entity) {
-            statuses.active = if remaining == 0 {
-                None
-            } else {
-                Some(ActiveStatus {
-                    remaining,
-                    ..active
-                })
-            };
-        }
-        if remaining == 0 {
-            match active.kind {
-                StatusKind::Bleed => self.log(format!("{label}'s leak is plugged.")),
-                StatusKind::Stun => self.log(format!("{label} resumes.")),
-                StatusKind::Exposed => self.log(format!("{label} re-validates.")),
-            }
+            statuses.active = kept;
         }
     }
 
@@ -352,10 +439,10 @@ impl Game {
     /// kinds have no per-tick effect of their own — they're read on demand
     /// by `field_buff_power` instead — so they fall through the wildcard.
     ///
-    /// `Regen` is a heal, not damage, so it writes `Stats::hp` directly
-    /// rather than going through `apply_damage` — that function is the
-    /// only path that *lowers* HP, and routing a heal through it would
-    /// break that invariant. `Trickle` writes `PowerReserve`, which only
+    /// `Regen` is a heal, not damage, so it goes through `restore_hp`
+    /// (which honours `HealBlock`) rather than `apply_damage` — that
+    /// function is the only path that *lowers* HP, and routing a heal
+    /// through it would break that invariant. `Trickle` writes `PowerReserve`, which only
     /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
     /// exactly that reason) — a companion carrying one is not an error, the
     /// write simply has nothing to land on.
@@ -372,10 +459,8 @@ impl Game {
     fn apply_field_buff_tick(&mut self, entity: Entity, kind: FieldBuffKind, power: i32) {
         match kind {
             FieldBuffKind::Regen => {
-                if self.creature_alive(entity)
-                    && let Some(mut stats) = self.world.get_mut::<Stats>(entity)
-                {
-                    stats.hp = (stats.hp + power).min(stats.max_hp);
+                if self.creature_alive(entity) {
+                    self.restore_hp(entity, power);
                 }
             }
             FieldBuffKind::Trickle => {

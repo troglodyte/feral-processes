@@ -232,12 +232,13 @@ fn a_seated_high_persistence_program_shrugs_a_status_off_sooner() {
     game.world
         .entity_mut(program)
         .insert(crate::components::StatusEffects::default());
-    game.arm_status(program, crate::components::StatusKind::Stun, 10, 0);
+    game.arm_status(program, &crate::statuses::StatusId::from("stun"), 10, 0);
     let remaining = game
         .world
         .get::<crate::components::StatusEffects>(program)
         .unwrap()
         .active
+        .first()
         .unwrap()
         .remaining;
     assert_eq!(remaining, 7);

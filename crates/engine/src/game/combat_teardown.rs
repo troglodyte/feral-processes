@@ -163,7 +163,7 @@ impl Game {
     /// but neither case may skip clearing your own side.
     pub(crate) fn clear_battle_status_effects(&mut self, player: Entity, wild: Option<Entity>) {
         if let Some(mut s) = self.world.get_mut::<StatusEffects>(player) {
-            s.active = None;
+            s.active.clear();
         }
         if let Some(mut b) = self.world.get_mut::<CombatBuff>(player) {
             b.active = None;
@@ -201,7 +201,7 @@ impl Game {
         hostiles.extend(wild);
         for hostile in hostiles {
             if let Some(mut s) = self.world.get_mut::<StatusEffects>(hostile) {
-                s.active = None;
+                s.active.clear();
             }
             if let Some(mut b) = self.world.get_mut::<CombatBuff>(hostile) {
                 b.active = None;
@@ -216,7 +216,7 @@ impl Game {
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
             if let Some(mut s) = self.world.get_mut::<StatusEffects>(companion) {
-                s.active = None;
+                s.active.clear();
             }
             // Companions hold `CombatBuff` too, now that a Rally or Shield
             // can be aimed at one. Left set, it never ticks down outside a

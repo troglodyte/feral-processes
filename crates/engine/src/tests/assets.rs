@@ -4011,6 +4011,7 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
     let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (classes, _) =
         crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+    let statuses = game.world.resource::<StatusDb>().clone();
     for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
         if !def.starter {
             continue;
@@ -4029,8 +4030,8 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
             def.id
         );
         assert_ne!(
-            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL),
-            crate::abilities::effect_label(def, 1, raised),
+            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL, &statuses),
+            crate::abilities::effect_label(def, 1, raised, &statuses),
             "starter {:?} prints the same numbers at {} and at {raised} — its magnitude \
              cannot be scaled, so the Routine step teaches nothing for the {axis:?} axis",
             def.id,
@@ -5794,5 +5795,87 @@ fn every_thought_trigger_has_a_shipped_def() {
             .get(trigger)
             .unwrap_or_else(|| panic!("{trigger:?} has no def in assets/thoughts/"));
         assert_ne!(def.intensity, 0.0, "{trigger:?} would be worth nothing");
+    }
+}
+
+/// Every status id a shipped ability or species move names, read from the
+/// raw directories: `Game::new` drops a rider naming an unknown status, so a
+/// census over the loaded db could never see a dangling one.
+fn shipped_status_references() -> Vec<(String, StatusId)> {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&dir.join("abilities")).unwrap();
+    let (species, _) = SpeciesDb::load_dir(&dir.join("species"), &abilities).unwrap();
+    let mut refs = Vec::new();
+    for def in abilities.all() {
+        match &def.effect {
+            crate::abilities::AbilityEffect::Debuff { kind, .. } => {
+                refs.push((format!("ability {}", def.id), kind.clone()));
+            }
+            crate::abilities::AbilityEffect::Damage {
+                status: Some(rider),
+                ..
+            } => refs.push((format!("ability {}", def.id), rider.kind.clone())),
+            _ => {}
+        }
+    }
+    for def in species.all() {
+        for mv in &def.moves {
+            if let Some(effect) = &mv.effect {
+                refs.push((
+                    format!("species {} move {}", def.id, mv.name),
+                    effect.kind.clone(),
+                ));
+            }
+        }
+    }
+    refs
+}
+
+fn shipped_statuses() -> StatusDb {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/statuses");
+    let (db, warnings) = StatusDb::load_dir(&dir).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "statuses should load cleanly: {warnings:?}"
+    );
+    db
+}
+
+#[test]
+fn every_status_id_in_the_shipped_assets_resolves() {
+    let statuses = shipped_statuses();
+    let refs = shipped_status_references();
+    assert!(!refs.is_empty(), "the census must actually find references");
+    for (who, id) in refs {
+        assert!(
+            statuses.contains(&id),
+            "{who} names unknown status {:?}",
+            id.0
+        );
+    }
+}
+
+#[test]
+fn every_shipped_status_is_armed_by_something() {
+    let statuses = shipped_statuses();
+    let mut referenced: std::collections::HashSet<StatusId> = shipped_status_references()
+        .into_iter()
+        .map(|(_, id)| id)
+        .collect();
+    for id in [
+        crate::tuning::FUMBLE_EXPOSED_STATUS,
+        crate::tuning::FUMBLE_CRASH_STATUS,
+    ] {
+        referenced.insert(StatusId::from(id));
+    }
+    for id in statuses.ids() {
+        assert!(
+            referenced.contains(id),
+            "status {:?} ships but no move, ability or fumble rung arms it",
+            id.0
+        );
+    }
+    for id in ["poison", "throttled", "locked"] {
+        assert!(statuses.contains(&StatusId::from(id)), "{id} should ship");
     }
 }

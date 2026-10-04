@@ -481,6 +481,10 @@ impl App {
             self.menu_origin = Some(self.mode);
             match rows[idx].target {
                 Mode::Perks => self.open_perks(),
+                Mode::Build => {
+                    self.build_category = None;
+                    self.mode = Mode::Build;
+                }
                 target => self.mode = target,
             }
         }

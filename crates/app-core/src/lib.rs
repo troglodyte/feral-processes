@@ -11,7 +11,8 @@ mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::building::{
-    Roster, RosterRow, StaffAction, StaffRow, Staffing, WorkOrderRow, roster_rows,
+    BuildMenu, BuildRow, Roster, RosterRow, StaffAction, StaffRow, Staffing, WorkOrderRow,
+    roster_rows,
 };
 pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
@@ -2602,6 +2603,10 @@ pub struct App {
     /// because that screen names it: the build menu's row is off screen by
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
+    /// The category `Mode::Build` has open, or `None` on its top level.
+    /// Cleared on the way in from the base menu, so the menu never reopens
+    /// inside a category the player left by some other door.
+    pub build_category: Option<feral_processes_engine::structures::StructureCategory>,
     /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s
     /// shape one verb over. Cleared by the commit and by Esc alike, so a
     /// cancelled placement leaves nothing behind to be spent later.

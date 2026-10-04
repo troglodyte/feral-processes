@@ -1,6 +1,7 @@
 //! Placing, staffing, demolishing and upgrading base structures.
 
 use crate::*;
+use feral_processes_engine::structures::{StructureCategory, StructureDef};
 use feral_processes_engine::{LineKey, LineReport, StructureReport};
 
 /// What `Mode::StructureAssign` is showing: the structure picked on the
@@ -123,7 +124,59 @@ pub fn roster_rows(reports: &[StructureReport], lines: &[LineReport]) -> Vec<Ros
     rows
 }
 
+/// One selectable row of the deploy menu.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BuildRow {
+    /// An index into `BuildMenu::defs`, deployed when picked.
+    Structure(usize),
+    /// A category, opened as a submenu when picked.
+    Category(StructureCategory),
+}
+
+/// What the deploy menu is showing: the buildable defs and the row list that
+/// indexes them, built once here — `Roster`'s reason — so
+/// `handle_build_key` and the gui's `draw_build_menu` cannot disagree about
+/// which row is which.
+pub struct BuildMenu {
+    pub defs: Vec<StructureDef>,
+    pub rows: Vec<BuildRow>,
+}
+
+impl BuildMenu {
+    pub fn of(game: &Game, open: Option<StructureCategory>) -> BuildMenu {
+        let defs = game.buildable_structure_defs();
+        let rows = build_rows(&defs, open);
+        BuildMenu { defs, rows }
+    }
+}
+
+/// The top level lists the Home directly and every other category once, in
+/// the order `StructureDb::all` groups them; an open category lists its
+/// structures. The Home is never a category row because a submenu holding
+/// one structure is a keypress spent on no choice.
+pub fn build_rows(defs: &[StructureDef], open: Option<StructureCategory>) -> Vec<BuildRow> {
+    let mut rows = Vec::new();
+    for (i, def) in defs.iter().enumerate() {
+        let category = def.category();
+        let row = match open {
+            Some(c) if c == category => BuildRow::Structure(i),
+            Some(_) => continue,
+            None if category == StructureCategory::Home => BuildRow::Structure(i),
+            None => BuildRow::Category(category),
+        };
+        if !rows.contains(&row) {
+            rows.push(row);
+        }
+    }
+    rows
+}
+
 impl App {
+    /// The deploy menu as it stands, opened on `build_category`.
+    pub fn build_menu(&self) -> Option<BuildMenu> {
+        Some(BuildMenu::of(self.game.as_ref()?, self.build_category))
+    }
+
     /// What can be said about `pending_post_structure`: the two standing
     /// instructions it can carry, and — if you are standing beside it — the
     /// offer to work it yourself.
@@ -304,14 +357,34 @@ impl App {
 
     pub(crate) fn handle_build_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.close_screen();
+            match self.build_category.take() {
+                Some(open) => {
+                    let rows = self.build_menu().map(|m| m.rows).unwrap_or_default();
+                    self.menu_selected = rows
+                        .iter()
+                        .position(|r| *r == BuildRow::Category(open))
+                        .unwrap_or(0);
+                }
+                None => self.close_screen(),
+            }
             return;
         }
-        let Some(game) = &self.game else { return };
-        let defs = game.buildable_structure_defs();
-        if let Some(idx) = self.selected_index(key, defs.len()) {
-            self.pending_structure = Some(defs[idx].id.clone());
-            self.mode = Mode::BuildDirection;
+        let Some(menu) = self.build_menu() else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, menu.rows.len()) else {
+            return;
+        };
+        match menu.rows[idx] {
+            BuildRow::Category(c) => {
+                self.build_category = Some(c);
+                self.menu_selected = 0;
+            }
+            BuildRow::Structure(i) => {
+                self.build_category = None;
+                self.pending_structure = Some(menu.defs[i].id.clone());
+                self.mode = Mode::BuildDirection;
+            }
         }
     }
 

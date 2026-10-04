@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::save;
+use feral_processes_engine::structures::StructureCategory;
 
 #[test]
 fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
@@ -1126,7 +1127,10 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// not `'b'`.
 fn deploy_second_structure(app: &mut App) {
     app.mode = Mode::Build;
+    // Row 2 is the first category after the Home; its row 1 is the first
+    // structure past the Home in `StructureDb::all` order.
     app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Right);
 }
 
@@ -1138,14 +1142,25 @@ fn deploy_second_structure(app: &mut App) {
 /// renumbers whatever sorts after it.
 fn choose_build_row(app: &mut App, id: &str) {
     open_via_menu(app, 'b', "Deploy a structure");
-    let idx = app
-        .game
-        .as_ref()
-        .expect("a running game")
-        .buildable_structure_defs()
+    let menu = app.build_menu().expect("a running game");
+    let def = menu
+        .defs
         .iter()
-        .position(|def| def.id == id)
+        .find(|def| def.id == id)
         .unwrap_or_else(|| panic!("{id} is not offered in the build menu"));
+    let category = BuildRow::Category(def.category());
+    if let Some(row) = menu.rows.iter().position(|r| *r == category) {
+        for _ in 0..row {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+    }
+    let menu = app.build_menu().unwrap();
+    let idx = menu
+        .rows
+        .iter()
+        .position(|r| matches!(r, BuildRow::Structure(i) if menu.defs[*i].id == id))
+        .expect("the structure is listed where its category says");
     for _ in 0..idx {
         app.handle_key(GameKey::Down);
     }
@@ -1830,4 +1845,91 @@ fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Structures);
     assert_eq!(app.menu_selected, 1, "back on the line row");
+}
+
+/// The deploy menu opens on its categories, with the Home the one structure
+/// listed directly: a submenu holding nothing but the Home is a keypress
+/// spent on no choice.
+#[test]
+fn the_deploy_menu_opens_on_categories_with_the_home_listed_directly() {
+    let mut app = test_app(4101);
+    open_via_menu(&mut app, 'b', "Deploy a structure");
+    assert_eq!(app.mode, Mode::Build);
+    let menu = app.build_menu().expect("a game is loaded");
+    let mut categories = Vec::new();
+    for row in &menu.rows {
+        match row {
+            BuildRow::Structure(i) => assert_eq!(
+                menu.defs[*i].category(),
+                StructureCategory::Home,
+                "only the Home is listed outside a category"
+            ),
+            BuildRow::Category(c) => categories.push(*c),
+        }
+    }
+    assert!(
+        categories.len() >= 2,
+        "a fresh run offers several categories, or this proves nothing: {categories:?}"
+    );
+    let mut deduped = categories.clone();
+    deduped.dedup();
+    assert_eq!(categories, deduped, "each category is one row");
+    assert!(!categories.contains(&StructureCategory::Home));
+}
+
+/// Picking a category opens that category's structures; picking one of them
+/// is the deploy it always was. Esc from inside walks back to the category
+/// list on the row it came from, and from there to the base menu.
+#[test]
+fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
+    let mut app = test_app(4102);
+    open_via_menu(&mut app, 'b', "Deploy a structure");
+    let top = app.build_menu().unwrap();
+    let (row, category) = top
+        .rows
+        .iter()
+        .enumerate()
+        .find_map(|(i, r)| match r {
+            BuildRow::Category(c) => Some((i, *c)),
+            BuildRow::Structure(_) => None,
+        })
+        .expect("a fresh run has a category");
+    app.handle_key(GameKey::Char(menu_shortcut(row)));
+    assert_eq!(app.mode, Mode::Build);
+    assert_eq!(app.build_category, Some(category));
+    assert_eq!(app.menu_selected, 0, "the submenu opens at its top");
+    let inner = app.build_menu().unwrap();
+    assert!(!inner.rows.is_empty());
+    for r in &inner.rows {
+        let BuildRow::Structure(i) = r else {
+            panic!("a category lists structures, not categories")
+        };
+        assert_eq!(inner.defs[*i].category(), category);
+    }
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::Build,
+        "Esc leaves the category, not the menu"
+    );
+    assert_eq!(app.build_category, None);
+    assert_eq!(app.menu_selected, row, "back on the category it opened");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseMenu);
+
+    // Back in, and through to a deploy.
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Build);
+    assert_eq!(
+        app.build_category, None,
+        "the menu reopens on its categories"
+    );
+    app.handle_key(GameKey::Char(menu_shortcut(row)));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::BuildDirection);
+    let BuildRow::Structure(i) = inner.rows[0] else {
+        unreachable!()
+    };
+    assert_eq!(app.pending_structure.as_deref(), Some(&*inner.defs[i].id));
 }

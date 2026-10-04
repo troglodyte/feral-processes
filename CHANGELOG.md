@@ -53,6 +53,13 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.3
+
+**The controls help page now lists `u`, the compass.** The destination
+picker has been on `u` on the zone map, but no help page mentioned it, so you
+could only find it by accident. The new line says what the picker lists and
+how to point the compass at a place or clear it.
+
 ## 0.15.2
 
 **A program can carry several status effects at once, Poison now stacks up

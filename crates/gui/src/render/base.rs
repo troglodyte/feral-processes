@@ -5,6 +5,7 @@ use super::outposts::draw_outpost_marks;
 use super::stack::draw_stack;
 use super::terrain::*;
 use super::*;
+use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
 use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
@@ -243,6 +244,10 @@ pub(super) fn draw_playing_base(
             cursor,
             anchor: app.excavate_anchor,
         });
+    // Before the `game` borrow, `plan`'s rule. No mode gate needed: a walk
+    // is only ever set on `Mode::Playing`, and any key that leaves the map
+    // ends it.
+    let travel = app.travel_goal();
     // Gated on the mode rather than left to `excavate_brush_label`'s own
     // `None`, `plan`'s reason: a brush left over from the last visit must
     // not draw a header on the ordinary playing map.
@@ -439,6 +444,7 @@ pub(super) fn draw_playing_base(
             glyph_px,
             &status,
             plan,
+            travel,
             // The party's own cell unless the camera has been sent
             // somewhere: `base_pos` is `Some` only in base space, which is
             // exactly where the pinned `Position` is the wrong answer.
@@ -604,6 +610,7 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
+    travel: Option<TravelGoal>,
     center: (i32, i32),
     reveal: bool,
 ) -> Vec<EntityView> {
@@ -1536,6 +1543,34 @@ fn draw_surface_map(
                 pane,
             )
         });
+    }
+    // Over every body and effect, since it marks one of them when the walk
+    // is a chase; resolved against `entities` — what this frame drew — so
+    // the outline follows the hostile and never lands where nothing is.
+    let destination = match travel {
+        Some(TravelGoal::Tile(x, y)) => Some((x, y)),
+        Some(TravelGoal::Creature(target)) => {
+            entities.iter().find(|e| e.entity == target).map(|e| e.pos)
+        }
+        None => None,
+    };
+    if let Some(cell) = destination {
+        let (px, py) = tile_origin_px(
+            cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        let culled = px >= pane.x + pane.w
+            || py >= pane.y + pane.h
+            || px + tile_px <= pane.x
+            || py + tile_px <= pane.y;
+        if !culled {
+            let size = tile_px - 1.0;
+            painter.rect_lines(px, py, size, size, 2.0, hud::palette::DESTINATION);
+        }
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
     entities
@@ -2797,11 +2832,97 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
         });
         (painted_images(&shapes).len(), painted_text(&shapes))
+    }
+
+    /// Every outline the map pane stroked in `DESTINATION`, for a frame
+    /// drawn with `travel` as the pending click-travel.
+    fn destination_outlines(
+        game: &mut Game,
+        travel: Option<TravelGoal>,
+    ) -> Vec<bevy_egui::egui::Rect> {
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                travel,
+                status.position,
+                false,
+            );
+        });
+        crate::paint::painted_rect_stroke_boxes(&shapes, hud::palette::DESTINATION)
+    }
+
+    /// A clicked tile is outlined on the map, one tile's width further
+    /// along for a goal one tile further along — and nothing is outlined
+    /// while no travel is pending.
+    #[test]
+    fn a_clicked_tile_is_outlined_as_the_destination() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let at = game.player_status().position;
+        let (tile_px, _) = crate::text::map_cell(1);
+
+        assert!(
+            destination_outlines(&mut game, None).is_empty(),
+            "no travel pending, no destination drawn"
+        );
+        let near = destination_outlines(&mut game, Some(TravelGoal::Tile(at.0 + 3, at.1)));
+        let far = destination_outlines(&mut game, Some(TravelGoal::Tile(at.0 + 4, at.1)));
+        assert_eq!(near.len(), 1, "one outline for one destination");
+        assert_eq!(far.len(), 1);
+        assert_eq!(far[0].min.x - near[0].min.x, tile_px);
+        assert_eq!(far[0].min.y, near[0].min.y);
+    }
+
+    /// A hostile chosen as the destination is outlined where it is drawn —
+    /// the same cell a click on its tile would have outlined — and a goal
+    /// naming a body the map did not draw outlines nothing rather than a
+    /// stale cell.
+    #[test]
+    fn a_targeted_hostile_is_outlined_where_it_is_drawn() {
+        let (mut game, hostile) = (0..50)
+            .find_map(|seed| {
+                let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
+                    .expect("the shipped assets must load");
+                let hostile = game.view_entities(12, 12).into_iter().find(|e| {
+                    e.is_hostile
+                        && !e.is_structure
+                        && drawn_on_surface_map(e.is_tamed, e.position_is_honest)
+                })?;
+                Some((game, hostile))
+            })
+            .expect("some seed under 50 puts a hostile in view");
+
+        let chased = destination_outlines(&mut game, Some(TravelGoal::Creature(hostile.entity)));
+        let clicked = destination_outlines(
+            &mut game,
+            Some(TravelGoal::Tile(hostile.pos.0, hostile.pos.1)),
+        );
+        assert_eq!(chased.len(), 1, "the chased hostile's cell is outlined");
+        assert_eq!(chased, clicked, "outlined on the cell it is drawn on");
+
+        // A hostile dissolved mid-chase: the goal still names it, and the
+        // map drew nothing under that name this frame.
+        let gone = Entity::PLACEHOLDER;
+        assert!(
+            destination_outlines(&mut game, Some(TravelGoal::Creature(gone))).is_empty(),
+            "a body the map did not draw gets no outline"
+        );
     }
 
     /// `drawn_map`, but the game starts from a character-creation `choice`
@@ -2845,6 +2966,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -3040,6 +3162,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3171,6 +3294,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3219,6 +3343,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -3354,6 +3479,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 center,
                 reveal,
@@ -3496,6 +3622,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3610,6 +3737,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3647,6 +3775,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -3736,6 +3865,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 status.position,
                 false,
             );
@@ -3792,6 +3922,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -4288,6 +4419,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -5120,7 +5252,8 @@ mod tests {
                 // that has arrived.
                 for _ in 0..2 {
                     draw_surface_map(
-                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center, false,
+                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, None, center,
+                        false,
                     );
                 }
             });
@@ -5701,6 +5834,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                None,
                 anchor,
                 false,
             );
@@ -5734,6 +5868,7 @@ mod tests {
                 tile_px,
                 glyph_px,
                 &status,
+                None,
                 None,
                 status.position,
                 false,
@@ -6039,6 +6174,7 @@ mod tests {
                     tile_px,
                     glyph_px,
                     &status,
+                    None,
                     None,
                     status.position,
                     false,

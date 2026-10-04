@@ -83,6 +83,15 @@ pub(crate) const WARN: Color = rgb(0xb8943f);
 /// washes sat 0.11 from it — close enough that a cell the player had marked
 /// and a machine that had stalled read as the same news.
 pub(crate) const PLAN: Color = rgb(0x4a7fd0);
+/// white — **where a click sent the party**: the outline on the cell a
+/// pending travel is headed for, or on the hostile it is chasing.
+///
+/// Not [`PLAYER`], though it is the player's own intent: an emulating
+/// player's tile already wears a `PLAYER` outline, and the two would read as
+/// the party standing at its own destination. Not [`PLAN`] either, which
+/// outlines committed dig marks in base space — a walk across a marked
+/// block would lose its end among them.
+pub(crate) const DESTINATION: Color = rgb(0xffffff);
 /// yellow — **where a thrown routine's centre may legally land**, drawn on
 /// the battle map only while one is being aimed.
 ///

@@ -60,4 +60,16 @@ impl App {
             .map_or(TravelGoal::Tile(x, y), |e| TravelGoal::Creature(e.entity));
         self.walk = Some(Walk::Travel { goal, in_base });
     }
+
+    /// Where the pending click-travel is headed, for the map to mark — read
+    /// off `walk` itself rather than kept beside it, so the mark goes the
+    /// moment anything ends the walk. A `Creature` goal is handed back as
+    /// the entity, not a tile: the map resolves it against the bodies it
+    /// drew this frame, which is what makes the mark follow the chase.
+    pub fn travel_goal(&self) -> Option<TravelGoal> {
+        match self.walk {
+            Some(Walk::Travel { goal, .. }) => Some(goal),
+            _ => None,
+        }
+    }
 }

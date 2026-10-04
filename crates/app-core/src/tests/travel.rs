@@ -357,3 +357,24 @@ fn a_toward_step_that_makes_no_progress_clears_the_walk() {
         "a Toward step that made no progress must clear the walk"
     );
 }
+
+/// The map's destination marker reads `travel_goal`: a click's goal, and
+/// nothing for an arrow's queued step, which names a direction rather than
+/// a place.
+#[test]
+fn travel_goal_is_the_clicked_goal_and_never_an_arrow_step() {
+    let mut app = test_app(2712);
+    let hostile = place_wild_program_east(&mut app, 4);
+    let start = player_pos(&app);
+    assert_eq!(app.travel_goal(), None, "test premise: nothing is queued");
+
+    app.travel_to(start.0 + 4, start.1);
+    assert_eq!(app.travel_goal(), Some(TravelGoal::Creature(hostile)));
+
+    app.walk = Some(Walk::Step(1, 0));
+    assert_eq!(
+        app.travel_goal(),
+        None,
+        "an arrow step is not a destination"
+    );
+}

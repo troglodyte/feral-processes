@@ -56,6 +56,9 @@ Reading and housekeeping:
 - L — history
 - N — the alert board: production blockers and program events, capped and dismissed with x or d.
   Opening it marks everything read.
+- u — the compass: home, the settlements and the Stack entrances you know of, each with its
+  heading and distance. Enter points the compass at the highlighted place, and the zone map keeps
+  that heading in view; X clears it. It reads the zone surface only, and costs no time.
 - f — filter the log: all, field, or base
 - tab — double the log pane's height, and back
 - space — pause the world, and resume. You can still act while paused; each action takes its

@@ -903,6 +903,8 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
     let manifest_tab = app.manifest_tab;
+    let manifest_is_own = app.manifest_is_own();
+    let level_up_reopenable = app.level_up_reopenable();
     let pending_field_routine = app.pending_field_routine;
     let pending_downed_program = app.pending_downed_program_index;
     let pending_structure = app.pending_structure.clone();
@@ -1240,6 +1242,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 // ones whose tile is the one they were beaten on.
                 watchable: pending_manifest.is_some_and(|e| game.watch_position(e).is_some()),
                 tab: manifest_tab,
+                level_up: manifest_is_own.then_some(level_up_reopenable),
             };
             draw_manifest(game, pending_manifest, nav, refusal, painter, m)
         }

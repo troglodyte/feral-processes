@@ -55,6 +55,11 @@ pub(super) struct ManifestNav {
     /// Which face of an owned program's sheet is up. Only read when the
     /// subject has a SOCIAL face at all.
     pub(super) tab: ManifestTab,
+    /// `[L]` reopens the last level-up page. `None` off your own sheet,
+    /// where the key is not bound; `Some(false)` greys it, since a key that
+    /// sometimes vanishes is one the player stops looking for.
+    /// `App::level_up_reopenable` is the one rule.
+    pub(super) level_up: Option<bool>,
 }
 
 pub(super) fn draw_manifest(
@@ -127,13 +132,30 @@ pub(super) fn draw_manifest(
         draw_section(section, *rect, painter, m);
     }
 
-    painter.ui(
-        footer_text(&nav, view.remembers()),
-        l.footer.x,
-        l.footer.y + m.font_size as f32,
-        m.small(),
-        TEXT_DIM,
-    );
+    let footer = footer_text(&nav, view.remembers());
+    let footer_y = l.footer.y + m.font_size as f32;
+    painter.ui(&footer, l.footer.x, footer_y, m.small(), TEXT_DIM);
+    if let Some((hint, color)) = level_up_hint(&nav) {
+        let x = l.footer.x + painter.measure_ui_advance(format!("{footer}{FOOTER_GAP}"), m.small());
+        painter.ui(hint, x, footer_y, m.small(), color);
+    }
+}
+
+/// Three spaces, not six: with all five keys offered, six ran 216px past
+/// the frame at 1280x1440 (`the_fullest_footer_fits_the_narrowest_window`).
+const FOOTER_GAP: &str = "   ";
+
+const LEVEL_UP_HINT: &str = "[L] level up";
+
+/// `[L]` trails the rest of the footer in its own run, so it alone can be
+/// greyed.
+fn level_up_hint(nav: &ManifestNav) -> Option<(&'static str, Color)> {
+    nav.level_up.map(|open| {
+        (
+            LEVEL_UP_HINT,
+            if open { TEXT_DIM } else { hud::palette::FAINT },
+        )
+    })
 }
 
 /// Every key the sheet answers, since this line is the only place any of
@@ -158,9 +180,7 @@ fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
     } else {
         "Esc back"
     });
-    // Three spaces, not six: with all five keys offered, six ran 216px past
-    // the frame at 1280x1440 (`the_fullest_footer_fits_the_narrowest_window`).
-    footer.join("   ")
+    footer.join(FOOTER_GAP)
 }
 
 /// One meter on the sheet.
@@ -2566,6 +2586,7 @@ mod tests {
                         back_to_list: false,
                         watchable,
                         tab: ManifestTab::Stats,
+                        level_up: None,
                     },
                     None,
                     p,
@@ -2598,11 +2619,34 @@ mod tests {
                         back_to_list,
                         watchable,
                         tab: ManifestTab::Stats,
+                        level_up: None,
                     };
                     assert!(footer_text(&nav, false).contains("[D] dossier"));
                 }
             }
         }
+    }
+
+    /// `[L]` is drawn only on your own sheet, in the footer's colour when it
+    /// would open the page and greyed when there is nothing to spend.
+    #[test]
+    fn the_level_up_hint_greys_rather_than_hides() {
+        let nav = |level_up| ManifestNav {
+            cyclable: false,
+            back_to_list: false,
+            watchable: false,
+            tab: ManifestTab::Stats,
+            level_up,
+        };
+        assert_eq!(level_up_hint(&nav(None)), None);
+        assert_eq!(
+            level_up_hint(&nav(Some(true))),
+            Some((LEVEL_UP_HINT, TEXT_DIM))
+        );
+        assert_eq!(
+            level_up_hint(&nav(Some(false))),
+            Some((LEVEL_UP_HINT, hud::palette::FAINT))
+        );
     }
 
     /// `[R]` is offered exactly when `ManifestView::remembers` says there is
@@ -2614,6 +2658,7 @@ mod tests {
             back_to_list: false,
             watchable: false,
             tab: ManifestTab::Stats,
+            level_up: None,
         };
         assert!(footer_text(&nav, true).contains("[R] memories"));
         assert!(!footer_text(&nav, false).contains("[R]"));
@@ -2648,22 +2693,36 @@ mod tests {
     /// fit the frame at the narrowest supported window and the largest font.
     #[test]
     fn the_fullest_footer_fits_the_narrowest_window() {
-        let nav = ManifestNav {
+        let program = ManifestNav {
             cyclable: true,
             back_to_list: true,
             watchable: true,
             tab: ManifestTab::Stats,
+            level_up: None,
         };
+        // Your own sheet is the only one with `[L]`, and never has `[w]` (the
+        // player walks no base: `Game::program_role` is `None` untamed) or
+        // `[R]` (only an owned program remembers).
+        let own = ManifestNav {
+            watchable: false,
+            level_up: Some(true),
+            ..program
+        };
+        let footers = [
+            footer_text(&program, true),
+            format!("{}{FOOTER_GAP}{LEVEL_UP_HINT}", footer_text(&own, false)),
+        ];
         for h in [720.0, 1080.0, 1440.0] {
             let m = ui_metrics(h);
             let l = manifest_layout(1280.0, h, 4, &[], &m);
-            let (width, _) =
-                with_painter(|p| p.measure_ui_advance(footer_text(&nav, true), m.small()));
-            assert!(
-                width <= l.footer.w,
-                "at 1280x{h} the footer is {width}px against {}px",
-                l.footer.w
-            );
+            for footer in &footers {
+                let (width, _) = with_painter(|p| p.measure_ui_advance(footer, m.small()));
+                assert!(
+                    width <= l.footer.w,
+                    "at 1280x{h} `{footer}` is {width}px against {}px",
+                    l.footer.w
+                );
+            }
         }
     }
 

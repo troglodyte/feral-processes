@@ -17,9 +17,10 @@ the sheet.
 
 Only your own numbers do anything. They are where your stat points go, at creation and at each
 level-up, and each point above an attribute's baseline moves the stats it feeds — the Points screen
-lists them beside each attribute. Entropy is the odd one out: each point makes your attacks more
-likely to land unchecked and more likely to fumble, so it widens both ends at once. A program's
-numbers are there to be read and change nothing in a fight.
+lists them beside each attribute. Close the level-up page without spending and L on your own
+manifest brings it back for as long as points are left to place. Entropy is the odd one out: each
+point makes your attacks more likely to land unchecked and more likely to fumble, so it widens both
+ends at once. A program's numbers are there to be read and change nothing in a fight.
 
 A program's numbers are settled the moment it comes into existence, from where it was and what it
 is, and they never move again. Two programs of the same species found in different places are

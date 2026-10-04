@@ -1026,6 +1026,28 @@ fn area_research_rolls_every_program_in_the_group_one_catalyst_each() {
     assert_eq!(breakers(&game), 2, "three programs, three catalysts");
 }
 
+/// Each roll is capped below certain, so sweep seeds for runs where the whole
+/// group was taken and check none of them leaves a battle with no enemies.
+#[test]
+fn area_decompile_that_takes_the_whole_group_ends_the_battle() {
+    let mut whole_groups = 0;
+    for seed in 0..30 {
+        let (mut game, _) = area_fight(940 + seed, 3, 5);
+        with_radius(&mut game, 1);
+        let before = game.pet_count();
+        let player = game.player_entity();
+        game.attempt_decompile(0, player);
+        if game.pet_count() == before + 3 {
+            whole_groups += 1;
+            assert!(
+                game.world.get_resource::<BattleState>().is_none(),
+                "seed {seed}: the group was taken but the battle stayed open"
+            );
+        }
+    }
+    assert!(whole_groups > 0, "no seed took the whole group");
+}
+
 #[test]
 fn area_decompile_stops_when_the_catalysts_run_out() {
     let (mut game, _) = area_fight(903, 4, 2);

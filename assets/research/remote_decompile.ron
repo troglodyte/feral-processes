@@ -1,0 +1,10 @@
+(
+    id: "remote_decompile",
+    name: "Remote Decompile",
+    description: "Decompile a downed program from a few squares away instead of standing next to it.",
+    cost: 30,
+    materials: [("bytecode_block", 12), ("charge_coil", 6)],
+    requires: ["routine_fabrication"],
+    requires_subject: true,
+    decompiler: Some((range: Some(4))),
+)

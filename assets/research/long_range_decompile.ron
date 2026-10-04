@@ -1,0 +1,11 @@
+(
+    id: "long_range_decompile",
+    name: "Long-Range Decompile",
+    description: "Decompile from much farther off, so a program that falls far from you is still worth taking apart.",
+    cost: 55,
+    materials: [("bytecode_block", 16), ("logic_wafer", 8)],
+    min_zone: 2,
+    requires: ["remote_decompile"],
+    requires_subject: true,
+    decompiler: Some((range: Some(6))),
+)

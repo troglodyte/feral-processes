@@ -622,7 +622,20 @@ impl Game {
                     .filter_map(|id| tools.get(id.as_str()).map(|t| t.name.as_str())),
             )
             .collect();
-        (!names.is_empty()).then(|| format!("Unlocks: {}", names.join(", ")))
+        let mut lines = Vec::new();
+        if !names.is_empty() {
+            lines.push(format!("Unlocks: {}", names.join(", ")));
+        }
+        // Derived from the field, not the prose, `unlocks`' own reason.
+        if let Some(up) = &def.decompiler {
+            if let Some(range) = up.range.filter(|r| *r > 0) {
+                lines.push(format!("Decompile reach: {range}"));
+            }
+            if let Some(radius) = up.radius.filter(|r| *r > 0) {
+                lines.push(format!("Decompile area: radius {radius}"));
+            }
+        }
+        (!lines.is_empty()).then(|| lines.join("; "))
     }
 
     /// "Bytecode Block x3 into Hardened Shell." — the one place a conversion

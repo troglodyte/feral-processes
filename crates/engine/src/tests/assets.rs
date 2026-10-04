@@ -5064,8 +5064,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 32,
-        "expected the shipped base tree's 32 nodes; a count that moved means a node was \
+        checked, 36,
+        "expected the shipped base tree's 36 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5879,4 +5879,41 @@ fn every_shipped_status_is_armed_by_something() {
     for id in ["poison", "throttled", "locked"] {
         assert!(statuses.contains(&StatusId::from(id)), "{id} should ship");
     }
+}
+
+/// The decompiler chain: four shipped nodes, each one rung past the last, all
+/// reachable from `routine_fabrication`. Reach and area climb separately, so
+/// each is checked strictly increasing along its own half.
+#[test]
+fn the_decompiler_research_chain_is_loaded_reachable_and_strictly_increasing() {
+    let game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::research::ResearchDb>();
+    let chain = [
+        "remote_decompile",
+        "long_range_decompile",
+        "broadcast_decompile",
+        "wide_broadcast_decompile",
+    ];
+    let mut previous: Option<&str> = None;
+    let (mut range, mut radius) = (0, 0);
+    for id in chain {
+        let def = db
+            .get(id)
+            .unwrap_or_else(|| panic!("{id} should be shipped"));
+        let up = def.decompiler.as_ref().expect("a decompiler node");
+        let expected_parent = previous.unwrap_or("routine_fabrication");
+        assert_eq!(def.requires, vec![expected_parent.to_string()], "{id}");
+        if let Some(r) = up.range {
+            assert!(r > range, "{id} must raise the range past {range}");
+            range = r;
+        }
+        if let Some(r) = up.radius {
+            assert!(r > radius, "{id} must raise the radius past {radius}");
+            radius = r;
+        }
+        previous = Some(id);
+    }
+    assert!(range > 0 && radius > 0, "both halves are covered");
+    let shipped = db.all().filter(|d| d.decompiler.is_some()).count();
+    assert_eq!(shipped, chain.len(), "no stray decompiler node");
 }

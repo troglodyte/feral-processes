@@ -1024,6 +1024,7 @@ fn no_research_node_is_left_unlocking_nothing() {
             !def.unlocks_structures.is_empty()
                 || !def.unlocks_recipes.is_empty()
                 || !def.unlocks_tools.is_empty()
+                || def.decompiler.is_some()
                 || def.teaches.is_some(),
             "{} unlocks nothing and is dead weight in the tree",
             node.id
@@ -3417,4 +3418,23 @@ fn decompile_reach_ignores_an_unresearched_node() {
         .0
         .remove("t_a");
     assert_eq!(game.decompile_reach().range, None);
+}
+
+/// A decompiler node says what it grants from its `decompiler` field, not from
+/// the prose, so a retuned range cannot leave the menu quoting the old one.
+#[test]
+fn a_decompiler_node_reports_its_reach_or_area() {
+    let mut game = Game::new(718, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
+
+    assert_eq!(
+        research_node(&game, "remote_decompile").unlocks.as_deref(),
+        Some("Decompile reach: 4")
+    );
+    assert_eq!(
+        research_node(&game, "broadcast_decompile")
+            .unlocks
+            .as_deref(),
+        Some("Decompile area: radius 1")
+    );
 }

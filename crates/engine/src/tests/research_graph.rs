@@ -41,11 +41,11 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
         Some(&vec!["automation", "commerce", "paging", "power_grid"])
     );
     assert_eq!(by_tier.get(&1).map(Vec::len), Some(10));
-    assert_eq!(by_tier.get(&2).map(Vec::len), Some(7));
-    assert_eq!(by_tier.get(&3).map(Vec::len), Some(6));
-    assert_eq!(by_tier.get(&4).map(Vec::len), Some(3));
-    assert_eq!(by_tier.get(&5).map(Vec::len), Some(2));
-    assert_eq!(g.cells.len(), 32, "every shipped base node gets a cell");
+    assert_eq!(by_tier.get(&2).map(Vec::len), Some(8));
+    assert_eq!(by_tier.get(&3).map(Vec::len), Some(7));
+    assert_eq!(by_tier.get(&4).map(Vec::len), Some(4));
+    assert_eq!(by_tier.get(&5).map(Vec::len), Some(3));
+    assert_eq!(g.cells.len(), 36, "every shipped base node gets a cell");
     assert_eq!(g.tiers, 6);
     assert_eq!(g.widest, 10, "tier 1 is the crowded one now");
 }
@@ -240,8 +240,8 @@ fn left_and_right_move_between_tiers_landing_on_the_nearest_slot() {
     let landed_cell = g.cell(&landed).expect("a cell");
     assert_eq!(landed_cell.tier, 2, "right moves exactly one tier");
     assert_eq!(
-        landed_cell.slot, 6,
-        "tier 2 has seven slots, so the nearest to slot 7 is its last"
+        landed_cell.slot, 7,
+        "tier 2 has eight slots, so slot 7 is its last"
     );
     let root = g
         .cells

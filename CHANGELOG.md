@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Four new research nodes let you decompile from farther away and take in a whole group at once.** Remote Decompile and Long-Range Decompile raise how far from a downed program you can decompile it (to 4, then 6); Broadcast Decompile and Wide Broadcast Decompile make one decompile reach the downed programs around its target as well, one catalyst each, out to radius 1, then 2. Each node's menu row names what it grants.
+
 ## 0.15.3
 
 **The controls help page now lists `u`, the compass.** The destination

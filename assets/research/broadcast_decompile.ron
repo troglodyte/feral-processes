@@ -1,0 +1,11 @@
+(
+    id: "broadcast_decompile",
+    name: "Broadcast Decompile",
+    description: "One decompile now reaches the downed programs around its target too. Each one still costs a catalyst.",
+    cost: 120,
+    materials: [("routine_disk", 8), ("logic_wafer", 12)],
+    min_zone: 3,
+    requires: ["long_range_decompile"],
+    requires_subject: true,
+    decompiler: Some((radius: Some(1))),
+)

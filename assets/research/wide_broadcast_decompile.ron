@@ -1,0 +1,11 @@
+(
+    id: "wide_broadcast_decompile",
+    name: "Wide Broadcast Decompile",
+    description: "A broader sweep: a decompile reaches downed programs two squares out from its target.",
+    cost: 220,
+    materials: [("logic_wafer", 14), ("charge_coil", 16)],
+    min_zone: 4,
+    requires: ["broadcast_decompile"],
+    requires_subject: true,
+    decompiler: Some((radius: Some(2))),
+)

@@ -58,7 +58,6 @@ spec resolves to a release tag.
 | `2026-10-01-sulking-behaviours-design` | **built**, unplayed; path-pinned | `note_sabotage` and `ConsumeSource::Sabotage` in `crates/engine/`; `rival_beside` in `crates/engine/src/game/base/morale.rs`; `sulking` in `crates/engine/src/interactions.rs` |
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
-| `2026-10-03-data-defined-status-effects-design` | approved, **unbuilt** | `StatusDef` and `assets/statuses/` exist nowhere |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | **superseded** | departure memories (`let_go`, `lost_in_battle`, ...) shipped with `2026-09-30-bonds-and-social-tab-design` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
@@ -454,6 +453,7 @@ shipped each, not the one containing the spec's first commit.
 | `2026-10-02-production-lines-design` | One worker per production line; a line is derived, never stored | `v0.14.6` |
 | `2026-10-02-derived-programs-design` | Owned programs derive their stats from attributes; a level grants attribute points a program can hold and spend; mining reads the program's own Analysis | `v0.15.0`; `ProgramBase` in `crates/engine/src/components.rs`, `Game::seat_derived`, save format 34, `docs/measurements/2026-10-02-derived-programs.md` |
 | `2026-10-03-power-siphon-design` | A base structure that holds a staff program and supplies +4 grid power while it is held; the program builds a grudge and comes out at 25% Integrity or less | `v0.15.1`; `crates/engine/src/game/base/siphon.rs`, `ProgramRole::Siphoned`, `StructureDef::siphons`, `assets/memories/siphoned.ron`, `Mode::Siphon` |
+| `2026-10-03-data-defined-status-effects-design` | Statuses are data files; a body carries several at once; Poison stacks; Throttled and Locked; `restore_hp` is the heal chokepoint | `v0.15.2`; `crates/engine/src/statuses.rs`, `assets/statuses/`, `arm_status`/`status_sum` in `crates/engine/src/game/combat_status.rs`, `StatusTagView` |
 
 ## Four rows that need a footnote
 

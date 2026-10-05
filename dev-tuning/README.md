@@ -190,5 +190,7 @@ min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
 dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
 
 Read `docs/measurements/2026-10-05-base-bench-chains-baseline.md` before
-trusting a proposal: `chains` is one small base, and a target on a machine's
-running share can be met by slowing the machine down.
+trusting a proposal. On `chains` nothing drains machine output, so every
+machine fills its buffer once and clogs; `economy.ron` is a mechanics demo
+and its proposal should not be applied. A running-share target can also be
+met just by slowing a machine down.

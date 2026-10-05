@@ -54,6 +54,14 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-10-05 — Base bench: `chains` baseline and a first tune](2026-10-05-base-bench-chains-baseline.md)
+  — on `chains` nothing drains machine output, so each machine fills its
+  buffer once and clogs: the assembly bay made **10** units at capacity 10
+  (4.0% running), the refinery 20 at capacity 20 (4.8%). The tune's zero
+  error came from enlarging and slowing a fill-once buffer, so the proposal
+  is not to be applied and `economy.ron` is a mechanics demo. `chains` needs
+  a drain or steady-state measures before it can be tuned for flow.
+
 - [2026-10-02 — What a program's level points buy, and the mining spread](2026-10-02-derived-programs.md)
   — the default Parity/Analysis split beats all-Parity, all-Footprint and
   all-Bandwidth in all six cells (levels 10 and 20, `g` 1.0 / 1.25 / 1.5),

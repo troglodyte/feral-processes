@@ -1,3 +1,9 @@
+// MECHANICS DEMO, NOT A VALID OBJECTIVE. On `chains` nothing drains machine
+// output, so every machine fills its buffer once and clogs: these targets
+// measure run length and buffer capacity, and a proposal from this file
+// should not be applied. See
+// docs/measurements/2026-10-05-base-bench-chains-baseline.md.
+//
 // What the base economy should look like on `chains`, and which numbers the
 // search may move to get there. Run: `bench tune dev-tuning/economy.ron`.
 //

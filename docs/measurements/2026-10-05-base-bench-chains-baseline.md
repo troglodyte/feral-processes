@@ -2,14 +2,20 @@
 
 ## The claim
 
-On the shipped `chains` template the base is mostly stalled, not busy: over
-5000 ticks the Assembly Bay runs 4% of the time and is clogged 92%, mining
-nodes run 1-14% (clogged 86-97%), the refinery runs 5%, and the compiler is
-starved the whole run and makes nothing. Lines end at 4.0 and 2.0 units per
-1000 ticks. A 25 x 16 CEM `tune` against three range targets reached zero
-error on its search seeds and on hold-out seeds, in 3m20s. Replication of
-nothing; all of this is new. The proposal is a demonstration of the
-instrument on one small base, not a balance change (see below).
+On the shipped `chains` template nothing drains machine output: each machine
+fills its output buffer once and then clogs for the rest of the run. Over
+5000 ticks the Assembly Bay makes 10 units (its capacity is 10) and runs 4.0%
+of the time; the refinery makes 20 (capacity 20) and runs 4.8%; the compiler
+is starved throughout and makes nothing. So `units` is about the machine's
+capacity and `running_share` is about `capacity x ticks_per_unit / ticks`,
+which is an artifact of run length, not a property of the economy.
+
+The 25 x 16 CEM `tune` in `dev-tuning/economy.ron` reached zero error, but
+only by enlarging and slowing a fill-once buffer (the tuned
+`patch_routine` count, 28, is the proposed assembly_bay capacity, 28).
+**Do not apply that proposal.** `chains` cannot be tuned for flow until a
+template has something that drains its output or the measures are taken in
+steady state. The instrument works; this template is the wrong subject.
 
 ## How to reproduce it
 
@@ -52,8 +58,8 @@ empty. `economy.labour_unworked` is therefore a dead measure on this
 template and is not a target. (The "-0.00" printed earlier was an empty f32
 sum, fixed in its own commit.)
 
-**Targets** (`dev-tuning/economy.ron`), chosen from the clog shape: every
-machine is clogged on output, so the shipped values sit well below the bands.
+**Targets** (`dev-tuning/economy.ron`) were chosen from the clog shape, and
+they only watch fill-once artifacts:
 
 | measure | range | shipped (3000 ticks, hold-out seeds) | proposed |
 |---|---|---|---|
@@ -65,22 +71,34 @@ Tune: error before/after on search seeds 0.3116 -> 0.0000; hold-out 0.3259
 -> 0.0000 ("holds up"). Knobs moved: mining_node `work.ticks_per_unit`
 10 -> 19, assembly_bay `assembles.ticks_per_unit` 20 -> 30, assembly_bay
 `capacity` 10 -> 28, refinery `capacity` 20 -> 39, assembly_bay
-`power_draw` 3 -> 1.
+`power_draw` 3 -> 1. "Holds up" here only means the artifact was
+reproduced on other seeds.
+
+## What the tune did, read plainly
+
+- **The targets are run-length artifacts.** `items.patch_routine` equals the
+  assembly bay's capacity, so raising the capacity is the only way to raise
+  it; no flow is being improved.
+- **Slower machines score as busier.** A longer `ticks_per_unit` keeps a
+  machine running longer per unit, so `running_share` rises with it. The
+  search found that and used it.
+- **`power_draw` 3 -> 1 is drift.** No target observes power, so the knob had
+  no gradient and the move carries no information.
+- The refinery capacity change is likewise unobserved by any target except
+  through the same fill-once chain.
 
 ## What it does not say
 
-- **One small two-line base.** The proposal is tuned to `chains` alone: a
-  demonstration of the instrument, not a balance change. A captured
-  late-game factory should become the hold-out template when one exists.
-- **A running-share target can be met by slowing a machine.** The search
-  raised both `ticks_per_unit` values (a slower machine is busy longer per
-  unit) and the share targets rose with them; only the patch_routine target
-  pushes the other way, and the extra capacity is what delivered it. Do not
-  apply the ticks changes without asking whether "busier" was what was
-  wanted. Output-based targets are the safer kind.
+- **One small two-line base** with no output drain. Nothing here is a
+  statement about a base whose machines are emptied.
 - Hold-out seeds barely differ from search seeds on this near-deterministic
-  base, so "holds up" is weak evidence of generalisation.
-- Zero error means inside the ranges, which were my reading of the clog
-  shape, not a design statement about what `chains` should do.
+  base, so "holds up" is weak evidence even of the artifact generalising.
 - Only asset-level numbers move; `tuning.rs` constants are out of reach.
 - The compiler stays starved: no knob here feeds it.
+
+## What would make it usable
+
+A template with a drain (something that consumes each machine's output), or
+a measure taken after the buffers have filled (steady state), so that
+`running_share` and `items` reflect throughput rather than capacity. Until
+then `economy.ron` is a demonstration of the mechanics, not an objective.

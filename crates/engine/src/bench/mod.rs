@@ -47,7 +47,17 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     play(game, opts)
 }
 
-fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
+fn play(game: Game, opts: RunOptions) -> Result<BenchReport, String> {
+    play_with(game, opts, |_, _| {})
+}
+
+/// `play`, with `before_tick(game, n)` run ahead of tick `n`, so a test can
+/// stop the clock partway through, which no public call does.
+fn play_with(
+    mut game: Game,
+    opts: RunOptions,
+    mut before_tick: impl FnMut(&mut Game, u64),
+) -> Result<BenchReport, String> {
     // Installed after the load, as `arena` does, so one save under several
     // seeds is several different runs and any one replays alone.
     game.world
@@ -72,6 +82,7 @@ fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
     let mut ticks = 0;
     let mut stopped_at = None;
     for _ in 0..opts.ticks {
+        before_tick(&mut game, ticks);
         if !advance(&mut game) {
             stopped_at = Some(ticks);
             break;
@@ -134,13 +145,13 @@ fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
             let status_ticks = fold_status(
                 &initial,
                 edges.get(&pos).map_or(&[][..], Vec::as_slice),
-                opts.ticks,
+                ticks,
             );
             let running = status_ticks.get("running").copied().unwrap_or(0);
             MachineReport {
                 pos,
                 kind,
-                running_share: share(running, opts.ticks),
+                running_share: share(running, ticks),
                 units: units.get(&pos).copied().unwrap_or(0),
                 status_ticks,
             }
@@ -156,10 +167,10 @@ fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
                 .unwrap_or(0);
             LineBench {
                 key,
-                output_per_1000: if opts.ticks == 0 {
+                output_per_1000: if ticks == 0 {
                     0.0
                 } else {
-                    made as f32 * 1000.0 / opts.ticks as f32
+                    made as f32 * 1000.0 / ticks as f32
                 },
                 status_ticks: tally.status_ticks,
             }
@@ -167,11 +178,11 @@ fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
         .collect();
     let mean_unworked: BTreeMap<String, f32> = unworked
         .iter()
-        .map(|(duty, &n)| (duty.name().to_string(), share(n, opts.ticks)))
+        .map(|(duty, &n)| (duty.name().to_string(), share(n, ticks)))
         .collect();
     let labour = LabourBench {
-        mean_wanted: share(wanted, opts.ticks),
-        mean_staffed: share(staffed, opts.ticks),
+        mean_wanted: share(wanted, ticks),
+        mean_staffed: share(staffed, ticks),
         mean_unworked_total: mean_unworked.values().fold(0.0, |a, v| a + v),
         mean_unworked,
     };
@@ -274,6 +285,43 @@ mod tests {
         .unwrap();
         assert_eq!(report.stopped_at, Some(0));
         assert_eq!(report.ticks, 0);
+    }
+
+    #[test]
+    fn a_run_stopped_midway_is_folded_and_rated_over_the_ticks_it_ran() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.spawn((
+            Structure {
+                kind: "bay".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            MachineStatus::Running,
+        ));
+        let report = play_with(
+            game,
+            RunOptions {
+                ticks: 50,
+                seed: 1,
+                orders: vec![],
+            },
+            |game, n| {
+                if n == 20 {
+                    game.world
+                        .resource_mut::<crate::resources::GameOver>()
+                        .reason = Some("test".into());
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(report.stopped_at, Some(20));
+        assert_eq!(report.ticks, 20);
+        let machines = &report.economy.machines;
+        assert!(!machines.is_empty(), "the fixture machine reports a status");
+        for m in machines {
+            assert_eq!(m.status_ticks.values().sum::<u64>(), 20, "{m:?}");
+            let running = m.status_ticks.get("running").copied().unwrap_or(0);
+            assert_eq!(m.running_share, running as f32 / 20.0);
+        }
     }
 
     #[test]

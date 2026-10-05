@@ -807,4 +807,17 @@ mod tests {
         let e = search(&obj, &assets_dir(), &chains_save(), &mut |_| {}).unwrap_err();
         assert!(e.contains("glyph"), "{e}");
     }
+
+    #[test]
+    fn a_knob_on_an_unspelled_field_fails_before_any_tick() {
+        let mut obj = objective();
+        obj.knobs[0] = Knob {
+            file: "interactions/commiserate.ron".into(),
+            field: "sulking".into(),
+            min: 0.0,
+            max: 5.0,
+        };
+        let e = search(&obj, &assets_dir(), &chains_save(), &mut |_| {}).unwrap_err();
+        assert!(e.contains("spells out"), "{e}");
+    }
 }

@@ -1,5 +1,6 @@
 (
     id: "branch_hazard",
+    fx: Some("explosion"),
     name: "Pipeline Stall Group",
     description: "Damage every member of one group, with a chance to stall each one",
     target: WholeEnemyGroup,

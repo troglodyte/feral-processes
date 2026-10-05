@@ -1,5 +1,6 @@
 (
     id: "race_condition",
+    fx: Some("zap"),
     name: "Hard Lock Group",
     description: "Stall every member of one group for 1 round",
     target: WholeEnemyGroup,

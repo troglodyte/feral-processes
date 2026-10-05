@@ -57,6 +57,7 @@ fn tamper_def(kind: TamperKind, duration: u32) -> AbilityDef {
         triggers: None,
         shape: None,
         range: None,
+        fx: None,
     }
 }
 

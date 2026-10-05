@@ -1,0 +1,7 @@
+(
+    id: "heal",
+    color: Some(Green),
+    travel: Ball,
+    impact: [Flash],
+    shake: 0.0,
+)

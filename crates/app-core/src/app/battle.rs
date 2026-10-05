@@ -260,6 +260,7 @@ impl App {
         let Some(game) = &mut self.game else { return };
         let cues = game.take_swing_cues();
         game.take_bolts();
+        game.take_routine_cues();
         game.take_tactical_fx();
         if let Some(loudest) = cues
             .into_iter()

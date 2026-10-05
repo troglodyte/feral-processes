@@ -1,5 +1,6 @@
 (
     id: "thermal_throttle",
+    fx: Some("zap"),
     name: "Thermal Throttle Single",
     description: "Cut one target's attack by a quarter for 3 rounds",
     target: OneEnemyGroupFront,

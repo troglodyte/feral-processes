@@ -1,5 +1,6 @@
 (
     id: "brownout",
+    fx: Some("zap"),
     name: "Throttle Everyone",
     // A sap: a negative buff power subtracts wherever it lands. At this
     // scope that also clears the Defend stance off every hostile that

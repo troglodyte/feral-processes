@@ -1,5 +1,6 @@
 (
     id: "black_ice_pick",
+    fx: Some("slash"),
     name: "Black ICE Pick",
     description: "Premium weapon. Built for black ICE, and it captures as well as it kills.",
     value: Some(90),

@@ -1,5 +1,6 @@
 (
     id: "kinetic_edge",
+    fx: Some("slash"),
     name: "Kinetic Edge",
     description: "Scavenged weapon. A cleaner strike than anything else you'll find lying around.",
     value: Some(7),

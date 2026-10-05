@@ -1,5 +1,6 @@
 (
     id: "throttle",
+    fx: Some("zap"),
     name: "Throttle Group",
     // A sap: a negative buff power subtracts wherever it lands. Note that a
     // combatant holds one buff at a time, so this also clears a target's

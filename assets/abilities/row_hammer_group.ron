@@ -1,5 +1,6 @@
 (
     id: "row_hammer_group",
+    fx: Some("explosion"),
     name: "Row Hammer Group",
     // Accuracy comes down as the scope widens, the way every other family's
     // does — but it stays far above the rung's ordinary bonus, because

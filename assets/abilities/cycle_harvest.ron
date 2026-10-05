@@ -1,5 +1,6 @@
 (
     id: "cycle_harvest",
+    fx: Some("zap"),
     name: "Leech Everyone",
     // The lowest damage-per-Power rate in the game, and deliberately so:
     // the return is taken off every hostile on the field at once, so a

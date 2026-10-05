@@ -1,5 +1,6 @@
 (
     id: "null_route",
+    fx: Some("zap"),
     name: "Hard Lock Everyone",
     description: "Stall every hostile program for 1 round",
     target: AllEnemies,

@@ -1,5 +1,6 @@
 (
     id: "hot_patch",
+    fx: Some("heal"),
     name: "Patch Single v1.0",
     description: "Restore 6–10 Integrity to one ally",
     target: OneAlly,

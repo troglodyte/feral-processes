@@ -1,0 +1,6 @@
+(
+    id: "explosion",
+    travel: Streak,
+    impact: [Explosion(radius: 1.0), Smoke],
+    shake: 1.0,
+)

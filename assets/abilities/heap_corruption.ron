@@ -1,5 +1,6 @@
 (
     id: "heap_corruption",
+    fx: Some("zap"),
     name: "Bit Rot Group",
     description: "Leaves every member of one group leaking for 3 rounds",
     target: WholeEnemyGroup,

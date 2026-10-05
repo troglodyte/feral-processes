@@ -1,5 +1,6 @@
 (
     id: "broadcast_storm",
+    fx: Some("explosion"),
     name: "Packet Shred Everyone",
     description: "Damage 19–31 to every hostile program on the field",
     target: AllEnemies,

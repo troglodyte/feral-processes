@@ -1020,6 +1020,12 @@ pub struct AbilityDef {
     /// the other a distance in cells.
     #[serde(default)]
     pub range: Option<AbilityRange>,
+    /// Names the battle effect (`assets/effects/`) this routine plays on a
+    /// battle map. Presentational: the engine copies it onto a `RoutineCue`
+    /// and never reads it. `#[serde(default)]`, absent meaning the
+    /// renderer's default.
+    #[serde(default)]
+    pub fx: Option<String>,
 }
 
 /// What makes a passive routine fire.

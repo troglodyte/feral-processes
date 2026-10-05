@@ -1,5 +1,6 @@
 (
     id: "stack_smash",
+    fx: Some("beam"),
     name: "Fork Bomb Single",
     description: "Damage one target, likely leaving it leaking",
     target: OneEnemyGroupFront,

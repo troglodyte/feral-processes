@@ -1,5 +1,6 @@
 (
     id: "cold_sample",
+    fx: Some("zap"),
     name: "Cold Sample Single",
     description: "Pins one target's decisions at the argmax for 3 rounds. Battle maps only.",
     target: OneEnemyGroupFront,

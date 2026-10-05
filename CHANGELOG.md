@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Attacks on a battle map now look like what they are.** Ranged weapons fire a train of pulses, melee weapons slash, heavy single hits draw a beam, debuffs and drains crackle, and blast routines go off as an explosion that shakes the screen. Before, every attack was the same streak. Each weapon and routine picks its look from a file in `assets/effects/` through an `fx:` line, so mods can add their own; anything without one keeps the plain streak.
+
+**Heals and buffs now show on the battle map too.** A heal sends a green ball to its target and the tiles it covers flash green; buffs do the same in cyan.
+
 ## 0.15.5
 
 **Crawlers, Drones, Overseers, Proxies, Rootkits, Sentinels, Sprites, SubProcesses, Trojans, Wintermutes and Worms now have their own art on the map too,** so every program has a picture instead of a letter. Each is a mix of two of the first six programs' art, drawn in the colour that program was already shown in; programs that share a colour are told apart by shade and shape, and the two bosses wear crowns.

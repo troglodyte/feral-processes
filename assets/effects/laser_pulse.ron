@@ -1,0 +1,6 @@
+(
+    id: "laser_pulse",
+    muzzle: true,
+    travel: Pulses(count: 3),
+    impact: [Sparks],
+)

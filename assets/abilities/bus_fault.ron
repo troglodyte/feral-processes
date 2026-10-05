@@ -1,5 +1,6 @@
 (
     id: "bus_fault",
+    fx: Some("explosion"),
     name: "Pipeline Stall Everyone",
     description: "Damage the whole field, with a chance to stall each target",
     target: AllEnemies,

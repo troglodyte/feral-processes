@@ -1,5 +1,6 @@
 (
     id: "overclock_core",
+    fx: Some("slash"),
     name: "Overclock Core",
     description: "Researched weapon. Pushes your clock past spec.",
     value: Some(22),

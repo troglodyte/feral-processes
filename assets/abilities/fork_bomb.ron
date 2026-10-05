@@ -1,5 +1,6 @@
 (
     id: "fork_bomb",
+    fx: Some("explosion"),
     name: "Fork Bomb Group",
     description: "Damage every member of one group, with a chance to leave each one leaking",
     target: WholeEnemyGroup,

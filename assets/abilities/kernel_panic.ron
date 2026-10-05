@@ -1,5 +1,6 @@
 (
     id: "kernel_panic",
+    fx: Some("beam"),
     name: "Packet Shred Single",
     description: "Heavy damage to one target",
     target: OneEnemyGroupFront,

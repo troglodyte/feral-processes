@@ -1,5 +1,6 @@
 (
     id: "bastion",
+    fx: Some("buff"),
     name: "Bastion Party",
     description: "-12% incoming damage to the whole party for 3 rounds",
     target: WholeParty,

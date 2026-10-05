@@ -1,5 +1,6 @@
 (
     id: "write_lock",
+    fx: Some("zap"),
     name: "Write Lock Single",
     description: "One target cannot be healed for 3 rounds",
     target: OneEnemyGroupFront,

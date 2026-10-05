@@ -1,5 +1,6 @@
 (
     id: "siphon_cycles",
+    fx: Some("zap"),
     name: "Leech Single",
     description: "Damage one target and restore half of it to yourself",
     target: OneEnemyGroupFront,

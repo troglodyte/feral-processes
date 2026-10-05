@@ -1,5 +1,6 @@
 (
     id: "backprop",
+    fx: Some("zap"),
     name: "Backprop Single",
     description: "Damage one target and restore two-fifths of it to yourself",
     target: OneEnemyGroupFront,

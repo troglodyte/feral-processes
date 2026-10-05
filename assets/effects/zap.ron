@@ -1,0 +1,5 @@
+(
+    id: "zap",
+    travel: Zap,
+    impact: [Zap],
+)

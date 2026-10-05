@@ -56,7 +56,15 @@
   and at one cell that is a short flick across a single square, which *is*
   the melee feedback — a kind field would make a renderer restate the melee
   threshold to pick between two draws, the third copy the door above exists
-  to prevent. **The colour is carried and not looked up**, because a fumble's
+  to prevent. What the cue gained is an **`fx` id** (`ItemDef.fx` of the
+  wielded weapon, `AbilityDef.fx` for a routine): data names the draw, the
+  engine copies it and never reads it, and an unknown id falls back to
+  `streak`. A routine's blast is a second list in `BoltQueue`
+  (`RoutineCue`, cells from `reach::shape_cells`), not a new Resource.
+  **Every travel primitive finishes inside `BOLT_SECONDS`**, or a richer
+  effect is still in flight when the next body acts. `EffectLibrary` lives in
+  `Fx.library`, and `Impact::Sparks` draws nothing because the engine's `Hit`
+  cue already bursts. **The colour is carried and not looked up**, because a fumble's
   Recoil rung can kill the body that swung and a lookup would have nothing to
   ask. Pushed **before** `resolve_and_apply_attack` and inside the recipients
   loop, so a body that dies to the blow still gets its streak and a sweep

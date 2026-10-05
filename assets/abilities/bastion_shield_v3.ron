@@ -1,5 +1,6 @@
 (
     id: "bastion_shield_v3",
+    fx: Some("buff"),
     name: "Bastion Single v3.0",
     description: "-20% incoming damage to one ally for 4 rounds",
     target: OneAlly,

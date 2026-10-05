@@ -1,5 +1,6 @@
 (
     id: "fine_tune",
+    fx: Some("buff"),
     name: "Fine Tune Single",
     description: "+5 ATK to one ally for 3 rounds",
     target: OneAlly,

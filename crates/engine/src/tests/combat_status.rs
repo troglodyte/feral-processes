@@ -1849,6 +1849,7 @@ fn test_ability(
         triggers: None,
         shape: None,
         range: None,
+        fx: None,
     }
 }
 

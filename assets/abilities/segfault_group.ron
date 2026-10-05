@@ -1,5 +1,6 @@
 (
     id: "segfault_group",
+    fx: Some("explosion"),
     name: "Segfault Group",
     // Segfault's Single rungs sat within a point of Packet Shred's on every
     // axis, so promoting the family without giving it an identity would

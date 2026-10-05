@@ -1,5 +1,6 @@
 (
     id: "prompt_injection",
+    fx: Some("zap"),
     name: "Prompt Injection Single",
     description: "Turns one target against its own side for 1 round. Battle maps only.",
     target: OneEnemyGroupFront,

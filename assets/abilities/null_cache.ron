@@ -1,5 +1,6 @@
 (
     id: "null_cache",
+    fx: Some("zap"),
     name: "Null Cache Group",
     // Exclusive: Wintermute's. The shape no ordinary routine has — Leech
     // Group drains a third of what it deals off one group, this returns all

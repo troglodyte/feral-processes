@@ -1,5 +1,6 @@
 (
     id: "rollback_v1",
+    fx: Some("heal"),
     name: "Rollback Single v1.0",
     description: "Restore 8–12 Integrity to one ally",
     target: OneAlly,

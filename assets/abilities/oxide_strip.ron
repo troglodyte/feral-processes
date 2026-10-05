@@ -1,5 +1,6 @@
 (
     id: "oxide_strip",
+    fx: Some("zap"),
     name: "Etch Everyone",
     description: "+9% damage taken by every hostile program on the field for 3 rounds",
     target: AllEnemies,

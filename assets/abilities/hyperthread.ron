@@ -1,5 +1,6 @@
 (
     id: "hyperthread",
+    fx: Some("buff"),
     name: "Hyperthread Single v2.0",
     description: "+6 ATK to one ally for 4 rounds",
     target: OneAlly,

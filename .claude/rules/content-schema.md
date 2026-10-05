@@ -33,6 +33,9 @@ that are not in any one README.
   `KERNEL_RING_MAX * LEVELS_PER_RING` tiers of two choices each, or the tree is
   skipped with a warning; six censuses in `tests/assets.rs` hold shipped trees
   to the design, so a new node kind costs every tree an existing choice.
+- **Effects** (`assets/effects/*.ron`) are read by gui only, never the engine;
+  items and abilities name one with `fx`, and a census in `effects.rs` holds
+  every named id to a real file.
 - **Help pages** are markdown, not RON: five block rules, no front matter; the
   filename is both the ordering and the link id.
 - **Perks are half data, deliberately.** `assets/perks/*.ron` is a catalogue

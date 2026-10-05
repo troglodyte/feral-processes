@@ -12,12 +12,14 @@
 
 use std::collections::HashMap;
 
+use crate::effect_draw;
+use crate::effects::{EffectDef, EffectLibrary, Impact};
 use crate::paint::{Color, Painter};
 use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::{
-    BoltCue, EffectKind, Entity, Game, LogLine, MessageKind, SpeechCue, TacticalFxCue,
+    BoltCue, EffectKind, Entity, Game, LogLine, MessageKind, RoutineCue, SpeechCue, TacticalFxCue,
     TacticalFxKind, TransitCue, VisualEffect,
 };
 
@@ -76,7 +78,20 @@ const _: () = assert!(
 /// thickness — a profiled hostile's projected walk is `BoltCue`'s line
 /// vocabulary, not a second-guessed weight.
 pub(crate) const BOLT_THICKNESS_PX: f32 = 2.5;
-const BOLT_HEAD_FRACTION: f32 = 0.35;
+pub(crate) const BOLT_HEAD_FRACTION: f32 = 0.35;
+
+/// Screen shake. Impacts add their effect's `shake` to a stored energy, the
+/// energy is capped so a volley cannot throw the board off the screen, and it
+/// decays exponentially with this time constant.
+const SHAKE_DECAY_SECONDS: f32 = 0.3;
+const SHAKE_MAX_ENERGY: f32 = 1.5;
+/// Below this the energy is zeroed rather than left to decay forever.
+const SHAKE_FLOOR: f32 = 0.01;
+/// The widest the board is ever thrown, in tiles, at full (1.0) energy.
+const SHAKE_MAX_OFFSET_TILES: f32 = 0.2;
+/// How often the wobble picks a new direction.
+const SHAKE_WOBBLE_HZ: f64 = 30.0;
+const SHAKE_Y_SALT: u32 = 0x68E3_1DA4;
 
 /// The two cell centres a line between them runs through.
 ///
@@ -552,7 +567,7 @@ fn spark_spread(t: f32) -> f32 {
 /// Deliberately a function of the tile and the spark index and *nothing
 /// else* — there is no time argument, which is what stops a spark being
 /// re-rolled every frame and strobing instead of flying.
-fn spark_scatter(pos: (i32, i32), index: u32) -> f32 {
+pub(crate) fn spark_scatter(pos: (i32, i32), index: u32) -> f32 {
     let mut h = (pos.0 as u32).wrapping_mul(0x9E37_79B9)
         ^ (pos.1 as u32).wrapping_mul(0x85EB_CA6B)
         ^ index.wrapping_mul(0xC2B2_AE35);
@@ -766,8 +781,14 @@ struct SpeechMark {
 struct Bolt {
     from: (i32, i32),
     to: (i32, i32),
+    /// Every covered cell of an aimed routine; empty for a single blow, whose
+    /// impacts land on `to`.
+    cells: Vec<(i32, i32)>,
     color: GlyphColor,
+    def: EffectDef,
     start: f64,
+    /// Whether its impact has already added its shake.
+    shaken: bool,
 }
 
 /// Which body the battle camera is aimed at, and how long it may stay there.
@@ -820,6 +841,10 @@ pub struct Fx {
     walkers: Vec<Walker>,
     speech: Vec<SpeechMark>,
     bolts: Vec<Bolt>,
+    /// Named looks for `BoltCue.fx`; only the built-in `streak` until
+    /// `effects::load` fills it.
+    pub(crate) library: EffectLibrary,
+    shake_energy: f32,
     floats: Vec<FloatingNumber>,
     bars: HashMap<u64, BarTracking>,
     camera: Option<(f32, f32)>,
@@ -838,6 +863,7 @@ pub struct FrameCues {
     pub effects: Vec<VisualEffect>,
     pub transits: Vec<TransitCue>,
     pub bolts: Vec<BoltCue>,
+    pub routines: Vec<RoutineCue>,
     pub tactical_fx: Vec<TacticalFxCue>,
     pub speech: Vec<SpeechCue>,
 }
@@ -848,6 +874,7 @@ impl FrameCues {
             effects: game.take_effects(),
             transits: game.take_transits(),
             bolts: game.take_bolts(),
+            routines: game.take_routine_cues(),
             tactical_fx: game.take_tactical_fx(),
             speech: game.take_speech(),
         }
@@ -866,6 +893,8 @@ impl Fx {
             walkers: Vec::new(),
             speech: Vec::new(),
             bolts: Vec::new(),
+            library: EffectLibrary::default(),
+            shake_energy: 0.0,
             floats: Vec::new(),
             bars: HashMap::new(),
             camera: None,
@@ -903,10 +932,16 @@ impl Fx {
             effects,
             transits,
             bolts,
+            routines,
             tactical_fx,
             speech,
         } = cues;
+        let dt = (now - self.now).max(0.0) as f32;
         self.now = now;
+        self.shake_energy *= (-dt / SHAKE_DECAY_SECONDS).exp();
+        if !self.enabled || !in_battle || self.shake_energy < SHAKE_FLOOR {
+            self.shake_energy = 0.0;
+        }
         if self.enabled {
             for e in effects {
                 self.flashes.push(TileFlash {
@@ -930,11 +965,27 @@ impl Fx {
                 });
             }
             for cue in bolts {
+                let def = self.library.get(cue.fx.as_deref()).clone();
                 self.bolts.push(Bolt {
                     from: cue.from,
                     to: cue.to,
+                    cells: Vec::new(),
                     color: cue.color,
+                    def,
                     start: now,
+                    shaken: false,
+                });
+            }
+            for cue in routines {
+                let def = self.library.get(cue.fx.as_deref()).clone();
+                self.bolts.push(Bolt {
+                    from: cue.from,
+                    to: cue.aim,
+                    cells: cue.cells,
+                    color: cue.color,
+                    def,
+                    start: now,
+                    shaken: false,
                 });
             }
             // Split by kind here rather than at the engine: a hit reuses
@@ -978,7 +1029,18 @@ impl Fx {
             .retain(|&(_, start)| now - start < LANDING_FLASH_SECONDS);
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
-        self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
+        // Each impact's shake lands on arrival, after the flight, so a
+        // blast kicks the board when it hits rather than when it is fired.
+        if self.enabled && in_battle {
+            for bolt in self.bolts.iter_mut().filter(|b| !b.shaken) {
+                if now - bolt.start >= effect_draw::travel_seconds(bolt.def.travel) {
+                    bolt.shaken = true;
+                    self.shake_energy = (self.shake_energy + bolt.def.shake).min(SHAKE_MAX_ENERGY);
+                }
+            }
+        }
+        self.bolts
+            .retain(|b| now - b.start < effect_draw::blow_seconds(&b.def).max(BOLT_SECONDS));
         self.speech.retain(|s| now - s.start < SPEECH_SECONDS);
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
@@ -990,6 +1052,9 @@ impl Fx {
             self.tactical_flashes.clear();
             self.cell_marks.clear();
             self.landings.clear();
+            // A blow still in flight would shake the base map's camera on
+            // arrival, after the battle it was fired in has ended.
+            self.bolts.clear();
         }
     }
 
@@ -1259,17 +1324,51 @@ impl Fx {
         tile_px: f32,
     ) {
         for bolt in &self.bolts {
-            let along = ((self.now - bolt.start) / BOLT_SECONDS).clamp(0.0, 1.0) as f32;
-            let ((ax, ay), (bx, by)) = cell_centers(&to_px, tile_px, bolt.from, bolt.to);
-            let tail = (along - BOLT_HEAD_FRACTION).max(0.0);
-            let point = |t: f32| (ax + (bx - ax) * t, ay + (by - ay) * t);
-            let (hx, hy) = point(along);
-            let (tx, ty) = point(tail);
-            let base = palette::glyph(bolt.color);
-            // Fades as it travels, so the eye is pulled to the arrival
-            // rather than left looking at a beam.
-            let color = Color::new(base.r, base.g, base.b, base.a * (1.0 - along * 0.4));
-            painter.line(tx, ty, hx, hy, BOLT_THICKNESS_PX, color);
+            let age = self.now - bolt.start;
+            let (ca, cb) = cell_centers(&to_px, tile_px, bolt.from, bolt.to);
+            let color = palette::glyph(bolt.def.color.unwrap_or(bolt.color));
+            if bolt.def.muzzle {
+                effect_draw::draw_muzzle(painter, bolt.from, ca, tile_px, age);
+            }
+            let flight = effect_draw::travel_seconds(bolt.def.travel);
+            if age < flight {
+                let along = (age / BOLT_SECONDS).clamp(0.0, 1.0) as f32;
+                effect_draw::draw_travel(
+                    painter,
+                    bolt.def.travel,
+                    (bolt.from, bolt.to),
+                    (ca, cb),
+                    tile_px,
+                    along,
+                    color,
+                );
+            }
+            let landed = age - flight;
+            if landed < 0.0 {
+                continue;
+            }
+            let cells: &[(i32, i32)] = if bolt.cells.is_empty() {
+                std::slice::from_ref(&bolt.to)
+            } else {
+                &bolt.cells
+            };
+            for impact in &bolt.def.impact {
+                // An area covers every cell; a single-cell impact lands on
+                // the aim alone.
+                let area = matches!(
+                    impact,
+                    Impact::Explosion { .. } | Impact::Smoke | Impact::Flash
+                );
+                let targets: &[(i32, i32)] = if area {
+                    cells
+                } else {
+                    std::slice::from_ref(&bolt.to)
+                };
+                for &cell in targets {
+                    let (c, _) = cell_centers(&to_px, tile_px, cell, cell);
+                    effect_draw::draw_impact(painter, *impact, cell, c, tile_px, landed, color);
+                }
+            }
         }
     }
 
@@ -1441,7 +1540,21 @@ impl Fx {
             camera_step(previous.1, target.1, dt, max_lag),
         );
         self.camera = Some(cam);
-        (cam.0 - target.0, cam.1 - target.1)
+        let (sx, sy) = self.shake_offset();
+        (cam.0 - target.0 + sx, cam.1 - target.1 + sy)
+    }
+
+    /// The board's thrown offset this frame, in tiles: a wobble hashed off
+    /// the frame's time bucket, scaled by the stored energy and never more
+    /// than `SHAKE_MAX_OFFSET_TILES`. Zero with effects off.
+    fn shake_offset(&self) -> (f32, f32) {
+        if !self.enabled || self.shake_energy <= 0.0 {
+            return (0.0, 0.0);
+        }
+        let bucket = (self.now * SHAKE_WOBBLE_HZ).floor() as i32;
+        let wobble = |salt: u32| spark_scatter((bucket, 0), salt) * 2.0 - 1.0;
+        let reach = self.shake_energy.min(1.0) * SHAKE_MAX_OFFSET_TILES;
+        (wobble(0) * reach, wobble(SHAKE_Y_SALT) * reach)
     }
 
     /// Which cell the **battle** camera should be aimed at, given whose turn
@@ -1756,6 +1869,7 @@ mod tests {
             from: (0, 0),
             to: (3, 0),
             color: GlyphColor::Cyan,
+            fx: None,
         };
         fx.begin_frame(
             0.0,
@@ -1795,6 +1909,7 @@ mod tests {
                     from: (0, 0),
                     to: (2, 0),
                     color: GlyphColor::Cyan,
+                    fx: None,
                 }],
                 ..Default::default()
             },
@@ -1803,6 +1918,170 @@ mod tests {
         let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
         let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
         assert_eq!(crate::paint::painted_line_count(&shapes), 0);
+    }
+
+    fn with_library() -> Fx {
+        let mut fx = Fx::new();
+        fx.library = EffectLibrary::load_dir(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/effects"),
+        );
+        fx
+    }
+
+    fn blast(id: &str) -> FrameCues {
+        FrameCues {
+            bolts: vec![BoltCue {
+                from: (0, 0),
+                to: (2, 0),
+                color: GlyphColor::Cyan,
+                fx: Some(id.to_string()),
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// Two impacts in the same frame add, a third is held at the cap, and the
+    /// energy then decays to exactly zero.
+    #[test]
+    fn shake_stacks_additively_caps_and_decays_to_zero() {
+        let mut fx = with_library();
+        let mut cues = blast("explosion");
+        cues.bolts.extend(blast("explosion").bolts);
+        fx.begin_frame(0.0, cues, true);
+        fx.begin_frame(BOLT_SECONDS + 0.001, FrameCues::default(), true);
+        let two = fx.shake_energy;
+        assert!(two > 1.0, "two blasts should stack above one: {two}");
+        assert!(two <= SHAKE_MAX_ENERGY);
+
+        let mut cues = blast("explosion");
+        cues.bolts.extend(blast("explosion").bolts);
+        cues.bolts.extend(blast("explosion").bolts);
+        let t = BOLT_SECONDS + 0.01;
+        fx.begin_frame(t, cues, true);
+        fx.begin_frame(t + BOLT_SECONDS + 0.001, FrameCues::default(), true);
+        assert_eq!(fx.shake_energy, SHAKE_MAX_ENERGY, "energy exceeded its cap");
+
+        let mut now = t + BOLT_SECONDS + 0.001;
+        let mut last = fx.shake_energy;
+        for _ in 0..400 {
+            now += 0.016;
+            fx.begin_frame(now, FrameCues::default(), true);
+            assert!(fx.shake_energy <= last);
+            last = fx.shake_energy;
+        }
+        assert_eq!(fx.shake_energy, 0.0);
+    }
+
+    #[test]
+    fn shake_moves_the_battle_camera_by_less_than_its_cap() {
+        let mut fx = with_library();
+        fx.begin_frame(0.0, blast("explosion"), true);
+        fx.begin_frame(BOLT_SECONDS + 0.001, FrameCues::default(), true);
+        let (ox, oy) = fx.camera_offset((0, 0), 0.0, None);
+        assert!(ox != 0.0 || oy != 0.0, "a live shake moved nothing");
+        assert!(ox.abs() <= SHAKE_MAX_OFFSET_TILES && oy.abs() <= SHAKE_MAX_OFFSET_TILES);
+    }
+
+    /// An explosion that is a fight's last blow lands after the fight is
+    /// over; its shake must not carry onto the base map's camera.
+    #[test]
+    fn a_blast_in_flight_when_the_battle_ends_does_not_shake_the_base() {
+        let mut fx = with_library();
+        fx.begin_frame(0.0, blast("explosion"), true);
+        fx.begin_frame(BOLT_SECONDS + 0.001, FrameCues::default(), false);
+        assert_eq!(fx.shake_energy, 0.0);
+        assert_eq!(fx.camera_offset((0, 0), 0.0, None), (0.0, 0.0));
+    }
+
+    #[test]
+    fn a_routine_cue_draws_an_explosion_on_every_covered_cell() {
+        let mut fx = with_library();
+        fx.begin_frame(
+            0.0,
+            FrameCues {
+                routines: vec![RoutineCue {
+                    from: (0, 0),
+                    aim: (3, 0),
+                    cells: vec![(3, 0), (4, 0)],
+                    color: GlyphColor::Cyan,
+                    fx: Some("explosion".into()),
+                }],
+                ..Default::default()
+            },
+            true,
+        );
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        let lines_at = |fx: &mut Fx, at: f64| {
+            fx.begin_frame(at, FrameCues::default(), true);
+            let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+            crate::paint::painted_line_count(&shapes)
+        };
+        // Mid-flight: one streak. After arrival: a ring on each of two cells.
+        let flight = lines_at(&mut fx, BOLT_SECONDS * 0.5);
+        let landed = lines_at(&mut fx, BOLT_SECONDS + 0.1);
+        assert!(flight >= 1);
+        assert!(landed >= 2 * 16, "expected a ring per cell, got {landed}");
+    }
+
+    /// Draws `id`'s cue over `cells` and returns (mid-flight, landed) rect
+    /// and polygon counts.
+    fn heal_counts(cells: Vec<(i32, i32)>) -> ((usize, usize), (usize, usize)) {
+        let mut fx = with_library();
+        fx.begin_frame(
+            0.0,
+            FrameCues {
+                routines: vec![RoutineCue {
+                    from: (0, 0),
+                    aim: (3, 0),
+                    cells,
+                    color: GlyphColor::Cyan,
+                    fx: Some("heal".into()),
+                }],
+                ..Default::default()
+            },
+            true,
+        );
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        let mut at = |t: f64| {
+            fx.begin_frame(t, FrameCues::default(), true);
+            let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+            let polys = shapes
+                .iter()
+                .filter(|cs| matches!(&cs.shape, bevy_egui::egui::Shape::Path(_)))
+                .count();
+            (crate::paint::painted_rect_widths(&shapes).len(), polys)
+        };
+        (at(BOLT_SECONDS * 0.5), at(BOLT_SECONDS + 0.05))
+    }
+
+    #[test]
+    fn a_heal_flies_a_ball_then_flashes_every_covered_cell() {
+        let ((rects, balls), (landed_rects, _)) = heal_counts(vec![(3, 0), (4, 0), (5, 0)]);
+        assert_eq!(rects, 0, "no flash before the ball lands");
+        assert_eq!(balls, 1);
+        assert_eq!(landed_rects, 3);
+    }
+
+    #[test]
+    fn a_single_cell_heal_flashes_the_aim() {
+        let (_, (landed_rects, _)) = heal_counts(vec![]);
+        assert_eq!(landed_rects, 1);
+    }
+
+    /// A disabled `Fx` draws no pulses or explosion and produces no shake.
+    #[test]
+    fn a_disabled_fx_draws_no_effect_and_no_shake() {
+        let mut fx = with_library();
+        fx.enabled = false;
+        for id in ["laser_pulse", "explosion"] {
+            fx.begin_frame(0.0, blast(id), true);
+            fx.begin_frame(BOLT_SECONDS + 0.01, FrameCues::default(), true);
+            let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+            let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+            assert_eq!(crate::paint::painted_line_count(&shapes), 0);
+        }
+        assert_eq!(fx.shake_energy, 0.0);
+        assert_eq!(fx.camera_offset((0, 0), 0.0, None), (0.0, 0.0));
     }
 
     /// Both alert kinds start the log pane's border flash. A tantrum is the

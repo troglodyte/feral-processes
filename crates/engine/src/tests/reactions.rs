@@ -343,13 +343,20 @@ fn a_fizzled_routine_keeps_its_price_and_lands_nothing() {
             .get();
         let before = game.message_history(usize::MAX).len();
 
+        game.take_routine_cues();
         assert!(game.tactical_use_routine(0, at));
+        let queued = game.take_routine_cues().len();
 
         let cut_off = game
             .message_history(usize::MAX)
             .into_iter()
             .skip(before)
             .any(|line| line.text.contains("is cut off"));
+        assert_eq!(
+            queued,
+            usize::from(!cut_off),
+            "a fizzled routine queues no effect cue, a landed one queues one"
+        );
         if cut_off {
             // **Probed on the log and not on a body.** A fizzle in a
             // one-on-one fight is the player going down, which closes the

@@ -869,19 +869,37 @@ impl SpeechQueue {
 /// would pin a flash to an unrelated tile out in the zone — exactly the
 /// convenience the `Position` seam refuses.
 ///
-/// **No kind field.** The streak travels `from` → `to` by one rule, and at
-/// one cell that is a short flick across a single square — which is the
-/// melee feedback, for free, and keeps a renderer from restating the melee
-/// threshold to choose between two draws.
+/// **No kind field; `fx` names a library effect by id.** The cue says where
+/// a blow travels and the renderer's effect library (`assets/effects/`) says
+/// what it looks like. The engine copies the id from the weapon and never
+/// reads it, so the renderer keeps no melee threshold to choose between
+/// draws, and each travel primitive still finishes inside one turn beat.
 ///
 /// The colour is carried because it is the swinger's, and the swinger may be
 /// dead by the time this is drawn: a fumble's Recoil rung can kill the body
 /// that swung, and a lookup would then have nothing to ask.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BoltCue {
     pub from: (i32, i32),
     pub to: (i32, i32),
     pub color: GlyphColor,
+    pub fx: Option<String>,
+}
+
+/// A routine cast on a battle map, queued before its effect resolves —
+/// `BoltCue`'s counterpart for an aimed shape rather than one blow.
+///
+/// Travel is drawn `from` the caster's cell to `aim`, and an area effect
+/// covers `cells`, the same `reach::shape_cells` list the routine's
+/// recipients are read off. `color` is the caster's, read up front for
+/// `BoltCue`'s reason. `fx` names a library effect and is never read here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoutineCue {
+    pub from: (i32, i32),
+    pub aim: (i32, i32),
+    pub cells: Vec<(i32, i32)>,
+    pub color: GlyphColor,
+    pub fx: Option<String>,
 }
 
 /// Bolts queued since the last `Game::take_bolts` — `TransitQueue`'s
@@ -891,6 +909,9 @@ pub struct BoltCue {
 #[derive(Resource, Default)]
 pub struct BoltQueue {
     cues: Vec<BoltCue>,
+    // A second list in this resource rather than a new `Resource`, which
+    // would shift query iteration order for every seeded test.
+    routines: Vec<RoutineCue>,
 }
 
 impl BoltQueue {
@@ -904,6 +925,18 @@ impl BoltQueue {
 
     pub fn take(&mut self) -> Vec<BoltCue> {
         std::mem::take(&mut self.cues)
+    }
+
+    pub(crate) fn push_routine(&mut self, cue: RoutineCue) {
+        self.routines.push(cue);
+        if self.routines.len() > EFFECT_QUEUE_CAP {
+            let excess = self.routines.len() - EFFECT_QUEUE_CAP;
+            self.routines.drain(0..excess);
+        }
+    }
+
+    pub fn take_routines(&mut self) -> Vec<RoutineCue> {
+        std::mem::take(&mut self.routines)
     }
 }
 
@@ -2388,3 +2421,25 @@ impl Sortie {
 /// why it needs no membership scheme.
 #[derive(Resource, Default, Clone, Debug)]
 pub struct Routes(pub Vec<crate::routes::Route>);
+
+#[cfg(test)]
+mod bolt_queue_tests {
+    use super::*;
+
+    #[test]
+    fn push_routine_drops_the_oldest_past_the_cap() {
+        let mut queue = BoltQueue::default();
+        for i in 0..EFFECT_QUEUE_CAP + 5 {
+            queue.push_routine(RoutineCue {
+                from: (i as i32, 0),
+                aim: (0, 0),
+                cells: Vec::new(),
+                color: GlyphColor::Cyan,
+                fx: None,
+            });
+        }
+        let kept = queue.take_routines();
+        assert_eq!(kept.len(), EFFECT_QUEUE_CAP);
+        assert_eq!(kept[0].from, (5, 0), "the oldest cues should be dropped");
+    }
+}

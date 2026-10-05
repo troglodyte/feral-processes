@@ -1,5 +1,6 @@
 (
     id: "cold_boot",
+    fx: Some("heal"),
     name: "Patch Single v3.0",
     description: "Restore 38–62 Integrity to one ally",
     target: OneAlly,

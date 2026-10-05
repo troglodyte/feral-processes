@@ -1,5 +1,6 @@
 (
     id: "redundancy_sync",
+    fx: Some("heal"),
     name: "Patch Party v1.1",
     description: "Restore 8–12 Integrity to the whole party",
     target: WholeParty,

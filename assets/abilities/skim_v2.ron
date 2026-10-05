@@ -1,5 +1,6 @@
 (
     id: "skim_v2",
+    fx: Some("zap"),
     name: "Skim Single v2.0",
     description: "Damage one target and restore nearly half of it to yourself",
     target: OneEnemyGroupFront,

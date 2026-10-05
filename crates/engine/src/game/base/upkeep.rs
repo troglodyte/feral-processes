@@ -237,6 +237,14 @@ impl Game {
             .take()
     }
 
+    /// Drains every `RoutineCue` queued since the last call — `take_bolts`'
+    /// twin for a routine's shape, drained for the same reason.
+    pub fn take_routine_cues(&mut self) -> Vec<crate::resources::RoutineCue> {
+        self.world
+            .resource_mut::<crate::resources::BoltQueue>()
+            .take_routines()
+    }
+
     /// Drains every `TacticalFxCue` queued since the last call — a body's
     /// own hit or heal on a battle map, `take_bolts`' counterpart for the
     /// blow itself rather than the streak that travelled to it.

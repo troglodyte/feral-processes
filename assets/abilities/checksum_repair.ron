@@ -1,5 +1,6 @@
 (
     id: "checksum_repair",
+    fx: Some("heal"),
     name: "Patch Single v2.0",
     description: "Restore 19–31 Integrity to one ally",
     target: OneAlly,

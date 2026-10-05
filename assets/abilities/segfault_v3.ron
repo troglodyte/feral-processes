@@ -1,5 +1,6 @@
 (
     id: "segfault_v3",
+    fx: Some("beam"),
     name: "Segfault Single v3.0",
     description: "Damage 13–21 to one target",
     target: OneEnemyGroupFront,

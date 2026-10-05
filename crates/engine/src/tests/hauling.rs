@@ -1850,14 +1850,130 @@ fn squeezing_past_a_body_costs_the_extra_tick() {
     );
 }
 
+/// Deploys a Depot at `(x, 0)` with a Wall on each of its four faces —
+/// nothing can stand beside it, so a load headed there is `Stranded` for
+/// good.
+fn walled_depot(game: &mut Game, x: i32) -> Entity {
+    let depot = deploy(game, "depot", x, 0);
+    for (dx, dy) in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+        deploy(game, "wall", x + dx, dy);
+    }
+    depot
+}
+
+/// **A carrier stranded by structures sets its load down in the nearest store
+/// that takes it, after `STRANDED_SET_DOWN_TICKS` and not before.** Both
+/// Depots are walled in, so no walk reaches either; the nearer by Chebyshev
+/// is the one that gets the load, and the carrier's hands are empty — which
+/// is what lets the scheduler free it the way it frees anyone.
+#[test]
+fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
+    let mut game = base(41);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let near = walled_depot(&mut game, 3);
+    let far = walled_depot(&mut game, -3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    tick_until(&mut game, 40, |g| {
+        g.world.get::<Stranded>(worker).is_some() && g.world.get::<Carrying>(worker).is_some()
+    });
+    let since = game
+        .world
+        .get::<Stranded>(worker)
+        .expect("precondition: stranded holding a load")
+        .since;
+
+    while game.current_tick() < since + tuning::STRANDED_SET_DOWN_TICKS {
+        assert!(
+            game.world.get::<Carrying>(worker).is_some(),
+            "set down early, at tick {} of an episode from {since}",
+            game.current_tick()
+        );
+        game.tick();
+    }
+    tick_until(&mut game, 3, |g| g.world.get::<Carrying>(worker).is_none());
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "still holding the load past the timeout"
+    );
+    assert_eq!(
+        node_output(&game, near, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the load belongs in the nearer store"
+    );
+    assert_eq!(node_output(&game, far, ids::CORE_FRAGMENT), 0);
+}
+
+/// **Nothing is destroyed to free a carrier.** Sealed in by Walls away from
+/// its machine, with the one Depot full, a stranded carrier has nowhere to
+/// set its load down — so it keeps it, and stays exactly as it was.
+#[test]
+fn a_stranded_carrier_with_nowhere_to_set_down_keeps_its_load() {
+    let mut game = base(42);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in -4..=-2 {
+            for y in -4..=-2 {
+                grid.lay_floor(x, y);
+            }
+        }
+    }
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = deploy(&mut game, "depot", 3, 0);
+    for x in -4..=-2 {
+        for y in -4..=-2 {
+            if (x, y) != (-3, -3) {
+                deploy(&mut game, "wall", x, y);
+            }
+        }
+    }
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    move_to(&mut game, worker, -3, -3);
+    fill_to_capacity(&mut game, depot, ids::CORE_FRAGMENT);
+    let load = Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: tuning::HAUL_CARRY_CAPACITY,
+    };
+    game.world.entity_mut(worker).insert(load.clone());
+    let node_before = node_output(&game, node, ids::CORE_FRAGMENT);
+    tick_until(&mut game, 10, |g| g.world.get::<Stranded>(worker).is_some());
+    assert!(
+        game.world.get::<Stranded>(worker).is_some(),
+        "precondition: stranded"
+    );
+
+    for _ in 0..tuning::STRANDED_SET_DOWN_TICKS + 20 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .get::<Carrying>(worker)
+            .map(|c| (c.item.clone(), c.qty)),
+        Some((load.item, load.qty)),
+        "the load is kept whole"
+    );
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        capacity_of(&game, depot)
+    );
+    assert_eq!(node_output(&game, node, ids::CORE_FRAGMENT), node_before);
+    assert!(game.world.get::<Stranded>(worker).is_some());
+}
+
 /// A hauler stranded with a load it cannot deliver is held on shift by
 /// `Carrying` (freeing it would destroy the goods), and `Stranded` is never
-/// cleared by anything but a route reopening — so once it also downs tools it
-/// carries, and counts as on shift, for as long as the walls stand. Found on
-/// the `chains` bench: seeds 2 and 5 read `on_shift_share` 1.0 beside a
-/// 3.6%/5.0% `downed_tools` rung share.
+/// cleared by anything but a route reopening — so once it also downed tools
+/// it carried, and counted as on shift, for as long as the walls stood. Found
+/// on the `chains` bench: seeds 2 and 5 read `on_shift_share` 1.0 beside a
+/// 3.6%/5.0% `downed_tools` rung share. The set-down is what clears it: the
+/// load goes into the walled Depot after `STRANDED_SET_DOWN_TICKS`, the hands
+/// are empty, and the downed-tools rule takes it off shift.
 #[test]
-#[ignore = "reproducer: jammed downed-tools hauler"]
 fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
     let mut game = base(22);
     let node = deploy(&mut game, "mining_node", 0, 2);

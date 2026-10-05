@@ -833,11 +833,55 @@ fn no_telemetry_no_fray_or_tantrum_records() {
     lash_out(&mut game, staff[0]);
     reseed_rng(&mut game, 7);
     game.fray(staff[2], &coherence(), true);
+    let mut opened = false;
     for _ in 0..500 {
         game.run_tantrums(&staff);
+        opened |= open_brawls(&game) > 0;
     }
 
+    // Both events must have happened, or an empty list proves nothing.
+    assert!(opened, "the brawl opened");
+    assert!(
+        game.world
+            .get::<crate::components::Needs>(staff[2])
+            .unwrap()
+            .is_latched(&coherence()),
+        "the fray latched"
+    );
+    assert!(lines(&game).iter().any(|l| l.contains("can't find a way")));
     assert!(bench_records(&mut game).is_empty());
+}
+
+/// The record follows the latch: a need that recovers past `critical` and
+/// runs low again is news a second time, through the real gate.
+#[test]
+fn a_second_fray_is_recorded_after_the_need_unlatches_and_runs_low_again() {
+    let mut game = Game::new(123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    game.enable_telemetry();
+    let (critical, content) = {
+        let def = game
+            .world
+            .resource::<crate::needs::NeedDb>()
+            .get(&coherence())
+            .unwrap();
+        (def.critical, def.content)
+    };
+    let set = |game: &mut Game, level: f32| {
+        game.world
+            .get_mut::<crate::components::Needs>(staff[0])
+            .unwrap()
+            .set(&coherence(), level);
+        let amenities = game.amenities();
+        game.update_off_shift(&staff, &amenities);
+    };
+
+    set(&mut game, critical - 1.0);
+    set(&mut game, critical - 1.0);
+    assert_eq!(bench_records(&mut game).len(), 1, "one per latch edge");
+    set(&mut game, content);
+    set(&mut game, critical - 1.0);
+    assert_eq!(bench_records(&mut game).len(), 1, "a second after recovery");
 }
 
 #[test]

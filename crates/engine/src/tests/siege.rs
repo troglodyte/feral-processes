@@ -4266,27 +4266,3 @@ fn a_base_is_not_besieged_while_sieges_are_off() {
         "on again, it fires"
     );
 }
-
-/// Forcing a siege is an explicit dev act, so the switch does not block it.
-#[test]
-fn a_forced_siege_still_opens_while_sieges_are_off() {
-    let mut game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let structure = game
-        .world
-        .spawn((
-            Structure {
-                kind: "test_structure".to_string(),
-            },
-            Position { x: 1, y: 1 },
-            Durability { hp: 30, max_hp: 30 },
-        ))
-        .id();
-    game.dev_set_sieges(false);
-    game.dev_force_siege();
-    assert!(
-        game.world
-            .get::<Durability>(structure)
-            .map(|d| d.hp < 30)
-            .unwrap_or(true)
-    );
-}

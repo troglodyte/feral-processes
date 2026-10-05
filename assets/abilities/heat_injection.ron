@@ -1,5 +1,6 @@
 (
     id: "heat_injection",
+    fx: Some("explosion"),
     name: "Heat Injection Group",
     description: "Randomizes one hostile group's decisions for 2 rounds. Battle maps only.",
     target: WholeEnemyGroup,

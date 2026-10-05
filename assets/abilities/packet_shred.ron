@@ -1,5 +1,6 @@
 (
     id: "packet_shred",
+    fx: Some("explosion"),
     name: "Packet Shred Group v2.0",
     description: "Damage 8–12 to every member of one group",
     target: WholeEnemyGroup,

@@ -1,5 +1,6 @@
 (
     id: "segfault_everyone",
+    fx: Some("explosion"),
     name: "Segfault Everyone",
     // The top of the widening ladder — see `segfault_group` for why the
     // family has one. Against Packet Shred Everyone (19–31, four rounds,

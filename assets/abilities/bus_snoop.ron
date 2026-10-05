@@ -1,5 +1,6 @@
 (
     id: "bus_snoop",
+    fx: Some("zap"),
     name: "Snoop Everyone",
     // Exclusive: the Overseer's. `cycle_harvest` names the thing the
     // ordinary tier may not do — a field-wide drain at a rate competitive

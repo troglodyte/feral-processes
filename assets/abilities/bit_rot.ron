@@ -1,5 +1,6 @@
 (
     id: "bit_rot",
+    fx: Some("zap"),
     name: "Bit Rot Everyone",
     description: "Leaves every hostile program on the field leaking for 4 rounds",
     target: AllEnemies,

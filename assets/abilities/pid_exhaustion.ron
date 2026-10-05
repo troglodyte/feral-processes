@@ -1,5 +1,6 @@
 (
     id: "pid_exhaustion",
+    fx: Some("explosion"),
     name: "Fork Bomb Everyone",
     description: "Damage the whole field, with a chance to leave each target leaking",
     target: AllEnemies,

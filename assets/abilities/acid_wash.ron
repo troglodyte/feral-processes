@@ -1,5 +1,6 @@
 (
     id: "acid_wash",
+    fx: Some("zap"),
     name: "Etch Single",
     description: "+15% damage taken by one target for 3 rounds",
     target: OneEnemyGroupFront,

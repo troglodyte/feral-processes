@@ -1,5 +1,6 @@
 (
     id: "data_poisoning",
+    fx: Some("zap"),
     name: "Data Poisoning Single",
     description: "One target takes 5 Integrity a round for 3 rounds, stacking up to 5 times",
     target: OneEnemyGroupFront,

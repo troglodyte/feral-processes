@@ -1,5 +1,6 @@
 (
     id: "row_hammer_everyone",
+    fx: Some("explosion"),
     name: "Row Hammer Everyone",
     // The rung the family exists for. Every other Everyone-scope routine
     // aims at 2 or not at all, so a field-wide swing is the biggest single

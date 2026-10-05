@@ -1,5 +1,6 @@
 (
     id: "dropout_group",
+    fx: Some("zap"),
     name: "Dropout Group",
     description: "Stall every member of one group for 1 round",
     target: WholeEnemyGroup,

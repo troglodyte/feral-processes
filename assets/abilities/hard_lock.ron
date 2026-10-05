@@ -1,5 +1,6 @@
 (
     id: "hard_lock",
+    fx: Some("zap"),
     name: "Hard Lock Single v2.0",
     description: "Stall one target for 2 rounds",
     target: OneEnemyGroupFront,

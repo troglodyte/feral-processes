@@ -1,5 +1,6 @@
 (
     id: "ragged_edge",
+    fx: Some("slash"),
     name: "Ragged Edge",
     description: "Scavenged weapon. Never quite in phase with the round it opens, and neither is anything it touches.",
     value: Some(115),

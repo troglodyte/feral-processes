@@ -1,5 +1,6 @@
 (
     id: "skim_everyone",
+    fx: Some("zap"),
     name: "Skim Everyone",
     // Skim is Leech's cheap sibling at every rung — less back per cycle,
     // but sooner and for less Power. At this scope that lands it exactly on

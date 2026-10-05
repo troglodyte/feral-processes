@@ -1,5 +1,6 @@
 (
     id: "skim_group",
+    fx: Some("zap"),
     name: "Skim Group",
     description: "Damage every member of one group and restore a third of it to yourself",
     target: WholeEnemyGroup,

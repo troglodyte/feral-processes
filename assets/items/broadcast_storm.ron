@@ -1,5 +1,6 @@
 (
     id: "broadcast_storm",
+    fx: Some("laser_pulse"),
     name: "Broadcast Storm",
     description: "Floods every listener on the segment at once. Recharging it takes a while, and nothing on the far side is left untouched.",
     value: Some(70),

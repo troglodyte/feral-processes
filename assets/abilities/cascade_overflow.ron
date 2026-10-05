@@ -1,5 +1,6 @@
 (
     id: "cascade_overflow",
+    fx: Some("explosion"),
     name: "Packet Shred Group v1.0",
     description: "Damage 4–8 to every member of one group",
     target: WholeEnemyGroup,

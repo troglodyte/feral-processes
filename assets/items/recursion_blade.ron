@@ -1,5 +1,6 @@
 (
     id: "recursion_blade",
+    fx: Some("slash"),
     name: "Recursion Blade",
     description: "Standard weapon. Trades some bite for plating that folds back over you.",
     value: Some(14),

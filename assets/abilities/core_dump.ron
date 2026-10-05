@@ -1,5 +1,6 @@
 (
     id: "core_dump",
+    fx: Some("beam"),
     name: "Core Dump Single",
     // PASSIVE on `AllyWounded`: the wearer has just been driven under a
     // third of their Integrity, and what they were holding goes out at

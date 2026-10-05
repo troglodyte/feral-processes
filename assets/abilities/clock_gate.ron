@@ -1,5 +1,6 @@
 (
     id: "clock_gate",
+    fx: Some("zap"),
     name: "Throttle Single",
     description: "-5 ATK to one target for 3 rounds",
     target: OneEnemyGroupFront,

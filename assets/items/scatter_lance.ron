@@ -1,5 +1,6 @@
 (
     id: "scatter_lance",
+    fx: Some("laser_pulse"),
     name: "Scatter Lance",
     description: "Broadcasts the payload across a whole hostile group. It hits softer than a directed lance, and it hits everything.",
     value: Some(20),

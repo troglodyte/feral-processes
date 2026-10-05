@@ -1,5 +1,6 @@
 (
     id: "inference_probe",
+    fx: Some("zap"),
     name: "Inference Probe Single",
     description: "Publishes one target's next move for 3 rounds. Battle maps only.",
     target: OneEnemyGroupFront,

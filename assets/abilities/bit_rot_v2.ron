@@ -1,5 +1,6 @@
 (
     id: "bit_rot_v2",
+    fx: Some("zap"),
     name: "Bit Rot Single v2.0",
     description: "One target leaks 4 Integrity a round for 3 rounds",
     target: OneEnemyGroupFront,

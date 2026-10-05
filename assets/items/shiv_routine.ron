@@ -1,5 +1,6 @@
 (
     id: "shiv_routine",
+    fx: Some("slash"),
     name: "Shiv Routine",
     description: "Scavenged weapon. Barely a blade, but it beats bare hands.",
     value: Some(4),

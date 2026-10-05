@@ -1,5 +1,6 @@
 (
     id: "kernel_shear",
+    fx: Some("explosion"),
     name: "Kernel Shear Group",
     // Exclusive: Wintermute's, and nobody etches a blank with it. Twenty-two
     // across a whole group against segfault_v3's seventeen into one face is

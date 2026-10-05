@@ -1,5 +1,6 @@
 (
     id: "dropout",
+    fx: Some("zap"),
     name: "Dropout Single",
     description: "Stall one target for 1 round",
     target: OneEnemyGroupFront,

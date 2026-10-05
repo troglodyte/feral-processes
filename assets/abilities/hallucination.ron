@@ -1,5 +1,6 @@
 (
     id: "hallucination",
+    fx: Some("explosion"),
     name: "Hallucination Group",
     description: "Seeds one hostile group with decoys it mistakes for real. Battle maps only.",
     target: WholeEnemyGroup,

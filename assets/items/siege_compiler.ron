@@ -1,5 +1,6 @@
 (
     id: "siege_compiler",
+    fx: Some("laser_pulse"),
     name: "Siege Compiler",
     description: "Premium weapon. Heavy enough to shield you while it swings.",
     value: Some(90),

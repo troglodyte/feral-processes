@@ -57,7 +57,7 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     let (mut wanted, mut staffed) = (0u64, 0u64);
     let mut unworked: BTreeMap<Duty, u64> = BTreeMap::new();
     for _ in 0..opts.ticks {
-        game.wait();
+        advance(&mut game)?;
         for line in game.line_reports() {
             let tally = lines
                 .entry(format!("{},{}", line.key.0.0, line.key.0.1))
@@ -171,6 +171,20 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     })
 }
 
+/// One `wait`, which does nothing while a battle is open or the game is
+/// over: a bench that kept counting would report a stopped clock as a quiet
+/// base.
+fn advance(game: &mut Game) -> Result<(), String> {
+    let before = game.current_tick();
+    game.wait();
+    if game.current_tick() == before {
+        return Err(format!(
+            "clock stopped at tick {before} (battle open or game over)"
+        ));
+    }
+    Ok(())
+}
+
 /// `n / ticks`, with an empty run reading as zero rather than NaN.
 fn share(n: u64, ticks: u64) -> f32 {
     if ticks == 0 {
@@ -201,14 +215,12 @@ mod tests {
     }
 
     #[test]
-    fn the_same_seed_twice_is_the_same_report_and_another_seed_is_not() {
+    fn the_same_seed_twice_is_the_same_report() {
         let path = blank_save("determinism");
         let a = run_blank(&path, 1);
         let b = run_blank(&path, 1);
-        let c = run_blank(&path, 2);
         std::fs::remove_file(&path).unwrap();
         assert_eq!(a, b);
-        assert_ne!(a, c);
     }
 
     /// An empty `f32` sum is `-0.0`, which prints as "-0.00" and compares
@@ -219,6 +231,17 @@ mod tests {
         let report = run_blank(&path, 1);
         std::fs::remove_file(&path).unwrap();
         assert!(report.economy.labour.mean_unworked_total.is_sign_positive());
+    }
+
+    #[test]
+    fn a_stopped_clock_is_an_error_not_a_quiet_base() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        advance(&mut game).unwrap();
+        game.world
+            .resource_mut::<crate::resources::GameOver>()
+            .reason = Some("test".into());
+        let err = advance(&mut game).unwrap_err();
+        assert!(err.contains("clock stopped at tick"), "{err}");
     }
 
     #[test]

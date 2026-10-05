@@ -38,6 +38,18 @@ const EXPLOSION_SECONDS: f64 = 0.45;
 const ZAP_IMPACT_SECONDS: f64 = 0.18;
 const SLASH_SECONDS: f64 = 0.2;
 const SMOKE_SECONDS: f64 = 0.8;
+const FLASH_SECONDS: f64 = 0.35;
+/// Opacity of a flash at the instant it lands; low enough that the glyphs
+/// under the tint stay readable.
+const FLASH_PEAK_ALPHA: f32 = 0.45;
+
+/// A `Ball`'s disc, drawn as a regular polygon because `Painter` has no
+/// circle.
+const BALL_RADIUS_TILES: f32 = 0.18;
+const BALL_SIDES: u32 = 12;
+/// Share of the flight after which the ball is on its target; it sits there
+/// until the flight ends so the landing flash does not meet an empty gap.
+const BALL_ARRIVE_FRACTION: f32 = 0.9;
 
 const SMOKE_PUFFS: u32 = 4;
 const SMOKE_RISE_TILES: f32 = 0.6;
@@ -67,6 +79,7 @@ pub(crate) fn impact_seconds(impact: Impact) -> f64 {
         Impact::Zap => ZAP_IMPACT_SECONDS,
         Impact::Slash => SLASH_SECONDS,
         Impact::Smoke => SMOKE_SECONDS,
+        Impact::Flash => FLASH_SECONDS,
     }
 }
 
@@ -114,6 +127,16 @@ pub(crate) fn zap_offset(cell: (i32, i32), index: u32) -> f32 {
 /// decelerating, so the blast reads as thrown outward.
 pub(crate) fn explosion_radius(u: f32, radius: f32) -> f32 {
     radius * (1.0 - (1.0 - u.clamp(0.0, 1.0)).powi(2))
+}
+
+/// How far along the line a `Ball` is at flight progress `t`.
+pub(crate) fn ball_along(t: f32) -> f32 {
+    (t / BALL_ARRIVE_FRACTION).clamp(0.0, 1.0)
+}
+
+/// A flash's opacity at impact progress `u` (0..1): its peak, fading to 0.
+pub(crate) fn flash_alpha(u: f32) -> f32 {
+    FLASH_PEAK_ALPHA * (1.0 - u.clamp(0.0, 1.0))
 }
 
 fn faded(base: Color, alpha: f32) -> Color {
@@ -190,6 +213,20 @@ pub(crate) fn draw_travel(
                 painter.line(p.0, p.1, q.0, q.1, IMPACT_THICKNESS_PX, color);
             }
         }
+        Travel::Ball => {
+            let (x, y) = lerp(a, b, ball_along(t));
+            let r = BALL_RADIUS_TILES * tile_px;
+            let step = std::f32::consts::TAU / BALL_SIDES as f32;
+            let points: Vec<Px> = (0..BALL_SIDES)
+                .map(|i| {
+                    (
+                        x + (i as f32 * step).cos() * r,
+                        y + (i as f32 * step).sin() * r,
+                    )
+                })
+                .collect();
+            painter.poly(&points, color);
+        }
         Travel::None => {}
     }
 }
@@ -242,6 +279,7 @@ pub(crate) fn draw_impact(
     c: Px,
     tile_px: f32,
     age: f64,
+    color: Color,
 ) {
     let u = (age / impact_seconds(impact).max(f64::EPSILON)) as f32;
     if !(0.0..1.0).contains(&u) {
@@ -291,6 +329,13 @@ pub(crate) fn draw_impact(
                 faded(FLASH_WHITE, 1.0 - u),
             );
         }
+        Impact::Flash => painter.rect(
+            c.0 - tile_px / 2.0,
+            c.1 - tile_px / 2.0,
+            tile_px,
+            tile_px,
+            faded(color, flash_alpha(u)),
+        ),
         Impact::Smoke => {
             for i in 0..SMOKE_PUFFS {
                 let drift = (spark_scatter(cell, i ^ CRACKLE_SALT) - 0.5) * 2.0 * SMOKE_DRIFT_TILES;
@@ -384,5 +429,44 @@ mod tests {
             blow_seconds(&def(Travel::None, vec![Impact::Slash])),
             SLASH_SECONDS
         );
+    }
+
+    #[test]
+    fn a_ball_arrives_inside_the_flight_and_never_backs_up() {
+        let mut last = 0.0;
+        for s in 0..=1000 {
+            let along = ball_along(s as f32 / 1000.0);
+            assert!(along >= last, "ball backed up at step {s}");
+            last = along;
+        }
+        let arrived = (0..1000).find(|s| ball_along(*s as f32 / 1000.0) >= 1.0);
+        assert!(arrived.is_some_and(|s| s < 1000), "ball never lands early");
+        assert_eq!(ball_along(0.0), 0.0);
+    }
+
+    #[test]
+    fn a_flash_only_fades_and_is_gone_by_its_lifetime() {
+        let mut last = f32::MAX;
+        for s in 0..=100 {
+            let a = flash_alpha(s as f32 / 100.0);
+            assert!(a <= last, "flash brightened at step {s}");
+            last = a;
+        }
+        assert_eq!(flash_alpha(1.0), 0.0);
+        assert!(flash_alpha(0.0) <= FLASH_PEAK_ALPHA);
+        assert!(flash_alpha(0.0) > 0.0);
+    }
+
+    #[test]
+    fn a_flash_extends_a_cue_by_its_lifetime() {
+        let def = EffectDef {
+            id: "t".into(),
+            color: None,
+            muzzle: false,
+            travel: Travel::Ball,
+            impact: vec![Impact::Flash],
+            shake: 0.0,
+        };
+        assert_eq!(blow_seconds(&def), BOLT_SECONDS + FLASH_SECONDS);
     }
 }

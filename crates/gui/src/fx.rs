@@ -1355,7 +1355,10 @@ impl Fx {
             for impact in &bolt.def.impact {
                 // An area covers every cell; a single-cell impact lands on
                 // the aim alone.
-                let area = matches!(impact, Impact::Explosion { .. } | Impact::Smoke);
+                let area = matches!(
+                    impact,
+                    Impact::Explosion { .. } | Impact::Smoke | Impact::Flash
+                );
                 let targets: &[(i32, i32)] = if area {
                     cells
                 } else {
@@ -1363,7 +1366,7 @@ impl Fx {
                 };
                 for &cell in targets {
                     let (c, _) = cell_centers(&to_px, tile_px, cell, cell);
-                    effect_draw::draw_impact(painter, *impact, cell, c, tile_px, landed);
+                    effect_draw::draw_impact(painter, *impact, cell, c, tile_px, landed, color);
                 }
             }
         }
@@ -2018,6 +2021,51 @@ mod tests {
         let landed = lines_at(&mut fx, BOLT_SECONDS + 0.1);
         assert!(flight >= 1);
         assert!(landed >= 2 * 16, "expected a ring per cell, got {landed}");
+    }
+
+    /// Draws `id`'s cue over `cells` and returns (mid-flight, landed) rect
+    /// and polygon counts.
+    fn heal_counts(cells: Vec<(i32, i32)>) -> ((usize, usize), (usize, usize)) {
+        let mut fx = with_library();
+        fx.begin_frame(
+            0.0,
+            FrameCues {
+                routines: vec![RoutineCue {
+                    from: (0, 0),
+                    aim: (3, 0),
+                    cells,
+                    color: GlyphColor::Cyan,
+                    fx: Some("heal".into()),
+                }],
+                ..Default::default()
+            },
+            true,
+        );
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        let mut at = |t: f64| {
+            fx.begin_frame(t, FrameCues::default(), true);
+            let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+            let polys = shapes
+                .iter()
+                .filter(|cs| matches!(&cs.shape, bevy_egui::egui::Shape::Path(_)))
+                .count();
+            (crate::paint::painted_rect_widths(&shapes).len(), polys)
+        };
+        (at(BOLT_SECONDS * 0.5), at(BOLT_SECONDS + 0.05))
+    }
+
+    #[test]
+    fn a_heal_flies_a_ball_then_flashes_every_covered_cell() {
+        let ((rects, balls), (landed_rects, _)) = heal_counts(vec![(3, 0), (4, 0), (5, 0)]);
+        assert_eq!(rects, 0, "no flash before the ball lands");
+        assert_eq!(balls, 1);
+        assert_eq!(landed_rects, 3);
+    }
+
+    #[test]
+    fn a_single_cell_heal_flashes_the_aim() {
+        let (_, (landed_rects, _)) = heal_counts(vec![]);
+        assert_eq!(landed_rects, 1);
     }
 
     /// A disabled `Fx` draws no pulses or explosion and produces no shake.

@@ -28,6 +28,7 @@ pub enum Travel {
         hold: f32,
     },
     Zap,
+    Ball,
     None,
 }
 
@@ -39,6 +40,7 @@ pub enum Impact {
     Zap,
     Slash,
     Smoke,
+    Flash,
 }
 
 fn default_impact() -> Vec<Impact> {
@@ -207,17 +209,29 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_library_loads_all_six() {
+    fn the_shipped_library_loads_all_eight() {
         let mut lib = EffectLibrary::load_dir(&assets().join("effects"));
-        for id in ["streak", "laser_pulse", "beam", "zap", "slash", "explosion"] {
+        for id in [
+            "streak",
+            "laser_pulse",
+            "beam",
+            "zap",
+            "slash",
+            "explosion",
+            "heal",
+            "buff",
+        ] {
             assert_eq!(lib.get(Some(id)).id, id);
         }
-        assert_eq!(lib.defs.len(), 6);
+        assert_eq!(lib.defs.len(), 8);
         assert_eq!(
             lib.get(Some("laser_pulse")).travel,
             Travel::Pulses { count: 3 }
         );
         assert_eq!(lib.get(Some("explosion")).shake, 1.0);
+        assert_eq!(lib.get(Some("heal")).color, Some(GlyphColor::Green));
+        assert_eq!(lib.get(Some("buff")).color, Some(GlyphColor::Cyan));
+        assert_eq!(lib.get(Some("heal")).travel, Travel::Ball);
     }
 
     /// Every `fx` on a shipped item or ability names a real effect, so the

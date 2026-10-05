@@ -272,6 +272,25 @@ reserve reaches critical (20) after ~2,000 working ticks, and a siege stops
 movement on `bench-economy`, report it rather than lengthen the run; the
 siege fix (party outside base space) is a separate decision.
 
+### After the baseline (user, 2026-10-05)
+
+- **Siege dev switch (T9).** One engine switch, `Game::dev_set_sieges(bool)`
+  (a non-saved Resource; `siege_check` does nothing while off). `bench
+  run --no-sieges` and objective field `sieges: false` (`#[serde(default =
+  true)]`); the game honours `FERAL_DEV_NO_SIEGES=1` where
+  `FERAL_DEV_REVEAL` is read. README + `dev-tuning/README.md`.
+- **Staff objective (T10)** on `bench-economy`, sieges off, 6,000 ticks
+  (re-baseline shipped values at that length first; record it in the staff
+  baseline doc). Targets, "occasional trouble":
+  `staff.sulking_share` 0.05–0.15, `staff.need_critical_share.coherence`
+  0.01–0.05, `staff.need_mean.slack` 60–85, `staff.frays_per_1000` 0–0.2,
+  `staff.rung_share.downed_tools` 0–0.02.
+  Knobs: coherence + slack `drain_per_tick`, `working_multiplier` (±50%),
+  `critical` (10–30), `content` (50–80), `morale_weight` (±50%); Defrag Bay
+  and Sandbox `services.<need>.per_tick` (±50%); the five thoughts'
+  `intensity` (sign kept, magnitude 0.5–4). Proposal doc, CHANGELOG
+  `## Unreleased`.
+
 ## P3 — Memories (outline; plan pass after baseline)
 
 `MemoryReport` (morale distribution, bond distribution from `social`, fired

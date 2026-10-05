@@ -53,7 +53,19 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.15.4
+
+**Constructs, ZeroDays, Glitches, Ciphers, Viruses and Scrappers now have their own art on the map instead of a letter.** All six share one body in six colours, each in the colour that program was already shown in, so the map still reads the same at a glance.
+
+**Four new research nodes let you decompile from farther away and take in a whole group at once.** Remote Decompile and Long-Range Decompile raise how far from a downed program you can decompile it (to 4, then 6); Broadcast Decompile and Wide Broadcast Decompile make one decompile reach the downed programs around its target as well, one catalyst each, out to radius 1, then 2. Each node's menu row names what it grants.
+
+**The deploy menu opens by category, with the Home listed directly.** Choosing a category opens its structures as a submenu, so the list no longer runs every structure together.
+
+**On a battle map, a hit floats its damage as -N over the body and a heal floats +N.** The number is what actually landed, after mitigation and caps, and it rises and fades instead of the heal's old bouncing +.
+
+**A Depot's fill bar stands up its right edge,** so it no longer sits on top of the damage shown along the top of the tile.
+
+**On the Perks step of character creation, a long perk description now wraps** instead of running off the panel.
 
 **Four new research nodes let you decompile from farther away and take in a whole group at once.** Remote Decompile and Long-Range Decompile raise how far from a downed program you can decompile it (to 4, then 6); Broadcast Decompile and Wide Broadcast Decompile make one decompile reach the downed programs around its target as well, one catalyst each, out to radius 1, then 2. Each node's menu row names what it grants.
 

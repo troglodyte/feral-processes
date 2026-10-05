@@ -3541,3 +3541,28 @@ mod stats_tests {
         assert_eq!(hurt.power(), whole.power());
     }
 }
+
+#[cfg(test)]
+mod grievance_all_tests {
+    use super::Grievance;
+
+    /// The match has no wildcard, so a new rung stops this compiling until it
+    /// is placed here, and the assertion below until it is in `ALL`.
+    #[test]
+    fn every_rung_is_in_all() {
+        let mut seen = 0;
+        for rung in [
+            Grievance::Sulking,
+            Grievance::DownedTools,
+            Grievance::LashingOut,
+        ] {
+            match rung {
+                Grievance::Sulking | Grievance::DownedTools | Grievance::LashingOut => {
+                    assert!(Grievance::ALL.contains(&rung), "{rung:?}");
+                    seen += 1;
+                }
+            }
+        }
+        assert_eq!(seen, Grievance::ALL.len());
+    }
+}

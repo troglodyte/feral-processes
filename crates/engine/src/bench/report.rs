@@ -102,7 +102,7 @@ pub struct StaffReport {
     pub on_shift_share: f32,
     pub morale_mean: f32,
     pub morale_min: f32,
-    /// Staff-ticks with morale below `MORALE_SULKS_AT`.
+    /// Staff-ticks with morale at or below `MORALE_SULKS_AT`: any rung reached.
     pub sulking_share: f32,
     pub need_strain_mean: f32,
     pub needs: BTreeMap<String, NeedBench>,
@@ -167,7 +167,7 @@ impl StaffTally {
     pub fn add(&mut self, s: &StaffSample) {
         self.staff_ticks += 1;
         self.on_shift += u64::from(s.on_shift);
-        self.sulking += u64::from(s.morale < crate::tuning::MORALE_SULKS_AT);
+        self.sulking += u64::from(crate::game::base::morale::reached(s.morale).is_some());
         self.morale_sum += f64::from(s.morale);
         self.morale_min = Some(self.morale_min.map_or(s.morale, |m| m.min(s.morale)));
         self.strain_sum += f64::from(s.strain);
@@ -459,6 +459,15 @@ mod tests {
             needs: vec![("coherence", morale + 10.0, 5.0)],
             rung,
         }
+    }
+
+    /// The sim's own entry test is `<=`, so a program sitting exactly on the
+    /// line is sulking and the report has to say so.
+    #[test]
+    fn a_program_exactly_on_the_sulking_line_counts_as_sulking() {
+        let mut t = StaffTally::default();
+        t.add(&sample_of(crate::tuning::MORALE_SULKS_AT, true, None));
+        assert_eq!(t.finish(0, &[]).sulking_share, 1.0);
     }
 
     fn folded() -> StaffReport {

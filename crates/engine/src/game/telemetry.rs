@@ -2,7 +2,7 @@
 //!
 //! `crate::telemetry` holds the record shapes; the five combat seams build
 //! them through `Game::record`; app-core drains with
-//! `Game::take_battle_telemetry` and is the only crate that turns one into
+//! `Game::take_telemetry` and is the only crate that turns one into
 //! text. Nothing here touches the disk.
 
 use crate::resources::BattleTelemetry;
@@ -12,7 +12,7 @@ use crate::*;
 impl Game {
     /// Starts collecting. Called once at startup by app-core when
     /// `FERAL_DEV_LOG` is set, never from inside the sim.
-    pub fn enable_battle_telemetry(&mut self) {
+    pub fn enable_telemetry(&mut self) {
         self.world.resource_mut::<BattleTelemetry>().on = true;
     }
 
@@ -20,7 +20,7 @@ impl Game {
     /// buffer. A drain rather than a read, matching
     /// `take_pending_profile_writes`: app-core appends what it is given, so
     /// a second read must not append the same records twice.
-    pub fn take_battle_telemetry(&mut self) -> Vec<Record> {
+    pub fn take_telemetry(&mut self) -> Vec<Record> {
         std::mem::take(&mut self.world.resource_mut::<BattleTelemetry>().records)
     }
 

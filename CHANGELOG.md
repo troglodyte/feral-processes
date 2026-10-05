@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.7
+
+**The base economy can now be measured and tuned without playing it.** A new `bench` tool runs a saved base for a fixed number of ticks and reports how busy each machine was, how much each line made and what the base built, and a second mode searches machine speeds, capacities and power draw for values that put those numbers inside ranges you set. It writes a proposal for you to read and apply by hand; nothing in `assets/` changes. The shipped `dev-tuning/economy.ron` is a demonstration only: the `chains` base it runs on has nothing emptying its machines, so its proposal should not be applied. `bench run --order item:qty` queues work orders first so programs haul; that helps `chains` for about a thousand ticks, not for a whole run. A new `bench-economy` dev-save template is `chains` rearranged so those orders keep flowing for thousands of ticks (wider floor, a Depot beside each production line, three Power Conduits, a Sandbox and a Defrag Bay), and `dev-tuning/economy-bench.ron` tunes against it. See `dev-tuning/README.md`.
+
+**A machine with no power is no longer given a worker.** When the grid could not run a machine, a standing work order could still send a program to it, and that program stood there making nothing for as long as the order lasted, so the order stalled whenever the grid went dark. Programs are now sent to the machine that can restore power instead, and a dark machine is left alone until it has power again.
+
 ## 0.15.6
 
 **Attacks on a battle map now look like what they are.** Ranged weapons fire a train of pulses, melee weapons slash, heavy single hits draw a beam, debuffs and drains crackle, and blast routines go off as an explosion that shakes the screen. Before, every attack was the same streak. Each weapon and routine picks its look from a file in `assets/effects/` through an `fx:` line, so mods can add their own; anything without one keeps the plain streak.

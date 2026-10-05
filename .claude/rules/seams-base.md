@@ -83,8 +83,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `power_regen` trickle alike — and the Home never declares it.**
 - **The grid cuts its fuel makers last, nearest the fuel last of all, and a
   short burner with nothing in store staffs them** — `power::grid_rung` is
-  the ledger's first key and `fuel_wants`' make half never names a dark
-  machine, asked of `ledger` fresh.
+  the ledger's first key and `base_wants` drops a dark machine from every
+  source before `collapse`, asked of `ledger` fresh.
 - **`collect::plan_adjacent_take` is the one machine-to-machine reach**, the
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **The raid clock is spent by a sweep, not by reaching its threshold, and

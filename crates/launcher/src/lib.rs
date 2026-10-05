@@ -11,8 +11,10 @@
 //! dev tool that proposes changes to shipped game content is exactly the
 //! kind of thing that should not live untested inside a `main`.
 
+pub mod bench;
 pub mod cem;
 pub mod dev_template;
 pub mod paths;
+pub mod scratch_assets;
 pub mod soak;
 pub mod tuner;

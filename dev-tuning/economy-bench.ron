@@ -1,0 +1,54 @@
+// What the base economy should look like on `bench-economy`, and which
+// numbers the search may move to get there. Run:
+//   bench tune dev-tuning/economy-bench.ron
+//
+// Unlike `economy.ron` (a mechanics demo on `chains`) this is a real
+// objective: `bench-economy` keeps its machines emptied, so `items` and
+// `running_share` describe throughput. Read
+// docs/measurements/2026-10-05-base-bench-economy-baseline.md for the
+// baseline these ranges were read off and for what the tune did.
+//
+// 3000 ticks, because a siege stops the clock at roughly tick 3800-4900 of a
+// run with these orders (`stopped_at` in the report); a run that stops early
+// would score as a quiet base. Ranges, not points: a value inside its range
+// costs nothing, outside it costs the squared miss over the range's width.
+Objective(
+    template: "bench-economy",
+    ticks: 3000,
+    // Demand that cannot be met in the run, so machines keep being asked.
+    orders: [
+        ("patch_routine", 9999),
+        ("bytecode_block", 9999),
+        ("ice_breaker", 9999),
+    ],
+    seeds: [1, 2, 3],
+    holdout_seeds: [4, 5, 6],
+    iterations: 25,
+    population: 16,
+    search_seed: 1337,
+
+    targets: [
+        // Shipped ~33 per 3000 ticks. The bay line is the longest chain
+        // (conduit, winding, bay) and the one the game is for.
+        Target(measure: "economy.items.patch_routine", min: 45.0, max: 70.0),
+        // Shipped ~111. The compiler is starved a third of the run for
+        // Core Fragments.
+        Target(measure: "economy.items.ice_breaker", min: 140.0, max: 200.0),
+        // Shipped ~83. The refinery's line shares its mining node.
+        Target(measure: "economy.items.bytecode_block", min: 100.0, max: 150.0),
+        // Shipped ~0.22. Asked for alongside the output counts on purpose:
+        // slowing the bay would raise this by itself, and the patch_routine
+        // target is what should stop that being a win.
+        Target(measure: "economy.running_share.assembly_bay", min: 0.30, max: 0.50),
+    ],
+
+    // Every knob is observed by at least one target above.
+    knobs: [
+        Knob(file: "structures/mining_node.ron", field: "work.ticks_per_unit", min: 5.0, max: 14.0),
+        Knob(file: "structures/power_conduit.ron", field: "work.ticks_per_unit", min: 3.0, max: 9.0),
+        Knob(file: "structures/winding_node.ron", field: "assembles.ticks_per_unit", min: 6.0, max: 16.0),
+        Knob(file: "structures/assembly_bay.ron", field: "assembles.ticks_per_unit", min: 8.0, max: 30.0),
+        Knob(file: "structures/refinery.ron", field: "assembles.ticks_per_unit", min: 6.0, max: 16.0),
+        Knob(file: "structures/compiler.ron", field: "assembles.ticks_per_unit", min: 4.0, max: 12.0),
+    ],
+)

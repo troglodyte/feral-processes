@@ -1,0 +1,102 @@
+//! The base bench's launcher half: knobs a search turns, the objective it
+//! aims at, and the search.
+
+pub mod knob;
+pub mod objective;
+pub mod search;
+
+/// A `chains` save at one fixed path, generated once per test process.
+/// `dev_template::resolve` writes one shared working copy, which parallel
+/// tests would race on. A static cannot be dropped, so the path is the same
+/// for every process (one file ever left behind, not one per run) and is
+/// written under a private name and renamed into place, so a process reading
+/// it never sees another's half-written copy.
+#[cfg(test)]
+pub(crate) fn chains_save() -> std::path::PathBuf {
+    use std::sync::OnceLock;
+    static SAVE: OnceLock<std::path::PathBuf> = OnceLock::new();
+    SAVE.get_or_init(|| {
+        let dir = std::env::temp_dir();
+        let path = dir.join("feral_bench_chains.bin");
+        let private = dir.join(format!("feral_bench_chains_{}.tmp", std::process::id()));
+        crate::dev_template::generate("chains", &private).expect("chains template generates");
+        std::fs::rename(&private, &path).expect("chains save moves into place");
+        path
+    })
+    .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chains_save;
+    use crate::dev_template::assets_dir;
+    use feral_processes_engine::bench::{self, RunOptions};
+
+    fn run(ticks: u64, seed: u64) -> bench::BenchReport {
+        bench::run(
+            &chains_save(),
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed,
+                orders: vec![],
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn every_chains_machine_accounts_for_every_tick_and_the_line_produces() {
+        let report = run(300, 1);
+        assert!(!report.economy.machines.is_empty());
+        for m in &report.economy.machines {
+            assert_eq!(m.status_ticks.values().sum::<u64>(), 300, "{m:?}");
+        }
+        assert!(
+            report.economy.lines.iter().any(|l| l.output_per_1000 > 0.0),
+            "{:?}",
+            report.economy.lines
+        );
+    }
+
+    #[test]
+    fn an_order_posts_workers_who_drain_the_bay_past_its_capacity() {
+        // Seed 1 passes the bay's capacity only around tick 2000: the line
+        // starves of power cells soon after the first batch (see the
+        // with-orders section of the chains measurement doc).
+        let ticks = 2000;
+        let report = bench::run(
+            &chains_save(),
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed: 1,
+                orders: vec![("patch_routine".into(), 9999)],
+            },
+        )
+        .unwrap();
+        let bay = report
+            .economy
+            .machines
+            .iter()
+            .find(|m| m.kind == "assembly_bay")
+            .unwrap();
+        let capacity = 10; // assets/structures/assembly_bay.ron
+        assert!(bay.units > capacity, "no drain: {bay:?}");
+        assert!(report.economy.labour.mean_wanted > 0.0);
+        for m in &report.economy.machines {
+            assert_eq!(m.status_ticks.values().sum::<u64>(), ticks, "{m:?}");
+        }
+    }
+
+    #[test]
+    fn two_seeds_on_chains_differ_beyond_the_seed_field() {
+        let (a, b) = (run(300, 1), run(300, 2));
+        let mut b_as_a = b.clone();
+        b_as_a.seed = a.seed;
+        assert_ne!(
+            a.economy, b_as_a.economy,
+            "seed changed nothing the report shows"
+        );
+    }
+}

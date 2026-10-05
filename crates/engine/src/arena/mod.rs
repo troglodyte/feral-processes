@@ -305,7 +305,7 @@ pub fn stage(
     // `false`: the headless bin's output is its `Report`, and `train` runs
     // 1.9M fights a session that must not each open a file.
     if telemetry {
-        game.enable_battle_telemetry();
+        game.enable_telemetry();
     }
 
     // Per fight, not per run: twenty reps are then a sample rather than
@@ -462,16 +462,10 @@ pub fn run(
         });
         if opts.telemetry {
             let fight = rep as u64 + 1;
-            records.extend(
-                staged
-                    .game
-                    .take_battle_telemetry()
-                    .into_iter()
-                    .map(|mut record| {
-                        record.set_fight(fight);
-                        record
-                    }),
-            );
+            records.extend(staged.game.take_telemetry().into_iter().map(|mut record| {
+                record.set_fight(fight);
+                record
+            }));
         }
     }
     Ok((

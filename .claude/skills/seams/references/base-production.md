@@ -30,8 +30,8 @@
   only through the player's hands. The labour half lives in `fuel_wants`:
   fuel in store is *fetched*, fuel nowhere is *made* — `wants` asked
   of a one-window `WorkOrder::batch` for it — filed after every fetch and
-  **never naming a dark machine**. **The dark set is asked of `ledger`
-  fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
+  never filtered for darkness itself — `base_wants` drops dark machines.
+  **The dark set is asked of `ledger` fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
   runs ahead of `power_grid_system`, so the cache is last tick's and empty
   on the first tick after a load — exactly when a base arrives dark.
   **"In store" is any structure's output, not the shelves alone**, and
@@ -41,7 +41,14 @@
   Conduit cannot progress. **Charge Coil is not fuel**; the Winding Node *burns* three Power Cells
   per coil, and protecting it would deepen a blackout. And a probe that
   samples `PowerFuel::ticks_left` every 100 ticks aliases against
-  `POWER_UPKEEP_TICKS` and reads a healthy burner as frozen.
+  `POWER_UPKEEP_TICKS` and reads a healthy burner as frozen. **`base_wants`
+  drops every dark `GatherResource` want before `collapse`, not only the fuel
+  ones**: `can_progress` asks about stock, not the grid, so an order named a
+  dark Assembly Bay with coils beside it, `collapse` sent the line's one body
+  to it as the furthest downstream, and the lit Conduit in the same line —
+  the one machine that could end the blackout — never got a body
+  (`a_lines_body_goes_to_its_lit_fuel_maker_not_its_dark_end_machine`). A
+  fixture whose line out-draws the Home now needs `stand_ample_grid_supply`.
 
 - **`power_upkeep` is `Option<ItemId>`, not `bool`, and the *building*
   gates on it, not just the Grid.** Task D shipped the bool and flagged the

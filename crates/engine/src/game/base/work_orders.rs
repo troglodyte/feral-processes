@@ -1071,6 +1071,22 @@ impl Game {
                 && post.1 == TaskKind::GatherResource
                 && outsiders.contains(post))
         });
+        // **A dark machine is never a want, from any source.** `can_progress` asks about stock, not the grid, so an
+        // order names a dark end machine with a batch beside it, and
+        // `collapse` aims the line's one body at it as the furthest
+        // downstream: it makes nothing there, while the lit Conduit in the
+        // same line that could end the blackout never gets a body. Asked
+        // of `ledger` fresh rather than read off `resources::PowerGrid`: this
+        // runs ahead of `power_grid_system` in the tick, so the resource is
+        // last tick's ledger — empty on the first tick after a load, which
+        // is exactly when a base arrives already dark.
+        let dark = crate::game::base::power::ledger(
+            &self.world,
+            self.world.resource::<StructureDb>(),
+            self.world.resource::<ItemDb>(),
+        )
+        .dark;
+        wanted.retain(|(e, kind)| !(*kind == TaskKind::GatherResource && dark.contains(e)));
         let holders = lines::line_holders(&mut self.world, &member_of, staff);
         lines::collapse(wanted, lines, |key| holders.get(&key).copied())
     }
@@ -1805,18 +1821,10 @@ impl Game {
         if unstocked.is_empty() {
             return out;
         }
-        // Asked fresh rather than read off `resources::PowerGrid`: this runs
-        // ahead of `power_grid_system` in the tick, so the resource is last
-        // tick's ledger — empty on the first tick after a load, which is
-        // exactly when a base arrives already dark. Only reached while a
-        // burner is short with nothing in store, so the walk is a blackout's
-        // cost and not a tick's.
-        let dark =
-            crate::game::base::power::ledger(&self.world, db, self.world.resource::<ItemDb>()).dark;
         for fuel in unstocked {
             let order = WorkOrder::batch(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW);
             for (machine, _) in wants(self, &order) {
-                if dark.contains(&machine) || out.iter().any(|&(e, _)| e == machine) {
+                if out.iter().any(|&(e, _)| e == machine) {
                     continue;
                 }
                 out.push((machine, TaskKind::GatherResource));

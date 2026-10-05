@@ -18,6 +18,19 @@ measure — a win rate and how much HP the player should have left. The tuner
 hill-climbs species stats, fighting every candidate in the real arena, and
 writes the best roster it found to `dev-tuning/out/`.
 
+`--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
+queues a batch work order before the first tick. Only posted workers haul,
+and workers are posted only on machines an order wants, so a base with no
+orders has no drain. Use a quantity the run cannot reach (9999) so the demand
+lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
+
+A run ends early, with a report over the ticks it did play, when a battle
+opens or the game ends; the report's `stopped_at` says the tick and `run`
+prints it. `tune` treats a candidate with any stopped run as failed (worst
+fitness, like an unreadable knob): its measures cover a shorter run, so
+stopping could otherwise look like hitting a target. `report.md` notes any
+stopped runs in the before/after and hold-out scores.
+
 **The output is a proposal, never an edit.** Nothing writes into `assets/`.
 Read `out/report.md`, `diff -r assets/species dev-tuning/out/species`, and
 apply what you agree with by hand. `out/` is gitignored: a proposal is a
@@ -165,3 +178,49 @@ The targets were re-argued on 2026-08-12; before that they still encoded a
 game where a zone doubled enemy stats. `stack-depth-5.ron` was a target
 until then and is not one now — see its own comment for why, and
 `NOTES.md` for what it cost while it was.
+
+## Base economy: `bench`
+
+Measures the base economy, and tunes machine numbers toward target ranges.
+
+```sh
+cargo run --release --bin bench -- run --template chains --ticks 5000 [--seed 1] [--order item:qty]... [--out report.ron]
+cargo run --release --bin bench -- tune dev-tuning/economy.ron [--out dir]
+```
+
+`run` loads a `dev-saves/` template, plays it for `--ticks` and prints a
+summary to stderr; the full report (RON: per-machine status ticks and units,
+per-line output per 1000 ticks, labour, items made) goes to `--out` or
+stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
+(a miss costs the squared distance outside, normalised by the range width),
+knobs are fields of `assets/structures/*.ron` or `assets/items/*.ron` with a
+min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
+`power_draw`, `craftable.cost.<item>`). A cross-entropy search runs over
+`seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
+
+`--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
+queues a batch work order before the first tick. Only posted workers haul,
+and workers are posted only on machines an order wants, so a base with no
+orders has no drain. Use a quantity the run cannot reach (9999) so the demand
+lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
+
+**The output is a proposal, never an edit.** `out/bench-economy/` holds
+`report.md`, `proposal.ron` and the patched files; `diff -r assets/
+dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
+
+Two templates, two objectives:
+
+- `economy-bench.ron` runs on `bench-economy` (`dev-saves/README.md`), a
+  rearranged `chains` whose machines keep being emptied under orders, so
+  `items` and `running_share` measure throughput. Use this one. Ticks stay at
+  3000 because a siege stops the clock at roughly tick 3800-4900 with these
+  orders. Its proposal sets six machine speeds, three of them on the edge of
+  their range, and the model has no cost for speed, so read it as which
+  speeds bind throughput rather than as values to apply. See
+  `docs/measurements/2026-10-05-base-bench-economy-baseline.md`.
+- `economy.ron` runs on `chains` and is a mechanics demo: nothing drains
+  `chains`, so every machine fills its buffer once and clogs, and its
+  proposal should not be applied; queuing orders drains it for the first
+  ~1000 ticks and then the line starves again
+  (`docs/measurements/2026-10-05-base-bench-chains-baseline.md`). A
+  running-share target can also be met just by slowing a machine down.

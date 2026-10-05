@@ -464,7 +464,7 @@ mod tests {
                 sample_of(-10.0, false, Some("sulking")),
             ],
             vec![
-                sample_of(4.0, true, None),
+                sample_of(-12.0, true, None),
                 sample_of(-20.0, true, Some("downed_tools")),
             ],
         ] {
@@ -497,10 +497,10 @@ mod tests {
         let r = folded();
         assert_eq!(r.staff_ticks, 4);
         assert_eq!(r.on_shift_share, 0.75);
-        assert_eq!(r.morale_mean, -6.5);
+        assert_eq!(r.morale_mean, -10.5);
         assert_eq!(r.morale_min, -20.0);
-        assert_eq!(r.sulking_share, 0.5);
-        assert_eq!(r.need_strain_mean, 8.5);
+        assert_eq!(r.sulking_share, 0.75);
+        assert_eq!(r.need_strain_mean, 10.5);
         assert_eq!(r.rung_share["none"], 0.5);
         assert_eq!(r.rung_share["sulking"], 0.25);
         assert_eq!(r.rung_share["downed_tools"], 0.25);
@@ -508,9 +508,9 @@ mod tests {
         let need = &r.needs["coherence"];
         assert_eq!(
             (need.mean, need.min, need.critical_share),
-            (3.5, -10.0, 0.5)
+            (-0.5, -10.0, 0.75)
         );
-        assert_eq!(r.end_morale, vec![-20.0, 4.0]);
+        assert_eq!(r.end_morale, vec![-20.0, -12.0]);
     }
 
     #[test]
@@ -546,12 +546,12 @@ mod tests {
         let r = staffed();
         let m = |n: &str| r.measure(n).unwrap();
         assert_eq!(m("staff.on_shift_share"), 0.75);
-        assert_eq!(m("staff.morale_mean"), -6.5);
+        assert_eq!(m("staff.morale_mean"), -10.5);
         assert_eq!(m("staff.morale_min"), -20.0);
-        assert_eq!(m("staff.sulking_share"), 0.5);
-        assert_eq!(m("staff.need_strain_mean"), 8.5);
-        assert_eq!(m("staff.need_mean.coherence"), 3.5);
-        assert_eq!(m("staff.need_critical_share.coherence"), 0.5);
+        assert_eq!(m("staff.sulking_share"), 0.75);
+        assert_eq!(m("staff.need_strain_mean"), 10.5);
+        assert_eq!(m("staff.need_mean.coherence"), -0.5);
+        assert_eq!(m("staff.need_critical_share.coherence"), 0.75);
         assert_eq!(m("staff.rung_share.none"), 0.5);
         assert_eq!(m("staff.rung_share.lashing_out"), 0.0);
         assert_eq!(m("staff.tantrums_per_1000"), 2.0);

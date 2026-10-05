@@ -32,6 +32,20 @@ pub struct Score {
     pub stopped: usize,
 }
 
+/// The shipped numbers are the search's baseline, so a stopped run in them
+/// leaves nothing to compare against; the objective's `ticks` outlasts
+/// something in the base, and the fix is a shorter run.
+fn require_whole_runs(score: &Score, ticks: u64) -> Result<(), String> {
+    if score.stopped == 0 {
+        return Ok(());
+    }
+    Err(format!(
+        "{} run(s) of the shipped set stopped early on the search seeds (a battle opened or the \
+         game ended before {ticks} ticks); use fewer `ticks` in the objective",
+        score.stopped
+    ))
+}
+
 /// A candidate whose run stopped early scores worst, as an unreadable one
 /// does. Its measures cover a shorter run, so a base that dies at tick 3
 /// could look like it sits on every target; and `optimise` already ranks a
@@ -70,7 +84,7 @@ impl Proposal {
     /// stays at zero error holds up.
     pub fn holds_up(&self) -> bool {
         let (before, after) = (self.holdout_before.error, self.holdout_after.error);
-        after < before || (before == 0.0 && after == 0.0)
+        self.holdout_after.stopped == 0 && (after < before || (before == 0.0 && after == 0.0))
     }
 }
 
@@ -232,6 +246,7 @@ pub fn search(
 
     let shipped: Vec<f64> = old.iter().map(|v| v.round()).collect();
     let search_before = score(obj, save, assets, &obj.seeds)?;
+    require_whole_runs(&search_before, obj.ticks)?;
     let holdout_before = score(obj, save, assets, &obj.holdout_seeds)?;
     log(&format!(
         "shipped: error {:.4} on the search seeds",
@@ -442,6 +457,28 @@ mod tests {
         };
         assert_eq!(fitness_of(&score(0.0, 1)), f32::NEG_INFINITY);
         assert_eq!(fitness_of(&score(2.0, 0)), -2.0);
+    }
+
+    #[test]
+    fn a_stopped_baseline_is_refused_with_the_ticks_and_a_remedy() {
+        let stopped = |stopped| Score {
+            error: 0.0,
+            values: vec![],
+            stopped,
+        };
+        assert!(require_whole_runs(&stopped(0), 5000).is_ok());
+        let err = require_whole_runs(&stopped(2), 5000).unwrap_err();
+        assert!(
+            err.contains("5000") && err.contains("fewer `ticks`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_stopped_holdout_run_never_holds_up() {
+        let mut p = proposal_with_holdout(2.0, 1.0);
+        p.holdout_after.stopped = 1;
+        assert!(!p.holds_up());
     }
 
     #[test]

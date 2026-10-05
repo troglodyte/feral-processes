@@ -1031,7 +1031,7 @@ impl Fx {
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
         // Each impact's shake lands on arrival, after the flight, so a
         // blast kicks the board when it hits rather than when it is fired.
-        if self.enabled {
+        if self.enabled && in_battle {
             for bolt in self.bolts.iter_mut().filter(|b| !b.shaken) {
                 if now - bolt.start >= effect_draw::travel_seconds(bolt.def.travel) {
                     bolt.shaken = true;
@@ -1052,6 +1052,9 @@ impl Fx {
             self.tactical_flashes.clear();
             self.cell_marks.clear();
             self.landings.clear();
+            // A blow still in flight would shake the base map's camera on
+            // arrival, after the battle it was fired in has ended.
+            self.bolts.clear();
         }
     }
 
@@ -1974,6 +1977,17 @@ mod tests {
         let (ox, oy) = fx.camera_offset((0, 0), 0.0, None);
         assert!(ox != 0.0 || oy != 0.0, "a live shake moved nothing");
         assert!(ox.abs() <= SHAKE_MAX_OFFSET_TILES && oy.abs() <= SHAKE_MAX_OFFSET_TILES);
+    }
+
+    /// An explosion that is a fight's last blow lands after the fight is
+    /// over; its shake must not carry onto the base map's camera.
+    #[test]
+    fn a_blast_in_flight_when_the_battle_ends_does_not_shake_the_base() {
+        let mut fx = with_library();
+        fx.begin_frame(0.0, blast("explosion"), true);
+        fx.begin_frame(BOLT_SECONDS + 0.001, FrameCues::default(), false);
+        assert_eq!(fx.shake_energy, 0.0);
+        assert_eq!(fx.camera_offset((0, 0), 0.0, None), (0.0, 0.0));
     }
 
     #[test]

@@ -76,8 +76,7 @@ impl Objective {
                     MEASURES.join(", ")
                 ));
             }
-            // NaN fails both comparisons, so it is rejected here too.
-            if !(target.min < target.max) {
+            if !is_range(target.min, target.max) {
                 return Err(format!(
                     "target `{}`: min {} must be below max {}",
                     target.measure, target.min, target.max
@@ -85,7 +84,7 @@ impl Objective {
             }
         }
         for (i, knob) in self.knobs.iter().enumerate() {
-            if !(knob.min < knob.max) {
+            if !is_range(knob.min, knob.max) {
                 return Err(format!(
                     "knob {} `{}`: min {} must be below max {}",
                     knob.file, knob.field, knob.min, knob.max
@@ -103,6 +102,11 @@ impl Objective {
         }
         Ok(())
     }
+}
+
+/// A usable range: finite, with room between the ends (NaN is neither).
+fn is_range(min: f64, max: f64) -> bool {
+    min.is_finite() && max.is_finite() && min < max
 }
 
 /// Whether `name` is one of `MEASURES`, whose entries end in `<placeholder>`

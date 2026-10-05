@@ -4,7 +4,9 @@
 //! field order in a shipped `.ron` survives and a patch is never applied on
 //! top of a previous patch.
 
+use feral_processes_engine::interactions::InteractionDef;
 use feral_processes_engine::items_db::ItemDef;
+use feral_processes_engine::memories::MemoryDef;
 use feral_processes_engine::needs::NeedDef;
 use feral_processes_engine::situations::ThoughtDef;
 use feral_processes_engine::structures::StructureDef;
@@ -38,6 +40,13 @@ const FIELDS: &[(&str, bool)] = &[
     ("content", false),
     ("morale_weight", false),
     ("intensity", false),
+    ("valence", false),
+    ("half_life", true),
+    ("strike_cap", true),
+    ("stack_decay", false),
+    ("mood", false),
+    ("weight", false),
+    ("sulking", false),
 ];
 
 fn matches_pattern(pattern: &str, field: &str) -> bool {
@@ -392,6 +401,33 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
     let structure =
         || ron::from_str::<StructureDef>(&text).map_err(|e| format!("{}: {e}", path.display()));
     let missing = || format!("{}: no `{}`", knob.file, knob.field);
+    // These names could repeat across kinds, so they dispatch on the
+    // directory; a field named under the wrong one falls to `unsupported`.
+    let kind = knob.file.split('/').next().unwrap_or_default();
+    match (kind, parts.as_slice()) {
+        (
+            "memories",
+            [field @ ("valence" | "half_life" | "strike_cap" | "stack_decay" | "mood")],
+        ) => {
+            let def = ron::from_str::<MemoryDef>(&text).map_err(parse_err)?;
+            return Ok(match *field {
+                "valence" => f64::from(def.valence),
+                "half_life" => def.half_life as f64,
+                "strike_cap" => f64::from(def.strike_cap),
+                "stack_decay" => f64::from(def.stack_decay),
+                _ => f64::from(def.mood),
+            });
+        }
+        ("interactions", [field @ ("weight" | "sulking")]) => {
+            let def = ron::from_str::<InteractionDef>(&text).map_err(parse_err)?;
+            return Ok(f64::from(if *field == "weight" {
+                def.weight
+            } else {
+                def.sulking
+            }));
+        }
+        _ => {}
+    }
     match parts.as_slice() {
         ["capacity"] => Ok(f64::from(structure()?.capacity)),
         ["power_draw"] => Ok(f64::from(structure()?.power_draw)),
@@ -420,7 +456,7 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
                 _ => need.morale_weight,
             }))
         }
-        ["intensity"] => Ok(f64::from(
+        ["intensity"] if kind == "thoughts" => Ok(f64::from(
             ron::from_str::<ThoughtDef>(&text)
                 .map_err(parse_err)?
                 .intensity,
@@ -529,6 +565,13 @@ mod tests {
             ("content", "needs/coherence.ron", "content"),
             ("morale_weight", "needs/coherence.ron", "morale_weight"),
             ("intensity", "thoughts/beside_friend.ron", "intensity"),
+            ("valence", "memories/chatted_with.ron", "valence"),
+            ("half_life", "memories/chatted_with.ron", "half_life"),
+            ("strike_cap", "memories/chatted_with.ron", "strike_cap"),
+            ("stack_decay", "memories/chatted_with.ron", "stack_decay"),
+            ("mood", "memories/chatted_with.ron", "mood"),
+            ("weight", "interactions/complain.ron", "weight"),
+            ("sulking", "interactions/complain.ron", "sulking"),
         ];
         for &(pattern, integer) in FIELDS {
             let &(_, file, field) = examples
@@ -726,5 +769,73 @@ mod tests {
             e.contains("intensity") && e.contains("services.<need>.radius"),
             "{e}"
         );
+    }
+
+    /// Appends `line` to a memory file's top-level struct, for the two
+    /// `#[serde(default)]` fields no shipped memory sets.
+    fn with_field(text: &str, line: &str) -> String {
+        let close = text.rfind(')').unwrap();
+        format!("{}    {line}\n{}", &text[..close], &text[close..])
+    }
+
+    #[test]
+    fn every_memory_field_round_trips() {
+        let f = "memories/chatted_with.ron";
+        assert_eq!(write_and_read(f, "valence", -2.5), -2.5);
+        assert_eq!(write_and_read(f, "half_life", 777.0), 777.0);
+        assert_eq!(write_and_read(f, "strike_cap", 5.0), 5.0);
+    }
+
+    #[test]
+    fn a_memory_half_life_and_strike_cap_round() {
+        let f = "memories/chatted_with.ron";
+        assert_eq!(write_and_read(f, "half_life", 1234.6), 1235.0);
+        assert_eq!(write_and_read(f, "strike_cap", 4.4), 4.0);
+        assert!(knob(f, "half_life").is_integer() && knob(f, "strike_cap").is_integer());
+    }
+
+    #[test]
+    fn stack_decay_and_mood_round_trip_when_the_file_sets_them() {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        let k = knob("memories/chatted_with.ron", "stack_decay");
+        let path = scratch.dir().join(&k.file);
+        let text = std::fs::read_to_string(&path).unwrap();
+        // Absent from every shipped file: the default reads back, a patch is an error.
+        assert_eq!(read_back(scratch.dir(), &k).unwrap(), 1.0);
+        let e = patch(&text, "stack_decay", 0.5, false).unwrap_err();
+        assert!(e.contains("stack_decay"), "{e}");
+        let text = with_field(&with_field(&text, "stack_decay: 0.9,"), "mood: 0.8,");
+        std::fs::write(&path, &text).unwrap();
+        for (field, v) in [("stack_decay", 0.55), ("mood", 0.25)] {
+            let k = knob("memories/chatted_with.ron", field);
+            std::fs::write(&path, patch(&text, field, v, false).unwrap()).unwrap();
+            let got = read_back(scratch.dir(), &k).unwrap();
+            assert!((got - v).abs() < 1e-6, "{field}: {got}");
+        }
+    }
+
+    #[test]
+    fn every_interaction_field_round_trips() {
+        let f = "interactions/complain.ron";
+        assert_eq!(write_and_read(f, "weight", 2.75), 2.75);
+        assert_eq!(write_and_read(f, "sulking", 0.5), 0.5);
+    }
+
+    #[test]
+    fn a_field_is_refused_outside_its_directory() {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        for (file, field) in [
+            ("memories/chatted_with.ron", "intensity"),
+            ("memories/chatted_with.ron", "weight"),
+            ("thoughts/beside_friend.ron", "valence"),
+            ("interactions/complain.ron", "valence"),
+            ("interactions/complain.ron", "mood"),
+        ] {
+            let e = read_back(scratch.dir(), &knob(file, field)).unwrap_err();
+            assert!(
+                e.contains("not a supported knob field"),
+                "{file} {field}: {e}"
+            );
+        }
     }
 }

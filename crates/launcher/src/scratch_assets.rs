@@ -2,7 +2,8 @@
 //!
 //! Cleanup is `Drop`, not a line at the end of a success path. Each tree is
 //! a full copy of `assets/` — around two hundred files — and a run that ends
-//! on an error or a Ctrl-C would otherwise leave every one of them behind.
+//! on an error or a panic would otherwise leave every one of them behind.
+//! A Ctrl-C does not unwind, so it still leaks the trees alive at that moment.
 //! The engine's test fixtures learned this the expensive way: 5,437 stale
 //! installs exhausted the filesystem's *inode* table on a tmpfs that was 15%
 //! full by bytes, which fails builds machine-wide with an error naming none

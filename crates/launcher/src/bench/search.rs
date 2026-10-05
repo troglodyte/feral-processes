@@ -50,9 +50,12 @@ pub struct Proposal {
 
 impl Proposal {
     /// Whether the proposal beat the shipped numbers on seeds the search
-    /// never saw; a win on the training seeds alone is overfitting.
+    /// never saw; a win on the training seeds alone is overfitting. Numbers
+    /// that already sit on every target cannot improve, so a hold-out that
+    /// stays at zero error holds up.
     pub fn holds_up(&self) -> bool {
-        self.holdout_after.error < self.holdout_before.error
+        let (before, after) = (self.holdout_before.error, self.holdout_after.error);
+        after < before || (before == 0.0 && after == 0.0)
     }
 }
 
@@ -225,15 +228,25 @@ pub fn search(
         std_floor: STD_FLOOR,
     };
     let mut rng = StdRng::seed_from_u64(obj.search_seed);
+    let first_error: Mutex<Option<String>> = Mutex::new(None);
     let fitness = |x: &[f32]| -> f32 {
         match evaluate(&values_of(x), &obj.seeds) {
             Ok(s) => -(s.error as f32),
             // A candidate whose measure cannot be read (a kind that no
-            // longer exists) scores worst rather than ending the search.
-            Err(_) => f32::NEG_INFINITY,
+            // longer exists) scores worst rather than ending the search;
+            // the first reason is kept so the log can say why.
+            Err(e) => {
+                first_error.lock().expect("first error").get_or_insert(e);
+                f32::NEG_INFINITY
+            }
         }
     };
+    let mut reported = false;
     let best = optimise(&cfg, &mut rng, fitness, |p| {
+        if !reported && let Some(e) = first_error.lock().expect("first error").as_ref() {
+            log(&format!("note: a candidate failed and scored worst: {e}"));
+            reported = true;
+        }
         log(&format!(
             "gen {}/{}  best error {:.4}  mean {:.4}",
             p.iteration + 1,
@@ -370,6 +383,30 @@ mod tests {
                      min: 5.0, max: 60.0)])"#,
         )
         .unwrap()
+    }
+
+    fn proposal_with_holdout(before: f64, after: f64) -> Proposal {
+        let score = |error| Score {
+            error,
+            values: vec![],
+        };
+        Proposal {
+            changes: vec![],
+            search_before: score(0.0),
+            search_after: score(0.0),
+            holdout_before: score(before),
+            holdout_after: score(after),
+            files: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn holds_up_when_better_or_already_perfect_but_not_when_worse() {
+        assert!(proposal_with_holdout(2.0, 1.0).holds_up());
+        assert!(proposal_with_holdout(0.0, 0.0).holds_up());
+        assert!(!proposal_with_holdout(1.0, 1.0).holds_up());
+        assert!(!proposal_with_holdout(1.0, 2.0).holds_up());
+        assert!(!proposal_with_holdout(0.0, 0.5).holds_up());
     }
 
     #[test]

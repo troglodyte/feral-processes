@@ -378,14 +378,20 @@ mod tests {
     fn a_nested_block_comment_is_skipped() {
         let text = "(\n    /* capacity: 1, /* capacity: 2, */ ) */\n    capacity: 3,\n)";
         let out = patch(text, "capacity", 9.0, true).unwrap();
-        assert!(out.contains("capacity: 9,") && out.contains("capacity: 2, */ )"), "{out}");
+        assert!(
+            out.contains("capacity: 9,") && out.contains("capacity: 2, */ )"),
+            "{out}"
+        );
     }
 
     #[test]
     fn a_raw_string_is_skipped() {
         let text = "(\n    note: r#\"capacity: 1, \" ) \"#,\n    capacity: 3,\n)";
         let out = patch(text, "capacity", 9.0, true).unwrap();
-        assert!(out.contains("capacity: 9,") && out.contains("capacity: 1, \" )"), "{out}");
+        assert!(
+            out.contains("capacity: 9,") && out.contains("capacity: 1, \" )"),
+            "{out}"
+        );
     }
 
     #[test]

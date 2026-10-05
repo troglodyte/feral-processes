@@ -5,17 +5,22 @@ pub mod knob;
 pub mod objective;
 pub mod search;
 
-/// A `chains` save in a directory of its own, generated once per test
-/// process. `dev_template::resolve` writes one shared working copy, which
-/// parallel tests would race on.
+/// A `chains` save at one fixed path, generated once per test process.
+/// `dev_template::resolve` writes one shared working copy, which parallel
+/// tests would race on. A static cannot be dropped, so the path is the same
+/// for every process (one file ever left behind, not one per run) and is
+/// written under a private name and renamed into place, so a process reading
+/// it never sees another's half-written copy.
 #[cfg(test)]
 pub(crate) fn chains_save() -> std::path::PathBuf {
     use std::sync::OnceLock;
     static SAVE: OnceLock<std::path::PathBuf> = OnceLock::new();
     SAVE.get_or_init(|| {
-        let path =
-            std::env::temp_dir().join(format!("feral_bench_chains_{}.bin", std::process::id()));
-        crate::dev_template::generate("chains", &path).expect("chains template generates");
+        let dir = std::env::temp_dir();
+        let path = dir.join("feral_bench_chains.bin");
+        let private = dir.join(format!("feral_bench_chains_{}.tmp", std::process::id()));
+        crate::dev_template::generate("chains", &private).expect("chains template generates");
+        std::fs::rename(&private, &path).expect("chains save moves into place");
         path
     })
     .clone()

@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.15.6
 
 **Attacks on a battle map now look like what they are.** Ranged weapons fire a train of pulses, melee weapons slash, heavy single hits draw a beam, debuffs and drains crackle, and blast routines go off as an explosion that shakes the screen. Before, every attack was the same streak. Each weapon and routine picks its look from a file in `assets/effects/` through an `fx:` line, so mods can add their own; anything without one keeps the plain streak.
 

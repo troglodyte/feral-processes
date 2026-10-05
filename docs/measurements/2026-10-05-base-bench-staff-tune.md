@@ -13,8 +13,9 @@ meets every remaining target on the three search seeds (error 0.0000 against
 of the shipped error is `sulking_share` being too low; the other three targets
 were met by the shipped assets and stay met. The proposal gets sulking up
 by turning the knobs hard: four knobs end at a bound, morale weights go to
-their strongest allowed, and staff spend 3-6 points less of their time on shift
-(about 0.88-0.90 against 0.94-0.95). One of the three search seeds now has a
+their strongest allowed, and staff spend 2-9 points less of their time on shift
+(means 0.879 against 0.935 on the search seeds, 0.904 against 0.954 on
+hold-out). One of the three search seeds now has a
 fray. Whether that is "occasional trouble" is a design call (see
 "Suspicious").
 
@@ -46,6 +47,15 @@ seeds (the mean's re-score is not logged, so how far behind it was is not
 recorded). Generation bests ran 0.0339 down to 0.0000 (generation 19); the
 generation means stayed at 0.04-0.13.
 
+**`on shift` was re-measured after a fix.** The tune note first read it from
+the examine line's errand label, which calls a downed-tools program on shift
+at a base with no amenity and a disgruntled carrier off shift. It is now
+`Game::on_shift`, the scheduler's own test. On `bench-economy`, which has an
+amenity, the column moved by rounding only (seed 1 shipped 0.941 to 0.942,
+seed 5 proposed 0.869 to 0.870); the figures below are the re-measured ones.
+The targets are not on shift and their numbers are unchanged (seed 1 shipped
+sulking 0.0282, the proposal's sulking on seeds 1-6 as in the table).
+
 Per-seed numbers below come from `bench run` for seeds 1-6 against the shipped
 assets and against a scratch copy of the repo with the proposed files in
 `assets/` (the real `assets/` was never edited). They reproduce the tune's own
@@ -75,11 +85,11 @@ target any more; it is shown because the proposal moves it.
 
 | seed | sulking_share | slack mean | coherence critical | frays | on shift | morale min |
 |---|---|---|---|---|---|---|
-| 1 | 0.0643 (0.0282) | 84.1 (82.9) | 0.0373 (0.0024) | 1 (0) | 0.882 (0.941) | -15.9 (-15.4) |
+| 1 | 0.0643 (0.0282) | 84.1 (82.9) | 0.0373 (0.0024) | 1 (0) | 0.882 (0.942) | -15.9 (-15.4) |
 | 2 | 0.0586 (0.0338) | 84.0 (84.2) | 0.0031 (0.0011) | 0 (0) | 0.896 (0.926) | -17.0 (-15.4) |
 | 3 | 0.0925 (0.0330) | 83.6 (82.9) | 0.0039 (0.0012) | 0 (0) | 0.860 (0.939) | -18.8 (-16.4) |
 | 4 | 0.0666 (0.0403) | 85.1 (81.9) | 0.0029 (0.0020) | 0 (0) | 0.902 (0.926) | -17.5 (-14.3) |
-| 5 | 0.0620 (0.0220) | 84.0 (79.5) | 0.0035 (0.0012) | 0 (0) | 0.869 (0.963) | -16.4 (-14.4) |
+| 5 | 0.0620 (0.0220) | 84.0 (79.5) | 0.0035 (0.0012) | 0 (0) | 0.870 (0.963) | -16.4 (-14.4) |
 | 6 | 0.0158 (0.0095) | 79.5 (83.0) | 0.0032 (0.0015) | 0 (0) | 0.942 (0.974) | -14.2 (-13.1) |
 
 No run stopped (`stopped_at` None on all twelve). No tantrum on any seed; the
@@ -125,7 +135,7 @@ weights (strongest pull), Sandbox restore rate (max), `no_amenity` thought
 - **Sulking comes from amplifying need strain, not from the thoughts.**
   Coherence drains at its fastest and both morale weights are at their
   strongest; the Sandbox is at its fastest restore to hold slack up. Staff
-  spend less time on shift (0.88-0.90 against 0.94-0.95) and morale minima
+  spend less time on shift (0.86-0.94 against 0.93-0.97 per seed) and morale minima
   fall (-14 to -19). That meets "occasional trouble" by the metric; whether it
   looks like it in play is untested here.
 - **Seed 1 is an outlier.** Coherence critical share is 0.037 there against

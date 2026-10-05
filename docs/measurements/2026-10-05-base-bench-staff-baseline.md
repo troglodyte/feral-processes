@@ -16,8 +16,8 @@ Over 3,000 ticks, seeds 1-5, with 15 staff on both templates:
   near it (min 54-66). One rung is reached, `sulking` (4.8% of staff-ticks,
   0.8-9.2% by seed). **No tantrum, no fray, no `downed_tools`, no
   `lashing_out`, on any seed.**
-- **`chains` (no amenity) is the fray contrast.** Staff are on shift 100% of
-  ticks, mean morale -4.8, sulking 22.4%. Coherence is at 0 for someone on
+- **`chains` (no amenity) is the fray contrast.** Staff are on shift 97.8% of
+  ticks (100% on four seeds, 89.0% on seed 1), mean morale -4.8, sulking 22.4%. Coherence is at 0 for someone on
   every seed and below critical for 5.2% of staff-ticks. 3-4 frays per run,
   first at tick 1922-2328. `downed_tools` is reached on 3 of 5 seeds (mean
   3.9%). No tantrum and no `lashing_out`.
@@ -55,7 +55,7 @@ All new: no earlier note measured staff. Shares are of `staff_ticks`.
 
 | measure | seed 1 | 2 | 3 | 4 | 5 | mean | range |
 |---|---|---|---|---|---|---|---|
-| on_shift_share | 0.9516 | 0.9177 | 0.9718 | 0.9043 | 0.9868 | 0.9465 | 0.9043-0.9868 |
+| on_shift_share | 0.9517 | 0.9180 | 0.9718 | 0.9043 | 0.9868 | 0.9465 | 0.9043-0.9868 |
 | morale_mean | 2.854 | 2.612 | 2.844 | 1.584 | 2.306 | 2.440 | 1.584-2.854 |
 | morale_min | -11.44 | -15.03 | -10.84 | -16.65 | -10.21 | -12.84 | -16.65 to -10.21 |
 | sulking_share | 0.0246 | 0.0468 | 0.0115 | 0.0677 | 0.0045 | 0.0310 | 0.0045-0.0677 |
@@ -79,7 +79,7 @@ All new: no earlier note measured staff. Shares are of `staff_ticks`.
 
 | measure | seed 1 | 2 | 3 | 4 | 5 | mean | range |
 |---|---|---|---|---|---|---|---|
-| on_shift_share | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| on_shift_share | 0.8904 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.9781 | 0.8904-1.0000 |
 | morale_mean | -7.792 | -4.207 | -4.480 | -3.638 | -4.032 | -4.830 | -7.792 to -3.638 |
 | morale_min | -54.75 | -57.17 | -32.54 | -40.95 | -50.61 | -47.20 | -57.17 to -32.54 |
 | sulking_share | 0.2422 | 0.1942 | 0.2559 | 0.2283 | 0.1969 | 0.2235 | 0.1942-0.2559 |
@@ -127,7 +127,7 @@ baseline row and not comparable to the table above.
 
 | measure | 3000 ticks (baseline row) | 4902 ticks (diagnostic) |
 |---|---|---|
-| on_shift_share | 0.9516 | 0.9401 |
+| on_shift_share | 0.9517 | 0.9402 |
 | morale_mean / min | 2.854 / -11.44 | 3.728 / -11.44 |
 | sulking_share | 0.0246 | 0.0257 |
 | need_strain_mean | -0.1949 | -0.3863 |
@@ -156,8 +156,17 @@ ticks, but no one reaches a fray or a heavier rung before the siege.
   3,000 ticks.
 - **No tantrum anywhere.** Neither template produced one, so
   `staff.tantrums_per_1000` is zero on every row.
-- **`on_shift_share` of 1.0 on `chains`:** nobody had an errand in any
-  tick; the cause was not investigated here.
+- **`on_shift_share` on `chains`:** the first version of this note read 1.0 on
+  every seed because it asked the examine line's errand label, and `chains`
+  has no amenity, so nobody ever had an errand. It now asks `Game::on_shift`,
+  the scheduler's own test, and the numbers above are from that. Seed 1 reads
+  0.8904, which is exactly one minus its `downed_tools` share (0.1096): a
+  program at downed tools is off the line. Seeds 2 and 5 also reach
+  `downed_tools` (3.6% and 5.0%) and still read 1.0; the sim keeps a program
+  that is carrying a load on shift whatever its mood, which is the likely
+  reason, but that was not checked here. On `bench-economy` the re-measure
+  moved the figures by at most 0.0003 (it has an amenity, so the label and
+  the test agree).
 
 ## What it does not say
 
@@ -208,7 +217,7 @@ five rows are the staff objective's targets; `frays_per_1000` is `frays` / 6.
 | need_mean.slack | 82.88 | 84.15 | 82.86 | 81.90 | 79.49 | 82.26 |
 | frays_per_1000 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rung_share.downed_tools | 0 | 0 | 0 | 0 | 0 | 0 |
-| on_shift_share | 0.9414 | 0.9256 | 0.9390 | 0.9256 | 0.9628 | 0.9389 |
+| on_shift_share | 0.9415 | 0.9257 | 0.9391 | 0.9257 | 0.9629 | 0.9390 |
 | morale_mean | 4.888 | 4.325 | 3.485 | 5.395 | 4.801 | 4.579 |
 | morale_min | -15.36 | -15.38 | -16.40 | -14.32 | -14.42 | -15.18 |
 | tantrums | 0 | 0 | 0 | 0 | 0 | 0 |

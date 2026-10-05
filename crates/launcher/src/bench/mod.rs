@@ -13,7 +13,8 @@ pub(crate) fn chains_save() -> std::path::PathBuf {
     use std::sync::OnceLock;
     static SAVE: OnceLock<std::path::PathBuf> = OnceLock::new();
     SAVE.get_or_init(|| {
-        let path = std::env::temp_dir().join(format!("feral_bench_chains_{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("feral_bench_chains_{}.bin", std::process::id()));
         crate::dev_template::generate("chains", &path).expect("chains template generates");
         path
     })
@@ -49,6 +50,9 @@ mod tests {
         let (a, b) = (run(300, 1), run(300, 2));
         let mut b_as_a = b.clone();
         b_as_a.seed = a.seed;
-        assert_ne!(a.economy, b_as_a.economy, "seed changed nothing the report shows");
+        assert_ne!(
+            a.economy, b_as_a.economy,
+            "seed changed nothing the report shows"
+        );
     }
 }

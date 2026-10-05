@@ -95,7 +95,10 @@ impl Objective {
                 .iter()
                 .any(|k| k.file == knob.file && k.field == knob.field)
             {
-                return Err(format!("knob {} `{}` is listed twice", knob.file, knob.field));
+                return Err(format!(
+                    "knob {} `{}` is listed twice",
+                    knob.file, knob.field
+                ));
             }
         }
         Ok(())
@@ -196,7 +199,8 @@ mod tests {
 
     #[test]
     fn a_duplicate_knob_is_rejected() {
-        let knob = r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
+        let knob =
+            r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
         let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {knob}")));
         assert!(e.contains("twice"), "{e}");
     }

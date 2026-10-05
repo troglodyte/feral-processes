@@ -379,3 +379,18 @@ line.
 **Risk to check at T13:** battle-only kinds (`bonded_in_battle`,
 `mauled_by`, `lost_in_battle`) cannot fire with sieges off. Report them
 as unreachable on this bench rather than turning sieges back on.
+
+### After the baseline (user, 2026-10-05)
+
+- **Memories objective (T14)** on `bench-economy`, sieges off, 6,000 ticks,
+  P2's orders and seeds (search 1-3, hold-out 4-6, 22 x 24).
+  Targets: `memories.bond_share.Friend` 0.05-0.20,
+  `memories.bond_share.Rival` 0.02-0.10,
+  `memories.morale_band_share.uneasy` 0.02-0.10,
+  `memories.morale_band_share.devoted` 0.02-0.10.
+- Knobs ("social memories + talk"): for `chatted_with`, `talked_shop_with`,
+  `laughed_with`, `commiserated_with`, `idled_with`, `thanked_by`,
+  `complimented_by`, `slighted_by`, `complained_at_by`, `insulted_by`:
+  `valence` (sign kept, shipped x0.5 to x1.5) and `half_life` 1000-6000;
+  plus `weight` (shipped x0.5 to x2.0) on every interaction whose
+  listener/speaker memory is one of those kinds (all but `gossip`).

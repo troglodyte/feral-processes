@@ -3844,6 +3844,39 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     );
 }
 
+/// **A body is squeezed past but never stopped on.** The target's west face
+/// is the only way to its north face; with a program standing on the west
+/// face the walk may not pass through it, because arriving there would put
+/// two bodies on one cell — while the same program one cell short of the
+/// face is a throughway, and the step onto it says it is a squeeze.
+#[test]
+fn a_body_on_a_face_is_not_a_throughway_and_a_body_short_of_it_is() {
+    use crate::game::base::hauling::{NoPost, Step, blocked_tiles, step_to_post};
+
+    let mut grid = base_grid::BaseGrid::default();
+    for (x, y) in [(-1, 2), (-1, 1), (-1, 0), (0, -1)] {
+        grid.open(x, y, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: -1, y: 2 };
+    let on_face = blocked_tiles(std::iter::empty(), [Position { x: -1, y: 0 }].into_iter());
+    let short_of_it = blocked_tiles(std::iter::empty(), [Position { x: -1, y: 1 }].into_iter());
+
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &on_face, grid.radius()),
+        Err(NoPost::NoRoute),
+        "the only way on runs through a face somebody is standing on"
+    );
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &short_of_it, grid.radius()),
+        Ok(Some(Step {
+            to: Position { x: -1, y: 1 },
+            squeeze: true,
+        })),
+        "a body in the corridor is a throughway, priced as a squeeze"
+    );
+}
+
 /// The interior of a marked block must not spend the crew's budget.
 ///
 /// `dig_wants` lists every marked cell in tile order and

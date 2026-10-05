@@ -193,9 +193,16 @@ summary to stderr; the full report (RON: per-machine status ticks and units,
 per-line output per 1000 ticks, labour, items made) goes to `--out` or
 stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
 (a miss costs the squared distance outside, normalised by the range width),
-knobs are fields of `assets/structures/*.ron` or `assets/items/*.ron` with a
-min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
-`power_draw`, `craftable.cost.<item>`). A cross-entropy search runs over
+knobs are fields of `assets/structures/*.ron`, `assets/items/*.ron`,
+`assets/needs/*.ron` or `assets/thoughts/*.ron` with a min and max.
+Structure and item knobs: `work.ticks_per_unit`, `assembles.ticks_per_unit`,
+`capacity`, `power_draw`, `craftable.cost.<item>`, and
+`services.<need>.per_tick` / `services.<need>.radius` (the one service entry
+serving that need; none or several is an error). Need knobs: `drain_per_tick`,
+`working_multiplier`, `critical`, `content`, `morale_weight`. Thought knob:
+`intensity` (signed). Whole-number fields (everything in the first list
+except `services.<need>.per_tick`, plus `radius`) are rounded; the rest keep
+six decimals. A cross-entropy search runs over
 `seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
 
 `--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)

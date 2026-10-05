@@ -5,6 +5,8 @@
 //! top of a previous patch.
 
 use feral_processes_engine::items_db::ItemDef;
+use feral_processes_engine::needs::NeedDef;
+use feral_processes_engine::situations::ThoughtDef;
 use feral_processes_engine::structures::StructureDef;
 use serde::Deserialize;
 use std::path::Path;
@@ -14,10 +16,42 @@ pub struct Knob {
     /// Path under the assets directory, e.g. `structures/assembly_bay.ron`.
     pub file: String,
     /// Dotted field path: `capacity`, `work.ticks_per_unit`,
-    /// `craftable.cost.<item id>`.
+    /// `craftable.cost.<item id>`, `services.<need id>.per_tick`; a need
+    /// file's `drain_per_tick`, `working_multiplier`, `critical`, `content`
+    /// or `morale_weight`; a thought file's `intensity`.
     pub field: String,
     pub min: f64,
     pub max: f64,
+}
+
+/// Fields the game reads as whole numbers; every other knob is a float.
+fn is_integer_field(field: &str) -> bool {
+    matches!(
+        field.split('.').collect::<Vec<_>>().as_slice(),
+        ["capacity"]
+            | ["power_draw"]
+            | ["work", "ticks_per_unit"]
+            | ["assembles", "ticks_per_unit"]
+            | ["craftable", "cost", _]
+            | ["services", _, "radius"]
+    )
+}
+
+impl Knob {
+    /// Whether a value for this knob is a whole number.
+    pub fn is_integer(&self) -> bool {
+        is_integer_field(&self.field)
+    }
+
+    /// `value` as this knob stores it: rounded to a whole number, or to six
+    /// decimals so a proposal is not a string of float noise.
+    pub fn snap(&self, value: f64) -> f64 {
+        if self.is_integer() {
+            value.round()
+        } else {
+            (value * 1e6).round() / 1e6
+        }
+    }
 }
 
 /// Returns `pristine` with the number at `field` replaced by `value`
@@ -42,6 +76,9 @@ fn locate(text: &str, field: &str) -> Result<(usize, usize), String> {
     let segments: Vec<&str> = field.split('.').collect();
     let (scopes, tail) = match segments.as_slice() {
         ["craftable", "cost", id] => (&segments[..1], Tail::CostAmount(id)),
+        ["services", need, leaf @ ("per_tick" | "radius")] => {
+            (&segments[..0], Tail::Service(need, leaf))
+        }
         [scopes @ .., leaf] => (scopes, Tail::Field(leaf)),
         [] => return Err(no_match("empty")),
     };
@@ -83,12 +120,59 @@ fn locate(text: &str, field: &str) -> Result<(usize, usize), String> {
             }
             number_at(text, after_comma + 1).ok_or_else(|| no_match("amount is not a number"))
         }
+        Tail::Service(need, leaf) => {
+            let value = one(text, open, "services")
+                .map_err(|n| no_match(&format!("`services` matched {n} times")))?;
+            let list = skip_ws(text, value);
+            if text.as_bytes().get(list) != Some(&b'[') {
+                return Err(no_match("`services` is not a list"));
+            }
+            let list_close = matching(text, list).ok_or_else(|| no_match("unbalanced brackets"))?;
+            let entries = entries_serving(text, list, list_close, need);
+            let [entry] = entries.as_slice() else {
+                return Err(no_match(&format!(
+                    "`services` has {} entries serving `{need}`",
+                    entries.len()
+                )));
+            };
+            let value = one(text, *entry, leaf)
+                .map_err(|n| no_match(&format!("`{leaf}` matched {n} times")))?;
+            number_at(text, value).ok_or_else(|| no_match(&format!("`{leaf}` is not a number")))
+        }
     }
 }
 
 enum Tail<'a> {
     Field(&'a str),
     CostAmount(&'a str),
+    /// `(need id, leaf)` of the one `services` entry serving that need.
+    Service(&'a str, &'a str),
+}
+
+/// The `(` of every struct directly inside the list `list..close` whose
+/// `need:` is the string `need`.
+fn entries_serving(text: &str, list: usize, close: usize, need: &str) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let wanted = format!("\"{need}\"");
+    let mut out = Vec::new();
+    let mut i = list + 1;
+    while i < close {
+        if let Some(next) = skip_literal(bytes, i) {
+            i = next;
+        } else if bytes[i] == b'(' {
+            let Some(end) = matching(text, i) else { break };
+            if let Ok(value) = one(text, i, "need") {
+                let at = skip_ws(text, value);
+                if text[at..].starts_with(&wanted) {
+                    out.push(i);
+                }
+            }
+            i = end + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
 }
 
 /// The index just after the colon of the single `key:` at depth 0 of the
@@ -259,15 +343,26 @@ fn number_at(text: &str, from: usize) -> Option<(usize, usize)> {
     (len > 0).then_some((start, start + len))
 }
 
+const SUPPORTED: &str = "capacity, power_draw, work.ticks_per_unit, \
+assembles.ticks_per_unit, craftable.cost.<item>, services.<need>.per_tick, \
+services.<need>.radius, drain_per_tick, working_multiplier, critical, content, \
+morale_weight, intensity";
+
 /// The value currently at `knob` in the scratch tree `assets`, read through
 /// the engine's own types so a patch that landed on the wrong number shows.
-/// Phase-1 fields only. A single file is parsed rather than a whole db:
+/// A single file is parsed rather than a whole db:
 /// `ItemDb::load_dir` needs an `AbilityDb` this has no use for.
 pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
     let path = assets.join(&knob.file);
     let text = std::fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    let not_phase_1 = || format!("`{}` is not a phase-1 knob", knob.field);
+    let unsupported = || {
+        format!(
+            "`{}` is not a supported knob field; supported: {SUPPORTED}",
+            knob.field
+        )
+    };
+    let parse_err = |e: ron::error::SpannedError| format!("{}: {e}", path.display());
     let parts: Vec<&str> = knob.field.split('.').collect();
     let structure =
         || ron::from_str::<StructureDef>(&text).map_err(|e| format!("{}: {e}", path.display()));
@@ -290,7 +385,31 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
                 .map(|(_, n)| f64::from(*n))
                 .ok_or_else(missing)
         }
-        _ => Err(not_phase_1()),
+        ["drain_per_tick" | "working_multiplier" | "critical" | "content" | "morale_weight"] => {
+            let need = ron::from_str::<NeedDef>(&text).map_err(parse_err)?;
+            Ok(f64::from(match knob.field.as_str() {
+                "drain_per_tick" => need.drain_per_tick,
+                "working_multiplier" => need.working_multiplier,
+                "critical" => need.critical,
+                "content" => need.content,
+                _ => need.morale_weight,
+            }))
+        }
+        ["intensity"] => Ok(f64::from(
+            ron::from_str::<ThoughtDef>(&text)
+                .map_err(parse_err)?
+                .intensity,
+        )),
+        ["services", id, leaf @ ("per_tick" | "radius")] => {
+            let services = structure()?.services;
+            let mut serving = services.iter().filter(|s| s.need.as_str() == *id);
+            match (serving.next(), serving.next()) {
+                (Some(s), None) if *leaf == "radius" => Ok(f64::from(s.radius)),
+                (Some(s), None) => Ok(f64::from(s.per_tick)),
+                _ => Err(missing()),
+            }
+        }
+        _ => Err(unsupported()),
     }
 }
 
@@ -410,11 +529,120 @@ mod tests {
         assert!(second.contains("capacity: 60,") && !second.contains("50"));
     }
 
+    fn write_and_read(file: &str, field: &str, value: f64) -> f64 {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        let k = knob(file, field);
+        let path = scratch.dir().join(&k.file);
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, patch(&text, field, value, k.is_integer()).unwrap()).unwrap();
+        read_back(scratch.dir(), &k).unwrap()
+    }
+
+    #[test]
+    fn every_need_field_round_trips() {
+        for (field, v) in [
+            ("drain_per_tick", 0.0375),
+            ("working_multiplier", 2.5),
+            ("critical", 31.0),
+            ("content", 64.5),
+            ("morale_weight", -4.25),
+        ] {
+            let got = write_and_read("needs/slack.ron", field, v);
+            assert!((got - v).abs() < 1e-6, "{field}: {got}");
+        }
+    }
+
+    #[test]
+    fn a_thought_intensity_round_trips_negative_and_positive() {
+        // no_amenity ships at -2.0.
+        assert_eq!(
+            write_and_read("thoughts/no_amenity.ron", "intensity", -0.5),
+            -0.5
+        );
+        assert_eq!(
+            write_and_read("thoughts/no_amenity.ron", "intensity", 1.5),
+            1.5
+        );
+        // beside_friend ships positive; the sign flips cleanly.
+        assert_eq!(
+            write_and_read("thoughts/beside_friend.ron", "intensity", -3.0),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn a_service_per_tick_and_integer_radius_round_trip() {
+        let f = "structures/defrag_bay.ron";
+        let got = write_and_read(f, "services.coherence.per_tick", 0.85);
+        assert!((got - 0.85).abs() < 1e-6, "{got}");
+        assert_eq!(write_and_read(f, "services.coherence.radius", 3.4), 3.0);
+        let out = patch(&shipped_defrag(), "services.coherence.radius", 3.4, true).unwrap();
+        assert!(out.contains("radius: 3)"), "{out}");
+    }
+
+    fn shipped_defrag() -> String {
+        std::fs::read_to_string(assets().join("structures/defrag_bay.ron")).unwrap()
+    }
+
+    const TWO_SERVICES: &str = r#"(
+    id: "x",
+    services: [
+        (need: "coherence", per_tick: 0.6, radius: 1),
+        (need: "slack", per_tick: 0.2, radius: 2),
+    ],
+)"#;
+
+    #[test]
+    fn a_service_is_found_by_its_need_and_only_that_entry_moves() {
+        let out = patch(TWO_SERVICES, "services.slack.per_tick", 0.9, false).unwrap();
+        assert!(
+            out.contains("(need: \"slack\", per_tick: 0.9, radius: 2)"),
+            "{out}"
+        );
+        assert!(out.contains("per_tick: 0.6, radius: 1"), "{out}");
+        let out = patch(TWO_SERVICES, "services.coherence.radius", 4.0, true).unwrap();
+        assert!(
+            out.contains("radius: 4)") && out.contains("radius: 2)"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_service_with_no_matching_need_is_an_error() {
+        let e = patch(TWO_SERVICES, "services.warmth.per_tick", 1.0, false).unwrap_err();
+        assert!(
+            e.contains("services.warmth.per_tick") && e.contains("0 entries"),
+            "{e}"
+        );
+        let e = patch(BAY, "services.coherence.radius", 1.0, true).unwrap_err();
+        assert!(e.contains("services"), "{e}");
+    }
+
+    #[test]
+    fn two_services_for_one_need_is_ambiguous() {
+        let text = TWO_SERVICES.replace("\"slack\"", "\"coherence\"");
+        let e = patch(&text, "services.coherence.per_tick", 1.0, false).unwrap_err();
+        assert!(e.contains("2 entries"), "{e}");
+    }
+
+    #[test]
+    fn integer_ness_follows_the_field() {
+        assert!(knob("f", "services.coherence.radius").is_integer());
+        assert!(!knob("f", "services.coherence.per_tick").is_integer());
+        assert!(!knob("f", "intensity").is_integer());
+        assert!(knob("f", "capacity").is_integer());
+        assert_eq!(knob("f", "drain_per_tick").snap(0.01234567891), 0.012346);
+    }
+
     #[test]
     fn read_back_refuses_other_fields() {
         let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
         let e =
             read_back(scratch.dir(), &knob("structures/assembly_bay.ron", "glyph")).unwrap_err();
-        assert!(e.contains("not a phase-1 knob"), "{e}");
+        assert!(e.contains("not a supported knob field"), "{e}");
+        assert!(
+            e.contains("intensity") && e.contains("services.<need>.radius"),
+            "{e}"
+        );
     }
 }

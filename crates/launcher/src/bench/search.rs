@@ -88,10 +88,10 @@ impl Proposal {
     }
 }
 
-/// Maps a unit-interval position to a knob's range, rounded: every phase-1
-/// field is integral.
+/// Maps a unit-interval position to a knob's range, snapped to what the knob
+/// stores.
 fn knob_value(knob: &Knob, unit: f64) -> f64 {
-    (knob.min + unit.clamp(0.0, 1.0) * (knob.max - knob.min)).round()
+    knob.snap(knob.min + unit.clamp(0.0, 1.0) * (knob.max - knob.min))
 }
 
 fn unit_of(knob: &Knob, value: f64) -> f64 {
@@ -113,7 +113,7 @@ fn apply(
     }
     for (knob, &value) in knobs.iter().zip(values) {
         let got = read_back(scratch, knob)?;
-        if (got - value).abs() > 1e-6 {
+        if (got - value).abs() > 1e-6 * value.abs().max(1.0) {
             return Err(format!(
                 "{} `{}`: wrote {value}, read back {got}",
                 knob.file, knob.field
@@ -244,7 +244,11 @@ pub fn search(
         })
     };
 
-    let shipped: Vec<f64> = old.iter().map(|v| v.round()).collect();
+    let shipped: Vec<f64> = old
+        .iter()
+        .zip(&obj.knobs)
+        .map(|(v, k)| k.snap(*v))
+        .collect();
     let search_before = score(obj, save, assets, &obj.seeds)?;
     require_whole_runs(&search_before, obj.ticks)?;
     let holdout_before = score(obj, save, assets, &obj.holdout_seeds)?;
@@ -410,7 +414,7 @@ fn apply_to_text(
     let mut files = pristine.clone();
     for (knob, &value) in knobs.iter().zip(values) {
         let text = files.get_mut(&knob.file).ok_or("knob file not loaded")?;
-        *text = patch(text, &knob.field, value, true)?;
+        *text = patch(text, &knob.field, value, knob.is_integer())?;
     }
     Ok(files)
 }
@@ -503,6 +507,17 @@ mod tests {
         assert_eq!(knob_value(&k, 5.0), 20.0);
         assert_eq!(knob_value(&k, -5.0), 10.0);
         assert!((unit_of(&k, 15.0) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_float_knob_keeps_its_fraction() {
+        let k = Knob {
+            file: "needs/slack.ron".into(),
+            field: "drain_per_tick".into(),
+            min: 0.01,
+            max: 0.03,
+        };
+        assert_eq!(knob_value(&k, 0.5), 0.02);
     }
 
     #[test]

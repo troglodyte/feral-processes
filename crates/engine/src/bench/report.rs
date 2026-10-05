@@ -46,8 +46,12 @@ pub struct BenchReport {
     pub stopped_at: Option<u64>,
     pub seed: u64,
     pub economy: EconomyReport,
-    /// Zeros for a base with no staff, never absent: an empty base is a
-    /// result a target should be able to read, not an error.
+    /// Never absent. A base with no staff reads zero for every scalar
+    /// (`on_shift_share`, `morale_*`, `sulking_share`, the rung shares, the
+    /// rates). The per-need measures are the exception: the report learns
+    /// the needs from the staff it sampled, so with none a
+    /// `need_mean.<id>` or `need_critical_share.<id>` is an error, the same
+    /// as an unknown id, rather than a zero a typo could hide behind.
     pub staff: StaffReport,
     /// Typed in phase 3.
     pub memories: Option<()>,
@@ -545,6 +549,21 @@ mod tests {
         assert!(r.end_morale.is_empty());
         assert!(r.rung_share.values().all(|&v| v == 0.0));
         assert_eq!(r.rung_share.len(), rungs().len());
+    }
+
+    #[test]
+    fn an_empty_base_reads_zero_scalars_but_errors_on_per_need_measures() {
+        let mut r = sample();
+        r.staff = StaffTally::default().finish(0, &[]);
+        for name in [
+            "staff.morale_min",
+            "staff.on_shift_share",
+            "staff.rung_share.none",
+        ] {
+            assert_eq!(r.measure(name), Ok(0.0), "{name}");
+        }
+        assert!(r.measure("staff.need_mean.coherence").is_err());
+        assert!(r.measure("staff.need_critical_share.coherence").is_err());
     }
 
     fn staffed() -> BenchReport {

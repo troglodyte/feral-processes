@@ -12,7 +12,7 @@ meets every remaining target on the three search seeds (error 0.0000 against
 0.0342 shipped) and improves the hold-out seeds (0.0391 against 0.0839). All
 of the shipped error is `sulking_share` being too low; the other three targets
 were met by the shipped assets and stay met. The proposal gets sulking up
-by turning the knobs hard: four knobs end at a bound, morale weights go to
+by turning the knobs hard: five knobs end at a bound, morale weights go to
 their strongest allowed, and staff spend 2-9 points less of their time on shift
 (means 0.879 against 0.935 on the search seeds, 0.904 against 0.954 on
 hold-out). One of the three search seeds now has a

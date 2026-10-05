@@ -75,7 +75,7 @@ an honest "unknown".
 - [2026-10-05 — Base bench: a staff tune](2026-10-05-base-bench-staff-tune.md)
   — without the coherence-critical target the search meets every target on
   the search seeds (error 0.0342 to 0) and improves hold-out (0.0839 to
-  0.0391), by pinning four knobs at a bound and spending 2-9 points less time
+  0.0391), by pinning five knobs at a bound and spending 2-9 points less time
   on shift; one search seed gains a fray. Not a recommendation to apply.
 
 - [2026-10-05 — Base bench: `chains` baseline and a first tune](2026-10-05-base-bench-chains-baseline.md)

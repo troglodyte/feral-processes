@@ -3804,7 +3804,7 @@ fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
-    let blocked = std::collections::HashSet::new();
+    let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
         post_reach(&grid, from, target, 1, &blocked, grid.radius()),
@@ -3827,7 +3827,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
-    let blocked = std::collections::HashSet::new();
+    let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
         post_reach(&grid, from, target, 1, &blocked, grid.radius()),

@@ -900,6 +900,18 @@ pub struct Stranded {
     pub since: u64,
 }
 
+/// A posted walker paying `tuning::SQUEEZE_EXTRA_TICKS` to step into a cell
+/// another body holds — the step it is waiting to take, and when the wait
+/// began. `hauling::stride` is the one reader.
+///
+/// Not saved, `Stranded`'s reason: a reload costs a walker at most one more
+/// wait, and the walk that wrote it runs again next tick.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Squeezing {
+    pub into: Position,
+    pub since: u64,
+}
+
 /// Why a machine is or isn't producing. Present on a structure that runs a
 /// job (`StructureDef::work` or `::assembles`) and on one that burns to keep
 /// supplying (`StructureDef::power_upkeep`) — absence means "nothing here

@@ -930,7 +930,9 @@ impl Game {
             self.log(format!("{name} sets out its stock beside the counter."));
             return;
         }
-        let blocked = self.blocked_tiles();
+        // `Occupancy::rigid`: a caravan is not a program and keeps the walk
+        // that treats a body as a wall.
+        let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let step = {
             let grid = self.world.resource::<BaseGrid>();
@@ -946,7 +948,7 @@ impl Game {
         match step {
             Ok(Some(next)) => {
                 if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
-                    *pos = next;
+                    *pos = next.to;
                 }
                 self.age_caravan(entity);
             }

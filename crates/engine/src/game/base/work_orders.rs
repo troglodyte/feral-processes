@@ -825,13 +825,13 @@ pub(crate) fn ingredient_depths(
 /// matching — and both are lookups in the same fields, so a connected base
 /// pays one walk per body whatever the size of its plan.
 struct CrewFields {
-    blocked: std::collections::HashSet<(i32, i32)>,
+    blocked: hauling::Occupancy,
     pocket_radius: i32,
     fields: std::collections::HashMap<Entity, hauling::CrewReach>,
 }
 
 impl CrewFields {
-    fn new(blocked: std::collections::HashSet<(i32, i32)>, pocket_radius: i32) -> Self {
+    fn new(blocked: hauling::Occupancy, pocket_radius: i32) -> Self {
         Self {
             blocked,
             pocket_radius,
@@ -1628,7 +1628,7 @@ impl Game {
         &mut self,
         from: Position,
         machine: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> bool {
         self.post_route(from, machine, blocked, pocket_radius)
@@ -1645,7 +1645,7 @@ impl Game {
         &mut self,
         from: Position,
         target: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> Result<(), hauling::NoPost> {
         let Some(to) = self.world.get::<Position>(target).copied() else {

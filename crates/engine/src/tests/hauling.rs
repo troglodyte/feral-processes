@@ -1608,10 +1608,9 @@ fn a_researched_depot_rung_takes_a_haul_like_the_first_one() {
 fn station_candidates_offers_the_ring_around_the_whole_footprint() {
     let mut game = base_with_footprint_fixture(3010, "station_candidates_fixture");
     place_now(&mut game, "station_candidates_fixture", 2, 0).unwrap();
-    let empty = std::collections::HashSet::new();
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, &empty)
+        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, |_| false)
             .into_iter()
             .map(|p| (p.x, p.y))
             .collect();
@@ -1650,10 +1649,9 @@ fn at_station_agrees_with_station_candidates_exactly() {
     place_now(&mut game, "at_station_equivalence_fixture", 2, 0).unwrap();
     let structure = Position { x: 2, y: 0 };
     let side = 2;
-    let empty = std::collections::HashSet::new();
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, structure, side, &empty)
+        crate::game::base::hauling::station_candidates(grid, structure, side, |_| false)
             .into_iter()
             .map(|p| (p.x, p.y))
             .collect();
@@ -1680,10 +1678,10 @@ fn blocked_tiles_takes_the_anchor_and_structure_tiles_takes_the_whole_footprint(
     place_now(&mut game, "blocked_tiles_fixture", 2, 0).unwrap();
 
     let blocked = game.blocked_tiles();
-    assert!(blocked.contains(&(2, 0)), "the anchor blocks a walk");
+    assert!(blocked.taken((2, 0)), "the anchor blocks a walk");
     for floor_cell in [(3, 0), (2, 1), (3, 1)] {
         assert!(
-            !blocked.contains(&floor_cell),
+            !blocked.taken(floor_cell),
             "a floor cell must stay walkable: {floor_cell:?}"
         );
     }
@@ -1751,6 +1749,105 @@ fn a_worker_skips_a_nearer_depot_it_cannot_reach() {
         "the load belongs in the depot the worker can reach"
     );
     assert_eq!(node_output(&game, boxed, ids::CORE_FRAGMENT), 0);
+}
+
+/// A Mining Node walled in on three sides, its worker standing on the fourth,
+/// and the one way out a single-cell corridor — with a Depot past the far
+/// end. `plug` lays a downed program in the corridor cell: with no Repair Bay
+/// it lies where it fell, so it is a body that does not move off on its own.
+///
+/// ```text
+///   W W W      y = -4
+///   W N W      y = -3
+///   W F W      y = -2   F: the worker's post
+///   W C W      y = -1   C: the corridor cell
+///   . . .      y =  0
+///   . . .      y =  1
+///   . D .      y =  2
+/// ```
+fn plugged_corridor(seed: u32, plug: bool) -> (Game, Entity, Entity) {
+    let mut game = base(seed);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in 1..=3 {
+            for y in -4..=3 {
+                grid.lay_floor(x, y);
+            }
+        }
+    }
+    let node = deploy(&mut game, "mining_node", 2, -3);
+    for (dx, dy) in [
+        (1, -4),
+        (2, -4),
+        (3, -4),
+        (1, -3),
+        (3, -3),
+        (1, -2),
+        (3, -2),
+        (1, -1),
+        (3, -1),
+    ] {
+        deploy(&mut game, "wall", dx, dy);
+    }
+    let depot = deploy(&mut game, "depot", 2, 2);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    move_to(&mut game, worker, 2, -2);
+    if plug {
+        let body = hauler(&mut game);
+        game.world
+            .entity_mut(body)
+            .insert(crate::components::Downed);
+        move_to(&mut game, body, 2, -1);
+    }
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    (game, worker, depot)
+}
+
+/// Ticks until `depot` holds anything, and how many that took.
+fn ticks_to_delivery(game: &mut Game, depot: Entity, limit: u32) -> u32 {
+    for n in 0..limit {
+        if node_output(game, depot, ids::CORE_FRAGMENT) > 0 {
+            return n;
+        }
+        game.tick();
+    }
+    panic!("nothing reached the depot in {limit} ticks");
+}
+
+/// **A body in a corridor is squeezed past, not walked around.** The found
+/// case: `chains` builds a ring of machines with a one-cell corridor round
+/// it, standing programs closed it, and a carrier with no route stood holding
+/// its load for thousands of ticks.
+#[test]
+fn a_carrier_squeezes_past_a_program_standing_in_its_corridor() {
+    let (mut game, worker, depot) = plugged_corridor(31, true);
+
+    ticks_to_delivery(&mut game, depot, 60);
+
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the load went through the plugged corridor"
+    );
+    assert!(game.world.get::<Stranded>(worker).is_none());
+}
+
+/// Squeezing past costs time, and exactly `SQUEEZE_EXTRA_TICKS` of it per
+/// occupied cell — the same walk with the corridor clear is the baseline.
+#[test]
+fn squeezing_past_a_body_costs_the_extra_tick() {
+    let (mut clear, _, clear_depot) = plugged_corridor(32, false);
+    let (mut plugged, _, plugged_depot) = plugged_corridor(32, true);
+
+    let baseline = ticks_to_delivery(&mut clear, clear_depot, 60);
+    let squeezed = ticks_to_delivery(&mut plugged, plugged_depot, 60);
+
+    assert_eq!(
+        squeezed,
+        baseline + tuning::SQUEEZE_EXTRA_TICKS as u32,
+        "one occupied cell on the route costs exactly the squeeze"
+    );
 }
 
 /// A hauler stranded with a load it cannot deliver is held on shift by

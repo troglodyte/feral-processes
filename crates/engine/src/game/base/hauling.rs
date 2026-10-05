@@ -195,19 +195,27 @@ pub(crate) fn nearest_depot(
         .or_else(|| ranked.first().copied())
 }
 
-/// Every cell in base space that is already spoken for: the tile each
+/// Every cell in base space a walk has to reckon with: the tile each
 /// deployed structure stands on, and the tile each body the sim walks is
-/// standing in.
+/// standing in — kept apart, in `Occupancy`, because the two are not the
+/// same obstacle.
 ///
 /// A worker may not walk over a structure for the reason the player may not —
 /// `move_player` refuses a tile `find_blocking_structure_at` answers for, and
 /// a base a program walks through while its owner walks around stops reading
-/// as a physical place. **A body is the same rule one step further**, and it
-/// is what stops a crowd converging on one cell: every walk in base space
+/// as a physical place.
+///
+/// **A body is squeezed past, never stopped on.** Every walk in base space
 /// stops at the first tile its arrival test answers for, so with nothing in
 /// the way that is the *same* tile for everyone approaching from the same
-/// side. The save that forced this had 71 downed programs standing on one
-/// cell outside a Repair Bay, drawn as a single glyph.
+/// side; the save that made bodies count had 71 downed programs standing on
+/// one cell outside a Repair Bay, drawn as a single glyph. That is a rule
+/// about where a walk *ends*, and `Occupancy::step_cost` keeps it: a cell a
+/// body holds is never a station and never the cell a walk arrives on. What
+/// it no longer does is close a corridor — a `chains` base is a ring of
+/// machines with a one-cell corridor round it, and whoever stood in it
+/// stranded every carrier behind them for thousands of ticks. See
+/// `Occupancy::rigid` for the walkers that still treat a body as a wall.
 ///
 /// **Two iterators rather than one set the caller assembles**, which is the
 /// whole of what keeps the two seams agreeing: `post_field` and `crew_reach`
@@ -233,11 +241,143 @@ pub(crate) fn nearest_depot(
 pub(crate) fn blocked_tiles(
     structures: impl Iterator<Item = (Position, u8)>,
     bodies: impl Iterator<Item = Position>,
-) -> HashSet<(i32, i32)> {
-    structures
-        .map(|(p, _)| (p.x, p.y))
-        .chain(bodies.map(|p| (p.x, p.y)))
-        .collect()
+) -> Occupancy {
+    Occupancy {
+        walls: structures.map(|(p, _)| (p.x, p.y)).collect(),
+        bodies: bodies.map(|p| (p.x, p.y)).collect(),
+    }
+}
+
+/// What stands in base space, split by what it does to a walk: `walls` (a
+/// structure's anchor) are never crossed, `bodies` are crossed at
+/// `tuning::SQUEEZE_EXTRA_TICKS` extra and never stopped on.
+/// `blocked_tiles` is the one constructor outside tests.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Occupancy {
+    walls: HashSet<(i32, i32)>,
+    bodies: HashSet<(i32, i32)>,
+}
+
+impl Occupancy {
+    /// Whether anything at all stands on `cell` — the question a station
+    /// asks, since a cell somebody holds is not one to be sent to stand on.
+    pub(crate) fn taken(&self, cell: (i32, i32)) -> bool {
+        self.walls.contains(&cell) || self.bodies.contains(&cell)
+    }
+
+    /// Whether a body stands on `cell`, so stepping into it is a squeeze.
+    pub(crate) fn holds_a_body(&self, cell: (i32, i32)) -> bool {
+        self.bodies.contains(&cell)
+    }
+
+    /// Records a body arriving on `cell` mid-tick — `haul_step_system`'s
+    /// grown-never-shrunk rule.
+    pub(crate) fn claim(&mut self, cell: (i32, i32)) {
+        self.bodies.insert(cell);
+    }
+
+    /// Every body folded into the walls: the walk as it was before bodies
+    /// could be squeezed past.
+    ///
+    /// **For the walkers whose arrival is a radius rather than a station** —
+    /// a patient heading for a Bay, an off-shift body for an amenity, a
+    /// sulker on a respite, a subject for its pen — and the caravan. Their
+    /// arrival test (`offshift::in_reach`) admits cells no station list
+    /// names, so the "never stopped on" half cannot be said in the walk;
+    /// and `drift_idle_staff` hands a body sharing a cell to the wander
+    /// instead of its errand, so a drift walker squeezing through would be
+    /// knocked off its route at every pass. None of them carries a load,
+    /// which is what the squeeze is for. The caravan keeps the old walk
+    /// because it is not a program and its stuck case already says so once.
+    pub(crate) fn rigid(mut self) -> Self {
+        self.walls.extend(self.bodies.drain());
+        self
+    }
+
+    /// What entering `cell` costs a walk that started on `start` and arrives
+    /// wherever `arrives` answers — `None` where it may not go at all.
+    ///
+    /// The walker's own tile is admitted whatever stands on it.
+    /// `place_structure` checks terrain and other structures but never
+    /// whether a program is standing there, so a building can go up on top
+    /// of a hauler mid-walk; since the walk filters successors, that worker
+    /// would otherwise be absent from its own field and frozen for the rest
+    /// of the run. You may step *off* a wall, never onto one.
+    ///
+    /// **A body's cell is a throughway and never an arrival**: refused where
+    /// `arrives` says the walk would stop there, priced at the squeeze
+    /// everywhere else, so a route through a crowd is taken only when it is
+    /// quicker than the way round.
+    fn step_cost(
+        &self,
+        grid: &BaseGrid,
+        cell: (i32, i32),
+        start: (i32, i32),
+        arrives: impl Fn((i32, i32)) -> bool,
+    ) -> Option<u32> {
+        if !grid.walkable(cell.0, cell.1) {
+            return None;
+        }
+        if cell == start {
+            return Some(1);
+        }
+        if self.walls.contains(&cell) {
+            return None;
+        }
+        if self.bodies.contains(&cell) {
+            return (!arrives(cell)).then_some(1 + tuning::SQUEEZE_EXTRA_TICKS as u32);
+        }
+        Some(1)
+    }
+}
+
+/// One step a walker has decided to take, and whether a body stands on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Step {
+    pub(crate) to: Position,
+    pub(crate) squeeze: bool,
+}
+
+/// Whether a posted walker takes `step` this tick, or waits on it — and the
+/// marker it is left holding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Stride {
+    /// Step now, and clear any `Squeezing`.
+    Go,
+    /// Hold this tick, holding this marker.
+    Wait(Squeezing),
+}
+
+/// The squeeze's clock: a step into a free cell is taken at once, a step
+/// into a held one only once the walker has waited
+/// `tuning::SQUEEZE_EXTRA_TICKS` on *that* step.
+///
+/// The wait is stored rather than derived because nothing else about a
+/// walker says how long it has stood facing a crowd. A marker naming a
+/// different cell is a route that changed, and one older than twice the
+/// wait is left over from a walk that was interrupted — both start the wait
+/// over rather than handing out a free pass.
+pub(crate) fn stride(held: Option<Squeezing>, step: Step, tick: u64) -> Stride {
+    if !step.squeeze {
+        return Stride::Go;
+    }
+    let fresh = Squeezing {
+        into: step.to,
+        since: tick,
+    };
+    match held {
+        Some(s)
+            if s.into == step.to
+                && tick.saturating_sub(s.since) <= 2 * tuning::SQUEEZE_EXTRA_TICKS =>
+        {
+            if tick.saturating_sub(s.since) >= tuning::SQUEEZE_EXTRA_TICKS {
+                Stride::Go
+            } else {
+                Stride::Wait(s)
+            }
+        }
+        _ => Stride::Wait(fresh),
+    }
 }
 
 /// Every cell of every structure's footprint, anchor and floor alike —
@@ -280,9 +420,9 @@ fn station_tiles(
     structure: Position,
     side: u8,
     from: Position,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
 ) -> Vec<Position> {
-    let mut tiles = station_candidates(grid, structure, side, blocked);
+    let mut tiles = station_candidates(grid, structure, side, |c| blocked.taken(c));
     tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
     tiles
 }
@@ -304,7 +444,7 @@ pub(crate) fn station_candidates(
     grid: &BaseGrid,
     structure: Position,
     side: u8,
-    blocked: &HashSet<(i32, i32)>,
+    taken: impl Fn((i32, i32)) -> bool,
 ) -> Vec<Position> {
     let footprint = crate::tactical::footprint_cells_at((structure.x, structure.y), side);
     let footprint_set: HashSet<(i32, i32)> = footprint.iter().copied().collect();
@@ -322,7 +462,7 @@ pub(crate) fn station_candidates(
         // one of its own floor cells.
         .filter(|p| !footprint_set.contains(&(p.x, p.y)))
         .filter(|p| seen.insert((p.x, p.y)))
-        .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
+        .filter(|p| grid.walkable(p.x, p.y) && !taken((p.x, p.y)))
         .collect();
     candidates.sort_by_key(|p| (p.x, p.y));
     candidates
@@ -352,7 +492,7 @@ pub(crate) fn has_station(
     side: u8,
     structures: &HashSet<(i32, i32)>,
 ) -> bool {
-    !station_candidates(grid, structure, side, structures).is_empty()
+    !station_candidates(grid, structure, side, |c| structures.contains(&c)).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -382,12 +522,9 @@ pub(crate) enum NoPost {
 /// field is what makes "the worker is in it" a fact the caller is handed
 /// rather than one it has to re-establish.
 ///
-/// The worker's own tile is admitted whatever `blocked` says. `place_structure`
-/// checks terrain and other structures but never whether a program is standing
-/// there, so a building can go up on top of a hauler mid-walk; since the walk
-/// filters successors, that worker would otherwise be absent from its own
-/// field and frozen for the rest of the run. You may step *off* an occupied
-/// tile, never onto one.
+/// The step rule is `Occupancy::step_cost`, with the target's own faces as
+/// the cells it arrives on — so a face somebody is standing on is neither a
+/// station nor a cell to pass through, and every other body is squeezed past.
 ///
 /// **The faces are tried in `station_tiles`' order and the first that routes
 /// wins**, so a post that already resolved resolves through the same tile at
@@ -398,7 +535,7 @@ fn post_field(
     from: Position,
     structure: Position,
     side: u8,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
     pocket_radius: i32,
 ) -> Result<PostRoute, NoPost> {
     let stations = station_tiles(grid, structure, side, from, blocked);
@@ -409,7 +546,9 @@ fn post_field(
     let reach = haul_walk_radius(pocket_radius);
     for station in stations {
         let field = walk_field((station.x, station.y), reach, |p| {
-            (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
+            blocked.step_cost(grid, p, start, |c| {
+                at_station(Position { x: c.0, y: c.1 }, structure, side)
+            })
         });
         if let Some(&here) = field.get(&start) {
             return Ok((field, here));
@@ -450,12 +589,14 @@ pub(crate) type CrewReach = (Position, HashMap<(i32, i32), u32>);
 pub(crate) fn crew_reach(
     grid: &BaseGrid,
     from: Position,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
     pocket_radius: i32,
 ) -> HashMap<(i32, i32), u32> {
     let start = (from.x, from.y);
+    // Arriving is the caller's question, asked of the free stations through
+    // `reaches` — so here no cell is an arrival and a body is a throughway.
     walk_field(start, haul_walk_radius(pocket_radius), |p| {
-        (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
+        blocked.step_cost(grid, p, start, |_| false)
     })
 }
 
@@ -471,10 +612,10 @@ pub(crate) fn reaches(
     from: Position,
     structure: Position,
     side: u8,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
 ) -> bool {
     at_station(from, structure, side)
-        || station_candidates(grid, structure, side, blocked)
+        || station_candidates(grid, structure, side, |c| blocked.taken(c))
             .iter()
             .any(|s| reach.contains_key(&(s.x, s.y)))
 }
@@ -491,7 +632,7 @@ pub(crate) fn post_reach(
     from: Position,
     structure: Position,
     side: u8,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
     pocket_radius: i32,
 ) -> Result<(), NoPost> {
     if at_station(from, structure, side) {
@@ -518,9 +659,9 @@ pub(crate) fn step_to_post(
     from: Position,
     target: Position,
     side: u8,
-    blocked: &HashSet<(i32, i32)>,
+    blocked: &Occupancy,
     pocket_radius: i32,
-) -> Result<Option<Position>, NoPost> {
+) -> Result<Option<Step>, NoPost> {
     let (field, here) = post_field(grid, from, target, side, blocked, pocket_radius)?;
     Ok(NEIGHBOURS
         .iter()
@@ -528,7 +669,10 @@ pub(crate) fn step_to_post(
         .filter_map(|n| field.get(&n).map(|&cost| (cost, n.0, n.1)))
         .min()
         .filter(|&(cost, ..)| cost < here)
-        .map(|(_, x, y)| Position { x, y }))
+        .map(|(_, x, y)| Step {
+            to: Position { x, y },
+            squeeze: blocked.holds_a_body((x, y)),
+        }))
 }
 
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
@@ -560,6 +704,7 @@ type Hauler = (
     &'static Task,
     Option<&'static Carrying>,
     Option<&'static Stranded>,
+    Option<&'static Squeezing>,
     &'static Tamed,
 );
 
@@ -848,7 +993,7 @@ pub(crate) fn haul_step_system(
             .map(|(_, p, _, s)| (*p, db.get(&s.kind).map(|d| d.footprint).unwrap_or(1))),
         workers
             .iter()
-            .filter(|(entity, _, task, _, _, tamed)| {
+            .filter(|(entity, _, task, _, _, _, tamed)| {
                 crate::game::party::walks_the_base(roles.of(*entity, tamed.owner), Some(task.kind))
             })
             .map(|(_, p, ..)| *p)
@@ -939,10 +1084,16 @@ pub(crate) fn haul_step_system(
     order.sort_unstable();
 
     for (.., worker) in order {
-        let Ok((_, worker_pos, task, carrying, stranded, _)) = workers.get(worker) else {
+        let Ok((_, worker_pos, task, carrying, stranded, squeezing, _)) = workers.get(worker)
+        else {
             continue;
         };
-        let (worker_pos, carrying, stranded) = (*worker_pos, carrying.cloned(), stranded.copied());
+        let (worker_pos, carrying, stranded, squeezing) = (
+            *worker_pos,
+            carrying.cloned(),
+            stranded.copied(),
+            squeezing.copied(),
+        );
         let machine = task.target;
 
         // The whole of what this worker is doing with the tick, decided once
@@ -1255,11 +1406,22 @@ pub(crate) fn haul_step_system(
             continue;
         };
         commands.entity(worker).remove::<Stranded>();
-        if let Some(next) = step
-            && let Ok((_, mut pos, ..)) = workers.get_mut(worker)
-        {
-            *pos = next;
-            blocked.insert((next.x, next.y));
+        let Some(step) = step else {
+            continue;
+        };
+        match stride(squeezing, step, clock.tick) {
+            Stride::Wait(marker) => {
+                commands.entity(worker).insert(marker);
+            }
+            Stride::Go => {
+                if squeezing.is_some() {
+                    commands.entity(worker).remove::<Squeezing>();
+                }
+                if let Ok((_, mut pos, ..)) = workers.get_mut(worker) {
+                    *pos = step.to;
+                    blocked.claim((step.to.x, step.to.y));
+                }
+            }
         }
     }
 }

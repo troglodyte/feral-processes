@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use crate::base_grid::BaseGrid;
 use crate::components::{Needs, OffShift, Position, Structure};
-use crate::game::base::hauling::{NoPost, at_station, step_to_post};
+use crate::game::base::hauling::{NoPost, Step, at_station, step_to_post};
 use crate::needs::{NeedDb, NeedId};
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
@@ -418,11 +418,11 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
-        let blocked = self.blocked_tiles();
+        let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         // `in_reach`'s own note: no shipped amenity is wider than 1, held by
         // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
-        let Some(tile) = step_to_post(
+        let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,

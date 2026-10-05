@@ -3777,7 +3777,7 @@ fn a_party_companions_stale_tile_blocks_nothing() {
     *game.world.get_mut::<Position>(companion).unwrap() = stale;
 
     assert!(
-        !game.blocked_tiles().contains(&(stale.x, stale.y)),
+        !game.blocked_tiles().taken((stale.x, stale.y)),
         "a companion standing beside the player blocks no base-space cell"
     );
 }

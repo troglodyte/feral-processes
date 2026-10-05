@@ -16,8 +16,8 @@ use rand::rngs::StdRng;
 
 use report::share;
 pub use report::{
-    BenchReport, EconomyReport, LabourBench, LineBench, MEASURES, MachineReport, NeedBench,
-    StaffReport, StaffSample, StaffTally, fold_status,
+    BenchReport, EconomyReport, LabourBench, LineBench, MEASURES, MachineReport, MemoryReport,
+    MemoryTally, NeedBench, StaffReport, StaffSample, StaffTally, fold_status,
 };
 
 use crate::duties::Duty;
@@ -86,6 +86,14 @@ fn play_with(
     let (mut wanted, mut staffed) = (0u64, 0u64);
     let mut unworked: BTreeMap<Duty, u64> = BTreeMap::new();
     let mut staff = StaffTally::default();
+    // The game's own catalogue, so the seeded ids are exactly the ones
+    // `remember` can resolve.
+    let mut memories = MemoryTally::new(
+        game.world
+            .resource::<crate::memories::MemoryDb>()
+            .all()
+            .map(|d| d.id.as_str()),
+    );
     let mut ticks = 0;
     let mut stopped_at = None;
     for _ in 0..opts.ticks {
@@ -105,7 +113,7 @@ fn play_with(
                 .or_insert(0) += 1;
             tally.last_member = line.members.last().and_then(|m| tile_of.get(m)).copied();
         }
-        sample_staff(&game, &mut staff);
+        sample_staff(&game, &mut staff, &mut memories);
         let demand = game.labour_demand();
         wanted += demand.wanted as u64;
         staffed += demand.staff as u64;
@@ -114,6 +122,7 @@ fn play_with(
         }
     }
 
+    sample_bonds(&game, &mut memories);
     let records = game.take_telemetry();
     let mut edges: HashMap<(i32, i32), Vec<(u64, &str)>> = HashMap::new();
     let mut units: HashMap<(i32, i32), u64> = HashMap::new();
@@ -206,7 +215,7 @@ fn play_with(
             items,
         },
         staff: staff.finish(t0, &records),
-        memories: None,
+        memories: memories.finish(&records),
     })
 }
 
@@ -220,14 +229,16 @@ fn advance(game: &mut Game) -> bool {
 }
 
 /// One tick's staff, re-read each tick because staff can join or leave.
-fn sample_staff(game: &Game, tally: &mut StaffTally) {
+fn sample_staff(game: &Game, tally: &mut StaffTally, memories: &mut MemoryTally) {
     tally.begin_tick();
     for who in game.base_staff() {
         let needs = game.need_levels(who);
         let grievance = game.grievance(who);
+        let morale = game.morale(who);
+        memories.add_morale(morale);
         tally.add(&StaffSample {
             on_shift: game.on_shift(who),
-            morale: game.morale(who),
+            morale,
             strain: game.need_strain(who),
             needs: needs
                 .iter()
@@ -235,6 +246,21 @@ fn sample_staff(game: &Game, tally: &mut StaffTally) {
                 .collect(),
             rung: grievance,
         });
+    }
+}
+
+/// Bonds are slow state, so the end of the run is what a target reads;
+/// sampling `social` every tick would cost a lot and add nothing. Live
+/// relationships only: a departed program's bond is a memory of grief, which
+/// the formation records already count.
+fn sample_bonds(game: &Game, memories: &mut MemoryTally) {
+    for who in game.base_staff() {
+        let Some(social) = game.social(who) else {
+            continue;
+        };
+        for row in social.relationships.iter().filter(|r| !r.gone) {
+            memories.add_bond(row.bond);
+        }
     }
 }
 

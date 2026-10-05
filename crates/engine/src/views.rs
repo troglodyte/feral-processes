@@ -2917,6 +2917,9 @@ pub struct ManifestMood {
 /// shows and a later change to how many are drawn is a renderer change.
 pub const MANIFEST_MOOD_MEMORIES: usize = 4;
 
+/// Every word `morale_band` can return, best first.
+pub const MORALE_BANDS: [&str; 5] = ["devoted", "content", "even", "uneasy", "bitter"];
+
 /// Which word a morale sum reads as.
 ///
 /// **Banded against where morale stops mattering**, not against an invented

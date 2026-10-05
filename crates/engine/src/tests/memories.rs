@@ -3167,3 +3167,17 @@ fn a_refused_remember_records_nothing() {
     assert_eq!(wrong, Remembered::WrongSubject);
     assert!(remember_records(&mut game).is_empty());
 }
+
+#[test]
+fn morale_band_only_returns_members_of_morale_bands() {
+    for sum in [-1e6, -50.0, -5.0, -0.1, 0.0, 0.1, 5.0, 50.0, 1e6] {
+        let band = crate::views::morale_band(sum);
+        assert!(crate::views::MORALE_BANDS.contains(&band), "{sum}: {band}");
+    }
+    let full =
+        (crate::tuning::MEMORY_MORALE_MAX_SHIFT / crate::tuning::MEMORY_MORALE_PER_POINT) as f32;
+    let hit: std::collections::HashSet<_> = [-full, -full * 0.75, 0.0, full * 0.75, full]
+        .map(crate::views::morale_band)
+        .into();
+    assert_eq!(hit.len(), crate::views::MORALE_BANDS.len());
+}

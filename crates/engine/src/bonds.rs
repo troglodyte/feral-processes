@@ -38,6 +38,16 @@ pub fn band(opinion: f32) -> Bond {
 }
 
 impl Bond {
+    /// Every rung, bottom first, so a report can seed a band that nobody
+    /// stood on with a zero.
+    pub const ALL: [Bond; 5] = [
+        Bond::Enemy,
+        Bond::Rival,
+        Bond::Neutral,
+        Bond::Friend,
+        Bond::Close,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Bond::Enemy => "Enemy",
@@ -139,5 +149,13 @@ mod tests {
         assert_eq!(avoids, [Bond::Enemy, Bond::Rival]);
         assert_eq!(grieves, [Bond::Friend, Bond::Close]);
         assert_eq!(relieved, [Bond::Enemy, Bond::Rival]);
+    }
+
+    #[test]
+    fn all_lists_every_rung_bottom_first() {
+        assert!(Bond::ALL.windows(2).all(|w| w[0] < w[1]));
+        for opinion in [-100.0, BOND_RIVAL_AT, 0.0, BOND_FRIEND_AT, 100.0] {
+            assert!(Bond::ALL.contains(&band(opinion)));
+        }
     }
 }

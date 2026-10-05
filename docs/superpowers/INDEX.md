@@ -454,6 +454,7 @@ shipped each, not the one containing the spec's first commit.
 | `2026-10-02-derived-programs-design` | Owned programs derive their stats from attributes; a level grants attribute points a program can hold and spend; mining reads the program's own Analysis | `v0.15.0`; `ProgramBase` in `crates/engine/src/components.rs`, `Game::seat_derived`, save format 34, `docs/measurements/2026-10-02-derived-programs.md` |
 | `2026-10-03-power-siphon-design` | A base structure that holds a staff program and supplies +4 grid power while it is held; the program builds a grudge and comes out at 25% Integrity or less | `v0.15.1`; `crates/engine/src/game/base/siphon.rs`, `ProgramRole::Siphoned`, `StructureDef::siphons`, `assets/memories/siphoned.ron`, `Mode::Siphon` |
 | `2026-10-03-data-defined-status-effects-design` | Statuses are data files; a body carries several at once; Poison stacks; Throttled and Locked; `restore_hp` is the heal chokepoint | `v0.15.2`; `crates/engine/src/statuses.rs`, `assets/statuses/`, `arm_status`/`status_sum` in `crates/engine/src/game/combat_status.rs`, `StatusTagView` |
+| `2026-10-05-battle-effects-library-design` | Battle visuals are data: weapons and routines name an effect in `assets/effects/` by `fx`; travel (streak, pulses, beam, zap, ball), impacts (sparks, explosion, smoke, slash, zap, flash), screen shake; heal green, buff cyan | `v0.15.6`; `crates/gui/src/effects.rs`, `crates/gui/src/effect_draw.rs`, `BoltCue.fx`/`RoutineCue` in `crates/engine/src/resources.rs` |
 
 ## Four rows that need a footnote
 

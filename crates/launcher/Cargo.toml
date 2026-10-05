@@ -36,6 +36,10 @@ path = "src/bin/train.rs"
 name = "tuner"
 path = "src/bin/tuner.rs"
 
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"
+
 [dependencies]
 feral-processes-app-core = { workspace = true }
 feral-processes-engine = { workspace = true }

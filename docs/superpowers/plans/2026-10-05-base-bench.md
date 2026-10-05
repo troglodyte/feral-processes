@@ -187,14 +187,90 @@ Gate: `cargo test --workspace`, clippy, fmt. Then opus whole-branch review
 (diff as a file), fix, land per `landing-work-is-merge-tag-push-cleanup`
 (push only on the user's ask).
 
-## P2 — Staff (outline; plan pass after baseline)
+## P2 — Staff
 
-New read-only `Game` methods: per-need numeric level for a program, and its
-grievance rung. `StaffReport` replaces `staff: Option<()>`; measures per the
-spec. Capture `staffed-base` (`chains` + Defrag Bay + Sandbox, run to
-established) via `savetool capture`. Baseline both templates → **stop; user
-sets target ranges** → knobs for `assets/needs/`, amenity `services`,
-`assets/thoughts/` intensities (extend `read_back` per kind).
+Branch `staff-bench`. Same execution rules as P1 (serial sonnet tasks, gates
+off, opus whole-branch review at the end, never push, explicit paths, never
+stage `art/`).
+
+### Decisions
+
+- **No `staffed-base` capture.** `bench-economy` already is `chains` plus a
+  Defrag Bay and a Sandbox, with 15 staff and 26 structures, so it is past
+  `BASE_ESTABLISHED_STAFF`/`_STRUCTURES` (8/8). Baseline `bench-economy`
+  (amenities) and `chains` (none: the fray contrast).
+- **Tantrums and frays are telemetry records, not log scraping.**
+  `message_log` is capped at 100, has no tick and is pruned after battle.
+  Add `Record::Tantrum { tick, who }` (one per tantrum started, not per
+  brawl line) and `Record::Fray { tick, who, need, unreachable }` (one per
+  `fray` call), built where the log line is written. Not production, so
+  they do not go through `base_ledger::emit`; they follow `MachineStall`'s
+  pattern (telemetry-only, behind `enable_telemetry`).
+- **Two views, no `World` accessor.** `Game::need_levels(who) ->
+  Vec<NeedLevel { id: String, level: f32, critical: f32, content: f32 }>`
+  (sorted by id, empty without `Needs`) and `Game::grievance(who) ->
+  Option<&'static str>` (`"sulking"`/`"downed_tools"`/`"lashing_out"`, a
+  `Grievance::as_str`). Both in `game/base/offshift.rs` beside `need_rows`.
+- **Sampling is per staff-tick** over `base_staff()` re-read each tick (staff
+  can leave or join mid-run).
+- **Knobs ship with the measures, before the stop.** The stop is only for
+  target ranges; knob plumbing does not depend on them.
+
+### StaffReport (replaces `staff: Option<()>`; `#[serde(default)]` not needed — reports are not saves)
+
+```rust
+pub struct StaffReport {
+    pub staff_ticks: u64,            // sum over ticks of base_staff().len()
+    pub on_shift_share: f32,         // errand_label None / staff_ticks
+    pub morale_mean: f32, pub morale_min: f32,
+    pub sulking_share: f32,          // morale < MORALE_SULKS_AT
+    pub need_strain_mean: f32,
+    pub needs: BTreeMap<String, NeedBench>, // mean, min, critical_share (level < critical)
+    pub rung_share: BTreeMap<String, f32>,  // "none" + each rung, over staff_ticks
+    pub tantrums: u64, pub frays: u64,
+    pub first_fray: Option<u64>,     // ticks from run start
+    pub end_morale: Vec<f32>,        // per staff at the last tick, sorted
+}
+```
+
+New `MEASURES`: `staff.on_shift_share`, `staff.morale_mean`,
+`staff.morale_min`, `staff.sulking_share`, `staff.need_strain_mean`,
+`staff.need_mean.<need>`, `staff.need_critical_share.<need>`,
+`staff.rung_share.<rung|none>`, `staff.tantrums_per_1000`,
+`staff.frays_per_1000`. Unknown need/rung id → `Err`, as for economy.
+
+### T5 — engine: records + views (crate: engine)
+`Record::Tantrum`, `Record::Fray`; `need_levels`, `grievance`. Tests: a
+forced fray (no amenity, need set below critical) emits one `Fray` with
+`unreachable: false`; a tantrum emits exactly one `Tantrum`; views read back
+a set level and each rung; no telemetry → no records.
+
+### T6 — engine: StaffReport (crate: engine)
+Pure fold in `report.rs` (unit-tested without a `Game`: shares, mins,
+first fray, per-1000 rates, `measure` arms); sampling in `play_with`. A run
+test on `bench-economy` asserts `staff_ticks == 15 × ticks` and shares in
+[0,1].
+
+### T7 — launcher: knobs (crate: launcher)
+`read_back` arms: `NeedDef` (`drain_per_tick`, `working_multiplier`,
+`critical`, `content`, `morale_weight`), `ThoughtDef.intensity`,
+`StructureDef` `services.<need>.per_tick` / `.radius` (a `locate` special
+case like `craftable.cost.<item>`). Update `dev-tuning/README.md`. Tests:
+each new arm patches and reads back; an ambiguous/missing path errors.
+
+### T8 — baseline (no code)
+Release build; `bench run` on `bench-economy` (its P1 orders, seeds 1–5,
+3,000 ticks) and `chains` (same). Write
+`docs/measurements/2026-10-05-base-bench-staff-baseline.md` with every
+staff measure, `stopped_at`, first fray. **Stop: the user sets target
+ranges and picks knobs.** Then T9 writes `dev-tuning/staff.ron`, runs
+`tune`, and writes the proposal; CHANGELOG `## Unreleased` line.
+
+**Risk to check at T8:** coherence drains 0.02/tick ×2.0 at work, so a full
+reserve reaches critical (20) after ~2,000 working ticks, and a siege stops
+`bench-economy`'s clock at ~3,800. If 3,000 ticks show no fray or rung
+movement on `bench-economy`, report it rather than lengthen the run; the
+siege fix (party outside base space) is a separate decision.
 
 ## P3 — Memories (outline; plan pass after baseline)
 

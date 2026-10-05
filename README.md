@@ -33,7 +33,7 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 | `downed.png` | `--template bonds --keys "D"` |
 | `towns.png` | `--template settlements` |
 | `stack.png` | `--template stack` |
-| `intrusion.png` | `FERAL_DEV_ARENA=1`, `--keys "R l Down×7 Enter f"` (dev-arenas `full-group.ron`) |
+| `intrusion.png` | `FERAL_DEV_ARENA=1`, `--keys "R l Down Down Down Down Down Down Down Enter f"` (dev-arenas `full-group.ron`) |
 
 Keys run before the first frame and no time passes, so a walk can't be
 scripted: a move key only queues the step. Never ship a `FERAL_DEV_REVEAL=1`

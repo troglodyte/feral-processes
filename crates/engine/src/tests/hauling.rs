@@ -1341,6 +1341,46 @@ fn a_dark_fuel_maker_is_not_handed_a_body() {
 }
 
 #[test]
+fn a_lines_body_goes_to_its_lit_fuel_maker_not_its_dark_end_machine() {
+    // The `chains` deadlock. A Conduit -> Winding Node -> Assembly Bay line
+    // on the Home's 4, with a second Conduit off to one side: the two
+    // Conduits (rung 0) and the Winding Node take all 4, so the Bay (draw 3)
+    // is dark. The Bay still has a batch of coils
+    // beside it, so an order for Patch Routines names it — and `collapse`
+    // aims the line's one body at the furthest-downstream want, the dark
+    // Bay, where it makes nothing while the Conduit that could end the
+    // blackout stands idle for the rest of the run.
+    let mut game = base_with_conduits(9116);
+    let bay = deploy(&mut game, "assembly_bay", -2, -1);
+    let winding = deploy(&mut game, "winding_node", -2, 0);
+    let conduit = deploy(&mut game, "power_conduit", -2, 1);
+    deploy(&mut game, "power_conduit", 2, 2);
+    fill_output(&mut game, winding, "charge_coil", 3);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("patch_routine"), 500))
+        .unwrap();
+    let worker = hauler(&mut game);
+
+    game.tick();
+
+    assert!(
+        game.world.resource::<resources::PowerGrid>().is_dark(bay),
+        "fixture: the Bay is past the Home's supply"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<resources::PowerGrid>()
+            .is_dark(conduit),
+        "fixture: the Conduit is lit"
+    );
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(conduit),
+        "the line's one body works the lit machine that can move, not the dark Bay"
+    );
+}
+
+#[test]
 fn a_fed_burner_gives_the_body_back() {
     let mut game = base(9105);
     let node = deploy(&mut game, "mining_node", 0, 1);

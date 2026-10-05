@@ -1071,6 +1071,20 @@ impl Game {
                 && post.1 == TaskKind::GatherResource
                 && outsiders.contains(post))
         });
+        // **A dark machine is never a want — `fuel_wants`' rule, for every
+        // source.** `can_progress` asks about stock, not the grid, so an
+        // order names a dark end machine with a batch beside it, and
+        // `collapse` aims the line's one body at it as the furthest
+        // downstream: it makes nothing there, while the lit Conduit in the
+        // same line that could end the blackout never gets a body. Asked
+        // of `ledger` fresh, for `fuel_wants`' reason.
+        let dark = crate::game::base::power::ledger(
+            &self.world,
+            self.world.resource::<StructureDb>(),
+            self.world.resource::<ItemDb>(),
+        )
+        .dark;
+        wanted.retain(|(e, kind)| !(*kind == TaskKind::GatherResource && dark.contains(e)));
         let holders = lines::line_holders(&mut self.world, &member_of, staff);
         lines::collapse(wanted, lines, |key| holders.get(&key).copied())
     }

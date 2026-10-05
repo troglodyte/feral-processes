@@ -95,6 +95,9 @@ fn a_hand_posted_cronjob_loads_back_as_base_staff() {
 /// Returns the three entities in that order.
 fn lay_disk_line(game: &mut Game) -> (Entity, Entity, Entity) {
     place_home(&mut *game);
+    // The line draws 5 against the Home's 4, and a dark machine is never a
+    // want: unpowered, the Press would never be staffed at all.
+    stand_ample_grid_supply(game);
     let mine = spawn_machine_at(game, "mining_node", 2, 0);
     let lathe = spawn_machine_at(game, "lathe", 3, 0);
     let press = spawn_machine_at(game, "disk_press", 4, 0);
@@ -2294,6 +2297,8 @@ fn a_machine_two_orders_want_is_posted_once() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
+    // Mining Node, Lathe and Annealer draw 5 against the Home's 4.
+    stand_ample_grid_supply(&mut game);
     // A Depot feeds both benches by stock rather than by touching, so each
     // stays a line of one and the dedupe is what this exercises.
     let depot = spawn_machine_at(&mut game, "depot", 6, 6);

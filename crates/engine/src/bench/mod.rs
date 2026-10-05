@@ -153,7 +153,7 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     let labour = LabourBench {
         mean_wanted: share(wanted, opts.ticks),
         mean_staffed: share(staffed, opts.ticks),
-        mean_unworked_total: mean_unworked.values().sum(),
+        mean_unworked_total: mean_unworked.values().fold(0.0, |a, v| a + v),
         mean_unworked,
     };
 
@@ -209,6 +209,16 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    /// An empty `f32` sum is `-0.0`, which prints as "-0.00" and compares
+    /// equal to zero only by accident of `==`.
+    #[test]
+    fn a_base_nobody_waits_on_reads_positive_zero_unworked() {
+        let path = blank_save("unworked_zero");
+        let report = run_blank(&path, 1);
+        std::fs::remove_file(&path).unwrap();
+        assert!(report.economy.labour.mean_unworked_total.is_sign_positive());
     }
 
     #[test]

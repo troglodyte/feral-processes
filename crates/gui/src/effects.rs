@@ -76,11 +76,22 @@ impl EffectDef {
     }
 }
 
-/// Every loaded effect by id; always holds `streak`.
-#[derive(Resource)]
+/// Every loaded effect by id; always holds `streak`. Owned by `Fx`, which
+/// resolves a cue's id when it takes the cue in.
 pub struct EffectLibrary {
     defs: HashMap<String, EffectDef>,
     warned: Mutex<HashSet<String>>,
+}
+
+impl Default for EffectLibrary {
+    fn default() -> Self {
+        let mut defs = HashMap::new();
+        defs.insert(DEFAULT_EFFECT.to_string(), EffectDef::streak());
+        Self {
+            defs,
+            warned: Mutex::new(HashSet::new()),
+        }
+    }
 }
 
 impl EffectLibrary {
@@ -88,8 +99,7 @@ impl EffectLibrary {
     /// resolved the same way on every machine (the later file wins). A
     /// missing directory yields only the built-in `streak`.
     pub fn load_dir(dir: &Path) -> Self {
-        let mut defs = HashMap::new();
-        defs.insert(DEFAULT_EFFECT.to_string(), EffectDef::streak());
+        let mut library = Self::default();
         if let Ok(entries) = std::fs::read_dir(dir) {
             let mut paths: Vec<_> = entries
                 .filter_map(|e| e.ok())
@@ -103,16 +113,13 @@ impl EffectLibrary {
                     .and_then(|text| ron::from_str::<EffectDef>(&text).map_err(|e| e.to_string()));
                 match parsed {
                     Ok(def) => {
-                        defs.insert(def.id.clone(), def);
+                        library.defs.insert(def.id.clone(), def);
                     }
                     Err(e) => warn!("skipping effect {}: {e}", path.display()),
                 }
             }
         }
-        Self {
-            defs,
-            warned: Mutex::new(HashSet::new()),
-        }
+        library
     }
 
     /// The effect named `id`; `None` and unknown ids give `streak`. An
@@ -140,9 +147,9 @@ impl EffectLibrary {
 }
 
 /// Startup: loads `assets/effects/` beside the sprites.
-pub fn load(mut commands: Commands, frontend: Res<crate::Frontend>) {
+pub fn load(mut frontend: ResMut<crate::Frontend>) {
     let dir = frontend.app.assets_dir().join("effects");
-    commands.insert_resource(EffectLibrary::load_dir(&dir));
+    frontend.fx.library = EffectLibrary::load_dir(&dir);
 }
 
 #[cfg(test)]

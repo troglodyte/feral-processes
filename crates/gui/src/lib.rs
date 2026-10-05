@@ -15,6 +15,7 @@
 //! render pipeline; the game loop stays a loop.
 
 mod capture;
+mod effect_draw;
 mod effects;
 mod fx;
 mod keys;

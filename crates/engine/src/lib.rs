@@ -141,8 +141,8 @@ use resources::{
 };
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,
-    LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SpeechCue, SwingOutcome,
-    TacticalFxCue, TacticalFxKind, TransitCue, Visit, VisualEffect, condense,
+    LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, RoutineCue, SlotShift, SpeechCue,
+    SwingOutcome, TacticalFxCue, TacticalFxKind, TransitCue, Visit, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 pub use statuses::{StatusBehaviour, StatusDb, StatusId};

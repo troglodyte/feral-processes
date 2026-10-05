@@ -436,12 +436,14 @@ impl Game {
                 .unwrap_or(crate::components::GlyphColor::White);
             // `tactical_attack`'s rule: pushed before the blow lands, so a
             // body that dies to it still gets its streak drawn.
+            let reactor_fx = self.weapon_fx(reactor);
             self.world
                 .resource_mut::<crate::resources::BoltQueue>()
                 .push(crate::resources::BoltCue {
                     from: at,
                     to,
                     color,
+                    fx: reactor_fx,
                 });
             self.world
                 .resource_mut::<crate::resources::TacticalFxQueue>()
@@ -652,6 +654,7 @@ impl Game {
             .get::<crate::components::Glyph>(actor)
             .map(|g| g.color)
             .unwrap_or(crate::components::GlyphColor::White);
+        let bolt_fx = self.weapon_fx(actor);
         for (index, body) in bodies.into_iter().enumerate() {
             // `party_member_swing`'s guard, and its reason: a fumble's
             // Recoil or Opening rung damages the swinger, so it really can
@@ -670,6 +673,7 @@ impl Game {
                         from,
                         to,
                         color: bolt_color,
+                        fx: bolt_fx.clone(),
                     });
             }
             let outcome =
@@ -1306,6 +1310,34 @@ impl Game {
         true
     }
 
+    /// Queues the `RoutineCue` for a cast, over the cells `reach::shape_cells`
+    /// names — the list `recipients` is read off, so a renderer draws what the
+    /// routine will actually cover.
+    fn queue_routine_cue(&mut self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) {
+        let shape = self.routine_tactical_shape(ability);
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let Some(from) = battle.cell_of(actor) else {
+            return;
+        };
+        let cells = reach::shape_cells(&battle.board, from, aim, shape);
+        let color = self
+            .world
+            .get::<crate::components::Glyph>(actor)
+            .map(|g| g.color)
+            .unwrap_or(crate::components::GlyphColor::White);
+        self.world
+            .resource_mut::<crate::resources::BoltQueue>()
+            .push_routine(crate::resources::RoutineCue {
+                from,
+                aim,
+                cells,
+                color,
+                fx: ability.fx.clone(),
+            });
+    }
+
     /// Resolves a routine that has already been decided on and cleared: the
     /// price, the effect, the reap and the turn.
     ///
@@ -1373,6 +1405,11 @@ impl Game {
                 return;
             }
         }
+
+        // After the cut-off above, so a fizzle draws nothing, and before any
+        // effect resolves, so a caster that dies to its own blast still gets
+        // its cue — `BoltCue`'s rule. Every effect gets one, a capture too.
+        self.queue_routine_cue(actor, ability, aim);
 
         let name = self.creature_label(actor);
         // A capture is aimed at a body rather than resolved over

@@ -2940,6 +2940,74 @@ fn a_swing_queues_one_bolt_per_body_it_lands_on() {
     assert_eq!(bolts[0].to, (3, 0));
 }
 
+/// A swing's cue names the wielded weapon's effect, and an unarmed swing
+/// names none — the renderer's default is the renderer's to pick.
+#[test]
+fn a_swing_cue_carries_the_wielded_weapons_fx() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    let mut def = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .get("plasma_router")
+        .expect("the shipped weapon is loaded")
+        .clone();
+    def.fx = Some("x".to_string());
+    game.world
+        .resource_mut::<crate::items_db::ItemDb>()
+        .insert(def);
+    equip_weapon(&mut game, player, "plasma_router");
+    place_bodies(&mut game, player, (0, 0), pack[0], (3, 0));
+    assert!(game.tactical_attack(pack[0]));
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 1);
+    assert_eq!(bolts[0].fx.as_deref(), Some("x"));
+
+    // Unarmed: a fresh fight with nothing in the weapon slot.
+    let mut game = self::game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 1);
+    assert_eq!(bolts[0].fx, None);
+}
+
+/// A routine on a battle map queues exactly one cue, carrying the shape's
+/// cells and the routine's own effect, before it resolves.
+#[test]
+fn a_tactical_routine_queues_one_cue_with_its_shape_cells() {
+    use crate::abilities::{AbilityDb, AbilityRange, AbilityShape};
+
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    let shape = AbilityShape::Radius { radius: 1 };
+    let id = shaped_sweep(&mut game, player, shape, AbilityRange { min: 0, max: 6 });
+    let mut def = game.world.resource::<AbilityDb>().get(id).unwrap().clone();
+    def.fx = Some("boom".to_string());
+    game.world.resource_mut::<AbilityDb>().insert(def);
+    place_bodies(&mut game, player, (0, 0), pack[0], (3, 0));
+    game.take_routine_cues();
+    let expected = crate::tactical::reach::shape_cells(
+        &game.world.resource::<TacticalBattle>().board,
+        (0, 0),
+        (3, 0),
+        shape,
+    );
+
+    assert!(game.tactical_use_routine(0, (3, 0)));
+
+    let cues = game.take_routine_cues();
+    assert_eq!(cues.len(), 1, "one cast, one cue: {cues:?}");
+    assert_eq!(cues[0].cells, expected);
+    assert_eq!(cues[0].from, (0, 0));
+    assert_eq!(cues[0].aim, (3, 0));
+    assert_eq!(cues[0].fx.as_deref(), Some("boom"));
+}
+
 /// A sweep fires one at every body its shape caught, not one at the aim.
 #[test]
 fn a_sweep_queues_a_bolt_per_body_it_swept() {

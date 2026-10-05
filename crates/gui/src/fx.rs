@@ -1756,6 +1756,7 @@ mod tests {
             from: (0, 0),
             to: (3, 0),
             color: GlyphColor::Cyan,
+            fx: None,
         };
         fx.begin_frame(
             0.0,
@@ -1795,6 +1796,7 @@ mod tests {
                     from: (0, 0),
                     to: (2, 0),
                     color: GlyphColor::Cyan,
+                    fx: None,
                 }],
                 ..Default::default()
             },

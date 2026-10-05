@@ -123,6 +123,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         // length, which is what a swing on a battle map already is.
         shape: None,
         range: None,
+        fx: None,
     }
 }
 

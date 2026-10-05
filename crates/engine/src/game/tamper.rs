@@ -307,6 +307,8 @@ impl Game {
             from,
             to: cell,
             color,
+            // A decoy swallowing a swing is not a weapon swing of its own.
+            fx: None,
         });
         self.world
             .resource_mut::<TacticalBattle>()

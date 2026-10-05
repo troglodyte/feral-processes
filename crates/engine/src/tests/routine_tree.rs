@@ -172,6 +172,7 @@ fn fixture_ability(id: &str, name: &str, target: AbilityTarget) -> AbilityDef {
         triggers: None,
         shape: None,
         range: None,
+        fx: None,
     }
 }
 

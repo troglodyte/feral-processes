@@ -255,6 +255,11 @@ pub struct ItemDef {
     /// letters, so a column of tags never shows one twice.
     #[serde(default)]
     pub abbrev: Option<String>,
+    /// Names the battle effect (`assets/effects/`) a swing with this weapon
+    /// plays. Presentational: the engine copies it onto a `BoltCue` and never
+    /// reads it. `#[serde(default)]`, absent meaning the renderer's default.
+    #[serde(default)]
+    pub fx: Option<String>,
 }
 
 impl ItemDef {
@@ -610,6 +615,7 @@ impl ItemDb {
                     // family because no per-disk `abbrev` could be authored
                     // for a derived item anyway.
                     abbrev: None,
+                    fx: None,
                 },
             );
         }
@@ -694,10 +700,18 @@ impl ItemDb {
                     // one shipped case — because there is no `ToolDef` field
                     // to author this one from.
                     abbrev: None,
+                    fx: None,
                 },
             );
         }
         warnings
+    }
+
+    /// Replaces one def, for a test that needs a weapon the shipped
+    /// catalogue does not carry — `AbilityDb::insert`'s reason.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: ItemDef) {
+        self.items.insert(def.id.0.clone(), def);
     }
 
     pub fn get(&self, id: &str) -> Option<&ItemDef> {

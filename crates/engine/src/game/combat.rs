@@ -126,6 +126,19 @@ impl Game {
         }
     }
 
+    /// The effect id the wielded weapon names, if any — what a swing's
+    /// `BoltCue` carries. Unarmed and innate swings name none.
+    pub(crate) fn weapon_fx(&self, actor: Entity) -> Option<String> {
+        let worn = self
+            .world
+            .get::<Equipment>(actor)
+            .and_then(|e| e.weapon.as_ref())?;
+        self.world
+            .resource::<ItemDb>()
+            .get(worn.copy.item.as_str())
+            .and_then(|def| def.fx.clone())
+    }
+
     /// How far from itself `actor` may swing its basic attack, in cells.
     ///
     /// **The one door, and its three readers are calls rather than copies.**

@@ -2435,6 +2435,7 @@ mod tests {
                 bolts: vec![feral_processes_engine::BoltCue {
                     from: view.bodies[0].cell,
                     to: view.bodies[1].cell,
+                    fx: None,
                     color: feral_processes_engine::components::GlyphColor::Cyan,
                 }],
                 ..Default::default()

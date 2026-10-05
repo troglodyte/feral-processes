@@ -3,7 +3,7 @@
 //!
 //! The output is a proposal, never an edit: nothing here writes `assets/`.
 
-use super::knob::{Knob, patch, read_back};
+use super::knob::{Knob, check, patch, read_back};
 use super::objective::{Objective, range_error};
 use crate::cem::{CemConfig, optimise};
 use crate::scratch_assets::ScratchAssets;
@@ -305,7 +305,7 @@ pub fn search(
     let old: Vec<f64> = obj
         .knobs
         .iter()
-        .map(|k| read_back(assets, k))
+        .map(|k| check(assets, k))
         .collect::<Result<_, _>>()?;
     let start: Vec<f64> = obj
         .knobs

@@ -403,7 +403,14 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
     let missing = || format!("{}: no `{}`", knob.file, knob.field);
     // These names could repeat across kinds, so they dispatch on the
     // directory; a field named under the wrong one falls to `unsupported`.
-    let kind = knob.file.split('/').next().unwrap_or_default();
+    // `Path::components` so `./memories/x.ron` dispatches like `memories/x.ron`.
+    let kind = Path::new(&knob.file)
+        .components()
+        .find_map(|c| match c {
+            std::path::Component::Normal(name) => name.to_str(),
+            _ => None,
+        })
+        .unwrap_or_default();
     match (kind, parts.as_slice()) {
         (
             "memories",
@@ -446,7 +453,9 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
                 .map(|(_, n)| f64::from(*n))
                 .ok_or_else(missing)
         }
-        ["drain_per_tick" | "working_multiplier" | "critical" | "content" | "morale_weight"] => {
+        ["drain_per_tick" | "working_multiplier" | "critical" | "content" | "morale_weight"]
+            if kind == "needs" =>
+        {
             let need = ron::from_str::<NeedDef>(&text).map_err(parse_err)?;
             Ok(f64::from(match knob.field.as_str() {
                 "drain_per_tick" => need.drain_per_tick,
@@ -472,6 +481,23 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
         }
         _ => Err(unsupported()),
     }
+}
+
+/// `read_back`, then a `patch` of that same value onto the file, so a knob
+/// on a field the file does not spell out fails here and not at the first
+/// candidate. Returns the value as the file holds it.
+pub fn check(assets: &Path, knob: &Knob) -> Result<f64, String> {
+    let value = read_back(assets, knob)?;
+    let path = assets.join(&knob.file);
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    patch(&text, &knob.field, value, knob.is_integer()).map_err(|e| {
+        format!(
+            "{}: {e} (a knob can only move a number the file spells out)",
+            knob.file
+        )
+    })?;
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -819,6 +845,42 @@ mod tests {
         let f = "interactions/complain.ron";
         assert_eq!(write_and_read(f, "weight", 2.75), 2.75);
         assert_eq!(write_and_read(f, "sulking", 0.5), 0.5);
+    }
+
+    #[test]
+    fn check_refuses_a_knob_on_a_field_the_file_leaves_out() {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        // `read_back` alone passes: the default reads back.
+        let k = knob("interactions/commiserate.ron", "sulking");
+        assert!(read_back(scratch.dir(), &k).is_ok());
+        let e = check(scratch.dir(), &k).unwrap_err();
+        assert!(e.contains("sulking"), "{e}");
+        let k = knob("memories/chatted_with.ron", "stack_decay");
+        assert!(check(scratch.dir(), &k).is_err());
+        let k = knob("memories/chatted_with.ron", "valence");
+        assert!(check(scratch.dir(), &k).is_ok());
+    }
+
+    #[test]
+    fn a_dot_slash_path_dispatches_like_a_bare_one() {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        let bare = read_back(scratch.dir(), &knob("memories/chatted_with.ron", "valence"));
+        let dotted = read_back(
+            scratch.dir(),
+            &knob("./memories/chatted_with.ron", "valence"),
+        );
+        assert_eq!(bare, dotted);
+        assert!(dotted.is_ok());
+    }
+
+    #[test]
+    fn a_need_field_on_a_memory_file_is_refused_cleanly() {
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        for field in ["critical", "content", "drain_per_tick", "morale_weight"] {
+            let e =
+                read_back(scratch.dir(), &knob("memories/chatted_with.ron", field)).unwrap_err();
+            assert!(e.contains("not a supported knob field"), "{field}: {e}");
+        }
     }
 
     #[test]

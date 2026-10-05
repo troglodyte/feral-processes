@@ -103,6 +103,14 @@ impl Objective {
                     knob.file, knob.field, knob.min, knob.max
                 ));
             }
+            // A zero half-life or strike cap is a def the game never meant
+            // to load, and `snap` would happily propose it.
+            if matches!(knob.field.as_str(), "half_life" | "strike_cap") && knob.min < 1.0 {
+                return Err(format!(
+                    "knob {} `{}`: min {} must be at least 1",
+                    knob.file, knob.field, knob.min
+                ));
+            }
             if self.knobs[..i]
                 .iter()
                 .any(|k| k.file == knob.file && k.field == knob.field)
@@ -217,6 +225,21 @@ mod tests {
         assert!(e.contains("min"), "{e}");
         let e = err_of(&ron_with("").replace("min: 1.0, max: 9.0", "min: 9.0, max: 1.0"));
         assert!(e.contains("capacity"), "{e}");
+    }
+
+    #[test]
+    fn a_memory_half_life_or_strike_cap_below_one_is_rejected() {
+        for field in ["half_life", "strike_cap"] {
+            let text = ron_with("").replace(
+                r#"file: "structures/assembly_bay.ron", field: "capacity", min: 1.0"#,
+                &format!(r#"file: "memories/hard_won.ron", field: "{field}", min: 0.0"#),
+            );
+            let e = err_of(&text);
+            assert!(
+                e.contains(field) && e.contains("at least 1"),
+                "{field}: {e}"
+            );
+        }
     }
 
     #[test]

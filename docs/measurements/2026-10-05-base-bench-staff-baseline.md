@@ -255,25 +255,30 @@ twenty runs. Items are units made over the run.
 
 | seed | on_shift_share before / after | rung none | rung sulking | rung downed_tools | frays | patch_routine | bytecode_block | ice_breaker |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 0.8904 / 0.8413 | 0.7507 / 0.6632 | 0.1397 / 0.1776 | 0.1096 / 0.1592 | 4 / 3 | 10 / 15 | 37 / 51 | 0 / 3 |
-| 2 | 1.0000 / 0.9599 | 0.7998 / 0.7944 | 0.1644 / 0.1649 | 0.0358 / 0.0407 | 4 / 4 | 10 / 10 | 20 / 21 | 0 / 0 |
-| 3 | 1.0000 / 0.8805 | 0.7442 / 0.7424 | 0.2558 / 0.1372 | 0 / 0.1203 | 4 / 4 | 10 / 14 | 37 / 38 | 0 / 3 |
-| 4 | 1.0000 / 1.0000 | 0.7605 / 0.8528 | 0.2395 / 0.1472 | 0 / 0 | 3 / 3 | 8 / 8 | 20 / 21 | 0 / 0 |
-| 5 | 1.0000 / 0.9194 | 0.7920 / 0.7792 | 0.1579 / 0.1398 | 0.0500 / 0.0810 | 3 / 4 | 7 / 10 | 20 / 21 | 0 / 0 |
-| mean | 0.9781 / 0.9202 | 0.7694 / 0.7664 | 0.1915 / 0.1533 | 0.0391 / 0.0802 | 3.6 / 3.6 | 9.0 / 11.4 | 26.8 / 30.4 | 0 / 1.2 |
+| 1 | 0.8904 / 0.9270 | 0.7507 / 0.7239 | 0.1397 / 0.2028 | 0.1096 / 0.0733 | 4 / 5 | 10 / 14 | 37 / 58 | 0 / 0 |
+| 2 | 1.0000 / 0.9683 | 0.7998 / 0.7941 | 0.1644 / 0.1740 | 0.0358 / 0.0319 | 4 / 5 | 10 / 10 | 20 / 51 | 0 / 0 |
+| 3 | 1.0000 / 0.9641 | 0.7442 / 0.7852 | 0.2558 / 0.1788 | 0 / 0.0359 | 4 / 5 | 10 / 15 | 37 / 56 | 0 / 0 |
+| 4 | 1.0000 / 0.9736 | 0.7605 / 0.8002 | 0.2395 / 0.1733 | 0 / 0.0266 | 3 / 4 | 8 / 10 | 20 / 57 | 0 / 0 |
+| 5 | 1.0000 / 0.9938 | 0.7920 / 0.8792 | 0.1579 / 0.1144 | 0.0500 / 0.0064 | 3 / 3 | 7 / 12 | 20 / 42 | 0 / 0 |
+| mean | 0.9781 / 0.9654 | 0.7694 / 0.7965 | 0.1915 / 0.1687 | 0.0391 / 0.0348 | 3.6 / 4.4 | 9.0 / 12.2 | 26.8 / 52.8 | 0 / 0.0 |
 
-- **The carried-load inflation is gone.** After the fix `on_shift_share` is
-  one minus the `downed_tools` share on every seed, to within 0.0008; before,
-  seeds 2 and 5 read 1.0 beside 3.6% and 5.0% `downed_tools`.
-- **`downed_tools` rose** (mean 3.9% to 8.0%, seed 3 from 0 to 12.0%). The
-  runs diverge once the corridor stops jamming, so this is a different
-  morale trajectory, not the jam returning: the share is now fully off
-  shift where before part of it was hidden by a held load.
-- **Throughput rose on three seeds** (1, 3, 5): `chains` makes Ice Breakers
-  at all for the first time (3 on seeds 1 and 3), and seed 1's Bytecode
-  Blocks went 37 to 51. Seeds 2 and 4 barely moved.
-- `labour mean_unworked_total` went from 0 to 0-0.41 (seed 1 highest): a
-  want can now go unmatched where before the jammed body held it.
+- **The `chains` "after" column is the review-fix build** (a carrier lifts a
+  load only for a store the walk reaches; a posted passer no longer knocks
+  an arrived errand-walker off its cell; `reaches` defers to `post_reach`
+  when a face is held), release, same command, seeds run one at a time.
+  `bench-economy` below is still the `7f01e9a8` run and was not re-run.
+  `stopped_at` is None on all five.
+- **The carried-load inflation is still gone.** `on_shift_share` is one
+  minus the `downed_tools` share on every seed, to within 0.0008.
+- **`downed_tools` is back down** (mean 3.9% before, 8.0% at `7f01e9a8`,
+  3.5% now; seed 3 from 12.0% to 3.6%), and sulking sits at 16.9% (15.3%
+  at `7f01e9a8`).
+- **Bytecode Block throughput is about double the baseline on every seed**
+  (mean 26.8 to 52.8; at `7f01e9a8` 30.4), and Patch Routine rose to 12.2
+  (11.4). Ice Breaker is 0 on all five where `7f01e9a8` made 3 on seeds 1
+  and 3: the runs diverge, so that is a different trajectory, not a
+  regression anyone has read yet.
+- `labour mean_unworked_total` is 0.0003-0.069 (seed 2 highest).
 
 ### `bench-economy`
 

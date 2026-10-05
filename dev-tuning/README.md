@@ -22,7 +22,7 @@ writes the best roster it found to `dev-tuning/out/`.
 queues a batch work order before the first tick. Only posted workers haul,
 and workers are posted only on machines an order wants, so a base with no
 orders has no drain. Use a quantity the run cannot reach (9999) so the demand
-lasts. Orders alone did not make `chains` flow; see the doc below.
+lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
 
 A run ends early, with a report over the ticks it did play, when a battle
 opens or the game ends; the report's `stopped_at` says the tick and `run`
@@ -202,16 +202,25 @@ min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
 queues a batch work order before the first tick. Only posted workers haul,
 and workers are posted only on machines an order wants, so a base with no
 orders has no drain. Use a quantity the run cannot reach (9999) so the demand
-lasts. Orders alone did not make `chains` flow; see the doc below.
+lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
 
 **The output is a proposal, never an edit.** `out/bench-economy/` holds
 `report.md`, `proposal.ron` and the patched files; `diff -r assets/
 dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
 
-Read `docs/measurements/2026-10-05-base-bench-chains-baseline.md` before
-trusting a proposal. On `chains` nothing drains machine output, so every
-machine fills its buffer once and clogs; `economy.ron` is a mechanics demo
-and its proposal should not be applied; queuing orders drains it for the
-first ~1000 ticks and then the line starves again (its "with orders"
-section). A running-share target can also be
-met just by slowing a machine down.
+Two templates, two objectives:
+
+- `economy-bench.ron` runs on `bench-economy` (`dev-saves/README.md`), a
+  rearranged `chains` whose machines keep being emptied under orders, so
+  `items` and `running_share` measure throughput. Use this one. Ticks stay at
+  3000 because a siege stops the clock at roughly tick 3800-4900 with these
+  orders. Its proposal sets six machine speeds, three of them on the edge of
+  their range, and the model has no cost for speed, so read it as which
+  speeds bind throughput rather than as values to apply. See
+  `docs/measurements/2026-10-05-base-bench-economy-baseline.md`.
+- `economy.ron` runs on `chains` and is a mechanics demo: nothing drains
+  `chains`, so every machine fills its buffer once and clogs, and its
+  proposal should not be applied; queuing orders drains it for the first
+  ~1000 ticks and then the line starves again
+  (`docs/measurements/2026-10-05-base-bench-chains-baseline.md`). A
+  running-share target can also be met just by slowing a machine down.

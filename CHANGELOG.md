@@ -55,7 +55,9 @@ the same kind and list it here.
 
 ## Unreleased
 
-**The base economy can now be measured and tuned without playing it.** A new `bench` tool runs a saved base for a fixed number of ticks and reports how busy each machine was, how much each line made and what the base built, and a second mode searches machine speeds, capacities and power draw for values that put those numbers inside ranges you set. It writes a proposal for you to read and apply by hand; nothing in `assets/` changes. The shipped `dev-tuning/economy.ron` is a demonstration only: the sample base has nothing emptying its machines, so its proposal should not be applied. `bench run --order item:qty` queues work orders first so workers haul; that helps for about a thousand ticks, not for a whole run. See `dev-tuning/README.md`.
+**The base economy can now be measured and tuned without playing it.** A new `bench` tool runs a saved base for a fixed number of ticks and reports how busy each machine was, how much each line made and what the base built, and a second mode searches machine speeds, capacities and power draw for values that put those numbers inside ranges you set. It writes a proposal for you to read and apply by hand; nothing in `assets/` changes. The shipped `dev-tuning/economy.ron` is a demonstration only: the `chains` base it runs on has nothing emptying its machines, so its proposal should not be applied. `bench run --order item:qty` queues work orders first so workers haul; that helps `chains` for about a thousand ticks, not for a whole run. A new `bench-economy` dev-save template is `chains` rearranged so those orders keep flowing for thousands of ticks (wider floor, a Depot beside each production line, three Power Conduits, a Sandbox and a Defrag Bay), and `dev-tuning/economy-bench.ron` tunes against it. See `dev-tuning/README.md`.
+
+**A machine with no power is no longer given a worker.** When the grid could not run a machine, a work order could still post a program to it, and that program stood there making nothing for as long as the order lasted. Fuel and ingredient wants now skip a dark machine.
 
 ## 0.15.6
 

@@ -152,3 +152,9 @@ unhauled, or the scheduler skips it because a depot holds a batch of power
 cells that is never delivered to the winding node), and fix the template or
 the engine. Until a run shows units far above capacity at 4000 ticks, no
 target on this base is a statement about flow.
+
+## Later
+
+The questions above were answered by building a different template, not by
+changing `chains`: see
+[the `bench-economy` baseline](2026-10-05-base-bench-economy-baseline.md).

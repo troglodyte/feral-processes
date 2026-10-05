@@ -54,6 +54,17 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-10-05 — Base bench: the `bench-economy` baseline and a tune](2026-10-05-base-bench-economy-baseline.md)
+  — a rearranged `chains` that keeps flowing under orders: over 5000 ticks the
+  Assembly Bay makes **58** units against a capacity of 10 and the output
+  rises by the same amount every thousand ticks. `chains` stalled on Depots
+  with no room, a one-tile corridor idle programs block, and no amenity; one
+  free face per machine and one Power Conduit were the two further traps. A
+  siege stops the clock at tick 3789-4902, so tune at 3000. The tune scores
+  zero on hold-out by making six machines faster, three of them to the edge
+  of their range, so it is a ranking of what binds throughput and not a
+  proposal to apply.
+
 - [2026-10-05 — Base bench: `chains` baseline and a first tune](2026-10-05-base-bench-chains-baseline.md)
   — on `chains` nothing drains machine output, so each machine fills its
   buffer once and clogs: the assembly bay made **10** units at capacity 10
@@ -61,6 +72,7 @@ an honest "unknown".
   error came from enlarging and slowing a fill-once buffer, so the proposal
   is not to be applied and `economy.ron` is a mechanics demo. `chains` needs
   a drain or steady-state measures before it can be tuned for flow.
+  See the `bench-economy` entry above for the template that has one.
 
 - [2026-10-02 — What a program's level points buy, and the mining spread](2026-10-02-derived-programs.md)
   — the default Parity/Analysis split beats all-Parity, all-Footprint and

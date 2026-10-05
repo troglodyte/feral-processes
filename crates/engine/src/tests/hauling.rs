@@ -2,7 +2,9 @@
 //! and coming back.
 
 use super::support::*;
+use crate::components::Squeezing;
 use crate::components::{Memories, MemorySubject};
+use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
 use crate::memories::MemoryId;
 use crate::tuning::STARTING_POCKET_RADIUS;
 use crate::*;
@@ -1931,6 +1933,9 @@ fn a_walled_in_depot_is_never_lifted_toward() {
 #[test]
 fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
     let mut game = base(41);
+    game.world
+        .resource_mut::<crate::resources::BattleTelemetry>()
+        .on = true;
     lay_long_floor(&mut game);
     let node = deploy(&mut game, "mining_node", 0, 2);
     let near = deploy(&mut game, "depot", 12, 0);
@@ -1960,11 +1965,33 @@ fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
         );
         game.tick();
     }
+    game.world
+        .resource_mut::<crate::alerts::AlertBoard>()
+        .depots_full = true;
     tick_until(&mut game, 3, |g| g.world.get::<Carrying>(worker).is_none());
 
     assert!(
         game.world.get::<Carrying>(worker).is_none(),
         "still holding the load past the timeout"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<crate::alerts::AlertBoard>()
+            .depots_full,
+        "a set-down is a deposit, and a deposit clears the depots-full latch"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::BattleTelemetry>()
+            .records
+            .iter()
+            .any(|r| matches!(
+                r,
+                crate::telemetry::Record::Haul { errand, qty, .. }
+                    if errand == "set_down" && *qty == tuning::HAUL_CARRY_CAPACITY
+            )),
+        "the set-down is a haul in the log like any delivery"
     );
     assert_eq!(
         node_output(&game, near, ids::CORE_FRAGMENT),
@@ -2089,5 +2116,134 @@ fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
         !game.on_shift(worker),
         "a downed-tools program is still on shift, carrying {:?}, after 200 ticks",
         game.world.get::<Carrying>(worker)
+    );
+}
+
+fn squeezing(into: (i32, i32), since: u64) -> Squeezing {
+    Squeezing {
+        into: Position {
+            x: into.0,
+            y: into.1,
+        },
+        since,
+    }
+}
+
+fn squeeze_step(to: (i32, i32)) -> Step {
+    Step {
+        to: Position { x: to.0, y: to.1 },
+        squeeze: true,
+    }
+}
+
+/// A step into a free cell is taken at once, whatever marker is held.
+#[test]
+fn a_step_into_a_free_cell_is_taken_at_once() {
+    let free = Step {
+        to: Position { x: 1, y: 1 },
+        squeeze: false,
+    };
+    assert_eq!(stride(None, free, 10), Stride::Go);
+    assert_eq!(stride(Some(squeezing((1, 1), 9)), free, 10), Stride::Go);
+}
+
+/// A squeeze waits exactly `SQUEEZE_EXTRA_TICKS` on the same cell: the first
+/// tick opens the wait, the one `EXTRA` later takes the step.
+#[test]
+fn a_squeeze_waits_the_extra_ticks_on_the_same_cell() {
+    let step = squeeze_step((2, 0));
+    let opened = match stride(None, step, 100) {
+        Stride::Wait(m) => m,
+        other => panic!("a squeeze opened with {other:?}"),
+    };
+    assert_eq!(opened, squeezing((2, 0), 100));
+    assert_eq!(
+        stride(Some(opened), step, 100),
+        Stride::Wait(opened),
+        "still paying for it on the tick it opened"
+    );
+    assert_eq!(
+        stride(Some(opened), step, 100 + tuning::SQUEEZE_EXTRA_TICKS),
+        Stride::Go
+    );
+}
+
+/// A marker naming a different cell is a route that changed, so the wait
+/// starts over rather than handing out a free pass.
+#[test]
+fn a_changed_route_restarts_the_squeeze_wait() {
+    let held = squeezing((1, 0), 100);
+    assert_eq!(
+        stride(
+            Some(held),
+            squeeze_step((2, 0)),
+            100 + tuning::SQUEEZE_EXTRA_TICKS
+        ),
+        Stride::Wait(squeezing((2, 0), 100 + tuning::SQUEEZE_EXTRA_TICKS))
+    );
+}
+
+/// A marker older than twice the wait is left over from an interrupted walk:
+/// it starts over too, where one just inside the window takes the step.
+#[test]
+fn a_stale_squeeze_marker_restarts_the_wait() {
+    let step = squeeze_step((2, 0));
+    let held = squeezing((2, 0), 100);
+    let edge = 100 + 2 * tuning::SQUEEZE_EXTRA_TICKS;
+    assert_eq!(stride(Some(held), step, edge), Stride::Go);
+    assert_eq!(
+        stride(Some(held), step, edge + 1),
+        Stride::Wait(squeezing((2, 0), edge + 1))
+    );
+}
+
+/// `Game::take_base_step`, the `Game`-side caller of `stride`: the dig crew
+/// and the builder pay the squeeze through it. First call holds in place and
+/// leaves the marker; a call `SQUEEZE_EXTRA_TICKS` later moves and clears it.
+#[test]
+fn a_game_side_walker_pays_the_squeeze_before_it_moves() {
+    let mut game = base(51);
+    let worker = hauler(&mut game);
+    move_to(&mut game, worker, 0, 0);
+    let start = *game.world.get::<Position>(worker).unwrap();
+    let step = Step {
+        to: Position {
+            x: start.x + 1,
+            y: start.y,
+        },
+        squeeze: true,
+    };
+
+    game.take_base_step(worker, step);
+    assert_eq!(*game.world.get::<Position>(worker).unwrap(), start);
+    assert!(game.world.get::<Squeezing>(worker).is_some());
+
+    game.world.resource_mut::<GameClock>().tick += tuning::SQUEEZE_EXTRA_TICKS;
+    game.take_base_step(worker, step);
+    assert_eq!(*game.world.get::<Position>(worker).unwrap(), step.to);
+    assert!(game.world.get::<Squeezing>(worker).is_none());
+}
+
+/// **An equal-length detour beats a squeeze.** Two ways round a two-wide
+/// corridor, the straight one holding a body: the step taken is the free
+/// diagonal. Fails if a body's cell cost nothing extra.
+#[test]
+fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
+    let mut grid = crate::base_grid::BaseGrid::default();
+    for x in -3..=0 {
+        grid.open(x, -1, 0);
+        grid.open(x, -2, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: -3, y: -2 };
+    let blocked = blocked_tiles(std::iter::empty(), [Position { x: -2, y: -2 }].into_iter());
+
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &blocked, grid.radius()),
+        Ok(Some(Step {
+            to: Position { x: -2, y: -1 },
+            squeeze: false,
+        })),
+        "the free way round costs the same and pays nothing"
     );
 }

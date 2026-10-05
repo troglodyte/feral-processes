@@ -868,7 +868,7 @@ impl CrewFields {
                 hauling::crew_reach(grid, from, blocked, *pocket_radius),
             )
         });
-        hauling::reaches(grid, field, *from, at, side, blocked)
+        hauling::reaches(grid, field, *from, at, side, blocked, *pocket_radius)
     }
 }
 

@@ -573,8 +573,9 @@ pub(crate) type CrewReach = (Position, HashMap<(i32, i32), u32>);
 /// *body* instead of from the post, and each want is a set lookup through
 /// `reaches`.
 ///
-/// The step rule is `post_field`'s, character for character, because the
-/// two have to agree about which tiles are crossable. What differs is which
+/// The step rule is `post_field`'s except for its arrival test, which needs
+/// a target this field has none of — `reaches` restores it. The two have to
+/// agree about which tiles are crossable. What differs is which
 /// end the search is bounded around: `walk_field` bounds successors to a box
 /// centred on its origin, so this one is centred on the worker where
 /// `post_field`'s is centred on the face. Both boxes are
@@ -606,6 +607,12 @@ pub(crate) fn crew_reach(
 /// `at_station` first and for `post_reach`'s reason: a body already touching
 /// the post never walks, so it can never be refused for want of a route
 /// through a field.
+///
+/// **The field is target-blind, so a body on one of `structure`'s faces reads
+/// as a throughway in it** where `post_field` refuses to arrive on one. When
+/// a face is held the answer is `post_reach`'s own, rather than a copy of its
+/// arrival rule that could drift; the held-face case is rare enough that the
+/// one walk it costs is not a tick-by-tick bill.
 pub(crate) fn reaches(
     grid: &BaseGrid,
     reach: &HashMap<(i32, i32), u32>,
@@ -613,11 +620,21 @@ pub(crate) fn reaches(
     structure: Position,
     side: u8,
     blocked: &Occupancy,
+    pocket_radius: i32,
 ) -> bool {
-    at_station(from, structure, side)
-        || station_candidates(grid, structure, side, |c| blocked.taken(c))
-            .iter()
-            .any(|s| reach.contains_key(&(s.x, s.y)))
+    if at_station(from, structure, side) {
+        return true;
+    }
+    if !station_candidates(grid, structure, side, |c| blocked.taken(c))
+        .iter()
+        .any(|s| reach.contains_key(&(s.x, s.y)))
+    {
+        return false;
+    }
+    let face_held = station_candidates(grid, structure, side, |_| false)
+        .iter()
+        .any(|s| blocked.holds_a_body((s.x, s.y)));
+    !face_held || post_reach(grid, from, structure, side, blocked, pocket_radius).is_ok()
 }
 
 /// Whether a worker standing at `from` could ever reach a post at

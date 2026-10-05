@@ -266,7 +266,8 @@ twenty runs. Items are units made over the run.
   load only for a store the walk reaches; a posted passer no longer knocks
   an arrived errand-walker off its cell; `reaches` defers to `post_reach`
   when a face is held), release, same command, seeds run one at a time.
-  `bench-economy` below is still the `7f01e9a8` run and was not re-run.
+  `bench-economy` below was re-run on the same build (seeds 1, 2 and 4
+  unchanged from `7f01e9a8`; 3 and 5 moved slightly).
   `stopped_at` is None on all five.
 - **The carried-load inflation is still gone.** `on_shift_share` is one
   minus the `downed_tools` share on every seed, to within 0.0008.
@@ -286,13 +287,13 @@ twenty runs. Items are units made over the run.
 |---|---|---|---|---|---|---|
 | 1 | 0.9517 / 0.9599 | 0.9571 / 0.9650 | 0.0429 / 0.0350 | 35 / 32 | 81 / 84 | 118 / 116 |
 | 2 | 0.9180 / 0.9119 | 0.9228 / 0.9168 | 0.0772 / 0.0832 | 32 / 34 | 81 / 87 | 104 / 107 |
-| 3 | 0.9718 / 0.9273 | 0.9791 / 0.9303 | 0.0209 / 0.0697 | 33 / 34 | 86 / 81 | 111 / 112 |
+| 3 | 0.9718 / 0.9342 | 0.9791 / 0.9376 | 0.0209 / 0.0624 | 33 / 35 | 86 / 83 | 111 / 114 |
 | 4 | 0.9043 / 0.8963 | 0.9077 / 0.9013 | 0.0923 / 0.0987 | 32 / 34 | 82 / 84 | 113 / 106 |
-| 5 | 0.9868 / 0.9706 | 0.9921 / 0.9774 | 0.0079 / 0.0226 | 33 / 33 | 84 / 83 | 117 / 125 |
-| mean | 0.9465 / 0.9332 | 0.9518 / 0.9382 | 0.0482 / 0.0618 | 33.0 / 33.4 | 82.8 / 83.8 | 112.6 / 113.2 |
+| 5 | 0.9868 / 0.9701 | 0.9921 / 0.9768 | 0.0079 / 0.0232 | 33 / 33 | 84 / 83 | 117 / 122 |
+| mean | 0.9465 / 0.9345 | 0.9518 / 0.9395 | 0.0482 / 0.0605 | 33.0 / 33.6 | 82.8 / 84.2 | 112.6 / 113.0 |
 
 `downed_tools`, `lashing_out`, frays and tantrums stay 0 on every seed.
 `bench-economy` was built with no machine short of two free faces, so it
-never jammed; the item means move by 1.2% or less and the staff figures by
-seed-to-seed amounts (seed 3's sulking 2.1% to 7.0% is the largest). The
+never jammed; the item means move by 1.7% or less and the staff figures by
+seed-to-seed amounts (seed 3's sulking 2.1% to 6.2% is the largest). The
 economy baseline's tuning ranges are not re-read here.

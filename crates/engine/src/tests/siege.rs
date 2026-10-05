@@ -4266,3 +4266,23 @@ fn a_base_is_not_besieged_while_sieges_are_off() {
         "on again, it fires"
     );
 }
+
+/// A warning already posted when sieges go off must not outlive the switch:
+/// the clock is frozen, so nothing would ever clear the attention row.
+#[test]
+fn a_posted_siege_warning_is_withdrawn_when_sieges_go_off() {
+    let mut game = Game::new(910, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, true);
+    game.dev_wind_siege_clock();
+    game.siege_check();
+    assert!(game.siege_warned(), "the fixture has to warn first");
+
+    game.dev_set_sieges(false);
+    assert!(!game.siege_warned());
+    game.dev_set_sieges(true);
+    assert!(
+        game.siege_warned(),
+        "the banked clock resumes, still warned"
+    );
+}

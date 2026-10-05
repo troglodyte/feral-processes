@@ -238,9 +238,16 @@ impl Game {
 
     /// Whether the siege clock has warned for the interval it is in — the
     /// attention row's own read, and every test's.
+    ///
+    /// Read as unwarned while sieges are off: the latch is left alone, so
+    /// switching them back on neither re-posts the alert nor loses the
+    /// banked clock, but a frozen clock cannot leave a "siege forming" row
+    /// standing for a siege that will not come.
     pub fn siege_warned(&self) -> bool {
-        self.world
-            .resource::<crate::resources::SiegePressure>()
-            .warned
+        self.sieges_enabled()
+            && self
+                .world
+                .resource::<crate::resources::SiegePressure>()
+                .warned
     }
 }

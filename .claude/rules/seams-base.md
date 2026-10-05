@@ -214,8 +214,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`has_station` keeps the structures-only set**, `Game::structure_tiles`,
   because a body on the only face of a marked cell is proof something can
   stand there.
-- **Sharing a cell outranks every errand in `drift_idle_staff`**, which is
-  what makes one-body-to-a-cell true of a save written before it.
+- **Sharing a cell with another idle body outranks every errand in
+  `drift_idle_staff`**, which is what makes one-body-to-a-cell true of a
+  save written before it; a posted passer is not a heap.
 - **`task_progress_system` and `assembler_system` both write
   `Task::progress` and are `.chain()`ed** — bevy can see the conflict but
   not the disjointness.

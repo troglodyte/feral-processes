@@ -420,14 +420,19 @@
   stranding that waiting will not fix held a body on shift for good — a
   downed-tools hauler read on shift for a whole bench run. Nearest by
   **Chebyshev**, not path: a stranded carrier is one no walk reaches anything
-  from, so path distance is exactly what it does not have, and `depot_accepts`'
-  filter and output room still decide which stores count. The units go
+  from, so path distance is exactly what it does not have, and the `accepts` closure `haul_step_system` builds over `depot_accepts`
+  and output room still decides which stores count. The units go
   through `deposit` and a `Record::Haul` (`errand: "set_down"`), a move and
   never production. `CarryingProgram` is out of scope by construction: a
   rack's carrier never walks, so it cannot be stranded by a route. The
   timeout is long enough for a wanderer on a Depot's only free face to step
-  off first — with bodies squeezed past, only structures, or every face of
-  the destination stood on, strand a carrier now.
+  off first. What strands a carrier now is structures across the route, a
+  body on a face of the destination, a body on a non-destination face the
+  only route runs through (a face is never crossed, since a walk would stop
+  there), or the walk-radius cap. **A load is lifted only for a store the walk
+  reaches** (`Errand::Tend` asks `post_reach` of the accepting depots), so
+  set-down is the recovery from a route lost *mid-carry* and not a conveyor:
+  an unreachable-only base clogs its machine and lifts nothing.
 
 - **`set_machine_status` is the one place a stall is announced, and it logs
   only on transition.** Three callers, so "entering a state is news, staying

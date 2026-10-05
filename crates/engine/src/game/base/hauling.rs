@@ -284,9 +284,9 @@ impl Occupancy {
     /// sulker on a respite, a subject for its pen — and the caravan. Their
     /// arrival test (`offshift::in_reach`) admits cells no station list
     /// names, so the "never stopped on" half cannot be said in the walk;
-    /// and `drift_idle_staff` hands a body sharing a cell to the wander
-    /// instead of its errand, so a drift walker squeezing through would be
-    /// knocked off its route at every pass. None of them carries a load,
+    /// and `drift_idle_staff` hands a body sharing a cell with another
+    /// idle body to the wander instead of its errand, so an idle drift walker
+    /// squeezing through would be knocked off its route at every pass. None of them carries a load,
     /// which is what the squeeze is for. The caravan keeps the old walk
     /// because it is not a program and its stuck case already says so once.
     pub(crate) fn rigid(mut self) -> Self {

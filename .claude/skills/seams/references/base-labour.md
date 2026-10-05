@@ -131,9 +131,9 @@
   end the walk (the target's own faces). **The trap is the walkers whose
   arrival is a radius** — a patient for its Bay, an off-shift body for an
   amenity, a respite, a subject for its pen: `in_reach` admits cells no
-  station list names, and `drift_idle_staff` hands a body sharing a cell to
-  the wander, so a drift walker squeezing through would be knocked off its
-  route at every pass. Those and the caravan take `Occupancy::rigid`, the
+  station list names, and `drift_idle_staff` hands a body sharing a cell with
+  another idle body to the wander, so an idle drift walker squeezing through
+  would be knocked off its route at every pass. Those and the caravan take `Occupancy::rigid`, the
   old bodies-as-walls walk. A passer that briefly shares a cell with an idle
   body makes *that* body take the wander, which is the step aside the
   squeeze wants. `hauling::blocked_tiles` takes the structures and the bodies
@@ -169,10 +169,13 @@
   holds there deliberately, and so does a program at its amenity — so a heap
   already in a save, or left by a structure raised on top of one, would stay a
   heap forever with every future step correctly refused. A body sharing its
-  cell therefore takes the wander instead of its errand, which is the one arm
-  that already knows how to decline a tile somebody else has. The tally is
-  built off `Game::base_bodies` and not off `staff`, because a posted worker
-  standing there is as much in the way as an idle one and is not in that list.
+  cell with another *idle* body therefore takes the wander instead of its
+  errand, which is the one arm that already knows how to decline a tile
+  somebody else has. **A posted body is not counted**: it squeezes through
+  and moves on by its own walk, and counting it knocked a patient off its
+  Bay, a subject off its pen or an off-shift body off its amenity at every
+  pass. The tally is built off `Game::base_bodies` and not off `staff`,
+  because an idle party member holds a cell and is not in that list.
 
 - **An idle program wanders the base, and laid floor is the leash.**
   `wander_step` offers one of the eight neighbours of the tile the body is

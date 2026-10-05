@@ -883,9 +883,11 @@ pub struct Carrying {
 /// nothing to distinguish a route that has just broken from one that has been
 /// broken for an hour.
 ///
-/// A cache of that tick's answer rather than stored state, and not saved for
-/// the same reason `MachineStatus` isn't: the walk that produced it runs
-/// again on the next tick. It exists at all because the status it drives is
+/// Not saved, like `MachineStatus`: the walk that produced it runs again on
+/// the next tick. **It is more than a cache of that tick's answer, though**:
+/// `since` gates `STRANDED_SET_DOWN_TICKS`, so a reload restarts the
+/// timer and a carrier stranded across one waits the full timeout again.
+/// The marker exists at all because the status it drives is
 /// written by `systems::task_progress_system` — giving `MachineStatus` two
 /// writers would have them ping-pong `Unstaffed`↔`Stranded` every tick, and
 /// `set_machine_status` logs on every transition.

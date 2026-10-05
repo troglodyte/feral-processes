@@ -2565,10 +2565,13 @@ pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
 /// How long a carrier stands `Stranded` holding a load before it sets the
 /// load down in the nearest store that will take it.
 ///
-/// Since bodies no longer block a posted walk, only structures (or every
-/// face of the destination being stood on) can strand a carrier, and a
-/// carrier is never freed while it holds a load — freeing would destroy the
-/// goods. Without a timeout that is a body held on shift forever. Long
+/// A route lost mid-carry strands a carrier: structures raised across it, a
+/// body standing on a face of the destination (or on a non-destination face
+/// the only route runs through, which is never crossed), or a destination
+/// past the walk-radius cap. A carrier is never freed while it holds a load
+/// — freeing would destroy the goods — so without a timeout that is a body
+/// held on shift forever. A load is only lifted for a store the walk reaches,
+/// so this is the recovery from a route lost after the pickup. Long
 /// enough that the transient case clears on its own first — sixteen-odd
 /// `IDLE_STAFF_STEP_TICKS` beats for a wanderer on a Depot's only free face
 /// to step off it — and short against the 2,291-tick streaks the `chains`

@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.15.8
 
 **The base bench now measures the staff, and can tune how they feel.** A `bench` report adds how much of the time programs spent on shift (not downed, off for a need, on a break or at downed tools; a program carrying a load counts as on shift whatever its mood), their morale, how often they sulked, how full each need (Coherence, Slack) was and how often one fell critical, how many tantrums and frays broke out and when the first fray came, and how much time went on each grievance step. `bench tune` can now move a need's drain, how much faster it drains at work, its critical and content lines and its weight on morale, how fast a Defrag Bay or Sandbox restores a need, and the strength of each thought. `--no-sieges` (an objective's `sieges: false`, or `FERAL_DEV_NO_SIEGES=1` in the game) turns the siege clock off so a long measurement is not cut short by a siege it was not measuring. `dev-tuning/staff.ron` is a staff objective on `bench-economy` for 6,000 ticks with sieges off; like the others it writes a proposal for you to read and nothing in `assets/` changes. A proposal is the search's best candidate, or the average of its final generation if that scored better, or the shipped values when nothing beat them. See `dev-tuning/README.md`.
 

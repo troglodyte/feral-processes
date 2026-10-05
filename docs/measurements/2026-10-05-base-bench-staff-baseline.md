@@ -163,8 +163,11 @@ ticks, but no one reaches a fray or a heavier rung before the siege.
   0.8904, which is exactly one minus its `downed_tools` share (0.1096): a
   program at downed tools is off the line. Seeds 2 and 5 also reach
   `downed_tools` (3.6% and 5.0%) and still read 1.0; the sim keeps a program
-  that is carrying a load on shift whatever its mood, which is the likely
-  reason, but that was not checked here. On `bench-economy` the re-measure
+  that is carrying a load on shift whatever its mood. The likely mechanism
+  (from reading the code, not confirmed in a run): with no depot able to take
+  the item and the worker's own machine output full, `Deposit` keeps
+  `Carrying`, so a downed-tools hauler holding an unplaceable load never
+  leaves the line. Pre-existing sim behaviour, not a bench artefact. On `bench-economy` the re-measure
   moved the figures by at most 0.0003 (it has an amenity, so the label and
   the test agree).
 

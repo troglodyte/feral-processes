@@ -43,8 +43,8 @@ seeds 1-3, hold-out 4-6, 6,000 ticks, sieges off, orders as in
 `economy-bench.ron`, 22 iterations x 24 candidates: **13 m 09 s** wall (131
 CPU-min). The tune is deterministic. The log ended `proposing the best
 candidate seen`: the best candidate seen beat the final mean on the search
-seeds (the mean's re-score is not logged, so how far behind it was is not
-recorded). Generation bests ran 0.0339 down to 0.0000 (generation 19); the
+seeds (this run predates logging the mean's re-score, so how far behind it
+was is not recorded). Generation bests ran 0.0339 down to 0.0000 (generation 19); the
 generation means stayed at 0.04-0.13.
 
 **`on shift` was re-measured after a fix.** The tune note first read it from

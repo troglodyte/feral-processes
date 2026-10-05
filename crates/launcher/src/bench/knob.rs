@@ -487,7 +487,8 @@ mod tests {
     }
 
     /// One real file and concrete path per `FIELDS` entry, so a field added
-    /// to the table without a `read_back` arm (or the reverse) fails here.
+    /// to the table without a `read_back` arm fails here. A `read_back` arm
+    /// with no table entry is not caught.
     #[test]
     fn every_listed_field_reads_back_and_matches_its_integer_flag() {
         let examples = [

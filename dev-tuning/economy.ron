@@ -1,0 +1,38 @@
+// What the base economy should look like on `chains`, and which numbers the
+// search may move to get there. Run: `bench tune dev-tuning/economy.ron`.
+//
+// Ranges, not points: a value inside its range costs nothing, outside it
+// costs the squared miss normalised by the range's width. See
+// docs/measurements/2026-10-05-base-bench-chains-baseline.md for the
+// baseline these were read off.
+Objective(
+    template: "chains",
+    ticks: 3000,
+    // The chains base is nearly deterministic, so seeds differ mostly in
+    // mining yield; three each is enough to see that without paying for more.
+    seeds: [1, 2, 3],
+    holdout_seeds: [4, 5, 6],
+    iterations: 25,
+    population: 16,
+    search_seed: 1337,
+
+    targets: [
+        // Shipped: the Assembly Bay runs ~4% of the time and sits clogged
+        // ~92%: its 10-slot output backs up and nothing drains it.
+        Target(measure: "economy.running_share.assembly_bay", min: 0.15, max: 0.40),
+        // The line's end product. Shipped 10 per 3000 ticks.
+        Target(measure: "economy.items.patch_routine", min: 25.0, max: 60.0),
+        // Mining nodes sit clogged ~90% of the run; asking for a busier node
+        // pulls the whole chain faster, not just the front of it.
+        Target(measure: "economy.running_share.mining_node", min: 0.15, max: 0.40),
+    ],
+
+    // One knob of each phase-1 kind, on the structures the targets watch.
+    knobs: [
+        Knob(file: "structures/mining_node.ron", field: "work.ticks_per_unit", min: 4.0, max: 20.0),
+        Knob(file: "structures/assembly_bay.ron", field: "assembles.ticks_per_unit", min: 6.0, max: 30.0),
+        Knob(file: "structures/assembly_bay.ron", field: "capacity", min: 5.0, max: 40.0),
+        Knob(file: "structures/refinery.ron", field: "capacity", min: 10.0, max: 60.0),
+        Knob(file: "structures/assembly_bay.ron", field: "power_draw", min: 1.0, max: 6.0),
+    ],
+)

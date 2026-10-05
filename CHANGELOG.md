@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**The base economy can now be measured and tuned without playing it.** A new `bench` tool runs a saved base for a fixed number of ticks and reports how busy each machine was, how much each line made and what the base built, and a second mode searches machine speeds, capacities and power draw for values that put those numbers inside ranges you set in `dev-tuning/economy.ron`. It writes a proposal for you to read and apply by hand; nothing in `assets/` changes. See `dev-tuning/README.md`.
+
 ## 0.15.6
 
 **Attacks on a battle map now look like what they are.** Ranged weapons fire a train of pulses, melee weapons slash, heavy single hits draw a beam, debuffs and drains crackle, and blast routines go off as an explosion that shakes the screen. Before, every attack was the same streak. Each weapon and routine picks its look from a file in `assets/effects/` through an `fx:` line, so mods can add their own; anything without one keeps the plain streak.

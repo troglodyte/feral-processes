@@ -165,3 +165,30 @@ The targets were re-argued on 2026-08-12; before that they still encoded a
 game where a zone doubled enemy stats. `stack-depth-5.ron` was a target
 until then and is not one now — see its own comment for why, and
 `NOTES.md` for what it cost while it was.
+
+## Base economy: `bench`
+
+Measures the base economy, and tunes machine numbers toward target ranges.
+
+```sh
+cargo run --release --bin bench -- run --template chains --ticks 5000 [--seed 1] [--out report.ron]
+cargo run --release --bin bench -- tune dev-tuning/economy.ron [--out dir]
+```
+
+`run` loads a `dev-saves/` template, plays it for `--ticks` and prints a
+summary to stderr; the full report (RON: per-machine status ticks and units,
+per-line output per 1000 ticks, labour, items made) goes to `--out` or
+stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
+(a miss costs the squared distance outside, normalised by the range width),
+knobs are fields of `assets/structures/*.ron` or `assets/items/*.ron` with a
+min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
+`power_draw`, `craftable.cost.<item>`). A cross-entropy search runs over
+`seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
+
+**The output is a proposal, never an edit.** `out/bench-economy/` holds
+`report.md`, `proposal.ron` and the patched files; `diff -r assets/
+dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
+
+Read `docs/measurements/2026-10-05-base-bench-chains-baseline.md` before
+trusting a proposal: `chains` is one small base, and a target on a machine's
+running share can be met by slowing the machine down.

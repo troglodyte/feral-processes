@@ -568,6 +568,7 @@ mod tests {
     /// only makes its starting stock would fall short of the counts.
     #[test]
     fn the_bench_economy_template_sustains_flow_under_orders() {
+        use feral_processes_engine::telemetry::Record;
         use feral_processes_engine::{WorkOrder, items::ItemId};
         let out = std::env::temp_dir().join("feral_processes_template_bench_economy_flow.bin");
         generate("bench-economy", &out).unwrap();
@@ -583,6 +584,7 @@ mod tests {
             assert!(held <= 50, "a Depot at {:?} holds {held}", depot.pos);
         }
 
+        game.enable_telemetry();
         for item in ["patch_routine", "bytecode_block", "ice_breaker"] {
             game.queue_work_order(WorkOrder::batch(ItemId::from(item), 9999))
                 .unwrap();
@@ -591,28 +593,27 @@ mod tests {
             game.wait();
         }
 
-        let shelved: Vec<(String, u32)> = game
-            .structure_report()
-            .into_iter()
-            .flat_map(|s| s.output)
-            .collect();
-        let made = |name: &str| -> u32 {
-            shelved
-                .iter()
-                .filter(|(n, _)| n == name)
-                .map(|(_, n)| n)
-                .sum()
-        };
-        // Observed 15 / 40 / 60 at this length; floors leave room for a seed.
-        for (name, floor) in [
-            ("Patch Routine", 8),
-            ("Bytecode Block", 20),
-            ("ICE Breaker", 30),
+        // Units assembled over the run, not units on a shelf at the end: a
+        // base that filled each output buffer once and stalled would still
+        // shelve a full buffer, but could not have assembled past it.
+        let mut assembled: std::collections::BTreeMap<String, u32> = Default::default();
+        for record in game.take_telemetry() {
+            if let Record::Assemble { item, .. } = record {
+                *assembled.entry(item).or_insert(0) += 1;
+            }
+        }
+        // Observed 15 / 43 / 62. Each floor sits above the producing
+        // machine's output capacity (bay 10, refinery 20, compiler 20), and
+        // below what the run makes, so only continuing flow clears it.
+        for (item, floor) in [
+            ("patch_routine", 11),
+            ("bytecode_block", 25),
+            ("ice_breaker", 30),
         ] {
+            let made = assembled.get(item).copied().unwrap_or(0);
             assert!(
-                made(name) >= floor,
-                "{name}: {} shelved in 1500 ticks, wanted at least {floor}",
-                made(name)
+                made >= floor,
+                "{item}: {made} assembled in 1500 ticks, wanted at least {floor}"
             );
         }
     }

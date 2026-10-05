@@ -24,6 +24,12 @@ and workers are posted only on machines an order wants, so a base with no
 orders has no drain. Use a quantity the run cannot reach (9999) so the demand
 lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
 
+`--no-sieges` (`sieges: false` in an objective, default true; `tune` passes
+it to every run) stops the siege clock, so a long run is not cut short by a
+siege it was not measuring. `bench-economy` with the shipped orders is
+stopped at roughly tick 3,800-4,900 otherwise. Forced sieges (dev console)
+still open. The game itself honours `FERAL_DEV_NO_SIEGES=1`.
+
 A run ends early, with a report over the ticks it did play, when a battle
 opens or the game ends; the report's `stopped_at` says the tick and `run`
 prints it. `tune` treats a candidate with any stopped run as failed (worst

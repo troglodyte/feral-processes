@@ -4243,3 +4243,50 @@ mod auto_attack_party_arm_review {
         );
     }
 }
+
+/// With sieges off the clock neither warns nor fires over the ticks it
+/// otherwise would; switching them back on lets the same base be besieged.
+#[test]
+fn a_base_is_not_besieged_while_sieges_are_off() {
+    let mut game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, true);
+    game.dev_set_sieges(false);
+    game.dev_wind_siege_clock();
+    let wound = game.siege_pressure();
+
+    let ticks = latest_possible_tick(2) + 1;
+    assert_eq!(ticks_to_fire(&mut game, ticks), None);
+    assert!(!game.siege_warned(), "no approach warning while off");
+    assert_eq!(game.siege_pressure(), wound, "the clock does not accrue");
+
+    game.dev_set_sieges(true);
+    assert!(
+        ticks_to_fire(&mut game, ticks).is_some(),
+        "on again, it fires"
+    );
+}
+
+/// Forcing a siege is an explicit dev act, so the switch does not block it.
+#[test]
+fn a_forced_siege_still_opens_while_sieges_are_off() {
+    let mut game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_structure".to_string(),
+            },
+            Position { x: 1, y: 1 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    game.dev_set_sieges(false);
+    game.dev_force_siege();
+    assert!(
+        game.world
+            .get::<Durability>(structure)
+            .map(|d| d.hp < 30)
+            .unwrap_or(true)
+    );
+}

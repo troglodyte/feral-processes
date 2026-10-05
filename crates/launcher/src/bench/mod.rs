@@ -40,6 +40,7 @@ mod tests {
                 ticks,
                 seed,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap()
@@ -72,6 +73,7 @@ mod tests {
                 ticks,
                 seed: 1,
                 orders: vec![("patch_routine".into(), 9999)],
+                sieges: true,
             },
         )
         .unwrap();
@@ -115,6 +117,7 @@ mod tests {
                 ticks,
                 seed: 1,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap();
@@ -132,5 +135,29 @@ mod tests {
         }
         assert!((staff.rung_share.values().sum::<f32>() - 1.0).abs() < 1e-4);
         assert!(!staff.needs.is_empty());
+    }
+
+    #[test]
+    fn bench_economy_runs_past_the_siege_point_with_sieges_off() {
+        // Seed 1 with these orders is stopped by a siege near tick 3,789;
+        // see dev-tuning/economy-bench.ron.
+        let out =
+            std::env::temp_dir().join(format!("feral_bench_no_sieges_{}.bin", std::process::id()));
+        crate::dev_template::generate("bench-economy", &out).unwrap();
+        let report = bench::run(
+            &out,
+            &assets_dir(),
+            RunOptions {
+                ticks: 5000,
+                seed: 1,
+                orders: ["patch_routine", "bytecode_block", "ice_breaker"]
+                    .map(|item| (item.to_string(), 9999))
+                    .to_vec(),
+                sieges: false,
+            },
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(report.stopped_at, None);
     }
 }

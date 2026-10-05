@@ -136,6 +136,7 @@ fn score(obj: &Objective, save: &Path, assets: &Path, seeds: &[u64]) -> Result<S
                 ticks: obj.ticks,
                 seed,
                 orders: obj.orders.clone(),
+                sieges: obj.sieges,
             },
         )?;
         stopped += usize::from(report.stopped_at.is_some());

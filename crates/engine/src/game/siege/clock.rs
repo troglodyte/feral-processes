@@ -13,6 +13,15 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// Whether `FERAL_DEV_NO_SIEGES` is set, read the way `FERAL_DEV_REVEAL` is
+/// (`game/stack_view.rs`): once, present, non-empty and not `"0"`.
+fn dev_no_sieges_env() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var_os("FERAL_DEV_NO_SIEGES").is_some_and(|v| !v.is_empty() && v != "0")
+    });
+    *ON
+}
+
 impl Game {
     /// How close the base is to its next siege, in
     /// `resources::SiegePressure`'s own units — `raid_pressure`'s
@@ -23,7 +32,27 @@ impl Game {
             .level
     }
 
+    /// Turns the siege clock on or off for this run only: a dev and bench
+    /// switch, so a long economy run is not cut short by a siege it was
+    /// never measuring. Not saved, and it beats `FERAL_DEV_NO_SIEGES`.
+    #[doc(hidden)]
+    pub fn dev_set_sieges(&mut self, on: bool) {
+        self.world.insert_resource(crate::resources::DevSieges(on));
+    }
+
+    fn sieges_enabled(&self) -> bool {
+        match self.world.get_resource::<crate::resources::DevSieges>() {
+            Some(dev) => dev.0,
+            None => !dev_no_sieges_env(),
+        }
+    }
+
     pub(crate) fn siege_check(&mut self) {
+        // Frozen rather than held at a siege point: with no accrual there is
+        // no warning to fire, and switching back on resumes the banked clock.
+        if !self.sieges_enabled() {
+            return;
+        }
         let zone = self.world.resource::<ZoneLevel>().0;
         // **The sector gate is on accrual and not on firing** —
         // `raid_check`'s reason, applied here: pressure the opening sector

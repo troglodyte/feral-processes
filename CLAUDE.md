@@ -55,6 +55,7 @@ cargo run --bin arena -- dev-arenas/opening-fight.ron [--out report.ron]
 FERAL_DEV_ARENA=1 cargo run      # arena in the real battle UI; main menu [R]
 cargo run -- --template stack --keys "Right Right" --screenshot out.png  # needs DISPLAY; Read the PNG
 FERAL_DEV_REVEAL=1 cargo run -- --template stack   # whole Stack frame on the map
+FERAL_DEV_NO_SIEGES=1 cargo run                      # the siege clock never runs
 ```
 
 - Iterate with `cargo test -p feral-processes-engine <name>`.

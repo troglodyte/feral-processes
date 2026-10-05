@@ -34,6 +34,9 @@ pub struct RunOptions {
     /// wants, so a template with no standing demand has no drain; a
     /// quantity too big to reach keeps the demand alive for the whole run.
     pub orders: Vec<(String, u32)>,
+    /// Whether the siege clock runs. Off keeps a long run from stopping at
+    /// the first siege (`stopped_at`), for measuring what a siege hides.
+    pub sieges: bool,
 }
 
 /// Per-line tick tallies, accumulated as the run goes.
@@ -68,6 +71,7 @@ fn play_with(
         game.queue_work_order(WorkOrder::batch(ItemId::from(item.as_str()), *qty))
             .map_err(|e| format!("order {item} x{qty} refused: {e}"))?;
     }
+    game.dev_set_sieges(opts.sieges);
     game.enable_telemetry();
 
     let start = game.structure_report();
@@ -258,6 +262,7 @@ mod tests {
                 ticks: 50,
                 seed,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap()
@@ -294,6 +299,7 @@ mod tests {
                 ticks: 50,
                 seed: 1,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap();
@@ -317,6 +323,7 @@ mod tests {
                 ticks: 50,
                 seed: 1,
                 orders: vec![],
+                sieges: true,
             },
             |game, n| {
                 if n == 20 {
@@ -357,6 +364,7 @@ mod tests {
                 ticks: 1,
                 seed: 0,
                 orders: vec![("no_such_item".into(), 5)],
+                sieges: true,
             },
         )
         .unwrap_err();
@@ -374,6 +382,7 @@ mod tests {
                 ticks: 1,
                 seed: 0,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap_err();

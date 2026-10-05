@@ -110,7 +110,8 @@ Only posted workers haul, and workers are posted only on machines an order
 wants, so a huge quantity (9999) keeps demand alive. The question was
 whether that gives `chains` a sustained flow.
 
-**Baseline**, orders `patch_routine`, `bytecode_block`, `ice_breaker` at
+**Baseline** (measured before commit 50f6a895, which stopped a dark machine
+being wanted; numbers taken after it may differ), orders `patch_routine`, `bytecode_block`, `ice_breaker` at
 9999, release. `labour.mean_wanted` is now 2.1-2.5 (was 0.0), so the
 scheduler posts workers. Per-machine, seed 1:
 
@@ -129,16 +130,19 @@ the winding node stops at 30 charge coils, the bay at 10 patch routines
 reads "idle" for the entire run with 0 units (it made 194 with no orders),
 and the compiler never runs even with an `ice_breaker` order. The mining
 node (2,0) and the refinery keep running (units 81 -> 117 -> 156), but their
-output feeds nothing downstream that moves. I did not find why the conduit
-is never wanted or hauled from; the bay passing its capacity once (11 units
+output feeds nothing downstream that moves. The reason is in the
+[economy doc](2026-10-05-base-bench-economy-baseline.md): `chains` shelves 300
+Power Cells, so the Winding Node is fed from the shelf and the Conduit is never
+wanted. The bay passing its capacity once (11 units
 at seed 1, 2000 ticks, `patch_routine` order alone) shows the drain is real
 but short-lived. Extra orders for `power_cell` and `charge_coil` change
 nothing.
 
 Separately, 5000-tick runs with orders stop with "clock stopped" for seeds
 2 and 3 (about tick 4000-5000 of the run; seed 1 survives to ~4500), so the
-5000-tick window the first baseline used is not available with orders. That
-is the bench refusing a run where a battle opens, as designed.
+5000-tick window the first baseline used is not available with orders. A
+run that meets this now ends there and reports the ticks it did play, with
+`stopped_at` set, rather than being refused.
 
 **No tune was run and `economy.ron` was not rewritten.** There is no flowing
 window to take targets from: anything measured at 1000 ticks is the first

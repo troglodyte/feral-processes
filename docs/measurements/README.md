@@ -55,8 +55,9 @@ an honest "unknown".
 ## Entries
 
 - [2026-10-05 — Base bench: the `bench-economy` baseline and a tune](2026-10-05-base-bench-economy-baseline.md)
-  — a rearranged `chains` that keeps flowing under orders: over 5000 ticks the
-  Assembly Bay makes **58** units against a capacity of 10 and the output
+  — a rearranged `chains` that keeps flowing under orders: over the 4902 ticks
+  seed 1 survives, the Assembly Bay makes **58** units against a capacity of
+  10 (32-35 over a full 3000 ticks, seeds 1-3) and the output
   rises by the same amount every thousand ticks. `chains` stalled on Depots
   with no room, a one-tile corridor idle programs block, and no amenity; one
   free face per machine and one Power Conduit were the two further traps. A

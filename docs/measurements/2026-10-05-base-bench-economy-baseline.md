@@ -7,9 +7,12 @@ flow". This is that template, and a tune on it.
 ## The claim
 
 `dev-saves/bench-economy.ron`, a rearranged `chains`, sustains flow under
-standing orders: over 5000 ticks the Assembly Bay makes 58 units (capacity
-10), the Winding Node 176 (20), the Refinery 135 (20) and the Compiler 173
-(20), and the output rises by the same amount every thousand ticks. A tune on
+standing orders: seed 1, over the 4902 ticks before a siege stops the clock
+(see below), the Assembly Bay makes 58 units (capacity 10), the Winding Node
+176 (20), the Refinery 135 (20) and the Compiler 173 (20). Over a full 3000
+ticks, seeds 1-3, the Bay makes 32-35, the Winding Node 97-108, the Refinery
+81-86 and the Compiler 104-118. The output rises by the same amount every
+thousand ticks. A tune on
 it moved six machine speeds, produced a proposal that scores zero on hold-out
 seeds, and is **not an artifact of the kinds the `chains` tune was** (no
 buffer was enlarged, no machine slowed, no run stopped early). It is still a
@@ -57,7 +60,8 @@ A 3000-tick run is about 1.3 s.
 ## The numbers
 
 Flow, seed 1, orders as above, items shelved at each 1000 ticks (all
-shelves, so the running total of what the base holds):
+shelves, so the running total of what the base holds). The run stops at 4902,
+so the last row is the state there, not at 5000:
 
 | tick | patch_routine | bytecode_block | ice_breaker |
 |---|---|---|---|
@@ -65,7 +69,7 @@ shelves, so the running total of what the base holds):
 | 2000 | 20 | 55 | 83 |
 | 3000 | 31 | 81 | 122 |
 | 4000 | 41 | 110 | 158 |
-| 5000 | 51 | 135 | 189 |
+| 4902 (the stop) | 51 | 135 | 189 |
 
 Per machine, mean of seeds 1-3, 2000 ticks (the 5000-tick runs, which end
 early, are in the next table):
@@ -95,9 +99,12 @@ machines: the shipped and tuned asset sets stop at the same ticks.
 | 4, 5, 6 | 5000 | 4560, 4578, none |
 | 1-6 | 3000 | none |
 
-Machine statuses in a stopped run are folded over the requested ticks, so the
-tail after `stopped_at` reads as the last status held, mostly `idle`; use runs
-that finish for `running_share`.
+A stopped run reports over the ticks it actually ran (`ticks` in the report is
+4902, 3840 and 3789 for seeds 1-3): statuses, running shares, output per 1000
+and labour means all use that count. Before the fix that landed with this
+note they used the requested 5000, which stretched the last status over the
+unplayed tail and read every rate low; figures from stopped runs in earlier
+notes carry that error.
 
 ## The tune
 
@@ -111,6 +118,10 @@ read off the shipped numbers at 3000 ticks and set above them:
 | items.ice_breaker | 140..200 | 115.0 | 181.3 |
 | items.bytecode_block | 100..150 | 83.3 | 107.7 |
 | running_share.assembly_bay | 0.30..0.50 | 0.216 | 0.317 |
+
+None of the tune's runs stopped (3000 ticks is inside the siege-free range
+for the search and hold-out seeds 1-6, and the stop-aware search now refuses a baseline that stops),
+so the stopped-run fold error does not touch it and its result stands.
 
 Error before/after on the search seeds 0.7633 -> 0.0006; hold-out 0.6828 ->
 0.0000 ("holds up"). Three more seeds (7, 8, 9), which the search never saw:

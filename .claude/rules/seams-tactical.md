@@ -117,7 +117,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
   fifth `EffectKind`**, with no `kind` field: it names a library effect by
   `fx` id that the engine copies and never reads, and each travel primitive
-  still finishes inside one turn beat.
+  finishes inside `BOLT_SECONDS`, one turn beat.
 - **`TacticalFxQueue` is `BoltCue`'s pattern for a body's own hit or heal,
   cued once inside `apply_damage`/`restore_hp` rather than at each call
   site** — a hit reuses `EffectKind::Hit`'s wash and burst in gui, a heal

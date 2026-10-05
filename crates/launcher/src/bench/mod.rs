@@ -99,4 +99,38 @@ mod tests {
             "seed changed nothing the report shows"
         );
     }
+
+    #[test]
+    fn a_bench_economy_run_samples_every_staff_member_every_tick() {
+        let out = std::env::temp_dir().join(format!(
+            "feral_bench_staff_economy_{}.bin",
+            std::process::id()
+        ));
+        crate::dev_template::generate("bench-economy", &out).unwrap();
+        let ticks = 50;
+        let report = bench::run(
+            &out,
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed: 1,
+                orders: vec![],
+            },
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(report.stopped_at, None);
+        let staff = &report.staff;
+        assert_eq!(staff.staff_ticks, 15 * ticks);
+        assert_eq!(staff.end_morale.len(), 15);
+        for share in [staff.on_shift_share, staff.sulking_share]
+            .into_iter()
+            .chain(staff.rung_share.values().copied())
+            .chain(staff.needs.values().map(|n| n.critical_share))
+        {
+            assert!((0.0..=1.0).contains(&share), "{share}");
+        }
+        assert!((staff.rung_share.values().sum::<f32>() - 1.0).abs() < 1e-4);
+        assert!(!staff.needs.is_empty());
+    }
 }

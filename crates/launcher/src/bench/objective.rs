@@ -183,6 +183,20 @@ mod tests {
     }
 
     #[test]
+    fn staff_measures_are_accepted() {
+        for name in [
+            "staff.morale_mean",
+            "staff.need_mean.coherence",
+            "staff.need_critical_share.coherence",
+            "staff.rung_share.none",
+            "staff.frays_per_1000",
+        ] {
+            let text = ron_with("").replace("economy.labour_unworked", name);
+            assert!(Objective::from_ron(&text).is_ok(), "{name}");
+        }
+    }
+
+    #[test]
     fn inverted_ranges_are_rejected() {
         let e = err_of(&ron_with("").replace("min: 0.0, max: 1.0", "min: 1.0, max: 1.0"));
         assert!(e.contains("min"), "{e}");

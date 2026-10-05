@@ -27,7 +27,7 @@ use crate::components::TaskKind;
 use crate::components::{
     Carrying, CarryingProgram, Disgruntled, Downed, Grievance, OffShift, Position,
 };
-use crate::game::base::hauling::{NoPost, step_to_post};
+use crate::game::base::hauling::{NoPost, Step, step_to_post};
 use crate::game::base::offshift::{Amenities, in_reach};
 use crate::resources::{GameClock, Locale};
 use crate::tuning::{
@@ -316,12 +316,12 @@ impl Game {
         if in_reach(here, site, radius) {
             return Ok(());
         }
-        let blocked = self.blocked_tiles();
+        let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         // No shipped amenity declares a footprint past 1, so `side` here is
         // the default — `in_reach` above threads the same value, held by
         // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
-        let Some(tile) = step_to_post(
+        let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,

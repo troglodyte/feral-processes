@@ -763,3 +763,175 @@ fn a_witness_in_reach_remembers_the_aggressor_and_nobody_else_does() {
         "the victim's own grudge is unchanged"
     );
 }
+
+// ---------------------------------------------------------------------------
+// What the bench reads: records and views
+// ---------------------------------------------------------------------------
+
+use crate::telemetry::Record;
+
+fn bench_records(game: &mut Game) -> Vec<Record> {
+    game.take_telemetry()
+        .into_iter()
+        .filter(|r| matches!(r, Record::Fray { .. } | Record::Tantrum { .. }))
+        .collect()
+}
+
+#[test]
+fn a_fray_emits_one_record_per_latch_edge() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    game.enable_telemetry();
+    let tick = game.current_tick();
+    let who = game.creature_label(staff[0]);
+
+    game.fray(staff[0], &coherence(), false);
+    game.fray(staff[0], &coherence(), false);
+
+    assert_eq!(
+        bench_records(&mut game),
+        vec![Record::Fray {
+            tick,
+            who,
+            need: "coherence".to_string(),
+            unreachable: false,
+        }],
+        "the second call is the same latch and says nothing"
+    );
+}
+
+#[test]
+fn a_tantrum_emits_exactly_one_record() {
+    let mut game = Game::new(106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_scattered_base(&mut game);
+    place_at(&mut game, staff[1], 1, 40);
+    lash_out(&mut game, staff[0]);
+    reseed_rng(&mut game, 7);
+    game.enable_telemetry();
+    let who = game.creature_label(staff[0]);
+
+    let opened = (0..500).any(|_| {
+        game.run_tantrums(&staff);
+        open_brawls(&game) > 0
+    });
+    assert!(opened);
+    // The whole fight, so a record per exchange would show.
+    for _ in 0..TANTRUM_TICKS_MAX + 2 {
+        game.run_tantrums(&staff);
+    }
+
+    let records = bench_records(&mut game);
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert!(matches!(&records[0], Record::Tantrum { who: w, .. } if *w == who));
+}
+
+#[test]
+fn no_telemetry_no_fray_or_tantrum_records() {
+    let mut game = Game::new(106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_scattered_base(&mut game);
+    place_at(&mut game, staff[1], 1, 40);
+    lash_out(&mut game, staff[0]);
+    reseed_rng(&mut game, 7);
+    game.fray(staff[2], &coherence(), true);
+    let mut opened = false;
+    for _ in 0..500 {
+        game.run_tantrums(&staff);
+        opened |= open_brawls(&game) > 0;
+    }
+
+    // Both events must have happened, or an empty list proves nothing.
+    assert!(opened, "the brawl opened");
+    assert!(
+        game.world
+            .get::<crate::components::Needs>(staff[2])
+            .unwrap()
+            .is_latched(&coherence()),
+        "the fray latched"
+    );
+    assert!(lines(&game).iter().any(|l| l.contains("can't find a way")));
+    assert!(bench_records(&mut game).is_empty());
+}
+
+/// The record follows the latch: a need that recovers past `critical` and
+/// runs low again is news a second time, through the real gate.
+#[test]
+fn a_second_fray_is_recorded_after_the_need_unlatches_and_runs_low_again() {
+    let mut game = Game::new(123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    game.enable_telemetry();
+    let (critical, content) = {
+        let def = game
+            .world
+            .resource::<crate::needs::NeedDb>()
+            .get(&coherence())
+            .unwrap();
+        (def.critical, def.content)
+    };
+    let set = |game: &mut Game, level: f32| {
+        game.world
+            .get_mut::<crate::components::Needs>(staff[0])
+            .unwrap()
+            .set(&coherence(), level);
+        let amenities = game.amenities();
+        game.update_off_shift(&staff, &amenities);
+    };
+
+    set(&mut game, critical - 1.0);
+    set(&mut game, critical - 1.0);
+    assert_eq!(bench_records(&mut game).len(), 1, "one per latch edge");
+    set(&mut game, content);
+    set(&mut game, critical - 1.0);
+    assert_eq!(bench_records(&mut game).len(), 1, "a second after recovery");
+}
+
+#[test]
+fn need_levels_read_back_a_level_and_the_def_thresholds() {
+    let mut game = Game::new(121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    let def = game
+        .world
+        .resource::<crate::needs::NeedDb>()
+        .get(&coherence())
+        .unwrap()
+        .clone();
+    game.world
+        .get_mut::<crate::components::Needs>(staff[0])
+        .unwrap()
+        .set(&coherence(), 12.5);
+
+    let levels = game.need_levels(staff[0]);
+
+    let ids: Vec<&str> = levels.iter().map(|l| l.id.as_str()).collect();
+    let mut sorted = ids.clone();
+    sorted.sort();
+    assert_eq!(ids, sorted, "sorted by id");
+    let row = levels.iter().find(|l| l.id == "coherence").unwrap();
+    assert_eq!(row.level, 12.5);
+    assert_eq!(row.critical, def.critical);
+    assert_eq!(row.content, def.content);
+
+    game.world
+        .entity_mut(staff[0])
+        .remove::<crate::components::Needs>();
+    assert!(game.need_levels(staff[0]).is_empty());
+}
+
+#[test]
+fn grievance_names_each_rung_and_none_when_content() {
+    let mut game = Game::new(122, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = an_established_base(&mut game, BASE_ESTABLISHED_STAFF);
+    let who = staff[0];
+    assert_eq!(game.grievance(who), None);
+    for (rung, name) in [
+        (Grievance::Sulking, "sulking"),
+        (Grievance::DownedTools, "downed_tools"),
+        (Grievance::LashingOut, "lashing_out"),
+    ] {
+        game.world.entity_mut(who).insert(Disgruntled {
+            grievance: rung,
+            stranded: false,
+            told: false,
+        });
+        assert_eq!(game.grievance(who), Some(name));
+    }
+}

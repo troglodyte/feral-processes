@@ -24,6 +24,12 @@ and workers are posted only on machines an order wants, so a base with no
 orders has no drain. Use a quantity the run cannot reach (9999) so the demand
 lasts. Orders alone did not make `chains` flow; `bench-economy` is laid out so they do.
 
+`--no-sieges` (`sieges: false` in an objective, default true; `tune` passes
+it to every run) stops the siege clock, so a long run is not cut short by a
+siege it was not measuring. `bench-economy` with the shipped orders is
+stopped at roughly tick 3,800-4,900 otherwise. Forced sieges (dev console)
+still open. The game itself honours `FERAL_DEV_NO_SIEGES=1`.
+
 A run ends early, with a report over the ticks it did play, when a battle
 opens or the game ends; the report's `stopped_at` says the tick and `run`
 prints it. `tune` treats a candidate with any stopped run as failed (worst
@@ -193,10 +199,21 @@ summary to stderr; the full report (RON: per-machine status ticks and units,
 per-line output per 1000 ticks, labour, items made) goes to `--out` or
 stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
 (a miss costs the squared distance outside, normalised by the range width),
-knobs are fields of `assets/structures/*.ron` or `assets/items/*.ron` with a
-min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
-`power_draw`, `craftable.cost.<item>`). A cross-entropy search runs over
-`seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
+knobs are fields of `assets/structures/*.ron`, `assets/items/*.ron`,
+`assets/needs/*.ron` or `assets/thoughts/*.ron` with a min and max.
+Structure and item knobs: `work.ticks_per_unit`, `assembles.ticks_per_unit`,
+`capacity`, `power_draw`, `craftable.cost.<item>`, and
+`services.<need>.per_tick` / `services.<need>.radius` (the one service entry
+serving that need; none or several is an error). Need knobs: `drain_per_tick`,
+`working_multiplier`, `critical`, `content`, `morale_weight`. Thought knob:
+`intensity` (signed). Whole-number fields (`capacity`, `power_draw`, `work.ticks_per_unit`,
+`assembles.ticks_per_unit`, `craftable.cost.<item>` and
+`services.<need>.radius`) are rounded; every other field (`per_tick`, the
+need knobs, `intensity`) keeps six decimals. A cross-entropy search runs over
+`seeds`. The proposal is whichever is lowest on the `seeds` of the search's final
+mean, the best candidate it evaluated, and the shipped values (a candidate has
+to beat shipped strictly; if none does, the proposal is the shipped values and
+the report says so). It is then re-scored on `holdout_seeds` it never saw.
 
 `--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
 queues a batch work order before the first tick. Only posted workers haul,

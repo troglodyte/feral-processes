@@ -2549,6 +2549,35 @@ pub fn haul_walk_radius(build_radius: i32) -> i32 {
 /// size the Heap Pillar's cost makes routine.
 pub const HAUL_WALK_MAX_TILES: i32 = 60;
 
+/// What a posted walker pays, on top of the step itself, to enter a cell
+/// another program is standing in.
+///
+/// Bodies stopped blocking a posted walk because a ring base with a
+/// one-cell corridor round it was closed by whoever stood in it, and a
+/// carrier with no route held its load for thousands of ticks. **Not free**,
+/// though: the same cost is the walk field's step price for that cell, so a
+/// route detours round a crowd whenever the detour is no longer than the
+/// wait, and passing through is the answer only where it is the quicker one.
+/// One tick — the smallest cost the clock can charge, and enough to make a
+/// clear corridor the preferred one.
+pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
+
+/// How long a carrier stands `Stranded` holding a load before it sets the
+/// load down in the nearest store that will take it.
+///
+/// A route lost mid-carry strands a carrier: structures raised across it, a
+/// body standing on a face of the destination (or on a non-destination face
+/// the only route runs through, which is never crossed), or a destination
+/// past the walk-radius cap. A carrier is never freed while it holds a load
+/// — freeing would destroy the goods — so without a timeout that is a body
+/// held on shift forever. A load is only lifted for a store the walk reaches,
+/// so this is the recovery from a route lost after the pickup. Long
+/// enough that the transient case clears on its own first — sixteen-odd
+/// `IDLE_STAFF_STEP_TICKS` beats for a wanderer on a Depot's only free face
+/// to step off it — and short against the 2,291-tick streaks the `chains`
+/// bench measured.
+pub const STRANDED_SET_DOWN_TICKS: u64 = 100;
+
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch
 /// staged while working the current one, but a greedy machine still cannot

@@ -439,3 +439,20 @@ fn a_still_stranded_body_logs_the_line_once() {
         "still stranded after several retries — told once, not once a period"
     );
 }
+
+/// `Game::on_shift` is the scheduler's own `is_on_shift`, not the examine
+/// line's label: a program that has downed tools at a base with nowhere to
+/// unwind has no errand to show, yet is off the line.
+#[test]
+fn a_program_that_downed_tools_reads_off_shift_without_an_amenity() {
+    let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_no_amenity(&mut game, 1);
+    assert!(game.on_shift(staff[0]));
+    game.world.entity_mut(staff[0]).insert(Disgruntled {
+        grievance: Grievance::DownedTools,
+        stranded: false,
+        told: false,
+    });
+    assert_eq!(game.program_errand_label(staff[0]), None, "no errand shown");
+    assert!(!game.on_shift(staff[0]));
+}

@@ -414,6 +414,35 @@
   the *worker*, `task_progress_system` stays the only writer of a machine's
   status. Giving the status two writers makes them ping-pong every tick.
 
+- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` sets its load into
+  the nearest store that takes it, and keeps it when none will.** A carrier
+  is never freed while it holds a load (freeing destroys the goods), so a
+  stranding that waiting will not fix held a body on shift for good — a
+  downed-tools hauler read on shift for a whole bench run. Nearest by
+  **Chebyshev**, not path: a stranded carrier is one no walk reaches anything
+  from, so path distance is exactly what it does not have, and the `accepts` closure `haul_step_system` builds over `depot_accepts`
+  and output room still decides which stores count. The units go
+  through `deposit` and a `Record::Haul` (`errand: "set_down"`), a move and
+  never production. `CarryingProgram` is out of scope by construction: a
+  rack's carrier never walks, so it cannot be stranded by a route. The
+  timeout is long enough for a wanderer on a Depot's only free face to step
+  off first. What strands a carrier now is structures across the route, a
+  body on a face of the destination, a body on a non-destination face the
+  only route runs through (a face is never crossed, since a walk would stop
+  there), or the walk-radius cap. **A load is lifted only for a store the walk
+  reaches** (`Errand::Tend` asks `post_reach` of the accepting depots), so
+  set-down is the recovery from a route lost *mid-carry* and not a conveyor:
+  an unreachable-only base lifts nothing. The gate reads the output first and
+  asks `post_reach` lazily, nearest depot first, because Tend runs every tick
+  for every at-post worker on a clogged or unattached machine. **Output that a
+  depot would take but none can be reached reads `Stranded`, not `Clogged`**
+  ("collect it with c" names the wrong cause): Tend re-inserts the worker's
+  `Stranded` marker (keeping `since`) and `task_progress_system`'s clog branch
+  maps the marker to the status, so the alert is edge-latched by
+  `set_machine_status` and `note_strandings` forms one `stranded_at` memory per
+  episode. Tend's `clogged` gate counts `Stranded` too, or an attached machine
+  flaps back to `Clogged` and the marker is cleared every other tick.
+
 - **`set_machine_status` is the one place a stall is announced, and it logs
   only on transition.** Three callers, so "entering a state is news, staying
   in it is not" cannot lapse in one of them.

@@ -213,6 +213,10 @@ impl Game {
             let who = self.creature_label(aggressor);
             let them = self.creature_label(victim);
             self.log_base_kind(MessageKind::Tantrum, format!("{who} rounds on {them}."));
+            self.record(|_| crate::telemetry::Record::Tantrum {
+                tick: now,
+                who: who.clone(),
+            });
             self.world.resource_mut::<Brawls>().open.push(Brawl {
                 aggressor,
                 victim,

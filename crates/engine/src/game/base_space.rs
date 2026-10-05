@@ -794,11 +794,7 @@ impl Game {
                     )
                 };
                 match step {
-                    Ok(Some(next)) => {
-                        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
-                            *pos = next;
-                        }
-                    }
+                    Ok(Some(next)) => self.take_base_step(worker, next),
                     // Nowhere better to stand: the field admits the tile the
                     // worker is already on and nothing closer. It waits.
                     Ok(None) => {}

@@ -6,7 +6,7 @@
 //! responsibility: placement and demolition, not what a structure's
 //! footprint is *for*.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::base_grid::BaseGrid;
 use crate::game::base::hauling::NoPost;
@@ -177,7 +177,9 @@ impl Game {
             // `components::UnderStudy`'s doc for why nothing latches it.
             return Ok(());
         }
-        let blocked = self.blocked_tiles();
+        // `Occupancy::rigid`: a subject arrives on its pen, a cell no
+        // station list names.
+        let blocked = self.blocked_tiles().rigid();
         let start = (here.x, here.y);
         let Some(field) = self.pen_walk_field(pen, &blocked, start) else {
             return Err(NoPost::NoRoute);
@@ -216,16 +218,16 @@ impl Game {
     fn pen_walk_field(
         &mut self,
         pen: (i32, i32),
-        blocked: &HashSet<(i32, i32)>,
+        blocked: &crate::game::base::hauling::Occupancy,
         start: (i32, i32),
     ) -> Option<HashMap<(i32, i32), u32>> {
-        if blocked.contains(&pen) {
+        if blocked.taken(pen) {
             return None;
         }
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let grid = self.world.resource::<BaseGrid>();
         Some(walk_field(pen, haul_walk_radius(pocket_radius), |p| {
-            (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
+            (grid.walkable(p.0, p.1) && (p == start || !blocked.taken(p))).then_some(1)
         }))
     }
 
@@ -284,7 +286,7 @@ impl Game {
             .copied()
             .ok_or_else(|| "That program has nowhere to walk from.".to_string())?;
         if (here.x, here.y) != pen {
-            let blocked = self.blocked_tiles();
+            let blocked = self.blocked_tiles().rigid();
             let start = (here.x, here.y);
             let reachable = self
                 .pen_walk_field(pen, &blocked, start)

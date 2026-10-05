@@ -2966,6 +2966,17 @@ pub struct NeedRow {
     pub servicing: Option<String>,
 }
 
+/// One reserve as the headless bench reads it: the raw level beside the
+/// def's own thresholds, so a share-below-critical is computed against the
+/// number the sim itself uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NeedLevel {
+    pub id: String,
+    pub level: f32,
+    pub critical: f32,
+    pub content: f32,
+}
+
 /// Which word a reserve reads as, as a fraction of `NEED_MAX`.
 ///
 /// Four bands, and the boundaries are deliberately not the def's own

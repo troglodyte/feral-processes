@@ -27,8 +27,16 @@ pub struct Objective {
     /// quantity the run cannot reach.
     #[serde(default)]
     pub orders: Vec<(String, u32)>,
+    /// Whether sieges can open during a run; `false` for measuring a base a
+    /// siege would otherwise stop.
+    #[serde(default = "sieges_on")]
+    pub sieges: bool,
     pub targets: Vec<Target>,
     pub knobs: Vec<Knob>,
+}
+
+fn sieges_on() -> bool {
+    true
 }
 
 /// Zero inside `[min, max]`, else the squared distance outside it as a
@@ -169,6 +177,13 @@ mod tests {
     }
 
     #[test]
+    fn sieges_default_on_and_can_be_turned_off() {
+        assert!(Objective::from_ron(&ron_with("")).unwrap().sieges);
+        let off = Objective::from_ron(&ron_with(", sieges: false")).unwrap();
+        assert!(!off.sieges);
+    }
+
+    #[test]
     fn unknown_measure_is_named() {
         let e = err_of(&ron_with("").replace("economy.labour_unworked", "economy.nope"));
         assert!(e.contains("economy.nope") && e.contains("known:"), "{e}");
@@ -180,6 +195,20 @@ mod tests {
     fn parameterised_measures_are_accepted() {
         let text = ron_with("").replace("economy.labour_unworked", "economy.items.patch_routine");
         assert!(Objective::from_ron(&text).is_ok());
+    }
+
+    #[test]
+    fn staff_measures_are_accepted() {
+        for name in [
+            "staff.morale_mean",
+            "staff.need_mean.coherence",
+            "staff.need_critical_share.coherence",
+            "staff.rung_share.none",
+            "staff.frays_per_1000",
+        ] {
+            let text = ron_with("").replace("economy.labour_unworked", name);
+            assert!(Objective::from_ron(&text).is_ok(), "{name}");
+        }
     }
 
     #[test]

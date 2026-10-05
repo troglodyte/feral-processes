@@ -2,8 +2,9 @@
 // search may move to get there. Run:
 //   bench tune dev-tuning/staff.ron
 //
-// "Occasional trouble": programs sulk now and then and a need sometimes
-// touches its critical line, but nobody frays or downs tools. Targets and
+// "Occasional trouble": programs sulk now and then, but nobody frays or downs
+// tools. There is no coherence-critical target: the user dropped it
+// 2026-10-05 (no bound reached it); the coherence knobs stay. Targets and
 // knob bounds are the user's, 2026-10-05
 // (docs/superpowers/plans/2026-10-05-base-bench.md, "After the baseline").
 // Baseline: docs/measurements/2026-10-05-base-bench-staff-baseline.md,
@@ -34,8 +35,6 @@ Objective(
     targets: [
         // Shipped mean 0.031: quieter than wanted.
         Target(measure: "staff.sulking_share", min: 0.05, max: 0.15),
-        // Shipped mean 0.0016: coherence barely touches critical.
-        Target(measure: "staff.need_critical_share.coherence", min: 0.01, max: 0.05),
         // Shipped mean 82.3: already inside; a guard against the amenities
         // being starved to get the sulking.
         Target(measure: "staff.need_mean.slack", min: 60.0, max: 85.0),

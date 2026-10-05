@@ -2,22 +2,33 @@
 
 Follows the [staff baseline](2026-10-05-base-bench-staff-baseline.md), whose
 "6,000 ticks, sieges off" section holds the shipped values used here. This is
-what `bench tune dev-tuning/staff.ron` proposed. Nothing was applied;
+what `bench tune dev-tuning/staff.ron` proposes. Nothing was applied;
 `assets/` is untouched and the decision is the user's.
 
 ## The claim
 
-The search found no setting that puts the shipped base into "occasional
-trouble". Of the five targets, three (slack mean, frays, `downed_tools`) were
-already met by the shipped assets and stay met. The two that were not,
-`sulking_share` (want 0.05-0.15, shipped 0.031) and
-`need_critical_share.coherence` (want 0.01-0.05, shipped 0.0016), moved
-little: sulking reaches 0.052 on the hold-out seeds but stays 0.031 on the
-search seeds, and coherence-critical does not move (0.0024). **The proposal is
-worse than shipped on the search seeds (error 0.0856 against 0.0788) and
-better on the hold-out seeds (0.0362 against 0.1284).** That is a mixed
-result, not evidence the proposal improves the base. Read it as: the bounds
-given cannot reach the coherence-critical target on this base in 6,000 ticks.
+With the coherence-critical target dropped, the search finds a setting that
+meets every remaining target on the three search seeds (error 0.0000 against
+0.0342 shipped) and improves the hold-out seeds (0.0391 against 0.0839). All
+of the shipped error is `sulking_share` being too low; the other three targets
+were met by the shipped assets and stay met. The proposal gets sulking up
+by turning the knobs hard: four knobs end at a bound, morale weights go to
+their strongest allowed, and staff spend 3-6 points less of their time on shift
+(about 0.88-0.90 against 0.94-0.95). One of the three search seeds now has a
+fray. Whether that is "occasional trouble" is a design call (see
+"Suspicious").
+
+## First run, superseded
+
+The first run (same budget, with a `need_critical_share.coherence` target at
+0.01-0.05) proposed a setting that scored 0.0856 on the search seeds against
+0.0788 shipped (and 0.0362 against 0.1284 on hold-out). It was superseded for
+two reasons: `tune` proposed the CEM's final mean, which the search never
+evaluated, so the proposal could score worse than shipped and than every
+generation's best candidate (fixed: `tune` now re-scores the final mean and the
+best candidate seen and proposes the lowest, or the shipped values if neither
+beats them); and the user dropped the coherence-critical target, which no bound
+reached (shipped 0.0016, proposed 0.0024 against a want of 0.01).
 
 ## How to reproduce it
 
@@ -28,58 +39,52 @@ bench tune dev-tuning/staff.ron --out /tmp/staff-out
 
 Branch `staff-bench`, release, 16-core machine. `search_seed` 1337, search
 seeds 1-3, hold-out 4-6, 6,000 ticks, sieges off, orders as in
-`economy-bench.ron`. The tune is deterministic (two runs with different
-`iterations` print identical generations as far as they overlap).
+`economy-bench.ron`, 22 iterations x 24 candidates: **13 m 09 s** wall (131
+CPU-min). The tune is deterministic. The log ended `proposing the best
+candidate seen`: the best candidate seen beat the final mean on the search
+seeds (the mean's re-score is not logged, so how far behind it was is not
+recorded). Generation bests ran 0.0339 down to 0.0000 (generation 19); the
+generation means stayed at 0.04-0.13.
 
-| budget | wall time | note |
-|---|---|---|
-| 30 iterations x 24 candidates | 18 m 40 s (191 CPU-min) | over the 15-minute cap; first run, discarded |
-| **22 iterations x 24 candidates** | **13 m 53 s (140 CPU-min)** | the committed budget; the numbers below |
-
-About 5.3 CPU-seconds per 6,000-tick run (about 1.5 times the 2 x 1.7 s
-estimated), three runs per candidate. The 30-iteration run proposed a more
-extreme setting (coherence drain 0.03, working multiplier 3, Defrag Bay 0.9,
-machine-running thought 4: all at their bounds) and scored sulking 0.035 and
-coherence-critical 0.003 on the hold-out; it was not the committed result.
-
-Per-seed numbers below come from running `bench run` for seeds 1-6 against the
-shipped assets and against a copy of the repo with the proposed files in
-`assets/` (a scratch copy; the real `assets/` was never edited).
+Per-seed numbers below come from `bench run` for seeds 1-6 against the shipped
+assets and against a scratch copy of the repo with the proposed files in
+`assets/` (the real `assets/` was never edited). They reproduce the tune's own
+errors exactly (0.0342, 0.0000, 0.0839, 0.0391).
 
 ## The numbers
 
-New. Fitness is the objective's error (squared miss outside each range over
-the range width; lower is better).
+Fitness is the objective's error (squared miss outside each range over the
+range width, summed over targets, mean over seeds; lower is better).
 
 | fitness (error) | shipped | proposed |
 |---|---|---|
-| search seeds 1-3 | 0.0788 | 0.0856 |
-| hold-out seeds 4-6 | 0.1284 | 0.0362 |
+| search seeds 1-3 | 0.0342 | 0.0000 |
+| hold-out seeds 4-6 | 0.0839 | 0.0391 |
 
 Targets, mean over seeds (shipped / proposed). "Want" is the range.
 
-| measure | want | train shipped | train proposed | hold-out shipped | hold-out proposed |
+| measure | want | search shipped | search proposed | hold-out shipped | hold-out proposed |
 |---|---|---|---|---|---|
-| sulking_share | 0.05-0.15 | 0.0317 | 0.0313 | 0.0239 | 0.0522 |
-| need_critical_share.coherence | 0.01-0.05 | 0.0016 | 0.0024 | 0.0016 | 0.0025 |
-| need_mean.slack | 60-85 | 83.30 | 82.33 | 81.46 | 81.74 |
-| frays_per_1000 | 0-0.2 | 0 | 0 | 0 | 0 |
-| rung_share.downed_tools | 0-0.02 | 0 | 0 | 0 | 0 |
+| staff.sulking_share | 0.05-0.15 | 0.0317 | 0.0718 | 0.0239 | 0.0481 |
+| staff.need_mean.slack | 60-85 | 83.30 | 83.90 | 81.46 | 82.89 |
+| staff.frays_per_1000 | 0-0.2 | 0 | 0.056 | 0 | 0 |
+| staff.rung_share.downed_tools | 0-0.02 | 0 | 0 | 0 | 0 |
 
-Per seed, proposed (shipped in brackets):
+Per seed, proposed (shipped in brackets). Coherence critical share is not a
+target any more; it is shown because the proposal moves it.
 
-| seed | sulking_share | coherence critical_share | on_shift_share | morale mean / min | tantrums, frays |
-|---|---|---|---|---|---|
-| 1 | 0.0156 (0.0282) | 0.0025 (0.0024) | 0.960 (0.941) | 5.46 / -19.99 (4.89 / -15.36) | 0, 0 |
-| 2 | 0.0333 (0.0338) | 0.0025 (0.0011) | 0.928 (0.926) | 4.90 / -14.71 (4.33 / -15.38) | 0, 0 |
-| 3 | 0.0452 (0.0330) | 0.0023 (0.0012) | 0.921 (0.939) | 6.21 / -17.48 (3.48 / -16.40) | 0, 0 |
-| 4 | 0.0489 (0.0403) | 0.0023 (0.0020) | 0.913 (0.926) | 5.23 / -14.18 (5.40 / -14.32) | 0, 0 |
-| 5 | 0.0618 (0.0220) | 0.0023 (0.0012) | 0.905 (0.963) | 5.15 / -19.49 (4.80 / -14.42) | 0, 0 |
-| 6 | 0.0457 (0.0095) | 0.0028 (0.0015) | 0.916 (0.974) | 5.85 / -14.01 (4.78 / -13.06) | 0, 0 |
+| seed | sulking_share | slack mean | coherence critical | frays | on shift | morale min |
+|---|---|---|---|---|---|---|
+| 1 | 0.0643 (0.0282) | 84.1 (82.9) | 0.0373 (0.0024) | 1 (0) | 0.882 (0.941) | -15.9 (-15.4) |
+| 2 | 0.0586 (0.0338) | 84.0 (84.2) | 0.0031 (0.0011) | 0 (0) | 0.896 (0.926) | -17.0 (-15.4) |
+| 3 | 0.0925 (0.0330) | 83.6 (82.9) | 0.0039 (0.0012) | 0 (0) | 0.860 (0.939) | -18.8 (-16.4) |
+| 4 | 0.0666 (0.0403) | 85.1 (81.9) | 0.0029 (0.0020) | 0 (0) | 0.902 (0.926) | -17.5 (-14.3) |
+| 5 | 0.0620 (0.0220) | 84.0 (79.5) | 0.0035 (0.0012) | 0 (0) | 0.869 (0.963) | -16.4 (-14.4) |
+| 6 | 0.0158 (0.0095) | 79.5 (83.0) | 0.0032 (0.0015) | 0 (0) | 0.942 (0.974) | -14.2 (-13.1) |
 
-No run stopped (`stopped_at` None on all twelve). Labour unworked is 0 on
-every run, so staff stay on shift (90-96% of staff-ticks) with the proposed
-numbers too. No tantrum and no fray on any seed; `first_fray` none.
+No run stopped (`stopped_at` None on all twelve). No tantrum on any seed; the
+one fray is seed 1, first at tick 3406. Labour unworked is 0 except 0.0002 on
+seed 1.
 
 ### Knobs
 
@@ -88,69 +93,58 @@ Proposed against shipped, with the bound range given. "At bound" means within
 
 | file | field | shipped | proposed | range | at bound |
 |---|---|---|---|---|---|
-| needs/coherence.ron | drain_per_tick | 0.02 | 0.02848 | 0.01-0.03 | near max |
-| needs/coherence.ron | working_multiplier | 2 | 2.607 | 1-3 | |
-| needs/coherence.ron | critical | 20 | 16.23 | 10-30 | |
-| needs/coherence.ron | content | 60 | 69.87 | 50-80 | |
-| needs/coherence.ron | morale_weight | -4 | -4.088 | -6 to -2 | |
-| needs/slack.ron | drain_per_tick | 0.012 | 0.012902 | 0.006-0.018 | |
-| needs/slack.ron | working_multiplier | 1.4 | 1.018 | 0.7-2.1 | |
-| needs/slack.ron | critical | 25 | 21.54 | 10-30 | |
-| needs/slack.ron | content | 70 | 77.54 | 50-80 | near max |
-| needs/slack.ron | morale_weight | -3 | -2.329 | -4.5 to -1.5 | |
-| structures/defrag_bay.ron | services.coherence.per_tick | 0.6 | 0.9 | 0.3-0.9 | **max** |
-| structures/sandbox.ron | services.slack.per_tick | 0.5 | 0.398 | 0.25-0.75 | |
-| thoughts/beside_friend.ron | intensity | 2 | 1.690 | 0.5-4 | |
-| thoughts/beside_rival.ron | intensity | -3 | -2.264 | -4 to -0.5 | |
-| thoughts/machine_running.ron | intensity | 1 | 2.690 | 0.5-4 | |
-| thoughts/no_amenity.ron | intensity | -2 | -3.466 | -4 to -0.5 | |
-| thoughts/unpowered.ron | intensity | -2 | -2.924 | -4 to -0.5 | |
+| needs/coherence.ron | drain_per_tick | 0.02 | 0.03 | 0.01-0.03 | **max** |
+| needs/coherence.ron | working_multiplier | 2 | 2.890 | 1-3 | |
+| needs/coherence.ron | critical | 20 | 15.03 | 10-30 | |
+| needs/coherence.ron | content | 60 | 61.43 | 50-80 | |
+| needs/coherence.ron | morale_weight | -4 | -6 | -6 to -2 | **strongest** |
+| needs/slack.ron | drain_per_tick | 0.012 | 0.013478 | 0.006-0.018 | |
+| needs/slack.ron | working_multiplier | 1.4 | 1.695 | 0.7-2.1 | |
+| needs/slack.ron | critical | 25 | 23.82 | 10-30 | |
+| needs/slack.ron | content | 70 | 63.17 | 50-80 | |
+| needs/slack.ron | morale_weight | -3 | -4.5 | -4.5 to -1.5 | **strongest** |
+| structures/defrag_bay.ron | services.coherence.per_tick | 0.6 | 0.800 | 0.3-0.9 | |
+| structures/sandbox.ron | services.slack.per_tick | 0.5 | 0.75 | 0.25-0.75 | **max** |
+| thoughts/beside_friend.ron | intensity | 2 | 3.684 | 0.5-4 | |
+| thoughts/beside_rival.ron | intensity | -3 | -1.632 | -4 to -0.5 | |
+| thoughts/machine_running.ron | intensity | 1 | 1.566 | 0.5-4 | |
+| thoughts/no_amenity.ron | intensity | -2 | -0.5 | -4 to -0.5 | **weakest** |
+| thoughts/unpowered.ron | intensity | -2 | -2.359 | -4 to -0.5 | |
 
-Only the Defrag Bay restore rate sits exactly on a bound; coherence drain
-(0.0285 of 0.03) and slack `content` (77.5 of 80) are close to theirs. The
-30-iteration run pinned more: coherence drain 0.03, working multiplier 3,
-Defrag Bay 0.9 and machine-running thought 4, all at their maxima.
+Five of 17 knobs sit on a bound: coherence drain (max), both needs' morale
+weights (strongest pull), Sandbox restore rate (max), `no_amenity` thought
+(weakest).
 
-## What it does not say
+## Suspicious
 
-Flagged plainly, because several of these make the headline numbers weaker
-than they look.
-
-- **The proposal is not better on the search seeds.** Error 0.0856 after,
-  0.0788 before. The per-generation log shows a best candidate at 0.02-0.05
-  every generation, but the proposal written is not that candidate: tune
-  re-scores the search's final answer, and that re-score is higher than any
-  generation's best. A search whose answer scores worse than its own best
-  candidates and than the shipped assets is not converged. The hold-out gain
-  (0.1284 to 0.0362) is mostly `sulking_share` on seeds 4-6, where the shipped
-  base happens to be low (0.0239), and a three-seed hold-out is thin.
-- **The coherence-critical target is not reached by any knob here.**
-  Shipped 0.0016, proposed 0.0024, want 0.01-0.05. The search raised
-  coherence drain and the working multiplier, but also raised the Defrag Bay
-  to its maximum rate and **lowered `critical` from 20 to 16.2**, which makes
-  being "critical" harder. Critical share compared across the two columns is
-  against different lines (20 against 16.2), so the 0.0016-to-0.0024 rise is
-  not like for like.
+- **The search-seed zero is thin.** Error 0.0000 needs every seed's sulking in
+  0.05-0.15 and the fray rate at or under 0.2; seed 1 has one fray in 6,000
+  ticks, which is 0.167 per 1,000, just under the cap. A second fray on any
+  seed would break it. Hold-out is 0.0391, not zero: seed 6 sulks 0.0158, still
+  below range, so the gain does not carry to every seed.
+- **Sulking comes from amplifying need strain, not from the thoughts.**
+  Coherence drains at its fastest and both morale weights are at their
+  strongest; the Sandbox is at its fastest restore to hold slack up. Staff
+  spend less time on shift (0.88-0.90 against 0.94-0.95) and morale minima
+  fall (-14 to -19). That meets "occasional trouble" by the metric; whether it
+  looks like it in play is untested here.
+- **Seed 1 is an outlier.** Coherence critical share is 0.037 there against
+  about 0.003 on the others (shipped 0.001-0.002), and it is the seed with the
+  fray. The other five seeds put coherence critical at 0.003-0.004, so the
+  setting only touches critical on one seed in six.
+- **`no_amenity` at -0.5 is the weakest allowed.** The missing-amenity thought
+  is nearly switched off, so what an absent Defrag Bay or Sandbox costs staff
+  is mostly the need itself. The search chose that; the model has no other cost
+  for it.
 - **Three targets are guards the shipped base already meets** (slack mean,
   frays, `downed_tools`). Meeting them is not evidence of anything.
-- **Sulking moves by the thoughts, not by the needs.** `no_amenity` and
-  `unpowered` are both pushed toward -3 and `machine_running` up to 2.7, so
-  the search is widening the morale spread (morale min goes to about -17 to
-  -20 on some seeds, from about -15) rather than starving staff. Whether that
-  is "occasional trouble" or just a wider swing is a design call.
-- **Slack never meaningfully reaches critical** (min about 21-39 against a
-  critical that the search lowered to 21.5), so the five slack knobs are
-  observed only through `need_mean.slack` and morale, and slack
-  `critical`/`content` mostly have nothing to act on.
-- **Three seeds, one search seed (1337), a deterministic search.** A different
-  `search_seed` may land elsewhere; it was not tried.
+- **Three seeds, one search seed (1337).** A different `search_seed` may land
+  elsewhere; it was not tried.
 
 ## Open questions
 
-- Whether the coherence-critical range is reachable at all within these
-  bounds on `bench-economy`, or whether the Defrag Bay's reach (radius 1)
-  means most staff never need it. A wider `critical` or a lower Defrag Bay
-  minimum (below 0.3) would test that.
-- Why the final answer re-scores worse than the best candidate in every
-  generation (see above); the tune's output is the CEM mean, which may be
-  the cause, but this was not checked in code.
+- Whether sulking at about 0.05-0.07 reached by maximum drain and morale
+  weights reads as occasional trouble in play, or as a base that is simply
+  worse; the on-shift drop is the cost to weigh.
+- Whether a wider hold-out (more than three seeds) keeps seed 6's miss as a
+  one-off.

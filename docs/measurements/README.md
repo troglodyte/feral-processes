@@ -73,9 +73,10 @@ an honest "unknown".
   critical 0.0016, no fray).
 
 - [2026-10-05 — Base bench: a staff tune](2026-10-05-base-bench-staff-tune.md)
-  — the user's bounds cannot reach the coherence-critical target on
-  `bench-economy`; the proposal is worse than shipped on the search seeds and
-  better on hold-out, so it is not evidence to apply.
+  — without the coherence-critical target the search meets every target on
+  the search seeds (error 0.0342 to 0) and improves hold-out (0.0839 to
+  0.0391), by pinning five knobs at a bound and spending 3-6 points less time
+  on shift; one search seed gains a fray. Not a recommendation to apply.
 
 - [2026-10-05 — Base bench: `chains` baseline and a first tune](2026-10-05-base-bench-chains-baseline.md)
   — on `chains` nothing drains machine output, so each machine fills its

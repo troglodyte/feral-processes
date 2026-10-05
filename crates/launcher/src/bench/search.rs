@@ -68,6 +68,33 @@ fn effective_error(score: &Score) -> f64 {
     }
 }
 
+/// A re-score that errored leaves its candidate out of the choice, as an
+/// erroring candidate scores worst during the search: the mean and the best
+/// seen are each evaluated once more here, and one unreadable must not
+/// abort a tune whose other candidates are fine.
+fn rescored(what: &str, result: Result<Score, String>, log: &mut dyn FnMut(&str)) -> Option<Score> {
+    match result {
+        Ok(score) => {
+            log(&format!(
+                "re-scored the {what}: error {:.4}{}",
+                score.error,
+                if score.stopped > 0 {
+                    " (stopped early)"
+                } else {
+                    ""
+                }
+            ));
+            Some(score)
+        }
+        Err(e) => {
+            log(&format!(
+                "note: the {what} could not be scored and is ignored: {e}"
+            ));
+            None
+        }
+    }
+}
+
 /// What `tune` proposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pick {
@@ -375,23 +402,20 @@ pub fn search(
     // The final mean was never itself evaluated, so it competes with the
     // best candidate the search saw and with the shipped values.
     let mean_values = values_of(&mean);
-    let mean_score = evaluate(&mean_values, &obj.seeds)?;
-    let best = match best_seen.into_vector() {
-        Some(x) => {
-            let values = values_of(&x);
-            let score = evaluate(&values, &obj.seeds)?;
-            Some((values, score))
-        }
-        None => None,
-    };
+    let mean_score = rescored("final mean", evaluate(&mean_values, &obj.seeds), log);
+    let best = best_seen.into_vector().and_then(|x| {
+        let values = values_of(&x);
+        let score = rescored("best candidate seen", evaluate(&values, &obj.seeds), log)?;
+        Some((values, score))
+    });
     let picked = pick(
         effective_error(&search_before),
-        effective_error(&mean_score),
+        mean_score.as_ref().map_or(f64::INFINITY, effective_error),
         best.as_ref().map(|(_, s)| effective_error(s)),
     );
-    let (proposed, search_after) = match (picked, best) {
-        (Pick::Mean, _) => (mean_values, mean_score),
-        (Pick::BestSeen, Some(best)) => best,
+    let (proposed, search_after) = match (picked, mean_score, best) {
+        (Pick::Mean, Some(mean_score), _) => (mean_values, mean_score),
+        (Pick::BestSeen, _, Some(best)) => best,
         _ => (shipped.clone(), search_before.clone()),
     };
     let beat_shipped = picked != Pick::Shipped;
@@ -405,7 +429,7 @@ pub fn search(
     } else {
         holdout_before.clone()
     };
-    let files = apply_to_text(&pristine, &obj.knobs, &proposed)?;
+    let files = proposed_files(&pristine, &obj.knobs, &proposed, beat_shipped)?;
     let changes = obj
         .knobs
         .iter()
@@ -450,7 +474,7 @@ pub fn write_proposal(out_dir: &Path, obj: &Objective, proposal: &Proposal) -> R
 
 fn report(obj: &Objective, proposal: &Proposal) -> String {
     use std::fmt::Write as _;
-    let mut out = String::from("# Economy proposal\n\n");
+    let mut out = String::from("# Bench proposal\n\n");
     let _ = writeln!(
         out,
         "Template `{}`, {} ticks per run, {} iterations x {} candidates.\n",
@@ -523,6 +547,22 @@ fn report(obj: &Objective, proposal: &Proposal) -> String {
     out
 }
 
+/// The files the proposal writes. When shipped won they are the pristine
+/// text: re-patching the snapped shipped values can reformat a number the
+/// file spelled differently, and the diff against `assets/` must be empty.
+fn proposed_files(
+    pristine: &BTreeMap<String, String>,
+    knobs: &[Knob],
+    values: &[f64],
+    beat_shipped: bool,
+) -> Result<BTreeMap<String, String>, String> {
+    if beat_shipped {
+        apply_to_text(pristine, knobs, values)
+    } else {
+        Ok(pristine.clone())
+    }
+}
+
 fn apply_to_text(
     pristine: &BTreeMap<String, String>,
     knobs: &[Knob],
@@ -581,6 +621,47 @@ mod tests {
         assert_eq!(
             pick(0.08, f64::INFINITY, Some(f64::INFINITY)),
             Pick::Shipped
+        );
+    }
+
+    #[test]
+    fn an_unscorable_mean_is_left_out_of_the_choice_not_fatal() {
+        assert_eq!(
+            rescored("final mean", Err("no such kind".into()), &mut |_| {}),
+            None
+        );
+        let score = Score {
+            error: 0.02,
+            values: vec![],
+            stopped: 0,
+        };
+        assert_eq!(
+            rescored("final mean", Ok(score.clone()), &mut |_| {}),
+            Some(score)
+        );
+        let ignored = rescored("final mean", Err("x".into()), &mut |_| {})
+            .as_ref()
+            .map_or(f64::INFINITY, effective_error);
+        assert_eq!(pick(0.08, ignored, Some(0.03)), Pick::BestSeen);
+        assert_eq!(pick(0.08, ignored, None), Pick::Shipped);
+    }
+
+    #[test]
+    fn shipped_winning_proposes_the_pristine_text_untouched() {
+        let pristine = BTreeMap::from([("f".to_string(), "(capacity: 7.0,)".to_string())]);
+        let knobs = [Knob {
+            file: "f".into(),
+            field: "capacity".into(),
+            min: 1.0,
+            max: 20.0,
+        }];
+        assert_eq!(
+            proposed_files(&pristine, &knobs, &[7.0], false).unwrap(),
+            pristine
+        );
+        assert_ne!(
+            proposed_files(&pristine, &knobs, &[8.0], true).unwrap(),
+            pristine
         );
     }
 

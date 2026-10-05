@@ -199,7 +199,9 @@ fn tune(objective_path: &Path, out: Option<PathBuf>) -> Result<(), String> {
         "wrote {} — diff -r it against assets/ before applying",
         out.display()
     );
-    if !proposal.holds_up() {
+    if !proposal.beat_shipped {
+        println!("the shipped numbers won; the proposal changes nothing.");
+    } else if !proposal.holds_up() {
         println!(
             "WARNING: the proposal does not beat the shipped numbers on held-out seeds \
              ({:.4} -> {:.4}); do not apply it.",

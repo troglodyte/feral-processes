@@ -560,6 +560,63 @@ mod tests {
         }
     }
 
+    /// `bench-economy` exists to be measured, so the bar is flow that does not
+    /// stop: under standing orders the bay's line, the refinery's line and the
+    /// compiler must all keep delivering into the Depots for a long stretch,
+    /// which is what `chains` cannot do (full Depots, a stranded hauler, no
+    /// amenity). The 1500 ticks are well past the first batch, so a layout that
+    /// only makes its starting stock would fall short of the counts.
+    #[test]
+    fn the_bench_economy_template_sustains_flow_under_orders() {
+        use feral_processes_engine::{WorkOrder, items::ItemId};
+        let out = std::env::temp_dir().join("feral_processes_template_bench_economy_flow.bin");
+        generate("bench-economy", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let report = game.structure_report();
+        for kind in ["sandbox", "defrag_bay"] {
+            assert!(report.iter().any(|s| s.kind == kind), "no {kind} stands");
+        }
+        for depot in report.iter().filter(|s| s.kind == "depot") {
+            let held: u32 = depot.output.iter().map(|(_, n)| n).sum();
+            assert!(held <= 50, "a Depot at {:?} holds {held}", depot.pos);
+        }
+
+        for item in ["patch_routine", "bytecode_block", "ice_breaker"] {
+            game.queue_work_order(WorkOrder::batch(ItemId::from(item), 9999))
+                .unwrap();
+        }
+        for _ in 0..1500 {
+            game.wait();
+        }
+
+        let shelved: Vec<(String, u32)> = game
+            .structure_report()
+            .into_iter()
+            .flat_map(|s| s.output)
+            .collect();
+        let made = |name: &str| -> u32 {
+            shelved
+                .iter()
+                .filter(|(n, _)| n == name)
+                .map(|(_, n)| n)
+                .sum()
+        };
+        // Observed 15 / 40 / 60 at this length; floors leave room for a seed.
+        for (name, floor) in [
+            ("Patch Routine", 8),
+            ("Bytecode Block", 20),
+            ("ICE Breaker", 30),
+        ] {
+            assert!(
+                made(name) >= floor,
+                "{name}: {} shelved in 1500 ticks, wanted at least {floor}",
+                made(name)
+            );
+        }
+    }
+
     /// Loading is not the bar for `study` either: it exists so a session
     /// testing the Research Station opens *with a subject already pinned
     /// and a subject-gated project already running*, since reaching either

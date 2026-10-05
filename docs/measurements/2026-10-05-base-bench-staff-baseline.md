@@ -183,3 +183,47 @@ ticks, but no one reaches a fray or a heavier rung before the siege.
   come first.
 - Why `chains` reaches `downed_tools` on only three of five seeds while every
   seed frays.
+
+## 6,000 ticks, sieges off (the staff objective's baseline)
+
+Re-baseline for `dev-tuning/staff.ron`, taken before any knob moved. New
+measurement; replaces the 4,902-tick diagnostic above as the long-run view.
+
+```sh
+cargo build --release --bin bench
+for s in 1 2 3 4 5; do
+  ./target/release/bench run --template bench-economy --ticks 6000 --seed $s --no-sieges \
+    --order patch_routine:9999 --order bytecode_block:9999 --order ice_breaker:9999 --out s$s.ron
+done
+```
+
+Branch `staff-bench` at 54eb6049, release. `stopped_at` is None on all five,
+so every run played the full 6,000 ticks (`staff_ticks` 90,000). The first
+five rows are the staff objective's targets; `frays_per_1000` is `frays` / 6.
+
+| measure | seed 1 | 2 | 3 | 4 | 5 | mean |
+|---|---|---|---|---|---|---|
+| sulking_share | 0.0282 | 0.0338 | 0.0330 | 0.0403 | 0.0220 | 0.0315 |
+| need_critical_share.coherence | 0.00244 | 0.00109 | 0.00119 | 0.00204 | 0.00116 | 0.00158 |
+| need_mean.slack | 82.88 | 84.15 | 82.86 | 81.90 | 79.49 | 82.26 |
+| frays_per_1000 | 0 | 0 | 0 | 0 | 0 | 0 |
+| rung_share.downed_tools | 0 | 0 | 0 | 0 | 0 | 0 |
+| on_shift_share | 0.9414 | 0.9256 | 0.9390 | 0.9256 | 0.9628 | 0.9389 |
+| morale_mean | 4.888 | 4.325 | 3.485 | 5.395 | 4.801 | 4.579 |
+| morale_min | -15.36 | -15.38 | -16.40 | -14.32 | -14.42 | -15.18 |
+| tantrums | 0 | 0 | 0 | 0 | 0 | 0 |
+| first_fray | none | none | none | none | none | |
+| stopped_at | none | none | none | none | none | |
+| coherence mean / min | 67.64 / 17.70 | 68.99 / 19.68 | 71.82 / 19.71 | 68.33 / 18.59 | 71.12 / 19.51 | 69.58 / 19.04 |
+| slack min | 24.87 | 27.03 | 24.43 | 24.83 | 24.91 | 25.21 |
+| slack critical_share | 0.0001 | 0 | 0.00054 | 0.00012 | 0.00008 | 0.00017 |
+| labour mean_unworked_total | 0 | 0 | 0 | 0 | 0 | 0 |
+
+The economy orders still keep staff on shift for 6,000 ticks: 92.6-96.3% of
+staff-ticks on shift (mean 93.9%, a little under the 94.7% at 3,000 ticks),
+and no labour goes unworked on any seed. Against the plan's targets, shipped
+values already meet the slack, fray and `downed_tools` ranges and sit below
+the `sulking_share` (0.05-0.15) and coherence-critical (0.01-0.05) ranges:
+the shipped base is quieter than "occasional trouble". Slack now reaches
+critical (min 24-27 against 25) for a handful of staff-ticks, which the 3,000
+tick baseline did not show.

@@ -17,7 +17,7 @@ fn fresh() -> Game {
 fn telemetry_is_off_by_default() {
     let mut game = fresh();
     assert!(!game.world.resource::<BattleTelemetry>().on);
-    assert!(game.take_battle_telemetry().is_empty());
+    assert!(game.take_telemetry().is_empty());
 }
 
 /// Proves the closure is not invoked while disabled, which a "drains empty"
@@ -28,7 +28,7 @@ fn telemetry_is_off_by_default() {
 fn a_disabled_game_does_not_build_records() {
     let mut game = fresh();
     game.record(|_| panic!("a disabled game must not build a record"));
-    assert!(game.take_battle_telemetry().is_empty());
+    assert!(game.take_telemetry().is_empty());
 }
 
 /// `take_*` is a drain, matching `take_pending_profile_writes` — app-core
@@ -36,7 +36,7 @@ fn a_disabled_game_does_not_build_records() {
 #[test]
 fn taking_the_records_empties_the_buffer() {
     let mut game = fresh();
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
     game.record(|_| Record::FightEnd {
         fight: 1,
         rounds: 3,
@@ -45,8 +45,8 @@ fn taking_the_records_empties_the_buffer() {
         companions_downed: 0,
     });
 
-    assert_eq!(game.take_battle_telemetry().len(), 1);
-    assert!(game.take_battle_telemetry().is_empty());
+    assert_eq!(game.take_telemetry().len(), 1);
+    assert!(game.take_telemetry().is_empty());
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn an_enemy_choice_records_the_targets_hp_before_the_hit() {
     let player = game.player_entity();
     let wild = wild_scrapper(&mut game, 20, 500);
     insert_battle(&mut game, player, vec![wild]);
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
 
     let before = game.world.get::<Stats>(player).unwrap().hp;
     // Forced: the record is about what the swing saw, and a missed swing
@@ -98,7 +98,7 @@ fn an_enemy_choice_records_the_targets_hp_before_the_hit() {
     force_the_next_attack_to_land(&mut game);
     game.wild_retaliate(wild, 0, player);
 
-    let records = game.take_battle_telemetry();
+    let records = game.take_telemetry();
     let choices = enemy_choices(&records);
     assert_eq!(choices.len(), 1, "one swing, one record: {records:?}");
     let Record::EnemyChoice {
@@ -133,7 +133,7 @@ fn every_enemy_swing_produces_one_record() {
     // runs the full five rounds instead of ending early.
     let pack: Vec<Entity> = (0..3).map(|_| wild_scrapper(&mut game, 1, 5_000)).collect();
     insert_battle(&mut game, player, pack);
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
 
     let mut records = Vec::new();
     for _ in 0..5 {
@@ -142,7 +142,7 @@ fn every_enemy_swing_produces_one_record() {
             "the fixture must outlast the test"
         );
         resolve_round_with(&mut game, BattleAction::Attack { group: 0 });
-        records.extend(game.take_battle_telemetry());
+        records.extend(game.take_telemetry());
     }
 
     let swings = game
@@ -176,7 +176,7 @@ fn a_party_special_records_its_ability_and_target() {
     let wild = wild_scrapper(&mut game, 1, 5_000);
     insert_battle(&mut game, player, vec![wild]);
     let expected = game.actor_abilities(companion)[0].id.clone();
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
 
     companion_uses_special(
         &mut game,
@@ -185,7 +185,7 @@ fn a_party_special_records_its_ability_and_target() {
         battle::SpecialTarget::Ally { slot: 0 },
     );
 
-    let records = game.take_battle_telemetry();
+    let records = game.take_telemetry();
     let specials: Vec<&Record> = records
         .iter()
         .filter(|r| {
@@ -216,13 +216,13 @@ fn a_party_special_records_its_ability_and_target() {
 #[test]
 fn a_fight_emits_a_start_and_an_end_sharing_one_id() {
     let mut game = fresh();
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
 
     let ids = |game: &mut Game| {
         let wild = wild_scrapper(game, 0, 5_000);
         game.start_battle(vec![wild]);
         flee_until_clear(game);
-        let records = game.take_battle_telemetry();
+        let records = game.take_telemetry();
         let start = records.iter().find_map(|r| match r {
             Record::FightStart { fight, .. } => Some(*fight),
             _ => None,
@@ -253,7 +253,7 @@ fn a_back_group_that_cannot_reach_emits_no_choice() {
     let player = game.player_entity();
     let wild = wild_scrapper(&mut game, 5, 100);
     insert_battle(&mut game, player, vec![wild]);
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
 
     assert!(
         game.choose_wild_action(wild, tuning::ENGAGED_GROUPS, player)
@@ -261,7 +261,7 @@ fn a_back_group_that_cannot_reach_emits_no_choice() {
         "a melee-only species in a back group reaches nothing"
     );
     assert!(
-        enemy_choices(&game.take_battle_telemetry()).is_empty(),
+        enemy_choices(&game.take_telemetry()).is_empty(),
         "no swing happened, so nothing may be recorded"
     );
 }

@@ -653,7 +653,7 @@ fn respawn_is_refused_outside_a_battle_map_and_spends_no_power() {
 #[test]
 fn a_tactical_fight_reports_a_group_per_body_and_a_matching_end() {
     let mut game = game();
-    game.enable_battle_telemetry();
+    game.enable_telemetry();
     let pack = tactical_fight(&mut game, 2, 1);
     let player = game.player_entity();
 
@@ -682,7 +682,7 @@ fn a_tactical_fight_reports_a_group_per_body_and_a_matching_end() {
         game.tactical_attack(target);
     }
 
-    let records = game.take_battle_telemetry();
+    let records = game.take_telemetry();
     let start = records
         .iter()
         .find_map(|r| match r {

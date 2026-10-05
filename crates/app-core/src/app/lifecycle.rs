@@ -570,7 +570,7 @@ impl App {
     /// collect nothing at all.
     pub(crate) fn install_game(&mut self, mut game: Game) {
         if self.telemetry_enabled {
-            game.enable_battle_telemetry();
+            game.enable_telemetry();
         }
         self.game = Some(game);
         // A walk is intent aimed at the run that queued it — a fresh or
@@ -631,7 +631,7 @@ impl App {
             return;
         }
         let Some(game) = &mut self.game else { return };
-        let records = game.take_battle_telemetry();
+        let records = game.take_telemetry();
         if records.is_empty() {
             return;
         }

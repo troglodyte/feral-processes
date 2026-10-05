@@ -88,3 +88,21 @@ fn a_renamed_staff_member_names_its_species_too() {
         "{lines:?}"
     );
 }
+
+/// A staff member still on its handle is named just as opaquely — a hex
+/// number says nothing of what the program is either.
+#[test]
+fn a_staff_member_on_its_handle_names_its_species_too() {
+    let mut app = app_inside_a_small_base_with_programs(2806, false, 1);
+    let start = player_pos(&app);
+    let species = app.game.as_ref().unwrap().species_defs()[0].name.clone();
+
+    let lines = app.hover_lines(start.0, start.1);
+
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("0x") && l.ends_with(&format!("({species})"))),
+        "{lines:?}"
+    );
+}

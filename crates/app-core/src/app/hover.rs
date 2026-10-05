@@ -20,15 +20,10 @@ impl App {
             .view_entities_at((x, y), 0, 0)
             .into_iter()
             .filter(|e| drawn_on_surface_map(e.is_tamed, e.position_is_honest))
-            .map(|e| {
-                match (
-                    game.custom_name(e.entity),
-                    game.creature_species_name(e.entity),
-                ) {
-                    // A player's name for a program says nothing of what it is.
-                    (Some(_), Some(species)) => format!("{} ({species})", e.label),
-                    _ => e.label,
-                }
+            .map(|e| match game.species_hidden_by_name(e.entity) {
+                // A custom name or a handle says nothing of what it is.
+                Some(species) => format!("{} ({species})", e.label),
+                None => e.label,
             })
             .collect();
         if let Some(tile) = game

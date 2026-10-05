@@ -41,7 +41,7 @@ flight when the next body acts.
 
 | Value | Look |
 |---|---|
-| `Sparks` | the standard hit burst |
+| `Sparks` | the blow's own hit burst, drawn only when damage lands; listing it adds nothing over `impact: []` |
 | `Explosion(radius: r)` | an expanding ring and a heavier burst |
 | `Zap` | short crackle lines |
 | `Slash` | an arc swipe across the cell |

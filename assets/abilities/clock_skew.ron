@@ -1,6 +1,5 @@
 (
     id: "clock_skew",
-    fx: Some("zap"),
     name: "Clock Skew Single",
     // PASSIVE on `RoundStart`, and the one that opens with a *condition*
     // rather than damage. Two points of Bleed over two rounds against a

@@ -1,6 +1,5 @@
 (
     id: "deadman",
-    fx: Some("explosion"),
     name: "Deadman Everyone",
     // Exclusive and PASSIVE: Wintermute's. Never appears in the Special
     // menu — `triggers` is what takes it out of `battle_special_options` —

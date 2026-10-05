@@ -59,8 +59,8 @@ done
 grep -m1 '^version' Cargo.toml
 ```
 
-The counts on the page as of v0.14.6: 17 species, 103 routines, 75 items,
-43 structures, 48 contracts, 8 classes, 23 affixes, 22 perks.
+The counts on the page as of v0.15.6: 17 species, 105 routines, 75 items,
+44 structures, 48 contracts, 8 classes, 23 affixes, 22 perks.
 
 The root `README.md` on `main` is carved out of the doc-update obligation and is
 already stale on several of these; do not copy its numbers. `docs/manual.md` is

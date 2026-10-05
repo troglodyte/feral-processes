@@ -30,8 +30,8 @@
   only through the player's hands. The labour half lives in `fuel_wants`:
   fuel in store is *fetched*, fuel nowhere is *made* — `wants` asked
   of a one-window `WorkOrder::batch` for it — filed after every fetch and
-  **never naming a dark machine**. **The dark set is asked of `ledger`
-  fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
+  never filtered for darkness itself — `base_wants` drops dark machines.
+  **The dark set is asked of `ledger` fresh**, never read off `resources::PowerGrid`: `schedule_base_labour`
   runs ahead of `power_grid_system`, so the cache is last tick's and empty
   on the first tick after a load — exactly when a base arrives dark.
   **"In store" is any structure's output, not the shelves alone**, and

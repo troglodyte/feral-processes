@@ -1302,6 +1302,15 @@ impl Game {
         self.world.get::<CustomName>(creature).map(|n| n.0.clone())
     }
 
+    /// The species display name of `creature`, or `None` if it is not a
+    /// `Creature`. For a caller that shows a `CustomName` and still wants
+    /// to say what the program is — `creature_label` leaves it off.
+    pub fn creature_species_name(&self, creature: Entity) -> Option<String> {
+        self.world
+            .get::<Creature>(creature)
+            .map(|c| self.species_display_name(c))
+    }
+
     /// Renames a tamed program you own, or clears the name back to its
     /// species (see `CustomName`). Works wherever the program is — in the
     /// party, on a cronjob, standing guard — because it changes nothing

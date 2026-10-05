@@ -61,3 +61,30 @@ fn hover_underground_says_nothing() {
 
     assert!(app.hover_lines(start.0, start.1).is_empty());
 }
+
+/// A renamed staff member's name is the player's own and says nothing of
+/// what it is, so the hover label adds the species after it.
+#[test]
+fn a_renamed_staff_member_names_its_species_too() {
+    let mut app = app_inside_a_small_base_with_programs(2805, false, 1);
+    let start = player_pos(&app);
+    let game = app.game.as_mut().unwrap();
+    let staff = game
+        .view_entities_at(start, 0, 0)
+        .into_iter()
+        .find(|e| e.is_tamed && !e.is_player)
+        .expect("the fixture's program stands on the player's tile")
+        .entity;
+    game.rename_companion(staff, Some("Bob".to_string()))
+        .unwrap();
+    let species = game.species_defs()[0].name.clone();
+
+    let lines = app.hover_lines(start.0, start.1);
+
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("Bob") && l.ends_with(&format!("({species})"))),
+        "{lines:?}"
+    );
+}

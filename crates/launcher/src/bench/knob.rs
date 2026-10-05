@@ -189,6 +189,40 @@ fn skip_literal(bytes: &[u8], i: usize) -> Option<usize> {
                 .position(|b| *b == b'\n')
                 .map_or(bytes.len(), |n| i + n),
         ),
+        b'/' if bytes.get(i + 1) == Some(&b'*') => {
+            // RON block comments nest.
+            let (mut depth, mut j) = (1usize, i + 2);
+            while j < bytes.len() && depth > 0 {
+                match (bytes[j], bytes.get(j + 1)) {
+                    (b'/', Some(b'*')) => {
+                        depth += 1;
+                        j += 2;
+                    }
+                    (b'*', Some(b'/')) => {
+                        depth -= 1;
+                        j += 2;
+                    }
+                    _ => j += 1,
+                }
+            }
+            Some(j)
+        }
+        b'r' if i == 0 || !is_ident(bytes[i - 1]) => {
+            let hashes = bytes[i + 1..].iter().take_while(|b| **b == b'#').count();
+            if bytes.get(i + 1 + hashes) != Some(&b'"') {
+                return None;
+            }
+            let close: Vec<u8> = std::iter::once(b'"')
+                .chain(std::iter::repeat_n(b'#', hashes))
+                .collect();
+            let body = i + hashes + 2;
+            Some(
+                bytes[body..]
+                    .windows(close.len())
+                    .position(|w| w == close.as_slice())
+                    .map_or(bytes.len(), |n| body + n + close.len()),
+            )
+        }
         b'"' => {
             let mut j = i + 1;
             while j < bytes.len() && bytes[j] != b'"' {
@@ -338,6 +372,20 @@ mod tests {
         let twice = "(\n    capacity: 1,\n    capacity: 2,\n)";
         let e = patch(twice, "capacity", 5.0, true).unwrap_err();
         assert!(e.contains("capacity"), "{e}");
+    }
+
+    #[test]
+    fn a_nested_block_comment_is_skipped() {
+        let text = "(\n    /* capacity: 1, /* capacity: 2, */ ) */\n    capacity: 3,\n)";
+        let out = patch(text, "capacity", 9.0, true).unwrap();
+        assert!(out.contains("capacity: 9,") && out.contains("capacity: 2, */ )"), "{out}");
+    }
+
+    #[test]
+    fn a_raw_string_is_skipped() {
+        let text = "(\n    note: r#\"capacity: 1, \" ) \"#,\n    capacity: 3,\n)";
+        let out = patch(text, "capacity", 9.0, true).unwrap();
+        assert!(out.contains("capacity: 9,") && out.contains("capacity: 1, \" )"), "{out}");
     }
 
     #[test]

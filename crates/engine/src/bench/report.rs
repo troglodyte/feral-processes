@@ -143,6 +143,10 @@ pub struct MemoryReport {
     pub bond_share: BTreeMap<String, f32>,
     /// Live directed relationships at the last tick.
     pub relationships: u64,
+    /// Staff at the last tick, counted where `relationships` is, so a run
+    /// stopped before its first tick still divides over what was sampled.
+    #[serde(default)]
+    pub staff: u64,
     /// Memories written per def id, reinforcements included.
     pub fired: BTreeMap<String, u64>,
     /// Memories written per def id that were new to their holder.
@@ -287,6 +291,7 @@ pub struct MemoryTally {
     bands: BTreeMap<String, u64>,
     bonds: BTreeMap<String, u64>,
     relationships: u64,
+    staff: u64,
     fired: BTreeMap<String, u64>,
     formed: BTreeMap<String, u64>,
 }
@@ -306,12 +311,12 @@ impl MemoryTally {
             bands: zeros(&mut MORALE_BANDS.into_iter()),
             bonds: zeros(&mut Bond::ALL.into_iter().map(Bond::label)),
             relationships: 0,
+            staff: 0,
             fired: zeros(&mut defs.iter().copied()),
             formed: zeros(&mut defs.iter().copied()),
         }
     }
 
-    /// One staff member's morale at one tick.
     pub fn add_morale(&mut self, morale: f32) {
         let m = f64::from(morale);
         self.n += 1;
@@ -321,6 +326,12 @@ impl MemoryTally {
             .bands
             .entry(morale_band(morale).to_string())
             .or_insert(0) += 1;
+    }
+
+    /// One staff member present at the run's end, whose relationships are
+    /// counted by `add_bond`.
+    pub fn add_staff(&mut self) {
+        self.staff += 1;
     }
 
     /// One live directed relationship, sampled once at the run's end.
@@ -357,6 +368,7 @@ impl MemoryTally {
             morale_spread: spread,
             bond_share: shares(self.bonds, self.relationships),
             relationships: self.relationships,
+            staff: self.staff,
             fired,
             formed,
         }
@@ -466,13 +478,10 @@ impl BenchReport {
             return Some(Ok(f64::from(memories.morale_spread)));
         }
         if rest == "relationships_per_staff" {
-            // The staff there were at the last tick, which is when
-            // relationships are sampled.
-            let staff = self.staff.end_morale.len();
-            return Some(Ok(if staff == 0 {
+            return Some(Ok(if memories.staff == 0 {
                 0.0
             } else {
-                memories.relationships as f64 / staff as f64
+                memories.relationships as f64 / memories.staff as f64
             }));
         }
         if let Some(band) = rest.strip_prefix("morale_band_share.") {
@@ -798,6 +807,8 @@ mod tests {
         for bond in [Bond::Friend, Bond::Friend, Bond::Rival, Bond::Neutral] {
             t.add_bond(bond);
         }
+        t.add_staff();
+        t.add_staff();
         let remember = |def: &str, new| Record::Remember {
             tick: 5,
             def: def.into(),
@@ -894,10 +905,24 @@ mod tests {
     }
 
     #[test]
+    fn relationships_per_staff_divides_by_the_staff_sampled_not_the_morale_rows() {
+        // A run stopped at tick 0 has no morale rows but did sample bonds.
+        let r = BenchReport {
+            staff: StaffTally::default().finish(0, &[]),
+            memories: memory_report(),
+            ..sample()
+        };
+        assert_eq!(r.measure("memories.relationships_per_staff"), Ok(2.0));
+    }
+
+    #[test]
     fn memory_rates_over_no_staff_or_no_ticks_are_zero() {
         let r = BenchReport {
             ticks: 0,
-            memories: memory_report(),
+            memories: MemoryReport {
+                staff: 0,
+                ..memory_report()
+            },
             ..sample()
         };
         assert_eq!(r.measure("memories.fired_per_1000.hard_won"), Ok(0.0));

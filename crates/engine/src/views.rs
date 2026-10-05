@@ -2946,11 +2946,11 @@ pub fn morale_band(sum: f32) -> &'static str {
     // Half of saturation is the inner boundary, so the two outer words are
     // reserved for a program whose feelings are actually moving its work.
     match sum {
-        s if s >= full => "devoted",
-        s if s >= full / 2.0 => "content",
-        s if s > -full / 2.0 => "even",
-        s if s > -full => "uneasy",
-        _ => "bitter",
+        s if s >= full => MORALE_BANDS[0],
+        s if s >= full / 2.0 => MORALE_BANDS[1],
+        s if s > -full / 2.0 => MORALE_BANDS[2],
+        s if s > -full => MORALE_BANDS[3],
+        _ => MORALE_BANDS[4],
     }
 }
 

@@ -255,6 +255,7 @@ fn sample_staff(game: &Game, tally: &mut StaffTally, memories: &mut MemoryTally)
 /// the formation records already count.
 fn sample_bonds(game: &Game, memories: &mut MemoryTally) {
     for who in game.base_staff() {
+        memories.add_staff();
         let Some(social) = game.social(who) else {
             continue;
         };

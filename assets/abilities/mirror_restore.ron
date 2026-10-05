@@ -1,5 +1,6 @@
 (
     id: "mirror_restore",
+    fx: Some("heal"),
     name: "Patch Party v1.0",
     description: "Restore 6–10 Integrity to the whole party",
     target: WholeParty,

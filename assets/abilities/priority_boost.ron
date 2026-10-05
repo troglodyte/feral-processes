@@ -1,5 +1,6 @@
 (
     id: "priority_boost",
+    fx: Some("buff"),
     name: "Hyperthread Single v1.0",
     description: "+3 ATK to one ally for 3 rounds",
     target: OneAlly,

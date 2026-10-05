@@ -1,5 +1,6 @@
 (
     id: "overclock_array",
+    fx: Some("buff"),
     name: "Hyperthread Party",
     description: "+3 ATK to the whole party for 3 rounds",
     target: WholeParty,

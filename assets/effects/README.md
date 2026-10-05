@@ -14,8 +14,8 @@ unknown id at draw time falls back to `streak` with a one-time warning.
     id: "laser_pulse",        // required, unique
     color: None,              // Option<GlyphColor>; None = the attacker's glyph colour
     muzzle: false,            // brief flash on the attacker's cell(s)
-    travel: Pulses(count: 3), // Streak | Pulses(count: u8) | Beam(hold: f32) | Zap | None
-    impact: [Sparks],         // zero or more: Sparks | Explosion(radius: f32) | Zap | Slash | Smoke
+    travel: Pulses(count: 3), // Streak | Pulses(count: u8) | Beam(hold: f32) | Zap | Ball | None
+    impact: [Sparks],         // zero or more: Sparks | Explosion(radius: f32) | Zap | Slash | Smoke | Flash
     shake: 0.0,               // screen shake strength, 0 = none
 )
 ```
@@ -35,6 +35,7 @@ flight when the next body acts.
 | `Pulses(count: n)` | `n` short dashes fired in sequence along the line |
 | `Beam(hold: f)` | the full-length line, held for fraction `f` of the duration, then fading |
 | `Zap` | a jagged polyline, re-jittered a few times |
+| `Ball` | a small filled disc that flies from attacker to target and lands inside the duration; takes the effect's `color` |
 | `None` | nothing travels; impacts only |
 
 ## Impact (at the target, or on every covered cell for an area routine)
@@ -46,9 +47,10 @@ flight when the next body acts.
 | `Zap` | short crackle lines |
 | `Slash` | an arc swipe across the cell |
 | `Smoke` | a grey puff that drifts up and fades |
+| `Flash` | the whole tile tinted in the effect's `color`, fading out; drawn on every covered cell of an area |
 
 `shake` adds to the screen's shake energy at impact; overlapping effects add.
 
 ## Shipped
 
-`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`.
+`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`, `heal` (green), `buff` (cyan). The last two are for ally-facing routines.

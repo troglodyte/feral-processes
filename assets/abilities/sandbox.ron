@@ -1,5 +1,6 @@
 (
     id: "sandbox",
+    fx: Some("buff"),
     name: "Bastion Single v1.0",
     description: "-9% incoming damage to one ally for 3 rounds",
     target: OneAlly,

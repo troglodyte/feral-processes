@@ -144,3 +144,9 @@ than shipping invisible.
   `Game::new`'s anchor spawn), so this is the sprite that carries the most
   — it is also what `NotificationKind::BaseFounding` draws, and that
   notice's prose deliberately no longer names a character.
+- `construct`, `zero_day`, `glitch`, `cipher`, `virus`, `scrapper`
+  (`.colour.png`) — one creature body in six colourways, each matched to
+  the colour the species was already authored in, so the map reads the
+  same at a glance whether a sprite or a glyph drew. They are full colour
+  because the six differ only in hue, which a near-white sprite under the
+  species' tint could not keep apart from the tint itself.

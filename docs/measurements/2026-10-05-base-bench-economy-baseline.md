@@ -196,3 +196,10 @@ that order of patch_routine cost) and do not apply it.
   the Conduit refills; here that is solved by building three.
 - Whether a stranding should cost as much morale when the cause is another
   program standing on the only free face.
+- Whether the sieges-on baseline survives `play_with` always inserting the
+  `DevSieges` resource (a new Resource can shift query order and the RNG
+  stream). It does: re-run on the staff branch, seed 1, 3000 and 5000 ticks,
+  release, sieges on. The 5000-tick run stops at 4902 as above and its items
+  are the figures in the claim (Bay 58, Winding Node 176, Refinery 135,
+  Compiler 173); the 3000-tick run reads 35, 108, 81 and 118, each inside the
+  seeds 1-3 ranges quoted there. Nothing moved.

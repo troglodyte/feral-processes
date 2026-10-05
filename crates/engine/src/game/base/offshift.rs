@@ -228,6 +228,15 @@ impl Game {
             .map(|d| d.grievance.as_str())
     }
 
+    /// Whether the scheduler would hand `who` a job this beat — `is_on_shift`
+    /// for a `&self` caller, so a reader of the base asks the sim's own
+    /// question instead of reconstructing it from `program_errand_label`,
+    /// which says nothing of a downed body or a program that downed tools at
+    /// a base with nowhere to go.
+    pub fn on_shift(&self, who: Entity) -> bool {
+        self.is_on_shift(who, &self.amenities_here())
+    }
+
     /// The examine line's tail: what `who` has walked off to do, or `None`
     /// for a program that is on shift.
     ///

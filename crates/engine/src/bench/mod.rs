@@ -226,7 +226,7 @@ fn sample_staff(game: &Game, tally: &mut StaffTally) {
         let needs = game.need_levels(who);
         let grievance = game.grievance(who);
         tally.add(&StaffSample {
-            on_shift: game.program_errand_label(who).is_none(),
+            on_shift: game.on_shift(who),
             morale: game.morale(who),
             strain: game.need_strain(who),
             needs: needs

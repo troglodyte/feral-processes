@@ -30,7 +30,7 @@ impl Game {
     /// `Game::amenities` from a `&Game` — the refusal is asked from
     /// `ability_unavailable`, which cannot take `&mut`. `Amenities::build`
     /// takes an iterator for exactly this.
-    fn amenities_here(&self) -> Amenities {
+    pub(crate) fn amenities_here(&self) -> Amenities {
         let sites: Vec<(StructureId, Position)> = self
             .world
             .iter_entities()

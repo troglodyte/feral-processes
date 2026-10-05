@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.5
+
+**Crawlers, Drones, Overseers, Proxies, Rootkits, Sentinels, Sprites, SubProcesses, Trojans, Wintermutes and Worms now have their own art on the map too,** so every program has a picture instead of a letter. Each is a mix of two of the first six programs' art, drawn in the colour that program was already shown in; programs that share a colour are told apart by shade and shape, and the two bosses wear crowns.
+
+**Hovering over one of your programs on the map now names its species after its name** — `0x000001 (Drone)`, or `Bob (Cipher)` for one you renamed — since neither a handle nor a name you chose says what the program is.
+
 ## 0.15.4
 
 **Constructs, ZeroDays, Glitches, Ciphers, Viruses and Scrappers now have their own art on the map instead of a letter.** All six share one body in six colours, each in the colour that program was already shown in, so the map still reads the same at a glance.

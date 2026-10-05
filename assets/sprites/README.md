@@ -150,3 +150,10 @@ than shipping invisible.
   same at a glance whether a sprite or a glyph drew. They are full colour
   because the six differ only in hue, which a near-white sprite under the
   species' tint could not keep apart from the tint itself.
+- `crawler`, `drone`, `overseer`, `proxy`, `rootkit`, `sentinel`,
+  `sprite`, `sub_process`, `trojan`, `wintermute`, `worm`
+  (`.colour.png`) — variations on the six above: one sprite's head on
+  another's body, recoloured onto a ramp in the species' authored hue.
+  Species that share a hue are split by shade (rootkit rose against
+  overseer red, proxy emerald against sub_process green, sprite teal
+  against cipher cyan) and by body; the two bosses wear crown horns.

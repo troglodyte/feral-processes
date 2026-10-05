@@ -206,9 +206,10 @@ Structure and item knobs: `work.ticks_per_unit`, `assembles.ticks_per_unit`,
 `services.<need>.per_tick` / `services.<need>.radius` (the one service entry
 serving that need; none or several is an error). Need knobs: `drain_per_tick`,
 `working_multiplier`, `critical`, `content`, `morale_weight`. Thought knob:
-`intensity` (signed). Whole-number fields (everything in the first list
-except `services.<need>.per_tick`, plus `radius`) are rounded; the rest keep
-six decimals. A cross-entropy search runs over
+`intensity` (signed). Whole-number fields (`capacity`, `power_draw`, `work.ticks_per_unit`,
+`assembles.ticks_per_unit`, `craftable.cost.<item>` and
+`services.<need>.radius`) are rounded; every other field (`per_tick`, the
+need knobs, `intensity`) keeps six decimals. A cross-entropy search runs over
 `seeds`. The proposal is whichever is lowest on the `seeds` of the search's final
 mean, the best candidate it evaluated, and the shipped values (a candidate has
 to beat shipped strictly; if none does, the proposal is the shipped values and

@@ -414,6 +414,21 @@
   the *worker*, `task_progress_system` stays the only writer of a machine's
   status. Giving the status two writers makes them ping-pong every tick.
 
+- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` sets its load into
+  the nearest store that takes it, and keeps it when none will.** A carrier
+  is never freed while it holds a load (freeing destroys the goods), so a
+  stranding that waiting will not fix held a body on shift for good — a
+  downed-tools hauler read on shift for a whole bench run. Nearest by
+  **Chebyshev**, not path: a stranded carrier is one no walk reaches anything
+  from, so path distance is exactly what it does not have, and `depot_accepts`'
+  filter and output room still decide which stores count. The units go
+  through `deposit` and a `Record::Haul` (`errand: "set_down"`), a move and
+  never production. `CarryingProgram` is out of scope by construction: a
+  rack's carrier never walks, so it cannot be stranded by a route. The
+  timeout is long enough for a wanderer on a Depot's only free face to step
+  off first — with bodies squeezed past, only structures, or every face of
+  the destination stood on, strand a carrier now.
+
 - **`set_machine_status` is the one place a stall is announced, and it logs
   only on transition.** Three callers, so "entering a state is news, staying
   in it is not" cannot lapse in one of them.

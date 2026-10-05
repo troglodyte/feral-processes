@@ -2,6 +2,8 @@
 //! and coming back.
 
 use super::support::*;
+use crate::components::{Memories, MemorySubject};
+use crate::memories::MemoryId;
 use crate::tuning::STARTING_POCKET_RADIUS;
 use crate::*;
 
@@ -1749,4 +1751,64 @@ fn a_worker_skips_a_nearer_depot_it_cannot_reach() {
         "the load belongs in the depot the worker can reach"
     );
     assert_eq!(node_output(&game, boxed, ids::CORE_FRAGMENT), 0);
+}
+
+/// A hauler stranded with a load it cannot deliver is held on shift by
+/// `Carrying` (freeing it would destroy the goods), and `Stranded` is never
+/// cleared by anything but a route reopening — so once it also downs tools it
+/// carries, and counts as on shift, for as long as the walls stand. Found on
+/// the `chains` bench: seeds 2 and 5 read `on_shift_share` 1.0 beside a
+/// 3.6%/5.0% `downed_tools` rung share.
+#[test]
+#[ignore = "reproducer: jammed downed-tools hauler"]
+fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
+    let mut game = base(22);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    deploy(&mut game, "depot", 3, 0);
+    for (dx, dy) in [(2, 0), (4, 0), (3, 1), (3, -1)] {
+        deploy(&mut game, "mining_node", dx, dy);
+    }
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    tick_until(&mut game, 40, |g| {
+        g.world.get::<Stranded>(worker).is_some() && g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(
+        game.world.get::<Stranded>(worker).is_some()
+            && game.world.get::<Carrying>(worker).is_some(),
+        "precondition: stranded holding a load"
+    );
+
+    let now = game.current_tick();
+    let mut n = 0;
+    while game.morale(worker) > crate::tuning::MORALE_DOWNS_TOOLS_AT {
+        game.world
+            .get_mut::<Memories>(worker)
+            .unwrap()
+            .0
+            .push(Memory {
+                def: MemoryId::from("frayed_here"),
+                subject: MemorySubject::BaseTile { x: n, y: 900 },
+                subject_name: None,
+                reinforced: now,
+                strikes: 1,
+            });
+        n += 1;
+        assert!(n < 400, "morale never reached the rung");
+    }
+    game.update_disgruntled(&[worker]);
+    assert!(game.has_downed_tools(worker), "precondition: tools downed");
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert!(game.has_downed_tools(worker), "still downed");
+    assert!(
+        !game.on_shift(worker),
+        "a downed-tools program is still on shift, carrying {:?}, after 200 ticks",
+        game.world.get::<Carrying>(worker)
+    );
 }

@@ -209,7 +209,10 @@ serving that need; none or several is an error). Need knobs: `drain_per_tick`,
 `intensity` (signed). Whole-number fields (everything in the first list
 except `services.<need>.per_tick`, plus `radius`) are rounded; the rest keep
 six decimals. A cross-entropy search runs over
-`seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
+`seeds`. The proposal is whichever is lowest on the `seeds` of the search's final
+mean, the best candidate it evaluated, and the shipped values (a candidate has
+to beat shipped strictly; if none does, the proposal is the shipped values and
+the report says so). It is then re-scored on `holdout_seeds` it never saw.
 
 `--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
 queues a batch work order before the first tick. Only posted workers haul,

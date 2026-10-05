@@ -58,6 +58,76 @@ fn fitness_of(score: &Score) -> f32 {
     }
 }
 
+/// The error a candidate is judged by when choosing what to propose: a
+/// stopped run is as unusable here as it is to the search.
+fn effective_error(score: &Score) -> f64 {
+    if score.stopped > 0 {
+        f64::INFINITY
+    } else {
+        score.error
+    }
+}
+
+/// What `tune` proposes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pick {
+    Mean,
+    BestSeen,
+    Shipped,
+}
+
+/// The lowest error wins, and a candidate has to beat the shipped values
+/// strictly to be proposed at all. The CEM's final mean was never itself
+/// scored by the search, so it can be worse than a candidate the search saw
+/// (and than shipped); the best candidate seen can be worse than the mean
+/// on a re-score only through ties. Ties go to the mean, then the best seen.
+fn pick(shipped: f64, mean: f64, best_seen: Option<f64>) -> Pick {
+    let (mut pick, mut error) = (Pick::Shipped, shipped);
+    if mean < error {
+        (pick, error) = (Pick::Mean, mean);
+    }
+    if let Some(b) = best_seen
+        && b < error
+    {
+        pick = Pick::BestSeen;
+    }
+    pick
+}
+
+/// The best-fitness candidate the search evaluated. Candidates are scored on
+/// several threads, so arrival order is arbitrary; a tie in fitness goes to
+/// the lexicographically smaller vector so the answer does not depend on it.
+#[derive(Default)]
+struct BestSeen(Mutex<Option<(f32, Vec<f32>)>>);
+
+impl BestSeen {
+    fn offer(&self, fitness: f32, x: &[f32]) {
+        if !fitness.is_finite() {
+            return;
+        }
+        let mut best = self.0.lock().expect("best seen");
+        let better = match best.as_ref() {
+            None => true,
+            Some((f, v)) => {
+                fitness > *f
+                    || (fitness == *f
+                        && x.iter()
+                            .zip(v)
+                            .map(|(a, b)| a.total_cmp(b))
+                            .find(|o| o.is_ne())
+                            == Some(std::cmp::Ordering::Less))
+            }
+        };
+        if better {
+            *best = Some((fitness, x.to_vec()));
+        }
+    }
+
+    fn into_vector(self) -> Option<Vec<f32>> {
+        self.0.into_inner().expect("best seen").map(|(_, v)| v)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Change {
     pub file: String,
@@ -73,6 +143,10 @@ pub struct Proposal {
     pub search_after: Score,
     pub holdout_before: Score,
     pub holdout_after: Score,
+    /// Whether any candidate beat the shipped values on the search seeds. If
+    /// none did, the proposal is the shipped values and `*_after` equal
+    /// `*_before`.
+    pub beat_shipped: bool,
     /// The patched text of every file a knob touches, by path under assets.
     pub files: BTreeMap<String, String>,
 }
@@ -268,8 +342,9 @@ pub fn search(
     };
     let mut rng = StdRng::seed_from_u64(obj.search_seed);
     let first_error: Mutex<Option<String>> = Mutex::new(None);
+    let best_seen = BestSeen::default();
     let fitness = |x: &[f32]| -> f32 {
-        match evaluate(&values_of(x), &obj.seeds) {
+        let fitness = match evaluate(&values_of(x), &obj.seeds) {
             Ok(s) => fitness_of(&s),
             // A candidate whose measure cannot be read (a kind that no
             // longer exists) scores worst rather than ending the search;
@@ -278,10 +353,12 @@ pub fn search(
                 first_error.lock().expect("first error").get_or_insert(e);
                 f32::NEG_INFINITY
             }
-        }
+        };
+        best_seen.offer(fitness, x);
+        fitness
     };
     let mut reported = false;
-    let best = optimise(&cfg, &mut rng, fitness, |p| {
+    let mean = optimise(&cfg, &mut rng, fitness, |p| {
         if !reported && let Some(e) = first_error.lock().expect("first error").as_ref() {
             log(&format!("note: a candidate failed and scored worst: {e}"));
             reported = true;
@@ -295,9 +372,39 @@ pub fn search(
         ));
     });
 
-    let proposed = values_of(&best);
-    let search_after = evaluate(&proposed, &obj.seeds)?;
-    let holdout_after = evaluate(&proposed, &obj.holdout_seeds)?;
+    // The final mean was never itself evaluated, so it competes with the
+    // best candidate the search saw and with the shipped values.
+    let mean_values = values_of(&mean);
+    let mean_score = evaluate(&mean_values, &obj.seeds)?;
+    let best = match best_seen.into_vector() {
+        Some(x) => {
+            let values = values_of(&x);
+            let score = evaluate(&values, &obj.seeds)?;
+            Some((values, score))
+        }
+        None => None,
+    };
+    let picked = pick(
+        effective_error(&search_before),
+        effective_error(&mean_score),
+        best.as_ref().map(|(_, s)| effective_error(s)),
+    );
+    let (proposed, search_after) = match (picked, best) {
+        (Pick::Mean, _) => (mean_values, mean_score),
+        (Pick::BestSeen, Some(best)) => best,
+        _ => (shipped.clone(), search_before.clone()),
+    };
+    let beat_shipped = picked != Pick::Shipped;
+    log(&match picked {
+        Pick::Mean => "proposing the final mean".to_string(),
+        Pick::BestSeen => "proposing the best candidate seen".to_string(),
+        Pick::Shipped => "no candidate beat the shipped values on the search seeds".to_string(),
+    });
+    let holdout_after = if beat_shipped {
+        evaluate(&proposed, &obj.holdout_seeds)?
+    } else {
+        holdout_before.clone()
+    };
     let files = apply_to_text(&pristine, &obj.knobs, &proposed)?;
     let changes = obj
         .knobs
@@ -316,6 +423,7 @@ pub fn search(
         search_after,
         holdout_before,
         holdout_after,
+        beat_shipped,
         files,
     })
 }
@@ -372,15 +480,23 @@ fn report(obj: &Objective, proposal: &Proposal) -> String {
              their rates cover fewer ticks than asked.\n"
         );
     }
-    let _ = writeln!(
-        out,
-        "Hold-out: **{}**\n",
-        if proposal.holds_up() {
-            "holds up"
-        } else {
-            "DOES NOT HOLD UP; do not apply"
-        }
-    );
+    if proposal.beat_shipped {
+        let _ = writeln!(
+            out,
+            "Hold-out: **{}**\n",
+            if proposal.holds_up() {
+                "holds up"
+            } else {
+                "DOES NOT HOLD UP; do not apply"
+            }
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "**No candidate beat the shipped values on the search seeds.** The proposal is \
+             the shipped values; \"after\" equals \"before\".\n"
+        );
+    }
     let _ = writeln!(out, "## Targets, mean over the hold-out seeds\n");
     let _ = writeln!(
         out,
@@ -449,8 +565,52 @@ mod tests {
             search_after: score(0.0),
             holdout_before: score(before),
             holdout_after: score(after),
+            beat_shipped: true,
             files: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn pick_takes_the_lowest_error_and_shipped_unless_beaten() {
+        assert_eq!(pick(0.08, 0.09, Some(0.03)), Pick::BestSeen);
+        assert_eq!(pick(0.08, 0.02, Some(0.03)), Pick::Mean);
+        assert_eq!(pick(0.08, 0.09, Some(0.10)), Pick::Shipped);
+        assert_eq!(pick(0.08, 0.09, None), Pick::Shipped);
+        assert_eq!(pick(0.08, 0.05, None), Pick::Mean);
+        assert_eq!(pick(0.0, 0.0, Some(0.0)), Pick::Shipped);
+        assert_eq!(
+            pick(0.08, f64::INFINITY, Some(f64::INFINITY)),
+            Pick::Shipped
+        );
+    }
+
+    #[test]
+    fn pick_ties_go_to_the_mean_then_the_best_seen() {
+        assert_eq!(pick(0.08, 0.03, Some(0.03)), Pick::Mean);
+        assert_eq!(pick(0.08, 0.08, Some(0.03)), Pick::BestSeen);
+        assert_eq!(pick(0.08, 0.08, Some(0.08)), Pick::Shipped);
+    }
+
+    #[test]
+    fn best_seen_is_the_highest_fitness_whatever_the_arrival_order() {
+        let offers: [(f32, &[f32]); 4] = [
+            (-0.5, &[1.0, 2.0]),
+            (-0.2, &[3.0, 0.0]),
+            (-0.2, &[2.0, 9.0]),
+            (f32::NEG_INFINITY, &[0.0, 0.0]),
+        ];
+        let run = |order: &[usize]| {
+            let best = BestSeen::default();
+            for &i in order {
+                best.offer(offers[i].0, offers[i].1);
+            }
+            best.into_vector()
+        };
+        let want = Some(vec![2.0, 9.0]);
+        assert_eq!(run(&[0, 1, 2, 3]), want);
+        assert_eq!(run(&[3, 2, 1, 0]), want);
+        assert_eq!(run(&[1, 3, 0, 2]), want);
+        assert_eq!(BestSeen::default().into_vector(), None);
     }
 
     #[test]

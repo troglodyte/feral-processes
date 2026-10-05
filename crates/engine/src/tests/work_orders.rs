@@ -3826,3 +3826,53 @@ fn a_stations_own_floor_cell_does_not_count_as_a_dig_marks_only_face() {
          `has_station` counts as taken"
     );
 }
+
+/// **A passer does not knock an arrived errand-walker off its errand.** A
+/// posted carrier squeezes through a cell a subject is standing on at its
+/// pen — the squeeze is for the posted walkers — and `crowded` read the two
+/// bodies as a heap, so the subject was handed to the wander and left its
+/// pen. Only idle bodies sharing a cell are a heap to be broken up.
+#[test]
+fn a_posted_passer_does_not_knock_a_pinned_subject_off_its_pen() {
+    let mut game = Game::new(4214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut game, "research_node", 1, -3).expect("the Station fits on the starting pocket");
+    let station = game
+        .find_blocking_structure_at(1, -3)
+        .expect("the Station was just deployed");
+    let pen = game
+        .study_pen(station)
+        .expect("a studying structure has a pen");
+    let subject = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Position>(subject).unwrap().x = 3;
+    game.world.get_mut::<Position>(subject).unwrap().y = 1;
+    game.pin_subject(subject, station).unwrap();
+    for _ in 0..80 {
+        if game.pinned_subject() == Some(subject) {
+            break;
+        }
+        game.tick();
+    }
+    assert_eq!(
+        game.pinned_subject(),
+        Some(subject),
+        "precondition: the subject is settled on its pen"
+    );
+
+    let passer = spawn_tamed(&mut game, 10, 3);
+    *game.world.get_mut::<Position>(passer).unwrap() = Position { x: pen.0, y: pen.1 };
+    game.world.entity_mut(passer).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: station,
+        progress: 0,
+        required: 1,
+    });
+    for _ in 0..40 {
+        drift(&mut game, &[subject]);
+    }
+
+    let p = *game.world.get::<Position>(subject).unwrap();
+    assert_eq!((p.x, p.y), pen, "the subject was knocked off its pen");
+}

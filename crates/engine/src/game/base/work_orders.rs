@@ -2346,13 +2346,22 @@ impl Game {
         // takes the wander instead, which is the one arm that already knows
         // how to decline a tile somebody else has.
         //
-        // Off `Game::base_bodies` rather than off `staff`, because a posted
-        // worker standing on the cell is as much in the way as an idle one
-        // and is not in this list.
+        // **Idle bodies only.** A posted walker squeezes through a cell
+        // another body holds — that is the point of the squeeze — so one
+        // passing over a patient at its Bay, a subject on its pen or an
+        // off-shift body at its amenity is not a heap, and counting it
+        // knocked the rigid walker off its errand into the wander. A posted
+        // body that stops on the cell moves on by its own walk. Off
+        // `Game::base_bodies` rather than off `staff`, because an idle body
+        // that is not in this pass's list (a party member) still holds a
+        // cell.
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
-            for (_, p) in self.base_bodies() {
+            for (e, p) in self.base_bodies() {
+                if self.world.get::<Task>(e).is_some() {
+                    continue;
+                }
                 if !seen.insert((p.x, p.y)) {
                     twice.insert((p.x, p.y));
                 }

@@ -331,12 +331,15 @@ mod tests {
 
     #[test]
     fn a_beam_is_fully_grown_by_the_time_its_hold_begins() {
-        for hold in [0.0_f32, 0.3, 0.5, 0.9, 5.0] {
-            let grow = 1.0 - hold.clamp(0.0, BEAM_MAX_HOLD);
-            assert!((beam_head(grow, hold) - 1.0).abs() < 1e-6);
-            assert!(grow + hold.clamp(0.0, BEAM_MAX_HOLD) <= 1.0 + 1e-6);
-            assert_eq!(beam_head(1.0, hold), 1.0);
-        }
+        assert_eq!(beam_head(0.5, 0.5), 1.0);
+        assert_eq!(beam_head(0.25, 0.5), 0.5);
+        assert_eq!(beam_head(0.0, 0.5), 0.0);
+        assert_eq!(beam_head(1.0, 0.5), 1.0);
+        // No hold: grows over the whole flight.
+        assert_eq!(beam_head(0.5, 0.0), 0.5);
+        // An over-long hold is clamped, so the head still grows.
+        assert!(beam_head(0.5, 5.0) > 0.0);
+        assert_eq!(beam_head(1.0, 5.0), 1.0);
     }
 
     #[test]

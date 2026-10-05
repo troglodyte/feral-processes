@@ -2421,3 +2421,25 @@ impl Sortie {
 /// why it needs no membership scheme.
 #[derive(Resource, Default, Clone, Debug)]
 pub struct Routes(pub Vec<crate::routes::Route>);
+
+#[cfg(test)]
+mod bolt_queue_tests {
+    use super::*;
+
+    #[test]
+    fn push_routine_drops_the_oldest_past_the_cap() {
+        let mut queue = BoltQueue::default();
+        for i in 0..EFFECT_QUEUE_CAP + 5 {
+            queue.push_routine(RoutineCue {
+                from: (i as i32, 0),
+                aim: (0, 0),
+                cells: Vec::new(),
+                color: GlyphColor::Cyan,
+                fx: None,
+            });
+        }
+        let kept = queue.take_routines();
+        assert_eq!(kept.len(), EFFECT_QUEUE_CAP);
+        assert_eq!(kept[0].from, (5, 0), "the oldest cues should be dropped");
+    }
+}

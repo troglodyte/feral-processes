@@ -8,7 +8,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::Mutex;
 
 use bevy::prelude::*;
 use feral_processes_engine::components::GlyphColor;
@@ -80,7 +79,7 @@ impl EffectDef {
 /// resolves a cue's id when it takes the cue in.
 pub struct EffectLibrary {
     defs: HashMap<String, EffectDef>,
-    warned: Mutex<HashSet<String>>,
+    warned: HashSet<String>,
 }
 
 impl Default for EffectLibrary {
@@ -89,7 +88,7 @@ impl Default for EffectLibrary {
         defs.insert(DEFAULT_EFFECT.to_string(), EffectDef::streak());
         Self {
             defs,
-            warned: Mutex::new(HashSet::new()),
+            warned: HashSet::new(),
         }
     }
 }
@@ -124,7 +123,7 @@ impl EffectLibrary {
 
     /// The effect named `id`; `None` and unknown ids give `streak`. An
     /// unknown id warns once per id.
-    pub fn get(&self, id: Option<&str>) -> &EffectDef {
+    pub fn get(&mut self, id: Option<&str>) -> &EffectDef {
         let streak = &self.defs[DEFAULT_EFFECT];
         let Some(id) = id else {
             return streak;
@@ -132,12 +131,7 @@ impl EffectLibrary {
         match self.defs.get(id) {
             Some(def) => def,
             None => {
-                let first = self
-                    .warned
-                    .lock()
-                    .map(|mut seen| seen.insert(id.to_string()))
-                    .unwrap_or(false);
-                if first {
+                if self.warned.insert(id.to_string()) {
                     warn!("unknown effect `{id}`, drawing `{DEFAULT_EFFECT}`");
                 }
                 streak
@@ -191,7 +185,7 @@ mod tests {
             "(id: \"ok\", travel: Pulses(count: 2), shake: 0.5)",
         )
         .unwrap();
-        let lib = EffectLibrary::load_dir(&dir);
+        let mut lib = EffectLibrary::load_dir(&dir);
         assert_eq!(lib.get(Some("ok")).travel, Travel::Pulses { count: 2 });
         assert_eq!(lib.defs.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
@@ -199,22 +193,22 @@ mod tests {
 
     #[test]
     fn a_missing_directory_leaves_only_streak() {
-        let lib = EffectLibrary::load_dir(Path::new("/nonexistent/effects"));
+        let mut lib = EffectLibrary::load_dir(Path::new("/nonexistent/effects"));
         assert_eq!(lib.defs.len(), 1);
         assert_eq!(lib.get(None).id, "streak");
     }
 
     #[test]
     fn unknown_ids_fall_back_to_streak_and_warn_once() {
-        let lib = EffectLibrary::load_dir(Path::new("/nonexistent/effects"));
+        let mut lib = EffectLibrary::load_dir(Path::new("/nonexistent/effects"));
         assert_eq!(lib.get(Some("nope")).id, "streak");
         assert_eq!(lib.get(Some("nope")).id, "streak");
-        assert_eq!(lib.warned.lock().unwrap().len(), 1);
+        assert_eq!(lib.warned.len(), 1);
     }
 
     #[test]
     fn the_shipped_library_loads_all_six() {
-        let lib = EffectLibrary::load_dir(&assets().join("effects"));
+        let mut lib = EffectLibrary::load_dir(&assets().join("effects"));
         for id in ["streak", "laser_pulse", "beam", "zap", "slash", "explosion"] {
             assert_eq!(lib.get(Some(id)).id, id);
         }
@@ -226,33 +220,30 @@ mod tests {
         assert_eq!(lib.get(Some("explosion")).shake, 1.0);
     }
 
-    /// Every `fx: Some("id")` in shipped items and abilities names a real
-    /// effect, so the draw-time fallback is unreachable for shipped content.
+    /// Every `fx` on a shipped item or ability names a real effect, so the
+    /// draw-time fallback is unreachable for shipped content.
     #[test]
     fn every_assigned_fx_resolves() {
+        use feral_processes_engine::abilities::AbilityDb;
+        use feral_processes_engine::items_db::ItemDb;
         let lib = EffectLibrary::load_dir(&assets().join("effects"));
-        for kind in ["items", "abilities"] {
-            for entry in std::fs::read_dir(assets().join(kind)).unwrap().flatten() {
-                let path = entry.path();
-                if path.extension().is_none_or(|e| e != "ron") {
-                    continue;
-                }
-                let text = std::fs::read_to_string(&path).unwrap();
-                for line in text.lines() {
-                    let line = line.trim();
-                    let Some(rest) = line.strip_prefix("fx:") else {
-                        continue;
-                    };
-                    let Some(id) = rest.split('"').nth(1) else {
-                        continue;
-                    };
-                    assert!(
-                        lib.defs.contains_key(id),
-                        "{} names unknown effect `{id}`",
-                        path.display()
-                    );
-                }
-            }
+        let (abilities, _) = AbilityDb::load_dir(&assets().join("abilities")).unwrap();
+        let (items, _) = ItemDb::load_dir(&assets().join("items"), &abilities).unwrap();
+        let assigned: Vec<(&str, &str)> = abilities
+            .all()
+            .filter_map(|a| a.fx.as_deref().map(|fx| (a.id.as_str(), fx)))
+            .chain(
+                items
+                    .all()
+                    .filter_map(|i| i.fx.as_deref().map(|fx| (i.id.as_str(), fx))),
+            )
+            .collect();
+        assert!(!assigned.is_empty(), "no shipped content assigns an fx");
+        for (owner, id) in assigned {
+            assert!(
+                lib.defs.contains_key(id),
+                "{owner} names unknown effect `{id}`"
+            );
         }
     }
 }

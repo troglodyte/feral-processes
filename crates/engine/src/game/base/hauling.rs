@@ -286,9 +286,10 @@ impl Occupancy {
     /// names, so the "never stopped on" half cannot be said in the walk;
     /// and `drift_idle_staff` hands a body sharing a cell with another
     /// idle body to the wander instead of its errand, so an idle drift walker
-    /// squeezing through would be knocked off its route at every pass. None of them carries a load,
-    /// which is what the squeeze is for. The caravan keeps the old walk
-    /// because it is not a program and its stuck case already says so once.
+    /// squeezing through would be knocked off its route at every pass. None
+    /// of them carries a load, which is what the squeeze is for. The caravan
+    /// keeps the old walk because it is not a program and its stuck case
+    /// already says so once.
     pub(crate) fn rigid(mut self) -> Self {
         self.walls.extend(self.bodies.drain());
         self
@@ -611,8 +612,10 @@ pub(crate) fn crew_reach(
 /// **The field is target-blind, so a body on one of `structure`'s faces reads
 /// as a throughway in it** where `post_field` refuses to arrive on one. When
 /// a face is held the answer is `post_reach`'s own, rather than a copy of its
-/// arrival rule that could drift; the held-face case is rare enough that the
-/// one walk it costs is not a tick-by-tick bill.
+/// arrival rule that could drift; held faces are common — every staffed
+/// machine's worker stands on one — so the cost is one `post_reach` walk per
+/// call, not a rarity. It is bounded: arriving, and a target no candidate
+/// station of which is in the field, both answer before it.
 pub(crate) fn reaches(
     grid: &BaseGrid,
     reach: &HashMap<(i32, i32), u32>,
@@ -1377,7 +1380,14 @@ pub(crate) fn haul_step_system(
                     if depots.is_empty() {
                         continue;
                     }
-                    let clogged = statuses.get(machine) == Ok(&MachineStatus::Clogged);
+                    // `Stranded` counts: the cut-off reading below is this
+                    // errand's own, and a machine that reads it is still a
+                    // clogged one, so it must not slip out of the gate and
+                    // flap back to `Clogged`.
+                    let clogged = matches!(
+                        statuses.get(machine),
+                        Ok(MachineStatus::Clogged | MachineStatus::Stranded)
+                    );
                     let attached = structures.get(machine).ok().is_some_and(|(_, p, _, s)| {
                         db.get(&s.kind)
                             .and_then(produced_item)
@@ -1395,17 +1405,53 @@ pub(crate) fn haul_step_system(
                     // repeat. The machine stays where it is and clogs
                     // instead, and set-down is only the recovery from a
                     // route lost mid-carry.
-                    let open: Vec<Entity> = depots
-                        .iter()
-                        .filter(|&&(e, p)| reachable(e, p))
-                        .map(|&(e, _)| e)
+                    //
+                    // The output is read first and the fields are asked
+                    // lazily, nearest first: this runs every tick for every
+                    // worker at a clogged or unattached machine, and a field
+                    // per depot per tick is the bill otherwise.
+                    let Ok((_, _, stock, _)) = structures.get(machine) else {
+                        continue;
+                    };
+                    let wanted: Vec<ItemId> = stock
+                        .output
+                        .keys()
+                        .filter(|i| depots.iter().any(|&(e, _)| accepts(e, i)))
+                        .cloned()
                         .collect();
+                    if wanted.is_empty() {
+                        continue;
+                    }
+                    let mut ranked = depots.clone();
+                    ranked.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
+                    let mut asked: HashMap<Entity, bool> = HashMap::new();
+                    let mut pick = None;
+                    for item in wanted {
+                        let open = ranked.iter().any(|&(e, p)| {
+                            accepts(e, &item) && *asked.entry(e).or_insert_with(|| reachable(e, p))
+                        });
+                        if open {
+                            pick = Some(item);
+                            break;
+                        }
+                    }
+                    let Some(item) = pick else {
+                        // Something is waiting that a depot would take and
+                        // none can be walked to: the machine is cut off, not
+                        // merely full. Written through the marker the status
+                        // already reads, with `since` kept so the episode
+                        // has one start — `note_strandings` forms its
+                        // memory once, on entry, and the status and alert
+                        // speak only on transition.
+                        commands.entity(worker).insert(Stranded {
+                            since: stranded.map_or(clock.tick, |s| s.since),
+                        });
+                        continue;
+                    };
                     let Ok((_, _, mut stock, _)) = structures.get_mut(machine) else {
                         continue;
                     };
-                    if let Some(load) =
-                        take_haul_load(&mut stock, |item| open.iter().any(|e| accepts(*e, item)))
-                    {
+                    if let Some(load) = take_haul_load(&mut stock, |i| *i == item) {
                         commands.entity(worker).insert(load);
                     }
                 }

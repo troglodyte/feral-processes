@@ -1895,7 +1895,7 @@ fn lose_the_route_mid_carry(game: &mut Game, worker: Entity, close: impl FnOnce(
 
 /// **Nothing is lifted that cannot be delivered.** The only Depot is walled
 /// in from the start, so `Errand::Tend` picks nothing up: no strand, no
-/// set-down conveyor, and the machine fills and reads `Clogged` — steadily,
+/// set-down conveyor, and the machine fills and reads `Stranded` — steadily,
 /// rather than flipping as a load is lifted and set down every
 /// `STRANDED_SET_DOWN_TICKS`.
 #[test]
@@ -1917,12 +1917,107 @@ fn a_walled_in_depot_is_never_lifted_toward() {
         );
     }
 
-    assert!(game.world.get::<Stranded>(worker).is_none());
     assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
     assert_eq!(
         game.world.get::<MachineStatus>(node),
-        Some(&MachineStatus::Clogged)
+        Some(&MachineStatus::Stranded)
     );
+}
+
+/// **A machine cut off from every store that would take its output says so,
+/// once, and recovers when a route reopens.** `Clogged` would send the
+/// player to collect by hand for a cause that is a wall. One alert over the
+/// whole episode (`set_machine_status` speaks on transition only), and
+/// opening the wall lifts the status and delivers.
+#[test]
+fn a_machine_cut_off_from_its_depot_reads_stranded_once_and_recovers() {
+    use crate::alerts::AlertKind;
+    let mut game = base(43);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    for _ in 0..30 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+    let stranded_alerts: u32 = game
+        .alerts()
+        .iter()
+        .filter(|a| a.kind == AlertKind::MachineStalled(MachineStatus::Stranded))
+        .map(|a| a.count)
+        .sum();
+    assert_eq!(stranded_alerts, 1, "one alert for the whole episode");
+
+    let walls: Vec<Entity> = game
+        .world
+        .query::<(Entity, &Structure)>()
+        .iter(&game.world)
+        .filter(|(_, s)| s.kind == "wall")
+        .map(|(e, _)| e)
+        .collect();
+    for wall in walls {
+        game.world.despawn(wall);
+    }
+    tick_until(&mut game, 200, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "delivered"
+    );
+    assert_ne!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+}
+
+/// The same cut-off reading for a machine with an attached consumer: the
+/// `Errand::Tend` gate lets only a clogged one through, and `Stranded` has to
+/// count as clogged there or the status flaps back to `Clogged` and the
+/// marker is cleared every other tick.
+#[test]
+fn a_cut_off_machine_with_a_consumer_beside_it_stays_stranded() {
+    use crate::alerts::AlertKind;
+    let mut game = base(44);
+    lay_long_floor(&mut game);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    walled_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let lathe_cap = capacity_of(&game, lathe);
+    fill_output(&mut game, lathe, "blank_substrate", lathe_cap);
+    game.queue_work_order(WorkOrder::batch(
+        ItemId::from("blank_substrate"),
+        lathe_cap + 5,
+    ))
+    .unwrap();
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+    let flips: u32 = game
+        .alerts()
+        .iter()
+        .filter(|a| a.kind == AlertKind::MachineStalled(MachineStatus::Stranded))
+        .map(|a| a.count)
+        .sum();
+    assert_eq!(flips, 1, "entered once, never flapped back out");
 }
 
 /// **A carrier stranded by structures sets its load down in the nearest store

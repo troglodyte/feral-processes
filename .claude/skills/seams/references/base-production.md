@@ -432,7 +432,16 @@
   there), or the walk-radius cap. **A load is lifted only for a store the walk
   reaches** (`Errand::Tend` asks `post_reach` of the accepting depots), so
   set-down is the recovery from a route lost *mid-carry* and not a conveyor:
-  an unreachable-only base clogs its machine and lifts nothing.
+  an unreachable-only base lifts nothing. The gate reads the output first and
+  asks `post_reach` lazily, nearest depot first, because Tend runs every tick
+  for every at-post worker on a clogged or unattached machine. **Output that a
+  depot would take but none can be reached reads `Stranded`, not `Clogged`**
+  ("collect it with c" names the wrong cause): Tend re-inserts the worker's
+  `Stranded` marker (keeping `since`) and `task_progress_system`'s clog branch
+  maps the marker to the status, so the alert is edge-latched by
+  `set_machine_status` and `note_strandings` forms one `stranded_at` memory per
+  episode. Tend's `clogged` gate counts `Stranded` too, or an attached machine
+  flaps back to `Clogged` and the marker is cleared every other tick.
 
 - **`set_machine_status` is the one place a stall is announced, and it logs
   only on transition.** Three callers, so "entering a state is news, staying

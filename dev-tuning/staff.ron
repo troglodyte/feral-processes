@@ -1,0 +1,74 @@
+// What the staff of `bench-economy` should look like, and which numbers the
+// search may move to get there. Run:
+//   bench tune dev-tuning/staff.ron
+//
+// "Occasional trouble": programs sulk now and then and a need sometimes
+// touches its critical line, but nobody frays or downs tools. Targets and
+// knob bounds are the user's, 2026-10-05
+// (docs/superpowers/plans/2026-10-05-base-bench.md, "After the baseline").
+// Baseline: docs/measurements/2026-10-05-base-bench-staff-baseline.md,
+// "6,000 ticks, sieges off".
+//
+// 6000 ticks with sieges off: a siege would stop the clock at roughly
+// 3,800-4,900 (`stopped_at`), and a stopped run is scored as failed. Same
+// orders as economy-bench.ron so the base keeps working. A value inside its
+// range costs nothing; outside it costs the squared miss over the width.
+Objective(
+    template: "bench-economy",
+    ticks: 6000,
+    sieges: false,
+    orders: [
+        ("patch_routine", 9999),
+        ("bytecode_block", 9999),
+        ("ice_breaker", 9999),
+    ],
+    seeds: [1, 2, 3],
+    holdout_seeds: [4, 5, 6],
+    // About 5.3 s CPU per 6000-tick run, three seeds per candidate (30 x 24 took
+    // 18m40s, over the 15 minute cap); see the
+    // staff-tune measurement note for the wall time this took.
+    iterations: 22,
+    population: 24,
+    search_seed: 1337,
+
+    targets: [
+        // Shipped mean 0.031: quieter than wanted.
+        Target(measure: "staff.sulking_share", min: 0.05, max: 0.15),
+        // Shipped mean 0.0016: coherence barely touches critical.
+        Target(measure: "staff.need_critical_share.coherence", min: 0.01, max: 0.05),
+        // Shipped mean 82.3: already inside; a guard against the amenities
+        // being starved to get the sulking.
+        Target(measure: "staff.need_mean.slack", min: 60.0, max: 85.0),
+        // Shipped 0 (no fray in 6000 ticks): guards, so trouble stays occasional.
+        Target(measure: "staff.frays_per_1000", min: 0.0, max: 0.2),
+        // Shipped 0: same.
+        Target(measure: "staff.rung_share.downed_tools", min: 0.0, max: 0.02),
+    ],
+
+    // Shipped values in brackets. Ranges are the user's: +-50% of shipped for
+    // rates and weights, absolute for critical/content.
+    knobs: [
+        // coherence [drain 0.02, working x2.0, critical 20, content 60, morale -4.0]
+        Knob(file: "needs/coherence.ron", field: "drain_per_tick", min: 0.01, max: 0.03),
+        Knob(file: "needs/coherence.ron", field: "working_multiplier", min: 1.0, max: 3.0),
+        Knob(file: "needs/coherence.ron", field: "critical", min: 10.0, max: 30.0),
+        Knob(file: "needs/coherence.ron", field: "content", min: 50.0, max: 80.0),
+        // morale_weight is negative: min -6 is the stronger pull.
+        Knob(file: "needs/coherence.ron", field: "morale_weight", min: -6.0, max: -2.0),
+        // slack [drain 0.012, working x1.4, critical 25, content 70, morale -3.0]
+        Knob(file: "needs/slack.ron", field: "drain_per_tick", min: 0.006, max: 0.018),
+        Knob(file: "needs/slack.ron", field: "working_multiplier", min: 0.7, max: 2.1),
+        Knob(file: "needs/slack.ron", field: "critical", min: 10.0, max: 30.0),
+        Knob(file: "needs/slack.ron", field: "content", min: 50.0, max: 80.0),
+        Knob(file: "needs/slack.ron", field: "morale_weight", min: -4.5, max: -1.5),
+        // amenity restore rates [defrag bay 0.6, sandbox 0.5]
+        Knob(file: "structures/defrag_bay.ron", field: "services.coherence.per_tick", min: 0.3, max: 0.9),
+        Knob(file: "structures/sandbox.ron", field: "services.slack.per_tick", min: 0.25, max: 0.75),
+        // thoughts, sign kept, magnitude 0.5-4 [friend +2, rival -3, running +1, no amenity -2, unpowered -2]
+        Knob(file: "thoughts/beside_friend.ron", field: "intensity", min: 0.5, max: 4.0),
+        Knob(file: "thoughts/beside_rival.ron", field: "intensity", min: -4.0, max: -0.5),
+        Knob(file: "thoughts/machine_running.ron", field: "intensity", min: 0.5, max: 4.0),
+        Knob(file: "thoughts/no_amenity.ron", field: "intensity", min: -4.0, max: -0.5),
+        Knob(file: "thoughts/unpowered.ron", field: "intensity", min: -4.0, max: -0.5),
+    ],
+)

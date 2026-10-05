@@ -2137,6 +2137,17 @@ pub enum Grievance {
     LashingOut,
 }
 
+impl Grievance {
+    /// The wire name a bench or analysis reads the rung by.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Grievance::Sulking => "sulking",
+            Grievance::DownedTools => "downed_tools",
+            Grievance::LashingOut => "lashing_out",
+        }
+    }
+}
+
 /// A program that is a Repair Bay's business rather than the base's: off the
 /// line until it is whole again.
 ///

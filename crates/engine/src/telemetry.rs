@@ -97,6 +97,23 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// A program on the `LashingOut` rung opened a fight. Once per brawl
+    /// started — not per exchange, which is the log's business.
+    ///
+    /// `who` is `Game::creature_label`, the identity every other line the
+    /// player reads uses, because a record has no `Entity` to carry that
+    /// survives the run.
+    Tantrum { tick: u64, who: String },
+    /// A program's need ran out with nothing to answer it. One per latch
+    /// edge, which is what `Game::fray` already says once, so the log and
+    /// the record never disagree. `unreachable` separates an amenity the
+    /// body cannot get to from a base that has none.
+    Fray {
+        tick: u64,
+        who: String,
+        need: String,
+        unreachable: bool,
+    },
     /// One leg of a haul that actually moved goods.
     ///
     /// **The corrected B3.** Adjacency is a throughput multiplier and not a
@@ -216,6 +233,8 @@ impl Record {
             Record::Extract { .. }
             | Record::Assemble { .. }
             | Record::MachineStall { .. }
+            | Record::Tantrum { .. }
+            | Record::Fray { .. }
             | Record::HandCraft { .. }
             | Record::Acquire { .. }
             | Record::Consume { .. }

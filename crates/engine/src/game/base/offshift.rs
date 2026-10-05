@@ -191,6 +191,43 @@ impl Game {
             .collect()
     }
 
+    /// Every reserve `who` carries as a number, sorted by need id.
+    ///
+    /// `need_rows` is the player's read (bands, names); this is the
+    /// headless bench's — it samples levels against the def's thresholds.
+    /// A view rather than a `World` accessor, because the renderer and
+    /// bench must never be handed the `World`. Empty for a body with no
+    /// `Needs`.
+    pub fn need_levels(&self, who: Entity) -> Vec<crate::views::NeedLevel> {
+        let Some(store) = self.world.get::<Needs>(who) else {
+            return Vec::new();
+        };
+        let db = self.world.resource::<NeedDb>();
+        let mut levels: Vec<_> = store
+            .iter()
+            .filter_map(|(id, level)| {
+                let def = db.get(id)?;
+                Some(crate::views::NeedLevel {
+                    id: id.to_string(),
+                    level,
+                    critical: def.critical,
+                    content: def.content,
+                })
+            })
+            .collect();
+        levels.sort_by(|a, b| a.id.cmp(&b.id));
+        levels
+    }
+
+    /// The rung `who` has reached on the grievance ladder, by wire name, or
+    /// `None` if not disgruntled. A view for the headless bench, for the
+    /// same reason as `need_levels`.
+    pub fn grievance(&self, who: Entity) -> Option<&'static str> {
+        self.world
+            .get::<crate::components::Disgruntled>(who)
+            .map(|d| d.grievance.as_str())
+    }
+
     /// The examine line's tail: what `who` has walked off to do, or `None`
     /// for a program that is on shift.
     ///
@@ -497,6 +534,13 @@ impl Game {
         }
         let at = self.world.get::<Position>(worker).copied();
         let who = self.creature_label(worker);
+        let tick = self.current_tick();
+        self.record(|_| crate::telemetry::Record::Fray {
+            tick,
+            who: who.clone(),
+            need: need.to_string(),
+            unreachable,
+        });
         let what = self
             .world
             .resource::<NeedDb>()

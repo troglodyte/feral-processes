@@ -1192,6 +1192,8 @@ mod tests {
                 Record::Extract { .. }
                 | Record::Assemble { .. }
                 | Record::MachineStall { .. }
+                | Record::Tantrum { .. }
+                | Record::Fray { .. }
                 | Record::HandCraft { .. }
                 | Record::Acquire { .. }
                 | Record::Consume { .. }

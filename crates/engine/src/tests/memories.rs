@@ -3147,6 +3147,39 @@ fn a_remember_records_a_formation_then_a_reinforcement() {
     );
 }
 
+/// A memory forgotten by the eviction on the very call that wrote it was
+/// never held, so the record must not claim a formation.
+#[test]
+fn a_remember_evicted_on_the_same_call_is_not_recorded_as_formed() {
+    use crate::telemetry::Record;
+    const FAINT: &str = r#"(
+        id: "faint",
+        name: "Faint",
+        blurb: "b",
+        valence: 0.1,
+        half_life: 50_000,
+        subject: Nothing,
+        strike_cap: 1,
+    )"#;
+    let dir = assets_with_memory_defs("evicted_on_write", &[("faint", FAINT)]);
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let tick = game.current_tick();
+
+    game.remember(program, "faint", MemorySubject::Nothing);
+
+    assert!(memories_of(&game, program).is_empty());
+    assert_eq!(
+        remember_records(&mut game),
+        vec![Record::Remember {
+            tick,
+            def: "faint".to_string(),
+            new: false,
+        }]
+    );
+}
+
 #[test]
 fn a_remember_with_telemetry_off_records_nothing() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

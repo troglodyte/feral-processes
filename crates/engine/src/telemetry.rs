@@ -114,8 +114,9 @@ pub enum Record {
         need: String,
         unreachable: bool,
     },
-    /// A memory was written: `new` when it formed and not when it
-    /// reinforced one already held. Only the Written path of
+    /// A memory was written: `new` when it was not held before and is held
+    /// after the write's eviction, so a reinforcement and a memory forgotten
+    /// on the call that wrote it are both `false`. Only the Written path of
     /// `Game::remember_named` says this, so a refused write (unknown def,
     /// wrong subject, no store) is not a formation.
     ///
@@ -230,8 +231,9 @@ impl Record {
     /// record carries a fight id" true rather than merely documented.
     ///
     /// The base records are the ones that do not. They are keyed to `tick`
-    /// and happen while no fight is open at all, so re-keying one would be
-    /// inventing an association rather than correcting it.
+    /// and carry no fight id (`Remember` fires mid-fight but belongs to no
+    /// one fight), so re-keying one would be inventing an association
+    /// rather than correcting it.
     pub(crate) fn set_fight(&mut self, fight: u64) {
         let slot = match self {
             Record::FightStart { fight, .. }

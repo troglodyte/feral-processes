@@ -27,6 +27,21 @@ pub struct Score {
     pub error: f64,
     /// Mean over seeds of each target's measure, in target order.
     pub values: Vec<f64>,
+    /// How many of the seeds' runs ended early (a battle opened or the game
+    /// ended), so their rates cover fewer ticks than asked for.
+    pub stopped: usize,
+}
+
+/// A candidate whose run stopped early scores worst, as an unreadable one
+/// does. Its measures cover a shorter run, so a base that dies at tick 3
+/// could look like it sits on every target; and `optimise` already ranks a
+/// `NEG_INFINITY` candidate last, so the search just steers away from it.
+fn fitness_of(score: &Score) -> f32 {
+    if score.stopped > 0 {
+        f32::NEG_INFINITY
+    } else {
+        -(score.error as f32)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -98,6 +113,7 @@ fn apply(
 fn score(obj: &Objective, save: &Path, assets: &Path, seeds: &[u64]) -> Result<Score, String> {
     let mut error = 0.0;
     let mut values = vec![0.0; obj.targets.len()];
+    let mut stopped = 0;
     for &seed in seeds {
         let report = bench::run(
             save,
@@ -108,6 +124,7 @@ fn score(obj: &Objective, save: &Path, assets: &Path, seeds: &[u64]) -> Result<S
                 orders: obj.orders.clone(),
             },
         )?;
+        stopped += usize::from(report.stopped_at.is_some());
         for (target, total) in obj.targets.iter().zip(&mut values) {
             let value = report.measure(&target.measure)?;
             *total += value;
@@ -118,6 +135,7 @@ fn score(obj: &Objective, save: &Path, assets: &Path, seeds: &[u64]) -> Result<S
     Ok(Score {
         error: error / n,
         values: values.into_iter().map(|v| v / n).collect(),
+        stopped,
     })
 }
 
@@ -232,7 +250,7 @@ pub fn search(
     let first_error: Mutex<Option<String>> = Mutex::new(None);
     let fitness = |x: &[f32]| -> f32 {
         match evaluate(&values_of(x), &obj.seeds) {
-            Ok(s) => -(s.error as f32),
+            Ok(s) => fitness_of(&s),
             // A candidate whose measure cannot be read (a kind that no
             // longer exists) scores worst rather than ending the search;
             // the first reason is kept so the log can say why.
@@ -321,6 +339,19 @@ fn report(obj: &Objective, proposal: &Proposal) -> String {
         proposal.holdout_before.error,
         proposal.holdout_after.error,
     );
+    let stops = [
+        ("search before", proposal.search_before.stopped),
+        ("search after", proposal.search_after.stopped),
+        ("hold-out before", proposal.holdout_before.stopped),
+        ("hold-out after", proposal.holdout_after.stopped),
+    ];
+    for (which, n) in stops.into_iter().filter(|&(_, n)| n > 0) {
+        let _ = writeln!(
+            out,
+            "**{which}: {n} run(s) stopped early** (a battle opened or the game ended); \
+             their rates cover fewer ticks than asked.\n"
+        );
+    }
     let _ = writeln!(
         out,
         "Hold-out: **{}**\n",
@@ -390,6 +421,7 @@ mod tests {
         let score = |error| Score {
             error,
             values: vec![],
+            stopped: 0,
         };
         Proposal {
             changes: vec![],
@@ -399,6 +431,17 @@ mod tests {
             holdout_after: score(after),
             files: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn a_stopped_run_scores_worst_whatever_its_error() {
+        let score = |error, stopped| Score {
+            error,
+            values: vec![],
+            stopped,
+        };
+        assert_eq!(fitness_of(&score(0.0, 1)), f32::NEG_INFINITY);
+        assert_eq!(fitness_of(&score(2.0, 0)), -2.0);
     }
 
     #[test]

@@ -146,6 +146,12 @@ fn run(
     )?;
     let ron = ron::ser::to_string_pretty(&report, ron::ser::PrettyConfig::default())
         .map_err(|e| e.to_string())?;
+    if let Some(at) = report.stopped_at {
+        eprintln!(
+            "stopped early at tick {at} of {ticks} (a battle opened or the game ended); \
+             the report covers {at} ticks"
+        );
+    }
     // Summary on stderr so stdout stays the data when no --out is given.
     eprintln!(
         "{template}: {ticks} ticks, seed {seed}: {} machines, {} lines, labour unworked {:.2}",

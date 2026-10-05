@@ -17,7 +17,12 @@ pub const MEASURES: &[&str] = &[
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct BenchReport {
+    /// Ticks actually run; every rate and status count is over these.
     pub ticks: u64,
+    /// The tick the run ended early at, relative to its start, because a
+    /// battle opened or the game ended. `None` for a run that played out.
+    #[serde(default)]
+    pub stopped_at: Option<u64>,
     pub seed: u64,
     pub economy: EconomyReport,
     /// Typed in phase 2.
@@ -160,6 +165,7 @@ mod tests {
     fn sample() -> BenchReport {
         BenchReport {
             ticks: 100,
+            stopped_at: None,
             seed: 1,
             economy: EconomyReport {
                 machines: vec![

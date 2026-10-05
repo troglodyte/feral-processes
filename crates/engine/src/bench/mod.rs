@@ -43,7 +43,11 @@ struct LineTally {
 }
 
 pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchReport, String> {
-    let mut game = Game::load(save, assets_dir).map_err(|e| format!("{}: {e}", save.display()))?;
+    let game = Game::load(save, assets_dir).map_err(|e| format!("{}: {e}", save.display()))?;
+    play(game, opts)
+}
+
+fn play(mut game: Game, opts: RunOptions) -> Result<BenchReport, String> {
     // Installed after the load, as `arena` does, so one save under several
     // seeds is several different runs and any one replays alone.
     game.world
@@ -65,8 +69,14 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     let mut lines: BTreeMap<String, LineTally> = BTreeMap::new();
     let (mut wanted, mut staffed) = (0u64, 0u64);
     let mut unworked: BTreeMap<Duty, u64> = BTreeMap::new();
+    let mut ticks = 0;
+    let mut stopped_at = None;
     for _ in 0..opts.ticks {
-        advance(&mut game)?;
+        if !advance(&mut game) {
+            stopped_at = Some(ticks);
+            break;
+        }
+        ticks += 1;
         for line in game.line_reports() {
             let tally = lines
                 .entry(format!("{},{}", line.key.0.0, line.key.0.1))
@@ -167,7 +177,8 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     };
 
     Ok(BenchReport {
-        ticks: opts.ticks,
+        ticks,
+        stopped_at,
         seed: opts.seed,
         economy: EconomyReport {
             machines,
@@ -180,18 +191,13 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     })
 }
 
-/// One `wait`, which does nothing while a battle is open or the game is
-/// over: a bench that kept counting would report a stopped clock as a quiet
-/// base.
-fn advance(game: &mut Game) -> Result<(), String> {
+/// One `wait`; false when it did nothing, which happens while a battle is
+/// open or the game is over. The run ends there rather than counting on: a
+/// bench that kept going would report a stopped clock as a quiet base.
+fn advance(game: &mut Game) -> bool {
     let before = game.current_tick();
     game.wait();
-    if game.current_tick() == before {
-        return Err(format!(
-            "clock stopped at tick {before} (battle open or game over)"
-        ));
-    }
-    Ok(())
+    game.current_tick() != before
 }
 
 /// `n / ticks`, with an empty run reading as zero rather than NaN.
@@ -252,14 +258,31 @@ mod tests {
     }
 
     #[test]
-    fn a_stopped_clock_is_an_error_not_a_quiet_base() {
+    fn a_stopped_clock_ends_the_run_early_and_says_where() {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        advance(&mut game).unwrap();
         game.world
             .resource_mut::<crate::resources::GameOver>()
             .reason = Some("test".into());
-        let err = advance(&mut game).unwrap_err();
-        assert!(err.contains("clock stopped at tick"), "{err}");
+        let report = play(
+            game,
+            RunOptions {
+                ticks: 50,
+                seed: 1,
+                orders: vec![],
+            },
+        )
+        .unwrap();
+        assert_eq!(report.stopped_at, Some(0));
+        assert_eq!(report.ticks, 0);
+    }
+
+    #[test]
+    fn a_run_that_plays_out_has_no_stop() {
+        let path = blank_save("no_stop");
+        let report = run_blank(&path, 1);
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(report.stopped_at, None);
+        assert_eq!(report.ticks, 50);
     }
 
     #[test]

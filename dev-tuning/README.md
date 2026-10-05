@@ -24,6 +24,13 @@ and workers are posted only on machines an order wants, so a base with no
 orders has no drain. Use a quantity the run cannot reach (9999) so the demand
 lasts. Orders alone did not make `chains` flow; see the doc below.
 
+A run ends early, with a report over the ticks it did play, when a battle
+opens or the game ends; the report's `stopped_at` says the tick and `run`
+prints it. `tune` treats a candidate with any stopped run as failed (worst
+fitness, like an unreadable knob): its measures cover a shorter run, so
+stopping could otherwise look like hitting a target. `report.md` notes any
+stopped runs in the before/after and hold-out scores.
+
 **The output is a proposal, never an edit.** Nothing writes into `assets/`.
 Read `out/report.md`, `diff -r assets/species dev-tuning/out/species`, and
 apply what you agree with by hand. `out/` is gitignored: a proposal is a

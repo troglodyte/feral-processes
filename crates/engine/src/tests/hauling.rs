@@ -696,15 +696,14 @@ fn posting_to_a_boxed_in_machine_is_refused() {
 #[test]
 fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
     let mut game = base(22);
+    lay_long_floor(&mut game);
     let node = deploy(&mut game, "mining_node", 0, 2);
-    deploy(&mut game, "depot", 3, 0);
-    for (dx, dy) in [(2, 0), (4, 0), (3, 1), (3, -1)] {
-        deploy(&mut game, "mining_node", dx, dy);
-    }
+    deploy(&mut game, "depot", 12, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    lose_the_route_mid_carry(&mut game, worker, close_the_depot_in);
 
     tick_until(&mut game, 40, |g| {
         g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Stranded)
@@ -1861,6 +1860,69 @@ fn walled_depot(game: &mut Game, x: i32) -> Entity {
     depot
 }
 
+/// Floor out to the far Depots the stranding tests need, past the Home's slab.
+fn lay_long_floor(game: &mut Game) {
+    let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+    for x in -16..=16 {
+        for y in -2..=3 {
+            grid.lay_floor(x, y);
+        }
+    }
+}
+
+/// Boxes the Depot at `(12, 0)` in with four more machines. Far enough off
+/// that the carrier is still walking when the last one goes up.
+fn close_the_depot_in(game: &mut Game) {
+    for (dx, dy) in [(11, 0), (13, 0), (12, 1), (12, -1)] {
+        deploy(game, "mining_node", dx, dy);
+    }
+}
+
+/// Picks the worker up holding a load, then closes the route: the structures
+/// go up *after* the pickup, which is the only way a carrier is stranded now
+/// that `Errand::Tend` lifts nothing it cannot deliver.
+fn lose_the_route_mid_carry(game: &mut Game, worker: Entity, close: impl FnOnce(&mut Game)) {
+    tick_until(game, 40, |g| g.world.get::<Carrying>(worker).is_some());
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker lifted a load"
+    );
+    close(game);
+    tick_until(game, 40, |g| g.world.get::<Stranded>(worker).is_some());
+}
+
+/// **Nothing is lifted that cannot be delivered.** The only Depot is walled
+/// in from the start, so `Errand::Tend` picks nothing up: no strand, no
+/// set-down conveyor, and the machine fills and reads `Clogged` — steadily,
+/// rather than flipping as a load is lifted and set down every
+/// `STRANDED_SET_DOWN_TICKS`.
+#[test]
+fn a_walled_in_depot_is_never_lifted_toward() {
+    let mut game = base(43);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    for _ in 0..3 * tuning::STRANDED_SET_DOWN_TICKS {
+        game.tick();
+        assert!(
+            game.world.get::<Carrying>(worker).is_none(),
+            "lifted a load toward a Depot nothing can reach, tick {}",
+            game.current_tick()
+        );
+    }
+
+    assert!(game.world.get::<Stranded>(worker).is_none());
+    assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Clogged)
+    );
+}
+
 /// **A carrier stranded by structures sets its load down in the nearest store
 /// that takes it, after `STRANDED_SET_DOWN_TICKS` and not before.** Both
 /// Depots are walled in, so no walk reaches either; the nearer by Chebyshev
@@ -1869,15 +1931,20 @@ fn walled_depot(game: &mut Game, x: i32) -> Entity {
 #[test]
 fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
     let mut game = base(41);
+    lay_long_floor(&mut game);
     let node = deploy(&mut game, "mining_node", 0, 2);
-    let near = walled_depot(&mut game, 3);
-    let far = walled_depot(&mut game, -3);
+    let near = deploy(&mut game, "depot", 12, 0);
+    let far = deploy(&mut game, "depot", -14, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
-    tick_until(&mut game, 40, |g| {
-        g.world.get::<Stranded>(worker).is_some() && g.world.get::<Carrying>(worker).is_some()
+    lose_the_route_mid_carry(&mut game, worker, |g| {
+        for x in [12, -14] {
+            for (dx, dy) in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+                deploy(g, "wall", x + dx, dy);
+            }
+        }
     });
     let since = game
         .world
@@ -1976,15 +2043,14 @@ fn a_stranded_carrier_with_nowhere_to_set_down_keeps_its_load() {
 #[test]
 fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
     let mut game = base(22);
+    lay_long_floor(&mut game);
     let node = deploy(&mut game, "mining_node", 0, 2);
-    deploy(&mut game, "depot", 3, 0);
-    for (dx, dy) in [(2, 0), (4, 0), (3, 1), (3, -1)] {
-        deploy(&mut game, "mining_node", dx, dy);
-    }
+    deploy(&mut game, "depot", 12, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    lose_the_route_mid_carry(&mut game, worker, close_the_depot_in);
     tick_until(&mut game, 40, |g| {
         g.world.get::<Stranded>(worker).is_some() && g.world.get::<Carrying>(worker).is_some()
     });

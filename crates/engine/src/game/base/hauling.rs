@@ -1096,20 +1096,21 @@ pub(crate) fn haul_step_system(
         );
         let machine = task.target;
 
+        // `post_reach` asked of a candidate depot, for `nearest_depot` and
+        // for `Errand::Tend`'s pickup — one rule for what the walk reaches.
+        let reachable = |depot: Entity, at: Position| {
+            let side = structures
+                .get(depot)
+                .ok()
+                .and_then(|(_, _, _, s)| db.get(&s.kind))
+                .map(|d| d.footprint)
+                .unwrap_or(1);
+            post_reach(&grid, worker_pos, at, side, &blocked, pocket_radius).is_ok()
+        };
         // The whole of what this worker is doing with the tick, decided once
         // — see `Errand`. Scoped so every read of `structures` is finished
         // before the arrival below writes to it.
         let errand = {
-            // `post_reach` asked of a candidate depot, for `nearest_depot`.
-            let reachable = |depot: Entity, at: Position| {
-                let side = structures
-                    .get(depot)
-                    .ok()
-                    .and_then(|(_, _, _, s)| db.get(&s.kind))
-                    .map(|d| d.footprint)
-                    .unwrap_or(1);
-                post_reach(&grid, worker_pos, at, side, &blocked, pocket_radius).is_ok()
-            };
             let def = structures
                 .get(machine)
                 .ok()
@@ -1368,12 +1369,26 @@ pub(crate) fn haul_step_system(
                     if !clogged && attached {
                         continue;
                     }
+                    // **A load is picked up only for a store the walk can
+                    // reach.** `nearest_depot` falls back to an unreachable
+                    // one so a lone candidate is never walked, which for a
+                    // carrier already holding the load is the loud stall; for
+                    // one about to pick it up it made set-down a slow
+                    // conveyor — lift, strand, set down at any distance,
+                    // repeat. The machine stays where it is and clogs
+                    // instead, and set-down is only the recovery from a
+                    // route lost mid-carry.
+                    let open: Vec<Entity> = depots
+                        .iter()
+                        .filter(|&&(e, p)| reachable(e, p))
+                        .map(|&(e, _)| e)
+                        .collect();
                     let Ok((_, _, mut stock, _)) = structures.get_mut(machine) else {
                         continue;
                     };
-                    if let Some(load) = take_haul_load(&mut stock, |item| {
-                        depots.iter().any(|(e, _)| accepts(*e, item))
-                    }) {
+                    if let Some(load) =
+                        take_haul_load(&mut stock, |item| open.iter().any(|e| accepts(*e, item)))
+                    {
                         commands.entity(worker).insert(load);
                     }
                 }

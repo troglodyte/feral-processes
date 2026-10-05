@@ -3,7 +3,7 @@
 //!
 //! The output is a proposal, never an edit: nothing here writes `assets/`.
 
-use super::knob::{Knob, patch, read_back};
+use super::knob::{Knob, check, patch, read_back};
 use super::objective::{Objective, range_error};
 use crate::cem::{CemConfig, optimise};
 use crate::scratch_assets::ScratchAssets;
@@ -305,7 +305,7 @@ pub fn search(
     let old: Vec<f64> = obj
         .knobs
         .iter()
-        .map(|k| read_back(assets, k))
+        .map(|k| check(assets, k))
         .collect::<Result<_, _>>()?;
     let start: Vec<f64> = obj
         .knobs
@@ -806,5 +806,18 @@ mod tests {
         obj.knobs[0].field = "glyph".into();
         let e = search(&obj, &assets_dir(), &chains_save(), &mut |_| {}).unwrap_err();
         assert!(e.contains("glyph"), "{e}");
+    }
+
+    #[test]
+    fn a_knob_on_an_unspelled_field_fails_before_any_tick() {
+        let mut obj = objective();
+        obj.knobs[0] = Knob {
+            file: "interactions/commiserate.ron".into(),
+            field: "sulking".into(),
+            min: 0.0,
+            max: 5.0,
+        };
+        let e = search(&obj, &assets_dir(), &chains_save(), &mut |_| {}).unwrap_err();
+        assert!(e.contains("spells out"), "{e}");
     }
 }

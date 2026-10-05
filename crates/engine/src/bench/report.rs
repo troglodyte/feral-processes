@@ -6,8 +6,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::bonds::Bond;
 use crate::components::Grievance;
 use crate::telemetry::Record;
+use crate::views::{MORALE_BANDS, morale_band};
 
 /// Every prefix `BenchReport::measure` accepts, for error messages and for
 /// an objective file's load-time check.
@@ -26,6 +28,12 @@ pub const MEASURES: &[&str] = &[
     "staff.rung_share.<rung|none>",
     "staff.tantrums_per_1000",
     "staff.frays_per_1000",
+    "memories.morale_band_share.<band>",
+    "memories.morale_spread",
+    "memories.bond_share.<bond>",
+    "memories.relationships_per_staff",
+    "memories.fired_per_1000.<memory id>",
+    "memories.formed_per_1000.<memory id>",
 ];
 
 /// The grievance rungs a staff member can stand on, by `Grievance::as_str`;
@@ -53,8 +61,11 @@ pub struct BenchReport {
     /// `need_mean.<id>` or `need_critical_share.<id>` is an error, the same
     /// as an unknown id, rather than a zero a typo could hide behind.
     pub staff: StaffReport,
-    /// Typed in phase 3.
-    pub memories: Option<()>,
+    /// Never absent. A base with no staff or no memories reads zero for
+    /// every share and rate; the id and band keys are seeded from the
+    /// catalogue, so a kind that never fired is a zero and an unknown name
+    /// is an error.
+    pub memories: MemoryReport,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -118,6 +129,28 @@ pub struct StaffReport {
     pub first_fray: Option<u64>,
     /// Each staff member's morale at the last tick, ascending.
     pub end_morale: Vec<f32>,
+}
+
+/// What staff remembered over the run. Bands and bonds are seeded in full so
+/// a share that is zero is a key with a zero, and a typo is not.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct MemoryReport {
+    /// Every `MORALE_BANDS` entry, over the run's `staff_ticks`.
+    pub morale_band_share: BTreeMap<String, f32>,
+    /// Standard deviation of morale over staff-ticks.
+    pub morale_spread: f32,
+    /// Every `Bond` label, over `relationships`.
+    pub bond_share: BTreeMap<String, f32>,
+    /// Live directed relationships at the last tick.
+    pub relationships: u64,
+    /// Staff at the last tick, counted where `relationships` is, so a run
+    /// stopped before its first tick still divides over what was sampled.
+    #[serde(default)]
+    pub staff: u64,
+    /// Memories written per def id, reinforcements included.
+    pub fired: BTreeMap<String, u64>,
+    /// Memories written per def id that were new to their holder.
+    pub formed: BTreeMap<String, u64>,
 }
 
 /// One reserve, over the staff-ticks that member had it.
@@ -249,6 +282,99 @@ impl StaffTally {
     }
 }
 
+/// Running sums for `MemoryReport`, seeded with the catalogue so an id that
+/// never fired still has a row.
+pub struct MemoryTally {
+    n: u64,
+    sum: f64,
+    sum_sq: f64,
+    bands: BTreeMap<String, u64>,
+    bonds: BTreeMap<String, u64>,
+    relationships: u64,
+    staff: u64,
+    fired: BTreeMap<String, u64>,
+    formed: BTreeMap<String, u64>,
+}
+
+impl MemoryTally {
+    /// `defs` is every memory id the catalogue loaded.
+    pub fn new<'a>(defs: impl IntoIterator<Item = &'a str>) -> Self {
+        let zeros = |keys: &mut dyn Iterator<Item = &str>| {
+            keys.map(|k| (k.to_string(), 0))
+                .collect::<BTreeMap<_, u64>>()
+        };
+        let defs: Vec<&str> = defs.into_iter().collect();
+        MemoryTally {
+            n: 0,
+            sum: 0.0,
+            sum_sq: 0.0,
+            bands: zeros(&mut MORALE_BANDS.into_iter()),
+            bonds: zeros(&mut Bond::ALL.into_iter().map(Bond::label)),
+            relationships: 0,
+            staff: 0,
+            fired: zeros(&mut defs.iter().copied()),
+            formed: zeros(&mut defs.iter().copied()),
+        }
+    }
+
+    pub fn add_morale(&mut self, morale: f32) {
+        let m = f64::from(morale);
+        self.n += 1;
+        self.sum += m;
+        self.sum_sq += m * m;
+        *self
+            .bands
+            .entry(morale_band(morale).to_string())
+            .or_insert(0) += 1;
+    }
+
+    /// One staff member present at the run's end, whose relationships are
+    /// counted by `add_bond`.
+    pub fn add_staff(&mut self) {
+        self.staff += 1;
+    }
+
+    /// One live directed relationship, sampled once at the run's end.
+    pub fn add_bond(&mut self, bond: Bond) {
+        self.relationships += 1;
+        *self.bonds.entry(bond.label().to_string()).or_insert(0) += 1;
+    }
+
+    pub fn finish(self, records: &[Record]) -> MemoryReport {
+        let (mut fired, mut formed) = (self.fired, self.formed);
+        for record in records {
+            if let Record::Remember { def, new, .. } = record {
+                *fired.entry(def.clone()).or_insert(0) += 1;
+                if *new {
+                    *formed.entry(def.clone()).or_insert(0) += 1;
+                }
+            }
+        }
+        let shares = |counts: BTreeMap<String, u64>, total: u64| {
+            counts
+                .into_iter()
+                .map(|(k, n)| (k, share(n, total)))
+                .collect()
+        };
+        let spread = if self.n == 0 {
+            0.0
+        } else {
+            let mean = self.sum / self.n as f64;
+            // Rounding can leave a constant series a hair below zero.
+            (self.sum_sq / self.n as f64 - mean * mean).max(0.0).sqrt() as f32
+        };
+        MemoryReport {
+            morale_band_share: shares(self.bands, self.n),
+            morale_spread: spread,
+            bond_share: shares(self.bonds, self.relationships),
+            relationships: self.relationships,
+            staff: self.staff,
+            fired,
+            formed,
+        }
+    }
+}
+
 /// `n / total`, with nothing to divide over reading as zero rather than NaN.
 pub fn share(n: u64, total: u64) -> f32 {
     if total == 0 {
@@ -325,6 +451,54 @@ impl BenchReport {
         None
     }
 
+    /// The `memories.` measures; `None` when `name` is not one of them.
+    fn memory_measure(&self, name: &str) -> Option<Result<f64, String>> {
+        let memories = &self.memories;
+        let rest = name.strip_prefix("memories.")?;
+        let per_1000 = |n: u64| {
+            if self.ticks == 0 {
+                0.0
+            } else {
+                n as f64 * 1000.0 / self.ticks as f64
+            }
+        };
+        let keyed = |map: &BTreeMap<String, f32>, key: &str, what: &str| {
+            map.get(key).map(|&v| f64::from(v)).ok_or_else(|| {
+                let known: Vec<&str> = map.keys().map(String::as_str).collect();
+                format!("no {what} `{key}`; known: {}", known.join(", "))
+            })
+        };
+        let counted = |map: &BTreeMap<String, u64>, key: &str| {
+            map.get(key).map(|&n| per_1000(n)).ok_or_else(|| {
+                let known: Vec<&str> = map.keys().map(String::as_str).collect();
+                format!("no memory `{key}`; known: {}", known.join(", "))
+            })
+        };
+        if rest == "morale_spread" {
+            return Some(Ok(f64::from(memories.morale_spread)));
+        }
+        if rest == "relationships_per_staff" {
+            return Some(Ok(if memories.staff == 0 {
+                0.0
+            } else {
+                memories.relationships as f64 / memories.staff as f64
+            }));
+        }
+        if let Some(band) = rest.strip_prefix("morale_band_share.") {
+            return Some(keyed(&memories.morale_band_share, band, "morale band"));
+        }
+        if let Some(bond) = rest.strip_prefix("bond_share.") {
+            return Some(keyed(&memories.bond_share, bond, "bond"));
+        }
+        if let Some(id) = rest.strip_prefix("fired_per_1000.") {
+            return Some(counted(&memories.fired, id));
+        }
+        if let Some(id) = rest.strip_prefix("formed_per_1000.") {
+            return Some(counted(&memories.formed, id));
+        }
+        None
+    }
+
     /// A named scalar view of the report, which is what an objective file's
     /// targets read. An unknown name is an error rather than a zero, so a
     /// typo cannot pass as a target met.
@@ -357,6 +531,9 @@ impl BenchReport {
             return Ok(economy.items.get(item).copied().unwrap_or(0) as f64);
         }
         if let Some(v) = self.staff_measure(name) {
+            return v;
+        }
+        if let Some(v) = self.memory_measure(name) {
             return v;
         }
         Err(format!(
@@ -433,7 +610,7 @@ mod tests {
                 items: BTreeMap::from([("ore".to_string(), 14)]),
             },
             staff: StaffReport::default(),
-            memories: None,
+            memories: MemoryTally::new([]).finish(&[]),
         }
     }
 
@@ -616,5 +793,139 @@ mod tests {
             ..staffed()
         };
         assert_eq!(r.measure("staff.frays_per_1000"), Ok(0.0));
+    }
+
+    /// Where `morale_band` saturates, so the extremes land in the outer bands.
+    const FULL: f32 =
+        (crate::tuning::MEMORY_MORALE_MAX_SHIFT / crate::tuning::MEMORY_MORALE_PER_POINT) as f32;
+
+    fn memory_report() -> MemoryReport {
+        let mut t = MemoryTally::new(["hard_won", "mauled_by"]);
+        for morale in [FULL, 0.0, 0.0, -FULL] {
+            t.add_morale(morale);
+        }
+        for bond in [Bond::Friend, Bond::Friend, Bond::Rival, Bond::Neutral] {
+            t.add_bond(bond);
+        }
+        t.add_staff();
+        t.add_staff();
+        let remember = |def: &str, new| Record::Remember {
+            tick: 5,
+            def: def.into(),
+            new,
+        };
+        t.finish(&[
+            remember("hard_won", true),
+            remember("hard_won", false),
+            remember("hard_won", false),
+        ])
+    }
+
+    #[test]
+    fn memory_fold_band_shares_sum_to_one_and_every_band_is_a_key() {
+        let r = memory_report();
+        assert_eq!(r.morale_band_share.len(), MORALE_BANDS.len());
+        assert!((r.morale_band_share.values().sum::<f32>() - 1.0).abs() < 1e-6);
+        assert_eq!(r.morale_band_share["even"], 0.5);
+        assert_eq!(r.morale_band_share["bitter"], 0.25);
+        assert_eq!(r.morale_band_share["devoted"], 0.25);
+        assert_eq!(r.morale_band_share["content"], 0.0);
+    }
+
+    #[test]
+    fn memory_fold_spread_is_the_staff_tick_standard_deviation() {
+        // mean 0, variance 2 * FULL^2 / 4.
+        let want = (FULL * FULL / 2.0).sqrt();
+        assert!((memory_report().morale_spread - want).abs() < 1e-4);
+        let mut flat = MemoryTally::new([]);
+        (0..3).for_each(|_| flat.add_morale(0.3));
+        assert_eq!(flat.finish(&[]).morale_spread, 0.0);
+    }
+
+    #[test]
+    fn memory_fold_bonds_are_shares_of_the_live_relationships() {
+        let r = memory_report();
+        assert_eq!(r.relationships, 4);
+        assert_eq!(r.bond_share.len(), Bond::ALL.len());
+        assert_eq!(r.bond_share["Friend"], 0.5);
+        assert_eq!(r.bond_share["Rival"], 0.25);
+        assert_eq!(r.bond_share["Close"], 0.0);
+    }
+
+    #[test]
+    fn memory_fold_seeds_every_def_and_splits_fired_from_formed() {
+        let r = memory_report();
+        assert_eq!(r.fired, counts(&[("hard_won", 3), ("mauled_by", 0)]));
+        assert_eq!(r.formed, counts(&[("hard_won", 1), ("mauled_by", 0)]));
+    }
+
+    #[test]
+    fn memory_fold_with_nothing_sampled_is_zeros_not_nan() {
+        let r = MemoryTally::new(["hard_won"]).finish(&[]);
+        assert_eq!(r.morale_spread, 0.0);
+        assert!(r.morale_band_share.values().all(|&v| v == 0.0));
+        assert!(r.bond_share.values().all(|&v| v == 0.0));
+        assert_eq!(r.relationships, 0);
+    }
+
+    #[test]
+    fn memory_measures_read_known_names() {
+        let r = BenchReport {
+            ticks: 500,
+            staff: folded(),
+            memories: memory_report(),
+            ..sample()
+        };
+        let m = |n: &str| r.measure(n).unwrap();
+        assert_eq!(m("memories.morale_band_share.even"), 0.5);
+        assert!((m("memories.morale_spread") - f64::from(FULL * FULL / 2.0).sqrt()).abs() < 1e-4);
+        assert_eq!(m("memories.bond_share.Friend"), 0.5);
+        // 4 relationships over the 2 staff there at the last tick.
+        assert_eq!(m("memories.relationships_per_staff"), 2.0);
+        assert_eq!(m("memories.fired_per_1000.hard_won"), 6.0);
+        assert_eq!(m("memories.formed_per_1000.hard_won"), 2.0);
+        assert_eq!(m("memories.fired_per_1000.mauled_by"), 0.0);
+    }
+
+    #[test]
+    fn memory_measures_reject_unknown_names() {
+        let r = BenchReport {
+            memories: memory_report(),
+            ..sample()
+        };
+        for name in [
+            "memories.morale_band_share.glad",
+            "memories.bond_share.Besotted",
+            "memories.fired_per_1000.no_such_memory",
+            "memories.formed_per_1000.no_such_memory",
+            "memories.nope",
+        ] {
+            assert!(r.measure(name).is_err(), "{name}");
+        }
+    }
+
+    #[test]
+    fn relationships_per_staff_divides_by_the_staff_sampled_not_the_morale_rows() {
+        // A run stopped at tick 0 has no morale rows but did sample bonds.
+        let r = BenchReport {
+            staff: StaffTally::default().finish(0, &[]),
+            memories: memory_report(),
+            ..sample()
+        };
+        assert_eq!(r.measure("memories.relationships_per_staff"), Ok(2.0));
+    }
+
+    #[test]
+    fn memory_rates_over_no_staff_or_no_ticks_are_zero() {
+        let r = BenchReport {
+            ticks: 0,
+            memories: MemoryReport {
+                staff: 0,
+                ..memory_report()
+            },
+            ..sample()
+        };
+        assert_eq!(r.measure("memories.fired_per_1000.hard_won"), Ok(0.0));
+        assert_eq!(r.measure("memories.relationships_per_staff"), Ok(0.0));
     }
 }

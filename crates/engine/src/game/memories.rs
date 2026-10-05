@@ -104,7 +104,7 @@ impl crate::Game {
         let Some(mut store) = self.world.get_mut::<Memories>(who) else {
             return Remembered::NoStore;
         };
-        match store
+        let formed = match store
             .0
             .iter_mut()
             .find(|m| m.def == id && m.subject == subject)
@@ -113,16 +113,19 @@ impl crate::Game {
                 held.strikes = (held.strikes + 1).min(cap);
                 held.reinforced = now;
                 held.subject_name = subject_name;
+                false
             }
-            None => store.0.push(Memory {
-                def: id,
-                subject,
-                subject_name,
-                reinforced: now,
-                strikes: 1,
-            }),
-        }
-
+            None => {
+                store.0.push(Memory {
+                    def: id.clone(),
+                    subject: subject.clone(),
+                    subject_name,
+                    reinforced: now,
+                    strikes: 1,
+                });
+                true
+            }
+        };
         // Eviction is lazy and this is the only place it happens — nothing
         // sweeps. It needs the catalogue to score an entry, which the
         // component borrow above cannot coexist with.
@@ -130,6 +133,17 @@ impl crate::Game {
             if let Some(mut store) = world.get_mut::<Memories>(who) {
                 evict(&mut store.0, &db, now);
             }
+        });
+        // After eviction, so a memory forgotten on the call that wrote it is
+        // not counted as formed.
+        let held = self
+            .world
+            .get::<Memories>(who)
+            .is_some_and(|s| s.0.iter().any(|m| m.def == id && m.subject == subject));
+        self.record(|_| crate::telemetry::Record::Remember {
+            tick: now,
+            def: id.to_string(),
+            new: formed && held,
         });
         Remembered::Written
     }

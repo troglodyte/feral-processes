@@ -4,7 +4,7 @@
 use super::knob::Knob;
 use feral_processes_engine::bench::MEASURES;
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Component, Path};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Target {
@@ -55,8 +55,11 @@ impl Objective {
     }
 
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let objective: Objective =
+        let mut objective: Objective =
             ron::from_str(text).map_err(|e| format!("malformed objective: {e}"))?;
+        for knob in &mut objective.knobs {
+            knob.file = normalise_file(&knob.file)?;
+        }
         objective.validate()?;
         Ok(objective)
     }
@@ -103,6 +106,14 @@ impl Objective {
                     knob.file, knob.field, knob.min, knob.max
                 ));
             }
+            // A zero half-life or strike cap is a def the game never meant
+            // to load, and `snap` would happily propose it.
+            if matches!(knob.field.as_str(), "half_life" | "strike_cap") && knob.min < 1.0 {
+                return Err(format!(
+                    "knob {} `{}`: min {} must be at least 1",
+                    knob.file, knob.field, knob.min
+                ));
+            }
             if self.knobs[..i]
                 .iter()
                 .any(|k| k.file == knob.file && k.field == knob.field)
@@ -115,6 +126,23 @@ impl Objective {
         }
         Ok(())
     }
+}
+
+/// A knob's file as a bare path under assets, so the same file spelled two
+/// ways is one key everywhere a path is compared or joined.
+fn normalise_file(file: &str) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for c in Path::new(file).components() {
+        match c {
+            Component::Normal(name) => parts.push(name.to_string_lossy()),
+            Component::CurDir => {}
+            _ => return Err(format!("knob file `{file}` must be a path under assets")),
+        }
+    }
+    if parts.is_empty() {
+        return Err(format!("knob file `{file}` must be a path under assets"));
+    }
+    Ok(parts.join("/"))
 }
 
 /// A usable range: finite, with room between the ends (NaN is neither).
@@ -220,6 +248,21 @@ mod tests {
     }
 
     #[test]
+    fn a_memory_half_life_or_strike_cap_below_one_is_rejected() {
+        for field in ["half_life", "strike_cap"] {
+            let text = ron_with("").replace(
+                r#"file: "structures/assembly_bay.ron", field: "capacity", min: 1.0"#,
+                &format!(r#"file: "memories/hard_won.ron", field: "{field}", min: 0.0"#),
+            );
+            let e = err_of(&text);
+            assert!(
+                e.contains(field) && e.contains("at least 1"),
+                "{field}: {e}"
+            );
+        }
+    }
+
+    #[test]
     fn seed_sets_must_be_non_empty_and_disjoint() {
         let e = err_of(&ron_with("").replace("holdout_seeds: [3]", "holdout_seeds: []"));
         assert!(e.contains("non-empty"), "{e}");
@@ -241,5 +284,32 @@ mod tests {
             r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
         let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {knob}")));
         assert!(e.contains("twice"), "{e}");
+    }
+
+    #[test]
+    fn a_dot_slash_duplicate_is_caught_and_the_path_is_stored_bare() {
+        let knob =
+            r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
+        let dotted = knob.replace("structures/", "./structures/");
+        let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {dotted}")));
+        assert!(e.contains("twice"), "{e}");
+        let obj = Objective::from_ron(&ron_with("").replace(knob, &dotted)).unwrap();
+        assert_eq!(obj.knobs[0].file, "structures/assembly_bay.ron");
+    }
+
+    #[test]
+    fn a_knob_path_that_leaves_assets_is_refused() {
+        for file in [
+            "../memories/x.ron",
+            "/memories/x.ron",
+            "memories/../../x.ron",
+        ] {
+            let text = ron_with("").replace("structures/assembly_bay.ron", file);
+            let e = err_of(&text);
+            assert!(
+                e.contains(file) && e.contains("under assets"),
+                "{file}: {e}"
+            );
+        }
     }
 }

@@ -200,20 +200,31 @@ per-line output per 1000 ticks, labour, items made) goes to `--out` or
 stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
 (a miss costs the squared distance outside, normalised by the range width),
 knobs are fields of `assets/structures/*.ron`, `assets/items/*.ron`,
-`assets/needs/*.ron` or `assets/thoughts/*.ron` with a min and max.
+`assets/needs/*.ron`, `assets/thoughts/*.ron`, `assets/memories/*.ron` or
+`assets/interactions/*.ron` with a min and max.
 Structure and item knobs: `work.ticks_per_unit`, `assembles.ticks_per_unit`,
 `capacity`, `power_draw`, `craftable.cost.<item>`, and
 `services.<need>.per_tick` / `services.<need>.radius` (the one service entry
 serving that need; none or several is an error). Need knobs: `drain_per_tick`,
 `working_multiplier`, `critical`, `content`, `morale_weight`. Thought knob:
-`intensity` (signed). Whole-number fields (`capacity`, `power_draw`, `work.ticks_per_unit`,
-`assembles.ticks_per_unit`, `craftable.cost.<item>` and
-`services.<need>.radius`) are rounded; every other field (`per_tick`, the
-need knobs, `intensity`) keeps six decimals. A cross-entropy search runs over
-`seeds`. The proposal is whichever is lowest on the `seeds` of the search's final
-mean, the best candidate it evaluated, and the shipped values (a candidate has
-to beat shipped strictly; if none does, the proposal is the shipped values and
-the report says so). It is then re-scored on `holdout_seeds` it never saw.
+`intensity` (signed). Memory knobs (`memories/*.ron`): `valence` (signed),
+`half_life` and `strike_cap` (whole), `stack_decay`, `mood`. Interaction knobs
+(`interactions/*.ron`): `weight`, `sulking` (scalars only; `by_band` and
+`by_disposition` are maps and are not knobs). These are dispatched by the
+file's directory, so `valence` under `thoughts/` or `intensity` under
+`memories/` is refused. `stack_decay` and `mood` are optional in a memory file
+and no shipped file sets them: a knob on a field the file does not spell out
+is refused when the objective loads, naming the path (add the line to the file
+first). Whole-number fields (`capacity`, `power_draw`, `work.ticks_per_unit`,
+`assembles.ticks_per_unit`, `craftable.cost.<item>`, `services.<need>.radius`,
+`half_life` and `strike_cap`) are rounded; every other field (`per_tick`, the
+need knobs, `intensity`, the other memory and interaction knobs) keeps six
+decimals. A `half_life` or `strike_cap` knob needs `min` of at least 1.
+A cross-entropy search runs over `seeds`. The proposal is whichever is lowest
+on the `seeds` of the search's final mean, the best candidate it evaluated,
+and the shipped values (a candidate has to beat shipped strictly; if none
+does, the proposal is the shipped values and the report says so). It is then
+re-scored on `holdout_seeds` it never saw.
 
 `--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
 queues a batch work order before the first tick. Only posted workers haul,

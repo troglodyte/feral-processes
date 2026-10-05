@@ -14,5 +14,6 @@
 pub mod cem;
 pub mod dev_template;
 pub mod paths;
+pub mod scratch_assets;
 pub mod soak;
 pub mod tuner;

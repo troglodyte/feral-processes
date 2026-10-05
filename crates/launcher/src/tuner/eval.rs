@@ -16,36 +16,24 @@
 
 use super::roster::Candidate;
 use super::score::Target;
+use crate::scratch_assets::ScratchAssets;
 use feral_processes_engine::arena::{self, Scenario, Summary};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// A scratch asset install a candidate roster is written into.
 pub struct Workspace {
-    dir: PathBuf,
+    scratch: ScratchAssets,
     /// species id -> (file name, original text). Patches always apply to
     /// the original, never to the previous candidate's output.
     pristine: BTreeMap<String, (String, String)>,
 }
 
-impl Drop for Workspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
 impl Workspace {
     /// Copies `assets_dir` into a fresh scratch install.
     pub fn new(assets_dir: &Path) -> Result<Workspace, String> {
-        let dir = std::env::temp_dir().join(format!(
-            "feral_processes_tuner_{}_{}",
-            std::process::id(),
-            // Distinguishes concurrent workspaces in one process without a
-            // clock, which a reproducible tool has no business reading.
-            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        copy_tree(assets_dir, &dir)?;
+        let scratch = ScratchAssets::new(assets_dir, "tuner")?;
+        let dir = scratch.dir();
 
         let mut pristine = BTreeMap::new();
         let species_dir = dir.join("species");
@@ -70,11 +58,11 @@ impl Workspace {
         if pristine.is_empty() {
             return Err(format!("no species files under {}", species_dir.display()));
         }
-        Ok(Workspace { dir, pristine })
+        Ok(Workspace { scratch, pristine })
     }
 
     pub fn dir(&self) -> &Path {
-        &self.dir
+        self.scratch.dir()
     }
 
     /// The shipped value of every movable field, per species — the point
@@ -105,7 +93,7 @@ impl Workspace {
                 return Err(format!("candidate names unknown species {id:?}"));
             };
             let patched = super::roster::patch_species(original, changes);
-            std::fs::write(self.dir.join("species").join(name), patched)
+            std::fs::write(self.dir().join("species").join(name), patched)
                 .map_err(|e| format!("cannot write {name}: {e}"))?;
         }
         Ok(())
@@ -114,7 +102,7 @@ impl Workspace {
     /// The install's attribute catalogue, which the balance sim derives the
     /// player's growth from. A tuner candidate never edits it.
     pub fn attribute_db(&self) -> Result<feral_processes_engine::attributes::AttributeDb, String> {
-        feral_processes_engine::attributes::AttributeDb::load_dir(&self.dir.join("attributes"))
+        feral_processes_engine::attributes::AttributeDb::load_dir(&self.dir().join("attributes"))
             .map(|(db, _)| db)
             .map_err(|e| format!("cannot load attributes: {e}"))
     }
@@ -126,7 +114,7 @@ impl Workspace {
     pub fn species_defs(&self) -> Result<Vec<feral_processes_engine::species::SpeciesDef>, String> {
         let mut defs = Vec::new();
         for (name, _) in self.pristine.values() {
-            let path = self.dir.join("species").join(name);
+            let path = self.dir().join("species").join(name);
             let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let def = ron::from_str(&text).map_err(|e| format!("{name}: {e}"))?;
             defs.push(def);
@@ -142,10 +130,10 @@ impl Workspace {
     /// paid on every candidate must not.
     pub fn species_db(&self) -> Result<feral_processes_engine::species::SpeciesDb, String> {
         let (abilities, _) =
-            feral_processes_engine::abilities::AbilityDb::load_dir(&self.dir.join("abilities"))
+            feral_processes_engine::abilities::AbilityDb::load_dir(&self.dir().join("abilities"))
                 .map_err(|e| format!("cannot load abilities: {e}"))?;
         let (db, warnings) = feral_processes_engine::species::SpeciesDb::load_dir(
-            &self.dir.join("species"),
+            &self.dir().join("species"),
             &abilities,
         )
         .map_err(|e| format!("cannot load species: {e}"))?;
@@ -157,8 +145,6 @@ impl Workspace {
         Ok(db)
     }
 }
-
-static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 /// Fights every target against whatever is currently in `workspace`.
 ///
@@ -206,27 +192,11 @@ fn species_id(text: &str) -> Option<String> {
     })
 }
 
-fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(to).map_err(|e| format!("cannot create {}: {e}", to.display()))?;
-    for entry in
-        std::fs::read_dir(from).map_err(|e| format!("cannot read {}: {e}", from.display()))?
-    {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let src = entry.path();
-        let dst = to.join(entry.file_name());
-        if src.is_dir() {
-            copy_tree(&src, &dst)?;
-        } else {
-            std::fs::copy(&src, &dst).map_err(|e| format!("cannot copy {}: {e}", src.display()))?;
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::tuner::roster::Field;
+    use std::path::PathBuf;
 
     fn assets() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")

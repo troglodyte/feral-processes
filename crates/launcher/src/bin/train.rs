@@ -17,6 +17,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use feral_processes::cem::{CemConfig, CemProgress, optimise};
+use feral_processes::scratch_assets::ScratchAssets;
 use feral_processes_engine::arena::{self, Scenario};
 use feral_processes_engine::policy::{self, Feature, PolicyWeights};
 use rand::SeedableRng;
@@ -132,7 +133,7 @@ fn run() -> Result<(), String> {
         .unwrap_or(1)
         .min(args.pop.max(1));
     let arena_pool = AssetPool::build(&args.assets, workers)?;
-    println!("{workers} worker asset trees under {}", arena_pool.root());
+    println!("{workers} worker asset trees");
 
     // Every candidate in a generation is scored on the same seeds, so a
     // comparison between them is signal rather than luck; the offset moves
@@ -379,39 +380,29 @@ fn by_magnitude(w: &PolicyWeights) -> Vec<(String, f32)> {
 /// there are `iters * pop` candidates, so building one each would cost more
 /// than the fights do.
 struct AssetPool {
-    root: PathBuf,
-    free: Mutex<Vec<PathBuf>>,
+    free: Mutex<Vec<ScratchAssets>>,
 }
 
 struct Lease<'a> {
     pool: &'a AssetPool,
-    dir: Option<PathBuf>,
+    tree: Option<ScratchAssets>,
 }
 
 impl AssetPool {
     fn build(assets: &Path, workers: usize) -> Result<Self, String> {
-        let root = std::env::temp_dir().join(format!("feral_train_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let mut free = Vec::new();
-        for i in 0..workers.max(1) {
-            let dir = root.join(i.to_string());
-            copy_tree(assets, &dir).map_err(|e| format!("copying {}: {e}", assets.display()))?;
-            free.push(dir);
-        }
+        let free = (0..workers.max(1))
+            .map(|_| ScratchAssets::new(assets, "train"))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("copying {}: {e}", assets.display()))?;
         Ok(AssetPool {
-            root,
             free: Mutex::new(free),
         })
-    }
-
-    fn root(&self) -> String {
-        self.root.display().to_string()
     }
 
     /// Blocks only in the sense of spinning on an empty pool, which cannot
     /// happen: there are as many trees as there are worker threads.
     fn take(&self) -> Lease<'_> {
-        let dir = self
+        let tree = self
             .free
             .lock()
             .expect("asset pool")
@@ -419,27 +410,17 @@ impl AssetPool {
             .expect("one tree per worker, so one is always free");
         Lease {
             pool: self,
-            dir: Some(dir),
+            tree: Some(tree),
         }
-    }
-}
-
-/// Cleanup is a guard, not a line at the end of `run`. Each tree is a full
-/// copy of `assets/` — around two hundred files — and a run that ends on an
-/// error or a Ctrl-C would otherwise leave every one of them behind. The
-/// engine's test fixtures learned this the expensive way: 5,437 stale
-/// installs exhausted the filesystem's *inode* table on a tmpfs that was
-/// 15% full by bytes, which fails builds machine-wide with an error naming
-/// none of it.
-impl Drop for AssetPool {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 
 impl Lease<'_> {
     fn assets(&self) -> &Path {
-        self.dir.as_ref().expect("held for the lease's lifetime")
+        self.tree
+            .as_ref()
+            .expect("held for the lease's lifetime")
+            .dir()
     }
 
     fn policy_path(&self) -> PathBuf {
@@ -449,24 +430,10 @@ impl Lease<'_> {
 
 impl Drop for Lease<'_> {
     fn drop(&mut self) {
-        if let Some(dir) = self.dir.take() {
-            self.pool.free.lock().expect("asset pool").push(dir);
+        if let Some(tree) = self.tree.take() {
+            self.pool.free.lock().expect("asset pool").push(tree);
         }
     }
-}
-
-fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
-        let entry = entry?;
-        let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_tree(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
 }
 
 /// Every `.ron` in `dir`, in filename order so a run is reproducible and a

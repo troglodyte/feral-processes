@@ -15,26 +15,47 @@ use std::path::Path;
 pub struct Knob {
     /// Path under the assets directory, e.g. `structures/assembly_bay.ron`.
     pub file: String,
-    /// Dotted field path: `capacity`, `work.ticks_per_unit`,
-    /// `craftable.cost.<item id>`, `services.<need id>.per_tick`; a need
-    /// file's `drain_per_tick`, `working_multiplier`, `critical`, `content`
-    /// or `morale_weight`; a thought file's `intensity`.
+    /// Dotted field path, one of `FIELDS`.
     pub field: String,
     pub min: f64,
     pub max: f64,
 }
 
+/// Every field a knob may name, as a path pattern (`<x>` stands for one
+/// segment, an id) and whether the game reads it as a whole number. The one
+/// place a field is listed: integer-ness and the error text derive from it.
+const FIELDS: &[(&str, bool)] = &[
+    ("capacity", true),
+    ("power_draw", true),
+    ("work.ticks_per_unit", true),
+    ("assembles.ticks_per_unit", true),
+    ("craftable.cost.<item>", true),
+    ("services.<need>.per_tick", false),
+    ("services.<need>.radius", true),
+    ("drain_per_tick", false),
+    ("working_multiplier", false),
+    ("critical", false),
+    ("content", false),
+    ("morale_weight", false),
+    ("intensity", false),
+];
+
+fn matches_pattern(pattern: &str, field: &str) -> bool {
+    let (mut p, mut f) = (pattern.split('.'), field.split('.'));
+    loop {
+        match (p.next(), f.next()) {
+            (None, None) => return true,
+            (Some(a), Some(b)) if a.starts_with('<') || a == b => {}
+            _ => return false,
+        }
+    }
+}
+
 /// Fields the game reads as whole numbers; every other knob is a float.
 fn is_integer_field(field: &str) -> bool {
-    matches!(
-        field.split('.').collect::<Vec<_>>().as_slice(),
-        ["capacity"]
-            | ["power_draw"]
-            | ["work", "ticks_per_unit"]
-            | ["assembles", "ticks_per_unit"]
-            | ["craftable", "cost", _]
-            | ["services", _, "radius"]
-    )
+    FIELDS
+        .iter()
+        .any(|&(pattern, integer)| integer && matches_pattern(pattern, field))
 }
 
 impl Knob {
@@ -343,10 +364,13 @@ fn number_at(text: &str, from: usize) -> Option<(usize, usize)> {
     (len > 0).then_some((start, start + len))
 }
 
-const SUPPORTED: &str = "capacity, power_draw, work.ticks_per_unit, \
-assembles.ticks_per_unit, craftable.cost.<item>, services.<need>.per_tick, \
-services.<need>.radius, drain_per_tick, working_multiplier, critical, content, \
-morale_weight, intensity";
+fn supported() -> String {
+    FIELDS
+        .iter()
+        .map(|&(pattern, _)| pattern)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 /// The value currently at `knob` in the scratch tree `assets`, read through
 /// the engine's own types so a patch that landed on the wrong number shows.
@@ -358,8 +382,9 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let unsupported = || {
         format!(
-            "`{}` is not a supported knob field; supported: {SUPPORTED}",
-            knob.field
+            "`{}` is not a supported knob field; supported: {}",
+            knob.field,
+            supported()
         )
     };
     let parse_err = |e: ron::error::SpannedError| format!("{}: {e}", path.display());
@@ -459,6 +484,62 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         std::fs::write(&path, patch(&text, &k.field, 9.0, true).unwrap()).unwrap();
         assert_eq!(read_back(scratch.dir(), &k).unwrap(), 9.0);
+    }
+
+    /// One real file and concrete path per `FIELDS` entry, so a field added
+    /// to the table without a `read_back` arm (or the reverse) fails here.
+    #[test]
+    fn every_listed_field_reads_back_and_matches_its_integer_flag() {
+        let examples = [
+            ("capacity", "structures/assembly_bay.ron", "capacity"),
+            ("power_draw", "structures/assembly_bay.ron", "power_draw"),
+            (
+                "work.ticks_per_unit",
+                "structures/power_conduit.ron",
+                "work.ticks_per_unit",
+            ),
+            (
+                "assembles.ticks_per_unit",
+                "structures/assembly_bay.ron",
+                "assembles.ticks_per_unit",
+            ),
+            (
+                "craftable.cost.<item>",
+                "items/charge_coil.ron",
+                "craftable.cost.power_cell",
+            ),
+            (
+                "services.<need>.per_tick",
+                "structures/defrag_bay.ron",
+                "services.coherence.per_tick",
+            ),
+            (
+                "services.<need>.radius",
+                "structures/defrag_bay.ron",
+                "services.coherence.radius",
+            ),
+            ("drain_per_tick", "needs/coherence.ron", "drain_per_tick"),
+            (
+                "working_multiplier",
+                "needs/coherence.ron",
+                "working_multiplier",
+            ),
+            ("critical", "needs/coherence.ron", "critical"),
+            ("content", "needs/coherence.ron", "content"),
+            ("morale_weight", "needs/coherence.ron", "morale_weight"),
+            ("intensity", "thoughts/beside_friend.ron", "intensity"),
+        ];
+        for &(pattern, integer) in FIELDS {
+            let &(_, file, field) = examples
+                .iter()
+                .find(|(p, ..)| *p == pattern)
+                .unwrap_or_else(|| panic!("no example for `{pattern}`"));
+            assert!(matches_pattern(pattern, field), "{field}");
+            let k = knob(file, field);
+            assert_eq!(k.is_integer(), integer, "{field}");
+            read_back(&assets(), &k).unwrap_or_else(|e| panic!("{pattern}: {e}"));
+        }
+        assert_eq!(examples.len(), FIELDS.len());
     }
 
     #[test]

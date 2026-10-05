@@ -268,6 +268,80 @@ pub fn search(
     })
 }
 
+/// Writes the proposal under `out_dir`: `proposal.ron`, `report.md`, and the
+/// patched files at their asset-relative paths so `diff -r` against
+/// `assets/` shows the change. Never touches `assets/` itself.
+pub fn write_proposal(out_dir: &Path, obj: &Objective, proposal: &Proposal) -> Result<(), String> {
+    let write = |path: std::path::PathBuf, text: &str| -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+        }
+        std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+    };
+    for (file, text) in &proposal.files {
+        write(out_dir.join(file), text)?;
+    }
+    let ron = ron::ser::to_string_pretty(&proposal.changes, ron::ser::PrettyConfig::default())
+        .map_err(|e| e.to_string())?;
+    write(out_dir.join("proposal.ron"), &ron)?;
+    write(out_dir.join("report.md"), &report(obj, proposal))
+}
+
+fn report(obj: &Objective, proposal: &Proposal) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::from("# Economy proposal\n\n");
+    let _ = writeln!(
+        out,
+        "Template `{}`, {} ticks per run, {} iterations x {} candidates.\n",
+        obj.template, obj.ticks, obj.iterations, obj.population
+    );
+    let _ = writeln!(
+        out,
+        "| seeds | error before | error after |\n|---|---|---|\n\
+         | search {:?} | {:.4} | {:.4} |\n| hold-out {:?} | {:.4} | {:.4} |\n",
+        obj.seeds,
+        proposal.search_before.error,
+        proposal.search_after.error,
+        obj.holdout_seeds,
+        proposal.holdout_before.error,
+        proposal.holdout_after.error,
+    );
+    let _ = writeln!(
+        out,
+        "Hold-out: **{}**\n",
+        if proposal.holds_up() {
+            "holds up"
+        } else {
+            "DOES NOT HOLD UP; do not apply"
+        }
+    );
+    let _ = writeln!(out, "## Targets, mean over the hold-out seeds\n");
+    let _ = writeln!(
+        out,
+        "| measure | want | shipped | proposed |\n|---|---|---|---|"
+    );
+    for (i, t) in obj.targets.iter().enumerate() {
+        let _ = writeln!(
+            out,
+            "| {} | {}..{} | {:.3} | {:.3} |",
+            t.measure,
+            t.min,
+            t.max,
+            proposal.holdout_before.values[i],
+            proposal.holdout_after.values[i]
+        );
+    }
+    let _ = writeln!(
+        out,
+        "\n## Knobs\n\n| file | field | shipped | proposed |\n|---|---|---|---|"
+    );
+    for c in &proposal.changes {
+        let _ = writeln!(out, "| {} | {} | {} | {} |", c.file, c.field, c.old, c.new);
+    }
+    out
+}
+
 fn apply_to_text(
     pristine: &BTreeMap<String, String>,
     knobs: &[Knob],
@@ -331,6 +405,24 @@ mod tests {
             std::fs::read_to_string(assets_dir().join(&obj.knobs[0].file)).unwrap(),
             before
         );
+
+        let out = std::env::temp_dir().join(format!("feral_bench_out_{}", std::process::id()));
+        write_proposal(&out, &obj, &proposal).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(out.join(&obj.knobs[0].file)).unwrap(),
+            *patched
+        );
+        assert!(
+            std::fs::read_to_string(out.join("proposal.ron"))
+                .unwrap()
+                .contains("old")
+        );
+        assert!(
+            std::fs::read_to_string(out.join("report.md"))
+                .unwrap()
+                .contains("hold-out")
+        );
+        let _ = std::fs::remove_dir_all(&out);
     }
 
     #[test]

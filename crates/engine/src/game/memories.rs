@@ -104,7 +104,7 @@ impl crate::Game {
         let Some(mut store) = self.world.get_mut::<Memories>(who) else {
             return Remembered::NoStore;
         };
-        match store
+        let formed = match store
             .0
             .iter_mut()
             .find(|m| m.def == id && m.subject == subject)
@@ -113,15 +113,24 @@ impl crate::Game {
                 held.strikes = (held.strikes + 1).min(cap);
                 held.reinforced = now;
                 held.subject_name = subject_name;
+                false
             }
-            None => store.0.push(Memory {
-                def: id,
-                subject,
-                subject_name,
-                reinforced: now,
-                strikes: 1,
-            }),
-        }
+            None => {
+                store.0.push(Memory {
+                    def: id.clone(),
+                    subject,
+                    subject_name,
+                    reinforced: now,
+                    strikes: 1,
+                });
+                true
+            }
+        };
+        self.record(|_| crate::telemetry::Record::Remember {
+            tick: now,
+            def: id.to_string(),
+            new: formed,
+        });
 
         // Eviction is lazy and this is the only place it happens — nothing
         // sweeps. It needs the catalogue to score an entry, which the

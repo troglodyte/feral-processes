@@ -114,6 +114,15 @@ pub enum Record {
         need: String,
         unreachable: bool,
     },
+    /// A memory was written: `new` when it formed and not when it
+    /// reinforced one already held. Only the Written path of
+    /// `Game::remember_named` says this, so a refused write (unknown def,
+    /// wrong subject, no store) is not a formation.
+    ///
+    /// The bench reads this rather than `memory_report`, which names what a
+    /// holder keeps *now*: a reinforcement looks like a first strike there
+    /// and an evicted memory is gone.
+    Remember { tick: u64, def: String, new: bool },
     /// One leg of a haul that actually moved goods.
     ///
     /// **The corrected B3.** Adjacency is a throughput multiplier and not a
@@ -235,6 +244,7 @@ impl Record {
             | Record::MachineStall { .. }
             | Record::Tantrum { .. }
             | Record::Fray { .. }
+            | Record::Remember { .. }
             | Record::HandCraft { .. }
             | Record::Acquire { .. }
             | Record::Consume { .. }

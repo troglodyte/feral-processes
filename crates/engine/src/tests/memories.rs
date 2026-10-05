@@ -3113,3 +3113,57 @@ fn the_manifests_mood_is_the_report_and_the_whole_sum() {
     );
     assert_eq!(mood.band, crate::views::morale_band(mood.sum));
 }
+
+// ---------------------------------------------------------------------------
+// What the bench reads: a formation record
+// ---------------------------------------------------------------------------
+
+fn remember_records(game: &mut Game) -> Vec<crate::telemetry::Record> {
+    game.take_telemetry()
+        .into_iter()
+        .filter(|r| matches!(r, crate::telemetry::Record::Remember { .. }))
+        .collect()
+}
+
+#[test]
+fn a_remember_records_a_formation_then_a_reinforcement() {
+    use crate::telemetry::Record;
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let tick = game.current_tick();
+
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let remember = |new| Record::Remember {
+        tick,
+        def: "hard_won".to_string(),
+        new,
+    };
+    assert_eq!(
+        remember_records(&mut game),
+        vec![remember(true), remember(false)]
+    );
+}
+
+#[test]
+fn a_remember_with_telemetry_off_records_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    game.enable_telemetry();
+    assert!(remember_records(&mut game).is_empty());
+}
+
+#[test]
+fn a_refused_remember_records_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let unknown = game.remember(program, "no_such_memory", MemorySubject::Nothing);
+    let wrong = game.remember(program, "hard_won", MemorySubject::Program(ProgramId(9999)));
+    assert_eq!(unknown, Remembered::UnknownDef);
+    assert_eq!(wrong, Remembered::WrongSubject);
+    assert!(remember_records(&mut game).is_empty());
+}

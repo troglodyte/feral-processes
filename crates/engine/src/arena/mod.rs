@@ -1194,6 +1194,7 @@ mod tests {
                 | Record::MachineStall { .. }
                 | Record::Tantrum { .. }
                 | Record::Fray { .. }
+                | Record::Remember { .. }
                 | Record::HandCraft { .. }
                 | Record::Acquire { .. }
                 | Record::Consume { .. }

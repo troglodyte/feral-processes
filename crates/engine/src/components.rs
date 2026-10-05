@@ -2138,6 +2138,13 @@ pub enum Grievance {
 }
 
 impl Grievance {
+    /// Every rung, lowest first.
+    pub const ALL: [Grievance; 3] = [
+        Grievance::Sulking,
+        Grievance::DownedTools,
+        Grievance::LashingOut,
+    ];
+
     /// The wire name a bench or analysis reads the rung by.
     pub fn as_str(self) -> &'static str {
         match self {

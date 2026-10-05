@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::components::Grievance;
 use crate::telemetry::Record;
 
 /// Every prefix `BenchReport::measure` accepts, for error messages and for
@@ -29,7 +30,11 @@ pub const MEASURES: &[&str] = &[
 
 /// The grievance rungs a staff member can stand on, by `Grievance::as_str`;
 /// `"none"` is the absence of one.
-const RUNGS: &[&str] = &["none", "sulking", "downed_tools", "lashing_out"];
+fn rungs() -> Vec<&'static str> {
+    std::iter::once("none")
+        .chain(Grievance::ALL.map(Grievance::as_str))
+        .collect()
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct BenchReport {
@@ -223,12 +228,12 @@ impl StaffTally {
                     (id, bench)
                 })
                 .collect(),
-            rung_share: RUNGS
-                .iter()
+            rung_share: rungs()
+                .into_iter()
                 .map(|r| {
                     (
                         r.to_string(),
-                        share(self.rungs.get(*r).copied().unwrap_or(0), n),
+                        share(self.rungs.get(r).copied().unwrap_or(0), n),
                     )
                 })
                 .collect(),
@@ -310,7 +315,7 @@ impl BenchReport {
                     .rung_share
                     .get(rung)
                     .map(|&v| f64::from(v))
-                    .ok_or_else(|| format!("no rung `{rung}`; known: {}", RUNGS.join(", "))),
+                    .ok_or_else(|| format!("no rung `{rung}`; known: {}", rungs().join(", "))),
             );
         }
         None
@@ -530,7 +535,7 @@ mod tests {
         assert_eq!(r.first_fray, None);
         assert!(r.end_morale.is_empty());
         assert!(r.rung_share.values().all(|&v| v == 0.0));
-        assert_eq!(r.rung_share.len(), RUNGS.len());
+        assert_eq!(r.rung_share.len(), rungs().len());
     }
 
     fn staffed() -> BenchReport {
@@ -556,6 +561,15 @@ mod tests {
         assert_eq!(m("staff.rung_share.lashing_out"), 0.0);
         assert_eq!(m("staff.tantrums_per_1000"), 2.0);
         assert_eq!(m("staff.frays_per_1000"), 4.0);
+    }
+
+    #[test]
+    fn every_grievance_rung_is_a_known_measure() {
+        let r = staffed();
+        for g in Grievance::ALL {
+            let name = format!("staff.rung_share.{}", g.as_str());
+            assert!(r.measure(&name).is_ok(), "{name}");
+        }
     }
 
     #[test]

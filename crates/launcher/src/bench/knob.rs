@@ -403,14 +403,8 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
     let missing = || format!("{}: no `{}`", knob.file, knob.field);
     // These names could repeat across kinds, so they dispatch on the
     // directory; a field named under the wrong one falls to `unsupported`.
-    // `Path::components` so `./memories/x.ron` dispatches like `memories/x.ron`.
-    let kind = Path::new(&knob.file)
-        .components()
-        .find_map(|c| match c {
-            std::path::Component::Normal(name) => name.to_str(),
-            _ => None,
-        })
-        .unwrap_or_default();
+    // `Objective::from_ron` stores `file` bare, so the first segment is it.
+    let kind = knob.file.split('/').next().unwrap_or_default();
     match (kind, parts.as_slice()) {
         (
             "memories",
@@ -859,18 +853,6 @@ mod tests {
         assert!(check(scratch.dir(), &k).is_err());
         let k = knob("memories/chatted_with.ron", "valence");
         assert!(check(scratch.dir(), &k).is_ok());
-    }
-
-    #[test]
-    fn a_dot_slash_path_dispatches_like_a_bare_one() {
-        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
-        let bare = read_back(scratch.dir(), &knob("memories/chatted_with.ron", "valence"));
-        let dotted = read_back(
-            scratch.dir(),
-            &knob("./memories/chatted_with.ron", "valence"),
-        );
-        assert_eq!(bare, dotted);
-        assert!(dotted.is_ok());
     }
 
     #[test]

@@ -23,10 +23,15 @@ use crate::resources::GameRng;
 use crate::telemetry::Record;
 use crate::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct RunOptions {
     pub ticks: u64,
     pub seed: u64,
+    /// Batch orders queued before the first tick, as `(item, qty)`. Only
+    /// posted workers haul, and workers are posted only on machines an order
+    /// wants, so a template with no standing demand has no drain; a
+    /// quantity too big to reach keeps the demand alive for the whole run.
+    pub orders: Vec<(String, u32)>,
 }
 
 /// Per-line tick tallies, accumulated as the run goes.
@@ -43,6 +48,10 @@ pub fn run(save: &Path, assets_dir: &Path, opts: RunOptions) -> Result<BenchRepo
     // seeds is several different runs and any one replays alone.
     game.world
         .insert_resource(GameRng(StdRng::seed_from_u64(opts.seed)));
+    for (item, qty) in &opts.orders {
+        game.queue_work_order(WorkOrder::batch(ItemId::from(item.as_str()), *qty))
+            .map_err(|e| format!("order {item} x{qty} refused: {e}"))?;
+    }
     game.enable_telemetry();
 
     let start = game.structure_report();
@@ -211,7 +220,16 @@ mod tests {
     }
 
     fn run_blank(path: &Path, seed: u64) -> BenchReport {
-        run(path, &test_assets_dir(), RunOptions { ticks: 50, seed }).unwrap()
+        run(
+            path,
+            &test_assets_dir(),
+            RunOptions {
+                ticks: 50,
+                seed,
+                orders: vec![],
+            },
+        )
+        .unwrap()
     }
 
     #[test]
@@ -245,11 +263,33 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_order_is_an_error_naming_the_item_and_the_reason() {
+        let path = blank_save("refused_order");
+        let err = run(
+            &path,
+            &test_assets_dir(),
+            RunOptions {
+                ticks: 1,
+                seed: 0,
+                orders: vec![("no_such_item".into(), 5)],
+            },
+        )
+        .unwrap_err();
+        std::fs::remove_file(&path).unwrap();
+        assert!(err.contains("no_such_item"), "{err}");
+        assert!(err.contains("refused"), "{err}");
+    }
+
+    #[test]
     fn a_missing_save_is_an_error_naming_the_path() {
         let err = run(
             Path::new("/nonexistent/feral_bench.bin"),
             &test_assets_dir(),
-            RunOptions { ticks: 1, seed: 0 },
+            RunOptions {
+                ticks: 1,
+                seed: 0,
+                orders: vec![],
+            },
         )
         .unwrap_err();
         assert!(err.contains("feral_bench.bin"), "{err}");

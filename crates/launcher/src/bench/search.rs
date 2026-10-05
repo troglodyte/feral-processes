@@ -105,6 +105,7 @@ fn score(obj: &Objective, save: &Path, assets: &Path, seeds: &[u64]) -> Result<S
             RunOptions {
                 ticks: obj.ticks,
                 seed,
+                orders: obj.orders.clone(),
             },
         )?;
         for (target, total) in obj.targets.iter().zip(&mut values) {

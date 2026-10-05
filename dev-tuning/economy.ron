@@ -2,7 +2,8 @@
 // output, so every machine fills its buffer once and clogs: these targets
 // measure run length and buffer capacity, and a proposal from this file
 // should not be applied. See
-// docs/measurements/2026-10-05-base-bench-chains-baseline.md.
+// docs/measurements/2026-10-05-base-bench-chains-baseline.md (its "with
+// orders" section says why `orders:` does not rescue it).
 //
 // What the base economy should look like on `chains`, and which numbers the
 // search may move to get there. Run: `bench tune dev-tuning/economy.ron`.

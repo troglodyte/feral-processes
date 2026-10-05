@@ -33,7 +33,16 @@ mod tests {
     use feral_processes_engine::bench::{self, RunOptions};
 
     fn run(ticks: u64, seed: u64) -> bench::BenchReport {
-        bench::run(&chains_save(), &assets_dir(), RunOptions { ticks, seed }).unwrap()
+        bench::run(
+            &chains_save(),
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed,
+                orders: vec![],
+            },
+        )
+        .unwrap()
     }
 
     #[test]
@@ -48,6 +57,36 @@ mod tests {
             "{:?}",
             report.economy.lines
         );
+    }
+
+    #[test]
+    fn an_order_posts_workers_who_drain_the_bay_past_its_capacity() {
+        // Seed 1 passes the bay's capacity only around tick 2000: the line
+        // starves of power cells soon after the first batch (see the
+        // with-orders section of the chains measurement doc).
+        let ticks = 2000;
+        let report = bench::run(
+            &chains_save(),
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed: 1,
+                orders: vec![("patch_routine".into(), 9999)],
+            },
+        )
+        .unwrap();
+        let bay = report
+            .economy
+            .machines
+            .iter()
+            .find(|m| m.kind == "assembly_bay")
+            .unwrap();
+        let capacity = 10; // assets/structures/assembly_bay.ron
+        assert!(bay.units > capacity, "no drain: {bay:?}");
+        assert!(report.economy.labour.mean_wanted > 0.0);
+        for m in &report.economy.machines {
+            assert_eq!(m.status_ticks.values().sum::<u64>(), ticks, "{m:?}");
+        }
     }
 
     #[test]

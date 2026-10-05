@@ -18,6 +18,12 @@ measure — a win rate and how much HP the player should have left. The tuner
 hill-climbs species stats, fighting every candidate in the real arena, and
 writes the best roster it found to `dev-tuning/out/`.
 
+`--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
+queues a batch work order before the first tick. Only posted workers haul,
+and workers are posted only on machines an order wants, so a base with no
+orders has no drain. Use a quantity the run cannot reach (9999) so the demand
+lasts. Orders alone did not make `chains` flow; see the doc below.
+
 **The output is a proposal, never an edit.** Nothing writes into `assets/`.
 Read `out/report.md`, `diff -r assets/species dev-tuning/out/species`, and
 apply what you agree with by hand. `out/` is gitignored: a proposal is a
@@ -171,7 +177,7 @@ until then and is not one now — see its own comment for why, and
 Measures the base economy, and tunes machine numbers toward target ranges.
 
 ```sh
-cargo run --release --bin bench -- run --template chains --ticks 5000 [--seed 1] [--out report.ron]
+cargo run --release --bin bench -- run --template chains --ticks 5000 [--seed 1] [--order item:qty]... [--out report.ron]
 cargo run --release --bin bench -- tune dev-tuning/economy.ron [--out dir]
 ```
 
@@ -185,6 +191,12 @@ min and max (`work.ticks_per_unit`, `assembles.ticks_per_unit`, `capacity`,
 `power_draw`, `craftable.cost.<item>`). A cross-entropy search runs over
 `seeds`, then the winner is re-scored on `holdout_seeds` it never saw.
 
+`--order item:qty` (repeatable; `orders: [("item", qty)]` in an objective)
+queues a batch work order before the first tick. Only posted workers haul,
+and workers are posted only on machines an order wants, so a base with no
+orders has no drain. Use a quantity the run cannot reach (9999) so the demand
+lasts. Orders alone did not make `chains` flow; see the doc below.
+
 **The output is a proposal, never an edit.** `out/bench-economy/` holds
 `report.md`, `proposal.ron` and the patched files; `diff -r assets/
 dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
@@ -192,5 +204,7 @@ dev-tuning/out/bench-economy/` and apply by hand. `out/` is gitignored.
 Read `docs/measurements/2026-10-05-base-bench-chains-baseline.md` before
 trusting a proposal. On `chains` nothing drains machine output, so every
 machine fills its buffer once and clogs; `economy.ron` is a mechanics demo
-and its proposal should not be applied. A running-share target can also be
+and its proposal should not be applied; queuing orders drains it for the
+first ~1000 ticks and then the line starves again (its "with orders"
+section). A running-share target can also be
 met just by slowing a machine down.

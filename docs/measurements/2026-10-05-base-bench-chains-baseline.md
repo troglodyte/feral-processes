@@ -102,3 +102,53 @@ A template with a drain (something that consumes each machine's output), or
 a measure taken after the buffers have filled (steady state), so that
 `running_share` and `items` reflect throughput rather than capacity. Until
 then `economy.ron` is a demonstration of the mechanics, not an objective.
+
+## With orders (`--order item:qty`)
+
+`bench run` and `Objective.orders` now queue batch work orders before tick 0.
+Only posted workers haul, and workers are posted only on machines an order
+wants, so a huge quantity (9999) keeps demand alive. The question was
+whether that gives `chains` a sustained flow.
+
+**Baseline**, orders `patch_routine`, `bytecode_block`, `ice_breaker` at
+9999, release. `labour.mean_wanted` is now 2.1-2.5 (was 0.0), so the
+scheduler posts workers. Per-machine, seed 1:
+
+| ticks | bay units | winding units | refinery units | bay starved |
+|---|---|---|---|---|
+| 500 | 4 | 12 | 15 | 0 of 500 |
+| 1000 | 8 | 25 | 20 | 0 |
+| 2000 | 10 | 30 | 29 | 884 |
+| 4000 | 10 | 30 | 39 | 1545 |
+
+**Flow check: it is not sustained.** The line moves for about 1000 ticks
+and then stops at a number set by the starting stock, not by the machines:
+the winding node stops at 30 charge coils, the bay at 10 patch routines
+(3 coils each), and the bay is starved for the rest of the run. Seeds 2 and
+3 land on exactly 10 units by 1000 ticks and stay there. The power conduit
+reads "idle" for the entire run with 0 units (it made 194 with no orders),
+and the compiler never runs even with an `ice_breaker` order. The mining
+node (2,0) and the refinery keep running (units 81 -> 117 -> 156), but their
+output feeds nothing downstream that moves. I did not find why the conduit
+is never wanted or hauled from; the bay passing its capacity once (11 units
+at seed 1, 2000 ticks, `patch_routine` order alone) shows the drain is real
+but short-lived. Extra orders for `power_cell` and `charge_coil` change
+nothing.
+
+Separately, 5000-tick runs with orders stop with "clock stopped" for seeds
+2 and 3 (about tick 4000-5000 of the run; seed 1 survives to ~4500), so the
+5000-tick window the first baseline used is not available with orders. That
+is the bench refusing a run where a battle opens, as designed.
+
+**No tune was run and `economy.ron` was not rewritten.** There is no flowing
+window to take targets from: anything measured at 1000 ticks is the first
+batch, and at 2000 or more it is the starting stock again. Tuning on it would
+reproduce the same artifact as before. `economy.ron` stays a mechanics demo.
+
+## What would make `chains` tunable
+
+Find out why the conduit never runs under orders (its output looks full and
+unhauled, or the scheduler skips it because a depot holds a batch of power
+cells that is never delivered to the winding node), and fix the template or
+the engine. Until a run shows units far above capacity at 4000 ticks, no
+target on this base is a statement about flow.

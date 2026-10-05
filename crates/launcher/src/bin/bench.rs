@@ -2,7 +2,7 @@
 //! ranges.
 //!
 //! ```sh
-//! bench run --template chains --ticks 5000 [--seed 1] [--out report.ron]
+//! bench run --template chains --ticks 5000 [--seed 1] [--order patch_routine:9999] [--out report.ron]
 //! bench tune dev-tuning/economy.ron [--out dir]
 //! ```
 //!
@@ -23,7 +23,7 @@ use feral_processes_engine::bench::{self, RunOptions};
 
 const USAGE: &str = "\
 usage:
-  bench run --template <name> --ticks <n> [--seed <n>] [--out <report.ron>]
+  bench run --template <name> --ticks <n> [--seed <n>] [--order <item:qty>]... [--out <report.ron>]
   bench tune <objective.ron> [--out <dir>]";
 
 #[derive(Debug, PartialEq)]
@@ -32,6 +32,7 @@ enum Command {
         template: String,
         ticks: u64,
         seed: u64,
+        orders: Vec<(String, u32)>,
         out: Option<PathBuf>,
     },
     Tune {
@@ -58,6 +59,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
     match args {
         ["run", flags @ ..] => {
             let (mut template, mut ticks, mut seed, mut out) = (None, None, 0u64, None);
+            let mut orders = Vec::new();
             let mut it = flags.iter();
             while let Some(&flag) = it.next() {
                 let mut value = || {
@@ -73,6 +75,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
                     "--template" => template = Some(value()?.to_string()),
                     "--ticks" => ticks = Some(number(value()?)?),
                     "--seed" => seed = number(value()?)?,
+                    "--order" => orders.push(parse_order(value()?).map_err(|e| bad(&e))?),
                     "--out" => out = Some(PathBuf::from(value()?)),
                     other => return Err(bad(&format!("unknown argument {other}"))),
                 }
@@ -81,6 +84,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
                 template: template.ok_or_else(|| bad("--template is required"))?,
                 ticks: ticks.ok_or_else(|| bad("--ticks is required"))?,
                 seed,
+                orders,
                 out,
             })
         }
@@ -96,24 +100,49 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
     }
 }
 
+/// `item:qty`, the last colon splitting so an item id may never need one.
+fn parse_order(v: &str) -> Result<(String, u32), String> {
+    let (item, qty) = v
+        .rsplit_once(':')
+        .ok_or_else(|| format!("--order needs item:qty, got `{v}`"))?;
+    let qty = qty
+        .parse::<u32>()
+        .map_err(|_| format!("--order quantity must be a whole number, got `{qty}`"))?;
+    if item.is_empty() {
+        return Err(format!("--order needs an item before the colon, got `{v}`"));
+    }
+    Ok((item.to_string(), qty))
+}
+
 fn execute(cmd: Command) -> Result<(), String> {
     match cmd {
         Command::Run {
             template,
             ticks,
             seed,
+            orders,
             out,
-        } => run(&template, ticks, seed, out.as_deref()),
+        } => run(&template, ticks, seed, orders, out.as_deref()),
         Command::Tune { objective, out } => tune(&objective, out),
     }
 }
 
-fn run(template: &str, ticks: u64, seed: u64, out: Option<&Path>) -> Result<(), String> {
+fn run(
+    template: &str,
+    ticks: u64,
+    seed: u64,
+    orders: Vec<(String, u32)>,
+    out: Option<&Path>,
+) -> Result<(), String> {
     let save = dev_template::resolve(template)?;
     let report = bench::run(
         &save,
         &dev_template::assets_dir(),
-        RunOptions { ticks, seed },
+        RunOptions {
+            ticks,
+            seed,
+            orders,
+        },
     )?;
     let ron = ron::ser::to_string_pretty(&report, ron::ser::PrettyConfig::default())
         .map_err(|e| e.to_string())?;
@@ -198,9 +227,38 @@ mod tests {
                 template: "chains".into(),
                 ticks: 50,
                 seed: 3,
+                orders: vec![],
                 out: None
             }
         );
+    }
+
+    #[test]
+    fn run_takes_repeatable_orders() {
+        let c = parse_args(&[
+            "run",
+            "--template",
+            "chains",
+            "--ticks",
+            "5",
+            "--order",
+            "patch_routine:9999",
+            "--order",
+            "ice_breaker:7",
+        ]);
+        let Command::Run { orders, .. } = c.unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            orders,
+            vec![("patch_routine".into(), 9999), ("ice_breaker".into(), 7)]
+        );
+        for bad in ["patch_routine", "patch_routine:x", ":5", "a:-1"] {
+            assert!(
+                parse_args(&["run", "--template", "c", "--ticks", "5", "--order", bad]).is_err(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
@@ -220,6 +278,7 @@ mod tests {
                 template: "chains".into(),
                 ticks: 5,
                 seed: 0,
+                orders: vec![],
                 out: Some("r.ron".into())
             }
         );

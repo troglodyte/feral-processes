@@ -22,6 +22,11 @@ pub struct Objective {
     pub iterations: usize,
     pub population: usize,
     pub search_seed: u64,
+    /// Batch orders `(item, qty)` queued before every run, so machines have
+    /// standing demand (and posted workers to haul their output). Use a
+    /// quantity the run cannot reach.
+    #[serde(default)]
+    pub orders: Vec<(String, u32)>,
     pub targets: Vec<Target>,
     pub knobs: Vec<Knob>,
 }

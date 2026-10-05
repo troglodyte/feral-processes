@@ -37,6 +37,8 @@ bevy = { version = "0.19", default-features = false, features = [
     "png",
 ] }
 bevy_egui = "0.41"
+ron = "0.12.2"
+serde = { version = "1.0.228", features = ["derive"] }
 
 # Bevy's own `png` feature (above) is decode-only, so writing a PNG back out
 # — the sprite editor's save — needs the encoder named explicitly. Pinned to

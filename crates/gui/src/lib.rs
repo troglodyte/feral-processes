@@ -15,6 +15,7 @@
 //! render pipeline; the game loop stays a loop.
 
 mod capture;
+mod effects;
 mod fx;
 mod keys;
 mod paint;
@@ -596,7 +597,15 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             wheel_acc: 0.0,
         })
         .init_resource::<sprites::Sprites>()
-        .add_systems(Startup, (setup, sprites::load, sprites::install_library))
+        .add_systems(
+            Startup,
+            (
+                setup,
+                sprites::load,
+                sprites::install_library,
+                effects::load,
+            ),
+        )
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.

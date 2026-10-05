@@ -1,0 +1,6 @@
+(
+    id: "beam",
+    muzzle: true,
+    travel: Beam(hold: 0.5),
+    impact: [Sparks],
+)

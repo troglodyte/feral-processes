@@ -24,6 +24,11 @@ any non-finite `taming_potency`, `consume.power`, or
     // to match by hand.
     description: "Restores 25 Power. The staple of staying on the Grid.",
 
+    // Optional. The battle effect that plays when this is swung or cast on
+    // a battle map: an id from `assets/effects/` (`Some("laser_pulse")`).
+    // Left out, it plays the plain `streak`. Purely visual.
+    fx: Some("streak"),
+
     // Optional; almost always leave it out. The short tag this item is
     // listed under in the base pane's PRODUCTION rows, beside its name. Left
     // out, it is derived from `name`: the initials of its words, or the

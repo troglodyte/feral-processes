@@ -1,0 +1,5 @@
+(
+    id: "slash",
+    travel: None,
+    impact: [Slash],
+)

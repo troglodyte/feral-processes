@@ -68,6 +68,11 @@ way deleting the Currency item does.
     // ability reads — the engine never rewrites this text.
     description: "Damage 6 to every member of one group",
 
+    // Optional. The battle effect that plays when this is swung or cast on
+    // a battle map: an id from `assets/effects/` (`Some("laser_pulse")`).
+    // Left out, it plays the plain `streak`. Purely visual.
+    fx: Some("streak"),
+
     // Who the ability lands on. One of:
     //
     //   OneAlly             one party member the player picks

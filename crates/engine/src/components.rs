@@ -711,6 +711,36 @@ pub struct Hopper {
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
 
+/// How many breedings deep a program's lineage runs. Absent reads as 0:
+/// wild, tamed, bought and fused programs are all generation 0, and only a
+/// hatched child carries one.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Generation(pub u32);
+
+/// The tick a parent is next fit to breed. Absent reads as ready.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BreedReadyAt(pub u64);
+
+/// A Breeding Bay's incubating children, one `Option` per slot — see
+/// `StructureDef::incubation_slots`. A child is a record here, not an entity,
+/// until `Game::hatch_incubations` seats it on the roster.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct Incubator {
+    pub slots: Vec<Option<crate::breeding::Incubation>>,
+}
+
+impl Incubator {
+    pub fn with_slots(count: u32) -> Self {
+        Incubator {
+            slots: vec![None; count as usize],
+        }
+    }
+
+    pub fn is_occupied(&self) -> bool {
+        self.slots.iter().any(Option::is_some)
+    }
+}
+
 /// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`
 /// and `Game::rack_slots`.
 ///

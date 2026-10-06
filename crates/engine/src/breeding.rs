@@ -49,6 +49,7 @@ pub enum BreedRefusal {
     OnCooldown,
     NoFreeSlot,
     NoSeed,
+    UnknownKind,
 }
 
 impl BreedRefusal {
@@ -61,6 +62,7 @@ impl BreedRefusal {
             BreedRefusal::OnCooldown => "ready later",
             BreedRefusal::NoFreeSlot => "no free bay",
             BreedRefusal::NoSeed => "no breeding seed",
+            BreedRefusal::UnknownKind => "unknown kind",
         }
     }
 }

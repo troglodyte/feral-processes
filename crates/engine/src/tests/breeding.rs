@@ -4,6 +4,7 @@ use super::support::*;
 use crate::attributes::{AttributeDb, AttributeId};
 use crate::breeding::{ParentRolls, child_species, inherit};
 use crate::tuning::*;
+use crate::views::BreedSpeciesPreview;
 use crate::*;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -233,4 +234,204 @@ fn the_better_parents_attribute_is_the_one_inherited() {
         let v = k.attributes[&id];
         assert!((mid_high - 1..=mid_high + 1).contains(&v), "{v}");
     }
+}
+
+// ---- Game::breed ----
+
+use crate::breeding::BreedRefusal;
+use crate::components::{BreedReadyAt, Generation, Incubator};
+
+fn seed() -> ItemId {
+    ItemId::from("breeding_seed")
+}
+
+/// A base with a built bay, two owned programs of the given species and
+/// `seeds` breeding seeds in the pack.
+fn bay_game(a: &str, b: &str, seeds: u32) -> (Game, Entity, Entity, Entity) {
+    let mut game = Game::new(5150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let bay = spawn_machine_at(&mut game, "breeding_bay", 3, 3);
+    let pa = game.adopt_program(a, 0, 0, 1.0).unwrap();
+    let pb = game.adopt_program(b, 0, 0, 1.0).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(seed(), seeds);
+    (game, pa, pb, bay)
+}
+
+fn seeds_in_pack(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&seed())
+}
+
+fn now(game: &Game) -> u64 {
+    game.world.resource::<GameClock>().tick
+}
+
+/// Everything a refused breeding must leave alone.
+fn snapshot(
+    game: &Game,
+    a: Entity,
+    b: Entity,
+    bay: Entity,
+) -> (u32, Option<u64>, Option<u64>, Incubator) {
+    (
+        seeds_in_pack(game),
+        game.world.get::<BreedReadyAt>(a).map(|r| r.0),
+        game.world.get::<BreedReadyAt>(b).map(|r| r.0),
+        game.world.get::<Incubator>(bay).cloned().unwrap(),
+    )
+}
+
+#[test]
+fn a_built_bay_carries_one_empty_slot() {
+    let (game, _, _, bay) = bay_game("worm", "worm", 1);
+    assert_eq!(game.world.get::<Incubator>(bay).unwrap().slots, vec![None]);
+}
+
+#[test]
+fn breeding_spends_a_seed_rests_both_parents_and_fills_the_slot() {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 2);
+    let started = now(&game);
+    game.breed(a, b, bay).unwrap();
+
+    assert_eq!(seeds_in_pack(&game), 1);
+    for parent in [a, b] {
+        assert_eq!(
+            game.world.get::<BreedReadyAt>(parent).unwrap().0,
+            started + BREEDING_COOLDOWN_TICKS
+        );
+    }
+    let child = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .clone()
+        .expect("the slot should hold the child");
+    assert_eq!(child.species, "botnet", "worm x virus is an authored pair");
+    assert_eq!(child.generation, 1);
+    assert_eq!(child.due, started + INCUBATION_TICKS);
+    assert!(!child.attributes.is_empty());
+}
+
+#[test]
+fn a_childs_generation_follows_its_deeper_parent() {
+    let (mut game, a, b, bay) = bay_game("worm", "worm", 1);
+    game.world.entity_mut(b).insert(Generation(4));
+    game.breed(a, b, bay).unwrap();
+    let child = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .clone()
+        .unwrap();
+    assert_eq!(child.generation, 5);
+}
+
+#[test]
+fn every_refusal_leaves_the_game_as_it_was() {
+    // Same program twice.
+    let (mut game, a, b, bay) = bay_game("worm", "worm", 1);
+    let before = snapshot(&game, a, b, bay);
+    assert_eq!(game.breed(a, a, bay), Err(BreedRefusal::SameProgram));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+
+    // A program the player does not own.
+    let wild = game.spawn_wild_creature("worm", 1, 1).unwrap();
+    assert_eq!(game.breed(a, wild, bay), Err(BreedRefusal::NotYours));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+
+    // Something that is not a bay.
+    let other = spawn_machine_at(&mut game, "quarantine_rack", 6, 6);
+    assert_eq!(game.breed(a, b, other), Err(BreedRefusal::NoFreeSlot));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+
+    // No seed.
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(seed(), 1);
+    let before = snapshot(&game, a, b, bay);
+    assert_eq!(game.breed(a, b, bay), Err(BreedRefusal::NoSeed));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+}
+
+#[test]
+fn a_parent_on_cooldown_is_refused_until_it_has_rested() {
+    let (mut game, a, b, bay) = bay_game("worm", "worm", 3);
+    let c = game.adopt_program("worm", 0, 0, 1.0).unwrap();
+    game.breed(a, b, bay).unwrap();
+    // Free the slot by hand so only the cooldown is in the way.
+    game.world.get_mut::<Incubator>(bay).unwrap().slots[0] = None;
+
+    let before = snapshot(&game, a, c, bay);
+    assert_eq!(game.breed(a, c, bay), Err(BreedRefusal::OnCooldown));
+    assert_eq!(snapshot(&game, a, c, bay), before);
+    assert_eq!(game.breed_refusal(a), Some(BreedRefusal::OnCooldown));
+    assert_eq!(game.breed_refusal(c), None);
+
+    game.world.resource_mut::<GameClock>().tick += BREEDING_COOLDOWN_TICKS;
+    assert_eq!(game.breed_refusal(a), None);
+    game.breed(a, c, bay).unwrap();
+}
+
+#[test]
+fn a_full_bay_refuses_a_second_breeding() {
+    let (mut game, a, b, bay) = bay_game("worm", "worm", 2);
+    let c = game.adopt_program("worm", 0, 0, 1.0).unwrap();
+    let d = game.adopt_program("worm", 0, 0, 1.0).unwrap();
+    game.breed(a, b, bay).unwrap();
+    let before = snapshot(&game, c, d, bay);
+    assert_eq!(game.breed(c, d, bay), Err(BreedRefusal::NoFreeSlot));
+    assert_eq!(snapshot(&game, c, d, bay), before);
+}
+
+#[test]
+fn breed_refusal_reports_a_program_that_is_not_the_players() {
+    let (mut game, a, _, _) = bay_game("worm", "worm", 1);
+    let wild = game.spawn_wild_creature("worm", 1, 1).unwrap();
+    assert_eq!(game.breed_refusal(a), None);
+    assert_eq!(game.breed_refusal(wild), Some(BreedRefusal::NotYours));
+}
+
+#[test]
+fn the_preview_names_a_certain_hybrid_and_calls_the_clamp_for_its_rolls() {
+    let (game, a, b, _) = bay_game("worm", "virus", 1);
+    let preview = game.breed_preview(a, b).unwrap();
+    assert_eq!(
+        preview.species,
+        BreedSpeciesPreview::Certain("Botnet".to_string())
+    );
+    assert_eq!(preview.generation, 1);
+    assert_eq!(preview.rolls.len(), 6);
+    let pa = *game.world.get::<Potential>(a).unwrap();
+    let pb = *game.world.get::<Potential>(b).unwrap();
+    let (lo, hi) = crate::breeding::roll_span(pa.hp_roll.max(pb.hp_roll), 1);
+    let hp = &preview.rolls[0];
+    assert_eq!((hp.min, hp.max), (lo, hi));
+}
+
+#[test]
+fn the_preview_of_an_unauthored_pair_names_both_possibilities() {
+    let (game, a, b, _) = bay_game("drone", "scrapper", 1);
+    let preview = game.breed_preview(a, b).unwrap();
+    assert!(matches!(
+        preview.species,
+        BreedSpeciesPreview::OneOf(ref x, ref y) if x != y
+    ));
+}
+
+#[test]
+fn incubations_lists_one_row_per_slot_with_the_child_while_it_grows() {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    let empty = game.incubations(bay);
+    assert_eq!(empty.len(), 1);
+    assert!(empty[0].child.is_none());
+
+    game.breed(a, b, bay).unwrap();
+    let rows = game.incubations(bay);
+    let child = rows[0].child.as_ref().unwrap();
+    assert_eq!(child.species, "Botnet");
+    assert_eq!(child.generation, 1);
+    assert_eq!(child.ticks_left, INCUBATION_TICKS);
+    assert!(!child.held);
 }

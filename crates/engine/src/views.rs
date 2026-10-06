@@ -3854,3 +3854,46 @@ pub struct ImplantView {
     pub installed: Vec<InstalledImplantRow>,
     pub installable: Vec<InstallableImplantRow>,
 }
+
+/// Which species a breeding would yield, in display names.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum BreedSpeciesPreview {
+    /// Same species twice, or an authored hybrid for the pair.
+    Certain(String),
+    /// An unauthored cross: either parent's species, by chance.
+    OneOf(String, String),
+}
+
+/// The lowest and highest one of the child's six rolls can land on.
+#[derive(Clone, PartialEq, Debug)]
+pub struct RollRange {
+    pub label: &'static str,
+    pub min: f32,
+    pub max: f32,
+}
+
+/// What `Game::breed` would make of two programs, before anything is spent.
+#[derive(Clone, PartialEq, Debug)]
+pub struct BreedPreview {
+    pub species: BreedSpeciesPreview,
+    pub generation: u32,
+    pub rolls: Vec<RollRange>,
+}
+
+/// A child still in a bay.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IncubatingChild {
+    /// Display name.
+    pub species: String,
+    pub generation: u32,
+    /// Zero once it is due. A screen turns this into a vague word.
+    pub ticks_left: u64,
+    /// Due, but the roster is full, so it waits in the bay.
+    pub held: bool,
+}
+
+/// One incubation slot of a bay.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IncubationView {
+    pub child: Option<IncubatingChild>,
+}

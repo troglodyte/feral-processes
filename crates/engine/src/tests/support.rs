@@ -1570,6 +1570,11 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
     if def.racks.is_some() {
         entity.insert(crate::components::Racked::default());
     }
+    if def.incubation_slots > 0 {
+        entity.insert(crate::components::Incubator::with_slots(
+            def.incubation_slots,
+        ));
+    }
     entity.id()
 }
 

@@ -364,6 +364,35 @@ fn every_refusal_leaves_the_game_as_it_was() {
     let before = snapshot(&game, a, b, bay);
     assert_eq!(game.breed(a, b, bay), Err(BreedRefusal::NoSeed));
     assert_eq!(snapshot(&game, a, b, bay), before);
+
+    // A boss parent, and a parent whose species the install no longer has.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(seed(), 1);
+    let before = snapshot(&game, a, b, bay);
+    let boss = game.adopt_program("overseer", 0, 0, 1.0).unwrap();
+    assert_eq!(game.breed(a, boss, bay), Err(BreedRefusal::Boss));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+    game.world.get_mut::<Creature>(b).unwrap().species = "long_gone".to_string();
+    assert_eq!(game.breed(a, b, bay), Err(BreedRefusal::UnknownKind));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+}
+
+#[test]
+fn a_breeding_during_a_battle_or_after_game_over_is_refused_and_changes_nothing() {
+    let (mut game, a, b, bay) = bay_game("worm", "worm", 1);
+    let before = snapshot(&game, a, b, bay);
+
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    assert_eq!(game.breed(a, b, bay), Err(BreedRefusal::Busy));
+    assert_eq!(snapshot(&game, a, b, bay), before);
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    start_battle_with_a_wild_program(&mut game);
+    assert!(game.has_active_battle());
+    assert_eq!(game.breed(a, b, bay), Err(BreedRefusal::Busy));
+    assert_eq!(snapshot(&game, a, b, bay), before);
 }
 
 #[test]

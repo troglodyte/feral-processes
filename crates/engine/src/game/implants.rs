@@ -5,11 +5,17 @@
 //! and every helper goes through `ImplantDb::get`, so an id whose def is
 //! missing contributes nothing.
 
+use crate::implants::ImplantId;
 use crate::implants::{
     ImplantDb, ImplantDef, ImplantDownside, ImplantHook, ImplantSignature, ImplantStats,
 };
+use crate::items::ItemId;
 use crate::statuses::StatusId;
-use crate::tuning::{DEAD_MANS_SWITCH_POWER, REJECTION_STATUS_DURATION, REJECTION_STATUSES};
+use crate::tuning::{
+    DEAD_MANS_SWITCH_POWER, HUNGER_DECAY_PER_TICK, IMPLANT_DRAIN_PER_LOAD,
+    IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD, REJECTION_STATUS_DURATION, REJECTION_STATUSES,
+};
+use crate::views::{ImplantView, InstallableImplantRow, InstalledImplantRow};
 use crate::*;
 
 impl Game {
@@ -191,4 +197,199 @@ impl Game {
         }
         false
     }
+
+    /// Whether a Splice Rig touches the party's cell — what the map key
+    /// opens the screen on. `adjacent_teardown_rigs`' rule, minus the Vec:
+    /// nothing here needs to tell two rigs apart.
+    pub fn adjacent_splice_rig(&self) -> bool {
+        let Some((px, py)) = self.base_pos() else {
+            return false;
+        };
+        self.world.iter_entities().any(|e| {
+            let (Some(s), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
+                return false;
+            };
+            s.kind == SPLICE_RIG
+                && crate::game::base::collect::ORTHOGONAL
+                    .iter()
+                    .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
+        })
+    }
+
+    /// Everything the Splice Rig screen shows: Load against the cap, what is
+    /// built in (including ids whose def has gone missing, so they can be
+    /// cut out), and the implant items in the pack.
+    pub fn implant_view(&self) -> ImplantView {
+        let player = self.player_entity();
+        let level = self.world.get::<Experience>(player).map_or(1, |e| e.level);
+        let load = self.implant_load();
+        let cap = crate::implants::load_cap(level);
+        let db = self.world.resource::<ImplantDb>();
+        let installed_ids: Vec<ImplantId> = self
+            .world
+            .get::<crate::components::Implants>(player)
+            .map(|held| held.installed.clone())
+            .unwrap_or_default();
+        let installed = installed_ids
+            .into_iter()
+            .map(|id| match db.get(&id) {
+                Some(def) => InstalledImplantRow {
+                    name: def.name.clone(),
+                    known: true,
+                    description: def.description.clone(),
+                    load: def.load,
+                    upkeep: upkeep_of(def.load),
+                    downside: self.downside_text(def),
+                    removal_fragments: removal_price(def.load),
+                    id,
+                },
+                None => InstalledImplantRow {
+                    name: id.as_str().to_string(),
+                    known: false,
+                    description: String::new(),
+                    load: 0,
+                    upkeep: 0.0,
+                    downside: None,
+                    removal_fragments: 0,
+                    id,
+                },
+            })
+            .collect();
+        let inventory = self.world.get::<Inventory>(player);
+        let mut installable: Vec<InstallableImplantRow> = self
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .all()
+            .filter_map(|item| {
+                let def = db.get(item.implant.as_ref()?)?;
+                let count = inventory.map_or(0, |inv| inv.count(&item.id));
+                (count > 0).then(|| InstallableImplantRow {
+                    item: item.id.clone(),
+                    name: item.name.clone(),
+                    description: def.description.clone(),
+                    load: def.load,
+                    upkeep: upkeep_of(def.load),
+                    downside: self.downside_text(def),
+                    count,
+                })
+            })
+            .collect();
+        installable.sort_by(|a, b| a.item.as_str().cmp(b.item.as_str()));
+        ImplantView {
+            load,
+            cap,
+            overload: crate::implants::overload(load, cap),
+            fragments: inventory.map_or(0, |inv| inv.count(&ItemId::from(ids::CORE_FRAGMENT))),
+            installed,
+            installable,
+        }
+    }
+
+    /// Builds `item`'s implant into the player, consuming the item. Every
+    /// refusal sits above the payment, so a refused install spends nothing.
+    /// Going past the Load cap is allowed (rejection is the price); callers
+    /// that want to warn compare `implant_view` first.
+    pub fn install_implant(&mut self, item: &ItemId) -> Result<(), String> {
+        self.splicing_allowed()?;
+        let implant = self
+            .item_def(item)
+            .and_then(|def| def.implant)
+            .ok_or_else(|| format!("{} is not an implant.", self.item_name(item)))?;
+        if self.world.resource::<ImplantDb>().get(&implant).is_none() {
+            return Err(format!(
+                "{} has no implant to splice.",
+                self.item_name(item)
+            ));
+        }
+        let player = self.player_entity();
+        let held = self.world.get::<crate::components::Implants>(player);
+        if held.is_some_and(|held| held.installed.contains(&implant)) {
+            return Err(format!("{} is already installed.", self.item_name(item)));
+        }
+        self.pay_items(&[(item.clone(), 1)])?;
+        if let Some(mut held) = self.world.get_mut::<crate::components::Implants>(player) {
+            held.installed.push(implant);
+        }
+        self.recompute_derived(player);
+        Ok(())
+    }
+
+    /// Cuts `implant` out and hands its item back, for
+    /// `IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD` `core_fragment`s per Load. An id
+    /// whose def is missing has no Load and no item, so it comes out free:
+    /// charging for something the game can no longer price would strand it.
+    pub fn remove_implant(&mut self, implant: &ImplantId) -> Result<(), String> {
+        self.splicing_allowed()?;
+        let player = self.player_entity();
+        let held = self
+            .world
+            .get::<crate::components::Implants>(player)
+            .is_some_and(|held| held.installed.contains(implant));
+        if !held {
+            return Err("That implant isn't installed.".into());
+        }
+        let load = self
+            .world
+            .resource::<ImplantDb>()
+            .get(implant)
+            .map_or(0, |def| def.load);
+        let price = removal_price(load);
+        if price > 0 {
+            self.pay_items(&[(ItemId::from(ids::CORE_FRAGMENT), price)])?;
+        }
+        if let Some(mut held) = self.world.get_mut::<crate::components::Implants>(player) {
+            held.installed.retain(|id| id != implant);
+        }
+        let carrier = self
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .all()
+            .find(|item| item.implant.as_ref() == Some(implant))
+            .map(|item| item.id.clone());
+        if let Some(item) = carrier {
+            self.grant_loot(item, 1, crate::base_ledger::LootSource::Refund);
+        }
+        self.recompute_derived(player);
+        Ok(())
+    }
+
+    /// The gate both doors share: no game over, no battle, a rig standing.
+    /// Like the Mod Bench, one anywhere in the base is enough.
+    fn splicing_allowed(&self) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if !self.has_structure(SPLICE_RIG) {
+            return Err("Build a Splice Rig first.".into());
+        }
+        Ok(())
+    }
+
+    /// One line on what `def`'s downside does, for the screen.
+    fn downside_text(&self, def: &ImplantDef) -> Option<String> {
+        Some(match def.downside.as_ref()? {
+            ImplantDownside::TraceRise(pct) => format!("Trace rises {pct}% faster."),
+            ImplantDownside::BattleStartStatus(status, chance) => {
+                let db = self.world.resource::<crate::statuses::StatusDb>();
+                format!(
+                    "{}% chance to start a fight {}.",
+                    (chance * 100.0).round(),
+                    db.name_of(status)
+                )
+            }
+        })
+    }
+}
+
+/// The structure install and remove require.
+const SPLICE_RIG: &str = "splice_rig";
+
+/// Extra Power per tick `load` adds, before perks: the share of
+/// `HUNGER_DECAY_PER_TICK` that `drain_factor` multiplies in.
+fn upkeep_of(load: u32) -> f32 {
+    HUNGER_DECAY_PER_TICK * IMPLANT_DRAIN_PER_LOAD * load as f32
+}
+
+fn removal_price(load: u32) -> u32 {
+    load * IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD
 }

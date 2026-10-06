@@ -533,3 +533,220 @@ fn every_signature_moves_the_game() {
     // variant's call here when it gains one.
     assert!(signature_moves_the_game(ImplantSignature::DeadMansSwitch));
 }
+
+// ---- the Splice Rig API (plan P3) ----
+
+fn rigged_game() -> Game {
+    let mut game = new_game();
+    spawn_structure_at(&mut game, "splice_rig", 3, 3);
+    game
+}
+
+fn pack(game: &Game) -> String {
+    format!(
+        "{:?}",
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .items
+    )
+}
+
+fn installed(game: &Game) -> Vec<ImplantId> {
+    game.world
+        .get::<Implants>(game.player_entity())
+        .unwrap()
+        .installed
+        .clone()
+}
+
+fn atk(game: &Game) -> i32 {
+    game.world.get::<Stats>(game.player_entity()).unwrap().atk
+}
+
+#[test]
+fn install_then_remove_round_trips_through_the_rig() {
+    let mut game = rigged_game();
+    let fibers = ItemId::from("ripper_fibers");
+    let fragments = ItemId::from("core_fragment");
+    give(&mut game, &fibers, 1);
+    give(&mut game, &fragments, 20);
+    let held = count_item(&game, "core_fragment");
+    let base_atk = atk(&game);
+
+    game.install_implant(&fibers).unwrap();
+    assert_eq!(
+        count_item(&game, "ripper_fibers"),
+        0,
+        "the item is consumed"
+    );
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+    assert_eq!(atk(&game), base_atk + 3);
+    assert_eq!(
+        count_item(&game, "core_fragment"),
+        held,
+        "installing is free of fragments"
+    );
+
+    game.remove_implant(&ImplantId::from("ripper_fibers"))
+        .unwrap();
+    assert_eq!(count_item(&game, "ripper_fibers"), 1, "the item comes back");
+    assert!(installed(&game).is_empty());
+    assert_eq!(atk(&game), base_atk);
+    // load 2 x IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD
+    let price = 2 * crate::tuning::IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD;
+    assert_eq!(count_item(&game, "core_fragment"), held - price);
+}
+
+#[test]
+fn install_refusals_spend_nothing() {
+    let fibers = ItemId::from("ripper_fibers");
+
+    // No rig.
+    let mut game = new_game();
+    give(&mut game, &fibers, 1);
+    let before = pack(&game);
+    assert!(game.install_implant(&fibers).is_err());
+    assert_eq!(pack(&game), before);
+    assert!(installed(&game).is_empty());
+
+    // In a battle.
+    let mut game = rigged_game();
+    give(&mut game, &fibers, 1);
+    open_battle(&mut game);
+    let before = pack(&game);
+    assert!(game.install_implant(&fibers).is_err());
+    assert_eq!(pack(&game), before);
+    assert!(installed(&game).is_empty());
+
+    // Not an implant.
+    let mut game = rigged_game();
+    give(&mut game, &ItemId::from("core_fragment"), 5);
+    let before = pack(&game);
+    assert!(
+        game.install_implant(&ItemId::from("core_fragment"))
+            .is_err()
+    );
+    assert_eq!(pack(&game), before);
+
+    // Not in the pack.
+    let mut game = rigged_game();
+    let before = pack(&game);
+    assert!(game.install_implant(&fibers).is_err());
+    assert_eq!(pack(&game), before);
+
+    // An item naming an implant with no def, and an item that is not known.
+    let mut game = rigged_game();
+    give(&mut game, &ItemId::from("no_such_item"), 1);
+    let before = pack(&game);
+    assert!(game.install_implant(&ItemId::from("no_such_item")).is_err());
+    assert_eq!(pack(&game), before);
+
+    // Already installed.
+    let mut game = rigged_game();
+    give(&mut game, &fibers, 2);
+    game.install_implant(&fibers).unwrap();
+    let before = pack(&game);
+    assert!(game.install_implant(&fibers).is_err());
+    assert_eq!(pack(&game), before);
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+}
+
+#[test]
+fn remove_refusals_spend_nothing() {
+    let fibers = ItemId::from("ripper_fibers");
+    let id = ImplantId::from("ripper_fibers");
+
+    // No rig.
+    let mut game = new_game();
+    install(&mut game, &["ripper_fibers"]);
+    give(&mut game, &ItemId::from("core_fragment"), 50);
+    let before = pack(&game);
+    assert!(game.remove_implant(&id).is_err());
+    assert_eq!(pack(&game), before);
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+
+    // In a battle.
+    let mut game = rigged_game();
+    install(&mut game, &["ripper_fibers"]);
+    give(&mut game, &ItemId::from("core_fragment"), 50);
+    open_battle(&mut game);
+    let before = pack(&game);
+    assert!(game.remove_implant(&id).is_err());
+    assert_eq!(pack(&game), before);
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+
+    // Too few fragments.
+    let mut game = rigged_game();
+    install(&mut game, &["ripper_fibers"]);
+    give(&mut game, &ItemId::from("core_fragment"), 1);
+    let before = pack(&game);
+    assert!(game.remove_implant(&id).is_err());
+    assert_eq!(pack(&game), before);
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+    assert_eq!(count_item(&game, fibers.as_str()), 0);
+
+    // Not installed.
+    let mut game = rigged_game();
+    give(&mut game, &ItemId::from("core_fragment"), 50);
+    let before = pack(&game);
+    assert!(game.remove_implant(&id).is_err());
+    assert_eq!(pack(&game), before);
+}
+
+#[test]
+fn an_unknown_installed_id_is_removed_for_free() {
+    let mut game = rigged_game();
+    install(&mut game, &["no_such_implant", "ripper_fibers"]);
+    let before = pack(&game);
+    game.remove_implant(&ImplantId::from("no_such_implant"))
+        .unwrap();
+    assert_eq!(
+        pack(&game),
+        before,
+        "no def means no load, no price, no item"
+    );
+    assert_eq!(installed(&game), ids(&["ripper_fibers"]));
+}
+
+#[test]
+fn the_view_reports_load_cap_rows_and_installable_items() {
+    let mut game = rigged_game();
+    give(&mut game, &ItemId::from("dermal_lattice"), 1);
+    let held = count_item(&game, "core_fragment");
+    install(&mut game, &["black_ledger", "no_such_implant"]);
+
+    let view = game.implant_view();
+    assert_eq!(view.load, 2);
+    assert_eq!(view.cap, crate::implants::load_cap(1));
+    assert_eq!(view.overload, 0);
+    assert_eq!(view.installed.len(), 2);
+    let ledger = &view.installed[0];
+    assert!(ledger.known);
+    assert_eq!(ledger.id, ImplantId::from("black_ledger"));
+    assert_eq!(ledger.load, 2);
+    assert!(ledger.downside.is_some());
+    assert!(ledger.upkeep > 0.0);
+    assert_eq!(
+        ledger.removal_fragments,
+        2 * crate::tuning::IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD
+    );
+    let ghost = &view.installed[1];
+    assert!(!ghost.known);
+    assert_eq!(ghost.removal_fragments, 0);
+    assert_eq!(view.installable.len(), 1);
+    assert_eq!(view.installable[0].item, ItemId::from("dermal_lattice"));
+    assert_eq!(view.installable[0].load, 3);
+    assert_eq!(view.fragments, held);
+}
+
+#[test]
+fn the_rig_is_adjacent_only_beside_the_party() {
+    let mut game = new_game();
+    stand_in_base(&mut game);
+    assert!(!game.adjacent_splice_rig());
+    spawn_structure_at(&mut game, "splice_rig", 5, 5);
+    assert!(!game.adjacent_splice_rig());
+    spawn_structure_at(&mut game, "splice_rig", 1, 0);
+    assert!(game.adjacent_splice_rig());
+}

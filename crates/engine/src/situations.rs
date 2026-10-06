@@ -215,6 +215,35 @@ pub(crate) fn chebyshev(a: Position, b: Position) -> i32 {
     (a.x - b.x).abs().max((a.y - b.y).abs())
 }
 
+/// How `body` rates `other`: `memories::opinion_about` through `bonds::band`,
+/// the call `Game::bond` makes. Every trigger that reads a bond goes through
+/// here, so they cannot disagree about who is a rival.
+fn bond_band(body: &Body, other: &Body, around: &Surroundings) -> crate::bonds::Bond {
+    let opinion = body.store.map_or(0.0, |store| {
+        crate::memories::opinion_about(
+            store,
+            around.memories,
+            around.now,
+            body.felt_as,
+            &MemorySubject::Program(other.id),
+            true,
+        )
+    });
+    crate::bonds::band(opinion)
+}
+
+/// The other bodies that stand in the base, never the body itself: a posted
+/// guard's `Position` is where it was assigned, not a tile it occupies.
+fn walking_others<'a, 'b>(
+    bodies: &'a [Body<'b>],
+    body: &'a Body,
+) -> impl Iterator<Item = &'a Body<'b>> {
+    bodies.iter().filter(move |other| {
+        other.entity != body.entity
+            && party::walks_the_base(Some(ProgramRole::Staff), other.task.map(|(k, _)| k))
+    })
+}
+
 /// Each body's situation, in `bodies` order. The one derivation behind both
 /// `assess_situation_system` and any caller that needs an answer outside the
 /// schedule.
@@ -234,33 +263,12 @@ pub(crate) fn assess(bodies: &[Body], around: &Surroundings) -> Vec<Situation> {
         .map(|body| {
             let mut thoughts = Vec::new();
             if party::walks_the_base(Some(ProgramRole::Staff), body.task.map(|(k, _)| k)) {
-                let bond_with = |other: &Body| {
-                    let opinion = body.store.map_or(0.0, |store| {
-                        crate::memories::opinion_about(
-                            store,
-                            around.memories,
-                            around.now,
-                            body.felt_as,
-                            &MemorySubject::Program(other.id),
-                            true,
-                        )
-                    });
-                    crate::bonds::band(opinion)
-                };
-                let neighbours = || {
-                    bodies.iter().filter(|other| {
-                        other.entity != body.entity
-                            && party::walks_the_base(
-                                Some(ProgramRole::Staff),
-                                other.task.map(|(k, _)| k),
-                            )
-                            && is_beside(other.pos, body.pos)
-                    })
-                };
-                if neighbours().any(|o| bond_with(o).avoids()) {
+                let neighbours =
+                    || walking_others(bodies, body).filter(|o| is_beside(o.pos, body.pos));
+                if neighbours().any(|o| bond_band(body, o, around).avoids()) {
                     thoughts.push(Trigger::BesideRival);
                 }
-                if neighbours().any(|o| bond_with(o).grieves()) {
+                if neighbours().any(|o| bond_band(body, o, around).grieves()) {
                     thoughts.push(Trigger::BesideFriend);
                 }
             }

@@ -308,7 +308,7 @@ impl Game {
     /// because "by construction" is exactly the kind of claim that stops
     /// being true when someone lets the ray run through rock.
     ///
-    /// **A finish underfoot is named first.** The cell one step along
+    /// **A finish or pile underfoot is named first.** The cell one step along
     /// `(dx, dy)` — the ray's own first stop — is checked for a finish
     /// before the ray runs at all, since a finished floor is walkable and
     /// the ray would otherwise step straight over it looking for the wall
@@ -328,6 +328,15 @@ impl Game {
                 .map(|def| def.name.clone())
         });
 
+        // Underfoot, in the order the cell is read: its finish, then what
+        // lies on it. Both are properties of the ray's first stop.
+        let underfoot: Vec<String> = finish_name
+            .map(|name| format!("{name} underfoot"))
+            .into_iter()
+            .chain(self.describe_floor_pile(bx + dx, by + dy))
+            .collect();
+        let underfoot = (!underfoot.is_empty()).then(|| underfoot.join("; "));
+
         let (mut x, mut y) = (bx, by);
         for _ in 0..range {
             x += dx;
@@ -342,13 +351,13 @@ impl Game {
                     "{}. It takes at least {} swings to cut through.",
                     def.name, def.min_swings
                 );
-                return Some(match &finish_name {
-                    Some(name) => format!("{name} underfoot; {rock_line}"),
+                return Some(match &underfoot {
+                    Some(line) => format!("{line}; {rock_line}"),
                     None => rock_line,
                 });
             }
         }
-        finish_name.map(|name| format!("{name} underfoot."))
+        underfoot.map(|line| format!("{line}."))
     }
 
     /// Whether the player's step into solid rock cuts it. See

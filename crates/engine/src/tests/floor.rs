@@ -2,7 +2,8 @@
 
 use super::support::*;
 use crate::components::{Carrying, FloorPile};
-use crate::game::base::floor::{drop_load, floor_pile_at, take_from_pile};
+use crate::floors::FloorId;
+use crate::game::base::floor::{drop_load, floor_pile_at, spawn_floor_pile, take_from_pile};
 use crate::*;
 
 fn game() -> Game {
@@ -250,4 +251,66 @@ fn freeing_a_downed_carrier_drops_the_load() {
     g.tick();
     assert!(g.world.get::<Task>(worker).is_none());
     assert_dropped(&mut g, worker, at.x, at.y);
+}
+
+fn put_pile(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) {
+    spawn_floor_pile(&mut game.world, Position { x, y }, ItemId::from(item), qty);
+}
+
+fn name_of(game: &Game, item: &str) -> String {
+    game.world
+        .resource::<crate::items_db::ItemDb>()
+        .get(item)
+        .expect("item exists")
+        .name
+        .clone()
+}
+
+#[test]
+fn a_pile_in_base_space_has_a_view_row_naming_its_contents() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 0, 0);
+    put_pile(&mut g, 2, 1, ids::CORE_FRAGMENT, 3);
+    let rows = g.floor_piles();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].pos, (2, 1));
+    assert_eq!(rows[0].items, vec![(name_of(&g, ids::CORE_FRAGMENT), 3)]);
+}
+
+#[test]
+fn a_pile_is_not_a_view_row_on_a_zone_surface() {
+    let mut g = game();
+    put_pile(&mut g, 2, 1, ids::CORE_FRAGMENT, 3);
+    assert!(g.floor_piles().is_empty());
+}
+
+#[test]
+fn examining_a_pile_names_what_it_holds() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 0, 0);
+    g.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(1, 0);
+    put_pile(&mut g, 1, 0, ids::CORE_FRAGMENT, 3);
+    let line = g.describe_base_rock(1, 0, 5).expect("a pile answers");
+    let name = name_of(&g, ids::CORE_FRAGMENT);
+    assert!(
+        line.starts_with(&format!("a pile on the floor: 3 {name}")),
+        "{line}"
+    );
+}
+
+#[test]
+fn examining_a_pile_on_a_finish_names_both() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 0, 0);
+    {
+        let mut grid = g.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(1, 0);
+        assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
+    }
+    put_pile(&mut g, 1, 0, ids::CORE_FRAGMENT, 3);
+    let line = g.describe_base_rock(1, 0, 5).unwrap();
+    assert!(line.contains("Cobalt Carpet underfoot"), "{line}");
+    assert!(line.contains("a pile on the floor: 3 "), "{line}");
 }

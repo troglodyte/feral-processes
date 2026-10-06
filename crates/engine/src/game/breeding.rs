@@ -9,7 +9,8 @@
 use crate::Game;
 use crate::breeding::{BreedRefusal, Incubation, ParentRolls, child_species, inherit, roll_span};
 use crate::components::{
-    Attributes, BreedReadyAt, Creature, Generation, Incubator, Potential, Structure, Tamed,
+    Attributes, BreedReadyAt, Creature, Generation, Glyph, Incubator, Position, Potential, Rarity,
+    Routines, Stats, StatusEffects, Structure, Tamed,
 };
 use crate::items::ItemId;
 use crate::resources::{GameClock, GameRng};
@@ -223,5 +224,107 @@ impl Game {
                 }),
             })
             .collect()
+    }
+
+    /// Hatches every due incubation, in `(x, y)` order of bay.
+    ///
+    /// A child is held — it stays in its slot and retries next tick — while
+    /// the roster has no room, which `incubations` reports as `held`. A due
+    /// child whose species has since been deleted from the install is
+    /// dropped with a line rather than retried forever.
+    pub(crate) fn hatch_incubations(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let now = self.clock_tick();
+        let mut due: Vec<(i32, i32, Entity, usize)> = {
+            let mut query = self.world.query::<(Entity, &Position, &Incubator)>();
+            query
+                .iter(&self.world)
+                .flat_map(|(bay, at, incubator)| {
+                    incubator
+                        .slots
+                        .iter()
+                        .enumerate()
+                        .filter(move |(_, slot)| slot.as_ref().is_some_and(|c| c.due <= now))
+                        .map(move |(i, _)| (at.x, at.y, bay, i))
+                })
+                .collect()
+        };
+        due.sort();
+        for (x, y, bay, slot) in due {
+            if self.roster_room() == 0 {
+                return;
+            }
+            let Some(child) = self
+                .world
+                .get_mut::<Incubator>(bay)
+                .and_then(|mut inc| inc.slots[slot].take())
+            else {
+                continue;
+            };
+            match self.seat_hatchling(&child, (x, y)) {
+                Some(program) => {
+                    let line = format!(
+                        "{} is ready in the Breeding Bay (gen {}).",
+                        self.creature_label(program),
+                        child.generation
+                    );
+                    self.log_base(line);
+                }
+                None => self.log_base("A child in the Breeding Bay is lost: its kind is gone."),
+            }
+        }
+    }
+
+    /// Seats a hatched child on the roster: the fifth door through
+    /// `roster_parts`, with its stats from the species base times the rolled
+    /// potential and nothing else — no zone, depth or rarity multiplier, and
+    /// no `Hostile`/`WanderAi` to strip. Arrives at the anchor like a
+    /// caravan purchase, falling back to the bay's own tile.
+    fn seat_hatchling(&mut self, child: &Incubation, bay_at: (i32, i32)) -> Option<Entity> {
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&child.species)
+            .cloned()?;
+        let (x, y) = self.anchor_position().unwrap_or(bay_at);
+        let potential = child.potential;
+        let scale = |base: i32, roll: f32| ((base as f32) * roll).round() as i32;
+        let hp = scale(species.base_hp, potential.hp_roll);
+        let mut attributes = Attributes::default();
+        for (id, value) in &child.attributes {
+            attributes.set(id, *value);
+        }
+        let program = self
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Position { x, y },
+                Glyph {
+                    ch: species.glyph,
+                    color: species.color,
+                },
+                Stats {
+                    hp,
+                    max_hp: hp,
+                    atk: scale(species.base_atk, potential.atk_roll),
+                    mitigation: species.base_mitigation,
+                },
+                potential,
+                Rarity::Ordinary,
+                StatusEffects::default(),
+                Routines::default(),
+                Generation(child.generation),
+                attributes,
+            ))
+            .id();
+        let parts = self.roster_parts();
+        self.world.entity_mut(program).insert(parts);
+        self.install_innate_routines(program);
+        self.seat_derived(program);
+        Some(program)
     }
 }

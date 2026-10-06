@@ -6,6 +6,7 @@ use crate::breeding::{ParentRolls, child_species, inherit};
 use crate::tuning::*;
 use crate::views::BreedSpeciesPreview;
 use crate::*;
+use bevy_ecs::prelude::{With, Without};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
@@ -434,4 +435,135 @@ fn incubations_lists_one_row_per_slot_with_the_child_while_it_grows() {
     assert_eq!(child.generation, 1);
     assert_eq!(child.ticks_left, INCUBATION_TICKS);
     assert!(!child.held);
+}
+
+// ---- hatching ----
+
+use crate::components::{ProgramBase, ProgramId, Routines};
+
+fn incubating_game() -> (Game, Entity, Entity, Entity) {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    game.breed(a, b, bay).unwrap();
+    (game, a, b, bay)
+}
+
+fn make_due(game: &mut Game) {
+    game.world.resource_mut::<GameClock>().tick += INCUBATION_TICKS;
+}
+
+/// Fills the roster to its hard cap with bare tamed bodies.
+fn fill_the_roster(game: &mut Game) {
+    let player = game.player_entity();
+    while game.roster_room() > 0 {
+        game.world.spawn(Tamed { owner: player });
+    }
+}
+
+#[test]
+fn a_child_stays_in_the_bay_until_it_is_due() {
+    let (mut game, _, _, bay) = incubating_game();
+    let before = game.pet_count();
+    game.world.resource_mut::<GameClock>().tick += INCUBATION_TICKS - 1;
+    game.hatch_incubations();
+    assert_eq!(game.pet_count(), before);
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
+}
+
+#[test]
+fn a_due_child_hatches_onto_the_roster_with_the_rolls_recorded_at_the_start() {
+    let (mut game, _, _, bay) = incubating_game();
+    let child = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .clone()
+        .unwrap();
+    let before = game.pet_count();
+    make_due(&mut game);
+    game.hatch_incubations();
+
+    assert_eq!(game.pet_count(), before + 1);
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
+
+    let hatched = {
+        let mut query = game
+            .world
+            .query::<(Entity, &Creature, &Generation, &Tamed)>();
+        let found: Vec<Entity> = query
+            .iter(&game.world)
+            .filter(|(_, c, g, _)| c.species == child.species && g.0 == child.generation)
+            .map(|(e, ..)| e)
+            .collect();
+        assert_eq!(found.len(), 1);
+        found[0]
+    };
+    assert_eq!(
+        *game.world.get::<Potential>(hatched).unwrap(),
+        child.potential
+    );
+    let attrs: std::collections::BTreeMap<_, _> = game
+        .world
+        .get::<crate::components::Attributes>(hatched)
+        .unwrap()
+        .iter()
+        .map(|(id, v)| (id.clone(), v))
+        .collect();
+    assert_eq!(attrs, child.attributes);
+    assert_eq!(game.world.get::<Experience>(hatched).unwrap().level, 1);
+    assert_eq!(
+        *game.world.get::<Rarity>(hatched).unwrap(),
+        Rarity::Ordinary
+    );
+    // Through `roster_parts`, `install_innate_routines` and `seat_derived`.
+    assert!(game.world.get::<ProgramId>(hatched).is_some());
+    assert!(game.world.get::<ProgramBase>(hatched).is_some());
+    assert!(!game.world.get::<Routines>(hatched).unwrap().0.is_empty());
+    assert!(game.world.get::<Stats>(hatched).unwrap().max_hp > 0);
+    assert!(game.world.get::<BreedReadyAt>(hatched).is_none());
+}
+
+#[test]
+fn hatching_logs_one_line_naming_the_species_and_generation() {
+    let (mut game, _, _, _) = incubating_game();
+    make_due(&mut game);
+    let before = game.message_log(1000).len();
+    game.hatch_incubations();
+    let lines: Vec<String> = game
+        .message_log(1000)
+        .into_iter()
+        .skip(before)
+        .map(|l| l.text)
+        .collect();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains("Botnet") && lines[0].contains("gen 1"),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_hatch_runs_from_the_game_tick() {
+    let (mut game, _, _, bay) = incubating_game();
+    make_due(&mut game);
+    game.tick();
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
+}
+
+#[test]
+fn a_full_roster_holds_the_child_in_the_bay_and_it_hatches_when_there_is_room() {
+    let (mut game, _, _, bay) = incubating_game();
+    fill_the_roster(&mut game);
+    make_due(&mut game);
+    game.hatch_incubations();
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
+    assert!(game.incubations(bay)[0].child.as_ref().unwrap().held);
+
+    // Make room by releasing one filler body.
+    let filler = {
+        let mut query = game
+            .world
+            .query_filtered::<Entity, (With<Tamed>, Without<Creature>)>();
+        query.iter(&game.world).next().unwrap()
+    };
+    game.world.despawn(filler);
+    game.hatch_incubations();
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
+    assert_eq!(game.roster_room(), 0);
 }

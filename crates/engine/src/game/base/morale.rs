@@ -282,9 +282,10 @@ impl Game {
             return false;
         }
         // `CarryingProgram` beside `Carrying`, and for exactly its reason:
-        // freeing a body mid-trip destroys what it is holding. A carrier is
-        // a kill the player cannot get back, so the omission is worse here
-        // than it is for a stack of fragments.
+        // a body freed mid-trip is a trip abandoned. A `Carrying` load is
+        // set on the floor for a later errand, but a carried program is a
+        // kill the player has to be able to count on being delivered, so it
+        // is never the first thing a stand-down is allowed to interrupt.
         if self.world.get::<Carrying>(who).is_some()
             || self.world.get::<CarryingProgram>(who).is_some()
         {

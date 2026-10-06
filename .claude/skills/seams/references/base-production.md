@@ -528,3 +528,23 @@
   ledger is not wiped at breach either any more: `StackMemory` and
   `PopulatedChunks` are the two base-adjacent resources still wiped by
   name in `enter_next_zone`, not `BuybackLedger`.
+
+- **A carrier's load is never destroyed: every path that ends a hold other
+  than delivery calls `floor::drop_load`.** Before floor items each of those
+  paths (post demolished, post destroyed, siphon lock-in, study, reinforcement
+  call-up, off-shift free of a `Downed` body, displacement by another
+  posting, joining the party, a temporary structure burning out, sale,
+  extraction, permadeath, fusion) removed `Carrying` or despawned the body
+  and the cargo vanished; the stranded timeout is the one that runs inside
+  `haul_step_system`, so it reaches the core through `commands.queue`. The
+  off-shift free fires for `Downed` only, because `is_on_shift` keeps every
+  other carrier on shift. The re-match drop in `assign_base_labour` is a
+  no-op kept for safety: the matching pool excludes carriers, so a carrier is
+  never re-matched away. The trap is a new path written as
+  `remove::<Carrying>()` or a bare despawn: nothing fails to compile and no
+  test notices, the cargo is just gone. The only removals that are not drops
+  are delivery (`hauling.rs`, at arrival) and the builder and besieger loads
+  (`construction.rs`, `combat_rewards.rs`), which are not hauled cargo.
+  Piles merge one per tile and come home through `Errand::Pickup`, which
+  lifts only what an accepting depot the walk can reach will take, trying
+  every pile nearest first.

@@ -1287,3 +1287,33 @@ fn selling_a_rare_copy_buys_back_the_same_copy() {
         "and must not have quietly handed back the ordinary one instead"
     );
 }
+
+/// A sale despawns the body, and what it was carrying must not go with it.
+#[test]
+fn selling_a_carrier_leaves_its_load_on_the_floor() {
+    let mut game = Game::new(129, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let market = spawn_market(&mut game);
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.world
+        .entity_mut(pet)
+        .insert(crate::components::Carrying {
+            item: ItemId::from("cache_grain"),
+            qty: 3,
+        });
+    let at = *game
+        .world
+        .get::<Position>(pet)
+        .expect("a tamed program has a tile");
+
+    game.sell_companion(market, pet)
+        .expect("the sale goes through");
+
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at).expect("a pile");
+    let held = &game
+        .world
+        .get::<crate::components::FloorPile>(pile)
+        .unwrap()
+        .items;
+    assert_eq!(held.get(&ItemId::from("cache_grain")), Some(&3));
+}

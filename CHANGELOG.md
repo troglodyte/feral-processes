@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.10
+
+**A program that loses its job while carrying something now puts the load on the floor instead of losing it.** When its machine is demolished, destroyed in a raid or burns out, when another program is posted onto its job, when it is called up as a reinforcement, joins your party, is fused, sold, extracted or killed for good, is taken for study or locked in a Power Siphon, or is knocked out and sent to a Repair Bay, what it held used to vanish. It now sits on the floor as a pile, drawn with a mark on the base map and named when you examine the tile. An idle hauler with nothing to collect from its own machine carries the nearest pile that a reachable depot will take home. A hauler stranded too long also drops its load where it stands rather than walking it to a depot.
+
 ## 0.15.9
 
 **The base bench now measures bonds and morale, and can tune the social memories.** A `bench` report adds how the staff's morale split across its bands and how spread out it was, how the relationships between programs sorted into bonds (Friend, Rival and so on), and, for every kind of memory, how often it was struck and how often it was new. `bench tune` can now move a memory's valence, half-life, strike cap, stack decay and mood, and an interaction's weight and sulking. `dev-tuning/memories.ron` asks `bench-economy` for some Friends and Rivals and a thin tail of uneasy and devoted staff by moving the ten social memories and the nine conversations that write them; like the others it writes a proposal for you to read and nothing in `assets/` changes. A knob on a field its file leaves out, or on a path outside `assets/`, is now refused when the objective loads rather than partway through a search. See `dev-tuning/README.md`.

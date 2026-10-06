@@ -1060,6 +1060,7 @@ impl Game {
         // this program again, but it does not undo a posting already made,
         // and a party member left holding a `Task` is a body the base still
         // counts as standing at a machine.
+        crate::game::base::floor::drop_load(&mut self.world, creature);
         self.world.entity_mut(creature).remove::<Task>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
@@ -1621,6 +1622,9 @@ impl Game {
             .resource_mut::<Party>()
             .0
             .retain(|&e| e != a && e != b);
+        // A parent mid-haul: its load is set on the floor, not despawned.
+        crate::game::base::floor::drop_load(&mut self.world, a);
+        crate::game::base::floor::drop_load(&mut self.world, b);
         self.world.despawn(a);
         self.world.despawn(b);
         // After both despawns, so neither parent is a holder of the other's
@@ -1832,9 +1836,9 @@ impl Game {
         if self.world.get::<crate::components::Downed>(e).is_some() {
             return None;
         }
-        // The load is destroyed by freeing the carrier, let alone by
-        // despawning it, and nothing in the base has a claim on it to
-        // return it to.
+        // A spend refunds the program's snapshot, not what its hands held,
+        // and a delivery in flight is better finished into a Depot than
+        // scattered as a pile where the program stood.
         if self.world.get::<Carrying>(e).is_some() {
             return None;
         }

@@ -71,6 +71,11 @@ const PREVIEW_FILL: Color = wash(0.35);
 const EXCAVATE_LABEL_INSET: f32 = 4.0;
 const EXCAVATE_LABEL_SIZE: u16 = 14;
 
+/// What a floor pile draws as, whatever it holds: one mark, so the map says
+/// "something is lying here" and the examine line says what. Amber, the hue
+/// of cargo, and not a program's glyph so it is never read as a body.
+pub(crate) const FLOOR_PILE_MARK: (char, Color) = ('%', hud::palette::WARN);
+
 /// The ring the party's own tile wears while cutting tools are armed.
 ///
 /// The plan's hue at full alpha, because a mark and a swing are the same
@@ -702,6 +707,9 @@ fn draw_surface_map(
     // anchor. Ungated, the ring follows the party onto the zone map and
     // claims something the ground there cannot answer.
     let cutting = base_pos.is_some() && game.mining();
+    // Base space only, and `floor_piles` already answers empty elsewhere.
+    let piles: std::collections::HashSet<(i32, i32)> =
+        game.floor_piles().into_iter().map(|p| p.pos).collect();
     // Cloud shadows are the zone map's alone. Base space is a pocket cut
     // out of rock with no sky over it, and the Stack draws through
     // `render/stack.rs` and never reaches here at all — so this one flag is
@@ -926,6 +934,11 @@ fn draw_surface_map(
                 } else {
                     glyph_color(ev.color)
                 };
+            }
+            // Under programs and structures, above the floor: a pile only
+            // takes a glyph nothing else has claimed.
+            if ch.is_none() && piles.contains(&world) {
+                (ch, color) = (Some(FLOOR_PILE_MARK.0), FLOOR_PILE_MARK.1);
             }
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
@@ -5803,6 +5816,68 @@ mod tests {
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
+    }
+
+    /// A base with a Home, and `pile` laid on the floor one cell off the
+    /// party's own when `Some`. Written through the save, the engine's only
+    /// door for a pile from outside its crate.
+    fn base_with_a_pile(seed: u32, pile: bool) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+        let at = game.base_pos().expect("in base space");
+        let path = crate::render::test_support::scratch_path("floor_pile", seed);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        if pile {
+            data.floor_piles
+                .push(feral_processes_engine::save::FloorPileSave {
+                    position: (at.0 + 1, at.1),
+                    items: vec![(
+                        feral_processes_engine::items::ItemId::from("core_fragment"),
+                        3,
+                    )],
+                });
+        }
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        Game::load(&path, &test_assets()).unwrap()
+    }
+
+    /// The pile glyph is drawn in base space, and only because a pile is
+    /// there: the identical base without one paints no such glyph.
+    #[test]
+    fn a_floor_pile_draws_its_mark_in_base_space() {
+        let drawn = |pile: bool| {
+            let mut game = base_with_a_pile(560_200, pile);
+            let mut fx = Fx::new();
+            let (tile_px, glyph_px) = crate::text::map_cell(1);
+            let (_, shapes) = with_painter(|p| {
+                let status = game.player_status();
+                let centre = game.base_pos().unwrap();
+                draw_surface_map(
+                    &mut game,
+                    &mut fx,
+                    p,
+                    Rect::new(0.0, 0.0, 800.0, 600.0),
+                    tile_px,
+                    glyph_px,
+                    &status,
+                    None,
+                    None,
+                    centre,
+                    false,
+                );
+            });
+            painted_text(&shapes)
+                .iter()
+                .filter(|g| g.as_str() == FLOOR_PILE_MARK.0.to_string())
+                .count()
+        };
+        assert_eq!(drawn(true), 1);
+        assert_eq!(drawn(false), 0);
     }
 
     /// Whether a painted fill is `STATION_FLOOR_FILL`, up to the vignette's

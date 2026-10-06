@@ -1369,6 +1369,17 @@ pub struct DigMark {
     pub cut: Option<f32>,
 }
 
+/// One floor pile as the base map draws it — see `Game::floor_piles`.
+///
+/// No glyph or colour: a pile is one mark whatever it holds, and that mark is
+/// the renderer's. `items` is display names in `ItemId` order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloorPileView {
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    pub items: Vec<(String, u32)>,
+}
+
 /// One outpost as the surface map marks it — see `Game::outpost_marks`.
 ///
 /// `DigMark`'s shape one subsystem over: a record with no entity still needs

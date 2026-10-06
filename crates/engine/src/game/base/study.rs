@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use crate::base_grid::BaseGrid;
+use crate::game::base::floor::drop_load;
 use crate::game::base::hauling::NoPost;
 use crate::game::pursuit::walk_field;
 use crate::resources::ActiveResearch;
@@ -303,16 +304,15 @@ impl Game {
         // `drift_idle_staff`'s body loop skips anything still carrying a
         // `Task` before it ever reaches the `UnderStudy` arm — so a stale
         // `Task` also stops the walk to the pen, not only the posting.
-        // `.remove::<Carrying>()` alongside it is `schedule_base_labour`'s
-        // own free-loop rule for a body that is no longer in the pool
-        // (`Downed`'s unconditional free, ahead of the `Carrying` escape):
-        // the scheduler re-posts someone else next tick exactly as it does
-        // when staff shrinks any other way.
+        // The load is dropped alongside it, as `schedule_base_labour`'s own
+        // free loop does for a body that is no longer in the pool: the
+        // scheduler re-posts someone else next tick exactly as it does when
+        // staff shrinks any other way.
+        drop_load(&mut self.world, program);
         self.world
             .entity_mut(program)
             .insert(components::UnderStudy { station })
-            .remove::<Task>()
-            .remove::<Carrying>();
+            .remove::<Task>();
         let name = self.creature_label(program);
         self.log(format!("{name} is pinned in the Research Station's pen."));
         Ok(())

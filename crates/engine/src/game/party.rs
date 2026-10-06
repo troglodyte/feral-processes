@@ -1060,6 +1060,7 @@ impl Game {
         // this program again, but it does not undo a posting already made,
         // and a party member left holding a `Task` is a body the base still
         // counts as standing at a machine.
+        crate::game::base::floor::drop_load(&mut self.world, creature);
         self.world.entity_mut(creature).remove::<Task>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);

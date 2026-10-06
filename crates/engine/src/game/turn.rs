@@ -675,6 +675,7 @@ impl Game {
                     .collect()
             };
             for worker in workers {
+                crate::game::base::floor::drop_load(&mut self.world, worker);
                 self.world.entity_mut(worker).remove::<Task>();
             }
             // Every despawn door lets go of what the structure held first,

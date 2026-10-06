@@ -1584,6 +1584,9 @@ impl Game {
                 .find(|(_, t)| t.target == structure && t.kind == kind)
                 .map(|(e, _)| e)
         }?;
+        // A hauler displaced mid-carry keeps no `Task` to deliver under, so
+        // its load goes to the floor instead of freezing in its hands.
+        drop_load(&mut self.world, holder);
         self.world.entity_mut(holder).remove::<Task>();
         if holder == self.player_entity() {
             self.log_base("You break off what you were doing.");

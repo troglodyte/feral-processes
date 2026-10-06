@@ -624,6 +624,34 @@ fn structure_tiles(game: &mut Game) -> Vec<(i32, i32)> {
     query.iter(&game.world).map(|p| (p.x, p.y)).collect()
 }
 
+/// The hauling system's own blocked set must let a body through a door: a
+/// line of walls across the base with one door in it is the only way from the
+/// node to the depot, so a load arrives only if the door is walked through.
+#[test]
+fn a_hauler_carries_a_load_through_a_door() {
+    let mut game = base(21);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
+    for y in -radius..=radius {
+        let kind = if y == 0 { "door" } else { "wall" };
+        deploy(&mut game, kind, 2, y);
+    }
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "the only route to the depot is through the door"
+    );
+}
+
 /// A hauler routes around the base rather than over it.
 ///
 /// A *wall* rather than a single blocker: the step rule picks the cheapest

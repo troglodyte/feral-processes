@@ -3,6 +3,7 @@
 
 use crate::alerts::AlertKind;
 use crate::components::Downed;
+use crate::game::base::floor::drop_load;
 use crate::*;
 
 impl Game {
@@ -628,6 +629,9 @@ impl Game {
             .resource_mut::<Party>()
             .0
             .retain(|&e| e != creature);
+        // Before the despawn every caller follows with: a load is never
+        // destroyed with its carrier.
+        drop_load(&mut self.world, creature);
         self.world
             .entity_mut(creature)
             .remove::<Task>()

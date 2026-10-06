@@ -1621,6 +1621,9 @@ impl Game {
             .resource_mut::<Party>()
             .0
             .retain(|&e| e != a && e != b);
+        // A parent mid-haul: its load is set on the floor, not despawned.
+        crate::game::base::floor::drop_load(&mut self.world, a);
+        crate::game::base::floor::drop_load(&mut self.world, b);
         self.world.despawn(a);
         self.world.despawn(b);
         // After both despawns, so neither parent is a holder of the other's

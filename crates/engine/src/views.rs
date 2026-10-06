@@ -18,6 +18,7 @@ use crate::perks::Perk;
 use crate::progression::StatRow;
 use crate::research::ResearchId;
 use crate::resources::DifficultyMode;
+use crate::rooms::RoomBand;
 use crate::species::{AffinityClass, MoveDef, SpeciesId};
 use crate::structures::StructureId;
 use crate::tools::{ToolCategory, ToolId};
@@ -1383,6 +1384,22 @@ pub struct DigMark {
     pub cut: Option<f32>,
 }
 
+/// One room with a role, for the base map's Alt overlay — see
+/// `Game::view_rooms`. Rooms with no role (the commons, bare space) are not
+/// listed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoomView {
+    /// The role's display name, e.g. "quarters".
+    pub role: String,
+    pub band: RoomBand,
+    /// **Base-space** cells, sorted.
+    pub cells: Vec<(i32, i32)>,
+    /// The cell of `cells` nearest the room's centre, where a label goes.
+    pub label_at: (i32, i32),
+    /// The role's overlay colour, as authored in its `RoomDef`.
+    pub tint: (u8, u8, u8),
+}
+
 /// One floor pile as the base map draws it — see `Game::floor_piles`.
 ///
 /// No glyph or colour: a pile is one mark whatever it holds, and that mark is
@@ -1705,6 +1722,9 @@ pub struct StructureReport {
     /// "work it yourself" filters on this, and per `CLAUDE.md` the rule is a
     /// call rather than a second copy of the adjacency list.
     pub player_adjacent: bool,
+    /// The room this structure stands in, as "Fine dormitory"; `None` in the
+    /// commons and in space with no role.
+    pub room: Option<String>,
     /// What is staged in this structure's input buffer and waiting in its
     /// output buffer, as display-ready `(item name, count)` pairs.
     ///

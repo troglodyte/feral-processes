@@ -458,6 +458,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "data_cache".to_string(),
             "defrag_bay".to_string(),
             "depot".to_string(),
+            "door".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),

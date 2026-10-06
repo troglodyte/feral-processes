@@ -738,6 +738,7 @@ mod tests {
             is_home: false,
             workable: true,
             player_adjacent: false,
+            room: None,
             input: Vec::new(),
             output: vec![("Cache Grain".to_string(), 7)],
             output_capacity: 20,

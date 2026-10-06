@@ -643,7 +643,7 @@ mod tests {
         let subjects = app.sprite_subjects();
         assert_eq!(
             subjects.len(),
-            61,
+            62,
             "the shipped subject count moved — re-check this census's premise"
         );
 

@@ -2616,6 +2616,7 @@ mod tests {
             is_home: false,
             workable: true,
             player_adjacent: false,
+            room: None,
             input: Vec::new(),
             output: Vec::new(),
             output_capacity: 0,

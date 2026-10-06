@@ -20,6 +20,7 @@ use crate::tuning::{
     ROOM_AREA_FULL, ROOM_AREA_WEIGHT, ROOM_BAND_FINE, ROOM_BAND_PLAIN, ROOM_BAND_SUPERB,
     ROOM_CROWD_FREE, ROOM_CROWD_WEIGHT, ROOM_FINISH_WEIGHT,
 };
+use crate::views::RoomView;
 
 pub type RoomId = String;
 
@@ -110,6 +111,17 @@ pub enum RoomBand {
     Plain,
     Fine,
     Superb,
+}
+
+impl RoomBand {
+    pub fn label(self) -> &'static str {
+        match self {
+            RoomBand::Cramped => "Cramped",
+            RoomBand::Plain => "Plain",
+            RoomBand::Fine => "Fine",
+            RoomBand::Superb => "Superb",
+        }
+    }
 }
 
 /// A structure standing in base space: its anchor and its def.
@@ -295,6 +307,54 @@ pub fn of_world(world: &World) -> Rooms {
         return Rooms::default();
     };
     detect(grid, &placed, rooms, floors, home)
+}
+
+impl crate::Game {
+    /// Every room that has a role, for the Alt overlay. Empty outside base
+    /// space, `floor_piles`' reason: the cells are base cells.
+    pub fn view_rooms(&mut self) -> Vec<RoomView> {
+        if self.base_pos().is_none() {
+            return Vec::new();
+        }
+        let rooms = of_world(&self.world);
+        let db = self.world.resource::<RoomDb>();
+        let mut views: Vec<RoomView> = rooms
+            .rooms
+            .iter()
+            .filter_map(|room| {
+                let def = db.get(room.role.as_deref()?)?;
+                Some(RoomView {
+                    role: def.name.clone(),
+                    band: room.band,
+                    cells: room.cells.clone(),
+                    label_at: centre_cell(&room.cells),
+                    tint: def.tint,
+                })
+            })
+            .collect();
+        views.sort_unstable_by_key(|v| v.cells[0]);
+        views
+    }
+
+    /// "Fine dormitory" for the role-bearing room on `cell`.
+    pub(crate) fn room_line(&self, rooms: &Rooms, cell: (i32, i32)) -> Option<String> {
+        let room = rooms.room_at(cell.0, cell.1)?;
+        let def = self.world.resource::<RoomDb>().get(room.role.as_deref()?)?;
+        Some(format!("{} {}", room.band.label(), def.name))
+    }
+}
+
+/// The cell of `cells` nearest their mean, the first on a tie.
+fn centre_cell(cells: &[(i32, i32)]) -> (i32, i32) {
+    let n = cells.len() as i64;
+    let (sx, sy) = cells.iter().fold((0i64, 0i64), |(sx, sy), &(x, y)| {
+        (sx + x as i64, sy + y as i64)
+    });
+    let dist = |&(x, y): &(i32, i32)| {
+        let (dx, dy) = (x as i64 * n - sx, y as i64 * n - sy);
+        dx * dx + dy * dy
+    };
+    cells.iter().copied().min_by_key(dist).unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -27,6 +27,7 @@ use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
+use crate::game::base::floor::drop_load;
 use crate::game::base::hauling;
 use crate::game::base::lines::{self, Line};
 use crate::game::base::offshift;
@@ -1483,10 +1484,8 @@ impl Game {
         // lives in that function rather than being restated here.
         for &worker in staff {
             if !self.is_on_shift(worker, amenities) {
-                self.world
-                    .entity_mut(worker)
-                    .remove::<Task>()
-                    .remove::<Carrying>();
+                self.world.entity_mut(worker).remove::<Task>();
+                drop_load(&mut self.world, worker);
             }
         }
         let mut matched: Vec<Option<(Entity, TaskKind)>> = vec![None; pool.len()];
@@ -1497,10 +1496,8 @@ impl Game {
         }
         for (body, &worker) in pool.iter().enumerate() {
             if held[body].is_some() && held[body] != matched[body] {
-                self.world
-                    .entity_mut(worker)
-                    .remove::<Task>()
-                    .remove::<Carrying>();
+                self.world.entity_mut(worker).remove::<Task>();
+                drop_load(&mut self.world, worker);
             }
         }
 

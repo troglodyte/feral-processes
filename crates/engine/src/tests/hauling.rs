@@ -2020,13 +2020,13 @@ fn a_cut_off_machine_with_a_consumer_beside_it_stays_stranded() {
     assert_eq!(flips, 1, "entered once, never flapped back out");
 }
 
-/// **A carrier stranded by structures sets its load down in the nearest store
-/// that takes it, after `STRANDED_SET_DOWN_TICKS` and not before.** Both
-/// Depots are walled in, so no walk reaches either; the nearer by Chebyshev
-/// is the one that gets the load, and the carrier's hands are empty — which
-/// is what lets the scheduler free it the way it frees anyone.
+/// **A carrier stranded by structures drops its load on the floor after
+/// `STRANDED_SET_DOWN_TICKS` and not before.** Both Depots are walled in, so
+/// no walk reaches either; the load becomes a pile on the tile the carrier
+/// stands on, nothing is deposited anywhere, and the carrier's hands are
+/// empty — which is what lets the scheduler free it the way it frees anyone.
 #[test]
-fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
+fn a_carrier_stranded_by_structures_drops_its_load_on_the_floor() {
     let mut game = base(41);
     game.world
         .resource_mut::<crate::resources::BattleTelemetry>()
@@ -2055,52 +2055,48 @@ fn a_carrier_stranded_by_structures_sets_its_load_down_in_the_nearest_store() {
     while game.current_tick() < since + tuning::STRANDED_SET_DOWN_TICKS {
         assert!(
             game.world.get::<Carrying>(worker).is_some(),
-            "set down early, at tick {} of an episode from {since}",
+            "dropped early, at tick {} of an episode from {since}",
             game.current_tick()
         );
         game.tick();
     }
-    game.world
-        .resource_mut::<crate::alerts::AlertBoard>()
-        .depots_full = true;
+    let at = *game.world.get::<Position>(worker).unwrap();
     tick_until(&mut game, 3, |g| g.world.get::<Carrying>(worker).is_none());
 
     assert!(
         game.world.get::<Carrying>(worker).is_none(),
         "still holding the load past the timeout"
     );
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at)
+        .expect("a pile where the carrier stood");
+    assert_eq!(
+        game.world
+            .get::<crate::components::FloorPile>(pile)
+            .unwrap()
+            .items
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(tuning::HAUL_CARRY_CAPACITY)
+    );
+    assert_eq!(node_output(&game, near, ids::CORE_FRAGMENT), 0);
+    assert_eq!(node_output(&game, far, ids::CORE_FRAGMENT), 0);
     assert!(
         !game
             .world
-            .resource::<crate::alerts::AlertBoard>()
-            .depots_full,
-        "a set-down is a deposit, and a deposit clears the depots-full latch"
-    );
-    assert!(
-        game.world
             .resource::<crate::resources::BattleTelemetry>()
             .records
             .iter()
-            .any(|r| matches!(
-                r,
-                crate::telemetry::Record::Haul { errand, qty, .. }
-                    if errand == "set_down" && *qty == tuning::HAUL_CARRY_CAPACITY
-            )),
-        "the set-down is a haul in the log like any delivery"
+            .any(|r| matches!(r, crate::telemetry::Record::Haul { errand, .. } if errand == "set_down")),
+        "a drop is not a delivery and writes no haul record"
     );
-    assert_eq!(
-        node_output(&game, near, ids::CORE_FRAGMENT),
-        tuning::HAUL_CARRY_CAPACITY,
-        "the load belongs in the nearer store"
-    );
-    assert_eq!(node_output(&game, far, ids::CORE_FRAGMENT), 0);
 }
 
-/// **Nothing is destroyed to free a carrier.** Sealed in by Walls away from
-/// its machine, with the one Depot full, a stranded carrier has nowhere to
-/// set its load down — so it keeps it, and stays exactly as it was.
+/// **Nothing is destroyed to free a carrier, and nothing is deposited by
+/// it.** Sealed in by Walls away from its machine, a stranded carrier drops
+/// its load where it stands even with the one Depot full — the Depot is not
+/// touched, the machine's buffer is not refilled, and the carrier is freed.
 #[test]
-fn a_stranded_carrier_with_nowhere_to_set_down_keeps_its_load() {
+fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
     let mut game = base(42);
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
@@ -2139,19 +2135,24 @@ fn a_stranded_carrier_with_nowhere_to_set_down_keeps_its_load() {
         game.tick();
     }
 
+    assert!(game.world.get::<Carrying>(worker).is_none());
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, Position { x: -3, y: -3 })
+        .expect("a pile where the carrier stood");
     assert_eq!(
         game.world
-            .get::<Carrying>(worker)
-            .map(|c| (c.item.clone(), c.qty)),
-        Some((load.item, load.qty)),
-        "the load is kept whole"
+            .get::<crate::components::FloorPile>(pile)
+            .unwrap()
+            .items
+            .get(&load.item)
+            .copied(),
+        Some(load.qty),
+        "the load is on the floor whole"
     );
     assert_eq!(
         node_output(&game, depot, ids::CORE_FRAGMENT),
         capacity_of(&game, depot)
     );
     assert_eq!(node_output(&game, node, ids::CORE_FRAGMENT), node_before);
-    assert!(game.world.get::<Stranded>(worker).is_some());
 }
 
 /// A hauler stranded with a load it cannot deliver is held on shift by
@@ -2159,8 +2160,8 @@ fn a_stranded_carrier_with_nowhere_to_set_down_keeps_its_load() {
 /// cleared by anything but a route reopening — so once it also downed tools
 /// it carried, and counted as on shift, for as long as the walls stood. Found
 /// on the `chains` bench: seeds 2 and 5 read `on_shift_share` 1.0 beside a
-/// 3.6%/5.0% `downed_tools` rung share. The set-down is what clears it: the
-/// load goes into the walled Depot after `STRANDED_SET_DOWN_TICKS`, the hands
+/// 3.6%/5.0% `downed_tools` rung share. The drop is what clears it: the
+/// load goes on the floor after `STRANDED_SET_DOWN_TICKS`, the hands
 /// are empty, and the downed-tools rule takes it off shift.
 #[test]
 fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {

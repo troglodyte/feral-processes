@@ -520,3 +520,36 @@ fn a_landing_is_cued_at_the_troopers_cell() {
         "{cues:?}"
     );
 }
+
+/// A trooper called up from the base while carrying a load leaves the load
+/// on its base tile rather than taking it into the fight.
+#[test]
+fn a_called_trooper_drops_its_load_on_its_base_tile() {
+    let mut game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    terminal_at(&mut game, 10, 10);
+    let trooper = trooper_at(&mut game, 11, 10, 0);
+    game.world
+        .entity_mut(trooper)
+        .insert(crate::components::Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        });
+    fight(&mut game);
+
+    assert!(call(&mut game));
+
+    assert!(
+        game.world
+            .get::<crate::components::Carrying>(trooper)
+            .is_none()
+    );
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, Position { x: 11, y: 10 })
+        .expect("a pile on the trooper's base tile");
+    assert_eq!(
+        game.world
+            .get::<crate::components::FloorPile>(pile)
+            .unwrap()
+            .items,
+        std::collections::BTreeMap::from([(ItemId::from(ids::CORE_FRAGMENT), 3)])
+    );
+}

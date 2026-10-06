@@ -127,3 +127,127 @@ fn a_save_without_the_field_loads_with_no_piles() {
     let parsed: crate::save::SaveData = ron::from_str(&stripped).unwrap();
     assert!(parsed.floor_piles.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// The paths that used to destroy a carrier's load. Each leaves a pile on the
+// carrier's tile and no `Carrying`.
+// ---------------------------------------------------------------------------
+
+use crate::components::{Downed, Durability, Task, TaskKind};
+
+const LOAD: u32 = 3;
+
+fn load() -> Carrying {
+    Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: LOAD,
+    }
+}
+
+/// A staff program on its own tile, holding a load.
+fn loaded_staff(game: &mut Game, x: i32, y: i32) -> Entity {
+    let worker = spawn_tamed(game, 100, 3);
+    game.world
+        .entity_mut(worker)
+        .insert((Position { x, y }, load()));
+    worker
+}
+
+fn assert_dropped(game: &mut Game, worker: Entity, x: i32, y: i32) {
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "still holding the load"
+    );
+    assert_eq!(
+        pile_items(game, x, y),
+        vec![(ItemId::from(ids::CORE_FRAGMENT), LOAD)]
+    );
+}
+
+fn posted_carrier(game: &mut Game) -> (Entity, Entity) {
+    stand_in_base(game);
+    place_home(game);
+    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let worker = loaded_staff(game, 6, 6);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: node,
+        progress: 0,
+        required: 10,
+    });
+    (node, worker)
+}
+
+#[test]
+fn a_demolished_post_drops_its_carriers_load() {
+    let mut g = game();
+    let (node, worker) = posted_carrier(&mut g);
+    g.remove_structure(node).unwrap();
+    assert!(g.world.get::<Task>(worker).is_none());
+    assert_dropped(&mut g, worker, 6, 6);
+}
+
+#[test]
+fn a_destroyed_post_drops_its_carriers_load() {
+    let mut g = game();
+    let (node, worker) = posted_carrier(&mut g);
+    g.world
+        .entity_mut(node)
+        .insert(Durability { hp: 10, max_hp: 10 });
+    g.damage_structure(node, 100_000, "Mining Node", "a GC Entropy Sweep");
+    assert!(g.world.get::<Task>(worker).is_none());
+    assert_dropped(&mut g, worker, 6, 6);
+}
+
+#[test]
+fn a_siphon_lock_in_drops_the_load() {
+    let mut g = game();
+    stand_in_base(&mut g);
+    let siphon = spawn_structure_at(&mut g, "power_siphon", 3, 3);
+    let worker = loaded_staff(&mut g, 6, 6);
+    g.siphon_program(worker, siphon).unwrap();
+    assert_dropped(&mut g, worker, 6, 6);
+}
+
+#[test]
+fn pinning_for_study_drops_the_load() {
+    let mut g = game();
+    stand_in_base(&mut g);
+    place_home(&mut g);
+    give(&mut g, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    place_now(&mut g, "research_node", 1, -3).unwrap();
+    let station = g.find_blocking_structure_at(1, -3).unwrap();
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert(load());
+    let at = *g.world.get::<Position>(worker).unwrap();
+    g.pin_subject(worker, station).unwrap();
+    assert_dropped(&mut g, worker, at.x, at.y);
+}
+
+/// A staff body at a mine under a real work order, holding a load.
+fn ordered_carrier(game: &mut Game) -> Entity {
+    stand_in_base(game);
+    place_home(game);
+    spawn_machine_at(game, "mining_node", 2, 0);
+    let worker = spawn_tamed(game, 100, 3);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    game.tick();
+    assert!(
+        game.world.get::<Task>(worker).is_some(),
+        "precondition: posted by the scheduler"
+    );
+    game.world.entity_mut(worker).insert(load());
+    worker
+}
+
+#[test]
+fn freeing_a_downed_carrier_drops_the_load() {
+    let mut g = game();
+    let worker = ordered_carrier(&mut g);
+    let at = *g.world.get::<Position>(worker).unwrap();
+    g.world.entity_mut(worker).insert(Downed);
+    g.tick();
+    assert!(g.world.get::<Task>(worker).is_none());
+    assert_dropped(&mut g, worker, at.x, at.y);
+}

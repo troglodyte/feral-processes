@@ -13,6 +13,7 @@ use bevy_ecs::system::SystemParam;
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
+use crate::game::base::floor::drop_load;
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
@@ -1482,56 +1483,23 @@ pub(crate) fn haul_step_system(
                     .insert(Stranded { since: clock.tick });
                 continue;
             };
-            // **A load held too long is set down, never destroyed.** A
-            // carrier is never freed while it holds one, so a stranding
-            // that waiting will not fix holds a body on shift forever. Past
-            // `STRANDED_SET_DOWN_TICKS` the load goes into the nearest store
-            // that takes it, at any distance — nearest by Chebyshev, because
-            // a stranded carrier is one no walk reaches anything from, so a
-            // path distance is exactly what it does not have. The units are
-            // moved, not made: a `Record::Haul` like any delivery, and
-            // through the same `deposit` a `Deposit` uses. With nothing
-            // that takes it the load is kept and the carrier stays as it
-            // is, `Stranded` and loud.
+            // **A load held too long goes on the floor, never into the
+            // void.** A carrier is never freed while it holds one, so a
+            // stranding that waiting will not fix holds a body on shift
+            // forever. Past `STRANDED_SET_DOWN_TICKS` the load becomes a
+            // `FloorPile` on the carrier's own tile (`floor::drop_load`),
+            // which a later errand brings home. Queued rather than applied
+            // here because the drop needs the whole `World`.
             //
             // `CarryingProgram` is not handled here because it never walks:
             // a rack's carrier is picked up only from a rack already in
             // reach and loaded the next beat, so it cannot be stranded by a
             // route, and what holds it — a full hopper — is the rig's to
-            // clear. A program is not a stock line a Depot could take.
-            if let Some(load) = &carrying
+            // clear. A program is not a stock line a pile could hold.
+            if carrying.is_some()
                 && clock.tick.saturating_sub(episode.since) >= tuning::STRANDED_SET_DOWN_TICKS
             {
-                let store = depots
-                    .iter()
-                    .copied()
-                    .filter(|(e, _)| accepts(*e, &load.item))
-                    .min_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
-                if let Some((store, at)) = store
-                    && let Ok((_, _, mut stock, _)) = structures.get_mut(store)
-                {
-                    let moved = deposit(&mut stock, load);
-                    if moved > 0 {
-                        board.depots_full = false;
-                    }
-                    note_haul(
-                        &mut telemetry,
-                        clock.tick,
-                        (post, &post_kind),
-                        "set_down",
-                        &load.item,
-                        moved,
-                        chebyshev(post, at).max(0) as u32,
-                    );
-                    if moved == load.qty {
-                        commands.entity(worker).remove::<Carrying>();
-                    } else if moved > 0 {
-                        commands.entity(worker).insert(Carrying {
-                            item: load.item.clone(),
-                            qty: load.qty - moved,
-                        });
-                    }
-                }
+                commands.queue(move |world: &mut World| drop_load(world, worker));
             }
             continue;
         };

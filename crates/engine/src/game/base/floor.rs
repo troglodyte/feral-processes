@@ -45,10 +45,6 @@ pub(crate) fn floor_pile_at(world: &mut World, pos: Position) -> Option<Entity> 
 
 /// Puts `who`'s load on the floor of its tile and ends the hold. A no-op if
 /// `who` carries nothing or has no tile.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired to its callers in the next commit")
-)]
 pub(crate) fn drop_load(world: &mut World, who: Entity) {
     let Some(pos) = world.get::<Position>(who).copied() else {
         return;

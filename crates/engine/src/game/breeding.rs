@@ -255,7 +255,7 @@ impl Game {
                 .map_or(species.clone(), |d| d.name.clone());
             self.log_kind(
                 MessageKind::Raid,
-                format!("A {name} child (gen {generation}) is lost with the Breeding Bay."),
+                format!("A {name} child (gen {generation}) is lost with its bay."),
             );
         }
     }

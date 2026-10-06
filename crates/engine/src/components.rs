@@ -1858,8 +1858,9 @@ impl Potential {
     /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL` onto 0-100. Purely a
     /// display aggregate — each roll still applies independently to its own
     /// stat/growth. A bred roll past `MAX_INDIVIDUAL_ROLL` reads above 100,
-    /// which is the point: it is the gain breeding made. The two build rolls are deliberately not folded in:
-    /// they say nothing about how this individual fights.
+    /// which is the point: it is the gain breeding made. The two build rolls
+    /// are deliberately not folded in: they say nothing about how this
+    /// individual fights.
     pub fn quality_percent(&self) -> u32 {
         let avg = (self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0;
         let pct = (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;

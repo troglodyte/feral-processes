@@ -113,11 +113,23 @@ fn new_game() -> Game {
     Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-/// What P3's `install_implant` will do to the world, minus its checks.
+/// Sets the installed list directly, skipping the rig and the item. For test
+/// defs that have no item, and for ids that must be installed missing; a
+/// shipped implant goes through `install_shipped` and the real door.
 fn install(game: &mut Game, list: &[&str]) {
     let player = game.player_entity();
     game.world.get_mut::<Implants>(player).unwrap().installed = ids(list);
     game.recompute_derived(player);
+}
+
+/// Installs a shipped implant the way the player does: a Splice Rig
+/// standing and the item in the pack.
+fn install_shipped(game: &mut Game, id: &str) {
+    if !game.has_structure("splice_rig") {
+        spawn_structure_at(game, "splice_rig", 3, 3);
+    }
+    give(game, &ItemId::from(id), 1);
+    game.install_implant(&ItemId::from(id)).unwrap();
 }
 
 fn def(id: &str) -> ImplantDef {
@@ -205,7 +217,7 @@ fn dermal_lattice_lowers_evasion_in_the_profile_and_the_manifest() {
     let shown = |g: &Game| g.manifest(player).unwrap().evasion;
     let (profile_before, shown_before) = (evasion(&game), shown(&game));
 
-    install(&mut game, &["dermal_lattice"]);
+    install_shipped(&mut game, "dermal_lattice");
     assert!(evasion(&game) < profile_before);
     assert!(shown(&game) < shown_before);
 }
@@ -277,7 +289,7 @@ fn upkeep_scales_with_load_and_low_power_mode_reduces_it_too() {
 fn capture_odds_rise_by_exactly_the_hooks_pct() {
     let mut game = new_game();
     let before = game.player_decompiler_bonuses().capture_boost_pct;
-    install(&mut game, &["ghost_handshake"]);
+    install_shipped(&mut game, "ghost_handshake");
     assert_eq!(
         game.player_decompiler_bonuses().capture_boost_pct,
         before + 10
@@ -293,7 +305,7 @@ fn drop_boost_applies_in_the_stack_and_not_on_the_surface() {
         .find(|s| !game.equipment_drops_for(s).is_empty())
         .expect("a species with equipment drops");
     let before = game.equipment_drops_for(&species);
-    install(&mut game, &["black_ledger"]);
+    install_shipped(&mut game, "black_ledger");
     assert_eq!(
         game.equipment_drops_for(&species),
         before,
@@ -324,7 +336,7 @@ fn routine_slots_gain_one_from_overclock_spine() {
     let mut game = new_game();
     let player = game.player_entity();
     let before = game.routine_slots(player);
-    install(&mut game, &["overclock_spine"]);
+    install_shipped(&mut game, "overclock_spine");
     assert_eq!(game.routine_slots(player), before + 1);
 }
 
@@ -341,7 +353,7 @@ fn trace_rises_faster_with_a_downside_and_slower_with_a_damp_and_never_stops() {
     game.enter_stack(pos.x, pos.y);
     let plain = trace_after_a_cache(&mut game);
 
-    install(&mut game, &["black_ledger"]);
+    install_shipped(&mut game, "black_ledger");
     assert!(trace_after_a_cache(&mut game) > plain);
 
     add_def(&mut game, hook_def("damp", ImplantHook::TraceDamp(100)));
@@ -449,7 +461,7 @@ fn overload_can_arm_a_rejection_status_and_not_overloaded_never_does() {
 
 fn switch_game() -> Game {
     let mut game = new_game();
-    install(&mut game, &["dead_mans_switch"]);
+    install_shipped(&mut game, "dead_mans_switch");
     open_battle(&mut game);
     game
 }
@@ -502,7 +514,7 @@ fn the_switch_needs_power_a_battle_and_the_implant() {
     assert_eq!(player_hp(&game), 0, "no implant");
 
     let mut game = new_game();
-    install(&mut game, &["dead_mans_switch"]);
+    install_shipped(&mut game, "dead_mans_switch");
     game.apply_damage(game.player_entity(), 10_000);
     assert_eq!(player_hp(&game), 0, "no battle");
 }
@@ -516,7 +528,7 @@ fn signature_moves_the_game(signature: ImplantSignature) -> bool {
             let survives = |installed: bool| {
                 let mut game = new_game();
                 if installed {
-                    install(&mut game, &["dead_mans_switch"]);
+                    install_shipped(&mut game, "dead_mans_switch");
                 }
                 open_battle(&mut game);
                 game.apply_damage(game.player_entity(), 10_000);
@@ -749,4 +761,14 @@ fn the_rig_is_adjacent_only_beside_the_party() {
     assert!(!game.adjacent_splice_rig());
     spawn_structure_at(&mut game, "splice_rig", 1, 0);
     assert!(game.adjacent_splice_rig());
+}
+
+#[test]
+fn a_tactical_fight_rolls_battle_start_statuses_too() {
+    let mut game = new_game();
+    add_def(&mut game, rejecting_def("always", 1.0));
+    install(&mut game, &["always"]);
+    super::tactical::tactical_fight(&mut game, 1, 20);
+    assert!(game.tactical_actor().is_some(), "a tactical fight is open");
+    assert_eq!(player_status_ids(&game), vec!["stun"]);
 }

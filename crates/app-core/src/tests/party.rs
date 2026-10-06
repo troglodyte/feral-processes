@@ -625,10 +625,16 @@ fn the_memories_page_scrolls_without_losing_the_rosters_row() {
         game.memory_report(app.pending_memory_program.unwrap())
             .len()
     };
-    assert!(rows >= 3, "precondition: room to scroll off row 0 and row 1");
+    assert!(
+        rows >= 3,
+        "precondition: room to scroll off row 0 and row 1"
+    );
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Down);
-    assert_eq!(app.menu_selected, 2, "the page scrolled to a row of its own");
+    assert_eq!(
+        app.menu_selected, 2,
+        "the page scrolled to a row of its own"
+    );
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Companion);

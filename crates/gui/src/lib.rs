@@ -99,6 +99,8 @@ const CTRL_KEYS: [KeyCode; 2] = [KeyCode::ControlLeft, KeyCode::ControlRight];
 /// this produces no `GameKey` at all and binds no arrow: app-core never
 /// hears about it, so there is nothing here for `App::handle_key` to strip
 /// on a screen that doesn't want it.
+const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
+
 /// Whether `FERAL_DEV_ALT` is set: holds `reveal` down for `--screenshot`,
 /// whose `--keys` cannot carry a modifier. `FERAL_DEV_REVEAL`'s predicate.
 fn dev_alt() -> bool {
@@ -107,8 +109,6 @@ fn dev_alt() -> bool {
     });
     *ON
 }
-
-const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
 
 /// Folds held modifiers into the two horizontal arrows.
 ///

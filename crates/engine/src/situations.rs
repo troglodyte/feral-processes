@@ -408,6 +408,10 @@ pub fn assess_situation_system(
     // A total order, not bevy's iteration order: the answer does not depend on
     // the order today, but a reader should not have to prove that.
     staff.sort_by_key(|(body, _)| body.entity);
+    // Room detection is the expensive part and has nobody to answer for.
+    if staff.is_empty() {
+        return;
+    }
     let (bodies, current): (Vec<Body>, Vec<Option<&Situation>>) = staff.into_iter().unzip();
     let rooms = crate::systems::rooms_of_inputs(&room_inputs, &structure_db, sites.iter());
     let status = |e: Entity| statuses.get(e).ok().copied();

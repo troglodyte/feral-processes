@@ -647,12 +647,34 @@ fn install_refusals_spend_nothing() {
     assert!(game.install_implant(&fibers).is_err());
     assert_eq!(pack(&game), before);
 
-    // An item naming an implant with no def, and an item that is not known.
+    // An item id the game does not know.
     let mut game = rigged_game();
     give(&mut game, &ItemId::from("no_such_item"), 1);
     let before = pack(&game);
     assert!(game.install_implant(&ItemId::from("no_such_item")).is_err());
     assert_eq!(pack(&game), before);
+
+    // A real item naming an implant that has no def.
+    let mut game = rigged_game();
+    let mut orphan = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .get("ripper_fibers")
+        .expect("the shipped implant item is loaded")
+        .clone();
+    orphan.id = ItemId::from("orphan_fibers");
+    orphan.implant = Some(ImplantId::from("no_such_implant"));
+    game.world
+        .resource_mut::<crate::items_db::ItemDb>()
+        .insert(orphan);
+    give(&mut game, &ItemId::from("orphan_fibers"), 1);
+    let before = pack(&game);
+    assert!(
+        game.install_implant(&ItemId::from("orphan_fibers"))
+            .is_err()
+    );
+    assert_eq!(pack(&game), before);
+    assert!(installed(&game).is_empty());
 
     // Already installed.
     let mut game = rigged_game();
@@ -903,4 +925,57 @@ fn a_negative_delta_cannot_drive_max_hp_or_power_below_their_floors() {
         .get::<crate::components::Derived>(player)
         .unwrap();
     assert_eq!(derived.max_power, 0.0);
+}
+
+// ---- the tactical door ----
+
+fn open_tactical(game: &mut Game) {
+    let wild = spawn_wild_on_player_tile(game);
+    game.open_tactical_battle(vec![wild]);
+    assert!(
+        game.world
+            .contains_resource::<crate::tactical::TacticalBattle>()
+    );
+}
+
+#[test]
+fn a_player_with_no_implants_draws_nothing_from_the_rng_in_a_tactical_fight() {
+    // A tactical fight draws for its own reasons (the board, initiative), so
+    // the roll is measured alone, with the battle open, not by comparing
+    // against a game where the battle never began.
+    let next_draw = |roll: bool| {
+        let mut game = new_game();
+        open_tactical(&mut game);
+        if roll {
+            game.roll_implant_battle_start();
+        }
+        game.world.resource_mut::<GameRng>().0.random::<u64>()
+    };
+    assert_eq!(next_draw(true), next_draw(false));
+}
+
+#[test]
+fn a_tactical_fight_opens_with_the_battle_start_status() {
+    let mut game = new_game();
+    add_def(&mut game, rejecting_def("always", 1.0));
+    install(&mut game, &["always"]);
+    open_tactical(&mut game);
+    assert_eq!(player_status_ids(&game), vec!["stun"]);
+}
+
+#[test]
+fn the_switch_fires_once_in_a_tactical_fight() {
+    let mut game = new_game();
+    install_shipped(&mut game, "dead_mans_switch");
+    open_tactical(&mut game);
+    let player = game.player_entity();
+    let power = |g: &Game| g.world.get::<PowerReserve>(player).unwrap().get();
+    let before = power(&game);
+
+    game.apply_damage(player, 10_000);
+    assert_eq!(player_hp(&game), 1);
+    assert_eq!(before - power(&game), crate::tuning::DEAD_MANS_SWITCH_POWER);
+
+    game.apply_damage(player, 10_000);
+    assert_eq!(player_hp(&game), 0, "the second lethal hit kills");
 }

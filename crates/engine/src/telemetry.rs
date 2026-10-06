@@ -97,6 +97,33 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// A program on the `LashingOut` rung opened a fight. Once per brawl
+    /// started — not per exchange, which is the log's business.
+    ///
+    /// `who` is `Game::creature_label`, the identity every other line the
+    /// player reads uses, because a record has no `Entity` to carry that
+    /// survives the run.
+    Tantrum { tick: u64, who: String },
+    /// A program's need ran out with nothing to answer it. One per latch
+    /// edge, which is what `Game::fray` already says once, so the log and
+    /// the record never disagree. `unreachable` separates an amenity the
+    /// body cannot get to from a base that has none.
+    Fray {
+        tick: u64,
+        who: String,
+        need: String,
+        unreachable: bool,
+    },
+    /// A memory was written: `new` when it was not held before and is held
+    /// after the write's eviction, so a reinforcement and a memory forgotten
+    /// on the call that wrote it are both `false`. Only the Written path of
+    /// `Game::remember_named` says this, so a refused write (unknown def,
+    /// wrong subject, no store) is not a formation.
+    ///
+    /// The bench reads this rather than `memory_report`, which names what a
+    /// holder keeps *now*: a reinforcement looks like a first strike there
+    /// and an evicted memory is gone.
+    Remember { tick: u64, def: String, new: bool },
     /// One leg of a haul that actually moved goods.
     ///
     /// **The corrected B3.** Adjacency is a throughput multiplier and not a
@@ -204,8 +231,9 @@ impl Record {
     /// record carries a fight id" true rather than merely documented.
     ///
     /// The base records are the ones that do not. They are keyed to `tick`
-    /// and happen while no fight is open at all, so re-keying one would be
-    /// inventing an association rather than correcting it.
+    /// and carry no fight id (`Remember` fires mid-fight but belongs to no
+    /// one fight), so re-keying one would be inventing an association
+    /// rather than correcting it.
     pub(crate) fn set_fight(&mut self, fight: u64) {
         let slot = match self {
             Record::FightStart { fight, .. }
@@ -216,6 +244,9 @@ impl Record {
             Record::Extract { .. }
             | Record::Assemble { .. }
             | Record::MachineStall { .. }
+            | Record::Tantrum { .. }
+            | Record::Fray { .. }
+            | Record::Remember { .. }
             | Record::HandCraft { .. }
             | Record::Acquire { .. }
             | Record::Consume { .. }

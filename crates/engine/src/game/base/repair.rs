@@ -8,7 +8,7 @@
 
 use crate::base_grid::BaseGrid;
 use crate::components::{Downed, Position, Stats, Structure};
-use crate::game::base::hauling::{NoPost, step_to_post};
+use crate::game::base::hauling::{NoPost, Step, step_to_post};
 use crate::game::base::offshift::in_reach;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
@@ -307,11 +307,11 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
-        let blocked = self.blocked_tiles();
+        let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         // `in_reach`'s own note: no shipped Repair Bay is wider than 1, held
         // by `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
-        let Some(tile) = step_to_post(
+        let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,

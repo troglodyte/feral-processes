@@ -20,6 +20,7 @@ pub(crate) mod construction;
 pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;
+pub(crate) mod floor;
 pub(crate) mod hauling;
 pub(crate) mod lines;
 pub(crate) mod morale;

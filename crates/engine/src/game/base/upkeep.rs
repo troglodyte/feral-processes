@@ -3,6 +3,7 @@
 
 use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
+use crate::game::base::floor::drop_load;
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -1088,12 +1089,13 @@ impl Game {
                 format!("{label} is destroyed in {event}!"),
             );
             for w in workers {
-                // See `remove_structure`: the load has to go with the task,
-                // and this is the second of the two destruction paths — so
-                // an in-transit carrier is put back here too, before the
-                // component goes with it.
+                // See `remove_structure`: the load goes on the floor with the
+                // task, and this is the second of the two destruction paths
+                // — so an in-transit carrier is put back here too, before
+                // the component goes with it.
                 self.return_carried_program(w);
-                self.world.entity_mut(w).remove::<(Task, Carrying)>();
+                self.world.entity_mut(w).remove::<Task>();
+                drop_load(&mut self.world, w);
             }
             // The second of the two destruction paths for the rig's tool
             // too — see `Game::return_rig_tool`.

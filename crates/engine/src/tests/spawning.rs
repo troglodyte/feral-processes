@@ -1748,6 +1748,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             hold_points: false,
         }],
         structures: Vec::new(),
+        floor_piles: Vec::new(),
         nests: Vec::new(),
         traps: Vec::new(),
         dig_sites: Vec::new(),

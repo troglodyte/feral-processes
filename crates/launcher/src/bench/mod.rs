@@ -40,6 +40,7 @@ mod tests {
                 ticks,
                 seed,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap()
@@ -72,6 +73,7 @@ mod tests {
                 ticks,
                 seed: 1,
                 orders: vec![("patch_routine".into(), 9999)],
+                sieges: true,
             },
         )
         .unwrap();
@@ -98,5 +100,103 @@ mod tests {
             a.economy, b_as_a.economy,
             "seed changed nothing the report shows"
         );
+    }
+
+    #[test]
+    fn a_bench_economy_run_samples_every_staff_member_every_tick() {
+        let out = std::env::temp_dir().join(format!(
+            "feral_bench_staff_economy_{}.bin",
+            std::process::id()
+        ));
+        crate::dev_template::generate("bench-economy", &out).unwrap();
+        let ticks = 50;
+        let report = bench::run(
+            &out,
+            &assets_dir(),
+            RunOptions {
+                ticks,
+                seed: 1,
+                orders: vec![],
+                sieges: true,
+            },
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(report.stopped_at, None);
+        let staff = &report.staff;
+        assert_eq!(staff.staff_ticks, 15 * ticks);
+        assert_eq!(staff.end_morale.len(), 15);
+        for share in [staff.on_shift_share, staff.sulking_share]
+            .into_iter()
+            .chain(staff.rung_share.values().copied())
+            .chain(staff.needs.values().map(|n| n.critical_share))
+        {
+            assert!((0.0..=1.0).contains(&share), "{share}");
+        }
+        assert!((staff.rung_share.values().sum::<f32>() - 1.0).abs() < 1e-4);
+        assert!(!staff.needs.is_empty());
+    }
+
+    #[test]
+    fn a_bench_economy_run_reports_every_catalogue_memory_and_band() {
+        let out = std::env::temp_dir().join(format!(
+            "feral_bench_memories_economy_{}.bin",
+            std::process::id()
+        ));
+        crate::dev_template::generate("bench-economy", &out).unwrap();
+        let report = bench::run(
+            &out,
+            &assets_dir(),
+            RunOptions {
+                ticks: 50,
+                seed: 1,
+                orders: vec![],
+                sieges: true,
+            },
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&out);
+        let memories = &report.memories;
+        let mut ids: Vec<String> = std::fs::read_dir(assets_dir().join("memories"))
+            .unwrap()
+            .filter_map(|e| e.ok()?.path().file_stem()?.to_str().map(str::to_string))
+            .filter(|stem| stem != "README")
+            .collect();
+        ids.sort();
+        assert!(!ids.is_empty());
+        assert_eq!(memories.fired.keys().cloned().collect::<Vec<_>>(), ids);
+        assert_eq!(memories.formed.keys().cloned().collect::<Vec<_>>(), ids);
+        assert!((memories.morale_band_share.values().sum::<f32>() - 1.0).abs() < 1e-4);
+        for id in &ids {
+            assert!(
+                report
+                    .measure(&format!("memories.fired_per_1000.{id}"))
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn bench_economy_runs_past_the_siege_point_with_sieges_off() {
+        // Seed 1 with these orders is stopped by a siege near tick 3,789;
+        // see dev-tuning/economy-bench.ron.
+        let out =
+            std::env::temp_dir().join(format!("feral_bench_no_sieges_{}.bin", std::process::id()));
+        crate::dev_template::generate("bench-economy", &out).unwrap();
+        let report = bench::run(
+            &out,
+            &assets_dir(),
+            RunOptions {
+                ticks: 5000,
+                seed: 1,
+                orders: ["patch_routine", "bytecode_block", "ice_breaker"]
+                    .map(|item| (item.to_string(), 9999))
+                    .to_vec(),
+                sieges: false,
+            },
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(report.stopped_at, None);
     }
 }

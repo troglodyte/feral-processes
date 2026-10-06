@@ -23,7 +23,7 @@ use feral_processes_engine::bench::{self, RunOptions};
 
 const USAGE: &str = "\
 usage:
-  bench run --template <name> --ticks <n> [--seed <n>] [--order <item:qty>]... [--out <report.ron>]
+  bench run --template <name> --ticks <n> [--seed <n>] [--order <item:qty>]... [--no-sieges] [--out <report.ron>]
   bench tune <objective.ron> [--out <dir>]";
 
 #[derive(Debug, PartialEq)]
@@ -33,6 +33,7 @@ enum Command {
         ticks: u64,
         seed: u64,
         orders: Vec<(String, u32)>,
+        sieges: bool,
         out: Option<PathBuf>,
     },
     Tune {
@@ -60,6 +61,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
         ["run", flags @ ..] => {
             let (mut template, mut ticks, mut seed, mut out) = (None, None, 0u64, None);
             let mut orders = Vec::new();
+            let mut sieges = true;
             let mut it = flags.iter();
             while let Some(&flag) = it.next() {
                 let mut value = || {
@@ -76,6 +78,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
                     "--ticks" => ticks = Some(number(value()?)?),
                     "--seed" => seed = number(value()?)?,
                     "--order" => orders.push(parse_order(value()?).map_err(|e| bad(&e))?),
+                    "--no-sieges" => sieges = false,
                     "--out" => out = Some(PathBuf::from(value()?)),
                     other => return Err(bad(&format!("unknown argument {other}"))),
                 }
@@ -85,6 +88,7 @@ fn parse_args(args: &[&str]) -> Result<Command, String> {
                 ticks: ticks.ok_or_else(|| bad("--ticks is required"))?,
                 seed,
                 orders,
+                sieges,
                 out,
             })
         }
@@ -121,8 +125,9 @@ fn execute(cmd: Command) -> Result<(), String> {
             ticks,
             seed,
             orders,
+            sieges,
             out,
-        } => run(&template, ticks, seed, orders, out.as_deref()),
+        } => run(&template, ticks, seed, orders, sieges, out.as_deref()),
         Command::Tune { objective, out } => tune(&objective, out),
     }
 }
@@ -132,6 +137,7 @@ fn run(
     ticks: u64,
     seed: u64,
     orders: Vec<(String, u32)>,
+    sieges: bool,
     out: Option<&Path>,
 ) -> Result<(), String> {
     let save = dev_template::resolve(template)?;
@@ -142,6 +148,7 @@ fn run(
             ticks,
             seed,
             orders,
+            sieges,
         },
     )?;
     let ron = ron::ser::to_string_pretty(&report, ron::ser::PrettyConfig::default())
@@ -192,7 +199,9 @@ fn tune(objective_path: &Path, out: Option<PathBuf>) -> Result<(), String> {
         "wrote {} — diff -r it against assets/ before applying",
         out.display()
     );
-    if !proposal.holds_up() {
+    if !proposal.beat_shipped {
+        println!("the shipped numbers won; the proposal changes nothing.");
+    } else if !proposal.holds_up() {
         println!(
             "WARNING: the proposal does not beat the shipped numbers on held-out seeds \
              ({:.4} -> {:.4}); do not apply it.",
@@ -234,9 +243,19 @@ mod tests {
                 ticks: 50,
                 seed: 3,
                 orders: vec![],
+                sieges: true,
                 out: None
             }
         );
+    }
+
+    #[test]
+    fn run_takes_no_sieges() {
+        let c = parse_args(&["run", "--template", "c", "--ticks", "5", "--no-sieges"]);
+        let Command::Run { sieges, .. } = c.unwrap() else {
+            panic!()
+        };
+        assert!(!sieges);
     }
 
     #[test]
@@ -285,6 +304,7 @@ mod tests {
                 ticks: 5,
                 seed: 0,
                 orders: vec![],
+                sieges: true,
                 out: Some("r.ron".into())
             }
         );

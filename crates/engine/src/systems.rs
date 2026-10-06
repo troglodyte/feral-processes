@@ -1424,9 +1424,17 @@ pub fn task_progress_system(
         // work was done, it just had nowhere to go.
         if stock.output_room() == 0 {
             task.progress = task.required;
+            // A worker at its post with the marker is cut off from every
+            // store that would take the output — `Errand::Tend` writes it —
+            // and "collect it by hand" would name the wrong cause.
+            let held = if stranded.is_some() {
+                MachineStatus::Stranded
+            } else {
+                MachineStatus::Clogged
+            };
             set_machine_status(
                 &mut status,
-                MachineStatus::Clogged,
+                held,
                 machine_name,
                 &mut log,
                 &mut board,

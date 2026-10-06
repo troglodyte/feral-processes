@@ -1,0 +1,86 @@
+// What the bonds and morale bands of `bench-economy` should look like, and
+// which numbers the search may move to get there. Run:
+//   bench tune dev-tuning/memories.ron
+//
+// "A base with friends, rivals and a few unhappy and devoted programs": the
+// shipped base is 98% Neutral bonds and has no Friend; this asks for some
+// Friends and Rivals and a thin tail of `uneasy` and `devoted` staff. Targets
+// and knobs are the user's, 2026-10-05
+// (docs/superpowers/plans/2026-10-05-base-bench.md, P3 "After the baseline").
+// Baseline: docs/measurements/2026-10-05-base-bench-memories-baseline.md.
+//
+// Same template, length, sieges and orders as staff.ron so the staff numbers
+// line up. A value inside its range costs nothing; outside it costs the
+// squared miss over the width.
+Objective(
+    template: "bench-economy",
+    ticks: 6000,
+    sieges: false,
+    orders: [
+        ("patch_routine", 9999),
+        ("bytecode_block", 9999),
+        ("ice_breaker", 9999),
+    ],
+    seeds: [1, 2, 3],
+    holdout_seeds: [4, 5, 6],
+    iterations: 22,
+    population: 24,
+    search_seed: 1337,
+
+    targets: [
+        // Shipped mean 0 (no Friend on any seed).
+        Target(measure: "memories.bond_share.Friend", min: 0.05, max: 0.20),
+        // Shipped mean 0.017.
+        Target(measure: "memories.bond_share.Rival", min: 0.02, max: 0.10),
+        // Shipped mean 0.027.
+        Target(measure: "memories.morale_band_share.uneasy", min: 0.02, max: 0.10),
+        // Shipped mean 0.06.
+        Target(measure: "memories.morale_band_share.devoted", min: 0.02, max: 0.10),
+    ],
+
+    // Social memory kinds that fire on bench-economy, and the interactions that
+    // write them. Ranges are the user's: valence x0.5 to x1.5 of shipped (sign
+    // kept), half_life 1000-6000, weight x0.5 to x2.0.
+    knobs: [
+        // chatted_with [valence 1.5, half_life 2000]
+        Knob(file: "memories/chatted_with.ron", field: "valence", min: 0.75, max: 2.25),
+        Knob(file: "memories/chatted_with.ron", field: "half_life", min: 1000, max: 6000),
+        // talked_shop_with [valence 2, half_life 2000]
+        Knob(file: "memories/talked_shop_with.ron", field: "valence", min: 1, max: 3),
+        Knob(file: "memories/talked_shop_with.ron", field: "half_life", min: 1000, max: 6000),
+        // laughed_with [valence 2.5, half_life 2000]
+        Knob(file: "memories/laughed_with.ron", field: "valence", min: 1.25, max: 3.75),
+        Knob(file: "memories/laughed_with.ron", field: "half_life", min: 1000, max: 6000),
+        // commiserated_with [valence 2, half_life 2000]
+        Knob(file: "memories/commiserated_with.ron", field: "valence", min: 1, max: 3),
+        Knob(file: "memories/commiserated_with.ron", field: "half_life", min: 1000, max: 6000),
+        // idled_with [valence 4, half_life 2000 (4000 for idled_with)]
+        Knob(file: "memories/idled_with.ron", field: "valence", min: 2, max: 6),
+        Knob(file: "memories/idled_with.ron", field: "half_life", min: 1000, max: 6000),
+        // thanked_by [valence 2, half_life 2000]
+        Knob(file: "memories/thanked_by.ron", field: "valence", min: 1, max: 3),
+        Knob(file: "memories/thanked_by.ron", field: "half_life", min: 1000, max: 6000),
+        // complimented_by [valence 3, half_life 2000]
+        Knob(file: "memories/complimented_by.ron", field: "valence", min: 1.5, max: 4.5),
+        Knob(file: "memories/complimented_by.ron", field: "half_life", min: 1000, max: 6000),
+        // slighted_by [valence -2.5, half_life 2000]
+        Knob(file: "memories/slighted_by.ron", field: "valence", min: -3.75, max: -1.25),
+        Knob(file: "memories/slighted_by.ron", field: "half_life", min: 1000, max: 6000),
+        // complained_at_by [valence -1.5, half_life 2000]
+        Knob(file: "memories/complained_at_by.ron", field: "valence", min: -2.25, max: -0.75),
+        Knob(file: "memories/complained_at_by.ron", field: "half_life", min: 1000, max: 6000),
+        // insulted_by [valence -4, half_life 2000]
+        Knob(file: "memories/insulted_by.ron", field: "valence", min: -6, max: -2),
+        Knob(file: "memories/insulted_by.ron", field: "half_life", min: 1000, max: 6000),
+        // interaction weights, x0.5 to x2.0 of shipped
+        Knob(file: "interactions/commiserate.ron", field: "weight", min: 0.5, max: 2),  // shipped 1
+        Knob(file: "interactions/complain.ron", field: "weight", min: 0.5, max: 2),  // shipped 1
+        Knob(file: "interactions/compliment.ron", field: "weight", min: 0.5, max: 2),  // shipped 1
+        Knob(file: "interactions/insult.ron", field: "weight", min: 0.15, max: 0.6),  // shipped 0.3
+        Knob(file: "interactions/joke.ron", field: "weight", min: 0.75, max: 3),  // shipped 1.5
+        Knob(file: "interactions/shop_talk.ron", field: "weight", min: 1, max: 4),  // shipped 2
+        Knob(file: "interactions/slight.ron", field: "weight", min: 0.3, max: 1.2),  // shipped 0.6
+        Knob(file: "interactions/small_talk.ron", field: "weight", min: 1.5, max: 6),  // shipped 3
+        Knob(file: "interactions/thanks.ron", field: "weight", min: 0.5, max: 2),  // shipped 1
+    ],
+)

@@ -27,6 +27,7 @@ use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
+use crate::game::base::floor::drop_load;
 use crate::game::base::hauling;
 use crate::game::base::lines::{self, Line};
 use crate::game::base::offshift;
@@ -825,13 +826,13 @@ pub(crate) fn ingredient_depths(
 /// matching — and both are lookups in the same fields, so a connected base
 /// pays one walk per body whatever the size of its plan.
 struct CrewFields {
-    blocked: std::collections::HashSet<(i32, i32)>,
+    blocked: hauling::Occupancy,
     pocket_radius: i32,
     fields: std::collections::HashMap<Entity, hauling::CrewReach>,
 }
 
 impl CrewFields {
-    fn new(blocked: std::collections::HashSet<(i32, i32)>, pocket_radius: i32) -> Self {
+    fn new(blocked: hauling::Occupancy, pocket_radius: i32) -> Self {
         Self {
             blocked,
             pocket_radius,
@@ -868,7 +869,7 @@ impl CrewFields {
                 hauling::crew_reach(grid, from, blocked, *pocket_radius),
             )
         });
-        hauling::reaches(grid, field, *from, at, side, blocked)
+        hauling::reaches(grid, field, *from, at, side, blocked, *pocket_radius)
     }
 }
 
@@ -1248,10 +1249,10 @@ impl Game {
         // **Forced edges, seeded before the matching sees anyone.** Two
         // bodies hold their post whatever the assignment would say:
         //
-        // - **A body mid-delivery is never freed.** Freeing it drops
-        //   `Carrying` along with the `Task`, and by then the units have
-        //   already been taken *out* of the machine's stock — so the goods
-        //   are destroyed rather than released. **Not even when its duties
+        // - **A body mid-delivery is never freed.** The units have already
+        //   been taken *out* of the machine's stock, so a freed carrier
+        //   would leave them as a floor pile for someone to fetch back
+        //   instead of delivering them. **Not even when its duties
         //   no longer admit the post**: an unchecked column frees it at its
         //   next unforced moment, which is after it has set the load down.
         // - **A body about to pick a load up** — standing on a machine with
@@ -1483,10 +1484,8 @@ impl Game {
         // lives in that function rather than being restated here.
         for &worker in staff {
             if !self.is_on_shift(worker, amenities) {
-                self.world
-                    .entity_mut(worker)
-                    .remove::<Task>()
-                    .remove::<Carrying>();
+                self.world.entity_mut(worker).remove::<Task>();
+                drop_load(&mut self.world, worker);
             }
         }
         let mut matched: Vec<Option<(Entity, TaskKind)>> = vec![None; pool.len()];
@@ -1497,10 +1496,8 @@ impl Game {
         }
         for (body, &worker) in pool.iter().enumerate() {
             if held[body].is_some() && held[body] != matched[body] {
-                self.world
-                    .entity_mut(worker)
-                    .remove::<Task>()
-                    .remove::<Carrying>();
+                self.world.entity_mut(worker).remove::<Task>();
+                drop_load(&mut self.world, worker);
             }
         }
 
@@ -1628,7 +1625,7 @@ impl Game {
         &mut self,
         from: Position,
         machine: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> bool {
         self.post_route(from, machine, blocked, pocket_radius)
@@ -1645,7 +1642,7 @@ impl Game {
         &mut self,
         from: Position,
         target: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> Result<(), hauling::NoPost> {
         let Some(to) = self.world.get::<Position>(target).copied() else {
@@ -2346,13 +2343,22 @@ impl Game {
         // takes the wander instead, which is the one arm that already knows
         // how to decline a tile somebody else has.
         //
-        // Off `Game::base_bodies` rather than off `staff`, because a posted
-        // worker standing on the cell is as much in the way as an idle one
-        // and is not in this list.
+        // **Idle bodies only.** A posted walker squeezes through a cell
+        // another body holds — that is the point of the squeeze — so one
+        // passing over a patient at its Bay, a subject on its pen or an
+        // off-shift body at its amenity is not a heap, and counting it
+        // knocked the rigid walker off its errand into the wander. A posted
+        // body that stops on the cell moves on by its own walk. Off
+        // `Game::base_bodies` rather than off `staff`, because an idle body
+        // that is not in this pass's list (a party member) still holds a
+        // cell.
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
-            for (_, p) in self.base_bodies() {
+            for (e, p) in self.base_bodies() {
+                if self.world.get::<Task>(e).is_some() {
+                    continue;
+                }
                 if !seen.insert((p.x, p.y)) {
                     twice.insert((p.x, p.y));
                 }

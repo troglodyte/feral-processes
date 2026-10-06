@@ -3804,7 +3804,7 @@ fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
-    let blocked = std::collections::HashSet::new();
+    let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
         post_reach(&grid, from, target, 1, &blocked, grid.radius()),
@@ -3827,7 +3827,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
-    let blocked = std::collections::HashSet::new();
+    let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
         post_reach(&grid, from, target, 1, &blocked, grid.radius()),
@@ -3842,6 +3842,78 @@ fn a_post_with_no_reachable_face_is_still_refused() {
         Err(NoPost::BoxedIn),
         "nothing can stand beside it at all, which is a digging problem"
     );
+}
+
+/// **A body is squeezed past but never stopped on.** The target's west face
+/// is the only way to its north face; with a program standing on the west
+/// face the walk may not pass through it, because arriving there would put
+/// two bodies on one cell — while the same program one cell short of the
+/// face is a throughway, and the step onto it says it is a squeeze.
+#[test]
+fn a_body_on_a_face_is_not_a_throughway_and_a_body_short_of_it_is() {
+    use crate::game::base::hauling::{NoPost, Step, blocked_tiles, step_to_post};
+
+    let mut grid = base_grid::BaseGrid::default();
+    for (x, y) in [(-1, 2), (-1, 1), (-1, 0), (0, -1)] {
+        grid.open(x, y, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: -1, y: 2 };
+    let on_face = blocked_tiles(std::iter::empty(), [Position { x: -1, y: 0 }].into_iter());
+    let short_of_it = blocked_tiles(std::iter::empty(), [Position { x: -1, y: 1 }].into_iter());
+
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &on_face, grid.radius()),
+        Err(NoPost::NoRoute),
+        "the only way on runs through a face somebody is standing on"
+    );
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &short_of_it, grid.radius()),
+        Ok(Some(Step {
+            to: Position { x: -1, y: 1 },
+            squeeze: true,
+        })),
+        "a body in the corridor is a throughway, priced as a squeeze"
+    );
+}
+
+/// **The crew's one-field answer agrees with the posted walk's.** `crew_reach`
+/// builds its field with no target in mind, so a body on one of a target's
+/// faces reads as a throughway there; `reaches` is what puts the arrival
+/// rule back, and the two geometries of
+/// `a_body_on_a_face_is_not_a_throughway_and_a_body_short_of_it_is` must
+/// come out as `post_reach` says.
+#[test]
+fn the_crew_field_and_the_posted_walk_agree_about_a_body_on_a_face() {
+    use crate::game::base::hauling::{blocked_tiles, crew_reach, post_reach, reaches};
+
+    let mut grid = base_grid::BaseGrid::default();
+    for (x, y) in [(-1, 2), (-1, 1), (-1, 0), (0, -1)] {
+        grid.open(x, y, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: -1, y: 2 };
+    for (body, reachable) in [((-1, 0), false), ((-1, 1), true)] {
+        let blocked = blocked_tiles(
+            std::iter::empty(),
+            [Position {
+                x: body.0,
+                y: body.1,
+            }]
+            .into_iter(),
+        );
+        let field = crew_reach(&grid, from, &blocked, grid.radius());
+        assert_eq!(
+            post_reach(&grid, from, target, 1, &blocked, grid.radius()).is_ok(),
+            reachable,
+            "precondition: the posted walk's answer for a body at {body:?}"
+        );
+        assert_eq!(
+            reaches(&grid, &field, from, target, 1, &blocked, grid.radius()),
+            reachable,
+            "the crew field disagrees with the posted walk for a body at {body:?}"
+        );
+    }
 }
 
 /// The interior of a marked block must not spend the crew's budget.

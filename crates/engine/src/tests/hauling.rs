@@ -2,6 +2,10 @@
 //! and coming back.
 
 use super::support::*;
+use crate::components::Squeezing;
+use crate::components::{Memories, MemorySubject};
+use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
+use crate::memories::MemoryId;
 use crate::tuning::STARTING_POCKET_RADIUS;
 use crate::*;
 
@@ -694,15 +698,14 @@ fn posting_to_a_boxed_in_machine_is_refused() {
 #[test]
 fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
     let mut game = base(22);
+    lay_long_floor(&mut game);
     let node = deploy(&mut game, "mining_node", 0, 2);
-    deploy(&mut game, "depot", 3, 0);
-    for (dx, dy) in [(2, 0), (4, 0), (3, 1), (3, -1)] {
-        deploy(&mut game, "mining_node", dx, dy);
-    }
+    deploy(&mut game, "depot", 12, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    lose_the_route_mid_carry(&mut game, worker, close_the_depot_in);
 
     tick_until(&mut game, 40, |g| {
         g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Stranded)
@@ -1606,10 +1609,9 @@ fn a_researched_depot_rung_takes_a_haul_like_the_first_one() {
 fn station_candidates_offers_the_ring_around_the_whole_footprint() {
     let mut game = base_with_footprint_fixture(3010, "station_candidates_fixture");
     place_now(&mut game, "station_candidates_fixture", 2, 0).unwrap();
-    let empty = std::collections::HashSet::new();
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, &empty)
+        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, |_| false)
             .into_iter()
             .map(|p| (p.x, p.y))
             .collect();
@@ -1648,10 +1650,9 @@ fn at_station_agrees_with_station_candidates_exactly() {
     place_now(&mut game, "at_station_equivalence_fixture", 2, 0).unwrap();
     let structure = Position { x: 2, y: 0 };
     let side = 2;
-    let empty = std::collections::HashSet::new();
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, structure, side, &empty)
+        crate::game::base::hauling::station_candidates(grid, structure, side, |_| false)
             .into_iter()
             .map(|p| (p.x, p.y))
             .collect();
@@ -1678,10 +1679,10 @@ fn blocked_tiles_takes_the_anchor_and_structure_tiles_takes_the_whole_footprint(
     place_now(&mut game, "blocked_tiles_fixture", 2, 0).unwrap();
 
     let blocked = game.blocked_tiles();
-    assert!(blocked.contains(&(2, 0)), "the anchor blocks a walk");
+    assert!(blocked.taken((2, 0)), "the anchor blocks a walk");
     for floor_cell in [(3, 0), (2, 1), (3, 1)] {
         assert!(
-            !blocked.contains(&floor_cell),
+            !blocked.taken(floor_cell),
             "a floor cell must stay walkable: {floor_cell:?}"
         );
     }
@@ -1749,4 +1750,786 @@ fn a_worker_skips_a_nearer_depot_it_cannot_reach() {
         "the load belongs in the depot the worker can reach"
     );
     assert_eq!(node_output(&game, boxed, ids::CORE_FRAGMENT), 0);
+}
+
+/// A Mining Node walled in on three sides, its worker standing on the fourth,
+/// and the one way out a single-cell corridor — with a Depot past the far
+/// end. `plug` lays a downed program in the corridor cell: with no Repair Bay
+/// it lies where it fell, so it is a body that does not move off on its own.
+///
+/// ```text
+///   W W W      y = -4
+///   W N W      y = -3
+///   W F W      y = -2   F: the worker's post
+///   W C W      y = -1   C: the corridor cell
+///   . . .      y =  0
+///   . . .      y =  1
+///   . D .      y =  2
+/// ```
+fn plugged_corridor(seed: u32, plug: bool) -> (Game, Entity, Entity) {
+    let mut game = base(seed);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in 1..=3 {
+            for y in -4..=3 {
+                grid.lay_floor(x, y);
+            }
+        }
+    }
+    let node = deploy(&mut game, "mining_node", 2, -3);
+    for (dx, dy) in [
+        (1, -4),
+        (2, -4),
+        (3, -4),
+        (1, -3),
+        (3, -3),
+        (1, -2),
+        (3, -2),
+        (1, -1),
+        (3, -1),
+    ] {
+        deploy(&mut game, "wall", dx, dy);
+    }
+    let depot = deploy(&mut game, "depot", 2, 2);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    move_to(&mut game, worker, 2, -2);
+    if plug {
+        let body = hauler(&mut game);
+        game.world
+            .entity_mut(body)
+            .insert(crate::components::Downed);
+        move_to(&mut game, body, 2, -1);
+    }
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    (game, worker, depot)
+}
+
+/// Ticks until `depot` holds anything, and how many that took.
+fn ticks_to_delivery(game: &mut Game, depot: Entity, limit: u32) -> u32 {
+    for n in 0..limit {
+        if node_output(game, depot, ids::CORE_FRAGMENT) > 0 {
+            return n;
+        }
+        game.tick();
+    }
+    panic!("nothing reached the depot in {limit} ticks");
+}
+
+/// **A body in a corridor is squeezed past, not walked around.** The found
+/// case: `chains` builds a ring of machines with a one-cell corridor round
+/// it, standing programs closed it, and a carrier with no route stood holding
+/// its load for thousands of ticks.
+#[test]
+fn a_carrier_squeezes_past_a_program_standing_in_its_corridor() {
+    let (mut game, worker, depot) = plugged_corridor(31, true);
+
+    ticks_to_delivery(&mut game, depot, 60);
+
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the load went through the plugged corridor"
+    );
+    assert!(game.world.get::<Stranded>(worker).is_none());
+}
+
+/// Squeezing past costs time, and exactly `SQUEEZE_EXTRA_TICKS` of it per
+/// occupied cell — the same walk with the corridor clear is the baseline.
+#[test]
+fn squeezing_past_a_body_costs_the_extra_tick() {
+    let (mut clear, _, clear_depot) = plugged_corridor(32, false);
+    let (mut plugged, _, plugged_depot) = plugged_corridor(32, true);
+
+    let baseline = ticks_to_delivery(&mut clear, clear_depot, 60);
+    let squeezed = ticks_to_delivery(&mut plugged, plugged_depot, 60);
+
+    assert_eq!(
+        squeezed,
+        baseline + tuning::SQUEEZE_EXTRA_TICKS as u32,
+        "one occupied cell on the route costs exactly the squeeze"
+    );
+}
+
+/// Deploys a Depot at `(x, 0)` with a Wall on each of its four faces —
+/// nothing can stand beside it, so a load headed there is `Stranded` for
+/// good.
+fn walled_depot(game: &mut Game, x: i32) -> Entity {
+    let depot = deploy(game, "depot", x, 0);
+    for (dx, dy) in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+        deploy(game, "wall", x + dx, dy);
+    }
+    depot
+}
+
+/// Floor out to the far Depots the stranding tests need, past the Home's slab.
+fn lay_long_floor(game: &mut Game) {
+    let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+    for x in -16..=16 {
+        for y in -2..=3 {
+            grid.lay_floor(x, y);
+        }
+    }
+}
+
+/// Boxes the Depot at `(12, 0)` in with four more machines. Far enough off
+/// that the carrier is still walking when the last one goes up.
+fn close_the_depot_in(game: &mut Game) {
+    for (dx, dy) in [(11, 0), (13, 0), (12, 1), (12, -1)] {
+        deploy(game, "mining_node", dx, dy);
+    }
+}
+
+/// Picks the worker up holding a load, then closes the route: the structures
+/// go up *after* the pickup, which is the only way a carrier is stranded now
+/// that `Errand::Tend` lifts nothing it cannot deliver.
+fn lose_the_route_mid_carry(game: &mut Game, worker: Entity, close: impl FnOnce(&mut Game)) {
+    tick_until(game, 40, |g| g.world.get::<Carrying>(worker).is_some());
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker lifted a load"
+    );
+    close(game);
+    tick_until(game, 40, |g| g.world.get::<Stranded>(worker).is_some());
+}
+
+/// **Nothing is lifted that cannot be delivered.** The only Depot is walled
+/// in from the start, so `Errand::Tend` picks nothing up: no strand, no
+/// set-down conveyor, and the machine fills and reads `Stranded` — steadily,
+/// rather than flipping as a load is lifted and set down every
+/// `STRANDED_SET_DOWN_TICKS`.
+#[test]
+fn a_walled_in_depot_is_never_lifted_toward() {
+    let mut game = base(43);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    for _ in 0..3 * tuning::STRANDED_SET_DOWN_TICKS {
+        game.tick();
+        assert!(
+            game.world.get::<Carrying>(worker).is_none(),
+            "lifted a load toward a Depot nothing can reach, tick {}",
+            game.current_tick()
+        );
+    }
+
+    assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+}
+
+/// **A machine cut off from every store that would take its output says so,
+/// once, and recovers when a route reopens.** `Clogged` would send the
+/// player to collect by hand for a cause that is a wall. One alert over the
+/// whole episode (`set_machine_status` speaks on transition only), and
+/// opening the wall lifts the status and delivers.
+#[test]
+fn a_machine_cut_off_from_its_depot_reads_stranded_once_and_recovers() {
+    use crate::alerts::AlertKind;
+    let mut game = base(43);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    for _ in 0..30 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+    let stranded_alerts: u32 = game
+        .alerts()
+        .iter()
+        .filter(|a| a.kind == AlertKind::MachineStalled(MachineStatus::Stranded))
+        .map(|a| a.count)
+        .sum();
+    assert_eq!(stranded_alerts, 1, "one alert for the whole episode");
+
+    let walls: Vec<Entity> = game
+        .world
+        .query::<(Entity, &Structure)>()
+        .iter(&game.world)
+        .filter(|(_, s)| s.kind == "wall")
+        .map(|(e, _)| e)
+        .collect();
+    for wall in walls {
+        game.world.despawn(wall);
+    }
+    tick_until(&mut game, 200, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "delivered"
+    );
+    assert_ne!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+}
+
+/// The same cut-off reading for a machine with an attached consumer: the
+/// `Errand::Tend` gate lets only a clogged one through, and `Stranded` has to
+/// count as clogged there or the status flaps back to `Clogged` and the
+/// marker is cleared every other tick.
+#[test]
+fn a_cut_off_machine_with_a_consumer_beside_it_stays_stranded() {
+    use crate::alerts::AlertKind;
+    let mut game = base(44);
+    lay_long_floor(&mut game);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    walled_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let lathe_cap = capacity_of(&game, lathe);
+    fill_output(&mut game, lathe, "blank_substrate", lathe_cap);
+    game.queue_work_order(WorkOrder::batch(
+        ItemId::from("blank_substrate"),
+        lathe_cap + 5,
+    ))
+    .unwrap();
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded)
+    );
+    let flips: u32 = game
+        .alerts()
+        .iter()
+        .filter(|a| a.kind == AlertKind::MachineStalled(MachineStatus::Stranded))
+        .map(|a| a.count)
+        .sum();
+    assert_eq!(flips, 1, "entered once, never flapped back out");
+}
+
+/// **A carrier stranded by structures drops its load on the floor after
+/// `STRANDED_SET_DOWN_TICKS` and not before.** Both Depots are walled in, so
+/// no walk reaches either; the load becomes a pile on the tile the carrier
+/// stands on, nothing is deposited anywhere, and the carrier's hands are
+/// empty — which is what lets the scheduler free it the way it frees anyone.
+#[test]
+fn a_carrier_stranded_by_structures_drops_its_load_on_the_floor() {
+    let mut game = base(41);
+    game.world
+        .resource_mut::<crate::resources::BattleTelemetry>()
+        .on = true;
+    lay_long_floor(&mut game);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let near = deploy(&mut game, "depot", 12, 0);
+    let far = deploy(&mut game, "depot", -14, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    lose_the_route_mid_carry(&mut game, worker, |g| {
+        for x in [12, -14] {
+            for (dx, dy) in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+                deploy(g, "wall", x + dx, dy);
+            }
+        }
+    });
+    let since = game
+        .world
+        .get::<Stranded>(worker)
+        .expect("precondition: stranded holding a load")
+        .since;
+
+    while game.current_tick() < since + tuning::STRANDED_SET_DOWN_TICKS {
+        assert!(
+            game.world.get::<Carrying>(worker).is_some(),
+            "dropped early, at tick {} of an episode from {since}",
+            game.current_tick()
+        );
+        game.tick();
+    }
+    let at = *game.world.get::<Position>(worker).unwrap();
+    tick_until(&mut game, 3, |g| g.world.get::<Carrying>(worker).is_none());
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "still holding the load past the timeout"
+    );
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at)
+        .expect("a pile where the carrier stood");
+    assert_eq!(
+        game.world
+            .get::<crate::components::FloorPile>(pile)
+            .unwrap()
+            .items
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(tuning::HAUL_CARRY_CAPACITY)
+    );
+    assert_eq!(node_output(&game, near, ids::CORE_FRAGMENT), 0);
+    assert_eq!(node_output(&game, far, ids::CORE_FRAGMENT), 0);
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::BattleTelemetry>()
+            .records
+            .iter()
+            .any(|r| matches!(r, crate::telemetry::Record::Haul { errand, .. } if errand == "set_down")),
+        "a drop is not a delivery and writes no haul record"
+    );
+}
+
+/// **Nothing is destroyed to free a carrier, and nothing is deposited by
+/// it.** Sealed in by Walls away from its machine, a stranded carrier drops
+/// its load where it stands even with the one Depot full — the Depot is not
+/// touched, the machine's buffer is not refilled, and the carrier is freed.
+#[test]
+fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
+    let mut game = base(42);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in -4..=-2 {
+            for y in -4..=-2 {
+                grid.lay_floor(x, y);
+            }
+        }
+    }
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = deploy(&mut game, "depot", 3, 0);
+    for x in -4..=-2 {
+        for y in -4..=-2 {
+            if (x, y) != (-3, -3) {
+                deploy(&mut game, "wall", x, y);
+            }
+        }
+    }
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    move_to(&mut game, worker, -3, -3);
+    fill_to_capacity(&mut game, depot, ids::CORE_FRAGMENT);
+    let load = Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: tuning::HAUL_CARRY_CAPACITY,
+    };
+    game.world.entity_mut(worker).insert(load.clone());
+    let node_before = node_output(&game, node, ids::CORE_FRAGMENT);
+    tick_until(&mut game, 10, |g| g.world.get::<Stranded>(worker).is_some());
+    assert!(
+        game.world.get::<Stranded>(worker).is_some(),
+        "precondition: stranded"
+    );
+
+    for _ in 0..tuning::STRANDED_SET_DOWN_TICKS + 20 {
+        game.tick();
+    }
+
+    assert!(game.world.get::<Carrying>(worker).is_none());
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, Position { x: -3, y: -3 })
+        .expect("a pile where the carrier stood");
+    assert_eq!(
+        game.world
+            .get::<crate::components::FloorPile>(pile)
+            .unwrap()
+            .items
+            .get(&load.item)
+            .copied(),
+        Some(load.qty),
+        "the load is on the floor whole"
+    );
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        capacity_of(&game, depot)
+    );
+    assert_eq!(node_output(&game, node, ids::CORE_FRAGMENT), node_before);
+}
+
+/// A hauler stranded with a load it cannot deliver is held on shift by
+/// `Carrying` (freeing it would destroy the goods), and `Stranded` is never
+/// cleared by anything but a route reopening — so once it also downed tools
+/// it carried, and counted as on shift, for as long as the walls stood. Found
+/// on the `chains` bench: seeds 2 and 5 read `on_shift_share` 1.0 beside a
+/// 3.6%/5.0% `downed_tools` rung share. The drop is what clears it: the
+/// load goes on the floor after `STRANDED_SET_DOWN_TICKS`, the hands
+/// are empty, and the downed-tools rule takes it off shift.
+#[test]
+fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
+    let mut game = base(22);
+    lay_long_floor(&mut game);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    deploy(&mut game, "depot", 12, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    lose_the_route_mid_carry(&mut game, worker, close_the_depot_in);
+    tick_until(&mut game, 40, |g| {
+        g.world.get::<Stranded>(worker).is_some() && g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(
+        game.world.get::<Stranded>(worker).is_some()
+            && game.world.get::<Carrying>(worker).is_some(),
+        "precondition: stranded holding a load"
+    );
+
+    let now = game.current_tick();
+    let mut n = 0;
+    while game.morale(worker) > crate::tuning::MORALE_DOWNS_TOOLS_AT {
+        game.world
+            .get_mut::<Memories>(worker)
+            .unwrap()
+            .0
+            .push(Memory {
+                def: MemoryId::from("frayed_here"),
+                subject: MemorySubject::BaseTile { x: n, y: 900 },
+                subject_name: None,
+                reinforced: now,
+                strikes: 1,
+            });
+        n += 1;
+        assert!(n < 400, "morale never reached the rung");
+    }
+    game.update_disgruntled(&[worker]);
+    assert!(game.has_downed_tools(worker), "precondition: tools downed");
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert!(game.has_downed_tools(worker), "still downed");
+    assert!(
+        !game.on_shift(worker),
+        "a downed-tools program is still on shift, carrying {:?}, after 200 ticks",
+        game.world.get::<Carrying>(worker)
+    );
+}
+
+fn squeezing(into: (i32, i32), since: u64) -> Squeezing {
+    Squeezing {
+        into: Position {
+            x: into.0,
+            y: into.1,
+        },
+        since,
+    }
+}
+
+fn squeeze_step(to: (i32, i32)) -> Step {
+    Step {
+        to: Position { x: to.0, y: to.1 },
+        squeeze: true,
+    }
+}
+
+/// A step into a free cell is taken at once, whatever marker is held.
+#[test]
+fn a_step_into_a_free_cell_is_taken_at_once() {
+    let free = Step {
+        to: Position { x: 1, y: 1 },
+        squeeze: false,
+    };
+    assert_eq!(stride(None, free, 10), Stride::Go);
+    assert_eq!(stride(Some(squeezing((1, 1), 9)), free, 10), Stride::Go);
+}
+
+/// A squeeze waits exactly `SQUEEZE_EXTRA_TICKS` on the same cell: the first
+/// tick opens the wait, the one `EXTRA` later takes the step.
+#[test]
+fn a_squeeze_waits_the_extra_ticks_on_the_same_cell() {
+    let step = squeeze_step((2, 0));
+    let opened = match stride(None, step, 100) {
+        Stride::Wait(m) => m,
+        other => panic!("a squeeze opened with {other:?}"),
+    };
+    assert_eq!(opened, squeezing((2, 0), 100));
+    assert_eq!(
+        stride(Some(opened), step, 100),
+        Stride::Wait(opened),
+        "still paying for it on the tick it opened"
+    );
+    assert_eq!(
+        stride(Some(opened), step, 100 + tuning::SQUEEZE_EXTRA_TICKS),
+        Stride::Go
+    );
+}
+
+/// A marker naming a different cell is a route that changed, so the wait
+/// starts over rather than handing out a free pass.
+#[test]
+fn a_changed_route_restarts_the_squeeze_wait() {
+    let held = squeezing((1, 0), 100);
+    assert_eq!(
+        stride(
+            Some(held),
+            squeeze_step((2, 0)),
+            100 + tuning::SQUEEZE_EXTRA_TICKS
+        ),
+        Stride::Wait(squeezing((2, 0), 100 + tuning::SQUEEZE_EXTRA_TICKS))
+    );
+}
+
+/// A marker older than twice the wait is left over from an interrupted walk:
+/// it starts over too, where one just inside the window takes the step.
+#[test]
+fn a_stale_squeeze_marker_restarts_the_wait() {
+    let step = squeeze_step((2, 0));
+    let held = squeezing((2, 0), 100);
+    let edge = 100 + 2 * tuning::SQUEEZE_EXTRA_TICKS;
+    assert_eq!(stride(Some(held), step, edge), Stride::Go);
+    assert_eq!(
+        stride(Some(held), step, edge + 1),
+        Stride::Wait(squeezing((2, 0), edge + 1))
+    );
+}
+
+/// `Game::take_base_step`, the `Game`-side caller of `stride`: the dig crew
+/// and the builder pay the squeeze through it. First call holds in place and
+/// leaves the marker; a call `SQUEEZE_EXTRA_TICKS` later moves and clears it.
+#[test]
+fn a_game_side_walker_pays_the_squeeze_before_it_moves() {
+    let mut game = base(51);
+    let worker = hauler(&mut game);
+    move_to(&mut game, worker, 0, 0);
+    let start = *game.world.get::<Position>(worker).unwrap();
+    let step = Step {
+        to: Position {
+            x: start.x + 1,
+            y: start.y,
+        },
+        squeeze: true,
+    };
+
+    game.take_base_step(worker, step);
+    assert_eq!(*game.world.get::<Position>(worker).unwrap(), start);
+    assert!(game.world.get::<Squeezing>(worker).is_some());
+
+    game.world.resource_mut::<GameClock>().tick += tuning::SQUEEZE_EXTRA_TICKS;
+    game.take_base_step(worker, step);
+    assert_eq!(*game.world.get::<Position>(worker).unwrap(), step.to);
+    assert!(game.world.get::<Squeezing>(worker).is_none());
+}
+
+/// **An equal-length detour beats a squeeze.** Two ways round a two-wide
+/// corridor, the straight one holding a body: the step taken is the free
+/// diagonal. Fails if a body's cell cost nothing extra.
+#[test]
+fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
+    let mut grid = crate::base_grid::BaseGrid::default();
+    for x in -3..=0 {
+        grid.open(x, -1, 0);
+        grid.open(x, -2, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: -3, y: -2 };
+    let blocked = blocked_tiles(std::iter::empty(), [Position { x: -2, y: -2 }].into_iter());
+
+    assert_eq!(
+        step_to_post(&grid, from, target, 1, &blocked, grid.radius()),
+        Ok(Some(Step {
+            to: Position { x: -2, y: -1 },
+            squeeze: false,
+        })),
+        "the free way round costs the same and pays nothing"
+    );
+}
+
+fn pile_on(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) {
+    crate::game::base::floor::spawn_floor_pile(
+        &mut game.world,
+        Position { x, y },
+        ItemId::from(item),
+        qty,
+    );
+}
+
+fn pile_total(game: &mut Game) -> u32 {
+    game.world
+        .query::<&crate::components::FloorPile>()
+        .iter(&game.world)
+        .flat_map(|p| p.items.values().copied())
+        .sum()
+}
+
+/// A node, a depot and a posted hauler on a clear tile apart from the pile.
+/// The node's own mining is slow enough (10 ticks a unit) that the pile is
+/// fetched while its output is still empty.
+fn pickup_fixture(seed: u32) -> (Game, Entity, Entity, Entity) {
+    let mut game = base(seed);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    (game, node, depot, worker)
+}
+
+#[test]
+fn a_posted_hauler_brings_a_floor_pile_home_to_the_depot() {
+    let (mut game, _, depot, _) = pickup_fixture(31);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 300, |g| node_output(g, depot, "cache_grain") > 0);
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 3);
+    assert_eq!(pile_total(&mut game), 0, "an emptied pile despawns");
+}
+
+#[test]
+fn an_unreachable_pile_is_left_alone() {
+    let (mut game, node, depot, _) = pickup_fixture(32);
+    let (px, py) = game.base_pos().unwrap();
+    // Far off the laid floor: no route reaches it.
+    pile_on(&mut game, px + 90, py + 90, "cache_grain", 3);
+
+    for _ in 0..120 {
+        game.tick();
+    }
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 0);
+    assert_eq!(pile_total(&mut game), 3);
+    assert_ne!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded),
+        "a pile nobody can reach is not a reason to walk"
+    );
+}
+
+#[test]
+fn a_hauler_with_a_machine_to_clear_does_not_divert_to_a_pile() {
+    let (mut game, node, depot, _) = pickup_fixture(33);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(node_output(&game, depot, ids::CORE_FRAGMENT) > 0);
+    assert_eq!(
+        pile_total(&mut game),
+        3,
+        "clearing the machine comes before the pile"
+    );
+}
+
+#[test]
+fn a_mixed_pile_is_lifted_lowest_item_first() {
+    let (mut game, _, _, worker) = pickup_fixture(34);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 300, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+
+    let load = game.world.get::<Carrying>(worker).expect("lifted a load");
+    assert_eq!(load.item, ItemId::from("cache_grain"));
+    assert_eq!(load.qty, 3);
+}
+
+#[test]
+fn two_haulers_sent_to_one_pile_conserve_the_total() {
+    let (mut game, node, depot, _) = pickup_fixture(35);
+    let second = hauler(&mut game);
+    game.assign_cronjob(second, node).unwrap();
+    park_at_post(&mut game, second, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 3
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 3);
+    assert_eq!(pile_total(&mut game), 0);
+}
+
+/// A node, a hauler posted to it and only a walled-in Depot: the pile is
+/// within reach but nothing it could be taken to is.
+#[test]
+fn a_pile_is_left_alone_when_the_only_accepting_depot_is_walled_in() {
+    let mut game = base(36);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 3, "cache_grain", 3);
+
+    for _ in 0..3 * tuning::STRANDED_SET_DOWN_TICKS {
+        game.tick();
+        assert!(
+            game.world.get::<Carrying>(worker).is_none(),
+            "lifted a pile no Depot can be reached for, tick {}",
+            game.current_tick()
+        );
+    }
+    assert_eq!(pile_total(&mut game), 3);
+}
+
+/// One pile the shelf refuses must not hide a farther one it takes.
+#[test]
+fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
+    let (mut game, _, depot, _) = pickup_fixture(37);
+    game.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 1, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 5, py + 1, "cache_grain", 4);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 4
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 4);
+    assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+}
+
+/// One pile the walk cannot reach must not hide a farther one it can.
+#[test]
+fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
+    let mut game = base(38);
+    // Walls first: raising a structure under a posted hauler stands it down.
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ] {
+        deploy(&mut game, "wall", 1 + dx, 2 + dy);
+    }
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 2, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 4, py + 2, "cache_grain", 4);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 4
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 4);
+    assert_eq!(pile_total(&mut game), 2, "the walled-in pile stays");
 }

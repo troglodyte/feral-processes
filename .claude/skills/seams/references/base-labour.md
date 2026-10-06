@@ -117,9 +117,27 @@
   broke twice: a wandering body teleported across the map onto you, and
   walking out of the walk field stopped the base filling a single machine.
 
-- **One body to a cell, and the walk's `blocked` set is what holds it.**
-  `hauling::blocked_tiles` takes the structures and the bodies as **two
-  iterators**, `collect::feeders_by_tile`'s argument: `post_field` and
+- **A body is squeezed past and never stopped on, and `Occupancy` is what
+  holds it.** It began as one body to a cell with bodies as walls, and that
+  closed corridors: a `chains` base is a ring of machines with a one-cell
+  corridor round it, whoever stood in it stranded every carrier behind them,
+  and since a carrier is never freed while it holds a load, a hauler stood
+  2,291 ticks holding one. Bodies now cost a posted walk
+  `SQUEEZE_EXTRA_TICKS` more per cell (`Occupancy::step_cost`, paid in time
+  through `hauling::stride` and the `Squeezing` marker), and the heap the
+  old rule broke up — 71 downed programs on one cell outside a Bay — is held
+  by the half that is about **arrival**: a cell a body holds is never a
+  station, and the walk refuses a body's cell wherever arriving there would
+  end the walk (the target's own faces). **The trap is the walkers whose
+  arrival is a radius** — a patient for its Bay, an off-shift body for an
+  amenity, a respite, a subject for its pen: `in_reach` admits cells no
+  station list names, and `drift_idle_staff` hands a body sharing a cell with
+  another idle body to the wander, so an idle drift walker squeezing through
+  would be knocked off its route at every pass. Those and the caravan take `Occupancy::rigid`, the
+  old bodies-as-walls walk. A passer that briefly shares a cell with an idle
+  body makes *that* body take the wander, which is the step aside the
+  squeeze wants. `hauling::blocked_tiles` takes the structures and the bodies
+  as **two iterators**, `collect::feeders_by_tile`'s argument: `post_field` and
   `crew_reach` have to answer the same question about which cells are
   crossable, and a caller that could pass the structures alone would silently
   be asking a different one. Two construction sites and no more —
@@ -151,10 +169,13 @@
   holds there deliberately, and so does a program at its amenity — so a heap
   already in a save, or left by a structure raised on top of one, would stay a
   heap forever with every future step correctly refused. A body sharing its
-  cell therefore takes the wander instead of its errand, which is the one arm
-  that already knows how to decline a tile somebody else has. The tally is
-  built off `Game::base_bodies` and not off `staff`, because a posted worker
-  standing there is as much in the way as an idle one and is not in that list.
+  cell with another *idle* body therefore takes the wander instead of its
+  errand, which is the one arm that already knows how to decline a tile
+  somebody else has. **A posted body is not counted**: it squeezes through
+  and moves on by its own walk, and counting it knocked a patient off its
+  Bay, a subject off its pen or an off-shift body off its amenity at every
+  pass. The tally is built off `Game::base_bodies` and not off `staff`,
+  because an idle party member holds a cell and is not in that list.
 
 - **An idle program wanders the base, and laid floor is the leash.**
   `wander_step` offers one of the eight neighbours of the tile the body is

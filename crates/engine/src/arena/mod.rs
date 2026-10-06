@@ -1180,8 +1180,10 @@ mod tests {
         // No wildcard, matching `Record::set_fight`: a new variant must be
         // classified as one that carries a fight or one that does not,
         // rather than silently joining the set this asserts over. The base
-        // records are keyed to a tick and cannot appear in an arena session
-        // anyway, since nothing there runs a machine.
+        // records are keyed to a tick and carry no fight id. Most cannot
+        // appear in an arena session since nothing there runs a machine, but
+        // `Remember` does: it fires mid-fight, and is classified as fightless
+        // all the same.
         fn fight_of(record: &Record) -> Option<u64> {
             match record {
                 Record::FightStart { fight, .. }
@@ -1192,6 +1194,9 @@ mod tests {
                 Record::Extract { .. }
                 | Record::Assemble { .. }
                 | Record::MachineStall { .. }
+                | Record::Tantrum { .. }
+                | Record::Fray { .. }
+                | Record::Remember { .. }
                 | Record::HandCraft { .. }
                 | Record::Acquire { .. }
                 | Record::Consume { .. }

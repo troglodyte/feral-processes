@@ -1369,6 +1369,17 @@ pub struct DigMark {
     pub cut: Option<f32>,
 }
 
+/// One floor pile as the base map draws it — see `Game::floor_piles`.
+///
+/// No glyph or colour: a pile is one mark whatever it holds, and that mark is
+/// the renderer's. `items` is display names in `ItemId` order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloorPileView {
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    pub items: Vec<(String, u32)>,
+}
+
 /// One outpost as the surface map marks it — see `Game::outpost_marks`.
 ///
 /// `DigMark`'s shape one subsystem over: a record with no entity still needs
@@ -2917,6 +2928,9 @@ pub struct ManifestMood {
 /// shows and a later change to how many are drawn is a renderer change.
 pub const MANIFEST_MOOD_MEMORIES: usize = 4;
 
+/// Every word `morale_band` can return, best first.
+pub const MORALE_BANDS: [&str; 5] = ["devoted", "content", "even", "uneasy", "bitter"];
+
 /// Which word a morale sum reads as.
 ///
 /// **Banded against where morale stops mattering**, not against an invented
@@ -2943,11 +2957,11 @@ pub fn morale_band(sum: f32) -> &'static str {
     // Half of saturation is the inner boundary, so the two outer words are
     // reserved for a program whose feelings are actually moving its work.
     match sum {
-        s if s >= full => "devoted",
-        s if s >= full / 2.0 => "content",
-        s if s > -full / 2.0 => "even",
-        s if s > -full => "uneasy",
-        _ => "bitter",
+        s if s >= full => MORALE_BANDS[0],
+        s if s >= full / 2.0 => MORALE_BANDS[1],
+        s if s > -full / 2.0 => MORALE_BANDS[2],
+        s if s > -full => MORALE_BANDS[3],
+        _ => MORALE_BANDS[4],
     }
 }
 
@@ -2964,6 +2978,17 @@ pub struct NeedRow {
     /// The def's `servicing` verb while the program is off shift for this
     /// need, `None` otherwise.
     pub servicing: Option<String>,
+}
+
+/// One reserve as the headless bench reads it: the raw level beside the
+/// def's own thresholds, so a share-below-critical is computed against the
+/// number the sim itself uses.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NeedLevel {
+    pub id: String,
+    pub level: f32,
+    pub critical: f32,
+    pub content: f32,
 }
 
 /// Which word a reserve reads as, as a fraction of `NEED_MAX`.

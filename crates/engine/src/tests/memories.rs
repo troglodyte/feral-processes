@@ -3113,3 +3113,104 @@ fn the_manifests_mood_is_the_report_and_the_whole_sum() {
     );
     assert_eq!(mood.band, crate::views::morale_band(mood.sum));
 }
+
+// ---------------------------------------------------------------------------
+// What the bench reads: a formation record
+// ---------------------------------------------------------------------------
+
+fn remember_records(game: &mut Game) -> Vec<crate::telemetry::Record> {
+    game.take_telemetry()
+        .into_iter()
+        .filter(|r| matches!(r, crate::telemetry::Record::Remember { .. }))
+        .collect()
+}
+
+#[test]
+fn a_remember_records_a_formation_then_a_reinforcement() {
+    use crate::telemetry::Record;
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let tick = game.current_tick();
+
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let remember = |new| Record::Remember {
+        tick,
+        def: "hard_won".to_string(),
+        new,
+    };
+    assert_eq!(
+        remember_records(&mut game),
+        vec![remember(true), remember(false)]
+    );
+}
+
+/// A memory forgotten by the eviction on the very call that wrote it was
+/// never held, so the record must not claim a formation.
+#[test]
+fn a_remember_evicted_on_the_same_call_is_not_recorded_as_formed() {
+    use crate::telemetry::Record;
+    const FAINT: &str = r#"(
+        id: "faint",
+        name: "Faint",
+        blurb: "b",
+        valence: 0.1,
+        half_life: 50_000,
+        subject: Nothing,
+        strike_cap: 1,
+    )"#;
+    let dir = assets_with_memory_defs("evicted_on_write", &[("faint", FAINT)]);
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let tick = game.current_tick();
+
+    game.remember(program, "faint", MemorySubject::Nothing);
+
+    assert!(memories_of(&game, program).is_empty());
+    assert_eq!(
+        remember_records(&mut game),
+        vec![Record::Remember {
+            tick,
+            def: "faint".to_string(),
+            new: false,
+        }]
+    );
+}
+
+#[test]
+fn a_remember_with_telemetry_off_records_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    game.enable_telemetry();
+    assert!(remember_records(&mut game).is_empty());
+}
+
+#[test]
+fn a_refused_remember_records_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.enable_telemetry();
+    let unknown = game.remember(program, "no_such_memory", MemorySubject::Nothing);
+    let wrong = game.remember(program, "hard_won", MemorySubject::Program(ProgramId(9999)));
+    assert_eq!(unknown, Remembered::UnknownDef);
+    assert_eq!(wrong, Remembered::WrongSubject);
+    assert!(remember_records(&mut game).is_empty());
+}
+
+#[test]
+fn morale_band_only_returns_members_of_morale_bands() {
+    for sum in [-1e6, -50.0, -5.0, -0.1, 0.0, 0.1, 5.0, 50.0, 1e6] {
+        let band = crate::views::morale_band(sum);
+        assert!(crate::views::MORALE_BANDS.contains(&band), "{sum}: {band}");
+    }
+    let full =
+        (crate::tuning::MEMORY_MORALE_MAX_SHIFT / crate::tuning::MEMORY_MORALE_PER_POINT) as f32;
+    let hit: std::collections::HashSet<_> = [-full, -full * 0.75, 0.0, full * 0.75, full]
+        .map(crate::views::morale_band)
+        .into();
+    assert_eq!(hit.len(), crate::views::MORALE_BANDS.len());
+}

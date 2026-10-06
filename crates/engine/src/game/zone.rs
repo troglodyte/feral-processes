@@ -442,13 +442,44 @@ impl Game {
     ///
     /// **The narrower of the two sets** — see `structure_tiles`' doc for why
     /// a structure's own floor cells are walkable here and taken there.
-    pub(crate) fn blocked_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
+    pub(crate) fn blocked_tiles(&mut self) -> crate::game::base::hauling::Occupancy {
         let rows = self.structure_footprints();
         let bodies: Vec<Position> = self.base_bodies().into_iter().map(|(_, p)| p).collect();
         crate::game::base::hauling::blocked_tiles(
             rows.into_iter().map(|(_, p, side)| (p, side)),
             bodies.into_iter(),
         )
+    }
+
+    /// Takes `step` for a posted walker, or waits on it if it is a squeeze
+    /// still being paid for — `hauling::stride` asked from the `Game` side,
+    /// for the walkers that are `Game` methods rather than systems.
+    pub(crate) fn take_base_step(
+        &mut self,
+        worker: Entity,
+        step: crate::game::base::hauling::Step,
+    ) {
+        use crate::game::base::hauling::{Stride, stride};
+        let tick = self.world.resource::<GameClock>().tick;
+        let held = self
+            .world
+            .get::<crate::components::Squeezing>(worker)
+            .copied();
+        match stride(held, step, tick) {
+            Stride::Wait(marker) => {
+                self.world.entity_mut(worker).insert(marker);
+            }
+            Stride::Go => {
+                if held.is_some() {
+                    self.world
+                        .entity_mut(worker)
+                        .remove::<crate::components::Squeezing>();
+                }
+                if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+                    *pos = step.to;
+                }
+            }
+        }
     }
 
     /// Every body standing in base space, with the cell it is standing in.

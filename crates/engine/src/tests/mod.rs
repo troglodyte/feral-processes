@@ -51,6 +51,7 @@ mod equipment;
 mod exclusive_routines;
 mod extraction;
 mod field;
+mod floor;
 mod gear_detail;
 mod gear_passives;
 mod hauling;

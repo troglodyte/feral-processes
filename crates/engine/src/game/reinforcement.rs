@@ -6,6 +6,7 @@
 //! `call_reinforcement` acts on it after, so the two cannot disagree.
 
 use crate::components::{DropPod, Reinforcement};
+use crate::game::base::floor::drop_load;
 use crate::game::base::offshift::Amenities;
 use crate::game::combat::RoutineRefusal;
 use crate::resources::Party;
@@ -30,7 +31,7 @@ impl Game {
     /// `Game::amenities` from a `&Game` — the refusal is asked from
     /// `ability_unavailable`, which cannot take `&mut`. `Amenities::build`
     /// takes an iterator for exactly this.
-    fn amenities_here(&self) -> Amenities {
+    pub(crate) fn amenities_here(&self) -> Amenities {
         let sites: Vec<(StructureId, Position)> = self
             .world
             .iter_entities()
@@ -133,9 +134,12 @@ impl Game {
             return false;
         }
         self.spend_pod(pod);
+        // The load stays behind on the base tile: the trooper's `Position` is
+        // still the base cell it was called from.
+        drop_load(&mut self.world, trooper);
         self.world
             .entity_mut(trooper)
-            .remove::<(Task, Carrying)>()
+            .remove::<Task>()
             .insert(Reinforcement { reorienting: true });
         self.world.resource_mut::<Party>().0.push(trooper);
         self.cue_tactical_fx(trooper, crate::resources::TacticalFxKind::Landing);

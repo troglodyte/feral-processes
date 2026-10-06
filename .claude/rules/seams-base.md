@@ -204,15 +204,19 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A body may cross a structure's own floor but never stop on it**, the
   wander declining `Game::structure_tiles` where `blocked_tiles` still emits
   anchors alone.
-- **One body to a cell, and `hauling::blocked_tiles` takes the structures and
-  the bodies as two iterators so no walk can ask the narrower question.**
+- **A body is squeezed past and never stopped on** — `hauling::blocked_tiles`
+  takes the structures and the bodies as two iterators into `Occupancy`, a
+  posted walk crosses a body's cell for `SQUEEZE_EXTRA_TICKS` more and never
+  arrives on one, and the radius-arrival walkers and the caravan take
+  `Occupancy::rigid`.
 - **`party::walks_the_base` is the one definition of which bodies occupy
   ground**, shared with `Game::watch_position`.
 - **`has_station` keeps the structures-only set**, `Game::structure_tiles`,
   because a body on the only face of a marked cell is proof something can
   stand there.
-- **Sharing a cell outranks every errand in `drift_idle_staff`**, which is
-  what makes one-body-to-a-cell true of a save written before it.
+- **Sharing a cell with another idle body outranks every errand in
+  `drift_idle_staff`**, which is what makes one-body-to-a-cell true of a
+  save written before it; a posted passer is not a heap.
 - **`task_progress_system` and `assembler_system` both write
   `Task::progress` and are `.chain()`ed** — bevy can see the conflict but
   not the disjointness.
@@ -243,6 +247,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   for a machine that would never take a unit.
 - **`Carrying` is the only thing hauling stores**, and the carry cap is what
   lets it be one `(item, qty)` pair.
+- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` sets its load into
+  the Chebyshev-nearest store that takes it, through `deposit`, and keeps it
+  when none will** — a load is never destroyed to free a body.
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`.
 - **A demolition hands back what the structure was *holding* — both `Stock`
@@ -414,3 +421,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `systems::feeds` over the pull's reach, Teardown Rigs are never members, and a body that is not staff (the player's own
   `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**
 - **A held program is `ProgramRole::Siphoned` and grid supply is counted off the `Siphoned` marker, so removing the marker is the whole release; every despawn path for a siphon must release first.**
+- **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `floor::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.

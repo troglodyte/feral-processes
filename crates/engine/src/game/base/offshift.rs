@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use crate::base_grid::BaseGrid;
 use crate::components::{Needs, OffShift, Position, Structure};
-use crate::game::base::hauling::{NoPost, at_station, step_to_post};
+use crate::game::base::hauling::{NoPost, Step, at_station, step_to_post};
 use crate::needs::{NeedDb, NeedId};
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
@@ -189,6 +189,52 @@ impl Game {
                 })
             })
             .collect()
+    }
+
+    /// Every reserve `who` carries as a number, sorted by need id.
+    ///
+    /// `need_rows` is the player's read (bands, names); this is the
+    /// headless bench's — it samples levels against the def's thresholds.
+    /// A view rather than a `World` accessor, because the renderer and
+    /// bench must never be handed the `World`. Empty for a body with no
+    /// `Needs`.
+    pub fn need_levels(&self, who: Entity) -> Vec<crate::views::NeedLevel> {
+        let Some(store) = self.world.get::<Needs>(who) else {
+            return Vec::new();
+        };
+        let db = self.world.resource::<NeedDb>();
+        let mut levels: Vec<_> = store
+            .iter()
+            .filter_map(|(id, level)| {
+                let def = db.get(id)?;
+                Some(crate::views::NeedLevel {
+                    id: id.to_string(),
+                    level,
+                    critical: def.critical,
+                    content: def.content,
+                })
+            })
+            .collect();
+        levels.sort_by(|a, b| a.id.cmp(&b.id));
+        levels
+    }
+
+    /// The rung `who` has reached on the grievance ladder, by wire name, or
+    /// `None` if not disgruntled. A view for the headless bench, for the
+    /// same reason as `need_levels`.
+    pub fn grievance(&self, who: Entity) -> Option<&'static str> {
+        self.world
+            .get::<crate::components::Disgruntled>(who)
+            .map(|d| d.grievance.as_str())
+    }
+
+    /// Whether the scheduler would hand `who` a job this beat — `is_on_shift`
+    /// for a `&self` caller, so a reader of the base asks the sim's own
+    /// question instead of reconstructing it from `program_errand_label`,
+    /// which says nothing of a downed body or a program that downed tools at
+    /// a base with nowhere to go.
+    pub fn on_shift(&self, who: Entity) -> bool {
+        self.is_on_shift(who, &self.amenities_here())
     }
 
     /// The examine line's tail: what `who` has walked off to do, or `None`
@@ -372,11 +418,11 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
-        let blocked = self.blocked_tiles();
+        let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         // `in_reach`'s own note: no shipped amenity is wider than 1, held by
         // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
-        let Some(tile) = step_to_post(
+        let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,
@@ -497,6 +543,13 @@ impl Game {
         }
         let at = self.world.get::<Position>(worker).copied();
         let who = self.creature_label(worker);
+        let tick = self.current_tick();
+        self.record(|_| crate::telemetry::Record::Fray {
+            tick,
+            who: who.clone(),
+            need: need.to_string(),
+            unreachable,
+        });
         let what = self
             .world
             .resource::<NeedDb>()

@@ -14,8 +14,10 @@ use std::path::Path;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
+use report::share;
 pub use report::{
-    BenchReport, EconomyReport, LabourBench, LineBench, MEASURES, MachineReport, fold_status,
+    BenchReport, EconomyReport, LabourBench, LineBench, MEASURES, MachineReport, MemoryReport,
+    MemoryTally, NeedBench, StaffReport, StaffSample, StaffTally, fold_status,
 };
 
 use crate::duties::Duty;
@@ -32,6 +34,9 @@ pub struct RunOptions {
     /// wants, so a template with no standing demand has no drain; a
     /// quantity too big to reach keeps the demand alive for the whole run.
     pub orders: Vec<(String, u32)>,
+    /// Whether the siege clock runs. Off keeps a long run from stopping at
+    /// the first siege (`stopped_at`), for measuring what a siege hides.
+    pub sieges: bool,
 }
 
 /// Per-line tick tallies, accumulated as the run goes.
@@ -66,6 +71,7 @@ fn play_with(
         game.queue_work_order(WorkOrder::batch(ItemId::from(item.as_str()), *qty))
             .map_err(|e| format!("order {item} x{qty} refused: {e}"))?;
     }
+    game.dev_set_sieges(opts.sieges);
     game.enable_telemetry();
 
     let start = game.structure_report();
@@ -79,6 +85,15 @@ fn play_with(
     let mut lines: BTreeMap<String, LineTally> = BTreeMap::new();
     let (mut wanted, mut staffed) = (0u64, 0u64);
     let mut unworked: BTreeMap<Duty, u64> = BTreeMap::new();
+    let mut staff = StaffTally::default();
+    // The game's own catalogue, so the seeded ids are exactly the ones
+    // `remember` can resolve.
+    let mut memories = MemoryTally::new(
+        game.world
+            .resource::<crate::memories::MemoryDb>()
+            .all()
+            .map(|d| d.id.as_str()),
+    );
     let mut ticks = 0;
     let mut stopped_at = None;
     for _ in 0..opts.ticks {
@@ -98,6 +113,7 @@ fn play_with(
                 .or_insert(0) += 1;
             tally.last_member = line.members.last().and_then(|m| tile_of.get(m)).copied();
         }
+        sample_staff(&game, &mut staff, &mut memories);
         let demand = game.labour_demand();
         wanted += demand.wanted as u64;
         staffed += demand.staff as u64;
@@ -106,6 +122,7 @@ fn play_with(
         }
     }
 
+    sample_bonds(&game, &mut memories);
     let records = game.take_telemetry();
     let mut edges: HashMap<(i32, i32), Vec<(u64, &str)>> = HashMap::new();
     let mut units: HashMap<(i32, i32), u64> = HashMap::new();
@@ -197,8 +214,8 @@ fn play_with(
             labour,
             items,
         },
-        staff: None,
-        memories: None,
+        staff: staff.finish(t0, &records),
+        memories: memories.finish(&records),
     })
 }
 
@@ -211,12 +228,40 @@ fn advance(game: &mut Game) -> bool {
     game.current_tick() != before
 }
 
-/// `n / ticks`, with an empty run reading as zero rather than NaN.
-fn share(n: u64, ticks: u64) -> f32 {
-    if ticks == 0 {
-        0.0
-    } else {
-        n as f32 / ticks as f32
+/// One tick's staff, re-read each tick because staff can join or leave.
+fn sample_staff(game: &Game, tally: &mut StaffTally, memories: &mut MemoryTally) {
+    tally.begin_tick();
+    for who in game.base_staff() {
+        let needs = game.need_levels(who);
+        let grievance = game.grievance(who);
+        let morale = game.morale(who);
+        memories.add_morale(morale);
+        tally.add(&StaffSample {
+            on_shift: game.on_shift(who),
+            morale,
+            strain: game.need_strain(who),
+            needs: needs
+                .iter()
+                .map(|n| (n.id.as_str(), n.level, n.critical))
+                .collect(),
+            rung: grievance,
+        });
+    }
+}
+
+/// Bonds are slow state, so the end of the run is what a target reads;
+/// sampling `social` every tick would cost a lot and add nothing. Live
+/// relationships only: a departed program's bond is a memory of grief, which
+/// the formation records already count.
+fn sample_bonds(game: &Game, memories: &mut MemoryTally) {
+    for who in game.base_staff() {
+        memories.add_staff();
+        let Some(social) = game.social(who) else {
+            continue;
+        };
+        for row in social.relationships.iter().filter(|r| !r.gone) {
+            memories.add_bond(row.bond);
+        }
     }
 }
 
@@ -244,6 +289,7 @@ mod tests {
                 ticks: 50,
                 seed,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap()
@@ -280,6 +326,7 @@ mod tests {
                 ticks: 50,
                 seed: 1,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap();
@@ -303,6 +350,7 @@ mod tests {
                 ticks: 50,
                 seed: 1,
                 orders: vec![],
+                sieges: true,
             },
             |game, n| {
                 if n == 20 {
@@ -343,6 +391,7 @@ mod tests {
                 ticks: 1,
                 seed: 0,
                 orders: vec![("no_such_item".into(), 5)],
+                sieges: true,
             },
         )
         .unwrap_err();
@@ -360,6 +409,7 @@ mod tests {
                 ticks: 1,
                 seed: 0,
                 orders: vec![],
+                sieges: true,
             },
         )
         .unwrap_err();

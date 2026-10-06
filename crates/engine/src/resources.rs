@@ -1951,6 +1951,13 @@ pub struct SiegePressure {
     pub warned: bool,
 }
 
+/// A dev override of whether the siege clock runs, set by
+/// `Game::dev_set_sieges`. Never saved and never inserted by `Game::new` or
+/// `load`: absent means "ask `FERAL_DEV_NO_SIEGES`", so inserting it eagerly
+/// would also turn the environment switch off for a bench that never asked.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct DevSieges(pub bool);
+
 /// The next `components::ProgramId` to hand out. Advanced by
 /// `Game::roster_parts`, which is the only thing that mints one.
 ///

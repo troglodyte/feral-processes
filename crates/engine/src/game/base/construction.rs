@@ -217,7 +217,7 @@ impl Game {
     fn step_one_builder(
         &mut self,
         worker: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) {
         let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {
@@ -379,7 +379,7 @@ impl Game {
         from: Position,
         dest: Position,
         side: u8,
-        blocked: &std::collections::HashSet<(i32, i32)>,
+        blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) {
         let step = {
@@ -387,11 +387,7 @@ impl Game {
             hauling::step_to_post(grid, from, dest, side, blocked, pocket_radius)
         };
         match step {
-            Ok(Some(next)) => {
-                if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
-                    *pos = next;
-                }
-            }
+            Ok(Some(next)) => self.take_base_step(worker, next),
             // Nowhere better to stand: the field admits the tile the body is
             // already on and nothing closer. It waits.
             Ok(None) => {}

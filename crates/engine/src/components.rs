@@ -877,6 +877,17 @@ pub struct Carrying {
     pub qty: u32,
 }
 
+/// Items on a base tile's floor: what an interrupted carrier let go of, until
+/// a hauler brings it home. One pile per tile (`base::floor::spawn_floor_pile`
+/// merges), no capacity so a drop can never fail, never decays, and despawned
+/// the moment it is empty. Deliberately has no `Glyph`: the many queries over
+/// `(&Position, &Glyph)` must not see it, and the renderer reads
+/// `Game::floor_piles` instead.
+#[derive(Component, Clone, Debug, Default)]
+pub struct FloorPile {
+    pub items: std::collections::BTreeMap<ItemId, u32>,
+}
+
 /// A posted program that found no route to where it is trying to get, and the
 /// tick it stopped being able to. Written and cleared by
 /// `game::base::hauling::haul_step_system`, the one system that walks a field
@@ -891,9 +902,11 @@ pub struct Carrying {
 /// nothing to distinguish a route that has just broken from one that has been
 /// broken for an hour.
 ///
-/// A cache of that tick's answer rather than stored state, and not saved for
-/// the same reason `MachineStatus` isn't: the walk that produced it runs
-/// again on the next tick. It exists at all because the status it drives is
+/// Not saved, like `MachineStatus`: the walk that produced it runs again on
+/// the next tick. **It is more than a cache of that tick's answer, though**:
+/// `since` gates `STRANDED_SET_DOWN_TICKS`, so a reload restarts the
+/// timer and a carrier stranded across one waits the full timeout again.
+/// The marker exists at all because the status it drives is
 /// written by `systems::task_progress_system` — giving `MachineStatus` two
 /// writers would have them ping-pong `Unstaffed`↔`Stranded` every tick, and
 /// `set_machine_status` logs on every transition.
@@ -905,6 +918,18 @@ pub struct Carrying {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Stranded {
     /// The `GameClock` tick the worker entered the state on.
+    pub since: u64,
+}
+
+/// A posted walker paying `tuning::SQUEEZE_EXTRA_TICKS` to step into a cell
+/// another body holds — the step it is waiting to take, and when the wait
+/// began. `hauling::stride` is the one reader.
+///
+/// Not saved, `Stranded`'s reason: a reload costs a walker at most one more
+/// wait, and the walk that wrote it runs again next tick.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Squeezing {
+    pub into: Position,
     pub since: u64,
 }
 
@@ -1101,9 +1126,11 @@ pub enum TaskKind {
     ///
     /// Unlike every other kind, a body holding this one may be **carrying**
     /// a load it fetched for the site. `schedule_base_labour`'s
-    /// never-free-a-`Carrying`-holder rule already covers that, and it has
-    /// to: freeing the body drops the `Carrying` with the `Task`, and those
-    /// units have already left the shelf they came off.
+    /// never-free-a-`Carrying`-holder rule keeps the scheduler from freeing
+    /// it mid-trip, because those units have already left the shelf they
+    /// came off and the builder is the one walking them to the site. Paths
+    /// that free the body anyway (displacement, sale) set the load on the
+    /// floor (`floor::drop_load`) for a hauler to bring home.
     Construct,
 }
 
@@ -2143,6 +2170,24 @@ pub enum Grievance {
     /// `Game::has_downed_tools` reads `>=` rather than `==`: a program on
     /// this rung has already stopped working.
     LashingOut,
+}
+
+impl Grievance {
+    /// Every rung, lowest first.
+    pub const ALL: [Grievance; 3] = [
+        Grievance::Sulking,
+        Grievance::DownedTools,
+        Grievance::LashingOut,
+    ];
+
+    /// The wire name a bench or analysis reads the rung by.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Grievance::Sulking => "sulking",
+            Grievance::DownedTools => "downed_tools",
+            Grievance::LashingOut => "lashing_out",
+        }
+    }
 }
 
 /// A program that is a Repair Bay's business rather than the base's: off the
@@ -3529,5 +3574,30 @@ mod stats_tests {
         };
         let whole = Stats { hp: 100, ..hurt };
         assert_eq!(hurt.power(), whole.power());
+    }
+}
+
+#[cfg(test)]
+mod grievance_all_tests {
+    use super::Grievance;
+
+    /// The match has no wildcard, so a new rung stops this compiling until it
+    /// is placed here, and the assertion below until it is in `ALL`.
+    #[test]
+    fn every_rung_is_in_all() {
+        let mut seen = 0;
+        for rung in [
+            Grievance::Sulking,
+            Grievance::DownedTools,
+            Grievance::LashingOut,
+        ] {
+            match rung {
+                Grievance::Sulking | Grievance::DownedTools | Grievance::LashingOut => {
+                    assert!(Grievance::ALL.contains(&rung), "{rung:?}");
+                    seen += 1;
+                }
+            }
+        }
+        assert_eq!(seen, Grievance::ALL.len());
     }
 }

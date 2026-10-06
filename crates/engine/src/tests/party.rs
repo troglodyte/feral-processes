@@ -2694,3 +2694,28 @@ fn a_downed_program_cannot_be_put_back_in_the_party() {
     );
     assert!(!game.world.resource::<Party>().0.contains(&companion));
 }
+
+/// Fusion despawns both parents; a parent mid-haul must not take its load
+/// with it.
+#[test]
+fn fusing_a_carrying_parent_leaves_its_load_on_the_floor() {
+    let mut game = Game::new(423, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let a = spawn_tamed(&mut game, 20, 10);
+    let b = spawn_tamed(&mut game, 10, 6);
+    game.world.entity_mut(a).insert(Carrying {
+        item: ItemId::from("cache_grain"),
+        qty: 3,
+    });
+    let at = *game.world.get::<Position>(a).unwrap();
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at).expect("a pile");
+    let held = &game
+        .world
+        .get::<crate::components::FloorPile>(pile)
+        .unwrap()
+        .items;
+    assert_eq!(held.get(&ItemId::from("cache_grain")), Some(&3));
+}

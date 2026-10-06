@@ -66,6 +66,18 @@ an honest "unknown".
   of their range, so it is a ranking of what binds throughput and not a
   proposal to apply.
 
+- [2026-10-05 — Base bench: the staff baseline](2026-10-05-base-bench-staff-baseline.md)
+  — over 3000 ticks `bench-economy` staff sulk 3% of the time and never fray;
+  `chains` (no amenity) frays 3-4 times a run. At 6000 ticks with sieges off the
+  shipped base is quieter than "occasional trouble" (sulking 0.031, coherence
+  critical 0.0016, no fray).
+
+- [2026-10-05 — Base bench: a staff tune](2026-10-05-base-bench-staff-tune.md)
+  — without the coherence-critical target the search meets every target on
+  the search seeds (error 0.0342 to 0) and improves hold-out (0.0839 to
+  0.0391), by pinning five knobs at a bound and spending 2-9 points less time
+  on shift; one search seed gains a fray. Not a recommendation to apply.
+
 - [2026-10-05 — Base bench: `chains` baseline and a first tune](2026-10-05-base-bench-chains-baseline.md)
   — on `chains` nothing drains machine output, so each machine fills its
   buffer once and clogs: the assembly bay made **10** units at capacity 10

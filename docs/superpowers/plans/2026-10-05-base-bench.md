@@ -187,18 +187,210 @@ Gate: `cargo test --workspace`, clippy, fmt. Then opus whole-branch review
 (diff as a file), fix, land per `landing-work-is-merge-tag-push-cleanup`
 (push only on the user's ask).
 
-## P2 — Staff (outline; plan pass after baseline)
+## P2 — Staff
 
-New read-only `Game` methods: per-need numeric level for a program, and its
-grievance rung. `StaffReport` replaces `staff: Option<()>`; measures per the
-spec. Capture `staffed-base` (`chains` + Defrag Bay + Sandbox, run to
-established) via `savetool capture`. Baseline both templates → **stop; user
-sets target ranges** → knobs for `assets/needs/`, amenity `services`,
-`assets/thoughts/` intensities (extend `read_back` per kind).
+Branch `staff-bench`. Same execution rules as P1 (serial sonnet tasks, gates
+off, opus whole-branch review at the end, never push, explicit paths, never
+stage `art/`).
 
-## P3 — Memories (outline; plan pass after baseline)
+### Decisions
 
-`MemoryReport` (morale distribution, bond distribution from `social`, fired
-count per memory kind from `memory_report`). Baseline lists fired kinds →
-**stop; user picks targets and knob list** → memory-def knobs restricted to
-fired kinds.
+- **No `staffed-base` capture.** `bench-economy` already is `chains` plus a
+  Defrag Bay and a Sandbox, with 15 staff and 26 structures, so it is past
+  `BASE_ESTABLISHED_STAFF`/`_STRUCTURES` (8/8). Baseline `bench-economy`
+  (amenities) and `chains` (none: the fray contrast).
+- **Tantrums and frays are telemetry records, not log scraping.**
+  `message_log` is capped at 100, has no tick and is pruned after battle.
+  Add `Record::Tantrum { tick, who }` (one per tantrum started, not per
+  brawl line) and `Record::Fray { tick, who, need, unreachable }` (one per
+  `fray` call), built where the log line is written. Not production, so
+  they do not go through `base_ledger::emit`; they follow `MachineStall`'s
+  pattern (telemetry-only, behind `enable_telemetry`).
+- **Two views, no `World` accessor.** `Game::need_levels(who) ->
+  Vec<NeedLevel { id: String, level: f32, critical: f32, content: f32 }>`
+  (sorted by id, empty without `Needs`) and `Game::grievance(who) ->
+  Option<&'static str>` (`"sulking"`/`"downed_tools"`/`"lashing_out"`, a
+  `Grievance::as_str`). Both in `game/base/offshift.rs` beside `need_rows`.
+- **Sampling is per staff-tick** over `base_staff()` re-read each tick (staff
+  can leave or join mid-run).
+- **Knobs ship with the measures, before the stop.** The stop is only for
+  target ranges; knob plumbing does not depend on them.
+
+### StaffReport (replaces `staff: Option<()>`; `#[serde(default)]` not needed — reports are not saves)
+
+```rust
+pub struct StaffReport {
+    pub staff_ticks: u64,            // sum over ticks of base_staff().len()
+    pub on_shift_share: f32,         // errand_label None / staff_ticks
+    pub morale_mean: f32, pub morale_min: f32,
+    pub sulking_share: f32,          // morale < MORALE_SULKS_AT
+    pub need_strain_mean: f32,
+    pub needs: BTreeMap<String, NeedBench>, // mean, min, critical_share (level < critical)
+    pub rung_share: BTreeMap<String, f32>,  // "none" + each rung, over staff_ticks
+    pub tantrums: u64, pub frays: u64,
+    pub first_fray: Option<u64>,     // ticks from run start
+    pub end_morale: Vec<f32>,        // per staff at the last tick, sorted
+}
+```
+
+New `MEASURES`: `staff.on_shift_share`, `staff.morale_mean`,
+`staff.morale_min`, `staff.sulking_share`, `staff.need_strain_mean`,
+`staff.need_mean.<need>`, `staff.need_critical_share.<need>`,
+`staff.rung_share.<rung|none>`, `staff.tantrums_per_1000`,
+`staff.frays_per_1000`. Unknown need/rung id → `Err`, as for economy.
+
+### T5 — engine: records + views (crate: engine)
+`Record::Tantrum`, `Record::Fray`; `need_levels`, `grievance`. Tests: a
+forced fray (no amenity, need set below critical) emits one `Fray` with
+`unreachable: false`; a tantrum emits exactly one `Tantrum`; views read back
+a set level and each rung; no telemetry → no records.
+
+### T6 — engine: StaffReport (crate: engine)
+Pure fold in `report.rs` (unit-tested without a `Game`: shares, mins,
+first fray, per-1000 rates, `measure` arms); sampling in `play_with`. A run
+test on `bench-economy` asserts `staff_ticks == 15 × ticks` and shares in
+[0,1].
+
+### T7 — launcher: knobs (crate: launcher)
+`read_back` arms: `NeedDef` (`drain_per_tick`, `working_multiplier`,
+`critical`, `content`, `morale_weight`), `ThoughtDef.intensity`,
+`StructureDef` `services.<need>.per_tick` / `.radius` (a `locate` special
+case like `craftable.cost.<item>`). Update `dev-tuning/README.md`. Tests:
+each new arm patches and reads back; an ambiguous/missing path errors.
+
+### T8 — baseline (no code)
+Release build; `bench run` on `bench-economy` (its P1 orders, seeds 1–5,
+3,000 ticks) and `chains` (same). Write
+`docs/measurements/2026-10-05-base-bench-staff-baseline.md` with every
+staff measure, `stopped_at`, first fray. **Stop: the user sets target
+ranges and picks knobs.** Then T9 writes `dev-tuning/staff.ron`, runs
+`tune`, and writes the proposal; CHANGELOG `## Unreleased` line.
+
+**Risk to check at T8:** coherence drains 0.02/tick ×2.0 at work, so a full
+reserve reaches critical (20) after ~2,000 working ticks, and a siege stops
+`bench-economy`'s clock at ~3,800. If 3,000 ticks show no fray or rung
+movement on `bench-economy`, report it rather than lengthen the run; the
+siege fix (party outside base space) is a separate decision.
+
+### After the baseline (user, 2026-10-05)
+
+- **Siege dev switch (T9).** One engine switch, `Game::dev_set_sieges(bool)`
+  (a non-saved Resource; `siege_check` does nothing while off). `bench
+  run --no-sieges` and objective field `sieges: false` (`#[serde(default =
+  true)]`); the game honours `FERAL_DEV_NO_SIEGES=1` where
+  `FERAL_DEV_REVEAL` is read. README + `dev-tuning/README.md`.
+- **Staff objective (T10)** on `bench-economy`, sieges off, 6,000 ticks
+  (re-baseline shipped values at that length first; record it in the staff
+  baseline doc). Targets, "occasional trouble":
+  `staff.sulking_share` 0.05–0.15, `staff.need_critical_share.coherence`
+  0.01–0.05, `staff.need_mean.slack` 60–85, `staff.frays_per_1000` 0–0.2,
+  `staff.rung_share.downed_tools` 0–0.02.
+  Knobs: coherence + slack `drain_per_tick`, `working_multiplier` (±50%),
+  `critical` (10–30), `content` (50–80), `morale_weight` (±50%); Defrag Bay
+  and Sandbox `services.<need>.per_tick` (±50%); the five thoughts'
+  `intensity` (sign kept, magnitude 0.5–4). Proposal doc, CHANGELOG
+  `## Unreleased`.
+
+## P3 — Memories
+
+Branch `memories-bench`. Same execution rules as P1/P2 (serial sonnet tasks,
+gates off, opus whole-branch review at the end, never push, explicit paths,
+never stage `art/`).
+
+### Decisions
+
+- **"Fired" comes from a telemetry record, not `memory_report`.** The spec
+  said "count per kind from `memory_report`", but that reads a holder's
+  current store by display *name*: a reinforced memory looks the same as
+  one struck once, and an evicted one vanishes. Every formation goes
+  through `Game::remember_named` (`game/memories.rs:82`; the other
+  `Memories` pushes are tests and `building.rs` moving a held store), so
+  emit `Record::Remember { tick, def: String, new: bool }` there, after
+  `Written`, the same telemetry-only pattern as `Fray`. Add it to the
+  base-record lists at `telemetry.rs:236` and `arena/mod.rs:1195`.
+- **Catalogue-seeded maps.** `bench::run` loads `MemoryDb::load_dir(assets_dir
+  /memories)` once and seeds `fired`/`formed` with every def id at 0. So a
+  kind that never fired reads 0 and an unknown id is an `Err`, the economy
+  rule. Morale bands and bond bands are seeded the same way, from a new
+  `views::MORALE_BANDS` (test: `morale_band` only returns members) and a new
+  `Bond::ALL`.
+- **Bonds at the last tick only**, over live directed relationships
+  (`Game::social(who).relationships`, `gone == false`) for each of
+  `base_staff()`. Bonds are slow state, so the end is what a target reads;
+  sampling `social` per tick would cost a lot and add nothing.
+- **Morale bands per staff-tick**, `views::morale_band(game.morale(who))`,
+  sampled in the same loop as `StaffTally`. Mean, min and "share downing
+  tools" are already `staff.*`. P3 adds band shares and the spread (staff-tick
+  standard deviation, from sum and sum of squares).
+- **Knobs are dispatched by directory, not by field name**, because
+  `weight`, `mood` and others are names that could repeat across kinds.
+  `memories/*.ron`: `valence`, `half_life` (integer), `strike_cap`
+  (integer), `stack_decay`, `mood`. `interactions/*.ron`: `weight`,
+  `sulking` (scalars only; `by_band`/`by_disposition` are `{}` maps, which
+  `patch` does not walk). Tuning constants (`MEMORY_MORALE_PER_POINT`, the
+  `BOND_*_AT` thresholds) are code, so they are out of reach, per the spec's
+  Not doing.
+
+### MemoryReport (replaces `memories: Option<()>`)
+
+```rust
+pub struct MemoryReport {
+    pub morale_band_share: BTreeMap<String, f32>, // every MORALE_BANDS entry, over staff_ticks
+    pub morale_spread: f32,                       // staff-tick std dev of morale
+    pub bond_share: BTreeMap<String, f32>,        // every Bond label, over `relationships`
+    pub relationships: u64,                       // live directed pairs at the last tick
+    pub fired: BTreeMap<String, u64>,             // every def id; Record::Remember count
+    pub formed: BTreeMap<String, u64>,            // every def id; `new: true` only
+}
+```
+
+New `MEASURES`: `memories.morale_band_share.<band>`,
+`memories.morale_spread`, `memories.bond_share.<bond>`,
+`memories.relationships_per_staff` (`relationships` / staff at the end),
+`memories.fired_per_1000.<memory id>`, `memories.formed_per_1000.<memory id>`.
+
+### T11 — engine: record + report (crate: engine)
+`Record::Remember`; `MORALE_BANDS`; `Bond::ALL`; `MemoryTally` pure fold in
+`report.rs` beside `StaffTally` (unit-tested without a `Game`: band shares
+sum to 1, spread, seeded zeros, fired vs formed, each `measure` arm, an
+unknown id is `Err`); sampling in `run`. Tests: a `remember` with telemetry on
+emits one record with `new: true`, a second emits `new: false`; with
+telemetry off it emits none; an unknown def emits none. A run test on
+`bench-economy` (from the launcher, where templates resolve, as T6 did)
+asserts that every catalogue id is a key and that band shares sum to 1.
+
+### T12 — launcher: knobs (crate: launcher)
+`read_back` arms for the memory and interaction fields above, dispatched on
+`knob.file`'s first path component; `FIELDS` and `dev-tuning/README.md`
+updated. Tests: each new arm patches and reads back; `half_life` rounds;
+`memories/x.ron` + `intensity` is refused, and so is `thoughts/x.ron` +
+`valence`.
+
+### T13 — baseline (no code)
+Release build. `bench run` on `bench-economy`, sieges off, 6,000 ticks, seeds
+1–5 (P2's settings, so the staff numbers line up), and on `chains` for
+contrast. Write `docs/measurements/2026-10-05-base-bench-memories-baseline.md`
+with every memory measure, the kinds that fired (and how often), and the
+kinds that never did. **Stop: the user picks targets and the knob list**,
+restricted to kinds that fired. Then T14 writes `dev-tuning/memories.ron`,
+runs `tune`, and writes the proposal doc and a CHANGELOG `## Unreleased`
+line.
+
+**Risk to check at T13:** battle-only kinds (`bonded_in_battle`,
+`mauled_by`, `lost_in_battle`) cannot fire with sieges off. Report them
+as unreachable on this bench rather than turning sieges back on.
+
+### After the baseline (user, 2026-10-05)
+
+- **Memories objective (T14)** on `bench-economy`, sieges off, 6,000 ticks,
+  P2's orders and seeds (search 1-3, hold-out 4-6, 22 x 24).
+  Targets: `memories.bond_share.Friend` 0.05-0.20,
+  `memories.bond_share.Rival` 0.02-0.10,
+  `memories.morale_band_share.uneasy` 0.02-0.10,
+  `memories.morale_band_share.devoted` 0.02-0.10.
+- Knobs ("social memories + talk"): for `chatted_with`, `talked_shop_with`,
+  `laughed_with`, `commiserated_with`, `idled_with`, `thanked_by`,
+  `complimented_by`, `slighted_by`, `complained_at_by`, `insulted_by`:
+  `valence` (sign kept, shipped x0.5 to x1.5) and `half_life` 1000-6000;
+  plus `weight` (shipped x0.5 to x2.0) on every interaction whose
+  listener/speaker memory is one of those kinds (all but `gossip`).

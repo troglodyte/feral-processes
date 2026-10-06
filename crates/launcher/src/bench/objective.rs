@@ -4,7 +4,7 @@
 use super::knob::Knob;
 use feral_processes_engine::bench::MEASURES;
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Component, Path};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Target {
@@ -27,8 +27,16 @@ pub struct Objective {
     /// quantity the run cannot reach.
     #[serde(default)]
     pub orders: Vec<(String, u32)>,
+    /// Whether sieges can open during a run; `false` for measuring a base a
+    /// siege would otherwise stop.
+    #[serde(default = "sieges_on")]
+    pub sieges: bool,
     pub targets: Vec<Target>,
     pub knobs: Vec<Knob>,
+}
+
+fn sieges_on() -> bool {
+    true
 }
 
 /// Zero inside `[min, max]`, else the squared distance outside it as a
@@ -47,8 +55,11 @@ impl Objective {
     }
 
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let objective: Objective =
+        let mut objective: Objective =
             ron::from_str(text).map_err(|e| format!("malformed objective: {e}"))?;
+        for knob in &mut objective.knobs {
+            knob.file = normalise_file(&knob.file)?;
+        }
         objective.validate()?;
         Ok(objective)
     }
@@ -95,6 +106,14 @@ impl Objective {
                     knob.file, knob.field, knob.min, knob.max
                 ));
             }
+            // A zero half-life or strike cap is a def the game never meant
+            // to load, and `snap` would happily propose it.
+            if matches!(knob.field.as_str(), "half_life" | "strike_cap") && knob.min < 1.0 {
+                return Err(format!(
+                    "knob {} `{}`: min {} must be at least 1",
+                    knob.file, knob.field, knob.min
+                ));
+            }
             if self.knobs[..i]
                 .iter()
                 .any(|k| k.file == knob.file && k.field == knob.field)
@@ -107,6 +126,23 @@ impl Objective {
         }
         Ok(())
     }
+}
+
+/// A knob's file as a bare path under assets, so the same file spelled two
+/// ways is one key everywhere a path is compared or joined.
+fn normalise_file(file: &str) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for c in Path::new(file).components() {
+        match c {
+            Component::Normal(name) => parts.push(name.to_string_lossy()),
+            Component::CurDir => {}
+            _ => return Err(format!("knob file `{file}` must be a path under assets")),
+        }
+    }
+    if parts.is_empty() {
+        return Err(format!("knob file `{file}` must be a path under assets"));
+    }
+    Ok(parts.join("/"))
 }
 
 /// A usable range: finite, with room between the ends (NaN is neither).
@@ -169,6 +205,13 @@ mod tests {
     }
 
     #[test]
+    fn sieges_default_on_and_can_be_turned_off() {
+        assert!(Objective::from_ron(&ron_with("")).unwrap().sieges);
+        let off = Objective::from_ron(&ron_with(", sieges: false")).unwrap();
+        assert!(!off.sieges);
+    }
+
+    #[test]
     fn unknown_measure_is_named() {
         let e = err_of(&ron_with("").replace("economy.labour_unworked", "economy.nope"));
         assert!(e.contains("economy.nope") && e.contains("known:"), "{e}");
@@ -183,11 +226,40 @@ mod tests {
     }
 
     #[test]
+    fn staff_measures_are_accepted() {
+        for name in [
+            "staff.morale_mean",
+            "staff.need_mean.coherence",
+            "staff.need_critical_share.coherence",
+            "staff.rung_share.none",
+            "staff.frays_per_1000",
+        ] {
+            let text = ron_with("").replace("economy.labour_unworked", name);
+            assert!(Objective::from_ron(&text).is_ok(), "{name}");
+        }
+    }
+
+    #[test]
     fn inverted_ranges_are_rejected() {
         let e = err_of(&ron_with("").replace("min: 0.0, max: 1.0", "min: 1.0, max: 1.0"));
         assert!(e.contains("min"), "{e}");
         let e = err_of(&ron_with("").replace("min: 1.0, max: 9.0", "min: 9.0, max: 1.0"));
         assert!(e.contains("capacity"), "{e}");
+    }
+
+    #[test]
+    fn a_memory_half_life_or_strike_cap_below_one_is_rejected() {
+        for field in ["half_life", "strike_cap"] {
+            let text = ron_with("").replace(
+                r#"file: "structures/assembly_bay.ron", field: "capacity", min: 1.0"#,
+                &format!(r#"file: "memories/hard_won.ron", field: "{field}", min: 0.0"#),
+            );
+            let e = err_of(&text);
+            assert!(
+                e.contains(field) && e.contains("at least 1"),
+                "{field}: {e}"
+            );
+        }
     }
 
     #[test]
@@ -212,5 +284,32 @@ mod tests {
             r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
         let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {knob}")));
         assert!(e.contains("twice"), "{e}");
+    }
+
+    #[test]
+    fn a_dot_slash_duplicate_is_caught_and_the_path_is_stored_bare() {
+        let knob =
+            r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
+        let dotted = knob.replace("structures/", "./structures/");
+        let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {dotted}")));
+        assert!(e.contains("twice"), "{e}");
+        let obj = Objective::from_ron(&ron_with("").replace(knob, &dotted)).unwrap();
+        assert_eq!(obj.knobs[0].file, "structures/assembly_bay.ron");
+    }
+
+    #[test]
+    fn a_knob_path_that_leaves_assets_is_refused() {
+        for file in [
+            "../memories/x.ron",
+            "/memories/x.ron",
+            "memories/../../x.ron",
+        ] {
+            let text = ron_with("").replace("structures/assembly_bay.ron", file);
+            let e = err_of(&text);
+            assert!(
+                e.contains(file) && e.contains("under assets"),
+                "{file}: {e}"
+            );
+        }
     }
 }

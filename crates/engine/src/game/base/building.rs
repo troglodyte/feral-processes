@@ -2,6 +2,7 @@
 //! to work them.
 
 use crate::base_grid::BaseGrid;
+use crate::game::base::floor::drop_load;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
@@ -1314,16 +1315,17 @@ impl Game {
                     .collect()
             };
             for worker in workers {
-                // `Carrying` goes with the `Task`: a worker whose machine is
-                // gone has nowhere to put its load down and would hold it for
-                // the rest of the run. `damage_structure` carries the same
-                // pair for the same reason.
+                // The load goes on the floor with the `Task`: a worker whose
+                // machine is gone has nowhere to put it down and would hold
+                // it for the rest of the run. `damage_structure` does the
+                // same for the same reason.
                 //
                 // A carrier is **put back** before the component goes, not
                 // dropped with it: destroying the building must not destroy
                 // the kill. See `Game::return_carried_program`.
                 self.return_carried_program(worker);
-                self.world.entity_mut(worker).remove::<(Task, Carrying)>();
+                self.world.entity_mut(worker).remove::<Task>();
+                drop_load(&mut self.world, worker);
             }
             // What the building was *holding*, as against the share of its
             // build cost accumulated above: a Depot's shelf, a machine's
@@ -1582,6 +1584,9 @@ impl Game {
                 .find(|(_, t)| t.target == structure && t.kind == kind)
                 .map(|(e, _)| e)
         }?;
+        // A hauler displaced mid-carry keeps no `Task` to deliver under, so
+        // its load goes to the floor instead of freezing in its hands.
+        drop_load(&mut self.world, holder);
         self.world.entity_mut(holder).remove::<Task>();
         if holder == self.player_entity() {
             self.log_base("You break off what you were doing.");

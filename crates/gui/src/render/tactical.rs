@@ -178,16 +178,23 @@ impl Wash {
 /// Every wash the board lays down this frame, in draw order, each with the
 /// cells it covers. An empty field is left out.
 ///
+/// **One movement wash a cell** (bug 13): move, cover and danger partition
+/// `reachable`, danger over cover over move. Stacked at a wash's alpha each,
+/// the three mixed into a colour nobody authored and the key named none of
+/// it. Danger wins because an inbound reaction is louder news than a
+/// boulder — a sheltered cell that still costs a swing is a cell that costs
+/// a swing.
+///
 /// **The one list both the draw and the legend read.** Bug 13 was a board
 /// of five washes nobody had named; a key derived separately from what was
 /// drawn would be a second answer free to disagree with the first.
-fn board_washes<'a>(
-    reachable: &'a [(i32, i32)],
-    covered: &'a [(i32, i32)],
-    provoking: &'a [(i32, i32)],
-    placeable: &'a [(i32, i32)],
-    preview: &'a [(i32, i32)],
-) -> Vec<(Wash, &'a [(i32, i32)])> {
+fn board_washes(
+    reachable: &[(i32, i32)],
+    covered: &[(i32, i32)],
+    provoking: &[(i32, i32)],
+    placeable: &[(i32, i32)],
+    preview: &[(i32, i32)],
+) -> Vec<(Wash, Vec<(i32, i32)>)> {
     let mut washes = Vec::new();
     // Movement is drawn for **either side**, off `TacticalView::reachable`
     // alone and never off `player_turn`: a wash that appeared only for
@@ -201,21 +208,28 @@ fn board_washes<'a>(
     // field stacked on the first. Drawing both washed every reachable cell
     // twice and read as a colour nobody authored.
     //
-    // Cover, then danger, over movement and in that order: a cell can be
-    // reachable, sheltered and provoking all at once and all three should
-    // read, and an inbound reaction is louder news than a boulder.
     if placeable.is_empty() {
+        let only = |field: &[(i32, i32)], louder: &[&[(i32, i32)]]| -> Vec<(i32, i32)> {
+            field
+                .iter()
+                .filter(|c| louder.iter().all(|l| !l.contains(c)))
+                .copied()
+                .collect()
+        };
         washes.extend([
-            (Wash::Move, reachable),
-            (Wash::Cover, covered),
-            (Wash::Danger, provoking),
+            (Wash::Move, only(reachable, &[covered, provoking])),
+            (Wash::Cover, only(covered, &[provoking])),
+            (Wash::Danger, provoking.to_vec()),
         ]);
     }
     // `placeable` is already empty for every shape but `Radius`
     // (`Game::tactical_placeable_cells`' own gate). The preview goes last,
     // over everything: a routine resolves wherever it is aimed whether or
     // not the body could walk there.
-    washes.extend([(Wash::Aim, placeable), (Wash::Hits, preview)]);
+    washes.extend([
+        (Wash::Aim, placeable.to_vec()),
+        (Wash::Hits, preview.to_vec()),
+    ]);
     washes.retain(|(_, field)| !field.is_empty());
     washes
 }
@@ -228,6 +242,8 @@ fn board_washes<'a>(
 /// washed — so the key never teaches a colour the player cannot see.
 /// Bottom-left because the turn strip and the tamper block take the
 /// top-right, and the map pane's bottom border carries no strip to clear.
+/// Rows wrap to the pane's width; only a pane narrower than one entry, or
+/// shorter than the rows, draws no key.
 pub(super) fn draw_wash_legend(washes: &[Wash], pane: Rect, painter: &Painter, m: &Metrics) {
     if washes.is_empty() {
         return;
@@ -236,26 +252,46 @@ pub(super) fn draw_wash_legend(washes: &[Wash], pane: Rect, painter: &Painter, m
     let size = m.small();
     let swatch = f32::from(size) * 0.7;
     let space = painter.measure_ui_advance(" ", size);
-    let words: f32 = washes
-        .iter()
-        .map(|w| swatch + space + painter.measure_ui_advance(w.label(), size))
-        .sum();
-    let w = pad * 2.0 + words + space * 2.0 * (washes.len() - 1) as f32;
-    let h = pad * 2.0 + m.line_height;
+    let gap = space * 2.0;
+    let entry = |w: Wash| swatch + space + painter.measure_ui_advance(w.label(), size);
+    // **Wrapped, never dropped.** A key that silently vanished when one row
+    // did not fit left a narrow board with washes and nothing naming them —
+    // bug 13 again at a smaller window.
+    let room = pane.w - m.inset * 2.0 - pad * 2.0;
+    let mut rows: Vec<Vec<Wash>> = vec![Vec::new()];
+    let mut used = 0.0;
+    for &wash in washes {
+        let ew = entry(wash);
+        let row = rows.last_mut().expect("rows starts with one");
+        if !row.is_empty() && used + gap + ew > room {
+            rows.push(vec![wash]);
+            used = ew;
+        } else {
+            used += if row.is_empty() { ew } else { gap + ew };
+            row.push(wash);
+        }
+    }
+    let row_width =
+        |row: &[Wash]| row.iter().map(|&w| entry(w)).sum::<f32>() + gap * (row.len() - 1) as f32;
+    let widest = rows.iter().map(|r| row_width(r)).fold(0.0, f32::max);
+    let w = pad * 2.0 + widest;
+    let h = pad * 2.0 + m.line_height * rows.len() as f32;
     let x = pane.x + m.inset;
     let y = pane.y + pane.h - m.inset - h;
-    if x + w > pane.x + pane.w - m.inset || y < pane.y {
+    if widest > room || y < pane.y {
         return;
     }
     painter.rect(x, y, w, h, Color::new(0.04, 0.06, 0.08, 0.88));
     painter.rect_lines(x, y, w, h, 1.0, palette::PANE_BORDER);
-    let baseline = y + pad + f32::from(size) * 0.8;
-    let mut at = x + pad;
-    for &wash in washes {
-        painter.rect(at, baseline - swatch, swatch, swatch, wash.color());
-        at += swatch + space;
-        painter.ui(wash.label(), at, baseline, size, palette::BODY);
-        at += painter.measure_ui_advance(wash.label(), size) + space * 2.0;
+    for (i, row) in rows.iter().enumerate() {
+        let baseline = y + pad + m.line_height * i as f32 + f32::from(size) * 0.8;
+        let mut at = x + pad;
+        for &wash in row {
+            painter.rect(at, baseline - swatch, swatch, swatch, wash.color());
+            at += swatch + space;
+            painter.ui(wash.label(), at, baseline, size, palette::BODY);
+            at += painter.measure_ui_advance(wash.label(), size) + gap;
+        }
     }
 }
 
@@ -323,22 +359,24 @@ fn turn_arrow(px: f32, py: f32, tile_px: f32, lift: f32) -> [(f32, f32); 3] {
 fn draw_cell_field(
     painter: &Painter,
     field: &[(i32, i32)],
+    edge: &[(i32, i32)],
     cell: (i32, i32),
-    px: f32,
-    py: f32,
+    (px, py): (f32, f32),
     tile_px: f32,
     color: Color,
 ) {
-    if !field.contains(&cell) {
+    if field.contains(&cell) {
+        painter.rect(
+            px,
+            py,
+            tile_px - 1.0,
+            tile_px - 1.0,
+            Color::new(color.r, color.g, color.b, REACH_WASH_ALPHA),
+        );
+    }
+    if !edge.contains(&cell) {
         return;
     }
-    painter.rect(
-        px,
-        py,
-        tile_px - 1.0,
-        tile_px - 1.0,
-        Color::new(color.r, color.g, color.b, REACH_WASH_ALPHA),
-    );
     let far = tile_px - 1.0;
     for (dx, dy, from, to) in [
         (0, -1, (0.0, 0.0), (far, 0.0)),
@@ -346,7 +384,7 @@ fn draw_cell_field(
         (-1, 0, (0.0, 0.0), (0.0, far)),
         (1, 0, (far, 0.0), (far, far)),
     ] {
-        if field.contains(&(cell.0 + dx, cell.1 + dy)) {
+        if edge.contains(&(cell.0 + dx, cell.1 + dy)) {
             continue;
         }
         painter.line(
@@ -462,7 +500,7 @@ pub(super) fn draw_tactical_map(
 
         // What the legend reports is this list, so a key entry exists
         // exactly when its wash is drawn — `board_washes`' own doc.
-        for &(wash, field) in &washes {
+        for &(wash, ref field) in &washes {
             if wash == Wash::Hits {
                 // No edge: a preview is a handful of cells under a cursor
                 // that already outlines its target, and a second boundary
@@ -478,7 +516,16 @@ pub(super) fn draw_tactical_map(
                     );
                 }
             } else {
-                draw_cell_field(painter, field, cell, px, py, tile_px, wash.color());
+                // The move wash fills only the cells nothing louder claims,
+                // but its edge traces everything reachable: traced round the
+                // plain cells alone, a cover or danger pocket inside the
+                // reach would be ringed in blue as if it were a hole in it.
+                let edge: &[(i32, i32)] = if wash == Wash::Move {
+                    &reachable
+                } else {
+                    field
+                };
+                draw_cell_field(painter, field, edge, cell, (px, py), tile_px, wash.color());
             }
         }
         // A body's own hit, last of the tile's washes — `render/base.rs`'s
@@ -2094,9 +2141,9 @@ mod tests {
                     draw_cell_field(
                         p,
                         &field,
+                        &field,
                         cell,
-                        100.0 + dx as f32 * tile_px,
-                        200.0 + dy as f32 * tile_px,
+                        (100.0 + dx as f32 * tile_px, 200.0 + dy as f32 * tile_px),
                         tile_px,
                         palette::PLAN,
                     );
@@ -2373,16 +2420,17 @@ mod tests {
     /// A covered destination is washed, and a board with none is not.
     #[test]
     fn a_covered_destination_is_washed() {
-        use crate::paint::painted_rects;
-
         let mut game = fighting();
         let mut view = game.tactical_view().expect("the fight is open");
         view.covered = Vec::new();
+        view.provoking = Vec::new();
+        let c = palette::HEALTHY;
+        let cover_wash = Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
         let mut fx = Fx::new();
         let (_, bare) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
-        let before = painted_rects(&bare).len();
+        assert_eq!(painted_rect_fill_count(&bare, cover_wash), 0);
 
         view.covered = view.reachable.iter().copied().take(1).collect();
         assert_eq!(view.covered.len(), 1, "the acting body reaches nowhere");
@@ -2390,8 +2438,9 @@ mod tests {
         let (_, washed) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
-        assert!(
-            painted_rects(&washed).len() > before,
+        assert_eq!(
+            painted_rect_fill_count(&washed, cover_wash),
+            1,
             "a covered cell drew no wash"
         );
     }
@@ -3412,18 +3461,77 @@ mod tests {
         };
         assert_eq!(
             draw(&view, &[cell], &[]),
-            vec![Wash::Move, Wash::Cover, Wash::Danger, Wash::Hits]
+            vec![Wash::Danger, Wash::Hits],
+            "a cell in all three movement fields wears danger alone"
         );
         assert_eq!(
             draw(&view, &[cell], &[cell]),
             vec![Wash::Aim, Wash::Hits],
             "the aim field replaces the three movement washes"
         );
-        view.covered.clear();
-        assert_eq!(draw(&view, &[], &[]), vec![Wash::Move, Wash::Danger]);
-        view.reachable.clear();
         view.provoking.clear();
+        assert_eq!(draw(&view, &[], &[]), vec![Wash::Cover]);
+        view.covered.clear();
+        assert_eq!(draw(&view, &[], &[]), vec![Wash::Move]);
+        view.reachable.clear();
         assert!(draw(&view, &[], &[]).is_empty());
+    }
+
+    /// Bug 13: move, cover and danger stacked on one cell read as a colour
+    /// nobody authored. Each reachable cell wears exactly one of them.
+    #[test]
+    fn a_reachable_cell_wears_one_movement_wash() {
+        let (open, sheltered, exposed, both) = ((0, 0), (1, 0), (2, 0), (3, 0));
+        let reachable = [open, sheltered, exposed, both];
+        let covered = [sheltered, both];
+        let provoking = [exposed, both];
+        assert_eq!(
+            board_washes(&reachable, &covered, &provoking, &[], &[]),
+            vec![
+                (Wash::Move, vec![open]),
+                (Wash::Cover, vec![sheltered]),
+                (Wash::Danger, vec![exposed, both]),
+            ]
+        );
+    }
+
+    /// The move edge is the reach's boundary, not the plain cells': a
+    /// covered cell at the end of a row of three leaves the blue outline
+    /// round all three (8 sides), not round the two blue-filled ones (6).
+    #[test]
+    fn the_move_edge_runs_round_cells_a_louder_wash_fills() {
+        use crate::paint::painted_line_count_in;
+
+        let (mut view, _) = one_cell_fields();
+        let cells: Vec<(i32, i32)> = view.board.cells().map(|(c, _)| c).collect();
+        let row = cells
+            .iter()
+            .map(|&(x, y)| [(x, y), (x + 1, y), (x + 2, y)])
+            .find(|r| r.iter().all(|c| cells.contains(c)))
+            .expect("the board has a row of three");
+        view.reachable = row.to_vec();
+        view.covered = vec![row[2]];
+        view.provoking = Vec::new();
+        let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
+        let mut fx = Fx::new();
+        let (_, shapes) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, wide, 32.0, 24));
+        assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 8);
+    }
+
+    /// The draw follows the list: the one cell in all three fields is
+    /// washed once, in danger red, with no blue or green under it.
+    #[test]
+    fn a_cell_in_every_movement_field_is_washed_once() {
+        let (view, _) = one_cell_fields();
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let wash = |c: Color| Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
+        assert_eq!(painted_rect_fill_count(&shapes, wash(palette::PLAN)), 0);
+        assert_eq!(painted_rect_fill_count(&shapes, wash(palette::HEALTHY)), 0);
+        assert_eq!(painted_rect_fill_count(&shapes, wash(palette::THREAT)), 1);
     }
 
     const ALL_WASHES: [Wash; 5] = [Wash::Move, Wash::Cover, Wash::Danger, Wash::Aim, Wash::Hits];
@@ -3446,6 +3554,32 @@ mod tests {
         }
         let (_, none) = with_painter(|p| draw_wash_legend(&[], pane(), p, &m));
         assert!(none.is_empty(), "an empty board drew a legend");
+    }
+
+    /// A pane too narrow for one row wraps the key onto more rows rather
+    /// than dropping it, and every row stays inside the pane.
+    #[test]
+    fn a_narrow_pane_wraps_the_legend_instead_of_hiding_it() {
+        use crate::paint::painted_fills;
+
+        let m = ui_metrics(720.0);
+        let narrow = Rect::new(0.0, 0.0, 160.0, 400.0);
+        let (_, shapes) = with_painter(|p| draw_wash_legend(&ALL_WASHES, narrow, p, &m));
+        assert_eq!(painted_text(&shapes).len(), ALL_WASHES.len());
+        let fills = painted_fills(&shapes);
+        let swatch = f32::from(m.small()) * 0.7;
+        let rows: std::collections::BTreeSet<i32> = fills
+            .iter()
+            .filter(|(_, r)| (r.w - swatch).abs() < 0.01 && (r.h - swatch).abs() < 0.01)
+            .map(|(_, r)| r.y.round() as i32)
+            .collect();
+        assert!(rows.len() > 1, "one row of five words in a 160px pane");
+        for (_, r) in &fills {
+            assert!(
+                r.x >= narrow.x && r.y >= narrow.y && r.x + r.w <= narrow.x + narrow.w,
+                "{r:?} leaves the pane"
+            );
+        }
     }
 
     /// Measured, not hoped: every entry draws, and nothing it paints leaves

@@ -14,7 +14,8 @@ below.
 
 The ground under the acting body is washed to show what its turn can do, and
 a key in the bottom-left corner of the board names whichever washes are
-showing:
+showing. A cell wears one of the first three at most — danger over cover
+over move:
 
 - Blue, move — every cell it can still step to.
 - Green, cover — a cell it can reach with something between it and the
@@ -32,6 +33,23 @@ A small green sunrise in a body's top-right corner means it is standing in
 cover against whoever is acting. A purple path ending in a purple outline is
 a hostile's next move and target, shown while Inference Probe Single is
 reading it.
+
+The bodies themselves carry marks too:
+
+- A body's own colour, on the other side, is how hard it is against you —
+  green much weaker, yellow an even match, orange tougher, red far
+  stronger. When a picture or a special colour already fills the body, a
+  small triangle in its top-left corner carries that colour instead.
+- A coloured bar along the top edge is its rarity — silver, gold, platinum
+  or prismatic. An ordinary body has none.
+- The bar along the bottom edge is its integrity — green for yours, red for
+  theirs. Short words just above it are what is affecting it; a number after
+  one is how many times it has stacked.
+- A body drawn faint is cloaked or is a decoy. One of yours drawn dark red
+  has been brought back by Respawn. A grey x is where something fell.
+- When a blow lands, the cell flashes red and a red number rises with what
+  was lost; a green number is integrity restored, and a yellow ! is a free
+  attempt being taken. A bolt is drawn in the colour of whatever fired it.
 
 On your turn:
 

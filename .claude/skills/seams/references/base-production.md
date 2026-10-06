@@ -535,7 +535,8 @@
   call-up, off-shift free of a `Downed` body, displacement by another
   posting, joining the party, a temporary structure burning out, sale,
   extraction, permadeath, fusion) removed `Carrying` or despawned the body
-  and the cargo vanished; the stranded timeout is the one that runs inside
+  and the cargo vanished, and sortie dispatch left it frozen on a body the
+  labour pool no longer sees; the stranded timeout is the one that runs inside
   `haul_step_system`, so it reaches the core through `commands.queue`. The
   off-shift free fires for `Downed` only, because `is_on_shift` keeps every
   other carrier on shift. The re-match drop in `assign_base_labour` is a

@@ -287,6 +287,11 @@ impl Game {
             .get(id)
             .cloned()
             .expect("a board row names a site the catalogue holds");
+        // Away, a body is out of the labour pool, so nothing would ever
+        // relieve a hauler of a load it took with it.
+        for &member in members {
+            crate::game::base::floor::drop_load(&mut self.world, member);
+        }
         let names: Vec<String> = members.iter().map(|&e| self.creature_label(e)).collect();
         self.queue_squad_walk(members, true);
         self.world

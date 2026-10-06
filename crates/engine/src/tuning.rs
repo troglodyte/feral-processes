@@ -2562,8 +2562,8 @@ pub const HAUL_WALK_MAX_TILES: i32 = 60;
 /// clear corridor the preferred one.
 pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
 
-/// How long a carrier stands `Stranded` holding a load before it sets the
-/// load down in the nearest store that will take it.
+/// How long a carrier stands `Stranded` holding a load before it drops the
+/// load on its own tile as a `FloorPile`.
 ///
 /// A route lost mid-carry strands a carrier: structures raised across it, a
 /// body standing on a face of the destination (or on a non-destination face

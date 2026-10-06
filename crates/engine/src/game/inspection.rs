@@ -895,7 +895,16 @@ impl Game {
     /// map's own priority order: an emulated form, then the player's drawn
     /// icon or chosen sprite, then the def's sprite, with the glyph as the
     /// renderer's fallback for whichever name has no art.
+    ///
+    /// `None` for anything that is neither a creature nor the player —
+    /// including a body despawned mid-turn — so the caller's fallback
+    /// applies instead of a nameless `?`.
     pub(crate) fn portrait_of(&self, entity: Entity) -> Option<PortraitView> {
+        if self.world.get::<Creature>(entity).is_none()
+            && self.world.get::<Player>(entity).is_none()
+        {
+            return None;
+        }
         let glyph = self.world.get::<Glyph>(entity);
         let form = self.form_look(entity);
         let look = self

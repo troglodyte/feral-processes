@@ -229,3 +229,20 @@ fn a_jacked_out_fight_still_shows_what_you_ran_from() {
     let result = game.battle_result_view().expect("the screen stays up");
     assert_eq!(result.portrait.map(|p| p.name), Some(label));
 }
+
+/// A hostile can kill itself on its own turn (a Recoil fumble) and is
+/// despawned while its turn is still being narrated; the window falls back
+/// to the first in line rather than showing a nameless `?`.
+#[test]
+fn a_despawned_actor_falls_back_to_the_front_hostile() {
+    let (mut game, _, wild) = a_fight(500);
+    let gone = a_hostile(&mut game, 5);
+    game.world.despawn(gone);
+    game.world.resource_mut::<BattleTimeline>().acting = Some(gone);
+
+    assert_eq!(game.portrait_of(gone), None);
+    assert_eq!(
+        game.battle_view().unwrap().portrait.map(|p| p.name),
+        Some(game.creature_label(wild))
+    );
+}

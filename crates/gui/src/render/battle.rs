@@ -441,14 +441,15 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // travels *into* that call because it is derived from these pixels, and
     // it is also what bounds the scroll.
     let pane = app.battle_pane(capacity);
-    let mut ly = y + margin;
-    for e in &pane.rows {
-        if ly + m.line_height > party_top {
-            break;
-        }
-        draw_message_line(e, text_x, ly, painter, m);
-        ly += m.line_height;
-    }
+    draw_battle_narration(
+        &pane.rows,
+        text_x,
+        y + margin,
+        margin + log_w - text_x,
+        party_top,
+        painter,
+        m,
+    );
     // Only when there is something out of sight: a pane showing the whole
     // round has nothing to say, and a hint standing there permanently would
     // be one more thing to read past on a screen that is already dense.
@@ -764,8 +765,9 @@ const SPRITE_PX: f32 = 16.0;
 /// character and starts eating narration the round is still telling.
 const PORTRAIT_MAX: f32 = SPRITE_PX * 12.0;
 /// The narrowest the narration may get before the portrait gives up its
-/// column — under this a swing line clips before it names its damage.
-const PORTRAIT_MIN_LOG_W: f32 = 420.0;
+/// column. Narration is clipped, not wrapped, so under this most swing
+/// lines are cut before they name their damage.
+const PORTRAIT_MIN_LOG_W: f32 = 480.0;
 
 /// The portrait's side in a log pane of `log_w` x `log_h`, leaving one
 /// `line_height` under it for the caption — or `None` when the pane cannot
@@ -774,6 +776,31 @@ fn portrait_side(log_w: f32, log_h: f32, line_height: f32) -> Option<f32> {
     let room = (log_h - line_height * 2.0).min(PORTRAIT_MAX);
     let side = (room / SPRITE_PX).floor() * SPRITE_PX;
     (side >= SPRITE_PX && log_w - side >= PORTRAIT_MIN_LOG_W).then_some(side)
+}
+
+/// The round's narration, one entry per line from `y` down to `bottom`, in a
+/// column `w` wide starting at `x`.
+fn draw_battle_narration(
+    rows: &[LogEntry],
+    x: f32,
+    y: f32,
+    w: f32,
+    bottom: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    // Clipped because nothing here wraps: with the portrait taking the left
+    // of the pane, a long swing line would otherwise run over the border.
+    painter.clipped(x, y - m.line_height, w, bottom - y + m.line_height, |p| {
+        let mut ly = y;
+        for e in rows {
+            if ly + m.line_height > bottom {
+                break;
+            }
+            draw_message_line(e, x, ly, p, m);
+            ly += m.line_height;
+        }
+    });
 }
 
 /// The picture window: one body, drawn the way the map draws it. The glyph
@@ -808,14 +835,19 @@ fn draw_battle_portrait(
             color,
         );
     }
+    // Centred when it fits; a longer name keeps its start and is cut at the
+    // picture's edge rather than running into the narration beside it.
     let width = painter.measure_ui(&portrait.name, m.small()).width;
-    painter.ui(
-        &portrait.name,
-        x + (side - width) / 2.0,
-        y + side + m.line_height,
-        m.small(),
-        TEXT,
-    );
+    let cx = x + ((side - width) / 2.0).max(0.0);
+    painter.clipped(x, y + side, side, m.line_height * 1.5, |p| {
+        p.ui(
+            &portrait.name,
+            cx,
+            y + side + m.line_height,
+            m.small(),
+            TEXT,
+        );
+    });
 }
 
 #[cfg(test)]
@@ -845,6 +877,40 @@ mod tests {
             draw_battle_portrait(portrait, 20.0, 40.0, 128.0, p, &m)
         });
         shapes
+    }
+
+    /// Narration is moved right by the portrait and nothing wraps it, so
+    /// a long swing line has to be cut at the log's own right border.
+    #[test]
+    fn long_narration_is_clipped_to_its_column() {
+        let m = ui_metrics(900.0);
+        let entry = LogEntry {
+            kind: MessageKind::Info,
+            source: feral_processes_engine::MessageSource::Field,
+            text: "x".repeat(400),
+            repeats: 1,
+        };
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_battle_narration(&[entry], 100.0, 40.0, 200.0, 300.0, p, &m)
+        });
+        assert!(!shapes.is_empty());
+        for shape in &shapes {
+            assert!(shape.clip_rect.max.x <= 300.0, "{:?}", shape.clip_rect);
+        }
+    }
+
+    #[test]
+    fn a_long_caption_stays_under_its_picture() {
+        let mut portrait = a_portrait(false);
+        portrait.name = "Overclocked Kx-77 Null Daemon (Z3)".into();
+        let shapes = draw_portrait_with(SpriteTable::default(), &portrait);
+        let texts = crate::paint::painted_text_boxes(&shapes);
+        let (index, _, _) = texts
+            .iter()
+            .find(|(_, t, _)| t.starts_with("Overclocked"))
+            .expect("the caption is painted");
+        let clip = shapes[*index].clip_rect;
+        assert!(clip.min.x >= 20.0 && clip.max.x <= 20.0 + 128.0, "{clip:?}");
     }
 
     #[test]
@@ -1527,13 +1593,6 @@ mod tests {
         app
     }
 
-    /// The gap `party_name_cell`'s own unit tests above cannot close:
-    /// nothing stops `draw_battle`'s call site reverting to bare `p.name`
-    /// while `party_name_cell` itself stays correct and its tests stay
-    /// green. This drives a real fight through `draw_battle` and reads the
-    /// painted text back, so a call site that regresses to `&p.name` fails
-    /// here — confirmed by reverting that one line locally and re-running
-    /// this test before writing the fix back.
     /// The window is drawn by `draw_battle` itself, for the body the engine
     /// put on display — not only by the helper in isolation.
     #[test]
@@ -1567,6 +1626,13 @@ mod tests {
         );
     }
 
+    /// The gap `party_name_cell`'s own unit tests above cannot close:
+    /// nothing stops `draw_battle`'s call site reverting to bare `p.name`
+    /// while `party_name_cell` itself stays correct and its tests stay
+    /// green. This drives a real fight through `draw_battle` and reads the
+    /// painted text back, so a call site that regresses to `&p.name` fails
+    /// here — confirmed by reverting that one line locally and re-running
+    /// this test before writing the fix back.
     #[test]
     fn draw_battle_paints_a_rare_partys_tier_tag() {
         let mut app = a_battling_app();

@@ -172,6 +172,9 @@ impl Game {
                 }
             }
         }
+        // Cleared before the passives: their lines answer the round as a
+        // whole, not the turn of whoever happened to act last.
+        self.world.resource_mut::<BattleTimeline>().acting = None;
 
         // Passives, after every chosen action and before the round is
         // closed out. All three triggers are answered from state rather
@@ -200,7 +203,6 @@ impl Game {
                 self.fire_passives(PassiveTrigger::Afflicted, &afflicted);
             }
         }
-        self.world.resource_mut::<BattleTimeline>().acting = None;
 
         if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
             battle.round += 1;

@@ -15,7 +15,7 @@ below.
 The ground under the acting body is washed to show what its turn can do, and
 a key in the bottom-left corner of the board names whichever washes are
 showing. A cell wears one of the first three at most — danger over cover
-over move — and the blue outline still runs round everything it can reach:
+over move:
 
 - Blue, move — every cell it can still step to.
 - Green, cover — a cell it can reach with something between it and the
@@ -43,10 +43,10 @@ The bodies themselves carry marks too:
 - A coloured bar along the top edge is its rarity — silver, gold, platinum
   or prismatic. An ordinary body has none.
 - The bar along the bottom edge is its integrity — green for yours, red for
-  theirs. Short words just above it are what is affecting it, and how many
-  rounds that has left.
-- A body drawn faint is cloaked or is a decoy. A dark red body has been
-  brought back by Respawn. A grey x is where something fell.
+  theirs. Short words just above it are what is affecting it; a number after
+  one is how many times it has stacked.
+- A body drawn faint is cloaked or is a decoy. One of yours drawn dark red
+  has been brought back by Respawn. A grey x is where something fell.
 - When a blow lands, the cell flashes red and a red number rises with what
   was lost; a green number is integrity restored, and a yellow ! is a free
   attempt being taken. A bolt is drawn in the colour of whatever fired it.

@@ -517,10 +517,9 @@ pub(super) fn draw_tactical_map(
                 }
             } else {
                 // The move wash fills only the cells nothing louder claims,
-                // but its edge still runs round everything reachable: that
-                // outline is how the reach is found at a glance, and
-                // tracing the plain cells alone would cut it up wherever
-                // cover or danger sits inside it.
+                // but its edge traces everything reachable: traced round the
+                // plain cells alone, a cover or danger pocket inside the
+                // reach would be ringed in blue as if it were a hole in it.
                 let edge: &[(i32, i32)] = if wash == Wash::Move {
                     &reachable
                 } else {
@@ -3494,6 +3493,30 @@ mod tests {
                 (Wash::Danger, vec![exposed, both]),
             ]
         );
+    }
+
+    /// The move edge is the reach's boundary, not the plain cells': a
+    /// covered cell at the end of a row of three leaves the blue outline
+    /// round all three (8 sides), not round the two blue-filled ones (6).
+    #[test]
+    fn the_move_edge_runs_round_cells_a_louder_wash_fills() {
+        use crate::paint::painted_line_count_in;
+
+        let (mut view, _) = one_cell_fields();
+        let cells: Vec<(i32, i32)> = view.board.cells().map(|(c, _)| c).collect();
+        let row = cells
+            .iter()
+            .map(|&(x, y)| [(x, y), (x + 1, y), (x + 2, y)])
+            .find(|r| r.iter().all(|c| cells.contains(c)))
+            .expect("the board has a row of three");
+        view.reachable = row.to_vec();
+        view.covered = vec![row[2]];
+        view.provoking = Vec::new();
+        let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
+        let mut fx = Fx::new();
+        let (_, shapes) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, wide, 32.0, 24));
+        assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 8);
     }
 
     /// The draw follows the list: the one cell in all three fields is

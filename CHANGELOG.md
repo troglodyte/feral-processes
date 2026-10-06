@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.15
+
+**On the battle map, each cell you could step to now shows one colour, and the key no longer disappears.** Before, a cell could be tinted blue for move, green for cover and red for danger all at once, which mixed into a colour the key did not name. Now danger wins over cover, and cover over move, so every cell reads as one of the three. The key in the bottom-left corner of the board now moves onto a second row when the window is narrow instead of vanishing. The battle maps help page also explains the marks a body carries: difficulty colours, the rarity bar, the integrity bar and status words, faint and dark red bodies, the grey x, and the floating numbers.
+
 ## 0.15.14
 
 **The battle screen's picture now has a column of its own.** The program being shown sits centred in a panel at the left of the battle log, divided from the log by a line in the same colour as the frame, rather than in the log's top corner. The "Your party" heading also no longer has the log's border drawn through it.

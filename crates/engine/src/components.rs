@@ -732,6 +732,14 @@ pub struct Racked(pub Vec<DownedProgram>);
 #[derive(Component, Default, Clone)]
 pub struct Tools(pub Vec<ToolId>);
 
+/// The implants built into the player, in install order. Player only. An id
+/// whose def has gone missing stays here, contributing nothing, so it can
+/// still be removed — see `implants::ImplantDb`.
+#[derive(Component, Default, Clone, Debug, PartialEq)]
+pub struct Implants {
+    pub installed: Vec<crate::implants::ImplantId>,
+}
+
 impl Inventory {
     pub fn add(&mut self, item: ItemId, qty: u32) {
         // Saturating so an unbounded Buffer can never wrap a stack's count.

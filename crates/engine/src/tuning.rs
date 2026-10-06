@@ -3092,6 +3092,51 @@ pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
 pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Implants
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The Neural Load a level-1 player can carry before an implant overloads
+/// them — `implants::load_cap`'s constant term. Two cheap implants fit from
+/// the start; nothing heavier does.
+pub const IMPLANT_LOAD_BASE: u32 = 4;
+
+/// Levels per extra point of Neural Load cap.
+///
+/// Chosen so the cap reaches 16 — the Load of the whole first set, six
+/// implants at once — in the middle of the level band `balance_sim` models.
+/// That band is zones 1 to 10 (`MAX_GEARED_ZONE_SWEPT`), whose level caps run
+/// 6, 12, 23 ... 100 (`zone_level_cap`), so its middle is zone 5-6 at levels
+/// 45-56. `IMPLANT_LOAD_BASE + 48 / 4 = 16` lands inside it: before then
+/// a player chooses which implants to run, after it they can run them all.
+pub const IMPLANT_LOAD_LEVELS_PER_POINT: u32 = 4;
+
+/// Extra Power upkeep per point of installed Load, as a fraction of the base
+/// drain: `implants::drain_factor` is `1 + load * this`. The full first set
+/// (16 Load) therefore drains 1.8 times as fast as a bare player.
+pub const IMPLANT_DRAIN_PER_LOAD: f32 = 0.05;
+
+/// Chance, per point of overload, that a battle start arms a rejection
+/// status on the player.
+pub const REJECTION_CHANCE_PER_LOAD: f64 = 0.10;
+
+/// Ceiling on that chance, so heavy overload is a bad bet and never a
+/// certainty.
+pub const REJECTION_CHANCE_MAX: f64 = 0.5;
+
+/// The statuses a rejection picks from, uniformly. Ids in
+/// `assets/statuses/`; one missing from the loaded set is skipped.
+pub const REJECTION_STATUSES: [&str; 3] = ["throttled", "exposed", "stun"];
+
+/// `core_fragment`s charged per point of Load to take an implant back out.
+/// Core fragments are zone-local and lost at a breach, so this is a price
+/// paid in the current zone's own currency. A cheap 2-Load implant costs 12
+/// to remove, about what two kinetic edges cost to build.
+pub const IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD: u32 = 6;
+
+/// Power the Dead Man's Switch spends each time it saves the player.
+pub const DEAD_MANS_SWITCH_POWER: f32 = 30.0;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
 

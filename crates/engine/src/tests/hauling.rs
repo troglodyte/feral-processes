@@ -2490,7 +2490,7 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
     game.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
     let (px, py) = game.base_pos().unwrap();
     pile_on(&mut game, px + 1, py + 1, ids::CORE_FRAGMENT, 2);
-    pile_on(&mut game, px + 2, py + 2, "cache_grain", 4);
+    pile_on(&mut game, px + 5, py + 1, "cache_grain", 4);
 
     tick_until(&mut game, 400, |g| {
         node_output(g, depot, "cache_grain") >= 4
@@ -2498,4 +2498,38 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
 
     assert_eq!(node_output(&game, depot, "cache_grain"), 4);
     assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+}
+
+/// One pile the walk cannot reach must not hide a farther one it can.
+#[test]
+fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
+    let mut game = base(38);
+    // Walls first: raising a structure under a posted hauler stands it down.
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ] {
+        deploy(&mut game, "wall", 1 + dx, 2 + dy);
+    }
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 2, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 4, py + 2, "cache_grain", 4);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 4
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 4);
+    assert_eq!(pile_total(&mut game), 2, "the walled-in pile stays");
 }

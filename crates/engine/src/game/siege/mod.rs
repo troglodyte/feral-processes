@@ -50,6 +50,27 @@ impl Game {
     /// already refuse for — `Game::siege_check` then resolves the siege
     /// off-screen instead of staging it.
     pub(crate) fn open_siege(&mut self) -> bool {
+        // Refused before the pack is spawned, so a base that cannot stage a
+        // siege draws nothing from `GameRng` and leaves no orphaned bodies.
+        if board::build(self).is_none() {
+            return false;
+        }
+        let Some(player_cell) = self.base_pos() else {
+            return false;
+        };
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let site = self.anchor_position().unwrap_or(player_cell);
+        let raiders = self.spawn_siege_pack(site, zone);
+        self.open_siege_with(raiders)
+    }
+
+    /// `open_siege`'s seating and fight set-up for a pack already made: the
+    /// sector's fresh pack for a regular siege, a nemesis's band for its own.
+    /// The empty-pack and nobody-seated refusals live here, so both callers
+    /// get them. Every raider is despawned on a refusal, so a caller whose
+    /// pack was not freshly spawned must not pass bodies it means to keep
+    /// when it can be refused.
+    pub(crate) fn open_siege_with(&mut self, raiders: Vec<Entity>) -> bool {
         let Some(siege_board) = board::build(self) else {
             return false;
         };
@@ -70,7 +91,6 @@ impl Game {
         // with, raiders excepted.
         let structures = self.structure_footprints();
         let staff = self.base_bodies();
-        let raiders = self.spawn_siege_pack(site, zone);
 
         let mut battle = TacticalBattle::open(
             BattleSpec {

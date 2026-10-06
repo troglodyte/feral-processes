@@ -18,7 +18,7 @@ use crate::floors::FloorDb;
 use crate::structures::{StructureDb, StructureDef};
 use crate::tuning::{
     ROOM_AREA_FULL, ROOM_AREA_WEIGHT, ROOM_BAND_FINE, ROOM_BAND_PLAIN, ROOM_BAND_SUPERB,
-    ROOM_CROWD_FREE, ROOM_CROWD_WEIGHT, ROOM_FINISH_WEIGHT,
+    ROOM_CROWD_FREE, ROOM_CROWD_WEIGHT, ROOM_FINISH_WEIGHT, ROOM_SERVICE_SCALE, ROOM_WORK_SCALE,
 };
 use crate::views::RoomView;
 
@@ -122,6 +122,19 @@ impl RoomBand {
             RoomBand::Superb => "Superb",
         }
     }
+}
+
+/// The `RoomDef` id whose room speeds the machines standing in it.
+pub const WORKSHOP_ROOM: &str = "workshop";
+
+/// Multiplier on an amenity's refill rate from the room it stands in.
+pub fn room_service_scale(band: RoomBand) -> f32 {
+    ROOM_SERVICE_SCALE[band as usize]
+}
+
+/// Multiplier on work ticks from the workshop room a machine stands in.
+pub fn room_work_scale(band: RoomBand) -> f64 {
+    ROOM_WORK_SCALE[band as usize]
 }
 
 /// A structure standing in base space: its anchor and its def.
@@ -294,11 +307,22 @@ pub fn of_world(world: &World) -> Rooms {
     ) else {
         return Rooms::default();
     };
-    let sites: Vec<(&Structure, &Position)> = world
+    let sites = world
         .iter_entities()
-        .filter_map(|e| Some((e.get::<Structure>()?, e.get::<Position>()?)))
-        .collect();
-    let placed = placed_structures(sites.iter().copied(), structures);
+        .filter_map(|e| Some((e.get::<Structure>()?, e.get::<Position>()?)));
+    of_parts(grid, structures, rooms, floors, sites)
+}
+
+/// `of_world` for a system holding the same resources and a structure
+/// query: the one place detect's inputs are assembled.
+pub fn of_parts<'a>(
+    grid: &BaseGrid,
+    structures: &'a StructureDb,
+    rooms: &RoomDb,
+    floors: &FloorDb,
+    sites: impl Iterator<Item = (&'a Structure, &'a Position)>,
+) -> Rooms {
+    let placed = placed_structures(sites, structures);
     let Some(home) = placed
         .iter()
         .find(|p| p.def.id == crate::HOME_STRUCTURE_ID)

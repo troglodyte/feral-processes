@@ -6066,6 +6066,12 @@ pub const ROOM_CROWD_FREE: f32 = 0.25;
 pub const ROOM_BAND_PLAIN: f32 = 0.25;
 pub const ROOM_BAND_FINE: f32 = 0.6;
 pub const ROOM_BAND_SUPERB: f32 = 0.85;
+/// Amenity refill multiplier by band, in `RoomBand` order (Cramped, Plain,
+/// Fine, Superb). Applies only to an amenity standing in a room with a role.
+pub const ROOM_SERVICE_SCALE: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
+/// Work-tick multiplier by band, in `RoomBand` order. Applies only to a
+/// structure standing in the workshop room; fewer ticks is faster.
+pub const ROOM_WORK_SCALE: [f64; 4] = [1.1, 1.0, 0.92, 0.85];
 
 #[cfg(test)]
 mod tests {

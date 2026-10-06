@@ -1105,6 +1105,29 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) ->
         .id()
 }
 
+/// A walled 4x4 room (interior x and y in 2..=5) with a door, `finished`
+/// of its 16 cells in cobalt carpet. Scored by area and finish alone: 16
+/// finished cells is Superb, 8 is Fine, none is Cramped-to-Plain. Anything
+/// the caller adds to it is on top.
+pub(super) fn walled_room_with_finish(game: &mut Game, finished: usize) {
+    for i in 1..=6 {
+        for (x, y) in [(i, 1), (i, 6), (1, i), (6, i)] {
+            let kind = if (x, y) == (3, 1) { "door" } else { "wall" };
+            spawn_structure_at(game, kind, x, y);
+        }
+    }
+    let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+    for (n, (x, y)) in (2..=5)
+        .flat_map(|x| (2..=5).map(move |y| (x, y)))
+        .enumerate()
+    {
+        grid.lay_floor(x, y);
+        if n < finished {
+            assert!(grid.set_finish(x, y, crate::floors::FloorId::from("cobalt_carpet")));
+        }
+    }
+}
+
 /// Marks a `Game` that has already had `stand_ample_grid_supply` run against
 /// it, so a helper a test calls more than once (`deployed`, `worked_node_at`,
 /// ...) doesn't pile up a fresh batch of Rechargers on every call.

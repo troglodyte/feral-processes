@@ -34,6 +34,7 @@ mod arena;
 mod bars;
 mod base;
 mod battle;
+mod breeding;
 mod building;
 mod canvas;
 mod caravan;
@@ -109,6 +110,7 @@ use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_emulate_menu, draw_battle_item_menu,
     draw_battle_special_menu, draw_battle_target_menu,
 };
+use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
     build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
     draw_build_program, draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon,
@@ -1353,6 +1355,18 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::Breed => draw_breed_menu(game, selected, refusal, painter, m),
+        Mode::BreedSecond => {
+            draw_breed_second_menu(game, app.pending_breed_first, selected, refusal, painter, m)
+        }
+        Mode::BreedConfirm => draw_breed_confirm_menu(
+            game,
+            app.pending_breed_first,
+            app.pending_breed_second,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::RenamePet => draw_rename_menu(
             game,
             app.pending_rename,
@@ -1620,7 +1634,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 127] = [
+    const ALL_MODES: [Mode; 130] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1689,6 +1703,9 @@ mod tests {
         Mode::Fuse,
         Mode::FuseSecond,
         Mode::FuseName,
+        Mode::Breed,
+        Mode::BreedSecond,
+        Mode::BreedConfirm,
         Mode::RenamePet,
         Mode::RoutineTarget,
         Mode::Routines,
@@ -1823,7 +1840,7 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 25] = [
+    const NEEDS_PENDING_STATE: [Mode; 27] = [
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,
         Mode::ModPickAffix,
@@ -1841,6 +1858,8 @@ mod tests {
         Mode::EraseQuantity,
         Mode::FuseSecond,
         Mode::FuseName,
+        Mode::BreedSecond,
+        Mode::BreedConfirm,
         Mode::RenamePet,
         Mode::Routines,
         Mode::FieldRoutineAlly,

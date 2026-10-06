@@ -8,6 +8,7 @@
 //! it is built by *calling* the roster's own line builders rather than
 //! restating them — see `building::structure_detail_lines`.
 
+use super::breeding::{bay_footer, incubation_lines};
 use super::building::{structure_detail_lines, structure_headline, structure_is_idle};
 use super::popup::*;
 use super::*;
@@ -54,14 +55,20 @@ pub(super) fn draw_structure_manifest(
     let detail = structure_detail_lines(&report, line.as_ref(), idle);
     // The room line says where the structure stands, not what it does, so a
     // structure whose only detail is its room is still one with nothing on.
-    if detail.len() == usize::from(report.room.is_some()) {
+    let slots = game.incubations(report.entity);
+    if detail.len() == usize::from(report.room.is_some()) && slots.is_empty() {
         rows.push(text_row("  nothing staged, nobody posted"));
     }
     for (line, color) in detail {
         rows.push(Row::TextColored(line, color));
     }
+    // A bay runs no job, so it reads as "nothing staged" without these;
+    // what it holds is its slots.
+    for line in incubation_lines(&slots) {
+        rows.push(text_row(line));
+    }
     rows.push(text_row(""));
-    rows.push(text_row("Any key to close."));
+    rows.push(text_row(bay_footer(&slots)));
 
     draw_popup("Structure", PopupSize::Small, &rows, refusal, painter, m);
 }

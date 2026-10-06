@@ -54,6 +54,13 @@ impl Game {
         None
     }
 
+    /// Breeding Seeds in the pack — what one breeding spends.
+    pub fn breeding_seeds_held(&self) -> u32 {
+        self.world
+            .get::<crate::components::Inventory>(self.player_entity())
+            .map_or(0, |inv| inv.count(&ItemId::from(BREEDING_SEED)))
+    }
+
     /// The first empty slot of `bay`, if it is a built bay with one.
     fn free_incubation_slot(&self, bay: Entity) -> Option<usize> {
         self.world.get::<Structure>(bay)?;
@@ -110,15 +117,11 @@ impl Game {
         let slot = self
             .free_incubation_slot(bay)
             .ok_or(BreedRefusal::NoFreeSlot)?;
-        let seed = ItemId::from(BREEDING_SEED);
-        let player = self.player_entity();
-        if self
-            .world
-            .get::<crate::components::Inventory>(player)
-            .is_none_or(|inv| inv.count(&seed) == 0)
-        {
+        if self.breeding_seeds_held() == 0 {
             return Err(BreedRefusal::NoSeed);
         }
+        let seed = ItemId::from(BREEDING_SEED);
+        let player = self.player_entity();
 
         let (species_a, species_b) = (self.species_of(a), self.species_of(b));
         let (rolls_a, rolls_b) = (self.parent_rolls(a), self.parent_rolls(b));

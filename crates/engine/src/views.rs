@@ -3901,7 +3901,7 @@ impl IncubatingChild {
     pub fn when(&self) -> &'static str {
         let span = crate::tuning::INCUBATION_TICKS;
         match self.ticks_left {
-            _ if self.held => "waiting for roster room",
+            _ if self.held => "roster full, waiting",
             0 => "ready",
             t if t * 3 <= span => "ready soon",
             t if t * 3 <= span * 2 => "ready in a while",

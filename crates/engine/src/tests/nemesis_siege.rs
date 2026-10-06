@@ -702,3 +702,70 @@ fn a_map_fight_with_a_nemesis_pulls_in_its_trailing_band() {
         assert!(pack.contains(&f), "the band joins the fight");
     }
 }
+
+// ---- Review fixes ----
+
+/// Decompiles `target` outright: a skilled player, plenty of catalysts, and
+/// the roll retried until it lands.
+fn decompile(game: &mut Game, target: Entity) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Decompiler>(player)
+        .unwrap()
+        .skill = 50;
+    set_inventory(game, &[(ids::ICE_BREAKER, 50)]);
+    for _ in 0..50 {
+        if game.decompile_body(target, player) {
+            return;
+        }
+    }
+    panic!("the decompile never landed");
+}
+
+#[test]
+fn a_decompiled_follower_leaves_the_band_and_survives_a_march() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (leader, band) = marching_band(&mut game);
+    let captured = band[0];
+
+    decompile(&mut game, captured);
+    assert!(game.world.get::<NemesisFollower>(captured).is_none());
+
+    game.nemesis_muster();
+    assert!(
+        !followers_of(&mut game, leader).contains(&captured),
+        "a roster program is not in the band"
+    );
+    // The muster above recruited a replacement, so the band is full.
+    assert_eq!(followers_of(&mut game, leader).len(), NEMESIS_BAND_MAX);
+    game.world.entity_mut(leader).insert(NemesisMuster {
+        ticks: NEMESIS_MARCH_DELAY,
+    });
+    game.nemesis_march_check();
+    assert!(
+        game.world.get_entity(captured).is_ok(),
+        "the march must not spend a program the player owns"
+    );
+    assert!(
+        game.world.get_entity(band[1]).is_err(),
+        "the march did fire"
+    );
+    assert!(game.world.get::<Tamed>(captured).is_some());
+}
+
+#[test]
+fn a_tamed_body_is_never_a_band_member_even_if_still_tagged() {
+    let mut game = new_game();
+    let (x, y) = open_ground(&mut game);
+    let leader = nemesis_at(&mut game, x, y);
+    let pet = wild_at(&mut game, x + 8, y);
+    let game_player = game.player_entity();
+    game.world
+        .entity_mut(pet)
+        .insert((NemesisFollower(leader), Tamed { owner: game_player }));
+    assert!(game.nemesis_band(leader).is_empty());
+    game.nemesis_muster();
+    let at = *game.world.get::<Position>(pet).unwrap();
+    assert_eq!((at.x, at.y), (x + 8, y), "not walked to the leader");
+}

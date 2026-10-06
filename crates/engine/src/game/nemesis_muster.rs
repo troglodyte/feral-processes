@@ -143,7 +143,7 @@ impl Game {
     pub(crate) fn nemesis_band(&mut self, leader: Entity) -> Vec<Entity> {
         let mut band: Vec<Entity> = self
             .world
-            .query::<(Entity, &NemesisFollower)>()
+            .query_filtered::<(Entity, &NemesisFollower), Without<Tamed>>()
             .iter(&self.world)
             .filter(|(_, f)| f.0 == leader)
             .map(|(e, _)| e)
@@ -232,7 +232,7 @@ impl Game {
     fn follow_leaders(&mut self) {
         let mut followers: Vec<(Entity, Entity)> = self
             .world
-            .query_filtered::<(Entity, &NemesisFollower), (Without<Pursuing>, Without<Besieger>)>()
+            .query_filtered::<(Entity, &NemesisFollower), (Without<Pursuing>, Without<Besieger>, Without<Tamed>)>()
             .iter(&self.world)
             .map(|(e, f)| (e, f.0))
             .collect();

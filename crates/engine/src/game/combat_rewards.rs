@@ -1,7 +1,7 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
-use crate::components::{Besieger, StolenFrom};
+use crate::components::{Besieger, NemesisFollower, StolenFrom};
 use crate::items::DownedProgram;
 use crate::progression::StatRow;
 use crate::tactical::TacticalBattle;
@@ -1331,9 +1331,14 @@ impl Game {
         // into a companion.
         let earned = self.kill_xp(front);
         let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
-        self.world
-            .entity_mut(front)
-            .remove::<(Hostile, WanderAi, NestGuardian, TownPatrol, Pursuing)>();
+        self.world.entity_mut(front).remove::<(
+            Hostile,
+            WanderAi,
+            NestGuardian,
+            TownPatrol,
+            Pursuing,
+            NemesisFollower,
+        )>();
         // A captured carrier gives its plunder back exactly as a killed one
         // does, while it is still on the board for the nearest-Depot
         // fallback to measure from.

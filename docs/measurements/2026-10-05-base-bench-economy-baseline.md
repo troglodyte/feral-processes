@@ -203,3 +203,33 @@ that order of patch_routine cost) and do not apply it.
   are the figures in the claim (Bay 58, Winding Node 176, Refinery 135,
   Compiler 173); the 3000-tick run reads 35, 108, 81 and 118, each inside the
   seeds 1-3 ranges quoted there. Nothing moved.
+
+## After floor items (branch `floor-items`, T5)
+
+Re-run exactly as in "How to reproduce it" (release, seeds 1-3, 2000 and 5000
+ticks, the same three orders). A load a carrier used to lose, or set down in
+the nearest Depot when stranded, is now dropped on the floor and fetched by an
+idle hauler. The siege stops are unchanged (4902, 3840, 3789).
+
+| run | Bay | Winding | Refinery | Compiler | before (same run) |
+|---|---|---|---|---|---|
+| seed 1, 4902 ticks | 54 | 164 | 138 | 196 | 58 / 176 / 135 / 173 |
+| mean seeds 1-3, 2000 ticks | 22.7 | 69.0 | 56.3 | 76.7 | 22 / 70 / 54 / 79 |
+
+Shelved items at the stop, seed 1: patch_routine 54, bytecode_block 138,
+ice_breaker 196 (before: 51, 135, 189).
+
+Staff measures (new here; this note had none, and the staff baseline's
+`bench-economy` run is a different length and sieges setting, so there is no
+like-for-like "before"): `on_shift_share` 0.97 / 0.92 / 0.95 at 2000 ticks
+and 0.93 / 0.90 / 0.93 at the stops, seeds 1-3; `morale_mean` 1.0-1.4 at 2000
+and 2.1-3.8 at the stops; `mean_staffed` 13.5-14.6, `mean_unworked` 0.
+
+Reading: at 2000 ticks nothing moved beyond the noise floor already recorded
+(a one-tick knob change swings patch_routine by about 3 per 3000). At the
+stop, seed 1 moved by up to -12 (Winding) and +23 (Compiler); one seed and
+five thousand ticks of changed hauling order cannot say whether that is drift
+or noise, and I did not run enough seeds to separate them. The "Nothing moved"
+claim of the last open question is therefore not renewed for the 4902-tick
+figures; the 2000-tick figures and the staff measures show no collapse
+(on shift never below 0.90, staffed never below 13.5).

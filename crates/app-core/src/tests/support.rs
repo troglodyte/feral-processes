@@ -2349,6 +2349,33 @@ pub(crate) fn app_with_companions_and_cargo(
     app
 }
 
+/// `app_with_companions_in_the_party` whose companions each remember three
+/// events, so a memories page has rows to scroll through. Edited into a save
+/// and reloaded, since the engine offers no way to write a memory from
+/// outside the crate.
+pub(crate) fn app_with_remembering_companions(seed: u32, count: u32) -> App {
+    let mut app = app_with_companions_in_the_party(seed, count);
+    let path = scratch_path("remembering", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    for creature in data.creatures.iter_mut().filter(|c| c.tamed) {
+        creature.memories = ["hard_won", "vented", "ran_down"]
+            .into_iter()
+            .map(|def| save::MemorySave {
+                def: def.into(),
+                subject: feral_processes_engine::components::MemorySubject::Nothing,
+                subject_name: None,
+                reinforced: 0,
+                strikes: 1,
+            })
+            .collect();
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
 /// An `App` standing on the entry cell of Stack frame 1.
 ///
 /// Built by editing a save and reloading it, the same trick

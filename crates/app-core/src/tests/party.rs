@@ -614,7 +614,7 @@ fn esc_backs_out_of_the_memories_page_and_keeps_the_highlight() {
 /// `menu_selected` would drop the player on the wrong program.
 #[test]
 fn the_memories_page_scrolls_without_losing_the_rosters_row() {
-    let mut app = app_with_companions_in_the_party(782, 2);
+    let mut app = app_with_remembering_companions(782, 2);
     open_roster(&mut app);
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Char('R'));
@@ -625,17 +625,14 @@ fn the_memories_page_scrolls_without_losing_the_rosters_row() {
         game.memory_report(app.pending_memory_program.unwrap())
             .len()
     };
-    app.handle_key(GameKey::Up);
-    assert!(
-        app.menu_selected <= rows.saturating_sub(1),
-        "never past the last entry"
-    );
+    assert!(rows >= 3, "precondition: room to scroll off row 0 and row 1");
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 2, "the page scrolled to a row of its own");
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Companion);
-    assert_eq!(app.menu_selected, 1);
+    assert_eq!(app.menu_selected, 1, "the roster's row, not the page's");
 }
 
 /// `R` with the highlight past the end of the roster has no program to be

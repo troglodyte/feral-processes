@@ -361,6 +361,8 @@ impl Game {
             self.grant_loot(item, 1, crate::base_ledger::LootSource::Refund);
         }
         self.recompute_derived(player);
+        // A removed Overclock Spine narrows the routine row.
+        self.fit_routines_to_slots(player);
         Ok(())
     }
 

@@ -780,3 +780,35 @@ fn neural_load_reports_load_against_the_cap_without_a_view() {
     install(&mut game, &["black_ledger"]);
     assert_eq!(game.neural_load(), (2, crate::implants::load_cap(1)));
 }
+
+#[test]
+fn removing_the_spine_trims_the_routine_row_it_widened() {
+    let mut game = rigged_game();
+    let player = game.player_entity();
+    give(&mut game, &ItemId::from("core_fragment"), 50);
+    install_shipped(&mut game, "overclock_spine");
+    let widened = game.routine_slots(player);
+    let spare = crate::abilities::AbilityId::from("hot_patch");
+    {
+        let mut routines = game.world.get_mut::<Routines>(player).unwrap();
+        while routines.0.len() < widened {
+            routines.0.push(spare.clone());
+        }
+        let last = routines.0.len() - 1;
+        routines.0[last] = crate::abilities::AbilityId::from("interrupt_request");
+    }
+
+    game.remove_implant(&ImplantId::from("overclock_spine"))
+        .unwrap();
+
+    let held = game.world.get::<Routines>(player).unwrap().0.clone();
+    assert_eq!(held.len(), game.routine_slots(player));
+    open_battle(&mut game);
+    assert!(
+        !game
+            .actor_abilities(player)
+            .iter()
+            .any(|a| a.id.as_str() == "interrupt_request"),
+        "the routine the spine's slot held is gone from the fight"
+    );
+}

@@ -1127,6 +1127,18 @@ impl Game {
             .count()
     }
 
+    /// Cuts `entity`'s routines down to its slots after something that
+    /// widened them is gone (a refunded `TalentNode::RoutineSlot`, a removed
+    /// Overclock Spine), then refills from the species kit and puts the
+    /// placeholder back if the program is now holding nothing at all.
+    pub(crate) fn fit_routines_to_slots(&mut self, entity: Entity) {
+        let slots = self.routine_slots(entity);
+        if let Some(mut routines) = self.world.get_mut::<Routines>(entity) {
+            routines.0.truncate(slots);
+        }
+        self.install_innate_routines(entity);
+    }
+
     /// Installs the kit `entity`'s species grants at its current level,
     /// merged with whatever it was already carrying. Called once when a
     /// program comes into existence — a decompile or a fusion — never

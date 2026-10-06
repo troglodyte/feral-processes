@@ -199,13 +199,9 @@ impl Game {
     /// refunding it narrows `routine_slots`, so a kit that exactly filled the
     /// widened row no longer fits.
     fn rebuild_routines_after_talent_loss(&mut self, entity: Entity, granted: &[AbilityId]) {
-        let slots = self.routine_slots(entity);
         if let Some(mut routines) = self.world.get_mut::<Routines>(entity) {
             routines.0.retain(|id| !granted.contains(id));
-            routines.0.truncate(slots);
         }
-        // Refills from the species kit if the truncate left room, and puts the
-        // placeholder back if the program is now holding nothing at all.
-        self.install_innate_routines(entity);
+        self.fit_routines_to_slots(entity);
     }
 }

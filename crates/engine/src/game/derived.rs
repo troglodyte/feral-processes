@@ -241,10 +241,12 @@ impl Game {
     }
 
     /// What `entity` holds on top of its attributes' derivation - the
-    /// perk receipt and worn gear - so the Points screen can preview the
-    /// figures the HUD will show. Read off the live stats rather than summed
-    /// again, so it cannot drift from `recompute_derived`. Only the stats
-    /// gear or a perk can move are non-zero.
+    /// perk receipt, worn gear and installed implants - so the Points screen
+    /// can preview the figures the HUD will show. HP, attack, mitigation and
+    /// the decompiler are read off the live stats rather than summed again,
+    /// so they cannot drift from `recompute_derived`; Power, status resist
+    /// and crit live in `Derived` and only an implant moves them, so those
+    /// are the implant deltas themselves.
     pub fn stat_bonus(&self, entity: Entity) -> crate::progression::DerivedStats {
         let derived = self.derived_stats(entity);
         let stats = *self
@@ -252,15 +254,16 @@ impl Game {
             .get::<Stats>(entity)
             .expect("an entity with a stat bonus has Stats");
         let skill = self.world.get::<Decompiler>(entity).map_or(0, |d| d.skill);
+        let implants = self.implant_stats(entity);
         crate::progression::DerivedStats {
             max_hp: stats.max_hp - derived.max_hp,
             atk: stats.atk - derived.atk,
             mitigation: stats.mitigation - derived.mitigation,
             decompiler: skill - derived.decompiler,
-            max_power: 0.0,
-            status_resist: 0,
+            max_power: implants.max_power,
+            status_resist: implants.status_resist,
             extraction: 0.0,
-            crit: 0.0,
+            crit: implants.crit,
             fumble: 0.0,
         }
     }
@@ -359,6 +362,9 @@ impl Game {
         derived.max_power += implants.max_power;
         derived.status_resist += implants.status_resist;
         derived.crit += implants.crit;
+        // A negative delta must not leave a body that cannot exist.
+        derived.max_hp = derived.max_hp.max(1);
+        derived.max_power = derived.max_power.max(0.0);
         let receipt = self
             .world
             .get::<BoughtStats>(entity)

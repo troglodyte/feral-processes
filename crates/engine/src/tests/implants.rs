@@ -856,3 +856,51 @@ fn implant_atk_and_mitigation_stay_in_effect_while_emulating() {
         (before.0 + 3, before.1 + 2, before.2 + 3, before.3 + 2)
     );
 }
+
+#[test]
+fn the_points_screen_bonus_includes_implant_power_resist_and_crit() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    add_def(
+        &mut game,
+        ImplantDef {
+            stats: ImplantStats {
+                max_power: 25.0,
+                status_resist: 4,
+                crit: 0.05,
+                ..Default::default()
+            },
+            ..def("bonus")
+        },
+    );
+    install(&mut game, &["bonus"]);
+    let bonus = game.stat_bonus(player);
+    assert_eq!(bonus.max_power, 25.0);
+    assert_eq!(bonus.status_resist, 4);
+    assert!((bonus.crit - 0.05).abs() < 1e-9);
+}
+
+#[test]
+fn a_negative_delta_cannot_drive_max_hp_or_power_below_their_floors() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    add_def(
+        &mut game,
+        ImplantDef {
+            stats: ImplantStats {
+                max_hp: -10_000,
+                max_power: -10_000.0,
+                ..Default::default()
+            },
+            ..def("hollow")
+        },
+    );
+    install(&mut game, &["hollow"]);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().max_hp, 1);
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, 1);
+    let derived = *game
+        .world
+        .get::<crate::components::Derived>(player)
+        .unwrap();
+    assert_eq!(derived.max_power, 0.0);
+}

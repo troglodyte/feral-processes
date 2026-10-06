@@ -327,8 +327,10 @@ impl Game {
 
     /// Cuts `implant` out and hands its item back, for
     /// `IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD` `core_fragment`s per Load. An id
-    /// whose def is missing has no Load and no item, so it comes out free:
-    /// charging for something the game can no longer price would strand it.
+    /// whose def is missing has no Load, so it comes out free: charging for
+    /// something the game can no longer price would strand it. An item that
+    /// still names the id is handed back all the same; with no such item
+    /// nothing is.
     pub fn remove_implant(&mut self, implant: &ImplantId) -> Result<(), String> {
         self.splicing_allowed()?;
         let player = self.player_entity();

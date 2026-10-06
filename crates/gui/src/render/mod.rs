@@ -73,6 +73,7 @@ mod settlement;
 mod settlement_board;
 mod settlement_market;
 mod social;
+mod splice_rig;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
 // hands back — every other module here stays private because nothing
@@ -150,6 +151,7 @@ use routines::{
 };
 use settlement::draw_settlement;
 use settlement_market::{SettlementMarketBasket, draw_settlement_market};
+use splice_rig::draw_splice_rig;
 use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
@@ -985,6 +987,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => None,
     };
     let siphon = app.siphon;
+    let splice_rig = match app.mode {
+        Mode::SpliceRig => app.splice_rig.clone(),
+        _ => None,
+    };
     let rig_tool = match app.mode {
         Mode::RigTool => app.rig_tool.clone(),
         _ => None,
@@ -1140,6 +1146,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
+        Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
@@ -1608,7 +1615,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 126] = [
+    const ALL_MODES: [Mode; 127] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1624,6 +1631,7 @@ mod tests {
         Mode::Transfer,
         Mode::DepotFilter,
         Mode::RigTool,
+        Mode::SpliceRig,
         Mode::BaseMenu,
         Mode::PartyMenu,
         Mode::Battle,

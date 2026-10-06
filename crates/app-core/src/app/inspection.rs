@@ -123,7 +123,21 @@ impl App {
     /// there is no list to page through and no origin to return to — unlike
     /// `Mode::Manifest`, whose ←/→ exist because it has `manifest_subjects`.
     /// Any key leaves, the way a plain popup does.
-    pub(crate) fn handle_structure_manifest_key(&mut self, _key: GameKey) {
+    pub(crate) fn handle_structure_manifest_key(&mut self, key: GameKey) {
+        // `B` is uppercase because lowercase letters select rows; a sheet
+        // with no row to select is no excuse to break that for the next one.
+        if key == GameKey::Char('B')
+            && let Some(bay) = self.pending_structure_manifest
+            && self
+                .game
+                .as_ref()
+                .is_some_and(|g| g.incubations(bay).iter().any(|i| i.child.is_none()))
+        {
+            self.pending_structure_manifest = None;
+            self.pending_breed_bay = Some(bay);
+            self.mode = Mode::Breed;
+            return;
+        }
         self.pending_structure_manifest = None;
         self.close_screen();
     }

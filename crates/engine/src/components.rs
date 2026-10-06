@@ -711,6 +711,36 @@ pub struct Hopper {
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
 
+/// How many breedings deep a program's lineage runs. Absent reads as 0:
+/// wild, tamed, bought and fused programs are all generation 0, and only a
+/// hatched child carries one.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Generation(pub u32);
+
+/// The tick a parent is next fit to breed. Absent reads as ready.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BreedReadyAt(pub u64);
+
+/// A Breeding Bay's incubating children, one `Option` per slot — see
+/// `StructureDef::incubation_slots`. A child is a record here, not an entity,
+/// until `Game::hatch_incubations` seats it on the roster.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct Incubator {
+    pub slots: Vec<Option<crate::breeding::Incubation>>,
+}
+
+impl Incubator {
+    pub fn with_slots(count: u32) -> Self {
+        Incubator {
+            slots: vec![None; count as usize],
+        }
+    }
+
+    pub fn is_occupied(&self) -> bool {
+        self.slots.iter().any(Option::is_some)
+    }
+}
+
 /// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`
 /// and `Game::rack_slots`.
 ///
@@ -1791,7 +1821,7 @@ pub struct AbilityCooldowns(pub std::collections::HashMap<crate::abilities::Abil
 /// `quality_percent`/`quality_label` can describe it. `growth_roll`
 /// actively scales `progression::add_xp`'s growth on every level-up, on
 /// top of `SpeciesDef::growth_multiplier`.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Potential {
     pub hp_roll: f32,
     pub atk_roll: f32,
@@ -1827,12 +1857,14 @@ impl Potential {
     /// the four *combat* rolls and maps
     /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL` onto 0-100. Purely a
     /// display aggregate — each roll still applies independently to its own
-    /// stat/growth. The two build rolls are deliberately not folded in:
-    /// they say nothing about how this individual fights.
+    /// stat/growth. A bred roll past `MAX_INDIVIDUAL_ROLL` reads above 100,
+    /// which is the point: it is the gain breeding made. The two build rolls
+    /// are deliberately not folded in: they say nothing about how this
+    /// individual fights.
     pub fn quality_percent(&self) -> u32 {
         let avg = (self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0;
         let pct = (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
-        pct.round().clamp(0.0, 100.0) as u32
+        pct.round().max(0.0) as u32
     }
 
     /// A coarse, human-readable tier for `quality_percent` — shown next to
@@ -1849,7 +1881,7 @@ impl Potential {
     pub fn roll_label(roll: f32) -> &'static str {
         let pct =
             (roll - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
-        match pct.round().clamp(0.0, 100.0) as u32 {
+        match pct.round().max(0.0) as u32 {
             0..=19 => "Poor",
             20..=39 => "Below Average",
             40..=59 => "Average",
@@ -3309,6 +3341,25 @@ mod potential_tests {
         assert_eq!(flat(0.8).quality_percent(), 0);
         assert_eq!(Potential::NEUTRAL.quality_percent(), 50);
         assert_eq!(flat(1.2).quality_percent(), 100);
+    }
+
+    /// A bred roll can pass `MAX_INDIVIDUAL_ROLL`, and reads above 100%
+    /// rather than hiding the gain; every roll a wild spawn can make reads
+    /// exactly as the clamped mapping always did.
+    #[test]
+    fn a_bred_roll_reads_above_100_and_a_wild_roll_never_does() {
+        assert_eq!(flat(1.248).quality_percent(), 112);
+        assert_eq!(flat(1.28).quality_percent(), 120);
+        assert_eq!(flat(1.28).quality_label(), "Excellent");
+        for step in 0..=200 {
+            let r = MIN_INDIVIDUAL_ROLL
+                + (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * (step as f32 / 200.0);
+            let old = ((r - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL)
+                * 100.0)
+                .round()
+                .clamp(0.0, 100.0) as u32;
+            assert_eq!(flat(r).quality_percent(), old, "wild roll {r} moved");
+        }
     }
 
     #[test]

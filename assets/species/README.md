@@ -356,6 +356,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // regardless of this flag.
     can_nest: false,
 
+    // Optional; can be left out entirely (defaults to none, an ordinary
+    // species). Names the two species this one is bred from, in either
+    // order. A species with `parents` is a hybrid: breeding those two
+    // programs together yields it, and nothing else does, so it ships
+    // `habitats: []` (it never spawns wild) and no shop, wagon or contract
+    // ever offers it. A hybrid is otherwise an ordinary species file: stats,
+    // attributes, kit, optional sprite.
+    //
+    // Loading skips a hybrid, with a warning, when a parent names no loaded
+    // species, when both parents are the same species, or when an earlier
+    // hybrid (by id) already covers the pair. A hybrid that lists any
+    // `habitats` loads with them cleared, and a warning. A hybrid may itself be a
+    // parent. The shipped ones (`botnet`, `polymorph`) sit on a growth rung
+    // and class like any other species and pass `stat_shape_faults`, but the
+    // one-per-band censuses count only the wild roster.
+    parents: Some(("worm", "virus")),
+
     // Optional; can be left out entirely (defaults to empty). Cosmetic
     // lines a tamed member of this species says in a fight. Nothing reads
     // them but the message log — they change no stat, cost no turn and

@@ -79,6 +79,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         affinities: crate::species::Affinities::NEUTRAL,
         taunts: Vec::new(),
         can_nest: false,
+        parents: None,
     }
 }
 
@@ -437,7 +438,7 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     game.world.resource_mut::<ZoneLevel>().0 = 3;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
@@ -1569,6 +1570,11 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
     if def.racks.is_some() {
         entity.insert(crate::components::Racked::default());
     }
+    if def.incubation_slots > 0 {
+        entity.insert(crate::components::Incubator::with_slots(
+            def.incubation_slots,
+        ));
+    }
     entity.id()
 }
 
@@ -2124,7 +2130,7 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let entity = game
         .world
@@ -2273,7 +2279,7 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

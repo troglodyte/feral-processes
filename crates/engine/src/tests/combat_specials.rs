@@ -13,7 +13,7 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -86,7 +86,7 @@ fn an_atk_buff_increases_damage_dealt_and_expires_after_its_duration() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -136,7 +136,7 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -416,7 +416,7 @@ fn a_companion_spends_its_round_on_a_power_cell_and_charges_itself() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

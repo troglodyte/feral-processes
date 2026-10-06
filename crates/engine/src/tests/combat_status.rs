@@ -1113,7 +1113,7 @@ fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

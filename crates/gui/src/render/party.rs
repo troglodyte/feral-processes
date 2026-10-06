@@ -1552,6 +1552,8 @@ mod tests {
             base: crate::render::test_support::tamed_base(),
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         };
         // The handle candidate, and its `CustomName` counterpart — a maxed
         // rename replaces the handle outright (`creature_name`), so it is a

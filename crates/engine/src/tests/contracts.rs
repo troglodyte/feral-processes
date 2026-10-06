@@ -2993,7 +2993,11 @@ mod deed_sites {
         let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let start = player_tile(&game);
         clear_creatures_east_of_player(&mut game, start, 10);
-        let species = game.species_defs().into_iter().next().unwrap();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap();
         game.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -4037,4 +4041,23 @@ fn a_contract_asking_for_nothing_is_refused() {
     );
     assert_eq!(db.iter().count(), 0, "all four are refused");
     assert_eq!(warnings.len(), 4, "and each says so: {warnings:?}");
+}
+
+/// The width census builds its rows from every species the assets define, so
+/// a hybrid left in the pool would put a species nobody can meet into a job.
+#[test]
+fn the_widest_contract_pool_holds_no_hybrid() {
+    let game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let hybrids: Vec<String> = game
+        .species_defs()
+        .into_iter()
+        .filter(|d| d.is_hybrid())
+        .map(|d| d.id)
+        .collect();
+    assert!(!hybrids.is_empty(), "the census needs a hybrid to look for");
+    let pools = game.widest_pools();
+    assert!(!pools.species.is_empty(), "an empty pool proves nothing");
+    for (id, _) in &pools.species {
+        assert!(!hybrids.contains(id), "the widest pool lists {id}");
+    }
 }

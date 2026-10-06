@@ -271,7 +271,7 @@ fn average_ranged_move_range(species: &SpeciesDef) -> Option<DamageRange> {
 /// fight to advance.
 pub fn toughest_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
     db.all()
-        .filter(|s| !s.is_boss)
+        .filter(|s| !s.is_boss && !s.is_hybrid())
         .max_by_key(|s| s.base_hp + s.base_atk + s.base_mitigation)
         .expect("species db should have at least one ordinary species")
 }
@@ -314,7 +314,8 @@ pub fn best_gear_stats() -> (EquipmentStats, EquipmentStats) {
 /// need to hold for. `SpeciesDb::all` is sorted by id and the sort below
 /// is stable, so ties resolve deterministically.
 pub fn median_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
-    let mut ordinary: Vec<&SpeciesDef> = db.all().filter(|s| !s.is_boss).collect();
+    let mut ordinary: Vec<&SpeciesDef> =
+        db.all().filter(|s| !s.is_boss && !s.is_hybrid()).collect();
     assert!(
         !ordinary.is_empty(),
         "species db should have at least one ordinary species"

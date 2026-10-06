@@ -288,6 +288,9 @@ fn draw_header(
             if let Some(q) = &p.potential {
                 tags.push(format!("{} ({}%)", q.label, q.percent));
             }
+            if p.generation > 0 {
+                tags.push(format!("gen {}", p.generation));
+            }
             if p.fusions > 0 {
                 tags.push(format!("fused {}/{}", p.fusions, p.max_fusions));
             }
@@ -1189,6 +1192,7 @@ mod tests {
             activity: None,
             post: None,
             potential: None,
+            generation: 0,
             fusions: 0,
             max_fusions: 3,
             rarity: Rarity::Ordinary,

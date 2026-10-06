@@ -717,6 +717,7 @@ fn with_a_drop_pod(mut app: App, seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -1660,7 +1661,7 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 ///
 /// **Which program is "first" and "second" decides `owned_pets`' order
 /// again, for a reason rather than by coincidence.** Both programs share a
-/// species (the fixtures both draw `species_defs()[0]`), so `owned_pets`
+/// species (the fixtures both draw `species_defs().into_iter().find(|d| !d.is_hybrid()).unwrap()`), so `owned_pets`
 /// ties on it and breaks the tie on `ProgramId` — assignment order, so the
 /// fixture's own (first-tamed) program sorts first. The added program is
 /// given `MAX_INDIVIDUAL_ROLL` (1.2, strictly above the first program's

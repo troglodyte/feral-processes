@@ -1,0 +1,9 @@
+(
+    id: "breeding_bay",
+    name: "Breeding Bay",
+    description: "Grows a child program from two of yours. Spend a Breeding Seed and it hatches in about a sortie.",
+    glyph: 'N',
+    color: Green,
+    build_cost: [("core_fragment", 14), ("bytecode_block", 2)],
+    incubation_slots: 1,
+)

@@ -328,7 +328,7 @@ impl Game {
             .world
             .resource::<SpeciesDb>()
             .all()
-            .filter(|d| !d.is_boss)
+            .filter(|d| !d.is_boss && !d.is_hybrid())
             .map(|d| d.id.clone())
             .collect();
 

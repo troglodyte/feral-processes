@@ -298,6 +298,10 @@ impl Game {
         // are `&mut Game` doors no bevy system can reach. See
         // `Game::run_repair_bays`.
         self.run_repair_bays();
+        // Beside the Bays and for their reason: seating a child goes through
+        // `roster_parts` and names it through `creature_label`, `&mut Game`
+        // work no bevy system can express. See `Game::hatch_incubations`.
+        self.hatch_incubations();
         // Beside the two crews and the Bays, and for `run_dig_crew`'s second
         // reason: an off-screen battle names programs through
         // `creature_label`, damages through `apply_damage` and logs, none of

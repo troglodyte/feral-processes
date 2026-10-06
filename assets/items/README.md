@@ -302,6 +302,11 @@ any non-finite `taming_potency`, `consume.power`, or
     // merged per kill — an item declared on both sides is rolled once, at
     // the better of the two chances.
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
+    //
+    // An item with `droppable` and no `consume`, `equipment` or `craftable`
+    // is spent by a mechanic that names it. The Breeding Seed is one: a
+    // Breeding Bay takes it for each breeding, it drops at 0.06-0.08 from
+    // four common wild species, and it is priced at 25 in the drop-only band.
 
     // Optional. Chance, 0.0-1.0, that a Stack cache holds one of these.
     // Caches sit in the dead ends of generated Stack frames; walking onto

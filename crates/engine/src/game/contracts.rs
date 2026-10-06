@@ -857,11 +857,12 @@ impl Game {
     /// is an upper bound rather than a reachable board — a row it flags as
     /// overflowing is one to shorten, which is right whether or not that exact
     /// roll can happen.
-    fn widest_pools(&self) -> crate::contracts::TemplatePools {
+    pub(crate) fn widest_pools(&self) -> crate::contracts::TemplatePools {
         let species: Vec<(String, String)> = self
             .world
             .resource::<crate::species::SpeciesDb>()
             .all()
+            .filter(|def| !def.is_hybrid())
             .map(|def| (def.id.clone(), def.name.clone()))
             .collect();
         crate::contracts::TemplatePools {

@@ -35,7 +35,11 @@ fn a_boss_manifest_names_no_base_job() {
 #[test]
 fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
 
     let zone1 = game
         .world
@@ -85,7 +89,11 @@ fn find_target_in_direction_finds_the_nearest_match_along_the_line() {
     let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let start = *game.world.get::<Position>(player).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
 
     assert!(game.find_target_in_direction(1, 0, 10).is_none());
@@ -141,7 +149,11 @@ fn find_target_in_direction_respects_max_range() {
     let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let start = *game.world.get::<Position>(player).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
     game.world.spawn((
         Creature {
@@ -172,7 +184,11 @@ fn find_target_in_direction_respects_max_range() {
 /// Spawns a bare creature at `(dx, dy)` from `start` — enough of one for the
 /// inspector, which reads `Position` and `Creature` and nothing else.
 fn spawn_marker_creature(game: &mut Game, start: Position, dx: i32, dy: i32) -> Entity {
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     game.world
         .spawn((
             Creature {
@@ -1408,7 +1424,11 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
 fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
     let mut game = Game::new(1401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
     // A `Structure` only answers this ray inside base space, so the
     // creature fixture below is tamed staff rather than a wild marker —
@@ -1476,7 +1496,11 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
 fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
 
     let creature = game
@@ -2259,7 +2283,12 @@ fn a_work_profile_is_none_for_a_species_the_db_never_heard_of() {
 #[test]
 fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
     let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let wild = game
         .world
         .spawn((
@@ -2706,7 +2735,7 @@ fn view_entities_honours_a_species_sprite_override() {
     let template = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let overridden = SpeciesDef {
         id: "sprite_override_species".to_string(),

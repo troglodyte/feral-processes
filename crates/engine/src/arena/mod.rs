@@ -573,7 +573,7 @@ mod tests {
     fn a_species(game: &Game) -> String {
         game.species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species")
             .id
             .clone()

@@ -184,6 +184,8 @@ fn seed_the_roster(game: &mut Game) -> Roster {
     game.world.entity_mut(member).insert((
         crate::components::StatPoints(9),
         crate::components::HoldPoints(true),
+        crate::components::Generation(2),
+        crate::components::BreedReadyAt(4321),
     ));
     // Damaged, so a builder that wrote `max_hp` into `hp` (or the reverse)
     // has two different numbers to get wrong.
@@ -410,6 +412,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
         base: _,
         stat_points: _,
         hold_points: _,
+        generation: _,
+        breed_ready_at: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");
@@ -442,6 +446,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
     );
     assert_eq!(saved.stat_points, 9, "stat_points");
     assert!(saved.hold_points, "hold_points");
+    assert_eq!(saved.generation, 2, "generation");
+    assert_eq!(saved.breed_ready_at, 4321, "breed_ready_at");
     assert_ne!(saved.hp, live.max_hp, "the fixture damaged it");
     assert!(saved.tamed, "tamed");
     assert_eq!(saved.power, 41.5, "power");

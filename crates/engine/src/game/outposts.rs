@@ -1033,7 +1033,11 @@ mod tests {
     /// a sibling module tree, `found_outpost`'s tests' own precedent. Seated
     /// last, like every real door, so it derives its stats like a real one.
     fn staff(game: &mut Game) -> Entity {
-        let species = game.species_defs().into_iter().next().unwrap();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap();
         let parts = game.roster_parts();
         let entity = game
             .world
@@ -1155,7 +1159,13 @@ mod tests {
         let mut game = game(26);
         let tile = founded_outpost_with_player_standing_there(&mut game);
         let program = staff(&mut game);
-        let species = game.species_defs()[0].id.clone();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone();
         game.world
             .entity_mut(program)
             .insert(crate::components::CarryingProgram(

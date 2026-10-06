@@ -126,7 +126,13 @@ fn recompute_clamps_hp_and_power_but_never_refills() {
 #[test]
 fn recompute_is_a_no_op_on_a_body_without_derived() {
     let mut game = Game::new(7006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let companion = game
         .spawn_wild_creature_scaled(&species, 60, 60, 1.0, false)
         .unwrap();
@@ -141,7 +147,13 @@ fn recompute_is_a_no_op_on_a_body_without_derived() {
 fn emulation_keeps_its_own_attack_through_a_recompute() {
     let mut game = Game::new(7007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.world.entity_mut(player).insert(Emulation {
         species,
         rounds_left: 3,

@@ -2846,6 +2846,8 @@ pub struct ProgramManifest {
     /// `None` for a creature with no `Potential` component — an old save
     /// predating it, or a test helper that spawned one directly.
     pub potential: Option<ManifestPotential>,
+    /// Breeding generation, 0 for anything not bred.
+    pub generation: u32,
     pub fusions: u32,
     /// `tuning::MAX_FUSIONS`, carried so the renderer prints "1/3" without
     /// importing a tuning constant of its own.
@@ -3853,4 +3855,63 @@ pub struct ImplantView {
     pub fragments: u32,
     pub installed: Vec<InstalledImplantRow>,
     pub installable: Vec<InstallableImplantRow>,
+}
+
+/// Which species a breeding would yield, in display names.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum BreedSpeciesPreview {
+    /// Same species twice, or an authored hybrid for the pair.
+    Certain(String),
+    /// An unauthored cross: either parent's species, by chance.
+    OneOf(String, String),
+}
+
+/// The lowest and highest one of the child's six rolls can land on.
+#[derive(Clone, PartialEq, Debug)]
+pub struct RollRange {
+    pub label: &'static str,
+    pub min: f32,
+    pub max: f32,
+}
+
+/// What `Game::breed` would make of two programs, before anything is spent.
+#[derive(Clone, PartialEq, Debug)]
+pub struct BreedPreview {
+    pub species: BreedSpeciesPreview,
+    pub generation: u32,
+    pub rolls: Vec<RollRange>,
+}
+
+/// A child still in a bay.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IncubatingChild {
+    /// Display name.
+    pub species: String,
+    pub generation: u32,
+    /// Zero once it is due. A screen turns this into a vague word.
+    pub ticks_left: u64,
+    /// Due, but the roster is full, so it waits in the bay.
+    pub held: bool,
+}
+
+impl IncubatingChild {
+    /// How far off the hatch is, in words — the player has no scale for a
+    /// tick count. Banded against `INCUBATION_TICKS`, the span the child
+    /// started with.
+    pub fn when(&self) -> &'static str {
+        let span = crate::tuning::INCUBATION_TICKS;
+        match self.ticks_left {
+            _ if self.held => "roster full, waiting",
+            0 => "ready",
+            t if t * 3 <= span => "ready soon",
+            t if t * 3 <= span * 2 => "ready in a while",
+            _ => "ready much later",
+        }
+    }
+}
+
+/// One incubation slot of a bay.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IncubationView {
+    pub child: Option<IncubatingChild>,
 }

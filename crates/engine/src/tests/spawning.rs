@@ -598,7 +598,12 @@ fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
 #[test]
 fn spawn_wild_creature_rolls_individual_stat_variance_within_a_species() {
     let mut game = Game::new(420, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     for _ in 0..15 {
         game.spawn_wild_creature(&species_id, 5, 5);
     }
@@ -622,7 +627,12 @@ fn spawn_wild_creature_rolls_individual_stat_variance_within_a_species() {
 fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
     let mut game = Game::new(422, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     for _ in 0..24 {
         game.world.spawn((
             Creature {
@@ -666,7 +676,12 @@ fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
 #[test]
 fn a_full_wild_population_far_away_is_culled_so_spawns_near_the_player_still_happen() {
     let mut game = Game::new(423, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
 
     // Clear the ground the player is standing on first. `spawn_initial_
@@ -757,7 +772,12 @@ fn a_full_wild_population_far_away_is_culled_so_spawns_near_the_player_still_hap
 #[test]
 fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
     let mut game = Game::new(424, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
 
     let nest = game
@@ -850,7 +870,12 @@ fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
 fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
     let mut game = Game::new(425, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 4;
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
 
     // Deep enough that a roll places a real group rather than a single
     // creature — zone, not distance, is what decides that now.
@@ -910,7 +935,12 @@ fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
 fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_multiplier() {
     let mut game = Game::new(421, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
 
     let low_roll = game
         .world
@@ -1397,7 +1427,11 @@ fn a_rolled_routine_is_always_one_of_the_opted_in_abilities() {
 fn every_spawned_wild_creature_holds_a_routines_component() {
     let mut game = Game::new(772, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let entity = game
         .spawn_wild_creature(&species.id, spawn.x + 3, spawn.y)
         .expect("a shipped species spawns");
@@ -1419,7 +1453,11 @@ fn a_wild_carrier_survives_a_save_load_round_trip() {
 
     let mut game = Game::new(773, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let entity = game
         .spawn_wild_creature(&species.id, spawn.x + 4, spawn.y)
         .unwrap();
@@ -1746,6 +1784,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             base: None,
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         }],
         structures: Vec::new(),
         floor_piles: Vec::new(),
@@ -2176,7 +2216,12 @@ fn the_dev_console_ignores_the_density_target() {
         }
     }
     // Saturate the box well past the target with hand-placed hostiles.
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     for i in 0..(WILD_LOCAL_DENSITY_TARGET * 2) {
         game.spawn_wild_creature(&species, pos.x + (i % 5) as i32, pos.y);
     }
@@ -2620,7 +2665,12 @@ fn breaching_forgets_which_chunks_were_stocked() {
 #[test]
 fn the_cap_evicts_a_whole_chunk_and_forgets_it() {
     let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let far = Position {
         x: start.x + 20 * crate::world::CHUNK_SIZE,
@@ -2691,7 +2741,12 @@ fn the_cap_evicts_a_whole_chunk_and_forgets_it() {
 #[test]
 fn the_cap_never_evicts_the_ground_under_the_player() {
     let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let species_id = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
 
     let already = {

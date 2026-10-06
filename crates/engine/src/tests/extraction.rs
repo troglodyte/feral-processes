@@ -388,7 +388,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
     let template = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one shipped species");
     let overridden = SpeciesDef {
         id: "rich_in_override_species".to_string(),
@@ -434,7 +434,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
         ..game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one shipped species")
     };
     game.world.resource_mut::<SpeciesDb>().insert(plain);

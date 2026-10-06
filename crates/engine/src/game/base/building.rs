@@ -672,6 +672,11 @@ impl Game {
         if def.strips.is_some() {
             entity.insert(crate::components::Hopper::default());
         }
+        if def.incubation_slots > 0 {
+            entity.insert(crate::components::Incubator::with_slots(
+                def.incubation_slots,
+            ));
+        }
         if let Some(temp) = &def.temporary {
             entity.insert(Temporary {
                 ticks_remaining: temp.max_ticks,
@@ -1279,6 +1284,15 @@ impl Game {
             );
         }
         let removed_count = targets.len();
+        // Before anything below mutates: a demolition (or the Home's cascade)
+        // would otherwise destroy a child that has no other home.
+        if targets.iter().any(|&t| {
+            self.world
+                .get::<crate::components::Incubator>(t)
+                .is_some_and(|bay| bay.is_occupied())
+        }) {
+            return Err("A program is incubating — wait for it to hatch.".into());
+        }
 
         let mut refund: Vec<(ItemId, u32)> = Vec::new();
         // Kept apart from `refund` only so the two can be granted under

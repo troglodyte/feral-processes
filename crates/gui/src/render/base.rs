@@ -2889,7 +2889,7 @@ mod tests {
             let species = game
                 .species_defs()
                 .into_iter()
-                .next()
+                .find(|d| !d.is_hybrid())
                 .expect("at least one species ships")
                 .id;
 
@@ -5926,6 +5926,7 @@ mod tests {
                 hopper_progress: 0,
                 standing_tool: None,
                 pod_charged: None,
+                incubating: Vec::new(),
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
@@ -6133,6 +6134,7 @@ mod tests {
                 hopper_progress: 0,
                 standing_tool: None,
                 pod_charged: Some(charged),
+                incubating: Vec::new(),
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         app.game = Some(Game::load(&path, &test_assets()).unwrap());
@@ -6230,7 +6232,13 @@ mod tests {
     ) -> (Game, Entity) {
         let mut game = game_with_a_research_station(seed, anchor);
         let pen = (anchor.0 + 1, anchor.1 + 1);
-        let species = game.species_defs()[0].id.clone();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone();
         let path = crate::render::test_support::scratch_path("pinned_subject", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
@@ -6301,6 +6309,8 @@ mod tests {
                 drop_trooper: false,
                 base: crate::render::test_support::tamed_base(),
                 stat_points: 0,
+                generation: 0,
+                breed_ready_at: 0,
                 hold_points: false,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();

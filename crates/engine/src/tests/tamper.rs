@@ -950,7 +950,7 @@ fn guaranteed_looter_species(game: &Game) -> SpeciesDef {
     let template = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one shipped species");
     SpeciesDef {
         id: "task4_guaranteed_looter".to_string(),

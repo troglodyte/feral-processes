@@ -1901,6 +1901,16 @@ pub enum Mode {
     /// programs in `Mode::Fuse`/`Mode::FuseSecond`; Enter actually runs the
     /// fusion.
     FuseName,
+    /// Picking the first parent for a Breeding Bay (`App::pending_breed_bay`).
+    /// Reached with `B` from the bay's structure sheet while it has a free
+    /// slot. A program still resting from its last breeding is listed but
+    /// refuses with the engine's own reason.
+    Breed,
+    /// Picking the second parent; the page previews the child.
+    BreedSecond,
+    /// The seed cost and the last chance to back out; Enter runs
+    /// `Game::breed`.
+    BreedConfirm,
     /// Typing a new display name (`App::rename_input`) for the program
     /// highlighted on the roster — the same text-entry idiom
     /// `Mode::FuseName` uses. Blank and Enter clears the name back to the
@@ -2381,6 +2391,9 @@ impl Mode {
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName
+            | Mode::Breed
+            | Mode::BreedSecond
+            | Mode::BreedConfirm
             | Mode::RenamePet
             | Mode::RoutineTarget
             | Mode::Routines
@@ -2740,6 +2753,13 @@ pub struct App {
     /// from `Mode::FuseName` before `Game::fuse_companions` is actually
     /// called.
     pub pending_fuse_second: Option<Entity>,
+    /// The Breeding Bay whose sheet opened `Mode::Breed`, held across the
+    /// three pages because the sheet's own subject is dropped on leaving it.
+    pub pending_breed_bay: Option<Entity>,
+    /// The first parent picked in `Mode::Breed`.
+    pub pending_breed_first: Option<Entity>,
+    /// The second parent picked in `Mode::BreedSecond`.
+    pub pending_breed_second: Option<Entity>,
     /// Characters typed so far on the fuse-naming page (see `Mode::FuseName`).
     pub fuse_name_input: String,
     /// The program being renamed in `Mode::RenamePet`, captured when `N` is

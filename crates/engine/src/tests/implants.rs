@@ -839,7 +839,12 @@ fn removing_the_spine_trims_the_routine_row_it_widened() {
 fn implant_atk_and_mitigation_stay_in_effect_while_emulating() {
     let mut game = new_game();
     let player = game.player_entity();
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     game.world
         .resource_mut::<crate::resources::EmulationImages>()
         .0

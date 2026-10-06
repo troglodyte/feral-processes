@@ -218,7 +218,13 @@ pub(crate) fn test_app(seed: u32) -> App {
 /// exposes no way to hand-place a tamed program from outside the crate.
 pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     distant_programs(seed, |game| {
-        let species = game.species_defs()[0].id.clone();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone();
         (0..count).map(|_| species.clone()).collect()
     })
 }
@@ -403,6 +409,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -443,6 +450,7 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -574,6 +582,8 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             base: tamed_base(10, 3, 2),
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -653,6 +663,8 @@ fn wild_creature_save(species: String, position: (i32, i32)) -> CreatureSave {
         base: None,
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     }
 }
 
@@ -665,7 +677,13 @@ pub(crate) fn box_in_player_with_hostiles(app: &mut App) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("box_in", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -700,7 +718,13 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
     let assets_dir = test_assets_dir();
     let path = scratch_path("wild_east", east as u32);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -774,6 +798,8 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         base: None,
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -807,7 +833,13 @@ pub(crate) fn place_pursuing_guardian_adjacent(app: &mut App, dx: i32, dy: i32) 
     let assets_dir = test_assets_dir();
     let path = scratch_path("pursuing_guardian", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -987,7 +1019,13 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
     let assets_dir = test_assets_dir();
     let path = scratch_path("outpost_staff", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1071,6 +1109,8 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         base: tamed_base(10, 3, 2),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1092,7 +1132,13 @@ pub(crate) fn place_outpost_with_crew_and_stock(
     let assets_dir = test_assets_dir();
     let path = scratch_path("outpost_crew_stock", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1180,6 +1226,8 @@ pub(crate) fn place_outpost_with_crew_and_stock(
             base: tamed_base(10, 3, 2),
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1338,6 +1386,8 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         base: None,
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1395,7 +1445,13 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     let path = scratch_path("extract", seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1483,6 +1539,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         base: tamed_base(10, 3, 1),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1502,6 +1560,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     if underground {
         data.locale = Locale::Stack {
@@ -1545,7 +1604,13 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
     let path = scratch_path(label, seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1620,6 +1685,8 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
         base: tamed_base(10, 3, 1),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
@@ -1640,6 +1707,7 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1680,7 +1748,13 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     game.warp_to_zone(breach_zone).unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1750,6 +1824,8 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         base: tamed_base(10, 3, 1),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -1769,6 +1845,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1795,7 +1872,13 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
     let mut app = test_app(seed);
     let path = scratch_path("market", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1869,6 +1952,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         base: tamed_base(10, 3, 2),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -1890,6 +1975,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            incubating: Vec::new(),
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -2158,7 +2244,13 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
     let mut app = test_app(seed);
     let path = scratch_path("field_own", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2231,6 +2323,8 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             base: if tamed { tamed_base(10, 3, 2) } else { None },
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2262,7 +2356,13 @@ pub(crate) fn app_with_companions_and_cargo(
     let mut app = test_app(seed);
     let path = scratch_path("party", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2340,6 +2440,8 @@ pub(crate) fn app_with_companions_and_cargo(
             base: tamed_base(30, 3, 1),
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -2593,7 +2695,13 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     let path = scratch_path("small_base", seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2617,6 +2725,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -2684,6 +2793,8 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             base: tamed_base(10, 3, 1),
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         });
     }
     data.locale = if underground {
@@ -2767,6 +2878,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     data.locale = if underground {
         Locale::Stack {
@@ -2903,6 +3015,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            incubating: Vec::new(),
         });
     }
     data.player.inventory = pack
@@ -2971,6 +3084,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            incubating: Vec::new(),
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -3019,6 +3133,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -3071,7 +3186,13 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
     let assets_dir = test_assets_dir();
     let path = scratch_path("tame_at_zone", zone);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -3141,6 +3262,8 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         base: tamed_base(10, 3, 2),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -3178,6 +3301,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            incubating: Vec::new(),
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };
@@ -3227,6 +3351,7 @@ pub(crate) fn app_at_a_mod_bench_carrying(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     // A plain copy lives in `inventory`; `gear_copies` holds only modded ones.
     data.player.inventory = vec![
@@ -3265,6 +3390,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     };
     data.structures.push(lathe);
     save::save_to_file(&path, &data).unwrap();
@@ -3282,4 +3408,64 @@ pub(crate) fn tamed_base(max_hp: i32, atk: i32, mitigation: i32) -> Option<Deriv
         mitigation,
         ..DerivedBase::player()
     })
+}
+
+/// `app_inside_a_small_base_with_programs`'s base with a built Breeding Bay
+/// beside the Home, `seeds` breeding seeds in the pack, and the **first**
+/// owned program still resting from an earlier breeding when `first_resting`.
+/// Through the save for the reason every fixture here is: nothing public
+/// builds a structure for free or writes a cooldown.
+pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool) -> App {
+    let mut app = app_inside_a_small_base_with_programs(seed, false, 2);
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("breeding_bay", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.structures.push(save::StructureSave {
+        kind: "breeding_bay".to_string(),
+        position: (-1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: vec![None],
+    });
+    data.player
+        .inventory
+        .push((ItemId::from("breeding_seed"), seeds));
+    if first_resting {
+        let first = data.creatures.iter_mut().find(|c| c.tamed).unwrap();
+        first.breed_ready_at = u64::MAX / 2;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// Opens the bay's sheet the way inspecting it does.
+pub(crate) fn open_the_bay_sheet(app: &mut App) -> Entity {
+    let bay = app
+        .game
+        .as_mut()
+        .unwrap()
+        .structure_report()
+        .into_iter()
+        .find(|s| s.label == "Breeding Bay")
+        .expect("the fixture builds a bay")
+        .entity;
+    app.pending_structure_manifest = Some(bay);
+    app.mode = Mode::StructureManifest;
+    bay
 }

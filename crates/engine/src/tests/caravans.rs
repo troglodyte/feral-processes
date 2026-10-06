@@ -567,7 +567,7 @@ fn a_shelf_deeper_than_its_pools_stops_when_they_empty() {
         .world
         .resource::<crate::species::SpeciesDb>()
         .all()
-        .filter(|d| !d.is_boss)
+        .filter(|d| !d.is_boss && !d.is_hybrid())
         .count();
     assert_eq!(
         rows.len(),
@@ -1020,7 +1020,7 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
 fn caravans_cost_no_save_format_bump() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        34,
+        35,
         "a caravan is an additive named-struct field and must not bump this"
     );
 }
@@ -1706,7 +1706,7 @@ fn caravan_memory_survives_a_save_and_load() {
     );
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        34,
+        35,
         "both caravan fields are additive named-struct ones"
     );
 }
@@ -2171,4 +2171,35 @@ fn a_basket_costs_one_tick_whatever_its_size() {
         1,
         "a basket spends one turn, not one per line"
     );
+}
+
+/// A hybrid is bred, never sold: a wagon that listed one would hand over a
+/// species the player is meant to earn by pairing two others.
+#[test]
+fn no_shelf_ever_offers_a_hybrid_program() {
+    use crate::game::caravan::Drawn;
+    use rand::SeedableRng;
+    let game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let hybrids: Vec<String> = game
+        .species_defs()
+        .into_iter()
+        .filter(|d| d.is_hybrid())
+        .map(|d| d.id)
+        .collect();
+    assert!(!hybrids.is_empty(), "the census needs a hybrid to look for");
+    let weights = crate::caravans::CaravanWeights {
+        programs: 1,
+        ..Default::default()
+    };
+    let mut programs = 0;
+    for seed in 0..200 {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        for (drawn, _) in game.draw_shelf(&mut rng, 6, weights, 0) {
+            if let Drawn::Program(species) = drawn {
+                programs += 1;
+                assert!(!hybrids.contains(&species), "a wagon offered {species}");
+            }
+        }
+    }
+    assert!(programs > 0, "the loop drew no programs, so proved nothing");
 }

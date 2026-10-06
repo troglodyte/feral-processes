@@ -180,7 +180,7 @@ fn a_tick_with_another_fight_running_holds_the_clock() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -765,7 +765,7 @@ mod opening {
         let species = game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species");
         let wild = game
             .world
@@ -2686,7 +2686,7 @@ mod persist {
     fn save_format_version_is_unchanged() {
         assert_eq!(
             crate::save::SAVE_FORMAT_VERSION,
-            34,
+            35,
             "adding a siege field is additive under field-named RON and must \
              not cost a version bump"
         );

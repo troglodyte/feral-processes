@@ -18,7 +18,7 @@ fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() 
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
 
     let wild = game

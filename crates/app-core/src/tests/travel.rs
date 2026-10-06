@@ -310,6 +310,7 @@ fn structure_save(kind: &str, x: i32, y: i32) -> save::StructureSave {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     }
 }
 

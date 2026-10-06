@@ -116,7 +116,13 @@ fn roster_doors_mint_distinct_increasing_ranks() {
         "a later door should mint a higher rank: {rank_first} then {rank_second}"
     );
 
-    let species = game.species_defs().into_iter().next().unwrap().id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     let third = game.adopt_program(&species, 4, 4, 1.0).unwrap();
     let rank_third = game.world.get::<StaffRank>(third).unwrap().0;
     assert!(

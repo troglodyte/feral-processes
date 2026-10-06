@@ -1006,6 +1006,13 @@ pub struct CreatureSave {
     /// Whether the program holds its points — see `components::HoldPoints`.
     #[serde(default)]
     pub hold_points: bool,
+    /// Breeding generation — see `components::Generation`. Absent reads 0.
+    #[serde(default)]
+    pub generation: u32,
+    /// The tick this program is next fit to breed — see
+    /// `components::BreedReadyAt`. 0 reads as ready.
+    #[serde(default)]
+    pub breed_ready_at: u64,
 }
 
 fn is_zero(n: &i32) -> bool {
@@ -1377,6 +1384,12 @@ pub struct StructureSave {
     /// with an empty one.
     #[serde(default)]
     pub racked: Vec<crate::items::DownedProgram>,
+    /// A Breeding Bay's slots — see `components::Incubator`. `Incubation`
+    /// directly, `racked`'s precedent: every roll was fixed when the
+    /// breeding started, so a reload must not re-roll it. Empty on a
+    /// structure with no bay.
+    #[serde(default)]
+    pub incubating: Vec<Option<crate::breeding::Incubation>>,
     /// The two halves of `components::StandingJob` — keep this machine
     /// worked, and keep this structure guarded, whether or not an order
     /// asks for it.
@@ -1989,7 +2002,11 @@ pub struct SaveData {
 /// no longer written (`skip_serializing_if`, derived on load from the new
 /// `base`, with `stat_points` and `hold_points` beside it). A v33 program has
 /// no base to derive from, and loading it would read its stats as zero.
-pub const SAVE_FORMAT_VERSION: u32 = 34;
+///
+/// 34 → 35: breeding. `CreatureSave::{generation, breed_ready_at}` and
+/// `StructureSave::incubating` are written; a v34 file would load with every
+/// bay empty, which is the same as losing a child mid-incubation.
+pub const SAVE_FORMAT_VERSION: u32 = 35;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2398,6 +2415,8 @@ mod tests {
             base: None,
             stat_points: 0,
             hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
         }
     }
 

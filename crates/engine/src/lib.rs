@@ -11,6 +11,7 @@ pub mod base_ledger;
 pub mod battle;
 pub mod bench;
 pub mod bonds;
+pub mod breeding;
 pub mod caravans;
 pub mod classes;
 pub mod components;

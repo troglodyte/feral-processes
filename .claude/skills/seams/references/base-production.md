@@ -414,16 +414,15 @@
   the *worker*, `task_progress_system` stays the only writer of a machine's
   status. Giving the status two writers makes them ping-pong every tick.
 
-- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` sets its load into
-  the nearest store that takes it, and keeps it when none will.** A carrier
+- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` drops its load on
+  its own tile (`floor::drop_load`), whatever the depots hold.** A carrier
   is never freed while it holds a load (freeing destroys the goods), so a
   stranding that waiting will not fix held a body on shift for good — a
-  downed-tools hauler read on shift for a whole bench run. Nearest by
-  **Chebyshev**, not path: a stranded carrier is one no walk reaches anything
-  from, so path distance is exactly what it does not have, and the `accepts` closure `haul_step_system` builds over `depot_accepts`
-  and output room still decides which stores count. The units go
-  through `deposit` and a `Record::Haul` (`errand: "set_down"`), a move and
-  never production. `CarryingProgram` is out of scope by construction: a
+  downed-tools hauler read on shift for a whole bench run. No store is
+  consulted: a stranded carrier is one no walk reaches anything from, and
+  the pile waits for an `Errand::Pickup` once a route to an accepting depot
+  exists again. (Before floor items, v0.15.10, it set the load into the
+  Chebyshev-nearest accepting store — a teleport.) `CarryingProgram` is out of scope by construction: a
   rack's carrier never walks, so it cannot be stranded by a route. The
   timeout is long enough for a wanderer on a Depot's only free face to step
   off first. What strands a carrier now is structures across the route, a

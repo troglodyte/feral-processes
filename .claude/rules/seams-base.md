@@ -247,9 +247,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   for a machine that would never take a unit.
 - **`Carrying` is the only thing hauling stores**, and the carry cap is what
   lets it be one `(item, qty)` pair.
-- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` sets its load into
-  the Chebyshev-nearest store that takes it, through `deposit`, and keeps it
-  when none will** — a load is never destroyed to free a body.
+- **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` drops its load on
+  its own tile through `floor::drop_load`, whatever the depots hold** — a
+  load is never destroyed to free a body.
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`.
 - **A demolition hands back what the structure was *holding* — both `Stock`

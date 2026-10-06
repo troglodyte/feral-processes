@@ -1,6 +1,6 @@
 # Player implants — plan
 
-Spec: `docs/superpowers/specs/2026-10-05-player-implants-design.md`. Read it
+Spec: `docs/superpowers/archive/specs/2026-10-05-player-implants-design.md`. Read it
 once. This plan adds only the decisions, the corrections to the spec and the
 file and test lists. Paths are relative to `crates/engine/src` unless they
 name another crate.

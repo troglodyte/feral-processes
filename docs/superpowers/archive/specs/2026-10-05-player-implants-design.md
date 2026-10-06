@@ -1,6 +1,6 @@
 # Player Implants — design
 
-**Date:** 2026-10-05 · **Status:** spec, reviewed; plan written · **Weight:**
+**Date:** 2026-10-05 · **Status:** built · **Weight:**
 spec-and-plan (engine + app-core + gui, new content kind, new structure, new
 save field)
 

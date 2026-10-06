@@ -1801,6 +1801,7 @@ impl Game {
         ));
 
         let structure_positions = game.restore_structures(data.structures);
+        game.restore_floor_piles(std::mem::take(&mut data.floor_piles));
 
         game.attach_cronjobs(pending_cronjobs, &structure_positions);
         game.attach_pinned_subjects(pending_study, &structure_positions);
@@ -3119,6 +3120,7 @@ impl Game {
             player: player_save,
             creatures,
             structures,
+            floor_piles: self.floor_pile_saves(),
             nests,
             traps,
             dig_sites,

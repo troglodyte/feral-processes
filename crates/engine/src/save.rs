@@ -1311,6 +1311,12 @@ pub struct CronjobSave {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct FloorPileSave {
+    pub position: (i32, i32),
+    pub items: Vec<(ItemId, u32)>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
@@ -1493,6 +1499,10 @@ pub struct SaveData {
     pub player: PlayerSave,
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
+    /// Loads already dropped on base tiles — `components::FloorPile`.
+    /// Additive behind `#[serde(default)]`: an older save has no piles.
+    #[serde(default)]
+    pub floor_piles: Vec<FloorPileSave>,
     /// Every nest standing in the zone — see `components::Nest`. Without
     /// this, a save/reload silently deleted every nest: a free way out of
     /// a swarm the player provoked, and a way to launder a nest destroyed
@@ -2264,6 +2274,7 @@ mod tests {
             },
             creatures: Vec::new(),
             structures: Vec::new(),
+            floor_piles: Vec::new(),
             nests: Vec::new(),
             traps: Vec::new(),
             dig_sites: Vec::new(),

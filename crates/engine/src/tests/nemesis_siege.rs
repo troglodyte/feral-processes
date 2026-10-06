@@ -798,3 +798,49 @@ fn a_tamed_nemesis_releases_its_band_and_stops_recruiting() {
     );
     assert!(game.world.get_entity(leader).is_ok());
 }
+
+#[test]
+fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
+    let mut game = new_game();
+    let (leader, _band) = home_siege(&mut game);
+    let home = game.world.get::<NemesisHome>(leader).unwrap().0;
+
+    let path = std::env::temp_dir().join(format!("feral_nemesis_drop_{}.sav", std::process::id()));
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    // A player cell off the board is one `restore` cannot seat the party in,
+    // which is the case that drops the siege.
+    assert!(text.contains("player_cell: Some("), "save layout moved");
+    let start = text.find("player_cell: Some(").unwrap();
+    let end = start + text[start..].find("),").unwrap() + 2;
+    let broken = format!(
+        "{}player_cell: Some((9999, 9999)),{}",
+        &text[..start],
+        &text[end..]
+    );
+    std::fs::write(&path, broken).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(!loaded.in_tactical_battle(), "the siege was dropped");
+    let survivors: Vec<Entity> = loaded
+        .world
+        .query_filtered::<Entity, With<Nemesis>>()
+        .iter(&loaded.world)
+        .collect();
+    assert_eq!(survivors.len(), 1, "the leader survives the dropped siege");
+    let l = survivors[0];
+    let at = *loaded.world.get::<Position>(l).unwrap();
+    assert_eq!((at.x, at.y), (home.x, home.y), "sent home");
+    assert!(loaded.world.get::<NemesisHome>(l).is_none());
+    assert!(loaded.world.get::<Besieger>(l).is_none());
+    assert_eq!(
+        loaded
+            .world
+            .query::<&Besieger>()
+            .iter(&loaded.world)
+            .count(),
+        0,
+        "no raider is left wandering"
+    );
+}

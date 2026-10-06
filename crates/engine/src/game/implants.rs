@@ -78,6 +78,17 @@ impl Game {
             })
     }
 
+    /// The player's installed Load against the cap for their level, as
+    /// `(load, cap)`. The cheap read the HUD and the points screen take per
+    /// frame, instead of building a whole `implant_view`.
+    pub fn neural_load(&self) -> (u32, u32) {
+        let level = self
+            .world
+            .get::<Experience>(self.player_entity())
+            .map_or(1, |e| e.level);
+        (self.implant_load(), crate::implants::load_cap(level))
+    }
+
     /// Net percent change on Trace the player's implants make: downsides
     /// raise it, `TraceDamp` hooks lower it.
     pub(crate) fn implant_trace_pct(&self) -> i32 {

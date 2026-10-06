@@ -540,6 +540,10 @@ impl App {
                 // `no_shipped_help_page_names_a_hidden_key` forbids a page
                 // from naming. Uppercase, as every map action is.
                 GameKey::Char('P') => self.open_siphon(),
+                // `I` because it is unbound on the map (the inspect key lives
+                // on the lists, never here), and not one of the hidden keys.
+                // Uppercase, as every map action is.
+                GameKey::Char('I') => self.open_splice_rig(),
                 GameKey::Char('c') => {
                     let offer = game.transfer_offer();
                     let carriers = game.rack_offer();

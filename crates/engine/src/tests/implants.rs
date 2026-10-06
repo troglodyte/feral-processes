@@ -772,3 +772,11 @@ fn a_tactical_fight_rolls_battle_start_statuses_too() {
     assert!(game.tactical_actor().is_some(), "a tactical fight is open");
     assert_eq!(player_status_ids(&game), vec!["stun"]);
 }
+
+#[test]
+fn neural_load_reports_load_against_the_cap_without_a_view() {
+    let mut game = new_game();
+    assert_eq!(game.neural_load(), (0, crate::implants::load_cap(1)));
+    install(&mut game, &["black_ledger"]);
+    assert_eq!(game.neural_load(), (2, crate::implants::load_cap(1)));
+}

@@ -55,7 +55,7 @@ the same kind and list it here.
 
 ## Unreleased
 
-**A program that loses its job while carrying something now puts the load on the floor instead of losing it.** When a post is demolished or destroyed, a program is called up for a fight, taken for study or locked in a siphon, goes off shift, or is handed another job, what it held used to vanish. It now sits on the floor as a pile, drawn with a mark on the base map and named when you examine the tile, and an idle hauler with nothing to collect from a machine carries the nearest pile to a depot that will take it. A hauler stranded too long also drops its load where it stands rather than walking it to a depot.
+**A program that loses its job while carrying something now puts the load on the floor instead of losing it.** When its machine is demolished, destroyed in a raid or burns out, when another program is posted onto its job, when it is called up as a reinforcement, joins your party, is fused, sold, extracted or killed for good, is taken for study or locked in a Power Siphon, or is knocked out and sent to a Repair Bay, what it held used to vanish. It now sits on the floor as a pile, drawn with a mark on the base map and named when you examine the tile. An idle hauler with nothing to collect from its own machine carries the nearest pile that a reachable depot will take home. A hauler stranded too long also drops its load where it stands rather than walking it to a depot.
 
 ## 0.15.9
 

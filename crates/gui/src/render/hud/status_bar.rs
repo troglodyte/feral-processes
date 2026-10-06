@@ -60,6 +60,10 @@ pub(in crate::render) struct StatusBarState<'a> {
     /// one, and only when it is nonzero — a `N 0` reads as noise beside
     /// `ALL NOMINAL`, which already says nothing is holding.
     pub unread_alerts: usize,
+    /// `Game::neural_load` is past its cap. One tag and no number: the
+    /// figure is on the Splice Rig screen, and this only says a rejection is
+    /// possible at the next fight.
+    pub overloaded: bool,
 }
 
 /// The identity block, as coloured runs. Pure, so the census can measure
@@ -89,6 +93,12 @@ fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
         ("[GRID] ".to_string(), palette::FIELD_LABEL, false),
         (format!("{draw}/{supply}"), grid_color(state.power), false),
     ]);
+    if state.overloaded {
+        runs.extend([
+            (SEP.to_string(), palette::FAINT, false),
+            ("[LOAD]".to_string(), palette::ATTENTION, true),
+        ]);
+    }
     runs
 }
 
@@ -293,6 +303,8 @@ mod tests {
             power: (188, 188),
             attention: &[],
             unread_alerts: 0,
+            // The widest the identity block gets.
+            overloaded: true,
         }
     }
 
@@ -306,6 +318,7 @@ mod tests {
             power,
             attention: &[],
             unread_alerts: 0,
+            overloaded: false,
         }
     }
 
@@ -318,6 +331,20 @@ mod tests {
             .expect("the identity block carries a grid segment");
         let (text, color, _) = runs[at + 1].clone();
         (text, color)
+    }
+
+    /// Both halves, `a_threat_badge_is_red`'s shape: a tag that always drew
+    /// and one that never did would each pass half of this.
+    #[test]
+    fn the_load_tag_draws_only_while_overloaded() {
+        let text_with = |overloaded| {
+            identity_text(&StatusBarState {
+                overloaded,
+                ..grid_state((0, 0))
+            })
+        };
+        assert!(text_with(true).contains("[LOAD]"));
+        assert!(!text_with(false).contains("LOAD"));
     }
 
     /// The clock reads beside the tick it paces: `PAUSED` while held, the

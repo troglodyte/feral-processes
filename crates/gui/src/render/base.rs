@@ -576,6 +576,10 @@ pub(super) fn draw_playing_base(
             power: game.base_power(),
             attention: &attention,
             unread_alerts: game.unread_alerts(),
+            overloaded: {
+                let (load, cap) = game.neural_load();
+                load > cap
+            },
         },
         painter,
         m,

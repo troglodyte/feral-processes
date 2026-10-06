@@ -2,10 +2,13 @@
 //! follower's tag. The march and the siege read the band this builds.
 
 use crate::alerts::AlertKind;
-use crate::components::{Besieger, NemesisFollower, NemesisMuster};
+use crate::components::{
+    Besieger, Carrying, NemesisFollower, NemesisHome, NemesisMuster, StolenFrom,
+};
 use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{
-    NEMESIS_BAND_MAX, NEMESIS_FOLLOW_DISTANCE, NEMESIS_RECRUIT_INTERVAL, NEMESIS_RECRUIT_RADIUS,
+    NEMESIS_BAND_MAX, NEMESIS_FOLLOW_DISTANCE, NEMESIS_MARCH_DELAY, NEMESIS_RECRUIT_INTERVAL,
+    NEMESIS_RECRUIT_RADIUS,
 };
 use crate::*;
 
@@ -35,6 +38,105 @@ impl Game {
             self.muster_one(leader);
         }
         self.follow_leaders();
+    }
+
+    /// Fires the first full, rested band's siege on the base, unless a siege
+    /// hold applies (`siege_holds`), another siege is already out, or sieges
+    /// are off. At home the real band is seated through `open_siege_with`;
+    /// away it is priced off-screen at its headcount, leader included, and
+    /// the aftermath runs on the spot.
+    pub(crate) fn nemesis_march_check(&mut self) {
+        if !self.sieges_enabled() || self.siege_holds() {
+            return;
+        }
+        let any_besieger = self
+            .world
+            .query_filtered::<Entity, With<Besieger>>()
+            .iter(&self.world)
+            .next()
+            .is_some();
+        if any_besieger {
+            return;
+        }
+        let mut leaders: Vec<Entity> = self
+            .world
+            .query_filtered::<Entity, (With<Nemesis>, Without<Pursuing>, Without<Tamed>)>()
+            .iter(&self.world)
+            .collect();
+        leaders.sort_by_key(|&l| self.nemesis_sort_key(l));
+        let ready = leaders.into_iter().find(|&l| {
+            self.world
+                .get::<NemesisMuster>(l)
+                .is_some_and(|m| m.ticks >= NEMESIS_MARCH_DELAY)
+                && self.nemesis_band(l).len() >= NEMESIS_BAND_MAX
+        });
+        if let Some(leader) = ready {
+            self.nemesis_march(leader);
+        }
+    }
+
+    fn nemesis_march(&mut self, leader: Entity) {
+        let Some(&home) = self.world.get::<Position>(leader) else {
+            return;
+        };
+        let mut raiders = vec![leader];
+        raiders.extend(self.nemesis_band(leader));
+        self.world.entity_mut(leader).insert(NemesisHome(home));
+        for &e in &raiders {
+            self.world.entity_mut(e).insert(Besieger);
+        }
+        if self.base_pos().is_some() {
+            // A besieger is a base-space body, and base-space `Position` is
+            // pinned to the anchor.
+            if let Some((ax, ay)) = self.anchor_position() {
+                for &e in &raiders {
+                    let mut pos = self.world.get_mut::<Position>(e).unwrap();
+                    pos.x = ax;
+                    pos.y = ay;
+                }
+            }
+            if self.open_siege_with(raiders.clone()) {
+                self.log_nemesis_taunt(leader);
+                return;
+            }
+            // The base could not stage it; the abstract answer reads no
+            // location, `siege_check`'s own fallback.
+        }
+        self.resolve_siege_offscreen_with(raiders.len() as u32);
+        for &follower in &raiders[1..] {
+            self.world.despawn(follower);
+        }
+        self.nemesis_return_home(leader);
+    }
+
+    /// Sends every marching leader still standing back to its home cell.
+    pub(crate) fn nemesis_return_all(&mut self) {
+        let leaders: Vec<Entity> = self
+            .world
+            .query_filtered::<Entity, With<NemesisHome>>()
+            .iter(&self.world)
+            .collect();
+        for leader in leaders {
+            self.nemesis_return_home(leader);
+        }
+    }
+
+    /// A leader's siege is over and it survived: back to the cell it marched
+    /// from, one grudge worse, with its muster starting over. A leader the
+    /// player decompiled mid-fight is theirs now and only loses the march.
+    pub(crate) fn nemesis_return_home(&mut self, leader: Entity) {
+        let Some(NemesisHome(home)) = self.world.get::<NemesisHome>(leader).copied() else {
+            return;
+        };
+        let mut entity = self.world.entity_mut(leader);
+        entity.remove::<(NemesisHome, Besieger, Carrying, StolenFrom)>();
+        if entity.contains::<Tamed>() {
+            entity.remove::<NemesisMuster>();
+            return;
+        }
+        entity.insert(home);
+        entity.insert(NemesisMuster { ticks: 0 });
+        self.escalate_nemesis(leader);
     }
 
     /// The bodies tagged as following `leader`, in a fixed order.
@@ -168,6 +270,22 @@ impl Game {
         }
     }
 
+    /// What a nemesis *is* — cell, species, grudge — with the entity index
+    /// last, only to break a tie between two otherwise identical bodies.
+    /// Unlike an entity index or query order it comes back the same after a
+    /// save and load, so anything chosen "first" by it is the same choice
+    /// either side of one.
+    fn nemesis_sort_key(&self, l: Entity) -> ((i32, i32), String, u32, Entity) {
+        let pos = self.world.get::<Position>(l).map_or((0, 0), |p| (p.x, p.y));
+        let species = self
+            .world
+            .get::<Creature>(l)
+            .map(|c| c.species.clone())
+            .unwrap_or_default();
+        let grudge = self.world.get::<Nemesis>(l).map_or(0, |n| n.0);
+        (pos, species, grudge, l)
+    }
+
     /// The number a save gives the band `e` is in, or `None` if it is in
     /// none: the leader's rank among the leaders that have followers, in an
     /// order built from what a body *is* (cell, species, grudge) so the same
@@ -189,17 +307,7 @@ impl Game {
             .collect();
         leaders.sort();
         leaders.dedup();
-        let key = |game: &Game, l: Entity| {
-            let pos = game.world.get::<Position>(l).map_or((0, 0), |p| (p.x, p.y));
-            let species = game
-                .world
-                .get::<Creature>(l)
-                .map(|c| c.species.clone())
-                .unwrap_or_default();
-            let grudge = game.world.get::<Nemesis>(l).map_or(0, |n| n.0);
-            (pos, species, grudge, l)
-        };
-        leaders.sort_by_key(|&l| key(self, l));
+        leaders.sort_by_key(|&l| self.nemesis_sort_key(l));
         leaders.iter().position(|&l| l == leader).map(|i| i as u32)
     }
 

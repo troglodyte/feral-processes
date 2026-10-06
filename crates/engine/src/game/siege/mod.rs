@@ -61,15 +61,22 @@ impl Game {
         let zone = self.world.resource::<ZoneLevel>().0;
         let site = self.anchor_position().unwrap_or(player_cell);
         let raiders = self.spawn_siege_pack(site, zone);
-        self.open_siege_with(raiders)
+        if self.open_siege_with(raiders.clone()) {
+            return true;
+        }
+        for raider in raiders {
+            self.world.despawn(raider);
+        }
+        false
     }
 
     /// `open_siege`'s seating and fight set-up for a pack already made: the
     /// sector's fresh pack for a regular siege, a nemesis's band for its own.
     /// The empty-pack and nobody-seated refusals live here, so both callers
-    /// get them. Every raider is despawned on a refusal, so a caller whose
-    /// pack was not freshly spawned must not pass bodies it means to keep
-    /// when it can be refused.
+    /// get them. A refusal leaves the whole pack alive for the caller to
+    /// dispose of: `open_siege` despawns a fresh pack, a nemesis keeps its
+    /// band. A raider merely turned away for want of a cell, in a siege that
+    /// did open, is despawned here.
     pub(crate) fn open_siege_with(&mut self, raiders: Vec<Entity>) -> bool {
         let Some(siege_board) = board::build(self) else {
             return false;
@@ -164,9 +171,6 @@ impl Game {
         // and an absent `base_pos` already are: `false`, on which
         // `Game::siege_check` resolves the siege off-screen instead.
         if seated.is_empty() {
-            for &raider in &raiders {
-                self.world.despawn(raider);
-            }
             return false;
         }
         // A raider spawned but turned away for want of a free cell has

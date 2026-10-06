@@ -1200,7 +1200,19 @@ impl Game {
         // town's guards is news to that town, and the neighbours have no
         // view on it.
         let patrol = self.world.get::<TownPatrol>(victim).map(|p| p.town);
+        let besieging_nemesis = self
+            .world
+            .get::<crate::components::NemesisHome>(victim)
+            .is_some()
+            .then(|| self.creature_label(victim));
         self.world.despawn(victim);
+        if let Some(label) = besieging_nemesis {
+            self.post_alert(
+                crate::alerts::AlertKind::SiegeIncoming,
+                format!("nemesis-end-{label}"),
+                format!("{label} will trouble you no more."),
+            );
+        }
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {

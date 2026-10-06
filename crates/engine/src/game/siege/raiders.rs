@@ -321,7 +321,7 @@ impl Game {
     /// than depending on that geometry. **What it carried is gone** — no
     /// further bookkeeping, which is what "stolen" means once it is through
     /// the door.
-    fn besieger_leaves(&mut self, body: Entity, carrying: bool) -> bool {
+    pub(crate) fn besieger_leaves(&mut self, body: Entity, carrying: bool) -> bool {
         let label = self.entity_label(body);
         let line = if carrying {
             format!("{label} slips out through the door with its plunder.")
@@ -338,7 +338,20 @@ impl Game {
         // entirely, with no `end_turn` anyone can see having been reached.
         let round_before = self.world.resource::<TacticalBattle>().round;
         self.world.resource_mut::<TacticalBattle>().remove(body);
-        self.world.despawn(body);
+        // **A nemesis leader walks out, it is not deleted.** It stays a
+        // `Besieger` off the board until the fight's teardown sends it home
+        // (`Game::nemesis_return_home`); what it carried is gone either way.
+        if self
+            .world
+            .get::<crate::components::NemesisHome>(body)
+            .is_some()
+        {
+            self.world
+                .entity_mut(body)
+                .remove::<(Carrying, StolenFrom)>();
+        } else {
+            self.world.despawn(body);
+        }
         self.settle_tactical(None);
         // **`skip_disengaged_turns` whenever the battle survives; the
         // upkeep only on a wrap.** `TacticalBattle::remove`'s own

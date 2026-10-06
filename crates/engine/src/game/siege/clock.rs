@@ -40,7 +40,7 @@ impl Game {
         self.world.insert_resource(crate::resources::DevSieges(on));
     }
 
-    fn sieges_enabled(&self) -> bool {
+    pub(crate) fn sieges_enabled(&self) -> bool {
         match self.world.get_resource::<crate::resources::DevSieges>() {
             Some(dev) => dev.0,
             None => !dev_no_sieges_env(),
@@ -93,21 +93,7 @@ impl Game {
         // **The departure from `raid_check`: three holds, not one.** Each is
         // a `return` before the reset, so the pressure a held tick built is
         // still owed and the siege waits rather than being forgiven.
-        //
-        // No base — an opening run has not earned the event yet.
-        if !self.base_is_established() {
-            return;
-        }
-        // Nothing standing to besiege — `run_raid`'s own emptiness check,
-        // asked up front rather than inside the fire, because Task 1's fire
-        // is a stub that cannot yet answer it itself.
-        if self.nothing_to_besiege() {
-            return;
-        }
-        // Another fight already running — a siege must not open, or resolve,
-        // on top of one. `Game::has_active_battle` covers both combat
-        // models in one call.
-        if self.has_active_battle() {
+        if self.siege_holds() {
             return;
         }
 
@@ -138,6 +124,19 @@ impl Game {
         pressure.level = 0;
         pressure.warned = false;
         pressure.next_at = None;
+    }
+
+    /// The three conditions under which a siege waits rather than fires, shared
+    /// by the clock and a nemesis's march so the two cannot disagree on when a
+    /// base is fair game:
+    ///
+    /// - no base — an opening run has not earned the event yet;
+    /// - nothing standing to besiege — `run_raid`'s own emptiness check,
+    ///   asked up front rather than inside the fire;
+    /// - another fight already running — a siege must not open, or resolve,
+    ///   on top of one. `Game::has_active_battle` covers both combat models.
+    pub(crate) fn siege_holds(&mut self) -> bool {
+        !self.base_is_established() || self.nothing_to_besiege() || self.has_active_battle()
     }
 
     /// Whether there is nothing standing for a siege to take or break —

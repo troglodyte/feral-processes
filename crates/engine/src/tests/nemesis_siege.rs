@@ -364,3 +364,341 @@ fn a_breach_sweep_keeps_a_nemesis_and_its_followers() {
     assert!(game.world.get_entity(leader).is_ok());
     assert!(game.world.get_entity(follower).is_ok());
 }
+
+// ---- March, siege, aftermath ----
+
+use crate::tactical::TacticalBattle;
+use crate::tuning::{
+    BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, NEMESIS_MARCH_DELAY, SIEGE_MIN_ZONE,
+};
+
+/// A full band whose march countdown has run out, on open ground.
+fn marching_band(game: &mut Game) -> (Entity, Vec<Entity>) {
+    let (x, y) = open_ground(game);
+    let leader = nemesis_at(game, x, y);
+    let mut band = Vec::new();
+    for i in 0..NEMESIS_BAND_MAX as i32 {
+        let f = wild_at(game, x + i, y + 1);
+        game.world.entity_mut(f).insert(NemesisFollower(leader));
+        band.push(f);
+    }
+    game.world.entity_mut(leader).insert(NemesisMuster {
+        ticks: NEMESIS_MARCH_DELAY,
+    });
+    (leader, band)
+}
+
+/// `siege.rs::establish_base`: enough staff and one raidable structure that
+/// `base_is_established` and `nothing_to_besiege` both pass, on a floored
+/// pocket so a siege board can be built.
+fn established_base(game: &mut Game) {
+    set_zone(game, SIEGE_MIN_ZONE.max(2));
+    game.lay_starting_pocket();
+    for _ in 0..BASE_ESTABLISHED_STAFF {
+        spawn_tamed(game, 10, 3);
+    }
+    for i in 0..BASE_ESTABLISHED_STRUCTURES {
+        let mut e = game.world.spawn((
+            Structure {
+                kind: "test_structure".to_string(),
+            },
+            Position {
+                x: 30 + i as i32,
+                y: 30,
+            },
+        ));
+        if i == 0 {
+            e.insert(Durability { hp: 30, max_hp: 30 });
+        }
+    }
+}
+
+fn has_siege_tags(game: &Game, e: Entity) -> bool {
+    game.world.get::<Besieger>(e).is_some()
+}
+
+#[test]
+fn a_full_band_marches_once_its_delay_has_run() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (leader, band) = marching_band(&mut game);
+    game.world.get_mut::<NemesisMuster>(leader).unwrap().ticks = NEMESIS_MARCH_DELAY - 1;
+    game.nemesis_march_check();
+    assert!(!has_siege_tags(&game, leader), "one tick early");
+
+    game.world.get_mut::<NemesisMuster>(leader).unwrap().ticks = NEMESIS_MARCH_DELAY;
+    let before = *game.world.get::<Position>(leader).unwrap();
+    game.nemesis_march_check();
+    // Away from the base, the march resolves at once and the aftermath has
+    // already run: the leader is home alone, the followers are gone.
+    for f in band {
+        assert!(game.world.get_entity(f).is_err(), "followers are spent");
+    }
+    let after = *game.world.get::<Position>(leader).unwrap();
+    assert_eq!((after.x, after.y), (before.x, before.y));
+    assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, 2, "grudge +1");
+    assert_eq!(game.world.get::<NemesisMuster>(leader).unwrap().ticks, 0);
+    assert!(game.world.get::<NemesisHome>(leader).is_none());
+    assert!(!has_siege_tags(&game, leader));
+}
+
+#[test]
+fn an_away_march_resolves_the_siege_off_screen() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (_leader, _band) = marching_band(&mut game);
+    game.nemesis_march_check();
+    let alerts: Vec<String> = game
+        .world
+        .resource::<crate::alerts::AlertBoard>()
+        .alerts
+        .iter()
+        .map(|a| a.text.clone())
+        .collect();
+    assert!(
+        alerts.iter().any(|t| t.contains("while you're away")),
+        "{alerts:?}"
+    );
+}
+
+#[test]
+fn a_march_holds_under_every_siege_hold() {
+    type Setup = fn(&mut Game);
+    let cases: [(&str, Setup); 5] = [
+        ("no base", |g| {
+            // Remove the staff: not established.
+            let staff: Vec<Entity> = g
+                .world
+                .query_filtered::<Entity, With<Tamed>>()
+                .iter(&g.world)
+                .collect();
+            for s in staff {
+                g.world.despawn(s);
+            }
+        }),
+        ("nothing to besiege", |g| {
+            let d: Vec<Entity> = g
+                .world
+                .query_filtered::<Entity, With<Durability>>()
+                .iter(&g.world)
+                .collect();
+            for e in d {
+                g.world.entity_mut(e).remove::<Durability>();
+            }
+        }),
+        ("a fight running", |g| {
+            let player = g.player_entity();
+            let w = g.spawn_wild_creature("construct", 3, 3).unwrap();
+            insert_battle(g, player, vec![w]);
+        }),
+        ("a siege already running", |g| {
+            let w = g.spawn_wild_creature("construct", 3, 3).unwrap();
+            g.world.entity_mut(w).insert(Besieger);
+        }),
+        ("sieges off", |g| g.dev_set_sieges(false)),
+    ];
+    for (name, setup) in cases {
+        let mut game = new_game();
+        established_base(&mut game);
+        let (leader, band) = marching_band(&mut game);
+        setup(&mut game);
+        game.nemesis_march_check();
+        assert!(!has_siege_tags(&game, leader), "{name}: the leader holds");
+        for f in band {
+            assert!(game.world.get_entity(f).is_ok(), "{name}: band intact");
+        }
+        assert!(game.world.get::<NemesisHome>(leader).is_none(), "{name}");
+    }
+}
+
+#[test]
+fn a_band_that_is_short_does_not_march_and_a_refill_waits_its_delay() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (leader, band) = marching_band(&mut game);
+    game.world.despawn(band[0]);
+    game.nemesis_march_check();
+    assert!(!has_siege_tags(&game, leader), "short band holds");
+
+    // The refill resets the countdown, so the new full band waits again.
+    game.nemesis_muster();
+    assert_eq!(followers_of(&mut game, leader).len(), NEMESIS_BAND_MAX);
+    game.nemesis_march_check();
+    assert!(game.world.get_entity(band[1]).is_ok(), "waits its delay");
+    assert!(!has_siege_tags(&game, leader));
+}
+
+#[test]
+fn the_marching_nemesis_is_chosen_by_what_it_is_not_by_entity_order() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (x, y) = open_ground(&mut game);
+    // Spawned in the opposite order to their cells: the higher entity sits
+    // at the lower cell, which the save-stable key puts first.
+    let mk = |game: &mut Game, x: i32, y: i32| {
+        let l = nemesis_at(game, x, y);
+        for i in 0..NEMESIS_BAND_MAX as i32 {
+            let f = wild_at(game, x + i, y + 1);
+            game.world.entity_mut(f).insert(NemesisFollower(l));
+        }
+        game.world.entity_mut(l).insert(NemesisMuster {
+            ticks: NEMESIS_MARCH_DELAY,
+        });
+        l
+    };
+    let later_cell = mk(&mut game, x + 20, y);
+    let earlier_cell = mk(&mut game, x, y);
+    game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+    game.nemesis_march_check();
+    assert!(has_siege_tags(&game, earlier_cell), "lower cell goes first");
+    assert!(!has_siege_tags(&game, later_cell));
+}
+
+#[test]
+fn a_march_at_home_seats_the_real_band_and_logs_the_taunt() {
+    let mut game = new_game();
+    established_base(&mut game);
+    stand_in_base_at(&mut game, 0, 0);
+    let (leader, band) = marching_band(&mut game);
+    let home = *game.world.get::<Position>(leader).unwrap();
+
+    game.nemesis_march_check();
+
+    assert!(game.in_tactical_battle());
+    let battle = game.world.resource::<TacticalBattle>();
+    assert_eq!(
+        battle.siege_pack as usize,
+        1 + NEMESIS_BAND_MAX,
+        "the band and its leader"
+    );
+    for e in std::iter::once(leader).chain(band) {
+        assert!(battle.cell_of(e).is_some(), "seated");
+        assert!(game.world.get::<Besieger>(e).is_some());
+    }
+    let h = game.world.get::<NemesisHome>(leader).unwrap().0;
+    assert_eq!((h.x, h.y), (home.x, home.y));
+    let label = game.creature_label(leader);
+    let logged = game
+        .world
+        .resource::<crate::resources::MessageLog>()
+        .recent(50)
+        .iter()
+        .any(|m| m.text.starts_with(&label));
+    assert!(logged, "the taunt is logged");
+}
+
+/// A siege at home, with the player taken off the board so it can be ended.
+fn home_siege(game: &mut Game) -> (Entity, Vec<Entity>) {
+    established_base(game);
+    stand_in_base_at(game, 0, 0);
+    let (leader, band) = marching_band(game);
+    game.nemesis_march_check();
+    assert!(game.in_tactical_battle(), "the siege opened");
+    (leader, band)
+}
+
+#[test]
+fn a_leader_that_outlives_the_siege_goes_home_alone_with_a_grudge() {
+    let mut game = new_game();
+    let (leader, band) = home_siege(&mut game);
+    let home = game.world.get::<NemesisHome>(leader).unwrap().0;
+    let grudge = game.world.get::<Nemesis>(leader).unwrap().0;
+    // A jack-out: the player leaves the board mid-siege.
+    let player = game.player_entity();
+    game.world.resource_mut::<TacticalBattle>().remove(player);
+    game.end_tactical_battle(None);
+
+    for f in band {
+        assert!(game.world.get_entity(f).is_err(), "followers despawn");
+    }
+    assert!(game.world.get_entity(leader).is_ok(), "the leader survives");
+    let pos = *game.world.get::<Position>(leader).unwrap();
+    assert_eq!((pos.x, pos.y), (home.x, home.y));
+    assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, grudge + 1);
+    // `end_tactical_battle` owes the round's tick, so the reset muster has
+    // already counted once.
+    assert!(game.world.get::<NemesisMuster>(leader).unwrap().ticks <= 1);
+    assert!(game.world.get::<NemesisHome>(leader).is_none());
+    assert!(!has_siege_tags(&game, leader));
+}
+
+#[test]
+fn a_downed_leader_is_gone_and_troubles_the_base_no_more() {
+    let mut game = new_game();
+    let (leader, _band) = home_siege(&mut game);
+    let player = game.player_entity();
+    game.finish_hostile_with_overkill(leader, player, 0.0);
+    assert!(game.world.get_entity(leader).is_err());
+    let said = game
+        .world
+        .resource::<crate::alerts::AlertBoard>()
+        .alerts
+        .iter()
+        .any(|a| a.text.contains("will trouble you no more"));
+    assert!(said);
+}
+
+#[test]
+fn a_leader_that_withdraws_through_the_door_is_kept() {
+    let mut game = new_game();
+    let (leader, _band) = home_siege(&mut game);
+    game.besieger_leaves(leader, false);
+    assert!(game.world.get_entity(leader).is_ok());
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .cell_of(leader)
+            .is_none(),
+        "off the board"
+    );
+}
+
+#[test]
+fn a_siege_in_progress_keeps_the_leaders_home_across_a_real_save() {
+    let mut game = new_game();
+    let (leader, _band) = home_siege(&mut game);
+    let home = game.world.get::<NemesisHome>(leader).unwrap().0;
+
+    let path = std::env::temp_dir().join(format!("feral_nemesis_siege_{}.sav", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(loaded.in_tactical_battle(), "the siege resumes");
+    let l = loaded
+        .world
+        .query_filtered::<Entity, With<NemesisHome>>()
+        .iter(&loaded.world)
+        .next()
+        .expect("the leader kept its home");
+    let h = loaded.world.get::<NemesisHome>(l).unwrap().0;
+    assert_eq!((h.x, h.y), (home.x, home.y));
+    assert!(loaded.world.get::<Besieger>(l).is_some());
+    assert_eq!(followers_of(&mut loaded, l).len(), NEMESIS_BAND_MAX);
+
+    // And the resumed siege still ends the same way.
+    let player = loaded.player_entity();
+    loaded.world.resource_mut::<TacticalBattle>().remove(player);
+    loaded.end_tactical_battle(None);
+    assert!(loaded.world.get_entity(l).is_ok());
+    assert!(loaded.world.get::<NemesisHome>(l).is_none());
+}
+
+#[test]
+fn a_map_fight_with_a_nemesis_pulls_in_its_trailing_band() {
+    let mut game = new_game();
+    let (x, y) = open_ground(&mut game);
+    let leader = nemesis_at(&mut game, x, y);
+    let mut band = Vec::new();
+    for i in 0..NEMESIS_BAND_MAX as i32 {
+        let f = wild_at(&mut game, x + 1 + i.min(1), y + 1);
+        game.world.entity_mut(f).insert(NemesisFollower(leader));
+        band.push(f);
+    }
+    // Deep enough that the zone's group ceiling holds the whole band.
+    set_zone(&mut game, 8);
+    let pack = game.gather_pack(leader);
+    for f in band {
+        assert!(pack.contains(&f), "the band joins the fight");
+    }
+}

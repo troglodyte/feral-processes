@@ -472,6 +472,10 @@ impl Game {
         // enough — a besieger that left through the door is already gone
         // before this runs, `siege::raiders::besieger_leaves`'s own despawn.
         //
+        // **A nemesis leader mid-march is spared** (`NemesisHome`): it is the
+        // one besieger with somewhere to go back to, and
+        // `nemesis_return_home` below sends it there.
+        //
         // **`Without<Tamed>` for the same reason the stray sweep above
         // carries it.** `Game::decompile_body` converts a besieger in place
         // rather than despawning and respawning it, so a besieger captured
@@ -481,9 +485,11 @@ impl Game {
         // between the capture and this sweep, or any future writer of
         // `Besieger` that forgets to.
         let besiegers: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<Entity, (With<Besieger>, Without<Tamed>)>();
+            let mut query = self.world.query_filtered::<Entity, (
+                With<Besieger>,
+                Without<Tamed>,
+                Without<crate::components::NemesisHome>,
+            )>();
             query.iter(&self.world).collect()
         };
         for besieger in besiegers {
@@ -506,6 +512,9 @@ impl Game {
         // lines down — see `mark_nemeses`'s own doc for why that window is
         // narrow rather than a preference.
         self.mark_nemeses(verdict.won);
+        // After `mark_nemeses`, which skips a marching leader so its grudge
+        // goes up once, here, whichever way the siege ended.
+        self.nemesis_return_all();
         // Beside `mark_nemeses` and inside the same window, because the two
         // are the same event read from opposite ends: what a fight the party
         // lost leaves standing, and what a fight it won leaves in the
@@ -575,13 +584,20 @@ impl Game {
             .iter(&self.world)
             .count();
         for hostile in self.all_living_enemies() {
+            // A marching leader's grudge is `nemesis_return_home`'s to raise.
+            if self
+                .world
+                .get::<crate::components::NemesisHome>(hostile)
+                .is_some()
+            {
+                continue;
+            }
             // `fresh` is tracked separately from `marked`: an escalation
             // (the `nemesis.0 += 1` arm) is a mark too, but the name is
             // written once, on the grudge that actually inserts `Nemesis`
             // — see `name_new_nemesis`.
-            let (marked, fresh) = if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile)
-            {
-                nemesis.0 += 1;
+            let (marked, fresh) = if self.world.get::<Nemesis>(hostile).is_some() {
+                self.escalate_nemesis(hostile);
                 (true, false)
             } else if holders < MAX_NEMESES {
                 self.world.entity_mut(hostile).insert(Nemesis(1));
@@ -594,8 +610,8 @@ impl Game {
             // not climb the rarity ladder either — promotion is what a mark
             // does, not something a fight's mere survival earns.
             if marked {
-                self.promote_rarity(hostile);
                 if fresh {
+                    self.promote_rarity(hostile);
                     self.name_new_nemesis(hostile);
                 }
                 // The same shake `battle_flee` performs on a successful
@@ -622,6 +638,17 @@ impl Game {
                     .remove::<(Pursuing, crate::components::NemesisFollower)>();
             }
         }
+    }
+
+    /// One more grudge for a nemesis: the count up by one, a rung up the
+    /// rarity ladder and fully healed (`promote_rarity` recharges). What a
+    /// surviving jack-out does to every hostile that was held, and what a
+    /// nemesis that outlives its own siege earns.
+    pub(crate) fn escalate_nemesis(&mut self, e: Entity) {
+        if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(e) {
+            nemesis.0 += 1;
+        }
+        self.promote_rarity(e);
     }
 
     /// Writes a bank-derived name to a hostile on its **first** grudge only

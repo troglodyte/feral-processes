@@ -417,7 +417,11 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let party_height = m.line_height * 2.0 + view.party.len() as f32 * bar_row_height(m) + m.inset;
     let party_top = (log_bottom - party_height).max(y);
 
-    let log_height = party_top - y;
+    // The party title is drawn on its baseline at `party_top`, so its ink
+    // rises a line into whatever is above; the pane stops short of it or its
+    // border strikes through the title.
+    let pane_bottom = (party_top - m.line_height).max(y);
+    let log_height = pane_bottom - y;
     let log_w = w - margin * 2.0;
     painter.rect(margin, y, log_w, log_height, PANEL_BG);
     painter.rect_lines(margin, y, log_w, log_height, 2.0, BORDER);
@@ -428,8 +432,20 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     if let Some(portrait) = &view.portrait
         && let Some(side) = portrait_side(log_w, log_height, m.line_height)
     {
-        draw_battle_portrait(portrait, text_x, y + m.inset, side, painter, m);
-        text_x += side + m.inset;
+        let log = Rect::new(margin, y, log_w, log_height);
+        let split = split_log(log, side, m);
+        draw_battle_portrait(portrait, split.picture_x, split.picture_y, side, painter, m);
+        // The pane border's own weight, so the rule reads as the frame
+        // continuing rather than something drawn inside it.
+        painter.line(
+            split.divider_x,
+            y,
+            split.divider_x,
+            y + log_height,
+            2.0,
+            BORDER,
+        );
+        text_x = split.text_x;
     }
     // Floors at 0, not 1. On a window too short to seat both rosters this
     // pane collapses to nothing, and forcing a line into it drew narration
@@ -446,7 +462,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         text_x,
         y + margin,
         margin + log_w - text_x,
-        party_top,
+        pane_bottom,
         painter,
         m,
     );
@@ -458,7 +474,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         painter.ui(
             &hint,
             w - margin - m.inset - width,
-            party_top - m.inset,
+            pane_bottom - m.inset,
             m.small(),
             TEXT_DIM,
         );
@@ -778,6 +794,35 @@ fn portrait_side(log_w: f32, log_h: f32, line_height: f32) -> Option<f32> {
     (side >= SPRITE_PX && log_w - side >= PORTRAIT_MIN_LOG_W).then_some(side)
 }
 
+/// Where the picture, the rule after its column and the narration sit in a
+/// log pane split around a `side`-square portrait.
+#[derive(Debug, PartialEq)]
+struct LogSplit {
+    picture_x: f32,
+    picture_y: f32,
+    divider_x: f32,
+    text_x: f32,
+}
+
+/// The portrait gets a column of its own, one inset either side, and sits
+/// centred down it with its caption — a picture pinned to the top corner
+/// read as an afterthought next to the narration.
+fn split_log(log: Rect, side: f32, m: &Metrics) -> LogSplit {
+    let divider_x = log.x + side + m.inset * 2.0;
+    let block_h = side + caption_height(m);
+    LogSplit {
+        picture_x: log.x + m.inset,
+        picture_y: log.y + ((log.h - block_h) / 2.0).max(m.inset),
+        divider_x,
+        text_x: divider_x + m.inset,
+    }
+}
+
+/// The band under the portrait its caption is clipped to.
+fn caption_height(m: &Metrics) -> f32 {
+    m.line_height * 1.5
+}
+
 /// The round's narration, one entry per line from `y` down to `bottom`, in a
 /// column `w` wide starting at `x`.
 fn draw_battle_narration(
@@ -839,7 +884,7 @@ fn draw_battle_portrait(
     // picture's edge rather than running into the narration beside it.
     let width = painter.measure_ui(&portrait.name, m.small()).width;
     let cx = x + ((side - width) / 2.0).max(0.0);
-    painter.clipped(x, y + side, side, m.line_height * 1.5, |p| {
+    painter.clipped(x, y + side, side, caption_height(m), |p| {
         p.ui(
             &portrait.name,
             cx,
@@ -933,6 +978,33 @@ mod tests {
     #[test]
     fn a_short_log_has_no_room_for_a_portrait() {
         assert_eq!(portrait_side(900.0, 30.0, 18.0), None);
+    }
+
+    #[test]
+    fn the_portrait_has_its_own_column_left_of_the_rule() {
+        let m = ui_metrics(900.0);
+        let log = Rect::new(10.0, 100.0, 900.0, 400.0);
+        let split = split_log(log, 128.0, &m);
+        assert_eq!(split.picture_x - log.x, m.inset);
+        assert_eq!(split.divider_x - (split.picture_x + 128.0), m.inset);
+        assert!(split.text_x > split.divider_x);
+    }
+
+    #[test]
+    fn the_portrait_is_centred_down_its_column() {
+        let m = ui_metrics(900.0);
+        let log = Rect::new(10.0, 100.0, 900.0, 400.0);
+        let split = split_log(log, 128.0, &m);
+        let above = split.picture_y - log.y;
+        let below = log.y + log.h - (split.picture_y + 128.0 + caption_height(&m));
+        assert!((above - below).abs() < 0.01, "{above} above, {below} below");
+    }
+
+    #[test]
+    fn a_tight_pane_keeps_the_portrait_off_its_top_border() {
+        let m = ui_metrics(900.0);
+        let log = Rect::new(10.0, 100.0, 900.0, 128.0);
+        assert_eq!(split_log(log, 128.0, &m).picture_y, log.y + m.inset);
     }
 
     #[test]
@@ -1623,6 +1695,38 @@ mod tests {
         assert!(
             crate::paint::painted_text(&shapes).contains(&portrait.name),
             "the portrait should carry its caption"
+        );
+        assert_eq!(
+            crate::paint::painted_line_count_in(&shapes, BORDER),
+            1,
+            "a rule should divide the portrait from the narration"
+        );
+    }
+
+    /// The party title is drawn on a baseline, so its ink rises *above*
+    /// `party_top` — a pane ending on that line had its border struck
+    /// through the title.
+    #[test]
+    fn the_party_title_sits_below_the_log_pane() {
+        let mut app = a_battling_app();
+        let mut fx = crate::fx::Fx::new();
+        let m = ui_metrics(900.0);
+
+        let (_, shapes) = crate::paint::with_painter(|p| draw_battle(&mut app, &mut fx, p, &m));
+
+        let pane = crate::paint::painted_rect_stroke_boxes(&shapes, BORDER)
+            .into_iter()
+            .max_by(|a, b| a.height().total_cmp(&b.height()))
+            .expect("the log pane is outlined");
+        let (_, _, title) = crate::paint::painted_text_boxes(&shapes)
+            .into_iter()
+            .find(|(_, t, _)| t.starts_with("Your party"))
+            .expect("the party title is painted");
+        assert!(
+            title.y > pane.max.y,
+            "title ink starts at {} inside a pane ending at {}",
+            title.y,
+            pane.max.y
         );
     }
 

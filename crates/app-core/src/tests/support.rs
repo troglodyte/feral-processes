@@ -3409,3 +3409,63 @@ pub(crate) fn tamed_base(max_hp: i32, atk: i32, mitigation: i32) -> Option<Deriv
         ..DerivedBase::player()
     })
 }
+
+/// `app_inside_a_small_base_with_programs`'s base with a built Breeding Bay
+/// beside the Home, `seeds` breeding seeds in the pack, and the **first**
+/// owned program still resting from an earlier breeding when `first_resting`.
+/// Through the save for the reason every fixture here is: nothing public
+/// builds a structure for free or writes a cooldown.
+pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool) -> App {
+    let mut app = app_inside_a_small_base_with_programs(seed, false, 2);
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("breeding_bay", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.structures.push(save::StructureSave {
+        kind: "breeding_bay".to_string(),
+        position: (-1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: vec![None],
+    });
+    data.player
+        .inventory
+        .push((ItemId::from("breeding_seed"), seeds));
+    if first_resting {
+        let first = data.creatures.iter_mut().find(|c| c.tamed).unwrap();
+        first.breed_ready_at = u64::MAX / 2;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// Opens the bay's sheet the way inspecting it does.
+pub(crate) fn open_the_bay_sheet(app: &mut App) -> Entity {
+    let bay = app
+        .game
+        .as_mut()
+        .unwrap()
+        .structure_report()
+        .into_iter()
+        .find(|s| s.label == "Breeding Bay")
+        .expect("the fixture builds a bay")
+        .entity;
+    app.pending_structure_manifest = Some(bay);
+    app.mode = Mode::StructureManifest;
+    bay
+}

@@ -2406,6 +2406,10 @@ impl Game {
                         percent: p.quality_percent(),
                         label: p.quality_label().to_string(),
                     }),
+                generation: self
+                    .world
+                    .get::<crate::components::Generation>(entity)
+                    .map_or(0, |g| g.0),
                 fusions: self.fusion_count(entity),
                 max_fusions: MAX_FUSIONS,
                 rarity: self.rarity_of(entity),

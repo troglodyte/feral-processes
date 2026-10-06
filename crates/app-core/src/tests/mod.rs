@@ -6,6 +6,7 @@ mod achievements;
 mod alerts;
 mod arena;
 mod battle;
+mod breeding;
 mod building;
 mod canvas_editor;
 mod caravan;

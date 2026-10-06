@@ -6,6 +6,7 @@
 pub(crate) mod arena;
 mod basket;
 mod battle;
+mod breeding;
 pub(crate) mod building;
 pub(crate) mod canvas_editor;
 pub(crate) mod caravan;

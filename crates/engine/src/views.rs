@@ -2846,6 +2846,8 @@ pub struct ProgramManifest {
     /// `None` for a creature with no `Potential` component — an old save
     /// predating it, or a test helper that spawned one directly.
     pub potential: Option<ManifestPotential>,
+    /// Breeding generation, 0 for anything not bred.
+    pub generation: u32,
     pub fusions: u32,
     /// `tuning::MAX_FUSIONS`, carried so the renderer prints "1/3" without
     /// importing a tuning constant of its own.
@@ -3890,6 +3892,22 @@ pub struct IncubatingChild {
     pub ticks_left: u64,
     /// Due, but the roster is full, so it waits in the bay.
     pub held: bool,
+}
+
+impl IncubatingChild {
+    /// How far off the hatch is, in words — the player has no scale for a
+    /// tick count. Banded against `INCUBATION_TICKS`, the span the child
+    /// started with.
+    pub fn when(&self) -> &'static str {
+        let span = crate::tuning::INCUBATION_TICKS;
+        match self.ticks_left {
+            _ if self.held => "waiting for roster room",
+            0 => "ready",
+            t if t * 3 <= span => "ready soon",
+            t if t * 3 <= span * 2 => "ready in a while",
+            _ => "ready much later",
+        }
+    }
 }
 
 /// One incubation slot of a bay.

@@ -1712,13 +1712,8 @@ pub(super) fn structure_headline(s: &StructureReport) -> String {
         .durability
         .map(|(hp, max)| format!("  {hp}/{max} HP"))
         .unwrap_or_default();
-    let room = s
-        .room
-        .as_deref()
-        .map(|r| format!("  {r}"))
-        .unwrap_or_default();
     format!(
-        "{}{tier}  ({}, {})  {}d{durability}{room}",
+        "{}{tier}  ({}, {})  {}d{durability}",
         s.label, s.pos.0, s.pos.1, s.distance
     )
 }
@@ -1738,6 +1733,11 @@ pub(super) fn structure_detail_lines(
     idle: bool,
 ) -> Vec<(String, Color)> {
     let mut lines = Vec::new();
+    // A row of its own: the headline already carries label, position,
+    // distance and durability, and the widest of those leaves no room for it.
+    if let Some(room) = &s.room {
+        lines.push((format!("  {room}"), TEXT_DIM));
+    }
     if let Some(line) = line {
         lines.push((
             format!("  Part of a line: {}.", line.names.join(" → ")),
@@ -2584,6 +2584,64 @@ mod tests {
                 text_w + 2.0 * m.pad < box_w,
                 "an assignee row is {text_w}px inside a {box_w}px sheet: {line:?}"
             );
+        });
+    }
+
+    /// The widest headline and the widest room row each fit the half-window
+    /// sheet. The widest of each part comes from the shipped assets, so a
+    /// longer room or structure name fails here rather than running off the
+    /// box. The room is its own row because the two together overflow.
+    #[test]
+    fn the_longest_structure_headline_fits_the_structure_sheet() {
+        use feral_processes_engine::rooms::{RoomBand, RoomDb};
+        use feral_processes_engine::structures::StructureDb;
+
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (rooms, _) = RoomDb::load_dir(&assets.join("rooms")).unwrap();
+        let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
+        let m = crate::text::ui_metrics(900.0);
+        crate::paint::with_painter(|p| {
+            let width = |text: &str| p.measure_ui_advance(text, m.font_size);
+            let widest = |names: Vec<String>| {
+                names
+                    .into_iter()
+                    .max_by(|a, b| width(a).total_cmp(&width(b)))
+                    .expect("the shipped assets define at least one")
+            };
+            let band = widest(
+                [
+                    RoomBand::Cramped,
+                    RoomBand::Plain,
+                    RoomBand::Fine,
+                    RoomBand::Superb,
+                ]
+                .map(|b| b.label().to_string())
+                .to_vec(),
+            );
+            let role = widest(rooms.iter().map(|r| r.name.clone()).collect());
+            let label = widest(structures.all().map(|d| d.name.clone()).collect());
+
+            let mut s = structure_report(MachineStatus::Running);
+            s.label = label;
+            s.pos = (-99, -99);
+            s.distance = 999;
+            s.tier = Some(9);
+            s.durability = Some((999, 999));
+            s.room = Some(format!("{band} {role}"));
+            let box_w = p.screen_w() * 0.5;
+            let headline = structure_headline(&s);
+            let room_row = structure_detail_lines(&s, None, false)
+                .into_iter()
+                .map(|(text, _)| text)
+                .find(|text| text.contains(&role))
+                .expect("a structure in a room says which");
+            for text in [headline, room_row] {
+                let text_w = width(&text);
+                assert!(
+                    text_w + 2.0 * m.pad < box_w,
+                    "a row is {text_w}px inside a {box_w}px sheet: {text:?}"
+                );
+            }
         });
     }
 

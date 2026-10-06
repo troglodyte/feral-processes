@@ -595,8 +595,7 @@ impl Game {
     pub(crate) fn is_door(&self, entity: Entity) -> bool {
         self.world
             .get::<Structure>(entity)
-            .and_then(|s| self.world.resource::<StructureDb>().get(s.kind.as_str()))
-            .is_some_and(|def| def.door)
+            .is_some_and(|s| self.world.resource::<StructureDb>().is_door(&s.kind))
     }
 
     /// Whether `entity` is a structure whose def is a barrier

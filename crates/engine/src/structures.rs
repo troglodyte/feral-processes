@@ -788,6 +788,12 @@ impl StructureDef {
 }
 
 impl StructureDb {
+    /// Whether `kind` is a door (`StructureDef::door`): bounds a room but is
+    /// walked through. The one place the walk-blocking sets ask it.
+    pub fn is_door(&self, kind: &str) -> bool {
+        self.get(kind).is_some_and(|d| d.door)
+    }
+
     /// Loads every `*.ron` structure definition in `dir`. Malformed files
     /// are skipped (with a returned warning) rather than aborting the whole
     /// load — a single bad custom/mod file shouldn't be able to crash

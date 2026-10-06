@@ -2343,3 +2343,118 @@ fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
         "the free way round costs the same and pays nothing"
     );
 }
+
+fn pile_on(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) {
+    crate::game::base::floor::spawn_floor_pile(
+        &mut game.world,
+        Position { x, y },
+        ItemId::from(item),
+        qty,
+    );
+}
+
+fn pile_total(game: &mut Game) -> u32 {
+    game.world
+        .query::<&crate::components::FloorPile>()
+        .iter(&game.world)
+        .flat_map(|p| p.items.values().copied())
+        .sum()
+}
+
+/// A node, a depot and a posted hauler on a clear tile apart from the pile.
+/// The node's own mining is slow enough (10 ticks a unit) that the pile is
+/// fetched while its output is still empty.
+fn pickup_fixture(seed: u32) -> (Game, Entity, Entity, Entity) {
+    let mut game = base(seed);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    (game, node, depot, worker)
+}
+
+#[test]
+fn a_posted_hauler_brings_a_floor_pile_home_to_the_depot() {
+    let (mut game, _, depot, _) = pickup_fixture(31);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 300, |g| node_output(g, depot, "cache_grain") > 0);
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 3);
+    assert_eq!(pile_total(&mut game), 0, "an emptied pile despawns");
+}
+
+#[test]
+fn an_unreachable_pile_is_left_alone() {
+    let (mut game, node, depot, _) = pickup_fixture(32);
+    let (px, py) = game.base_pos().unwrap();
+    // Far off the laid floor: no route reaches it.
+    pile_on(&mut game, px + 90, py + 90, "cache_grain", 3);
+
+    for _ in 0..120 {
+        game.tick();
+    }
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 0);
+    assert_eq!(pile_total(&mut game), 3);
+    assert_ne!(
+        game.world.get::<MachineStatus>(node),
+        Some(&MachineStatus::Stranded),
+        "a pile nobody can reach is not a reason to walk"
+    );
+}
+
+#[test]
+fn a_hauler_with_a_machine_to_clear_does_not_divert_to_a_pile() {
+    let (mut game, node, depot, _) = pickup_fixture(33);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(node_output(&game, depot, ids::CORE_FRAGMENT) > 0);
+    assert_eq!(
+        pile_total(&mut game),
+        3,
+        "clearing the machine comes before the pile"
+    );
+}
+
+#[test]
+fn a_mixed_pile_is_lifted_lowest_item_first() {
+    let (mut game, _, _, worker) = pickup_fixture(34);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 300, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+
+    let load = game.world.get::<Carrying>(worker).expect("lifted a load");
+    assert_eq!(load.item, ItemId::from("cache_grain"));
+    assert_eq!(load.qty, 3);
+}
+
+#[test]
+fn two_haulers_sent_to_one_pile_conserve_the_total() {
+    let (mut game, node, depot, _) = pickup_fixture(35);
+    let second = hauler(&mut game);
+    game.assign_cronjob(second, node).unwrap();
+    park_at_post(&mut game, second, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 3
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 3);
+    assert_eq!(pile_total(&mut game), 0);
+}

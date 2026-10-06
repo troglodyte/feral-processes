@@ -12,8 +12,9 @@ use bevy_ecs::system::SystemParam;
 
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
+use crate::components::FloorPile;
 use crate::game::base::collect::ORTHOGONAL;
-use crate::game::base::floor::drop_load;
+use crate::game::base::floor::{drop_load, take_from_pile};
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
@@ -781,6 +782,9 @@ pub struct HaulGround<'w, 's> {
     /// are split by exactly that filter and by nothing else.
     idle: Query<'w, 's, Bystander, NotPosted>,
     roles: crate::game::party::Roles<'w, 's>,
+    /// Loads on the floor, for `Errand::Pickup`. `Without<Tamed>` keeps its
+    /// `&Position` disjoint from `Hauler`'s `&mut`.
+    piles: Query<'w, 's, (Entity, &'static Position, &'static FloorPile), Without<Tamed>>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
@@ -849,17 +853,29 @@ enum Errand {
     /// Nothing to move. Stand at the post — and pick a load up if this is a
     /// machine that has one to shed.
     Tend(Entity),
+    /// Walk to the floor pile on `at` and lift `want` of `item` off it.
+    /// Carries the tile rather than leaning on the pile entity because the
+    /// walk resolves its destination through the structures query and a
+    /// pile is not a structure; a pile is a one-cell post, reached from a
+    /// neighbouring tile like any other.
+    Pickup {
+        pile: Entity,
+        at: Position,
+        item: ItemId,
+        want: u32,
+    },
 }
 
 impl Errand {
-    /// Where the worker is walking. Every errand has exactly one, which is
-    /// what lets the walk below be written once.
-    fn destination(&self) -> Entity {
+    /// The structure the worker is walking to, which every errand has but
+    /// `Pickup`, whose destination is a bare tile.
+    fn structure(&self) -> Option<Entity> {
         match self {
             Errand::Deposit(e)
             | Errand::Load { machine: e, .. }
             | Errand::Collect { depot: e, .. }
-            | Errand::Tend(e) => *e,
+            | Errand::Tend(e) => Some(*e),
+            Errand::Pickup { .. } => None,
         }
     }
 }
@@ -972,6 +988,41 @@ fn note_haul(
     });
 }
 
+/// The pile a hauler with nothing else to do should fetch: the nearest by
+/// tile, and only when the machine has no output of its own to clear
+/// (`Errand::Tend`'s job) and some depot would take what the lift is. The
+/// caller asks whether the walk reaches it.
+fn pickup_errand(
+    machine: Entity,
+    from: Position,
+    structures: &Query<HaulStructure, Without<Tamed>>,
+    piles: &Query<(Entity, &Position, &FloorPile), Without<Tamed>>,
+    depots: &[(Entity, Position)],
+    accepts: &impl Fn(Entity, &ItemId) -> bool,
+) -> Option<Errand> {
+    let clear = structures
+        .get(machine)
+        .is_ok_and(|(_, _, stock, _)| stock.output.is_empty());
+    if !clear {
+        return None;
+    }
+    let (pile, at, contents) = piles
+        .iter()
+        .map(|(e, p, c)| (e, *p, c))
+        .min_by_key(|(_, p, _)| (chebyshev(*p, from), p.x, p.y))?;
+    let item = contents.items.keys().next()?.clone();
+    if !depots.iter().any(|&(d, _)| accepts(d, &item)) {
+        return None;
+    }
+    let want = contents.items[&item].min(tuning::HAUL_CARRY_CAPACITY);
+    Some(Errand::Pickup {
+        pile,
+        at,
+        item,
+        want,
+    })
+}
+
 pub(crate) fn haul_step_system(
     mut workers: Query<Hauler, (With<Tamed>, Without<Structure>)>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
@@ -981,7 +1032,12 @@ pub(crate) fn haul_step_system(
     mut telemetry: ResMut<crate::resources::BattleTelemetry>,
     mut commands: Commands,
 ) {
-    let HaulGround { grid, idle, roles } = ground;
+    let HaulGround {
+        grid,
+        idle,
+        roles,
+        piles,
+    } = ground;
     let HaulDeparture {
         statuses,
         standing,
@@ -1221,22 +1277,40 @@ pub(crate) fn haul_step_system(
                         )?;
                         (want > 0).then_some(Errand::Collect { depot, item, want })
                     })
-                    .unwrap_or(Errand::Tend(machine)),
+                    .unwrap_or_else(|| {
+                        pickup_errand(machine, worker_pos, &structures, &piles, &depots, &accepts)
+                            .filter(|e| match e {
+                                Errand::Pickup { at, .. } => {
+                                    post_reach(&grid, worker_pos, *at, 1, &blocked, pocket_radius)
+                                        .is_ok()
+                                }
+                                _ => true,
+                            })
+                            .unwrap_or(Errand::Tend(machine))
+                    }),
             }
         };
-        let Ok((_, dest_pos, _, dest_structure)) = structures.get(errand.destination()) else {
-            continue;
-        };
-        let dest_pos = *dest_pos;
-        let dest_side = db
-            .get(&dest_structure.kind)
-            .map(|d| d.footprint)
-            .unwrap_or(1);
-        // Whether this errand's destination is a real Depot rather than the
-        // fallback `Errand::Deposit(machine)` bouncing a load back into its
-        // own machine — read here, off `dest_structure`, before it goes out
+        // `dest_is_depot`: whether the destination is a real Depot rather
+        // than the fallback `Errand::Deposit(machine)` bouncing a load back
+        // into its own machine. Read off `dest_structure` before it goes out
         // of scope, since the latch below must clear only on the former.
-        let dest_is_depot = db.get(&dest_structure.kind).is_some_and(|d| d.stores);
+        let (dest_pos, dest_side, dest_is_depot) = match &errand {
+            Errand::Pickup { at, .. } => (*at, 1, false),
+            other => {
+                let Some(Ok((_, dest_pos, _, dest_structure))) =
+                    other.structure().map(|e| structures.get(e))
+                else {
+                    continue;
+                };
+                (
+                    *dest_pos,
+                    db.get(&dest_structure.kind)
+                        .map(|d| d.footprint)
+                        .unwrap_or(1),
+                    db.get(&dest_structure.kind).is_some_and(|d| d.stores),
+                )
+            }
+        };
         // Read before the arms, which take `structures` mutably. The post
         // and not the worker's own tile: by the time an errand acts the two
         // are the same place, and what the analysis groups by is the
@@ -1349,6 +1423,21 @@ pub(crate) fn haul_step_system(
                             .entity(worker)
                             .insert(Carrying { item, qty: taken });
                     }
+                }
+                Errand::Pickup {
+                    pile, item, want, ..
+                } => {
+                    // Queued: the take needs the whole `World`. Two haulers
+                    // sent to one pile resolve in queue order, the second
+                    // finding less or nothing and re-deriving next tick.
+                    commands.queue(move |world: &mut World| {
+                        let taken = take_from_pile(world, pile, &item, want);
+                        if taken > 0 {
+                            world
+                                .entity_mut(worker)
+                                .insert(Carrying { item, qty: taken });
+                        }
+                    });
                 }
                 // At its post with empty hands and nothing to fetch, which is
                 // where the outbound errands start. Two of them do.

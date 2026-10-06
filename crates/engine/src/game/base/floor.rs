@@ -57,10 +57,6 @@ pub(crate) fn drop_load(world: &mut World, who: Entity) {
 
 /// Takes up to `qty` of `item` from `pile`, despawning it once empty.
 /// Returns what was taken; 0 for a vanished pile or an item it lacks.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired to the Pickup errand in a later commit")
-)]
 pub(crate) fn take_from_pile(world: &mut World, pile: Entity, item: &ItemId, qty: u32) -> u32 {
     let Some(mut contents) = world.get_mut::<FloorPile>(pile) else {
         return 0;

@@ -812,3 +812,47 @@ fn removing_the_spine_trims_the_routine_row_it_widened() {
         "the routine the spine's slot held is gone from the fight"
     );
 }
+
+#[test]
+fn implant_atk_and_mitigation_stay_in_effect_while_emulating() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    let species = game.species_defs().into_iter().next().unwrap().id;
+    game.world
+        .resource_mut::<crate::resources::EmulationImages>()
+        .0
+        .insert(species.clone());
+    game.world
+        .entity_mut(player)
+        .insert(crate::components::Emulation {
+            species,
+            rounds_left: 5,
+        });
+    add_def(
+        &mut game,
+        ImplantDef {
+            stats: ImplantStats {
+                atk: 3,
+                mitigation: 2,
+                ..Default::default()
+            },
+            ..def("plating")
+        },
+    );
+    let figures = |g: &Game| {
+        let row = &g.emulation_options()[0];
+        (
+            row.atk,
+            row.mitigation,
+            g.effective_atk(player),
+            g.effective_mitigation(player),
+        )
+    };
+    let before = figures(&game);
+    install(&mut game, &["plating"]);
+    let after = figures(&game);
+    assert_eq!(
+        after,
+        (before.0 + 3, before.1 + 2, before.2 + 3, before.3 + 2)
+    );
+}

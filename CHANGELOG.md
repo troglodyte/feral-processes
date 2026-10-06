@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.15.16
 
 **Closed-off spaces in your base are now rooms, with doors to get in and out and a quality that changes how the crew feels and works.** Before, every cell of floor was the same wherever you built. Now a space enclosed by walls or rock is a room: a bed makes quarters or a dormitory, a recreation machine a rec room, a bench a workshop. A new Door is the one thing the crew can walk through, so a wall with a door in it still closes the room. Each room is Cramped, Plain, Fine or Superb from its size, its laid floor and how crowded it is. Needs refill faster in better rooms, workshops work faster, and programs have new thoughts about cramped, fine and superb rooms and about roommates they like or dislike. Hold Alt to see every room tinted and labelled, and inspecting a machine says which room it is in. A new help page explains it. The programs' memories page also scrolls with Up and Down now, so a long list no longer runs off the screen.
 

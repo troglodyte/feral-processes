@@ -17,6 +17,7 @@ mod auto_resolve;
 mod base_grid;
 mod base_ledger;
 mod base_space;
+mod battle_portrait;
 mod battle_timeline;
 mod bonds;
 mod building;

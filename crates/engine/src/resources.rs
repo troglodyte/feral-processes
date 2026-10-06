@@ -1598,6 +1598,9 @@ pub struct RosterFrame {
     pub lines: usize,
     pub groups: Vec<crate::views::EnemyGroupView>,
     pub party: Vec<crate::views::PartySlotView>,
+    /// Resolved when the frame is taken rather than at replay, so a body
+    /// that dies or despawns later in the round still replays as it looked.
+    pub portrait: Option<crate::views::PortraitView>,
 }
 
 /// The current round's roster, recorded once per narrated line.
@@ -1637,6 +1640,11 @@ pub struct BattleTimeline {
     /// clearing is what winning looks like. A jack-out leaves it populated,
     /// which is equally the point — you can see what you ran from.
     pub closing: Option<ClosingRoster>,
+    /// The body whose turn is being narrated, so every line of that turn —
+    /// a swing, a stall, an ability's follow-ups — frames the same
+    /// portrait. Set and cleared by the initiative loops; `None` between
+    /// turns.
+    pub acting: Option<Entity>,
 }
 
 /// The battle screen's state at the moment a fight ended — see
@@ -1651,6 +1659,9 @@ pub struct ClosingRoster {
     /// rebuilt with the rest of the roster every fight, so a group fight
     /// after a tactical one cannot draw the old board.
     pub board: Option<crate::tactical::view::TacticalView>,
+    /// The first in line as the fight ended — `None` on a win, for the
+    /// reason the hostile half is empty then.
+    pub portrait: Option<crate::views::PortraitView>,
 }
 
 impl BattleTimeline {

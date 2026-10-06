@@ -341,3 +341,16 @@
   **not** the digger's `Task`: that meter is the swing cadence and resets
   every chip, so a bar off it sweeps full and empty while the cut barely
   moves.
+
+- **The battle portrait is a picture pane, not a glyph substitute — and
+  the engine, not the renderer, picks its subject.** `draw_battle_portrait`
+  has no glyph to replace, so the substitution rule survives only as its
+  fallback half: the glyph is drawn when `Painter::sprite` answers `false`,
+  gated on that answer. The trap is the subject: `Game::battle_portrait`
+  reads `BattleTimeline::acting`, which the initiative loops set per turn
+  and **clear after the loop** — forget the clear and the live view freezes
+  on the last swinger instead of returning to the first in line. Each
+  `RosterFrame` stores the *resolved* `PortraitView`, never an `Entity`,
+  because the actor can be despawned before the reveal reaches its line.
+  The fallback is `front_of_group(0)`, not the roster's `front()`, so the
+  window cannot out a cloaked program. Argument: `seam:battle-portrait`.

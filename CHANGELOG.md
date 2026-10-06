@@ -59,6 +59,10 @@ the same kind and list it here.
 
 Going over the Load cap is allowed. While you are over it, a fight can open with a rejection glitch on you, and some implants carry a downside of their own. A player with no implants sees no change at all.
 
+## 0.15.12
+
+**The battle screen now has a picture window.** A square to the left of the battle log shows the program whose turn is being told — yours, a companion's, or a hostile's — and returns to the first hostile in line between turns. Programs without art show their symbol, and you appear as the icon you drew if you have one.
+
 ## 0.15.11
 
 **A program sent on a sortie while carrying something now leaves the load on the floor of the base.** It used to take the load away with it and hold it for the whole trip, where nothing could take it back; now the pile waits on the tile it left from, and an idle hauler can carry it home.

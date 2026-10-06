@@ -150,6 +150,7 @@ impl Game {
             if !self.creature_alive(entity) {
                 continue;
             }
+            self.world.resource_mut::<BattleTimeline>().acting = Some(entity);
             if self.is_stunned(entity) {
                 let name = self.actor_label(actor, entity);
                 self.log(format!("{name} stalls out, and loses the turn!"));
@@ -171,6 +172,9 @@ impl Game {
                 }
             }
         }
+        // Cleared before the passives: their lines answer the round as a
+        // whole, not the turn of whoever happened to act last.
+        self.world.resource_mut::<BattleTimeline>().acting = None;
 
         // Passives, after every chosen action and before the round is
         // closed out. All three triggers are answered from state rather
@@ -994,7 +998,7 @@ impl Game {
     /// `battle_view_at` instead.
     pub fn battle_view(&self) -> Option<BattleView> {
         let (groups, party) = self.battle_rows()?;
-        self.assemble_view(groups, party)
+        self.assemble_view(groups, party, self.battle_portrait())
     }
 
     /// The battle screen's readout as of `revealed` narrated lines of the
@@ -1005,11 +1009,36 @@ impl Game {
     /// covers a fight whose reveal has already caught up and a loaded game
     /// whose timeline is empty.
     pub fn battle_view_at(&self, revealed: usize) -> Option<BattleView> {
-        let (groups, party) = match self.world.resource::<BattleTimeline>().frame_at(revealed) {
-            Some(frame) => (frame.groups.clone(), frame.party.clone()),
-            None => self.battle_rows()?,
-        };
-        self.assemble_view(groups, party)
+        let (groups, party, portrait) =
+            match self.world.resource::<BattleTimeline>().frame_at(revealed) {
+                Some(frame) => (
+                    frame.groups.clone(),
+                    frame.party.clone(),
+                    frame.portrait.clone(),
+                ),
+                None => {
+                    let (groups, party) = self.battle_rows()?;
+                    (groups, party, self.battle_portrait())
+                }
+            };
+        self.assemble_view(groups, party, portrait)
+    }
+
+    /// The picture window's subject right now: the body whose turn is
+    /// being narrated, else the first in line of the front group.
+    pub(crate) fn battle_portrait(&self) -> Option<PortraitView> {
+        self.world
+            .resource::<BattleTimeline>()
+            .acting
+            .and_then(|entity| self.portrait_of(entity))
+            .or_else(|| self.front_portrait())
+    }
+
+    /// `front_of_group` rather than the roster's own `front()`, so a
+    /// cloaked member is not the one put on display.
+    pub(crate) fn front_portrait(&self) -> Option<PortraitView> {
+        self.front_of_group(0)
+            .and_then(|entity| self.portrait_of(entity))
     }
 
     /// Wraps a pair of roster halves in the rest of the screen's state.
@@ -1022,6 +1051,7 @@ impl Game {
         &self,
         groups: Vec<EnemyGroupView>,
         party: Vec<PartySlotView>,
+        portrait: Option<PortraitView>,
     ) -> Option<BattleView> {
         let battle = self.world.get_resource::<BattleState>()?;
         let active_slot = self.battle_active_slot();
@@ -1034,6 +1064,7 @@ impl Game {
                 .unwrap_or_default(),
             round: battle.round,
             player_decompiler: self.player_decompiler_bonuses().skill,
+            portrait,
         })
     }
 
@@ -1045,6 +1076,7 @@ impl Game {
             return;
         };
         let lines = self.battle_log().len();
+        let portrait = self.battle_portrait();
         self.world
             .resource_mut::<BattleTimeline>()
             .frames
@@ -1052,6 +1084,7 @@ impl Game {
                 lines,
                 groups,
                 party,
+                portrait,
             });
     }
 
@@ -1071,6 +1104,7 @@ impl Game {
             options: Vec::new(),
             round: closing.round,
             player_decompiler: closing.player_decompiler,
+            portrait: closing.portrait.clone(),
         })
     }
 
@@ -1095,8 +1129,10 @@ impl Game {
             let Some(group) = self.group_of(wild) else {
                 continue;
             };
+            self.world.resource_mut::<BattleTimeline>().acting = Some(wild);
             self.wild_retaliate(wild, group, player);
         }
+        self.world.resource_mut::<BattleTimeline>().acting = None;
     }
 
     /// Drops `group`'s member at `index` (the caller is responsible for

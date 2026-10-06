@@ -377,6 +377,7 @@ impl Game {
             round: verdict.rounds,
             player_decompiler: self.player_decompiler_bonuses().skill,
             board,
+            portrait: self.front_portrait(),
         });
         self.world.resource_mut::<BattleTimeline>().closing = closing;
         // Beside the `closing` capture and for the same reason: the reap

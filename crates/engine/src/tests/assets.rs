@@ -2060,9 +2060,9 @@ fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
         }
     }
     assert_eq!(
-        checked, 12,
-        "expected every zone-gated recipe the tree unlocks — eight of gear and \
-         four of Power cells; one that lost its recipe would drop out of this \
+        checked, 18,
+        "expected every zone-gated recipe the tree unlocks — eight of gear, \
+         four of Power cells and six implants; one that lost its recipe would drop out of this \
          scan unnoticed"
     );
 }
@@ -5064,8 +5064,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 36,
-        "expected the shipped base tree's 36 nodes; a count that moved means a node was \
+        checked, 38,
+        "expected the shipped base tree's 38 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5405,6 +5405,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "cold_archive",
             "cortex",
             "deep_analysis",
+            "deep_splicing",
             "dispatch",
             "drop_pods",
             "firewall",
@@ -5420,6 +5421,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "siphoning",
             "virtual_memory",
             "weapon_bench",
+            "wetware_splicing",
         ],
         "the discoverable set is a content decision and nothing in ResearchDef states it"
     );

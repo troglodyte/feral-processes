@@ -1,0 +1,28 @@
+(
+    id: "deep_splicing",
+    name: "Deep Splicing",
+    description: "Implants that go past the nerves and into the core of you: Black Ledger, Dead Man's Switch and Overclock Spine.",
+    cost: 90,
+    materials: [("trace_sniffer", 3), ("logic_wafer", 8)],
+    min_zone: 3,
+    requires_subject: true,
+    discoverable: true,
+    requires: ["wetware_splicing"],
+    unlocks_recipes: [
+        (
+            result: "black_ledger",
+            cost: [("trace_sniffer", 1), ("logic_wafer", 3), ("cache_grain", 2)],
+            requires_structure: Some("fabricator"),
+        ),
+        (
+            result: "dead_mans_switch",
+            cost: [("trace_sniffer", 2), ("bytecode_block", 2), ("cache_grain", 2)],
+            requires_structure: Some("fabricator"),
+        ),
+        (
+            result: "overclock_spine",
+            cost: [("trace_sniffer", 3), ("logic_wafer", 2), ("cache_grain", 3)],
+            requires_structure: Some("fabricator"),
+        ),
+    ],
+)

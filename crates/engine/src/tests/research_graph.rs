@@ -42,10 +42,10 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
     );
     assert_eq!(by_tier.get(&1).map(Vec::len), Some(10));
     assert_eq!(by_tier.get(&2).map(Vec::len), Some(8));
-    assert_eq!(by_tier.get(&3).map(Vec::len), Some(7));
-    assert_eq!(by_tier.get(&4).map(Vec::len), Some(4));
+    assert_eq!(by_tier.get(&3).map(Vec::len), Some(8));
+    assert_eq!(by_tier.get(&4).map(Vec::len), Some(5));
     assert_eq!(by_tier.get(&5).map(Vec::len), Some(3));
-    assert_eq!(g.cells.len(), 36, "every shipped base node gets a cell");
+    assert_eq!(g.cells.len(), 38, "every shipped base node gets a cell");
     assert_eq!(g.tiers, 6);
     assert_eq!(g.widest, 10, "tier 1 is the crowded one now");
 }

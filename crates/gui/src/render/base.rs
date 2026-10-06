@@ -74,9 +74,22 @@ const ROOM_TINT_ALPHA: f32 = 0.28;
 /// holds "Fine dormitory" at the default zoom.
 const ROOM_LABEL_SIZE: u16 = 14;
 
-/// Whether a room label of `text_w` pixels sits inside a room whose widest
-/// row spans `cols` cells. Text never clips or wraps, so a label that does
-/// not fit is dropped.
+/// How many room cells run unbroken along the row of `at`, counting `at`
+/// itself: the stretch the label drawn there can actually sit over. An
+/// L-shaped room's widest row is not the one its label lands on.
+fn room_row_cols(cells: &[(i32, i32)], at: (i32, i32)) -> i32 {
+    let has = |x: i32| cells.contains(&(x, at.1));
+    let run = |step: i32| {
+        (1..)
+            .map(|d| at.0 + step * d)
+            .take_while(|&x| has(x))
+            .count() as i32
+    };
+    1 + run(-1) + run(1)
+}
+
+/// Whether a room label of `text_w` pixels sits inside `cols` cells of room.
+/// Text never clips or wraps, so a label that does not fit is dropped.
 fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
     text_w <= cols as f32 * tile_px
 }
@@ -1604,13 +1617,10 @@ fn draw_surface_map(
     }
     for room in &rooms {
         let label = format!("{} {}", room.band.label(), room.role);
-        let (min_x, max_x) = room.cells.iter().fold((i32::MAX, i32::MIN), |(lo, hi), c| {
-            (lo.min(c.0), hi.max(c.0))
-        });
         let size = ROOM_LABEL_SIZE;
         if !room_label_fits(
             painter.measure_ui(&label, size).width,
-            max_x - min_x + 1,
+            room_row_cols(&room.cells, room.label_at),
             tile_px,
         ) {
             continue;
@@ -1859,6 +1869,17 @@ mod tests {
     fn a_room_label_wider_than_its_room_is_dropped() {
         assert!(room_label_fits(80.0, 5, 16.0));
         assert!(!room_label_fits(81.0, 5, 16.0));
+    }
+
+    /// An L: a row of five over a column of one. The label sits on the
+    /// column's row, so the room's five-wide top must not make it fit.
+    #[test]
+    fn a_label_is_measured_against_its_own_row() {
+        let l: Vec<(i32, i32)> = (0..5).map(|x| (x, 0)).chain([(0, 1)]).collect();
+        assert_eq!(room_row_cols(&l, (2, 0)), 5);
+        assert_eq!(room_row_cols(&l, (0, 1)), 1);
+        assert!(!room_label_fits(80.0, room_row_cols(&l, (0, 1)), 16.0));
+        assert!(room_label_fits(80.0, room_row_cols(&l, (2, 0)), 16.0));
     }
 
     fn test_assets() -> std::path::PathBuf {

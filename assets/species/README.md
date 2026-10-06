@@ -366,7 +366,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // Loading skips a hybrid, with a warning, when a parent names no loaded
     // species, when both parents are the same species, or when an earlier
-    // hybrid (by id) already covers the pair. A hybrid may itself be a
+    // hybrid (by id) already covers the pair. A hybrid that lists any
+    // `habitats` loads with them cleared, and a warning. A hybrid may itself be a
     // parent. The shipped ones (`botnet`, `polymorph`) sit on a growth rung
     // and class like any other species and pass `stat_shape_faults`, but the
     // one-per-band censuses count only the wild roster.

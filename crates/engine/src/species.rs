@@ -1117,6 +1117,24 @@ impl SpeciesDb {
     /// Repeats until nothing more falls out: a hybrid is a legal parent, so
     /// skipping one can orphan another that was checked before it went.
     fn drop_invalid_hybrids(&mut self, warnings: &mut Vec<String>) {
+        // Habitats feed the wild spawn pools, which would hand out a hybrid
+        // that is meant to be obtainable only by breeding. Cleared rather
+        // than skipped: the species is otherwise fine.
+        let mut listed: Vec<SpeciesId> = self
+            .species
+            .values()
+            .filter(|d| d.is_hybrid() && !d.habitats.is_empty())
+            .map(|d| d.id.clone())
+            .collect();
+        listed.sort();
+        for id in listed {
+            warnings.push(format!(
+                "species {id:?}: a hybrid never spawns wild — habitats cleared"
+            ));
+            if let Some(def) = self.species.get_mut(&id) {
+                def.habitats.clear();
+            }
+        }
         loop {
             let mut ids: Vec<SpeciesId> = self
                 .species
@@ -2249,10 +2267,16 @@ mod tests {
     }
 
     /// A species file naming only what a species needs, plus `extra` fields.
+    /// A hybrid (`extra` names `parents`) ships no habitats, as authored.
     fn species_file(id: &str, extra: &str) -> String {
+        let habitats = if extra.contains("parents") {
+            "[]"
+        } else {
+            "[OpenGrid]"
+        };
         format!(
             r#"(id: "{id}", name: "{id}", glyph: 'q', color: Green, base_hp: 10, base_atk: 2,
-                base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
+                base_mitigation: 1, taming_difficulty: 0.5, habitats: {habitats},
                 moves: [(name: "Poke", power: 1)], work_resource: None{extra})"#
         )
     }
@@ -2309,6 +2333,33 @@ mod tests {
             warnings
                 .iter()
                 .any(|w| w.contains("ax") && w.contains("ghost"))
+        );
+    }
+
+    #[test]
+    fn a_hybrid_that_lists_habitats_is_loaded_without_them_and_warned_about() {
+        let (db, warnings) = load_files(
+            "hybrid-habitats",
+            &[
+                ("a", species_file("a", "")),
+                ("b", species_file("b", "")),
+                (
+                    "ab",
+                    species_file("ab", &pair("a", "b"))
+                        .replace("habitats: []", "habitats: [OpenGrid]"),
+                ),
+            ],
+        );
+        assert!(db.get("ab").unwrap().habitats.is_empty());
+        assert!(!db.get("a").unwrap().habitats.is_empty());
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("ab") && w.contains("habitats"))
+        );
+        assert!(
+            !db.all()
+                .any(|s| s.id != "a" && s.id != "b" && s.habitats.contains(&Biome::OpenGrid))
         );
     }
 

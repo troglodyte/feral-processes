@@ -28,7 +28,13 @@ impl Game {
         self.release_orphaned_followers();
         let mut leaders: Vec<Entity> = self
             .world
-            .query_filtered::<Entity, (With<Nemesis>, Without<Pursuing>, Without<Besieger>)>()
+            .query_filtered::<Entity, (
+                With<Nemesis>,
+                With<Hostile>,
+                Without<Tamed>,
+                Without<Pursuing>,
+                Without<Besieger>,
+            )>()
             .iter(&self.world)
             .collect();
         // Query order is not stable; a fixed order keeps the RNG draws of a
@@ -152,12 +158,18 @@ impl Game {
         band
     }
 
+    /// A decompiled nemesis keeps its `Nemesis` tag (the roster still shows
+    /// the grudge) but is the player's now, so it gathers nobody.
+    fn leads_a_band(&self, leader: Entity) -> bool {
+        self.world.get::<Nemesis>(leader).is_some() && self.world.get::<Tamed>(leader).is_none()
+    }
+
     fn release_orphaned_followers(&mut self) {
         let orphans: Vec<Entity> = self
             .world
             .query::<(Entity, &NemesisFollower)>()
             .iter(&self.world)
-            .filter(|(_, f)| self.world.get::<Nemesis>(f.0).is_none())
+            .filter(|(_, f)| !self.leads_a_band(f.0))
             .map(|(e, _)| e)
             .collect();
         for e in orphans {

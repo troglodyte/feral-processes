@@ -769,3 +769,32 @@ fn a_tamed_body_is_never_a_band_member_even_if_still_tagged() {
     let at = *game.world.get::<Position>(pet).unwrap();
     assert_eq!((at.x, at.y), (x + 8, y), "not walked to the leader");
 }
+
+#[test]
+fn a_tamed_nemesis_releases_its_band_and_stops_recruiting() {
+    let mut game = new_game();
+    let (x, y) = open_ground(&mut game);
+    let leader = nemesis_at(&mut game, x, y);
+    let mut band = Vec::new();
+    for i in 0..2 {
+        let f = wild_at(&mut game, x + i, y + 1);
+        game.world.entity_mut(f).insert(NemesisFollower(leader));
+        band.push(f);
+    }
+
+    decompile(&mut game, leader);
+    muster_for(&mut game, NEMESIS_RECRUIT_INTERVAL * 2);
+
+    for f in band {
+        assert!(game.world.get::<NemesisFollower>(f).is_none(), "released");
+    }
+    assert!(
+        game.world
+            .query::<&NemesisFollower>()
+            .iter(&game.world)
+            .next()
+            .is_none(),
+        "a roster program recruits nobody"
+    );
+    assert!(game.world.get_entity(leader).is_ok());
+}

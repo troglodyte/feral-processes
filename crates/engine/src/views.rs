@@ -2009,6 +2009,9 @@ pub struct BattleView {
     pub options: Vec<ActionOption>,
     pub round: u32,
     pub player_decompiler: i32,
+    /// The picture window: whoever the narrated line belongs to, else the
+    /// first in line. See `Game::battle_portrait`.
+    pub portrait: Option<PortraitView>,
 }
 
 /// What one cell of the first-person view cone contains — see

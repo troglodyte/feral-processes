@@ -999,6 +999,18 @@ pub const JACK_OUT_CHANCE_MAX: f64 = 0.95;
 pub const MIN_INDIVIDUAL_ROLL: f32 = 0.8;
 pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 
+/// How far a bred child's roll may drift either side of its better parent's,
+/// uniformly (`breeding::inherit`).
+pub const BREEDING_MUTATION: f32 = 0.04;
+/// How far each generation lifts the ceiling on a bred roll above
+/// `MAX_INDIVIDUAL_ROLL` — a gen-3 child may roll up to 1.29.
+pub const BREEDING_GEN_STEP: f32 = 0.03;
+/// The ceiling no generation passes, whatever the lineage.
+pub const BREEDING_ROLL_HARD_CAP: f32 = 1.4;
+/// The most a lineage lifts an attribute's top above the wild range, however
+/// many generations deep.
+pub const BREEDING_ATTRIBUTE_HARD_CAP: u32 = 3;
+
 /// Rounds `Game::auto_resolve_battle` will drive a fight for, in either
 /// combat model, before giving up and reporting `AutoResolve::Stalled` with
 /// the fight still open.
@@ -4726,6 +4738,12 @@ pub const SORTIE_TICKS_PER_BATTLE: u64 = 20;
 /// **Longer than the longest trip** the shipped catalogue can quote, so a
 /// board cannot rotate twice while the player is deliberating over it.
 pub const SORTIE_BOARD_ROTATION_TICKS: u64 = 1200;
+
+/// How long a parent rests after a breeding. A reference to the sortie
+/// board's rotation rather than its own number: both are "about one trip".
+pub const BREEDING_COOLDOWN_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
+/// How long a child incubates, for the same reason.
+pub const INCUBATION_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
 
 /// Offers on a board.
 pub const SORTIE_BOARD_SLOTS: usize = 3;

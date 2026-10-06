@@ -1791,7 +1791,7 @@ pub struct AbilityCooldowns(pub std::collections::HashMap<crate::abilities::Abil
 /// `quality_percent`/`quality_label` can describe it. `growth_roll`
 /// actively scales `progression::add_xp`'s growth on every level-up, on
 /// top of `SpeciesDef::growth_multiplier`.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct Potential {
     pub hp_roll: f32,
     pub atk_roll: f32,

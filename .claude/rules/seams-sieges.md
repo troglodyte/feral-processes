@@ -47,3 +47,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `total_raid_defense` or a turret adds anything — shortfall 0, nothing
   stolen, nothing broken, nobody benched. Left as-is for playtesting,
   contrary to the design's "missing a siege must not be cheaper."
+- **`siege_pack` can come from a nemesis band (`open_siege_with`), and its leader survives the besieger sweep and the morale-break exit through `NemesisHome`** — `nemesis_return_home` sends it home with grudge +1 via `escalate_nemesis`.

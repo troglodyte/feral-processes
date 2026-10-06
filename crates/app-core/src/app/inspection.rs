@@ -396,6 +396,7 @@ impl App {
         };
         self.pending_memory_program = Some(program);
         self.memories_origin = Mode::Manifest;
+        self.memories_return_row = self.menu_selected;
         self.status_line = None;
         self.mode = Mode::CompanionMemories;
     }

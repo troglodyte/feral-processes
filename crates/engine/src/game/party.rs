@@ -2,6 +2,7 @@
 //! bank, and moving programs between them.
 
 use crate::progression;
+use crate::systems::SiteScales;
 use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
@@ -891,7 +892,11 @@ impl Game {
         };
         let tier = crate::game::catalog::program_tier_required(goal);
         let extracts = def.work.is_some();
-        let shipped = self.cycle_ticks_for(&def, 1.0, crate::tuning::DEFAULT_BASE_SPEED);
+        let shipped = self.cycle_ticks_for(
+            &def,
+            SiteScales::built(1.0),
+            crate::tuning::DEFAULT_BASE_SPEED,
+        );
 
         let mut rows: Vec<(f32, BuildCandidate)> = self
             .programs_for_build(tier)
@@ -910,7 +915,11 @@ impl Game {
                 let quality = self.build_quality_for(&def, pet.entity);
                 let effect = match (
                     shipped,
-                    self.cycle_ticks_for(&def, quality, crate::tuning::DEFAULT_BASE_SPEED),
+                    self.cycle_ticks_for(
+                        &def,
+                        SiteScales::built(quality),
+                        crate::tuning::DEFAULT_BASE_SPEED,
+                    ),
                 ) {
                     (Some(shipped), Some(built)) => BuildEffect::Cycle { shipped, built },
                     _ => BuildEffect::NoCycle,

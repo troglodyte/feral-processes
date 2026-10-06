@@ -5,6 +5,7 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::floor::drop_load;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
+use crate::systems::SiteScales;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
@@ -1421,16 +1422,20 @@ impl Game {
             .world
             .get::<crate::components::BuildQuality>(structure)
             .map_or(1.0, |q| q.0);
+        let site = SiteScales {
+            room: self.workshop_scale(structure),
+            ..SiteScales::built(quality)
+        };
         let def = self.world.resource::<StructureDb>().get(&kind).cloned();
         match def {
             None => crate::systems::work_ticks_at_speed(
                 5,
                 worker_speed,
                 crate::classes::work_tick_scale(self.player_class()),
-                quality as f64,
+                site,
             ),
             Some(def) => self
-                .cycle_ticks_for(&def, quality, worker_speed)
+                .cycle_ticks_for(&def, site, worker_speed)
                 // A def that runs no cycle still answers here: the five-tick
                 // fallback is what a hand-spawned test node has always got.
                 .unwrap_or_else(|| {
@@ -1438,13 +1443,27 @@ impl Game {
                         5,
                         worker_speed,
                         crate::classes::work_tick_scale(self.player_class()),
-                        quality as f64,
+                        site,
                     )
                 }),
         }
     }
 
-    /// One cycle of `def` for a worker of `worker_speed`, at `quality`.
+    /// The work-tick scale of the room `structure` stands in: only the
+    /// workshop room speeds a machine, so a lathe in quarters or the commons
+    /// gets none.
+    fn workshop_scale(&self, structure: Entity) -> f64 {
+        let Some(at) = self.world.get::<Position>(structure) else {
+            return 1.0;
+        };
+        let rooms = crate::rooms::of_world(&self.world);
+        rooms
+            .room_at(at.x, at.y)
+            .filter(|r| r.role.as_deref() == Some(crate::rooms::WORKSHOP_ROOM))
+            .map_or(1.0, |r| crate::rooms::room_work_scale(r.band))
+    }
+
+    /// One cycle of `def` for a worker of `worker_speed`, at `site`.
     /// `None` for a structure that runs no cycle at all.
     ///
     /// The single derivation the live rate and the build picker's preview
@@ -1454,14 +1473,14 @@ impl Game {
     pub(crate) fn cycle_ticks_for(
         &self,
         def: &StructureDef,
-        quality: f32,
+        site: SiteScales,
         worker_speed: i32,
     ) -> Option<u32> {
         Some(crate::systems::work_ticks_at_speed(
             crate::structures::cycle_ticks(def)?,
             worker_speed,
             crate::classes::work_tick_scale(self.player_class()),
-            quality as f64,
+            site,
         ))
     }
 

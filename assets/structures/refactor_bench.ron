@@ -9,4 +9,5 @@
     capacity: 10,
     assembles: Some((item: "recompile_kernel", ticks_per_unit: 20)),
     power_draw: 3,
+    room_tags: ["workshop"],
 )

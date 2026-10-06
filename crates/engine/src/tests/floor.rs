@@ -314,3 +314,74 @@ fn examining_a_pile_on_a_finish_names_both() {
     assert!(line.contains("Cobalt Carpet underfoot"), "{line}");
     assert!(line.contains("; a pile on the floor: 3 "), "{line}");
 }
+
+/// A walled one-cell room on the real grid with one door and a bed in it, on the
+/// commons' east side.
+fn walled_room_with_a_bed(game: &mut Game) {
+    for i in 1..=3 {
+        for (x, y) in [(i, 1), (i, 3), (1, i), (3, i)] {
+            let kind = if (x, y) == (2, 1) { "door" } else { "wall" };
+            spawn_structure_at(game, kind, x, y);
+        }
+    }
+    spawn_structure_at(game, "defrag_bay", 2, 2);
+}
+
+fn game_with_home() -> Game {
+    let mut game = game();
+    place_home(&mut game);
+    stand_in_base(&mut game);
+    game
+}
+
+#[test]
+fn view_rooms_lists_the_walled_room_by_role_and_not_the_commons() {
+    let mut game = game_with_home();
+    walled_room_with_a_bed(&mut game);
+    let rooms = game.view_rooms();
+    assert_eq!(rooms.len(), 1, "{rooms:?}");
+    let room = &rooms[0];
+    assert_eq!(room.role, "quarters");
+    assert_eq!(room.cells, vec![(2, 2)]);
+    assert!(room.cells.contains(&room.label_at));
+    assert_eq!(room.tint, (90, 140, 220));
+}
+
+#[test]
+fn the_report_names_the_room_a_structure_stands_in_and_not_the_commons() {
+    let mut game = game_with_home();
+    walled_room_with_a_bed(&mut game);
+    let report = game.structure_report();
+    let at = |p: (i32, i32)| report.iter().find(|r| r.pos == p).unwrap();
+    let bay = at((2, 2)).room.as_deref().expect("the bay is in a room");
+    assert!(bay.ends_with("quarters"), "{bay}");
+    assert_eq!(at((0, 0)).room, None, "the home sits in the commons");
+}
+
+/// Ticks for one cycle at a lathe standing in a walled room with
+/// `finished` carpet cells, `with_bed` making it quarters rather than a
+/// workshop; `None` leaves the lathe in the commons.
+fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
+    let mut game = game_with_home();
+    if let Some((finished, with_bed)) = room {
+        walled_room_with_finish(&mut game, finished);
+        if with_bed {
+            spawn_structure_at(&mut game, "defrag_bay", 4, 4);
+        }
+    }
+    let lathe = spawn_structure_at(&mut game, "lathe", 3, 3);
+    game.work_ticks_for(lathe, crate::tuning::DEFAULT_BASE_SPEED)
+}
+
+#[test]
+fn a_fine_workshop_works_faster_than_the_commons() {
+    let commons = lathe_ticks(None);
+    let fine = lathe_ticks(Some((8, false)));
+    assert_eq!(commons, 12);
+    assert_eq!(fine, 11, "12 ticks at the Fine scale, rounded");
+}
+
+#[test]
+fn a_machine_in_quarters_gets_no_workshop_scale() {
+    assert_eq!(lathe_ticks(Some((8, true))), lathe_ticks(None));
+}

@@ -526,6 +526,52 @@ fn standing_at_an_amenity_refills_the_reserve() {
     );
 }
 
+/// One tick of a program standing beside a Defrag Bay, `finished` of its
+/// room's cells in carpet (`None`: the bay stands in the commons). Returns
+/// the reserve gained net of nothing else — the same drain applies either way.
+fn reserve_after_a_tick_at_a_bay(finished: Option<usize>) -> f32 {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    if let Some(finished) = finished {
+        walled_room_with_finish(&mut game, finished);
+    }
+    spawn_structure_at(&mut game, "defrag_bay", 3, 3);
+    let who = spawn_tamed(&mut game, 10, 3);
+    {
+        let mut pos = game.world.get_mut::<Position>(who).unwrap();
+        pos.x = 2;
+        pos.y = 3;
+    }
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, who, &coherence(), critical - 1.0);
+    let before = reserve(&game, who);
+    game.tick();
+    reserve(&game, who) - before
+}
+
+/// The amenity's room scales its refill: a Superb quarters beats the same
+/// bay in the commons by exactly the constant's share of the bay's rate.
+#[test]
+fn an_amenity_in_a_superb_room_refills_faster_than_one_in_the_commons() {
+    let commons = reserve_after_a_tick_at_a_bay(None);
+    let superb = reserve_after_a_tick_at_a_bay(Some(16));
+    let game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bay = game.world.resource::<crate::structures::StructureDb>();
+    let rate = Amenities::build(
+        [(&"defrag_bay".to_string(), &Position { x: 3, y: 3 })].into_iter(),
+        bay,
+    )
+    .nearest(&coherence(), Position { x: 2, y: 3 })
+    .unwrap()
+    .1;
+    let want = rate * (crate::tuning::ROOM_SERVICE_SCALE[3] - 1.0);
+    assert!(
+        (superb - commons - want).abs() < 1e-4,
+        "commons {commons}, superb {superb}, want a gap of {want}"
+    );
+}
+
 /// A program with no errand wanders exactly as it did before — the off-shift
 /// walk is a fall-through, not a replacement.
 #[test]

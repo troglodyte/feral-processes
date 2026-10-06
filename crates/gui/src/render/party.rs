@@ -109,12 +109,16 @@ pub(super) fn draw_companion_equip(
 /// — a species needs `SpeciesDb` and a destroyed program needs the name the
 /// record captured when it was written.
 ///
-/// The page does not scroll — `draw_popup` pages a `Row::Item` span and
-/// there are none here — so its height is held by
-/// `the_tallest_memory_page_fits_its_popup` rather than by a scrollbar.
+/// **The page scrolls the way the history screen does**: its entries are
+/// `Row::Item` rows, which `draw_popup` pages, and the highlight is the
+/// scroll position (`App::handle_companion_memories_key`, Up/Down), not a
+/// selection. A full store plus every thought at once is taller than the
+/// popup at the tightest window, so `the_tallest_memory_page_is_reachable`
+/// holds that the last row can be scrolled to.
 pub(super) fn draw_companion_memories(
     game: &mut Game,
     program: Option<Entity>,
+    selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -136,7 +140,12 @@ pub(super) fn draw_companion_memories(
         );
         return;
     };
-    let rows = memory_page_rows(&name, game.morale(program), &game.memory_report(program));
+    let rows = memory_page_rows(
+        &name,
+        game.morale(program),
+        &game.memory_report(program),
+        selected,
+    );
     draw_popup("Memories", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -145,7 +154,12 @@ pub(super) fn draw_companion_memories(
 /// height and width censuses have to measure the page at its **worst** case,
 /// and a store holding `MEMORY_CAP_PER_PROGRAM` of the widest shipped def is
 /// a state a fixture can state and a `Game` would have to be played into.
-pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -> Vec<Row> {
+pub(super) fn memory_page_rows(
+    name: &str,
+    morale: f32,
+    entries: &[MemoryRow],
+    selected: usize,
+) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(format!("{name}'s memories"), CYAN),
         // The one derived figure the whole store adds up to, and the reason
@@ -181,7 +195,7 @@ pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -
     // first, so the copy that keeps it is the one that characterises the
     // program.
     let mut said: Vec<&str> = Vec::new();
-    for entry in entries {
+    for (i, entry) in entries.iter().enumerate() {
         let subject = match &entry.subject {
             Some(subject) => format!("{} — {subject}", entry.name),
             None => entry.name.clone(),
@@ -193,11 +207,16 @@ pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -
             said.push(&entry.name);
             format!("{head}  {}", entry.blurb)
         };
-        rows.push(Row::TextColored(line, morale_color(entry.intensity)));
+        rows.push(annotated_item_row(
+            line,
+            None,
+            i == selected,
+            morale_color(entry.intensity),
+        ));
     }
 
     rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
+    rows.push(text_row("Up/Down to scroll, Esc to go back"));
     rows
 }
 
@@ -1218,8 +1237,14 @@ mod tests {
             "Kestrel",
             -14.0,
             &[memory("Mauled by", Some("Glitch"), -14.0)],
+            0,
         );
-        let sweet = memory_page_rows("Kestrel", 9.0, &[memory("Fought beside", Some("Vex"), 9.0)]);
+        let sweet = memory_page_rows(
+            "Kestrel",
+            9.0,
+            &[memory("Fought beside", Some("Vex"), 9.0)],
+            0,
+        );
 
         let header = |rows: &[Row]| match &rows[1] {
             Row::Text(t) | Row::TextColored(t, _) => t.clone(),
@@ -1227,7 +1252,7 @@ mod tests {
         };
         assert_eq!(header(&sour), format!("Mood {} (-14)", morale_band(-14.0)));
         assert_eq!(header(&sweet), format!("Mood {} (+9)", morale_band(9.0)));
-        let even = memory_page_rows("Kestrel", -0.2, &[]);
+        let even = memory_page_rows("Kestrel", -0.2, &[], 0);
         assert_eq!(
             header(&even),
             format!("Mood {} (+0)", morale_band(-0.2)),
@@ -1249,6 +1274,7 @@ mod tests {
             "Kestrel",
             -8.0,
             &[memory("Mauled by", Some("Zero-Day"), -8.0)],
+            0,
         );
         let text = joined(&rows);
 
@@ -1260,10 +1286,15 @@ mod tests {
     /// must not print a separator with nothing after it.
     #[test]
     fn a_subjectless_row_names_the_def_alone() {
-        let rows = memory_page_rows("Kestrel", 5.0, &[memory("Won against the odds", None, 5.0)]);
+        let rows = memory_page_rows(
+            "Kestrel",
+            5.0,
+            &[memory("Won against the odds", None, 5.0)],
+            0,
+        );
         let entry = match &rows[3] {
-            Row::Text(t) | Row::TextColored(t, _) => t.clone(),
-            _ => panic!("the first entry row is a text row"),
+            Row::Item { text, .. } => text.clone(),
+            _ => panic!("the first entry row is an item row"),
         };
 
         assert!(entry.contains("Won against the odds"), "{entry}");
@@ -1278,7 +1309,12 @@ mod tests {
     /// content the shipped catalogue is nonetheless held to.
     #[test]
     fn the_blurb_reaches_the_page() {
-        let rows = memory_page_rows("Kestrel", 5.0, &[memory("Won against the odds", None, 5.0)]);
+        let rows = memory_page_rows(
+            "Kestrel",
+            5.0,
+            &[memory("Won against the odds", None, 5.0)],
+            0,
+        );
 
         assert!(
             joined(&rows).contains("It stayed with me."),
@@ -1293,7 +1329,7 @@ mod tests {
     /// ever sees of this screen.
     #[test]
     fn an_empty_store_says_so_rather_than_drawing_a_blank_box() {
-        let rows = memory_page_rows("Kestrel", 0.0, &[]);
+        let rows = memory_page_rows("Kestrel", 0.0, &[], 0);
         let text = joined(&rows);
 
         assert!(text.contains("Nothing has happened"), "{text}");
@@ -1301,9 +1337,9 @@ mod tests {
 
     fn joined(rows: &[Row]) -> String {
         rows.iter()
-            .filter_map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) => Some(t.clone()),
-                _ => None,
+            .map(|r| match r {
+                Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()
             .join("\n")
@@ -1336,7 +1372,7 @@ mod tests {
     /// little wider than one the game can build. Over-measuring is the safe
     /// direction for a fit census; deduped, this would measure eleven rows
     /// that carry no blurb at all and pass against a page that overflows.
-    fn tallest_memory_page() -> Vec<Row> {
+    fn tallest_memory_page(selected: usize) -> Vec<Row> {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let (db, warnings) =
             feral_processes_engine::memories::MemoryDb::load_dir(&assets.join("memories"))
@@ -1366,20 +1402,25 @@ mod tests {
             feral_processes_engine::situations::ThoughtDb::load_dir(&assets.join("thoughts"))
                 .expect("the thoughts load");
         assert!(warnings.is_empty(), "{warnings:?}");
-        // Four, not five: `assess` makes `Unpowered` and `MachineRunning`
-        // exclusive, so the wider of the two is the most a page can carry.
+        // `assess` makes each group below exclusive, so the widest of a group
+        // is the most a page can carry: the two machine thoughts, and the
+        // three room bands.
         use feral_processes_engine::situations::Trigger;
         let width = |t: Trigger| {
             let def = thoughts.get(t).expect("every trigger ships a def");
             def.name.chars().count() + def.blurb.chars().count()
         };
-        let machine = [Trigger::Unpowered, Trigger::MachineRunning]
+        let groups: [&[Trigger]; 2] = [
+            &[Trigger::Unpowered, Trigger::MachineRunning],
+            &[Trigger::CrampedRoom, Trigger::FineRoom, Trigger::SuperbRoom],
+        ];
+        let widest: Vec<Trigger> = groups
+            .iter()
+            .map(|g| *g.iter().max_by_key(|t| width(**t)).expect("a group"))
+            .collect();
+        let worst = Trigger::ALL
             .into_iter()
-            .max_by_key(|t| width(*t))
-            .expect("two candidates");
-        let worst = Trigger::ALL.into_iter().filter(|t| {
-            !matches!(t, Trigger::Unpowered | Trigger::MachineRunning) || *t == machine
-        });
+            .filter(|t| !groups.iter().any(|g| g.contains(t)) || widest.contains(t));
         for trigger in worst {
             let def = thoughts.get(trigger).expect("every trigger ships a def");
             entries.push(MemoryRow {
@@ -1390,7 +1431,7 @@ mod tests {
                 age: "now".to_string(),
             });
         }
-        memory_page_rows(&subject, -99.0, &entries)
+        memory_page_rows(&subject, -99.0, &entries, selected)
     }
 
     /// The widest a row's subject can print, built through
@@ -1533,28 +1574,46 @@ mod tests {
             .clone()
     }
 
-    /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span and
-    /// this page has none, so a row past the bottom is dropped in silence —
-    /// the trap `the_tallest_gear_page_fits_its_popup` exists to catch, and
-    /// this is its mirror. Raising `MEMORY_CAP_PER_PROGRAM` past what fits
-    /// means giving the page a scroll first.
+    /// **Every row of the tallest page can be scrolled to.** The page is taller
+    /// than the popup at the tightest window, so what holds it is that
+    /// `popup_layout` pages its `Row::Item` entries: with the highlight on the
+    /// last entry the last one is on screen, and with it on the first, the
+    /// first is.
     ///
     /// Swept rather than measured at one window, for the gear page's reason:
     /// `ui_metrics` clamps the font at both ends, so below the clamp the box
     /// keeps shrinking while the line height stops and the tightest window
-    /// is the smallest one.
+    /// is the smallest one. The refusal's lines are reserved, as on every
+    /// page.
     #[test]
-    fn the_tallest_memory_page_fits_its_popup() {
-        let rows = tallest_memory_page().len();
+    fn the_tallest_memory_page_is_reachable() {
+        let items = |rows: &[Row]| {
+            rows.iter()
+                .filter_map(|r| match r {
+                    Row::Item { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let count = items(&tallest_memory_page(0)).len();
+        assert!(count > 1, "the census must page a real store");
         for h in (600..=2160).step_by(60) {
             let m = ui_metrics(h as f32);
-            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
-            // Plus a refusal's room, for `the_tallest_gear_page_fits_its_popup`'s
-            // reason: this page has no scroll either.
-            assert!(
-                rows + REFUSAL_MAX_LINES <= cap,
-                "a full store builds a {rows}-row page into a {cap}-row popup at {h}px"
-            );
+            for at in [0, count - 1] {
+                let rows = tallest_memory_page(at);
+                let all = items(&rows);
+                let shown = popup_visible_items(
+                    h as f32,
+                    PopupSize::Large,
+                    &rows,
+                    Some(&"x".repeat(REFUSAL_MAX_LINES * 10)),
+                    &m,
+                );
+                assert!(
+                    shown.contains(&all[at]),
+                    "entry {at} of {count} is not on screen at {h}px"
+                );
+            }
         }
     }
 
@@ -1564,7 +1623,7 @@ mod tests {
     /// the age — the two figures the row is read for.
     #[test]
     fn no_memory_row_overflows_its_popup() {
-        let rows = tallest_memory_page();
+        let rows = tallest_memory_page(0);
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // 0.88 is `PopupSize::Large`'s width fraction, against the
@@ -1573,7 +1632,7 @@ mod tests {
             for row in &rows {
                 let line = match row {
                     Row::Text(t) | Row::TextColored(t, _) => t,
-                    _ => continue,
+                    Row::Item { text, .. } => text,
                 };
                 let drawn = p.measure_ui_advance(line, m.font_size);
                 assert!(

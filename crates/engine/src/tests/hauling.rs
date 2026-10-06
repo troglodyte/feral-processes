@@ -624,6 +624,34 @@ fn structure_tiles(game: &mut Game) -> Vec<(i32, i32)> {
     query.iter(&game.world).map(|p| (p.x, p.y)).collect()
 }
 
+/// The hauling system's own blocked set must let a body through a door: a
+/// line of walls across the base with one door in it is the only way from the
+/// node to the depot, so a load arrives only if the door is walked through.
+#[test]
+fn a_hauler_carries_a_load_through_a_door() {
+    let mut game = base(21);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
+    for y in -radius..=radius {
+        let kind = if y == 0 { "door" } else { "wall" };
+        deploy(&mut game, kind, 2, y);
+    }
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "the only route to the depot is through the door"
+    );
+}
+
 /// A hauler routes around the base rather than over it.
 ///
 /// A *wall* rather than a single blocker: the step rule picks the cheapest
@@ -2532,4 +2560,42 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
 
     assert_eq!(node_output(&game, depot, "cache_grain"), 4);
     assert_eq!(pile_total(&mut game), 2, "the walled-in pile stays");
+}
+
+/// A walkable base cell that `from` can reach under `blocked`, asked the way
+/// every crew walk asks: through `crew_reach`.
+fn crew_reaches(game: &mut Game, cell: (i32, i32)) -> bool {
+    let blocked = game.blocked_tiles();
+    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    crate::game::base::hauling::crew_reach(grid, Position { x: 0, y: 1 }, &blocked, radius)
+        .contains_key(&cell)
+}
+
+/// The crew walks through a door and not through a wall: both bound a room
+/// for `rooms::detect`, but only the wall is solid to a body.
+#[test]
+fn crew_reach_passes_a_door_and_not_a_wall() {
+    let mut game = base(3101);
+    spawn_structure_at(&mut game, "door", 4, 0);
+    spawn_structure_at(&mut game, "wall", 4, 2);
+    assert!(crew_reaches(&mut game, (4, 0)), "a door is walked through");
+    assert!(!crew_reaches(&mut game, (4, 2)), "a wall is not");
+}
+
+#[test]
+fn blocked_tiles_excludes_a_door_anchor_and_keeps_a_wall() {
+    let mut game = base(3102);
+    spawn_structure_at(&mut game, "door", 4, 0);
+    spawn_structure_at(&mut game, "wall", 4, 2);
+    let blocked = game.blocked_tiles();
+    assert!(!blocked.taken((4, 0)));
+    assert!(blocked.taken((4, 2)));
+}
+
+#[test]
+fn the_player_steps_onto_a_door() {
+    let mut game = base(3103);
+    spawn_structure_at(&mut game, "door", 4, 0);
+    assert!(!game.base_step_blocked(4, 0));
 }

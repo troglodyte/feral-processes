@@ -10,4 +10,5 @@
         (need: "coherence", per_tick: 0.6, radius: 1),
     ],
     power_draw: 2,
+    room_tags: ["bed"],
 )

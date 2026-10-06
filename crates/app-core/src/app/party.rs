@@ -252,19 +252,31 @@ impl App {
         };
         self.pending_memory_program = Some(program);
         self.memories_origin = Mode::Companion;
+        self.memories_return_row = self.menu_selected;
         self.status_line = None;
         self.mode = Mode::CompanionMemories;
     }
 
-    /// What `pending_memory_program` remembers. A page and not a menu —
-    /// there is nothing on it to pick, so Esc is the only key it answers,
-    /// the way `Mode::StructureManifest` and `Mode::CellDescribe` do.
+    /// What `pending_memory_program` remembers. Nothing on it is picked, so
+    /// Esc and scrolling are its only keys: Up/Down move `menu_selected`,
+    /// which the page draws as its scroll position exactly as the history
+    /// screen does. The roster's row is parked in `memories_return_row` for
+    /// the page's duration and restored on Esc.
     pub(crate) fn handle_companion_memories_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_memory_program = None;
             self.status_line = None;
+            self.menu_selected = self.memories_return_row;
             self.mode = self.memories_origin;
+            return;
         }
+        // The rows the renderer draws, `memory_report`'s own count: a
+        // highlight past the last entry would scroll to nothing.
+        let rows = match (&self.game, self.pending_memory_program) {
+            (Some(game), Some(program)) => game.memory_report(program).len(),
+            _ => 0,
+        };
+        self.scroll(key, rows);
     }
 
     /// The slot page for `pending_equip_program`: three rows, each opening

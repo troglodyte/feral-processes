@@ -1583,6 +1583,7 @@ impl Game {
         }
 
         let line_of = crate::game::base::lines::membership(&self.production_lines());
+        let rooms = crate::rooms::of_world(&self.world);
         let mut report: Vec<StructureReport> = found
             .into_iter()
             .map(|(entity, kind, pos)| {
@@ -1615,6 +1616,7 @@ impl Game {
                         .map(|d| (d.hp, d.max_hp)),
                     workable,
                     player_adjacent: at_station(center, pos, side),
+                    room: self.room_line(&rooms, (pos.x, pos.y)),
                     assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
                     standing_tool: self
                         .world

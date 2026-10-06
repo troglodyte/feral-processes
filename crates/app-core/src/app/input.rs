@@ -71,14 +71,10 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             | (Mode::StructureAssign, Mode::Structures)
             | (Mode::Companion, Mode::Manifest)
             | (Mode::Manifest, Mode::Companion)
-            // Same pair as the manifest above, for the same reason: the
-            // memories page indexes nothing with the highlight, so the row
-            // the player was reading down the roster is what Esc returns to.
-            | (Mode::Companion, Mode::CompanionMemories)
+            // Esc from the memories page puts back the row it parked in
+            // `memories_return_row`; the page itself starts scrolled to the
+            // top, so the way in is not listed.
             | (Mode::CompanionMemories, Mode::Companion)
-            // And the same page reached from a sheet, where the roster's row
-            // is parked for the same reason the dossier's pair gives below.
-            | (Mode::Manifest, Mode::CompanionMemories)
             | (Mode::CompanionMemories, Mode::Manifest)
             // The dossier is a page of the manifest, and the manifest is
             // where the roster's row is *parked* for the duration (see this

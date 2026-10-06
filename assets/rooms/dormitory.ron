@@ -1,0 +1,8 @@
+(
+    id: "dormitory",
+    name: "dormitory",
+    priority: 30,
+    requires: [(tag: "bed", min: 2, max: None)],
+    living: true,
+    tint: (70, 110, 190),
+)

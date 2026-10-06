@@ -1,0 +1,8 @@
+(
+    id: "workshop",
+    name: "workshop",
+    priority: 10,
+    requires: [(tag: "workshop", min: 1, max: None)],
+    living: false,
+    tint: (220, 160, 70),
+)

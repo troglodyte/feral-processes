@@ -541,6 +541,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the half that is new. This is how the Wall works.
     barrier: true,
 
+    // Optional; can be left out entirely (defaults to false). A door bounds
+    // a room the way a wall does (see assets/rooms/README.md), yet programs
+    // and the crew walk through it. This is how the Door works.
+    door: true,
+
+    // Optional; can be left out entirely (defaults to empty). Tags this
+    // structure counts as when a room is matched against assets/rooms/*.ron.
+    // Only the structure's anchor cell counts. Shipped tags: "bed"
+    // (Log Analyzer Bay), "recreation" (Sandbox) and "workshop" (every
+    // assembler, rig and bench, plus the Research Node; the raw-material
+    // extractors are not workshops).
+    room_tags: ["workshop"],
+
     // Optional; can be left out entirely (defaults to 0). Flat raid-damage
     // reduction this structure contributes to *every* raid, against *any*
     // deployed structure, for as long as it's standing — not just itself,

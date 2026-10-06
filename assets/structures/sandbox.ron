@@ -10,4 +10,5 @@
         (need: "slack", per_tick: 0.5, radius: 1),
     ],
     power_draw: 1,
+    room_tags: ["recreation"],
 )

@@ -2878,6 +2878,10 @@ pub struct App {
     /// Where Esc on `Mode::CompanionMemories` goes: the roster when `R` was
     /// pressed there, the manifest when it was pressed on a sheet.
     pub memories_origin: Mode,
+    /// The highlight the page was opened from, parked while the page uses
+    /// `menu_selected` as its scroll position (the history screen's
+    /// mechanism) and put back on Esc.
+    pub memories_return_row: usize,
     /// The settlement `Mode::Settlement` is showing, set from either of the
     /// two doors onto it: `Game::take_visit`, drained in
     /// `after_world_action` the tick a bump lands on the tile, or

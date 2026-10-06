@@ -1,0 +1,8 @@
+(
+    id: "rec_room",
+    name: "rec room",
+    priority: 20,
+    requires: [(tag: "recreation", min: 1, max: None)],
+    living: false,
+    tint: (90, 200, 120),
+)

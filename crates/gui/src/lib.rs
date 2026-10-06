@@ -101,6 +101,15 @@ const CTRL_KEYS: [KeyCode; 2] = [KeyCode::ControlLeft, KeyCode::ControlRight];
 /// on a screen that doesn't want it.
 const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
 
+/// Whether `FERAL_DEV_ALT` is set: holds `reveal` down for `--screenshot`,
+/// whose `--keys` cannot carry a modifier. `FERAL_DEV_REVEAL`'s predicate.
+fn dev_alt() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var_os("FERAL_DEV_ALT").is_some_and(|v| !v.is_empty() && v != "0")
+    });
+    *ON
+}
+
 /// Folds held modifiers into the two horizontal arrows.
 ///
 /// Up and Down are deliberately untouched: they move a cursor on every
@@ -760,7 +769,7 @@ fn frame(
         .collect();
     let shift = input.keyboard.any_pressed(SHIFT_KEYS);
     let ctrl = input.keyboard.any_pressed(CTRL_KEYS);
-    let reveal = input.keyboard.any_pressed(ALT_KEYS);
+    let reveal = input.keyboard.any_pressed(ALT_KEYS) || dev_alt();
     for key in fe.key_repeat.tick(now, &held) {
         if let Some(game_key) = map_special_key(key) {
             fe.app.handle_key(with_modifiers(game_key, shift, ctrl));

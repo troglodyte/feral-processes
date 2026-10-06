@@ -52,7 +52,9 @@ pub(super) fn draw_structure_manifest(
         .line
         .and_then(|key| game.line_reports().into_iter().find(|l| l.key == key));
     let detail = structure_detail_lines(&report, line.as_ref(), idle);
-    if detail.is_empty() {
+    // The room line says where the structure stands, not what it does, so a
+    // structure whose only detail is its room is still one with nothing on.
+    if detail.len() == usize::from(report.room.is_some()) {
         rows.push(text_row("  nothing staged, nobody posted"));
     }
     for (line, color) in detail {

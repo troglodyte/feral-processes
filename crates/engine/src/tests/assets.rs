@@ -5987,3 +5987,40 @@ fn every_shipped_rejection_status_exists() {
         }
     }
 }
+
+/// Every shipped room def parses, every `room_tags` value is some room's
+/// `requires` tag, every required tag is carried by some structure, and
+/// `door` is set on the Door alone.
+#[test]
+fn rooms_and_structure_room_fields_agree() {
+    use crate::rooms::RoomDb;
+
+    let (rooms, warnings) = RoomDb::load_dir(&test_assets_dir().join("rooms")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(rooms.iter().count() > 0, "the census must walk real rooms");
+    let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
+    let required: Vec<&str> = rooms
+        .iter()
+        .flat_map(|r| r.requires.iter().map(|t| t.tag.as_str()))
+        .collect();
+    let carried: Vec<&str> = structures
+        .all()
+        .flat_map(|s| s.room_tags.iter().map(String::as_str))
+        .collect();
+    for def in structures.all() {
+        for tag in &def.room_tags {
+            assert!(
+                required.contains(&tag.as_str()),
+                "{} carries room tag {tag:?}, which no room requires",
+                def.id
+            );
+        }
+        assert_eq!(def.door, def.id == "door", "{}: door flag", def.id);
+    }
+    for tag in required {
+        assert!(
+            carried.contains(&tag),
+            "no structure carries room tag {tag:?}"
+        );
+    }
+}

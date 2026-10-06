@@ -43,6 +43,11 @@ reweight or delete a thought but not invent a trigger.
 | `Unpowered` | The program is posted to a machine the grid cannot power. |
 | `MachineRunning` | The program is posted to a machine that is running and powered (a dark machine gives only `Unpowered`). |
 | `NoAmenity` | The base has no amenity at all. |
+| `CrampedRoom` | The program stands in a room that has a role (quarters, workshop and so on) and is rated Cramped. |
+| `FineRoom` | As above, rated Fine. |
+| `SuperbRoom` | As above, rated Superb. A Plain room, the commons and roleless space give no room thought. |
+| `RoommateRival` | Another staff program stands anywhere in the same living room (quarters or dormitory) and this program's bond with it is Rival or Enemy. |
+| `RoommateFriend` | As above, and the bond is Friend or Close. |
 
 `Unpowered` and `MachineRunning` fire only for a program posted to gather at
 the machine; a guard, digger or builder posted at one thinks neither. A posted

@@ -101,13 +101,42 @@ type Needful<'w> = (
     Option<&'w crate::disposition::Disposition>,
 );
 
+/// What `rooms::of_parts` needs beyond the structure db, each optional
+/// like `of_world`'s `get_resource`s.
+pub(crate) type RoomInputs<'w> = (
+    Option<Res<'w, crate::base_grid::BaseGrid>>,
+    Option<Res<'w, crate::rooms::RoomDb>>,
+    Option<Res<'w, crate::floors::FloorDb>>,
+);
+
+/// `rooms::of_parts` over `RoomInputs`: no rooms at all when a world lacks
+/// any of the resources, `of_world`'s rule.
+pub(crate) fn rooms_of_inputs<'a>(
+    inputs: &RoomInputs,
+    structures: &'a StructureDb,
+    sites: impl Iterator<Item = (&'a Structure, &'a Position)>,
+) -> crate::rooms::Rooms {
+    let (Some(grid), Some(room_db), Some(floors)) = (
+        inputs.0.as_deref(),
+        inputs.1.as_deref(),
+        inputs.2.as_deref(),
+    ) else {
+        return crate::rooms::Rooms::default();
+    };
+    crate::rooms::of_parts(grid, structures, room_db, floors, sites)
+}
+
 pub fn needs_drain_system(
     mut programs: Query<Needful, Without<Player>>,
     sites: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
     db: Res<NeedDb>,
     roles: crate::game::party::Roles,
+    room_inputs: RoomInputs,
 ) {
+    // Detected at most once a tick, and only if somebody is actually
+    // standing at an amenity: most ticks nobody is.
+    let mut rooms: Option<crate::rooms::Rooms> = None;
     let amenities = crate::game::base::offshift::Amenities::build(
         sites.iter().map(|(s, p)| (&s.kind, p)),
         &structure_db,
@@ -148,7 +177,16 @@ pub fn needs_drain_system(
             let Some(current) = needs.get(&def.id) else {
                 continue;
             };
-            needs.set(&def.id, current + rate);
+            let scale = {
+                let rooms = rooms.get_or_insert_with(|| {
+                    rooms_of_inputs(&room_inputs, &structure_db, sites.iter())
+                });
+                rooms
+                    .room_at(site.x, site.y)
+                    .filter(|r| r.role.is_some())
+                    .map_or(1.0, |r| crate::rooms::room_service_scale(r.band))
+            };
+            needs.set(&def.id, current + rate * scale);
         }
     }
 }
@@ -318,25 +356,46 @@ pub(crate) fn morale_shift(morale: f32) -> f64 {
 /// meaning what it says, and what puts pressure on the posting in both
 /// directions: a quick program beats working the node yourself, and a slow
 /// one is worse than rolling your sleeves up.
-/// `build_quality` is the **builder's**, baked into the machine the tick it
+/// The per-site factors on a work cycle, as opposed to the worker's.
+/// Two fields and not one product because they combine differently:
+/// `build_quality` is a rating around 1.0 that `BUILD_QUALITY_TICK_WEIGHT`
+/// damps, while `room` is a finished multiplier on the ticks themselves.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SiteScales {
+    pub build_quality: f64,
+    pub room: f64,
+}
+
+impl SiteScales {
+    /// A site standing in no workshop room: only its build counts.
+    pub(crate) fn built(build_quality: f32) -> Self {
+        Self {
+            build_quality: build_quality as f64,
+            room: 1.0,
+        }
+    }
+}
+
+/// `site.build_quality` is the **builder's**, baked into the machine the tick it
 /// was raised (`components::BuildQuality`) and never moving again — where
 /// `speed` is the *posted worker's* and changes every time somebody is
 /// reassigned. The two multiply, which is why the term is weighted at
 /// `BUILD_QUALITY_TICK_WEIGHT` rather than at `WORK_TICKS_PER_SPEED`'s
 /// worth. It arrives raw rather than as a finished scale for `class_scale`'s
 /// reason: a scale computed at the caller is a second expression of the
-/// formula, and there are two callers.
+/// formula, and there are two callers. `site.room` is the workshop room's
+/// scale and is a plain multiplier.
 pub(crate) fn work_ticks_at_speed(
     base_ticks: u32,
     speed: i32,
     class_scale: f64,
-    build_quality: f64,
+    site: SiteScales,
 ) -> u32 {
     let scale = 1.0 + (DEFAULT_BASE_SPEED - speed) as f64 * WORK_TICKS_PER_SPEED;
-    let build_scale = 1.0 - (build_quality - 1.0) * BUILD_QUALITY_TICK_WEIGHT;
+    let build_scale = 1.0 - (site.build_quality - 1.0) * BUILD_QUALITY_TICK_WEIGHT;
     // Floored at one cycle per tick however fast the species: a modded
     // `base_speed: 200` scales straight past zero into negative.
-    (base_ticks as f64 * scale * class_scale * build_scale)
+    (base_ticks as f64 * scale * class_scale * build_scale * site.room)
         .round()
         .max(1.0) as u32
 }
@@ -2881,7 +2940,7 @@ mod tests {
         // number rather than merely land near it.
         for base in [1, 3, 6, 8, 10, 12, 20, 30] {
             assert_eq!(
-                work_ticks_at_speed(base, DEFAULT_BASE_SPEED, 1.0, 1.0),
+                work_ticks_at_speed(base, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.0)),
                 base,
                 "a worker at the roster baseline must cost exactly the def's rate"
             );
@@ -2892,10 +2951,10 @@ mod tests {
     fn a_faster_species_needs_fewer_ticks_and_a_slower_one_more() {
         // The shipped extremes — construct 6, sprite 14 — against a Mining
         // Node's 10 and a Fabricator's 30.
-        assert_eq!(work_ticks_at_speed(10, 14, 1.0, 1.0), 8);
-        assert_eq!(work_ticks_at_speed(10, 6, 1.0, 1.0), 12);
-        assert_eq!(work_ticks_at_speed(30, 14, 1.0, 1.0), 24);
-        assert_eq!(work_ticks_at_speed(30, 6, 1.0, 1.0), 36);
+        assert_eq!(work_ticks_at_speed(10, 14, 1.0, SiteScales::built(1.0)), 8);
+        assert_eq!(work_ticks_at_speed(10, 6, 1.0, SiteScales::built(1.0)), 12);
+        assert_eq!(work_ticks_at_speed(30, 14, 1.0, SiteScales::built(1.0)), 24);
+        assert_eq!(work_ticks_at_speed(30, 6, 1.0, SiteScales::built(1.0)), 36);
     }
 
     #[test]
@@ -2903,8 +2962,8 @@ mod tests {
         // A `base_speed: 200` mod scales the multiplier straight past zero and
         // negative. Without the floor that is a machine producing on every tick
         // forever, which is also what a `required: 0` would do.
-        assert_eq!(work_ticks_at_speed(10, 200, 1.0, 1.0), 1);
-        assert_eq!(work_ticks_at_speed(1, 14, 1.0, 1.0), 1);
+        assert_eq!(work_ticks_at_speed(10, 200, 1.0, SiteScales::built(1.0)), 1);
+        assert_eq!(work_ticks_at_speed(1, 14, 1.0, SiteScales::built(1.0)), 1);
     }
 
     /// The builder's figure pulls the same way the posted worker's speed
@@ -2915,23 +2974,32 @@ mod tests {
     fn a_build_quality_scales_a_cycle_the_way_speed_does_but_half_as_hard() {
         // The spec's worked table: a 20-tick machine at 0.90x, built by a
         // program at the top of the roll range.
-        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.2), 18);
-        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0), 20);
-        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 0.8), 22);
+        assert_eq!(
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.2)),
+            18
+        );
+        assert_eq!(
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.0)),
+            20
+        );
+        assert_eq!(
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(0.8)),
+            22
+        );
         // Half of what speed is worth over the same deviation: a point of
         // `WORK_TICKS_PER_SPEED` either side moves a 20-tick cycle by one,
         // and 0.2 of build quality moves it by two rather than four.
         assert!(
-            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.2)
-                < work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0)
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.2))
+                < work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.0))
         );
         assert!(
-            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 0.8)
-                > work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0)
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(0.8))
+                > work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, SiteScales::built(1.0))
         );
         // The floor covers the new term too: the best build the game can
         // roll on the quickest species must still cost a whole tick.
-        assert_eq!(work_ticks_at_speed(1, 14, 1.0, 1.32), 1);
+        assert_eq!(work_ticks_at_speed(1, 14, 1.0, SiteScales::built(1.32)), 1);
     }
 
     #[test]

@@ -45,11 +45,21 @@ pub fn power_drain_per_tick(multiplier: f32) -> f32 {
 }
 
 pub fn needs_tick_system(
-    mut query: Query<(&mut PowerReserve, &mut Stats, Option<&Perks>), With<Player>>,
+    mut query: Query<
+        (
+            &mut PowerReserve,
+            &mut Stats,
+            Option<&Perks>,
+            Option<&crate::components::Implants>,
+        ),
+        With<Player>,
+    >,
+    implant_db: Res<crate::implants::ImplantDb>,
     mut log: ResMut<MessageLog>,
 ) {
-    for (mut needs, mut stats, perks) in &mut query {
-        let hunger_multiplier = crate::perks::power_drain_multiplier(perks);
+    for (mut needs, mut stats, perks, implants) in &mut query {
+        let load = implants.map_or(0, |held| crate::implants::load_of(held, &implant_db));
+        let hunger_multiplier = crate::implants::power_multiplier(perks, load);
         let was_starving = needs.get() <= POWER_MIN;
         needs.spend(power_drain_per_tick(hunger_multiplier));
         if needs.get() <= POWER_MIN {
@@ -2627,6 +2637,7 @@ mod tests {
     fn power_regen_runs_before_decay_so_arriving_drained_costs_no_integrity() {
         let (mut world, player) =
             power_regen_world(load_test_recharger(), "test_recharger", 0.1, &[(0, 0)]);
+        world.insert_resource(crate::implants::ImplantDb::default());
         let mut schedule = Schedule::default();
         schedule.add_systems((power_regen_system, needs_tick_system).chain());
         schedule.run(&mut world);

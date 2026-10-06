@@ -251,8 +251,9 @@ mod emulation_tests {
     /// has to subtract this or it is really asserting "costs no Power
     /// *and* nobody ever gets hungry", which is false of every action.
     fn ambient_hunger_drain(game: &Game, player: Entity) -> f32 {
-        crate::systems::power_drain_per_tick(crate::perks::power_drain_multiplier(
+        crate::systems::power_drain_per_tick(crate::implants::power_multiplier(
             game.world.get::<Perks>(player),
+            game.implant_load(),
         ))
     }
 

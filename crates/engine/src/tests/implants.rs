@@ -239,3 +239,119 @@ fn a_missing_def_contributes_nothing() {
     install(&mut game, &["no_such_implant"]);
     assert_eq!(snapshot(&game), before);
 }
+
+fn hook_def(id: &str, hook: ImplantHook) -> ImplantDef {
+    ImplantDef {
+        hooks: vec![hook],
+        ..def(id)
+    }
+}
+
+fn power_after_a_wait(game: &mut Game) -> f32 {
+    let player = game.player_entity();
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+    game.wait();
+    before - game.world.get::<PowerReserve>(player).unwrap().get()
+}
+
+#[test]
+fn upkeep_scales_with_load_and_low_power_mode_reduces_it_too() {
+    let mut game = new_game();
+    let bare = power_after_a_wait(&mut game);
+    assert!(bare > 0.0);
+
+    install(&mut game, &["dermal_lattice", "overclock_spine"]);
+    let loaded = power_after_a_wait(&mut game);
+    assert!(
+        (loaded - bare * crate::implants::drain_factor(7)).abs() < 1e-4,
+        "{loaded} vs {bare}"
+    );
+
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::LowPowerMode; 3];
+    let reduced = power_after_a_wait(&mut game);
+    assert!(reduced < loaded, "LowPowerMode must cut implant upkeep too");
+}
+
+#[test]
+fn capture_odds_rise_by_exactly_the_hooks_pct() {
+    let mut game = new_game();
+    let before = game.player_decompiler_bonuses().capture_boost_pct;
+    install(&mut game, &["ghost_handshake"]);
+    assert_eq!(
+        game.player_decompiler_bonuses().capture_boost_pct,
+        before + 10
+    );
+}
+
+#[test]
+fn drop_boost_applies_in_the_stack_and_not_on_the_surface() {
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !game.equipment_drops_for(s).is_empty())
+        .expect("a species with equipment drops");
+    let before = game.equipment_drops_for(&species);
+    install(&mut game, &["black_ledger"]);
+    assert_eq!(
+        game.equipment_drops_for(&species),
+        before,
+        "unchanged on the surface"
+    );
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+    let in_stack = game.equipment_drops_for(&species);
+    assert!(game.is_underground());
+    for ((_, base), (_, boosted)) in before.iter().zip(&in_stack) {
+        assert!((boosted - base * 1.25).abs() < 1e-6);
+    }
+}
+
+#[test]
+fn xp_boost_raises_player_xp() {
+    let mut game = new_game();
+    add_def(&mut game, hook_def("xp", ImplantHook::XpBoost(50)));
+    install(&mut game, &["xp"]);
+    let player = game.player_entity();
+    game.award_player_xp(player, 10);
+    assert_eq!(game.world.get::<Experience>(player).unwrap().xp, 15);
+}
+
+#[test]
+fn routine_slots_gain_one_from_overclock_spine() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    let before = game.routine_slots(player);
+    install(&mut game, &["overclock_spine"]);
+    assert_eq!(game.routine_slots(player), before + 1);
+}
+
+fn trace_after_a_cache(game: &mut Game) -> u32 {
+    game.world.insert_resource(crate::resources::Trace(0));
+    game.raise_trace(crate::tuning::TRACE_PER_CACHE);
+    game.trace()
+}
+
+#[test]
+fn trace_rises_faster_with_a_downside_and_slower_with_a_damp_and_never_stops() {
+    let mut game = new_game();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.enter_stack(pos.x, pos.y);
+    let plain = trace_after_a_cache(&mut game);
+
+    install(&mut game, &["black_ledger"]);
+    assert!(trace_after_a_cache(&mut game) > plain);
+
+    add_def(&mut game, hook_def("damp", ImplantHook::TraceDamp(100)));
+    install(&mut game, &["damp"]);
+    assert!(trace_after_a_cache(&mut game) >= 1, "a damp never stops it");
+
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::Obfuscation; 20];
+    assert!(
+        trace_after_a_cache(&mut game) >= 1,
+        "the obfuscation floor still holds"
+    );
+}

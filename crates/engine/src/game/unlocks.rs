@@ -98,7 +98,11 @@ impl Game {
             // is worth. Both scale the entire attempt, so they belong in the
             // same field rather than as a fourth multiplier of the same shape.
             capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost)
-                + crate::classes::capture_boost_pct(self.player_class()),
+                + crate::classes::capture_boost_pct(self.player_class())
+                + self.implant_hook_total(|h| match h {
+                    crate::implants::ImplantHook::CaptureOdds(pct) => Some(*pct),
+                    _ => None,
+                }),
         }
     }
 

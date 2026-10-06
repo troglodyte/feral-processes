@@ -1073,6 +1073,10 @@ impl Game {
             // cap bounds the level curve, not the total.
             abilities::player_routine_slots(level)
                 + crate::classes::routine_slot_bonus(self.player_class())
+                + self.implant_hook_total(|h| match h {
+                    crate::implants::ImplantHook::RoutineSlots(n) => Some(*n as i32),
+                    _ => None,
+                }) as usize
         } else {
             abilities::companion_routine_slots(level) + self.talent_routine_slots(entity)
         }

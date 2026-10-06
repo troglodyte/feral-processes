@@ -74,9 +74,9 @@ const ROOM_TINT_ALPHA: f32 = 0.28;
 /// holds "Fine dormitory" at the default zoom.
 const ROOM_LABEL_SIZE: u16 = 14;
 
-/// How many room cells run unbroken along the row of `at`, counting `at`
-/// itself: the stretch the label drawn there can actually sit over. An
-/// L-shaped room's widest row is not the one its label lands on.
+/// How many room cells a label centred on `at` can sit over along its row,
+/// counting `at` itself. An L-shaped room's widest row is not the one its
+/// label lands on.
 fn room_row_cols(cells: &[(i32, i32)], at: (i32, i32)) -> i32 {
     let has = |x: i32| cells.contains(&(x, at.1));
     let run = |step: i32| {
@@ -85,7 +85,8 @@ fn room_row_cols(cells: &[(i32, i32)], at: (i32, i32)) -> i32 {
             .take_while(|&x| has(x))
             .count() as i32
     };
-    1 + run(-1) + run(1)
+    // The label is centred on `at`, so only the shorter side bounds it.
+    1 + 2 * run(-1).min(run(1))
 }
 
 /// Whether a room label of `text_w` pixels sits inside `cols` cells of room.
@@ -1878,6 +1879,9 @@ mod tests {
         let l: Vec<(i32, i32)> = (0..5).map(|x| (x, 0)).chain([(0, 1)]).collect();
         assert_eq!(room_row_cols(&l, (2, 0)), 5);
         assert_eq!(room_row_cols(&l, (0, 1)), 1);
+        // Centred on the run's end cell, the label has no room past it.
+        assert_eq!(room_row_cols(&l, (0, 0)), 1);
+        assert_eq!(room_row_cols(&l, (1, 0)), 3);
         assert!(!room_label_fits(80.0, room_row_cols(&l, (0, 1)), 16.0));
         assert!(room_label_fits(80.0, room_row_cols(&l, (2, 0)), 16.0));
     }

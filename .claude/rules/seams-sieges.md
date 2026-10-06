@@ -2,6 +2,7 @@
 paths:
   - "**/siege*"
   - "**/siege/**"
+  - "**/nemesis*"
 ---
 
 # Load-bearing seams: Sieges

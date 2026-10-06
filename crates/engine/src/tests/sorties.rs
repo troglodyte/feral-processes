@@ -725,6 +725,34 @@ fn a_dispatch_charges_and_takes_the_bodies() {
     }
 }
 
+/// A hauler sent out mid-trip sets its load down on the base floor first:
+/// away, it is out of the labour pool and nothing would ever relieve it.
+#[test]
+fn a_dispatched_carrier_leaves_its_load_on_the_floor() {
+    use crate::components::{Carrying, FloorPile};
+    use crate::game::base::floor::floor_pile_at;
+    use crate::items::ItemId;
+
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4613, 4, 500);
+    let carrier = staff[0];
+    let at = *game.world.get::<Position>(carrier).unwrap();
+    let item = ItemId::from("core_fragment");
+    game.world.entity_mut(carrier).insert(Carrying {
+        item: item.clone(),
+        qty: 3,
+    });
+
+    game.dispatch_sortie(&site, &staff[..2])
+        .expect("a legal dispatch");
+
+    assert!(game.world.get::<Carrying>(carrier).is_none());
+    let pile = floor_pile_at(&mut game.world, at).expect("a pile where it stood");
+    assert_eq!(
+        game.world.get::<FloorPile>(pile).unwrap().items.get(&item),
+        Some(&3)
+    );
+}
+
 /// The record stores the whole resolved site, never the id: a board that
 /// rotates while the squad is out must not be able to rewrite the trip.
 #[test]

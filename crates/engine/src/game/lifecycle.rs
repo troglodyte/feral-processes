@@ -1142,8 +1142,9 @@ impl Game {
                 entity.insert(crate::components::Racked(s.racked.clone()));
             }
             // And again for the bay. Never shrunk below what the save holds:
-            // a retune that cut `incubation_slots` must not eat a child.
-            if def.incubation_slots > 0 {
+            // a retune that cut `incubation_slots` — to zero included — must
+            // not eat a child.
+            if def.incubation_slots > 0 || s.incubating.iter().any(Option::is_some) {
                 let mut incubator = crate::components::Incubator::with_slots(def.incubation_slots);
                 for (slot, saved) in incubator.slots.iter_mut().zip(&s.incubating) {
                     *slot = saved.clone();

@@ -691,6 +691,24 @@ fn save_and_load(game: &mut Game, tag: &str) -> Game {
     loaded
 }
 
+#[test]
+fn a_retune_to_no_slots_does_not_eat_a_stored_child() {
+    let (mut game, _, _, _) = incubating_game();
+    let path =
+        std::env::temp_dir().join(format!("feral_breeding_noslots_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let shrunk = assets_dir_with_extra_structure(
+        "bay-no-slots",
+        "breeding_bay.ron",
+        r#"(id: "breeding_bay", name: "Breeding Bay", description: "x", glyph: 'N',
+            color: Green, build_cost: [("core_fragment", 14)], incubation_slots: 0)"#,
+    );
+    let mut loaded = Game::load(&path, &shrunk).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let bay = loaded_bay(&mut loaded);
+    assert!(loaded.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
+}
+
 fn loaded_bay(game: &mut Game) -> Entity {
     let mut query = game.world.query::<(Entity, &Incubator)>();
     query.iter(&game.world).next().expect("the bay stands").0

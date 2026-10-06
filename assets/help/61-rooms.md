@@ -6,12 +6,13 @@ into open floor, means the space is not a room yet.
 
 A door is how the crew gets through. Build one in a gap in the wall and the programs walk through
 it, while the space behind it still counts as closed. Every other machine and bench blocks the
-crew, so a door is the only thing that can stand in a doorway.
+crew, so a door is the only thing that can stand in a doorway. During a siege a door is an
+obstacle like any other structure.
 
 What a room is for depends on what stands in it.
 
-- quarters: exactly one bed.
-- dormitory: two or more beds.
+- quarters: exactly one Log Analyzer Bay.
+- dormitory: two or more Log Analyzer Bays.
 - rec room: any recreation machine.
 - workshop: any bench that makes things.
 

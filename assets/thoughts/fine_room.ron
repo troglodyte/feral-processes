@@ -1,0 +1,7 @@
+// Standing in a well kept room.
+(
+    trigger: FineRoom,
+    name: "A fine room",
+    blurb: "It is pleasant in here.",
+    intensity: 1.5,
+)

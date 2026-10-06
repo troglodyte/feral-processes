@@ -1,0 +1,7 @@
+// Standing in a room that is too small for what is in it.
+(
+    trigger: CrampedRoom,
+    name: "Cramped quarters",
+    blurb: "No room to move in here.",
+    intensity: -2.0,
+)

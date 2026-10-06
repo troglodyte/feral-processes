@@ -1,0 +1,7 @@
+// Sharing a bedroom with a program it is fond of.
+(
+    trigger: RoommateFriend,
+    name: "Sharing with a friend",
+    blurb: "Good company to have in the room.",
+    intensity: 2.0,
+)

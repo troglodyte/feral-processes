@@ -160,6 +160,17 @@ pub struct Rooms {
 }
 
 impl Rooms {
+    /// Rooms assembled by hand, so a test can place bodies without a grid.
+    #[cfg(test)]
+    pub(crate) fn from_rooms(rooms: Vec<Room>) -> Rooms {
+        let by_cell = rooms
+            .iter()
+            .enumerate()
+            .flat_map(|(i, r)| r.cells.iter().map(move |c| (*c, i)))
+            .collect();
+        Rooms { rooms, by_cell }
+    }
+
     /// The room standing on `(x, y)`; a boundary cell (rock, wall, door) is
     /// in none.
     pub fn room_at(&self, x: i32, y: i32) -> Option<&Room> {

@@ -1,0 +1,7 @@
+// Standing in a very well kept room.
+(
+    trigger: SuperbRoom,
+    name: "A superb room",
+    blurb: "Nowhere else on the base feels this good.",
+    intensity: 3.0,
+)

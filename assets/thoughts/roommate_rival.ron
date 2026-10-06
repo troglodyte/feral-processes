@@ -1,0 +1,7 @@
+// Sharing a bedroom with a program it holds a grudge against.
+(
+    trigger: RoommateRival,
+    name: "Sharing with a rival",
+    blurb: "Hard to rest with them in the same room.",
+    intensity: -3.0,
+)

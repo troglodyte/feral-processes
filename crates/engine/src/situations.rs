@@ -25,6 +25,7 @@ use crate::game::party::{self, ProgramRole, Roles};
 use crate::memories::MemoryDb;
 use crate::resources::GameClock;
 use crate::resources::PowerGrid;
+use crate::rooms::{RoomBand, Rooms};
 use crate::structures::StructureDb;
 use crate::tuning::SITUATION_MAX_TOTAL;
 
@@ -36,18 +37,28 @@ pub enum Trigger {
     Unpowered,
     MachineRunning,
     NoAmenity,
+    CrampedRoom,
+    FineRoom,
+    SuperbRoom,
+    RoommateRival,
+    RoommateFriend,
 }
 
 impl Trigger {
     /// Every variant, for the shipped-asset census. The `match` in
     /// `Trigger::index` is exhaustive, so a new variant fails to compile
     /// until it is placed here too.
-    pub const ALL: [Trigger; 5] = [
+    pub const ALL: [Trigger; 10] = [
         Trigger::BesideRival,
         Trigger::BesideFriend,
         Trigger::Unpowered,
         Trigger::MachineRunning,
         Trigger::NoAmenity,
+        Trigger::CrampedRoom,
+        Trigger::FineRoom,
+        Trigger::SuperbRoom,
+        Trigger::RoommateRival,
+        Trigger::RoommateFriend,
     ];
 
     #[cfg(test)]
@@ -58,6 +69,11 @@ impl Trigger {
             Trigger::Unpowered => 2,
             Trigger::MachineRunning => 3,
             Trigger::NoAmenity => 4,
+            Trigger::CrampedRoom => 5,
+            Trigger::FineRoom => 6,
+            Trigger::SuperbRoom => 7,
+            Trigger::RoommateRival => 8,
+            Trigger::RoommateFriend => 9,
         }
     }
 }
@@ -201,6 +217,8 @@ pub(crate) struct Surroundings<'a> {
     pub has_amenity: bool,
     /// A machine's `MachineStatus`; `None` for an entity that has none.
     pub status: &'a dyn Fn(Entity) -> Option<MachineStatus>,
+    /// The base's rooms, from `rooms::of_parts`.
+    pub rooms: &'a Rooms,
 }
 
 /// Whether two tiles are neighbours — Chebyshev distance one. `assess`'s
@@ -271,6 +289,29 @@ pub(crate) fn assess(bodies: &[Body], around: &Surroundings) -> Vec<Situation> {
                 if neighbours().any(|o| bond_band(body, o, around).grieves()) {
                     thoughts.push(Trigger::BesideFriend);
                 }
+                let here = (body.pos.x, body.pos.y);
+                if let Some(room) = around.rooms.room_at(here.0, here.1) {
+                    if room.role.is_some() {
+                        match room.band {
+                            RoomBand::Cramped => thoughts.push(Trigger::CrampedRoom),
+                            RoomBand::Plain => {}
+                            RoomBand::Fine => thoughts.push(Trigger::FineRoom),
+                            RoomBand::Superb => thoughts.push(Trigger::SuperbRoom),
+                        }
+                    }
+                    if room.living {
+                        let roommates = || {
+                            walking_others(bodies, body)
+                                .filter(|o| around.rooms.same_room(here, (o.pos.x, o.pos.y)))
+                        };
+                        if roommates().any(|o| bond_band(body, o, around).avoids()) {
+                            thoughts.push(Trigger::RoommateRival);
+                        }
+                        if roommates().any(|o| bond_band(body, o, around).grieves()) {
+                            thoughts.push(Trigger::RoommateFriend);
+                        }
+                    }
+                }
             }
             if let Some((TaskKind::GatherResource, machine)) = body.task {
                 if around.grid.is_dark(machine) {
@@ -311,6 +352,7 @@ pub struct AssessLookups<'w, 's> {
     grid: Res<'w, PowerGrid>,
     memories: Res<'w, MemoryDb>,
     clock: Res<'w, GameClock>,
+    room_inputs: crate::systems::RoomInputs<'w>,
 }
 
 /// Writes every staff program's `Situation`, once a tick, between
@@ -334,6 +376,7 @@ pub fn assess_situation_system(
         grid,
         memories,
         clock,
+        room_inputs,
     } = lookups;
     let amenities = crate::game::base::offshift::Amenities::build(
         sites.iter().map(|(s, p)| (&s.kind, p)),
@@ -366,6 +409,7 @@ pub fn assess_situation_system(
     // the order today, but a reader should not have to prove that.
     staff.sort_by_key(|(body, _)| body.entity);
     let (bodies, current): (Vec<Body>, Vec<Option<&Situation>>) = staff.into_iter().unzip();
+    let rooms = crate::systems::rooms_of_inputs(&room_inputs, &structure_db, sites.iter());
     let status = |e: Entity| statuses.get(e).ok().copied();
     let around = Surroundings {
         grid: &grid,
@@ -373,6 +417,7 @@ pub fn assess_situation_system(
         now: clock.tick,
         has_amenity: amenities.any(),
         status: &status,
+        rooms: &rooms,
     };
     let answers = assess(&bodies, &around);
     for ((body, current), answer) in bodies.iter().zip(current).zip(answers) {
@@ -564,6 +609,7 @@ mod tests {
 
     use crate::components::Memory;
     use crate::memories::MemoryId;
+    use crate::rooms::{Room, RoomBand};
     use bevy_ecs::world::World;
 
     const NOW: u64 = 100;
@@ -621,8 +667,102 @@ mod tests {
                 now: NOW,
                 has_amenity,
                 status,
+                rooms: &Rooms::default(),
             },
         )
+    }
+
+    fn room(cells: &[(i32, i32)], role: Option<&str>, living: bool, band: RoomBand) -> Room {
+        Room {
+            cells: cells.to_vec(),
+            role: role.map(String::from),
+            living,
+            band,
+        }
+    }
+
+    fn assess_in(bodies: &[Body], rooms: &Rooms) -> Vec<Situation> {
+        let db = MemoryDb::load_dir(&crate::tests::support::test_assets_dir().join("memories"))
+            .unwrap()
+            .0;
+        assess(
+            bodies,
+            &Surroundings {
+                grid: &PowerGrid::default(),
+                memories: &db,
+                now: NOW,
+                has_amenity: true,
+                status: &|_| None,
+                rooms,
+            },
+        )
+    }
+
+    #[test]
+    fn a_room_thought_fires_in_its_band_only_in_a_room_with_a_role() {
+        let e = entities(1);
+        let idle = [body(e[0], 1, (5, 5), None)];
+        let cells = [(5, 5), (5, 6)];
+        for (band, want) in [
+            (RoomBand::Cramped, Some(Trigger::CrampedRoom)),
+            (RoomBand::Plain, None),
+            (RoomBand::Fine, Some(Trigger::FineRoom)),
+            (RoomBand::Superb, Some(Trigger::SuperbRoom)),
+        ] {
+            let rooms = Rooms::from_rooms(vec![room(&cells, Some("workshop"), false, band)]);
+            let got = assess_in(&idle, &rooms)[0].thoughts.clone();
+            assert_eq!(got, want.into_iter().collect::<Vec<_>>(), "{band:?}");
+            // The commons and roleless space think nothing of their band.
+            let roleless = Rooms::from_rooms(vec![room(&cells, None, false, band)]);
+            assert!(
+                assess_in(&idle, &roleless)[0].thoughts.is_empty(),
+                "{band:?}"
+            );
+        }
+        assert!(assess_in(&idle, &Rooms::default())[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_roommate_rival_fires_across_a_dormitory_but_not_a_workshop() {
+        let e = entities(2);
+        let store = rival_store(2);
+        let bodies = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (8, 8), None),
+        ];
+        let cells = [(5, 5), (8, 8)];
+        let dorm = Rooms::from_rooms(vec![room(&cells, Some("dormitory"), true, RoomBand::Plain)]);
+        assert_eq!(
+            assess_in(&bodies, &dorm)[0].thoughts,
+            vec![Trigger::RoommateRival]
+        );
+        let shop = Rooms::from_rooms(vec![room(&cells, Some("workshop"), false, RoomBand::Plain)]);
+        assert!(assess_in(&bodies, &shop)[0].thoughts.is_empty());
+        let split = Rooms::from_rooms(vec![
+            room(&[(5, 5)], Some("dormitory"), true, RoomBand::Plain),
+            room(&[(8, 8)], Some("dormitory"), true, RoomBand::Plain),
+        ]);
+        assert!(assess_in(&bodies, &split)[0].thoughts.is_empty());
+    }
+
+    #[test]
+    fn a_roommate_friend_fires_in_a_living_room() {
+        let e = entities(2);
+        let store = friend_store(2);
+        let bodies = [
+            body(e[0], 1, (5, 5), Some(&store)),
+            body(e[1], 2, (8, 8), None),
+        ];
+        let quarters = Rooms::from_rooms(vec![room(
+            &[(5, 5), (8, 8)],
+            Some("quarters"),
+            true,
+            RoomBand::Plain,
+        )]);
+        assert_eq!(
+            assess_in(&bodies, &quarters)[0].thoughts,
+            vec![Trigger::RoommateFriend]
+        );
     }
 
     fn plain(bodies: &[Body]) -> Vec<Situation> {

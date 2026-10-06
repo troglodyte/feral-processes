@@ -103,11 +103,28 @@ type Needful<'w> = (
 
 /// What `rooms::of_parts` needs beyond the structure db, each optional
 /// like `of_world`'s `get_resource`s.
-type RoomInputs<'w> = (
+pub(crate) type RoomInputs<'w> = (
     Option<Res<'w, crate::base_grid::BaseGrid>>,
     Option<Res<'w, crate::rooms::RoomDb>>,
     Option<Res<'w, crate::floors::FloorDb>>,
 );
+
+/// `rooms::of_parts` over `RoomInputs`: no rooms at all when a world lacks
+/// any of the resources, `of_world`'s rule.
+pub(crate) fn rooms_of_inputs<'a>(
+    inputs: &RoomInputs,
+    structures: &'a StructureDb,
+    sites: impl Iterator<Item = (&'a Structure, &'a Position)>,
+) -> crate::rooms::Rooms {
+    let (Some(grid), Some(room_db), Some(floors)) = (
+        inputs.0.as_deref(),
+        inputs.1.as_deref(),
+        inputs.2.as_deref(),
+    ) else {
+        return crate::rooms::Rooms::default();
+    };
+    crate::rooms::of_parts(grid, structures, room_db, floors, sites)
+}
 
 pub fn needs_drain_system(
     mut programs: Query<Needful, Without<Player>>,
@@ -162,14 +179,7 @@ pub fn needs_drain_system(
             };
             let scale = {
                 let rooms = rooms.get_or_insert_with(|| {
-                    let (Some(grid), Some(room_db), Some(floors)) = (
-                        room_inputs.0.as_deref(),
-                        room_inputs.1.as_deref(),
-                        room_inputs.2.as_deref(),
-                    ) else {
-                        return crate::rooms::Rooms::default();
-                    };
-                    crate::rooms::of_parts(grid, &structure_db, room_db, floors, sites.iter())
+                    rooms_of_inputs(&room_inputs, &structure_db, sites.iter())
                 });
                 rooms
                     .room_at(site.x, site.y)

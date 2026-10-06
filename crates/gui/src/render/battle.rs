@@ -5,8 +5,8 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::StatusTagView;
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
+use feral_processes_engine::{PortraitView, StatusTagView};
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
@@ -418,8 +418,19 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let party_top = (log_bottom - party_height).max(y);
 
     let log_height = party_top - y;
-    painter.rect(margin, y, w - margin * 2.0, log_height, PANEL_BG);
-    painter.rect_lines(margin, y, w - margin * 2.0, log_height, 2.0, BORDER);
+    let log_w = w - margin * 2.0;
+    painter.rect(margin, y, log_w, log_height, PANEL_BG);
+    painter.rect_lines(margin, y, log_w, log_height, 2.0, BORDER);
+    // Cut from the narration's left edge, Bard's Tale's picture window: the
+    // log is the one region with slack to give, and both rosters keep the
+    // full width their columns are measured against.
+    let mut text_x = margin + m.inset;
+    if let Some(portrait) = &view.portrait
+        && let Some(side) = portrait_side(log_w, log_height, m.line_height)
+    {
+        draw_battle_portrait(portrait, text_x, y + m.inset, side, painter, m);
+        text_x += side + m.inset;
+    }
     // Floors at 0, not 1. On a window too short to seat both rosters this
     // pane collapses to nothing, and forcing a line into it drew narration
     // at the party block's first row — which the party header then painted
@@ -435,7 +446,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         if ly + m.line_height > party_top {
             break;
         }
-        draw_message_line(e, margin + m.inset, ly, painter, m);
+        draw_message_line(e, text_x, ly, painter, m);
         ly += m.line_height;
     }
     // Only when there is something out of sight: a pane showing the whole
@@ -746,10 +757,161 @@ pub(super) fn draw_battle_item_menu(
     draw_popup("Use an item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
+/// Sprites are 16px art drawn nearest-sampled; a portrait sized to a whole
+/// multiple keeps every source pixel the same size on screen.
+const SPRITE_PX: f32 = 16.0;
+/// Twelve source pixels to one: past this the picture stops reading as a
+/// character and starts eating narration the round is still telling.
+const PORTRAIT_MAX: f32 = SPRITE_PX * 12.0;
+/// The narrowest the narration may get before the portrait gives up its
+/// column — under this a swing line clips before it names its damage.
+const PORTRAIT_MIN_LOG_W: f32 = 420.0;
+
+/// The portrait's side in a log pane of `log_w` x `log_h`, leaving one
+/// `line_height` under it for the caption — or `None` when the pane cannot
+/// spare a square without starving the narration beside it.
+fn portrait_side(log_w: f32, log_h: f32, line_height: f32) -> Option<f32> {
+    let room = (log_h - line_height * 2.0).min(PORTRAIT_MAX);
+    let side = (room / SPRITE_PX).floor() * SPRITE_PX;
+    (side >= SPRITE_PX && log_w - side >= PORTRAIT_MIN_LOG_W).then_some(side)
+}
+
+/// The picture window: one body, drawn the way the map draws it. The glyph
+/// is only the fallback for a body with no art — it is never drawn beside
+/// a sprite, and whether one was drawn is read off `Painter::sprite`'s
+/// answer rather than guessed from the name.
+fn draw_battle_portrait(
+    portrait: &PortraitView,
+    x: f32,
+    y: f32,
+    side: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let color = hud::palette::glyph(portrait.color);
+    // The drawn icon is the one untinted sprite — see `drawing-seam.md`.
+    let drew_sprite = (portrait.drawn_icon
+        && painter.sprite(crate::sprites::DRAWN_ICON_KEY, x, y, side, WHITE))
+        || portrait
+            .sprite
+            .as_deref()
+            .is_some_and(|name| painter.sprite(name, x, y, side, color));
+    if !drew_sprite {
+        let glyph = portrait.glyph.to_string();
+        let size = side as u16;
+        let dims = painter.measure_map(&glyph, size);
+        painter.map(
+            &glyph,
+            x + (side - dims.width) / 2.0,
+            y + (side + dims.height) / 2.0,
+            size,
+            color,
+        );
+    }
+    let width = painter.measure_ui(&portrait.name, m.small()).width;
+    painter.ui(
+        &portrait.name,
+        x + (side - width) / 2.0,
+        y + side + m.line_height,
+        m.small(),
+        TEXT,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paint::SpriteTable;
+    use bevy_egui::egui;
+    use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::components::POWER_MAX;
+
+    fn a_portrait(drawn_icon: bool) -> PortraitView {
+        PortraitView {
+            sprite: Some("scrapper".into()),
+            glyph: 'S',
+            color: GlyphColor::Red,
+            name: "Scrapper".into(),
+            drawn_icon,
+        }
+    }
+
+    fn draw_portrait_with(
+        table: SpriteTable,
+        portrait: &PortraitView,
+    ) -> Vec<egui::epaint::ClippedShape> {
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_sprites(table, |p| {
+            draw_battle_portrait(portrait, 20.0, 40.0, 128.0, p, &m)
+        });
+        shapes
+    }
+
+    #[test]
+    fn the_portrait_is_a_whole_multiple_of_the_sprite_grid() {
+        let side = portrait_side(900.0, 300.0, 18.0).expect("room for a portrait");
+        assert_eq!(side % 16.0, 0.0);
+        assert!(side <= 300.0 - 18.0);
+    }
+
+    #[test]
+    fn the_portrait_stops_growing_at_its_cap() {
+        assert_eq!(portrait_side(2000.0, 2000.0, 18.0), Some(PORTRAIT_MAX));
+    }
+
+    #[test]
+    fn a_narrow_log_keeps_its_whole_width() {
+        assert_eq!(portrait_side(PORTRAIT_MIN_LOG_W + 40.0, 300.0, 18.0), None);
+    }
+
+    #[test]
+    fn a_short_log_has_no_room_for_a_portrait() {
+        assert_eq!(portrait_side(900.0, 30.0, 18.0), None);
+    }
+
+    #[test]
+    fn a_portrait_with_art_paints_the_sprite_and_not_the_glyph() {
+        let mut table = SpriteTable::default();
+        table.insert("scrapper", egui::TextureId::User(9));
+        let shapes = draw_portrait_with(table, &a_portrait(false));
+        let images = crate::paint::painted_images(&shapes);
+        let (_, rect, _) = images
+            .iter()
+            .find(|(id, _, _)| *id == egui::TextureId::User(9))
+            .expect("the sprite should be painted");
+        assert_eq!(rect.width(), 128.0);
+        assert!(!crate::paint::painted_text(&shapes).iter().any(|t| t == "S"));
+    }
+
+    #[test]
+    fn a_portrait_without_art_paints_its_glyph() {
+        let shapes = draw_portrait_with(SpriteTable::default(), &a_portrait(false));
+        assert!(crate::paint::painted_images(&shapes).is_empty());
+        assert!(crate::paint::painted_text(&shapes).iter().any(|t| t == "S"));
+    }
+
+    #[test]
+    fn the_player_portrait_prefers_the_drawn_icon() {
+        let mut table = SpriteTable::default();
+        table.insert("scrapper", egui::TextureId::User(9));
+        table.insert(crate::sprites::DRAWN_ICON_KEY, egui::TextureId::User(4));
+        let shapes = draw_portrait_with(table, &a_portrait(true));
+        let ids: Vec<_> = crate::paint::painted_images(&shapes)
+            .into_iter()
+            .map(|(id, _, _)| id)
+            .collect();
+        assert_eq!(ids, vec![egui::TextureId::User(4)]);
+    }
+
+    #[test]
+    fn the_portrait_is_captioned_with_its_name() {
+        let shapes = draw_portrait_with(SpriteTable::default(), &a_portrait(false));
+        assert!(
+            crate::paint::painted_text(&shapes)
+                .iter()
+                .any(|t| t == "Scrapper")
+        );
+    }
 
     fn tag(tag: &str, stacks: u32) -> StatusTagView {
         StatusTagView {
@@ -1316,15 +1478,9 @@ mod tests {
         );
     }
 
-    /// The gap `party_name_cell`'s own unit tests above cannot close:
-    /// nothing stops `draw_battle`'s call site reverting to bare `p.name`
-    /// while `party_name_cell` itself stays correct and its tests stay
-    /// green. This drives a real fight through `draw_battle` and reads the
-    /// painted text back, so a call site that regresses to `&p.name` fails
-    /// here — confirmed by reverting that one line locally and re-running
-    /// this test before writing the fix back.
-    #[test]
-    fn draw_battle_paints_a_rare_partys_tier_tag() {
+    /// A real fight opened by walking into a seeded hostile, with a rare
+    /// companion in the party.
+    fn a_battling_app() -> feral_processes_app_core::App {
         use feral_processes_app_core::{GameKey, Mode};
         use feral_processes_engine::components::Rarity;
         use feral_processes_engine::{DifficultyMode, Game};
@@ -1368,6 +1524,52 @@ mod tests {
             Mode::Battle,
             "the seeded hostile did not open a fight"
         );
+        app
+    }
+
+    /// The gap `party_name_cell`'s own unit tests above cannot close:
+    /// nothing stops `draw_battle`'s call site reverting to bare `p.name`
+    /// while `party_name_cell` itself stays correct and its tests stay
+    /// green. This drives a real fight through `draw_battle` and reads the
+    /// painted text back, so a call site that regresses to `&p.name` fails
+    /// here — confirmed by reverting that one line locally and re-running
+    /// this test before writing the fix back.
+    /// The window is drawn by `draw_battle` itself, for the body the engine
+    /// put on display — not only by the helper in isolation.
+    #[test]
+    fn draw_battle_paints_the_front_hostiles_portrait() {
+        let mut app = a_battling_app();
+        let portrait = app
+            .battle_view()
+            .and_then(|v| v.portrait)
+            .expect("a live fight has someone to show");
+        let name = portrait
+            .sprite
+            .clone()
+            .expect("a hostile has a sprite name");
+        let mut table = SpriteTable::default();
+        table.insert(name, egui::TextureId::User(9));
+        let mut fx = crate::fx::Fx::new();
+        let m = ui_metrics(900.0);
+
+        let (_, shapes) =
+            crate::paint::with_sprites(table, |p| draw_battle(&mut app, &mut fx, p, &m));
+
+        assert!(
+            crate::paint::painted_images(&shapes)
+                .iter()
+                .any(|(id, _, _)| *id == egui::TextureId::User(9)),
+            "the battle screen should paint the portrait's sprite"
+        );
+        assert!(
+            crate::paint::painted_text(&shapes).contains(&portrait.name),
+            "the portrait should carry its caption"
+        );
+    }
+
+    #[test]
+    fn draw_battle_paints_a_rare_partys_tier_tag() {
+        let mut app = a_battling_app();
 
         let mut fx = crate::fx::Fx::new();
         let m = ui_metrics(900.0);

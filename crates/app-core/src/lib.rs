@@ -26,6 +26,7 @@ pub use app::icon_editor::IconEditorView;
 pub use app::level_up::LevelUpOrigin;
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
+pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_forge::{
     PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
     SpriteWrite, SubjectTint,
@@ -1573,6 +1574,9 @@ pub enum Mode {
     /// space. A screen of its own rather than a page of `Mode::Tools`,
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
+    /// Build an implant into the player or cut one out — `[I]` in base
+    /// space beside a Splice Rig. See `App::splice_rig`.
+    SpliceRig,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -2320,6 +2324,8 @@ impl Mode {
             // one further step from a fight than the picker is.
             | Mode::DepotFilter
             | Mode::RigTool
+            // Opened from the map beside a rig, `RigTool`'s reason.
+            | Mode::SpliceRig
             | Mode::Craft
             | Mode::CraftQuantity
             // A blocking screen entered from the map, same as `Craft`
@@ -2954,6 +2960,9 @@ pub struct App {
     /// Session state, `depot_filter`'s reason — the screen acts on a
     /// machine, so it is re-read after every edit rather than restored.
     pub rig_tool: Option<RigToolScreen>,
+    /// What `Mode::SpliceRig` last read of the player's implants, and the
+    /// install it is asking to confirm. Session state, `rig_tool`'s reason.
+    pub splice_rig: Option<SpliceRigScreen>,
     /// The Power Siphon `Mode::Siphon` is acting on. Re-validated against
     /// `Game::adjacent_siphons` on every key, since the machine can be
     /// destroyed or walked away from while the screen is open.

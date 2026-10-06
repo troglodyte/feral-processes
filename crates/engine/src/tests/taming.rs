@@ -732,6 +732,7 @@ fn attempts_against_one_group_do_not_help_against_another() {
         rewards: BattleRewards::default(),
         lair: None,
         outmatched: false,
+        dead_mans_switch_spent: false,
     });
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
 

@@ -1,0 +1,8 @@
+(
+    id: "black_ledger",
+    name: "Black Ledger",
+    description: "Tracks what every kill in the Stack was carrying. Better gear drops, and the Stack notices.",
+    load: 2,
+    hooks: [DropBoost(25)],
+    downside: Some(TraceRise(25)),
+)

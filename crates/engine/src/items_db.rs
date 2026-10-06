@@ -220,6 +220,13 @@ pub struct ItemDef {
     /// ordinary cargo that cannot buy a rest.
     #[serde(default)]
     pub enables_rest: bool,
+    /// The implant this item installs at a Splice Rig, by id in
+    /// `assets/implants/`. A field rather than a naming convention so the
+    /// link is stated, not guessed; a census holds every implant and every
+    /// implant item to a partner. `#[serde(default)]` so every existing mod's
+    /// items keep parsing as ordinary cargo.
+    #[serde(default)]
+    pub implant: Option<crate::implants::ImplantId>,
     /// What one swing of this weapon lands on, past the body it is aimed
     /// at. Absent on everything that is not a weapon, and refused at load
     /// on anything that is not — see `unreachable_reach`.
@@ -604,6 +611,7 @@ impl ItemDb {
                     upgrade: None,
                     // A disk is installed, not slept against.
                     enables_rest: false,
+                    implant: None,
                     // Installed or fitted, never dropped on the ground.
                     trap: None,
                     // Every disk derives the same family tag, "ED" — the
@@ -686,6 +694,7 @@ impl ItemDb {
                     range: None,
                     upgrade: None,
                     enables_rest: false,
+                    implant: None,
                     // Installed or fitted, never dropped on the ground.
                     trap: None,
                     // `ItemDef::tag` takes the first two words' initials,
@@ -1185,7 +1194,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 75);
+        assert_eq!(db.all().count(), 81);
     }
 
     #[test]

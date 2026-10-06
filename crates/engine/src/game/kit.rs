@@ -73,7 +73,7 @@ pub struct EmulationOption {
 impl Game {
     /// The attack and mitigation an emulating `entity` actually fights
     /// with: `stats` (the species' own figure, already scaled to level and
-    /// fidelity) plus worn gear plus the `components::BoughtStats` receipt
+    /// fidelity) plus worn gear, installed implants and the `components::BoughtStats` receipt
     /// — final review F5 (U2 "keep bought stats"). One call shared by
     /// `effective_atk`/`effective_mitigation`'s `Kit::Emulated` arm and
     /// `emulation_options`' preview, so a quoted figure and a fought one
@@ -101,9 +101,13 @@ impl Game {
             .get::<crate::components::BoughtStats>(entity)
             .copied()
             .unwrap_or_default();
+        // Implants are in the player's body, not the borrowed form, so they
+        // stay in effect; `recompute_derived` bakes them into `Stats`, which
+        // this base replaces.
+        let implants = self.implant_stats(entity);
         (
-            stats.atk + gear.atk + bought.atk,
-            stats.mitigation + gear.mitigation + bought.mitigation,
+            stats.atk + gear.atk + bought.atk + implants.atk,
+            stats.mitigation + gear.mitigation + bought.mitigation + implants.mitigation,
         )
     }
 

@@ -1,0 +1,8 @@
+(
+    id: "ghost_handshake",
+    name: "Ghost Handshake",
+    description: "Opens a quiet side channel during a decompile. Captures land more often, and the Stack notices.",
+    load: 2,
+    hooks: [CaptureOdds(10)],
+    downside: Some(TraceRise(25)),
+)

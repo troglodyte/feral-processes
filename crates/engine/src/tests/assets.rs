@@ -2060,9 +2060,9 @@ fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
         }
     }
     assert_eq!(
-        checked, 12,
-        "expected every zone-gated recipe the tree unlocks — eight of gear and \
-         four of Power cells; one that lost its recipe would drop out of this \
+        checked, 18,
+        "expected every zone-gated recipe the tree unlocks — eight of gear, \
+         four of Power cells and six implants; one that lost its recipe would drop out of this \
          scan unnoticed"
     );
 }
@@ -2880,6 +2880,26 @@ fn the_manual_binds_the_excavation_plan_key() {
             .any(|row| row.contains("m — Excavation plan"))
     });
     assert!(says, "no help page binds the m key to the Excavation plan");
+}
+
+/// `I` beside a Splice Rig is a map key with no other way to be found, and
+/// the manual is also where removal's fragment price (lost at a breach) is
+/// told, so both are held.
+#[test]
+fn the_manual_teaches_the_splice_rig_key_and_what_removal_costs() {
+    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    let text = |id: &str| {
+        let page = db
+            .pages()
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("no help page {id}"));
+        help::page_rows(page, help::WRAP_COLUMNS).join(" ")
+    };
+    assert!(text("controls").contains("I — open the Splice Rig"));
+    let implants = text("implants");
+    assert!(implants.contains("core fragments"));
+    assert!(implants.contains("lost at a"));
 }
 
 /// Two piles cannot share a tag in the base pane's PRODUCTION rows, where a
@@ -5064,8 +5084,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 36,
-        "expected the shipped base tree's 36 nodes; a count that moved means a node was \
+        checked, 38,
+        "expected the shipped base tree's 38 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -5405,6 +5425,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "cold_archive",
             "cortex",
             "deep_analysis",
+            "deep_splicing",
             "dispatch",
             "drop_pods",
             "firewall",
@@ -5420,6 +5441,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "siphoning",
             "virtual_memory",
             "weapon_bench",
+            "wetware_splicing",
         ],
         "the discoverable set is a content decision and nothing in ResearchDef states it"
     );
@@ -5916,4 +5938,52 @@ fn the_decompiler_research_chain_is_loaded_reachable_and_strictly_increasing() {
     assert!(range > 0 && radius > 0, "both halves are covered");
     let shipped = db.all().filter(|d| d.decompiler.is_some()).count();
     assert_eq!(shipped, chain.len(), "no stray decompiler node");
+}
+
+#[test]
+fn six_implants_ship_and_every_implant_links_to_its_item_both_ways() {
+    let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let implants = game.world.resource::<crate::implants::ImplantDb>();
+    let items = game.world.resource::<ItemDb>();
+    let ids = implants.ids();
+    assert_eq!(ids.len(), 6, "the first set: {ids:?}");
+    for id in &ids {
+        let linked: Vec<_> = items
+            .all()
+            .filter(|item| item.implant.as_ref() == Some(*id))
+            .collect();
+        assert_eq!(
+            linked.len(),
+            1,
+            "implant {id:?} must have exactly one item installing it"
+        );
+    }
+    for item in items.all().filter(|item| item.implant.is_some()) {
+        let target = item.implant.as_ref().unwrap();
+        assert!(
+            implants.get(target).is_some(),
+            "item {:?} installs implant {target:?}, which does not exist",
+            item.id.0
+        );
+    }
+    let (_, warnings) =
+        crate::implants::ImplantDb::load_dir(&test_assets_dir().join("implants")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn every_shipped_rejection_status_exists() {
+    let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let statuses = game.world.resource::<StatusDb>();
+    for id in tuning::REJECTION_STATUSES {
+        assert!(statuses.contains(&StatusId::from(id)), "{id}");
+    }
+    let implants = game.world.resource::<crate::implants::ImplantDb>();
+    for id in implants.ids() {
+        if let Some(crate::implants::ImplantDownside::BattleStartStatus(status, _)) =
+            &implants.get(id).unwrap().downside
+        {
+            assert!(statuses.contains(status), "{id:?} arms unknown {status:?}");
+        }
+    }
 }

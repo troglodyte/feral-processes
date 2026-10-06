@@ -177,6 +177,9 @@ impl Game {
         });
         let line = self.intercept_line(wild.first().copied(), wild.len());
         self.log(line);
+        // The same roll `begin_battle` makes: statuses live on the entity,
+        // so both fight models read them alike.
+        self.roll_implant_battle_start();
     }
 
     /// `standing` in descending initiative order, rolled once.

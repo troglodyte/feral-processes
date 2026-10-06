@@ -53,6 +53,7 @@ mod settlement_market;
 mod siphon;
 mod social_tab;
 mod spend_preview;
+mod splice_rig;
 mod sprite_forge;
 mod stack;
 mod stack_market;

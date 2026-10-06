@@ -412,6 +412,46 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
     app
 }
 
+/// The party in base space beside a Splice Rig at `(1, 0)`, carrying
+/// `pack`. Built through the save round trip for
+/// `app_beside_a_teardown_rig_holding`'s reason: the rig's research and
+/// build flow are not what these tests are about.
+pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("splice_rig", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.inventory = pack.iter().map(|(id, n)| (ItemId::from(*id), *n)).collect();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    data.structures.push(save::StructureSave {
+        kind: "splice_rig".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// An app on `Mode::Inventory` with at least ten distinct cargo rows, so
 /// the fourth letter row (`DIGIT_ROWS` + 3 — lowercase `d`) resolves to a
 /// real row rather than `selected_index` falling out on an out-of-range

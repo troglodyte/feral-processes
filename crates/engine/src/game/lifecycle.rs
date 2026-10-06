@@ -148,6 +148,7 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
                 PlayerIdentity::default(),
                 DownedPrograms::default(),
                 Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
+                crate::components::Implants::default(),
             ),
         ))
         .id()
@@ -442,6 +443,11 @@ fn spawn_player_from_save(
                 // there instead of an empty loadout — see that field's
                 // doc comment.
                 Tools(player_save.tools),
+                // Kept verbatim, including ids with no def: they contribute
+                // nothing but stay removable — see `components::Implants`.
+                crate::components::Implants {
+                    installed: player_save.implants,
+                },
             ),
         ))
         .id()
@@ -471,6 +477,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             statuses: status_db,
+            implants: implant_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -514,6 +521,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
+        world.insert_resource(implant_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -1370,6 +1378,7 @@ impl Game {
             descriptions: description_db,
             memories: memory_db,
             statuses: status_db,
+            implants: implant_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -1431,6 +1440,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
+        world.insert_resource(implant_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -2886,6 +2896,11 @@ impl Game {
             .get::<Tools>(player)
             .map(|t| t.0.clone())
             .unwrap_or_default();
+        let implants = self
+            .world
+            .get::<crate::components::Implants>(player)
+            .map(|i| i.installed.clone())
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -3047,6 +3062,7 @@ impl Game {
             gear_copies,
             downed_programs,
             tools,
+            implants,
             perk_points: perks.points,
             unlocked_perks: perks.unlocked,
             bought_stats,
@@ -3487,6 +3503,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     memories: crate::memories::MemoryDb,
     statuses: crate::statuses::StatusDb,
+    implants: crate::implants::ImplantDb,
     thoughts: crate::situations::ThoughtDb,
     interactions: crate::interactions::InteractionDb,
     needs: crate::needs::NeedDb,
@@ -3535,6 +3552,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ));
         }
     }
+    // Absent-is-silent: an empty catalogue leaves nothing to install.
+    let (implants, implant_warnings) =
+        crate::implants::ImplantDb::load_dir(&assets_dir.join("implants"))?;
+    warnings.extend(implant_warnings);
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.
@@ -3711,6 +3732,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         memories,
         statuses,
+        implants,
         thoughts,
         interactions,
         needs,

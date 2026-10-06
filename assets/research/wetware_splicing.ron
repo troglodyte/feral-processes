@@ -1,0 +1,29 @@
+(
+    id: "wetware_splicing",
+    name: "Wetware Splicing",
+    description: "A rig that builds implants into your own body. Opens the first three: Ripper Fibers, Ghost Handshake and Dermal Lattice.",
+    cost: 50,
+    materials: [("logic_wafer", 8), ("bytecode_block", 8)],
+    min_zone: 2,
+    requires_subject: true,
+    discoverable: true,
+    requires: ["weapon_bench"],
+    unlocks_structures: ["splice_rig"],
+    unlocks_recipes: [
+        (
+            result: "ripper_fibers",
+            cost: [("logic_wafer", 5), ("bytecode_block", 2), ("cache_grain", 1)],
+            requires_structure: Some("fabricator"),
+        ),
+        (
+            result: "ghost_handshake",
+            cost: [("trace_sniffer", 1), ("logic_wafer", 3), ("cache_grain", 2)],
+            requires_structure: Some("fabricator"),
+        ),
+        (
+            result: "dermal_lattice",
+            cost: [("bytecode_block", 5), ("portal_fragment", 3), ("cache_grain", 1)],
+            requires_structure: Some("fabricator"),
+        ),
+    ],
+)

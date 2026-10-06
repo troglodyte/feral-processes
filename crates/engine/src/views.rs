@@ -3791,3 +3791,46 @@ pub struct SocialView {
     /// more conversations than another.
     pub sociability: &'static str,
 }
+
+/// One implant the player has built in — see `Game::implant_view`.
+#[derive(Clone, PartialEq, Debug)]
+pub struct InstalledImplantRow {
+    pub id: crate::implants::ImplantId,
+    /// The def's name, or the raw id when the def is gone (`known` false).
+    pub name: String,
+    /// False for an id whose def has gone missing: it contributes nothing,
+    /// costs nothing to remove and returns nothing.
+    pub known: bool,
+    pub description: String,
+    pub load: u32,
+    /// Extra Power per tick this implant adds, before perks.
+    pub upkeep: f32,
+    pub downside: Option<String>,
+    /// `core_fragment`s taking it out costs.
+    pub removal_fragments: u32,
+}
+
+/// One implant item in the pack, ready to install.
+#[derive(Clone, PartialEq, Debug)]
+pub struct InstallableImplantRow {
+    pub item: ItemId,
+    pub name: String,
+    pub description: String,
+    pub load: u32,
+    pub upkeep: f32,
+    pub downside: Option<String>,
+    pub count: u32,
+}
+
+/// The Splice Rig screen's whole picture of the player's implants.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ImplantView {
+    pub load: u32,
+    pub cap: u32,
+    /// Load past the cap, or 0.
+    pub overload: u32,
+    /// `core_fragment`s in the pack, what a removal is paid from.
+    pub fragments: u32,
+    pub installed: Vec<InstalledImplantRow>,
+    pub installable: Vec<InstallableImplantRow>,
+}

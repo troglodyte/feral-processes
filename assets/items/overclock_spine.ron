@@ -1,0 +1,7 @@
+(
+    id: "overclock_spine",
+    name: "Overclock Spine",
+    description: "Implant. Installed at a Splice Rig. Runs the whole nervous system hot. One more routine slot, and you start some fights throttled.",
+    value: Some(48),
+    implant: Some("overclock_spine"),
+)

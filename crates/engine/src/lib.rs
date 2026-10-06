@@ -26,6 +26,7 @@ mod game;
 pub mod handles;
 pub mod help;
 pub mod icon;
+pub mod implants;
 pub mod interactions;
 pub mod items;
 pub mod items_db;

@@ -1,0 +1,11 @@
+(
+    id: "splice_rig",
+    name: "Splice Rig",
+    description: "Where implants are built into your own body, or cut back out. One standing anywhere in the base is enough; walk up to it to use it.",
+    glyph: 'S',
+    color: Red,
+    build_cost: [("core_fragment", 18)],
+    work: None,
+    capacity: 10,
+    power_draw: 3,
+)

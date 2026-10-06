@@ -97,7 +97,17 @@ impl Game {
             }
         }
         drops.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
-        let boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::DropBoost);
+        // Stack only, by design: the implant's pct has no scope flag in data.
+        let implant_pct = if self.is_underground() {
+            self.implant_hook_total(|h| match h {
+                crate::implants::ImplantHook::DropBoost(pct) => Some(*pct),
+                _ => None,
+            })
+        } else {
+            0
+        };
+        let boost_pct =
+            self.field_buff_power(self.player_entity(), FieldBuffKind::DropBoost) + implant_pct;
         if boost_pct != 0 {
             let multiplier = 1.0 + boost_pct as f32 / 100.0;
             for (_, chance) in &mut drops {
@@ -1004,7 +1014,11 @@ impl Game {
         // `XpBoost` is `FieldScope::Run`, so it reads off the player
         // regardless of whether `player` here is the player themself (the
         // only caller today, but the parameter doesn't guarantee it).
-        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
+        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost)
+            + self.implant_hook_total(|h| match h {
+                crate::implants::ImplantHook::XpBoost(pct) => Some(*pct),
+                _ => None,
+            });
         let level_cap = self.level_cap();
         // Taken before `add_xp` mutates `Stats`/`Experience` below: by the
         // time `gain.levels` is known, the "before" state a level-up page

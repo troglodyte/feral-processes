@@ -563,6 +563,7 @@ impl Game {
             rewards: BattleRewards::default(),
             lair: None,
             outmatched: hostile_weight > party_weight,
+            dead_mans_switch_spent: false,
         });
         // After `BattleState` is in place, deliberately: the party slots and
         // the groups are both read back off it, so a record taken earlier
@@ -578,6 +579,7 @@ impl Game {
         });
         let line = self.intercept_line_named(&name, others);
         self.log(line);
+        self.roll_implant_battle_start();
         // The first nemesis in the opening groups, group-then-slot order —
         // deterministic, and there is no notion of "the" nemesis when a
         // pack holds two, so picking one rather than logging every one of
@@ -1073,6 +1075,10 @@ impl Game {
             // cap bounds the level curve, not the total.
             abilities::player_routine_slots(level)
                 + crate::classes::routine_slot_bonus(self.player_class())
+                + self.implant_hook_total(|h| match h {
+                    crate::implants::ImplantHook::RoutineSlots(n) => Some(*n as i32),
+                    _ => None,
+                }) as usize
         } else {
             abilities::companion_routine_slots(level) + self.talent_routine_slots(entity)
         }
@@ -1119,6 +1125,18 @@ impl Game {
                     && matches!(choice.node, crate::talents::TalentNode::RoutineSlot)
             })
             .count()
+    }
+
+    /// Cuts `entity`'s routines down to its slots after something that
+    /// widened them is gone (a refunded `TalentNode::RoutineSlot`, a removed
+    /// Overclock Spine), then refills from the species kit and puts the
+    /// placeholder back if the program is now holding nothing at all.
+    pub(crate) fn fit_routines_to_slots(&mut self, entity: Entity) {
+        let slots = self.routine_slots(entity);
+        if let Some(mut routines) = self.world.get_mut::<Routines>(entity) {
+            routines.0.truncate(slots);
+        }
+        self.install_innate_routines(entity);
     }
 
     /// Installs the kit `entity`'s species grants at its current level,

@@ -2300,7 +2300,7 @@ impl Game {
         crate::battle::accuracy_of(
             self.combat_speed(entity),
             self.ability_user_level(entity),
-            self.gear_bonus(entity).accuracy,
+            self.hit_bonus(entity).0,
         ) as f32
     }
 
@@ -2309,7 +2309,7 @@ impl Game {
         crate::battle::evasion_of(
             self.combat_speed(entity),
             self.ability_user_level(entity),
-            self.gear_bonus(entity).evasion,
+            self.hit_bonus(entity).1,
         ) as f32
     }
 

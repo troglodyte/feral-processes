@@ -105,6 +105,22 @@ pub(super) fn allocate_stats_title(app: &App) -> String {
     }
 }
 
+/// The Neural Load line, in the warning colour once over the cap.
+fn load_row((load, cap): (u32, u32)) -> Option<Row> {
+    if load == 0 {
+        return None;
+    }
+    let text = format!("Neural Load {load}/{cap}");
+    Some(if load > cap {
+        Row::TextColored(
+            format!("{text} - over the cap, fights risk a rejection"),
+            ORANGE,
+        )
+    } else {
+        text_row(text)
+    })
+}
+
 /// The popup's rows, split out so the census can measure what is drawn.
 pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
     let mut rows: Vec<Row> = app
@@ -117,6 +133,14 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
         .collect();
     if rows.is_empty() {
         rows.push(text_row("Nothing to spend points on."));
+    }
+    // The player's own spend only: a program has no implants. Shown only
+    // once there is Load, so a run that never splices sees no new row.
+    if allocation_owner(app).is_none()
+        && let Some(game) = app.game.as_ref()
+        && let Some(row) = load_row(game.neural_load())
+    {
+        rows.push(row);
     }
     // What the pending spend does in a fight, after the attribute rows and
     // pinned with the footer: the screen keeps its whole attribute list in
@@ -156,6 +180,16 @@ mod tests {
             game.attribute_db(),
             game.attributes_of(game.player_entity()),
         )
+    }
+
+    #[test]
+    fn the_load_row_is_absent_without_implants_and_warns_over_the_cap() {
+        assert!(load_row((0, 4)).is_none());
+        assert_eq!(
+            super::popup::row_label_text(&load_row((3, 4)).unwrap()),
+            "Neural Load 3/4"
+        );
+        assert!(matches!(load_row((5, 4)), Some(Row::TextColored(_, c)) if c == ORANGE));
     }
 
     /// `draw_row` clips vertically only, so a row wider than the popup body

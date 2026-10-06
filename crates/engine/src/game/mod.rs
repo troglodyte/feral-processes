@@ -31,6 +31,7 @@ pub(crate) mod environment;
 pub(crate) mod extraction;
 pub(crate) mod field;
 pub(crate) mod gear_power;
+pub(crate) mod implants;
 pub(crate) mod inspection;
 pub(crate) mod kit;
 pub(crate) mod level_up;

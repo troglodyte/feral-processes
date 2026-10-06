@@ -39,6 +39,7 @@ impl App {
         Self {
             depot_filter: None,
             rig_tool: None,
+            splice_rig: None,
             siphon: None,
             mode: Mode::MainMenu,
             game: None,

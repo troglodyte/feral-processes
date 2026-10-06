@@ -541,7 +541,7 @@ impl Game {
             .worn(wearer, slot)
             .and_then(|worn| self.worn_bonus(&worn))
             .unwrap_or_default();
-        let gear_accuracy = self.gear_bonus(wearer).accuracy - held.accuracy + stats.accuracy;
+        let gear_accuracy = self.hit_bonus(wearer).0 - held.accuracy + stats.accuracy;
         let accuracy = crate::battle::accuracy_of(
             self.combat_speed(wearer),
             self.ability_user_level(wearer),

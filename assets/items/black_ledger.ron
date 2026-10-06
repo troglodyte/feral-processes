@@ -1,0 +1,7 @@
+(
+    id: "black_ledger",
+    name: "Black Ledger",
+    description: "Implant. Installed at a Splice Rig. Tracks what every kill in the Stack was carrying. Better gear drops, and the Stack notices.",
+    value: Some(24),
+    implant: Some("black_ledger"),
+)

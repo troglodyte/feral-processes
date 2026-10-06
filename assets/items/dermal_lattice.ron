@@ -1,0 +1,7 @@
+(
+    id: "dermal_lattice",
+    name: "Dermal Lattice",
+    description: "Implant. Installed at a Splice Rig. A rigid mesh under the skin. Tougher and sturdier, and slower to dodge.",
+    value: Some(36),
+    implant: Some("dermal_lattice"),
+)

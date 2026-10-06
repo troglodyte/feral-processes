@@ -88,7 +88,7 @@ impl Game {
     /// brings to every swing it makes; a routine's own accuracy belongs to
     /// the invocation and is added once, at `combatant_profile`.
     pub(crate) fn accuracy_bonus(&self, entity: Entity) -> i32 {
-        let gear = self.gear_bonus(entity).accuracy;
+        let gear = self.hit_bonus(entity).0;
         if entity == self.player_entity() {
             return gear + crate::perks::accuracy_bonus(self.player_perks());
         }
@@ -134,10 +134,9 @@ impl Game {
         entity: Entity,
         swing: battle::Swing,
     ) -> battle::Combatant {
-        let gear = self.gear_bonus(entity);
         let level = self.ability_user_level(entity);
         let speed = self.combat_speed(entity);
-        let evasion = battle::evasion_of(speed, level, gear.evasion);
+        let evasion = battle::evasion_of(speed, level, self.hit_bonus(entity).1);
         // Status evasion cuts (Exposed's whole cost). Read here rather than
         // folded into `evasion_of` because it is entity state rather than a
         // property of the numbers, and `evasion_of` is what `balance_sim`
@@ -362,6 +361,7 @@ impl Game {
     /// requested number claims damage the target never took.
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) -> i32 {
         let dealt = self.mitigate_incoming_damage(target, dmg);
+        let dealt = self.dead_mans_switch(target, dealt);
         self.lower_hp(target, dealt);
         // "An area attack connected." The third and last `break_cloak`
         // caller, and the only one naming the body on the receiving end —

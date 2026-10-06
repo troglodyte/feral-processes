@@ -94,7 +94,10 @@ impl Game {
         if !self.is_underground() {
             return;
         }
-        let amount = crate::perks::trace_after_obfuscation(self.player_perks(), amount);
+        let amount = crate::perks::trace_after_obfuscation(
+            self.player_perks(),
+            crate::implants::trace_scaled(amount, self.implant_trace_pct()),
+        );
         let before = TraceBand::from_trace(self.trace());
         let raised = self.trace().saturating_add(amount);
         self.world.insert_resource(Trace(raised));

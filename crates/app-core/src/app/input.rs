@@ -235,6 +235,7 @@ impl App {
             Mode::Transfer => self.handle_basket_key(key),
             Mode::DepotFilter => self.handle_depot_filter_key(key),
             Mode::RigTool => self.handle_rig_tool_key(key),
+            Mode::SpliceRig => self.handle_splice_rig_key(key),
             Mode::BaseMenu => self.handle_base_menu_key(key),
             Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),

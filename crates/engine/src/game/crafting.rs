@@ -297,7 +297,8 @@ impl Game {
     /// case and the refusal it feeds never lets a batch through that the
     /// reserve could not have carried on its own.
     pub(crate) fn hand_craft_power_cost(&self, item: &ItemId, quantity: u32) -> f32 {
-        let multiplier = crate::perks::power_drain_multiplier(self.player_perks());
+        let multiplier =
+            crate::implants::power_multiplier(self.player_perks(), self.implant_load());
         (quantity.saturating_mul(self.hand_craft_ticks(item))) as f32
             * crate::systems::power_drain_per_tick(multiplier)
     }

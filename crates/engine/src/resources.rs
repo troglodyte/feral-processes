@@ -1487,6 +1487,10 @@ pub struct BattleState {
     /// `decompile_attempts` and `lair` — battles are never serialised, so this
     /// needs no `SAVE_FORMAT_VERSION` bump.
     pub(crate) outmatched: bool,
+    /// Whether the Dead Man's Switch has already fired this fight. Lives
+    /// here, not on the player, so removing the resource ends the battle and
+    /// resets it with no teardown; not saved, like the rest of the battle.
+    pub(crate) dead_mans_switch_spent: bool,
 }
 
 /// A fight's payout, accumulated per kill and announced once, by

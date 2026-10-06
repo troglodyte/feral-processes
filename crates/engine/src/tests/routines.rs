@@ -1085,6 +1085,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         rewards: BattleRewards::default(),
         lair: None,
         outmatched: false,
+        dead_mans_switch_spent: false,
     });
 
     let player_decompile = game

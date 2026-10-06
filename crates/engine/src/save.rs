@@ -148,6 +148,13 @@ pub struct PlayerSave {
     /// profile-rule reading and is wrong for that reason.
     #[serde(default = "starter_tools")]
     pub tools: Vec<ToolId>,
+    /// Implants built into the player, in install order — see
+    /// `components::Implants`. Additive behind `#[serde(default)]`, so a save
+    /// written before implants loads with none and costs no
+    /// `SAVE_FORMAT_VERSION` bump (`sorties`' reasoning). An id whose def is
+    /// gone is kept and contributes nothing.
+    #[serde(default)]
+    pub implants: Vec<crate::implants::ImplantId>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -2256,6 +2263,7 @@ mod tests {
                 gear_copies: Vec::new(),
                 downed_programs: Vec::new(),
                 tools: Vec::new(),
+                implants: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 bought_stats: crate::components::BoughtStats::default(),

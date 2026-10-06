@@ -488,6 +488,15 @@ fn a_due_child_hatches_onto_the_roster_with_the_rolls_recorded_at_the_start() {
     let before = game.pet_count();
     make_due(&mut game);
     game.hatch_incubations();
+    // Everything a hatchling is was drawn when the breeding started, so a
+    // twin game that never hatches is at the same point in the RNG stream.
+    let (mut twin, ..) = incubating_game();
+    make_due(&mut twin);
+    assert_eq!(
+        game.world.resource_mut::<GameRng>().0.random::<u64>(),
+        twin.world.resource_mut::<GameRng>().0.random::<u64>(),
+        "hatching must not draw from the game RNG"
+    );
 
     assert_eq!(game.pet_count(), before + 1);
     assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
@@ -525,7 +534,19 @@ fn a_due_child_hatches_onto_the_roster_with_the_rolls_recorded_at_the_start() {
     assert!(game.world.get::<ProgramId>(hatched).is_some());
     assert!(game.world.get::<ProgramBase>(hatched).is_some());
     assert!(!game.world.get::<Routines>(hatched).unwrap().0.is_empty());
-    assert!(game.world.get::<Stats>(hatched).unwrap().max_hp > 0);
+    // The same `round(base * roll)` a wild spawn applies at zone 1, with no
+    // other factor in it.
+    let def = game
+        .world
+        .resource::<SpeciesDb>()
+        .get(&child.species)
+        .cloned()
+        .unwrap();
+    let stats = game.world.get::<Stats>(hatched).unwrap();
+    let expect = |base: i32, roll: f32| ((base as f32) * roll).round() as i32;
+    assert_eq!(stats.max_hp, expect(def.base_hp, child.potential.hp_roll));
+    assert_eq!(stats.hp, stats.max_hp);
+    assert_eq!(stats.atk, expect(def.base_atk, child.potential.atk_roll));
     assert!(game.world.get::<BreedReadyAt>(hatched).is_none());
 }
 

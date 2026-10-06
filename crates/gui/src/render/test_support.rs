@@ -196,6 +196,8 @@ pub(super) fn game_with_a_rare_party_companion(
         base: tamed_base(),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
@@ -301,6 +303,8 @@ pub(super) fn game_with_tweaked_programs(
         base: tamed_base(),
         stat_points: 0,
         hold_points: false,
+        generation: 0,
+        breed_ready_at: 0,
     };
     for &(wielded, name) in programs {
         let mut save = program(wielded, name);
@@ -374,6 +378,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -465,6 +470,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     // And a Research Node with no project, so the same corner has a research
     // line to hide in the two places it is not drawn.
@@ -485,6 +491,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &assets_dir).unwrap()

@@ -40,6 +40,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     data.structures.push(save::StructureSave {
         kind: "depot".to_string(),
@@ -58,6 +59,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        incubating: Vec::new(),
     });
     // One tile clear of the Home, the Relay and the Depot — `deploy_relay`'s
     // own note in the engine suite.

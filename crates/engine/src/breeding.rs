@@ -30,7 +30,7 @@ pub type ChildRolls = ParentRolls;
 
 /// A child waiting in a bay: every roll fixed at the start of the breeding,
 /// so reloading cannot re-roll it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Incubation {
     pub species: String,
     pub potential: Potential,

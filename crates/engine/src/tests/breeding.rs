@@ -610,3 +610,74 @@ fn parents_stay_usable_while_the_child_incubates() {
     game.hatch_incubations();
     assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
 }
+
+// ---- save and load ----
+
+/// A RON round trip cannot see a skipped field, so breeding state is
+/// asserted through a real save and load.
+fn save_and_load(game: &mut Game, tag: &str) -> Game {
+    let path =
+        std::env::temp_dir().join(format!("feral_breeding_{tag}_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    loaded
+}
+
+fn loaded_bay(game: &mut Game) -> Entity {
+    let mut query = game.world.query::<(Entity, &Incubator)>();
+    query.iter(&game.world).next().expect("the bay stands").0
+}
+
+#[test]
+fn a_child_saved_mid_incubation_hatches_with_the_recorded_rolls() {
+    let (mut game, _, _, bay) = incubating_game();
+    let child = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .clone()
+        .unwrap();
+    let mut loaded = save_and_load(&mut game, "incubating");
+    let bay = loaded_bay(&mut loaded);
+    assert_eq!(
+        loaded.world.get::<Incubator>(bay).unwrap().slots,
+        vec![Some(child.clone())],
+        "the bay keeps its stored slot, not a fresh empty one"
+    );
+
+    let before = loaded.pet_count();
+    make_due(&mut loaded);
+    loaded.hatch_incubations();
+    assert_eq!(loaded.pet_count(), before + 1);
+
+    let mut query = loaded.world.query::<(
+        &Creature,
+        &Generation,
+        &Potential,
+        &crate::components::Attributes,
+    )>();
+    let (_, generation, potential, attributes) = query
+        .iter(&loaded.world)
+        .find(|(c, g, ..)| c.species == child.species && g.0 == child.generation)
+        .expect("the hatched child");
+    assert_eq!(generation.0, child.generation);
+    assert_eq!(*potential, child.potential);
+    let attrs: std::collections::BTreeMap<_, _> =
+        attributes.iter().map(|(id, v)| (id.clone(), v)).collect();
+    assert_eq!(attrs, child.attributes);
+}
+
+#[test]
+fn generation_and_breeding_cooldown_survive_a_save() {
+    let (mut game, a, _, _) = bay_game("worm", "virus", 1);
+    game.world
+        .entity_mut(a)
+        .insert((Generation(3), BreedReadyAt(777)));
+    let mut loaded = save_and_load(&mut game, "cooldown");
+    let mut query = loaded
+        .world
+        .query::<(&Generation, &BreedReadyAt, &Creature)>();
+    let rows: Vec<_> = query
+        .iter(&loaded.world)
+        .map(|(g, r, c)| (g.0, r.0, c.species.clone()))
+        .collect();
+    assert_eq!(rows, vec![(3, 777, "worm".to_string())]);
+}

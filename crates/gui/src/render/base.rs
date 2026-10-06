@@ -5926,6 +5926,7 @@ mod tests {
                 hopper_progress: 0,
                 standing_tool: None,
                 pod_charged: None,
+                incubating: Vec::new(),
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
@@ -6133,6 +6134,7 @@ mod tests {
                 hopper_progress: 0,
                 standing_tool: None,
                 pod_charged: Some(charged),
+                incubating: Vec::new(),
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         app.game = Some(Game::load(&path, &test_assets()).unwrap());
@@ -6307,6 +6309,8 @@ mod tests {
                 drop_trooper: false,
                 base: crate::render::test_support::tamed_base(),
                 stat_points: 0,
+                generation: 0,
+                breed_ready_at: 0,
                 hold_points: false,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();

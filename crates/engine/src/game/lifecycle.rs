@@ -1141,6 +1141,18 @@ impl Game {
             if def.racks.is_some() {
                 entity.insert(crate::components::Racked(s.racked.clone()));
             }
+            // And again for the bay. Never shrunk below what the save holds:
+            // a retune that cut `incubation_slots` must not eat a child.
+            if def.incubation_slots > 0 {
+                let mut incubator = crate::components::Incubator::with_slots(def.incubation_slots);
+                for (slot, saved) in incubator.slots.iter_mut().zip(&s.incubating) {
+                    *slot = saved.clone();
+                }
+                incubator
+                    .slots
+                    .extend(s.incubating.iter().skip(incubator.slots.len()).cloned());
+                entity.insert(incubator);
+            }
             // Both halves mirror `Game::spawn_structure`'s list, which is the
             // hand-written copy this file has always been: a burning supplier
             // missing its `PowerFuel` reads as a base whose grid collapsed on
@@ -2158,6 +2170,14 @@ impl Game {
         if c.nemesis_grudges > 0 {
             entity.insert(Nemesis(c.nemesis_grudges));
         }
+        // Inserted only when nonzero: absent already reads as generation 0
+        // and as ready to breed.
+        if c.generation > 0 {
+            entity.insert(crate::components::Generation(c.generation));
+        }
+        if c.breed_ready_at > 0 {
+            entity.insert(crate::components::BreedReadyAt(c.breed_ready_at));
+        }
         // Inserted only when set, so an absent component keeps meaning
         // "not a boss" — `is_boss_creature`'s species fallback still
         // answers for an apex species loaded from a file written before
@@ -2573,6 +2593,14 @@ impl Game {
             assembly_roll: potential.assembly_roll,
             extraction_roll: potential.extraction_roll,
             fusions: self.world.get::<FusionCount>(e).map(|f| f.0).unwrap_or(0),
+            generation: self
+                .world
+                .get::<crate::components::Generation>(e)
+                .map_or(0, |g| g.0),
+            breed_ready_at: self
+                .world
+                .get::<crate::components::BreedReadyAt>(e)
+                .map_or(0, |r| r.0),
             refactors: self.world.get::<Refactors>(e).map(|r| r.0).unwrap_or(0),
             purchased_tiers: self
                 .world
@@ -2742,6 +2770,7 @@ impl Game {
             Option<&crate::components::DepotFilter>,
             Option<&crate::components::Racked>,
             Option<&crate::components::DropPod>,
+            Option<&crate::components::Incubator>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
@@ -2759,6 +2788,7 @@ impl Game {
             filter,
             racked,
             pod,
+            incubator,
         ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -2786,6 +2816,7 @@ impl Game {
                 build_quality: quality.map_or(1.0, |q| q.0),
                 racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
                 pod_charged: pod.map(|p| p.charged),
+                incubating: incubator.map(|i| i.slots.clone()).unwrap_or_default(),
             });
         }
         structures

@@ -1020,7 +1020,7 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
 fn caravans_cost_no_save_format_bump() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        34,
+        35,
         "a caravan is an additive named-struct field and must not bump this"
     );
 }
@@ -1706,7 +1706,7 @@ fn caravan_memory_survives_a_save_and_load() {
     );
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        34,
+        35,
         "both caravan fields are additive named-struct ones"
     );
 }

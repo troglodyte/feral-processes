@@ -47,3 +47,7 @@ sprite stays `ICON_SIZE` (16)**, `ICON_CELL_PIXELS` the one expression
 of the ratio: each drawn cell fills a 2x2 block of the upload, and the
 save string is `"v2:"` plus 64 hex digits with `v1` folded, never
 dropped.
+
+**The battle portrait** (`render/battle.rs::draw_battle_portrait`) is the
+one sprite drawn as a picture pane rather than in a glyph's place; its glyph
+is only the `false`-return fallback (trap: `seams` skill, `hud.md`).

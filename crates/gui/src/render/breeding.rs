@@ -235,7 +235,7 @@ mod tests {
         assert_fits(&rows, PopupSize::Large);
     }
 
-    const ALL_REFUSALS: [BreedRefusal; 7] = [
+    const ALL_REFUSALS: [BreedRefusal; 8] = [
         BreedRefusal::Busy,
         BreedRefusal::SameProgram,
         BreedRefusal::NotYours,
@@ -243,6 +243,7 @@ mod tests {
         BreedRefusal::NoFreeSlot,
         BreedRefusal::NoSeed,
         BreedRefusal::UnknownKind,
+        BreedRefusal::Boss,
     ];
 
     #[test]

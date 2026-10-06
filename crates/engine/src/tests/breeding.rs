@@ -317,6 +317,16 @@ fn breeding_spends_a_seed_rests_both_parents_and_fills_the_slot() {
 }
 
 #[test]
+fn a_boss_cannot_be_a_parent() {
+    let (mut game, a, _, bay) = bay_game("worm", "worm", 1);
+    let boss = game.adopt_program("overseer", 0, 0, 1.0).unwrap();
+    assert_eq!(game.breed_refusal(boss), Some(BreedRefusal::Boss));
+    assert_eq!(game.breed(a, boss, bay), Err(BreedRefusal::Boss));
+    assert_eq!(game.breed(boss, a, bay), Err(BreedRefusal::Boss));
+    assert_eq!(seeds_in_pack(&game), 1);
+}
+
+#[test]
 fn a_childs_generation_follows_its_deeper_parent() {
     let (mut game, a, b, bay) = bay_game("worm", "worm", 1);
     game.world.entity_mut(b).insert(Generation(4));

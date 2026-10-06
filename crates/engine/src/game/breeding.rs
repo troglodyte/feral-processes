@@ -37,12 +37,15 @@ impl Game {
         {
             return Some(BreedRefusal::NotYours);
         }
-        let known = self
+        let def = self
             .world
             .get::<Creature>(program)
-            .is_some_and(|c| self.world.resource::<SpeciesDb>().get(&c.species).is_some());
-        if !known {
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
+        let Some(def) = def else {
             return Some(BreedRefusal::UnknownKind);
+        };
+        if def.is_boss {
+            return Some(BreedRefusal::Boss);
         }
         if self
             .world

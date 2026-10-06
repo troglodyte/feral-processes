@@ -50,6 +50,7 @@ pub enum BreedRefusal {
     NoFreeSlot,
     NoSeed,
     UnknownKind,
+    Boss,
 }
 
 impl BreedRefusal {
@@ -63,6 +64,7 @@ impl BreedRefusal {
             BreedRefusal::NoFreeSlot => "no free bay",
             BreedRefusal::NoSeed => "no breeding seed",
             BreedRefusal::UnknownKind => "unknown kind",
+            BreedRefusal::Boss => "can't breed",
         }
     }
 }

@@ -153,6 +153,7 @@ Every refusal is checked before the first mutation (the
 
 - game over, or a battle is active;
 - `a == b`, or either is not owned by the player;
+- either parent's species is a boss (`is_boss`; "can't breed");
 - either parent's `BreedReadyAt` is in the future;
 - `bay` is not a built structure with a free incubation slot;
 - no `breeding_seed` in stock.

@@ -335,7 +335,15 @@ impl Game {
             .into_iter()
             .chain(self.describe_floor_pile(bx + dx, by + dy))
             .collect();
-        let underfoot = (!underfoot.is_empty()).then(|| underfoot.join("; "));
+        // Capitalised here so a pile that leads the line reads like the
+        // other examine lines; a finish name already is.
+        let underfoot = (!underfoot.is_empty()).then(|| {
+            let line = underfoot.join("; ");
+            let mut chars = line.chars();
+            chars.next().map_or(line.clone(), |c| {
+                c.to_uppercase().chain(chars).collect::<String>()
+            })
+        });
 
         let (mut x, mut y) = (bx, by);
         for _ in 0..range {

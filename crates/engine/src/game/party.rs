@@ -1836,9 +1836,9 @@ impl Game {
         if self.world.get::<crate::components::Downed>(e).is_some() {
             return None;
         }
-        // The load is destroyed by freeing the carrier, let alone by
-        // despawning it, and nothing in the base has a claim on it to
-        // return it to.
+        // A spend refunds the program's snapshot, not what its hands held,
+        // and a delivery in flight is better finished into a Depot than
+        // scattered as a pile where the program stood.
         if self.world.get::<Carrying>(e).is_some() {
             return None;
         }

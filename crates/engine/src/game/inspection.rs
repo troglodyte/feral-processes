@@ -421,7 +421,6 @@ impl Game {
         self.world.get::<Structure>(entity).is_some()
             || self.world.get::<BuildSite>(entity).is_some()
             || self.world.get::<Tamed>(entity).is_some()
-            || self.world.get::<crate::components::FloorPile>(entity).is_some()
             // A besieger's `Position` is a base-space cell for the length of
             // the siege — `components::Besieger`'s own doc — and without this
             // arm it reads as an ordinary wild `Creature` standing on the

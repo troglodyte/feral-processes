@@ -1249,10 +1249,10 @@ impl Game {
         // **Forced edges, seeded before the matching sees anyone.** Two
         // bodies hold their post whatever the assignment would say:
         //
-        // - **A body mid-delivery is never freed.** Freeing it drops
-        //   `Carrying` along with the `Task`, and by then the units have
-        //   already been taken *out* of the machine's stock — so the goods
-        //   are destroyed rather than released. **Not even when its duties
+        // - **A body mid-delivery is never freed.** The units have already
+        //   been taken *out* of the machine's stock, so a freed carrier
+        //   would leave them as a floor pile for someone to fetch back
+        //   instead of delivering them. **Not even when its duties
         //   no longer admit the post**: an unchecked column frees it at its
         //   next unforced moment, which is after it has set the load down.
         // - **A body about to pick a load up** — standing on a machine with

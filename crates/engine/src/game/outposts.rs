@@ -140,9 +140,9 @@ impl Game {
         if self.world.get::<Downed>(creature).is_some() {
             return Err("That program is down and needs a Repair Bay first.".into());
         }
-        // Refused rather than freed: unlike a pin, posting has nowhere for
-        // the load to land, and `hauling`'s own rule is that a body holding
-        // `Carrying` is never freed for exactly this reason. `CarryingProgram`
+        // Refused rather than freed: a freed carrier would set its load on
+        // the floor wherever it stands, and a mid-delivery goods run is
+        // better finished into a Depot than left as a pile. `CarryingProgram`
         // is `is_on_shift`'s pairing — a carried kill is a program the player
         // cannot get back, so it is refused for the same reason.
         if self.world.get::<Carrying>(creature).is_some() {

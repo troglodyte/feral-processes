@@ -295,7 +295,7 @@ fn examining_a_pile_names_what_it_holds() {
     let line = g.describe_base_rock(1, 0, 5).expect("a pile answers");
     let name = name_of(&g, ids::CORE_FRAGMENT);
     assert!(
-        line.starts_with(&format!("a pile on the floor: 3 {name}")),
+        line.starts_with(&format!("A pile on the floor: 3 {name}")),
         "{line}"
     );
 }
@@ -312,5 +312,5 @@ fn examining_a_pile_on_a_finish_names_both() {
     put_pile(&mut g, 1, 0, ids::CORE_FRAGMENT, 3);
     let line = g.describe_base_rock(1, 0, 5).unwrap();
     assert!(line.contains("Cobalt Carpet underfoot"), "{line}");
-    assert!(line.contains("a pile on the floor: 3 "), "{line}");
+    assert!(line.contains("; a pile on the floor: 3 "), "{line}");
 }

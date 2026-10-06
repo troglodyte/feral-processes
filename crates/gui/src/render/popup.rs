@@ -532,6 +532,30 @@ pub(super) fn popup_scrolls(
     popup_layout(screen_h, popup_fractions(size).1, rows, status, m).scrolling
 }
 
+/// The text of the `Row::Item` rows a `draw_popup` call with these arguments
+/// has on screen, for a test that a paged page can reach a given entry.
+#[cfg(test)]
+pub(super) fn popup_visible_items(
+    screen_h: f32,
+    size: PopupSize,
+    rows: &[Row],
+    refusal: Option<&str>,
+    m: &Metrics,
+) -> Vec<String> {
+    let status = refusal
+        .map(|s| wrap_text(s, status_wrap_columns(size)).len())
+        .unwrap_or(0);
+    let layout = popup_layout(screen_h, popup_fractions(size).1, rows, status, m);
+    let end = (layout.offset + layout.capacity).min(layout.body.len());
+    layout.body[layout.offset..end]
+        .iter()
+        .filter_map(|r| match r {
+            Row::Item { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// `status` is how many lines a refusal drawn under the title takes up.
 /// Counted here rather than prepended to `rows` because `Row` is not
 /// `Clone` and `rows` is borrowed — and because it must not join the

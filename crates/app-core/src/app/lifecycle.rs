@@ -114,6 +114,7 @@ impl App {
             pending_equip_program: None,
             pending_memory_program: None,
             memories_origin: Mode::Companion,
+            memories_return_row: 0,
             pending_settlement: None,
             pending_outpost: None,
             pending_erase: None,

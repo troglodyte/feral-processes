@@ -1302,9 +1302,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::CompanionMemories => {
-            draw_companion_memories(game, app.pending_memory_program, refusal, painter, m)
-        }
+        Mode::CompanionMemories => draw_companion_memories(
+            game,
+            app.pending_memory_program,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Dossier => {
             crate::render::dossier::draw_dossier(game, app.pending_manifest, refusal, painter, m)
         }

@@ -609,6 +609,35 @@ fn esc_backs_out_of_the_memories_page_and_keeps_the_highlight() {
     assert_eq!(app.menu_selected, 1, "and the roster is where it was left");
 }
 
+/// The page scrolls with the highlight, so the roster's row is parked while
+/// it does and comes back on Esc: a page that left the scroll position in
+/// `menu_selected` would drop the player on the wrong program.
+#[test]
+fn the_memories_page_scrolls_without_losing_the_rosters_row() {
+    let mut app = app_with_companions_in_the_party(782, 2);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(app.menu_selected, 0, "the page starts at the top");
+
+    let rows = {
+        let game = app.game.as_ref().unwrap();
+        game.memory_report(app.pending_memory_program.unwrap())
+            .len()
+    };
+    app.handle_key(GameKey::Up);
+    assert!(
+        app.menu_selected <= rows.saturating_sub(1),
+        "never past the last entry"
+    );
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Down);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(app.menu_selected, 1);
+}
+
 /// `R` with the highlight past the end of the roster has no program to be
 /// about, and must leave the mode alone rather than open a page with no
 /// subject. Reached by writing the highlight rather than by emptying the

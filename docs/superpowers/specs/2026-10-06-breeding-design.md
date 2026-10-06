@@ -203,7 +203,7 @@ rarity multiplier), and the stored attributes and generation.
 
 ### Demolishing a bay
 
-Refused while any slot holds an incubation ("a program is incubating").
+Refused while any slot holds an incubation ("a program is incubating"). A bay stays raidable: one destroyed by a raid or siege loses its children, and the log names each (species, generation) as a lost shelf is named.
 
 ## Save format
 

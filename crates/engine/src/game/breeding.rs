@@ -13,7 +13,7 @@ use crate::components::{
     Routines, Stats, StatusEffects, Structure, Tamed,
 };
 use crate::items::ItemId;
-use crate::resources::{GameClock, GameRng};
+use crate::resources::{GameClock, GameRng, MessageKind};
 use crate::species::SpeciesDb;
 use crate::views::{BreedPreview, BreedSpeciesPreview, IncubatingChild, IncubationView, RollRange};
 use bevy_ecs::prelude::{Entity, Mut};
@@ -227,6 +227,34 @@ impl Game {
                 }),
             })
             .collect()
+    }
+
+    /// Logs one line per child a bay was holding as it is destroyed by a
+    /// raid or siege. Demolition refuses an occupied bay instead
+    /// (`remove_structure`), so this is the other destruction path's half
+    /// of the same rule, and like `announce_lost_shelf` it is called from
+    /// `damage_structure` before the despawn.
+    pub(crate) fn announce_lost_children(&mut self, bay: Entity) {
+        let Some(incubator) = self.world.get::<Incubator>(bay) else {
+            return;
+        };
+        let lost: Vec<(String, u32)> = incubator
+            .slots
+            .iter()
+            .flatten()
+            .map(|c| (c.species.clone(), c.generation))
+            .collect();
+        for (species, generation) in lost {
+            let name = self
+                .world
+                .resource::<SpeciesDb>()
+                .get(&species)
+                .map_or(species.clone(), |d| d.name.clone());
+            self.log_kind(
+                MessageKind::Raid,
+                format!("A {name} child (gen {generation}) is lost with the Breeding Bay."),
+            );
+        }
     }
 
     /// Hatches every due incubation, in `(x, y)` order of bay.

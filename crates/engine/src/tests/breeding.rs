@@ -580,6 +580,42 @@ fn a_bay_with_a_child_in_it_cannot_be_demolished() {
 }
 
 #[test]
+fn a_raided_bay_loses_its_child_and_says_so() {
+    let (mut game, _, _, bay) = incubating_game();
+    // `spawn_machine_at` attaches nothing raidable.
+    game.world
+        .entity_mut(bay)
+        .insert(Durability { hp: 1, max_hp: 1 });
+    let before = game.world.resource::<MessageLog>().lines.len();
+    game.damage_structure(bay, u32::MAX, "The Breeding Bay", "a siege");
+    assert!(game.world.get::<Structure>(bay).is_none());
+    let said: Vec<String> = game.world.resource::<MessageLog>().lines[before..]
+        .iter()
+        .map(|e| e.text.clone())
+        .collect();
+    assert!(
+        said.iter()
+            .any(|l| l.contains("Botnet") && l.contains("gen 1") && l.contains("lost")),
+        "one line should name the lost child, got {said:?}"
+    );
+}
+
+#[test]
+fn a_raided_empty_bay_is_silent_about_children() {
+    let (mut game, _, _, bay) = bay_game("worm", "virus", 1);
+    game.world
+        .entity_mut(bay)
+        .insert(Durability { hp: 1, max_hp: 1 });
+    let before = game.world.resource::<MessageLog>().lines.len();
+    game.damage_structure(bay, u32::MAX, "The Breeding Bay", "a siege");
+    assert!(
+        !game.world.resource::<MessageLog>().lines[before..]
+            .iter()
+            .any(|e| e.text.contains("gen ")),
+    );
+}
+
+#[test]
 fn an_empty_bay_demolishes_and_so_does_one_after_the_child_hatches() {
     let (mut game, _, _, bay) = incubating_game();
     make_due(&mut game);

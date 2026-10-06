@@ -1112,6 +1112,7 @@ impl Game {
             self.release_study_station(structure);
             self.release_siphon_at(structure);
             self.announce_lost_shelf(structure);
+            self.announce_lost_children(structure);
             self.world.despawn(structure);
         } else {
             self.log_base_kind(

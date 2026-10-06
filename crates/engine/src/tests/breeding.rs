@@ -567,3 +567,46 @@ fn a_full_roster_holds_the_child_in_the_bay_and_it_hatches_when_there_is_room() 
     assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
     assert_eq!(game.roster_room(), 0);
 }
+
+// ---- demolition and parents ----
+
+#[test]
+fn a_bay_with_a_child_in_it_cannot_be_demolished() {
+    let (mut game, _, _, bay) = incubating_game();
+    let err = game.remove_structure(bay).unwrap_err();
+    assert!(err.contains("incubating"), "{err}");
+    assert!(game.world.get::<Structure>(bay).is_some());
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
+}
+
+#[test]
+fn an_empty_bay_demolishes_and_so_does_one_after_the_child_hatches() {
+    let (mut game, _, _, bay) = incubating_game();
+    make_due(&mut game);
+    game.hatch_incubations();
+    game.remove_structure(bay).unwrap();
+    assert!(game.world.get::<Structure>(bay).is_none());
+}
+
+#[test]
+fn demolishing_the_home_is_refused_while_any_bay_holds_a_child() {
+    let (mut game, _, _, bay) = incubating_game();
+    let home = spawn_machine_at(&mut game, crate::HOME_STRUCTURE_ID, 9, 9);
+    assert!(game.remove_structure(home).is_err());
+    assert!(game.world.get::<Structure>(home).is_some());
+    assert!(game.world.get::<Structure>(bay).is_some());
+}
+
+#[test]
+fn parents_stay_usable_while_the_child_incubates() {
+    let (mut game, a, b, bay) = incubating_game();
+    // Join the party, and be fused, mid-incubation.
+    enlist(&mut game, a);
+    assert!(game.world.resource::<Party>().0.contains(&a));
+    unlock_research_chain(&mut game, "program_refactoring");
+    game.fuse_companions(a, b, None).unwrap();
+    // The bay still holds its child and the parents' absence is harmless.
+    make_due(&mut game);
+    game.hatch_incubations();
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_none());
+}

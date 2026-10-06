@@ -68,6 +68,7 @@ mod memories;
 mod message_log;
 mod needs;
 mod nemesis;
+mod nemesis_siege;
 mod notifications;
 mod outposts;
 mod party;

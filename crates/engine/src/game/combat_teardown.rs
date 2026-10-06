@@ -615,7 +615,11 @@ impl Game {
                 // next time. Only a hostile that actually got marked loses
                 // its `Pursuing` here — one the cap refused keeps chasing,
                 // exactly as it did before this feature existed.
-                self.world.entity_mut(hostile).remove::<Pursuing>();
+                // A marked follower leads its own band now, whatever it
+                // trailed before.
+                self.world
+                    .entity_mut(hostile)
+                    .remove::<(Pursuing, crate::components::NemesisFollower)>();
             }
         }
     }

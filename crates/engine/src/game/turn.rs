@@ -408,6 +408,10 @@ impl Game {
         // standing in something resolved the tick it arrives.
         self.town_raid_check();
         self.nest_respawn_tick();
+        // After the nest respawn so a band recruits from the population as
+        // this tick left it, and before the pursuit step so a follower that
+        // has just been tagged is not also walked by the shared chase.
+        self.nemesis_muster();
         // Immediately after respawn: a guardian that just replaced a fallen
         // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`
         // via `nest_has_pursuers`) and should get its step the same tick it

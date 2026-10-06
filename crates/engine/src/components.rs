@@ -3130,6 +3130,24 @@ pub struct Boss;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Nemesis(pub u32);
 
+/// Ticks since a `Nemesis` last recruited, or since its band filled. Reset on
+/// each recruit; `Game::nemesis_muster` inserts it on a nemesis that lacks one.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct NemesisMuster {
+    pub ticks: u32,
+}
+
+/// A wild program that trails a `Nemesis`, pointing at its leader. Stops
+/// wandering (`systems::wander_ai_system`), survives the wild-population
+/// sweeps, and is dropped when the leader goes (`Game::nemesis_muster`).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct NemesisFollower(pub Entity);
+
+/// The zone cell a nemesis left to lead a siege from, so it can walk home
+/// afterwards. Saved with the leader.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct NemesisHome(pub Position);
+
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the
 /// creature) when its nest is destroyed (`Game::attack_nest`) or when the

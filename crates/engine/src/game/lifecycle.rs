@@ -229,6 +229,10 @@ pub(crate) struct CreatureRestore {
     /// `restore_sorties`: entity ids aren't stable across a save/load round
     /// trip, so a siege's own membership rides the creature side too.
     pub(crate) pending_siege_members: Vec<(u32, Entity, (i32, i32))>,
+    /// `(nemesis_band, body, is_leader)` — linked by
+    /// `Game::link_nemesis_bands` once every creature is spawned, since a
+    /// follower's leader may sit later in the file than it does.
+    pub(crate) pending_nemesis_band: Vec<(u32, Entity, bool)>,
     /// `(besieger, source structure's tile)` — `pending_cronjobs`'
     /// deferral: `components::StolenFrom` names a structure entity, and the
     /// structures a tile has to name are rebuilt after the creature array.
@@ -273,6 +277,7 @@ impl CreatureRestore {
             pending_outpost_crew: Vec::new(),
             pending_siphon: Vec::new(),
             pending_siege_members: Vec::new(),
+            pending_nemesis_band: Vec::new(),
             pending_stolen_from: Vec::new(),
             pending_ranks: Vec::new(),
             max_rank_seen: 0,
@@ -1793,6 +1798,7 @@ impl Game {
             pending_outpost_crew,
             pending_siphon,
             pending_siege_members,
+            pending_nemesis_band,
             pending_stolen_from,
             pending_ranks,
             max_rank_seen,
@@ -1834,6 +1840,7 @@ impl Game {
         game.attach_pinned_subjects(pending_study, &structure_positions);
         game.attach_siphoned(pending_siphon, &structure_positions);
         game.attach_stolen_from(pending_stolen_from, &structure_positions);
+        game.link_nemesis_bands(pending_nemesis_band);
         // After structures load, `attach_stolen_from`'s own reason: a
         // siege re-seats every structure still standing as a body on the
         // reconstructed board, `Game::open_siege`'s own placement.
@@ -2170,6 +2177,16 @@ impl Game {
         // same trap on the tag it promoted.
         if c.nemesis_grudges > 0 {
             entity.insert(Nemesis(c.nemesis_grudges));
+            // Absent already reads as zero, so only a running muster is
+            // written back.
+            if c.nemesis_muster_ticks > 0 {
+                entity.insert(crate::components::NemesisMuster {
+                    ticks: c.nemesis_muster_ticks,
+                });
+            }
+            if let Some((x, y)) = c.nemesis_home {
+                entity.insert(crate::components::NemesisHome(Position { x, y }));
+            }
         }
         // Inserted only when nonzero: absent already reads as generation 0
         // and as ready to breed.
@@ -2390,6 +2407,10 @@ impl Game {
             }
             if let (Some(order), Some(cell)) = (c.siege_order, c.siege_cell) {
                 ctx.pending_siege_members.push((order, entity.id(), cell));
+            }
+            if let Some(band) = c.nemesis_band {
+                ctx.pending_nemesis_band
+                    .push((band, entity.id(), c.nemesis_grudges > 0));
             }
             // A nest_position resolving to nothing (the nest's species
             // is gone, or the save predates nests) is dropped silently
@@ -2649,6 +2670,15 @@ impl Game {
                 .map(|c| c.0.clone()),
             rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
             nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
+            nemesis_muster_ticks: self
+                .world
+                .get::<crate::components::NemesisMuster>(e)
+                .map_or(0, |m| m.ticks),
+            nemesis_home: self
+                .world
+                .get::<crate::components::NemesisHome>(e)
+                .map(|h| (h.0.x, h.0.y)),
+            nemesis_band: self.nemesis_band_number(e),
             program_id: self.world.get::<ProgramId>(e).map(|p| p.0).unwrap_or(0),
             disposition: self
                 .world

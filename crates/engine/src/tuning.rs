@@ -3532,6 +3532,32 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 /// reads as a runaway backstop, not a difficulty knob.
 pub const MAX_NEMESES: usize = 10;
 
+/// Ticks between one nemesis recruit and the next, while its band is short.
+///
+/// **Authored in minutes of play and written here in ticks**, the way
+/// `SIEGE_PRESSURE_THRESHOLD` is: the world runs at
+/// `app_core::WORLD_SPEED_MULTIPLIER` = 2 ticks a second, so `600` is **5
+/// minutes** per recruit. Three recruits plus `NEMESIS_MARCH_DELAY` is about
+/// 23 minutes from a nemesis's last fight to its march. An unmeasured number.
+pub const NEMESIS_RECRUIT_INTERVAL: u32 = 600;
+
+/// How far, in cells (Chebyshev), a nemesis looks for an existing wild
+/// program to recruit before it spawns a fresh body beside itself.
+pub const NEMESIS_RECRUIT_RADIUS: i32 = 12;
+
+/// Followers a nemesis gathers before its band is full: a siege of
+/// `NEMESIS_BAND_MAX + 1` bodies, against 6 to 12 for a regular one.
+pub const NEMESIS_BAND_MAX: usize = 3;
+
+/// Ticks from a full band to its march: `SIEGE_WARN_FLOOR_TICKS`, **8
+/// minutes** of play, so the player gets the same minimum notice a regular
+/// siege gives.
+pub const NEMESIS_MARCH_DELAY: u32 = SIEGE_WARN_FLOOR_TICKS;
+
+/// How far a follower may drift from its leader, in cells (Chebyshev),
+/// before it steps back toward it.
+pub const NEMESIS_FOLLOW_DISTANCE: i32 = 2;
+
 // ---------------------------------------------------------------------------
 // Travel
 // ---------------------------------------------------------------------------

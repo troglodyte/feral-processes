@@ -196,8 +196,16 @@ pub fn needs_drain_system(
 /// `type_complexity` lint — same reasoning as `CronjobWorker` below.
 type Wanderer<'w> = (&'w mut Position, &'w mut WanderAi, Option<&'w NestGuardian>);
 
+/// Who is left to wander: not the player, not a chaser, and not a nemesis's
+/// follower, which trails its leader instead (`Game::nemesis_muster`).
+type CanWander = (
+    Without<Player>,
+    Without<Pursuing>,
+    Without<crate::components::NemesisFollower>,
+);
+
 pub fn wander_ai_system(
-    mut query: Query<Wanderer, (Without<Player>, Without<Pursuing>)>,
+    mut query: Query<Wanderer, CanWander>,
     nests: Query<&Position, (With<Nest>, Without<WanderAi>)>,
     mut world: ResMut<WorldMap>,
     mut rng: ResMut<GameRng>,

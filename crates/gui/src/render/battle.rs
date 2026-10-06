@@ -417,7 +417,11 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let party_height = m.line_height * 2.0 + view.party.len() as f32 * bar_row_height(m) + m.inset;
     let party_top = (log_bottom - party_height).max(y);
 
-    let log_height = party_top - y;
+    // The party title is drawn on its baseline at `party_top`, so its ink
+    // rises a line into whatever is above; the pane stops short of it or its
+    // border strikes through the title.
+    let pane_bottom = (party_top - m.line_height).max(y);
+    let log_height = pane_bottom - y;
     let log_w = w - margin * 2.0;
     painter.rect(margin, y, log_w, log_height, PANEL_BG);
     painter.rect_lines(margin, y, log_w, log_height, 2.0, BORDER);
@@ -458,7 +462,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         text_x,
         y + margin,
         margin + log_w - text_x,
-        party_top,
+        pane_bottom,
         painter,
         m,
     );
@@ -470,7 +474,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         painter.ui(
             &hint,
             w - margin - m.inset - width,
-            party_top - m.inset,
+            pane_bottom - m.inset,
             m.small(),
             TEXT_DIM,
         );
@@ -1696,6 +1700,33 @@ mod tests {
             crate::paint::painted_line_count_in(&shapes, BORDER),
             1,
             "a rule should divide the portrait from the narration"
+        );
+    }
+
+    /// The party title is drawn on a baseline, so its ink rises *above*
+    /// `party_top` — a pane ending on that line had its border struck
+    /// through the title.
+    #[test]
+    fn the_party_title_sits_below_the_log_pane() {
+        let mut app = a_battling_app();
+        let mut fx = crate::fx::Fx::new();
+        let m = ui_metrics(900.0);
+
+        let (_, shapes) = crate::paint::with_painter(|p| draw_battle(&mut app, &mut fx, p, &m));
+
+        let pane = crate::paint::painted_rect_stroke_boxes(&shapes, BORDER)
+            .into_iter()
+            .max_by(|a, b| a.height().total_cmp(&b.height()))
+            .expect("the log pane is outlined");
+        let (_, _, title) = crate::paint::painted_text_boxes(&shapes)
+            .into_iter()
+            .find(|(_, t, _)| t.starts_with("Your party"))
+            .expect("the party title is painted");
+        assert!(
+            title.y > pane.max.y,
+            "title ink starts at {} inside a pane ending at {}",
+            title.y,
+            pane.max.y
         );
     }
 

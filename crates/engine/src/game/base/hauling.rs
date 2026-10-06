@@ -1012,10 +1012,17 @@ fn pickup_errand(
     ranked.sort_by_key(|(_, p, _)| (chebyshev(*p, from), p.x, p.y));
     let mut depot_reach: HashMap<Entity, bool> = HashMap::new();
     for (pile, at, contents) in ranked {
-        if !reach_pile(at) {
+        // Willingness first: it is a filter lookup, where the walk to the
+        // pile is a Dijkstra field, so a pile nobody wants costs no field.
+        let wanted: Vec<_> = contents
+            .items
+            .iter()
+            .filter(|&(item, _)| depots.iter().any(|&(d, _)| accepts(d, item)))
+            .collect();
+        if wanted.is_empty() || !reach_pile(at) {
             continue;
         }
-        for (item, &qty) in &contents.items {
+        for (item, &qty) in wanted {
             let takes = depots.iter().any(|&(d, p)| {
                 accepts(d, item) && *depot_reach.entry(d).or_insert_with(|| reach_depot(d, p))
             });

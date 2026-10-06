@@ -1118,9 +1118,11 @@ pub enum TaskKind {
     ///
     /// Unlike every other kind, a body holding this one may be **carrying**
     /// a load it fetched for the site. `schedule_base_labour`'s
-    /// never-free-a-`Carrying`-holder rule already covers that, and it has
-    /// to: freeing the body drops the `Carrying` with the `Task`, and those
-    /// units have already left the shelf they came off.
+    /// never-free-a-`Carrying`-holder rule keeps the scheduler from freeing
+    /// it mid-trip, because those units have already left the shelf they
+    /// came off and the builder is the one walking them to the site. Paths
+    /// that free the body anyway (displacement, sale) set the load on the
+    /// floor (`floor::drop_load`) for a hauler to bring home.
     Construct,
 }
 

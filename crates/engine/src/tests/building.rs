@@ -1424,8 +1424,7 @@ fn a_second_cronjob_on_one_structure_displaces_the_first() {
     );
 }
 
-/// The load of a hauler stood down mid-carry goes to the floor; left in its
-/// hands with no `Task` it would be frozen there for good.
+/// How much `cache_grain` lies on the floor at `at`, if there is a pile.
 fn load_on_floor(game: &mut Game, at: Position) -> Option<u32> {
     let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at)?;
     game.world
@@ -1446,6 +1445,8 @@ fn hand_a_load(game: &mut Game, who: Entity) -> Position {
     *game.world.get::<Position>(who).unwrap()
 }
 
+/// The load of a hauler stood down mid-carry goes to the floor; left in its
+/// hands with no `Task` it would be frozen there for good.
 #[test]
 fn displacing_a_carrying_worker_sets_its_load_on_the_floor() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

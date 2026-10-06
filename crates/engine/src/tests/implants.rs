@@ -104,3 +104,138 @@ fn the_shipped_implants_load_into_the_game() {
     let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(!game.world.resource::<ImplantDb>().is_empty());
 }
+
+// ---- effects at their seams (plan P2) ----
+
+use crate::implants::{ImplantDef, ImplantDownside, ImplantHook, ImplantSignature, ImplantStats};
+
+fn new_game() -> Game {
+    Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// What P3's `install_implant` will do to the world, minus its checks.
+fn install(game: &mut Game, list: &[&str]) {
+    let player = game.player_entity();
+    game.world.get_mut::<Implants>(player).unwrap().installed = ids(list);
+    game.recompute_derived(player);
+}
+
+fn def(id: &str) -> ImplantDef {
+    ImplantDef {
+        id: ImplantId::from(id),
+        name: id.to_string(),
+        description: String::new(),
+        load: 1,
+        stats: ImplantStats::default(),
+        hooks: Vec::new(),
+        signature: None,
+        downside: None,
+    }
+}
+
+fn add_def(game: &mut Game, def: ImplantDef) {
+    game.world.resource_mut::<ImplantDb>().insert(def);
+}
+
+fn snapshot(game: &Game) -> String {
+    let player = game.player_entity();
+    format!(
+        "{:?} {:?} {:?} {}",
+        game.world.get::<Stats>(player).unwrap(),
+        game.world
+            .get::<crate::components::Derived>(player)
+            .unwrap(),
+        game.world.get::<Decompiler>(player).unwrap().skill,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+    )
+}
+
+#[test]
+fn stats_install_and_remove_restores_every_field() {
+    let mut game = new_game();
+    add_def(
+        &mut game,
+        ImplantDef {
+            stats: ImplantStats {
+                max_hp: 7,
+                atk: 3,
+                mitigation: 2,
+                max_power: 25.0,
+                crit: 0.05,
+                status_resist: 4,
+                decompiler: 2,
+                accuracy: 0,
+                evasion: 0,
+            },
+            ..def("all_stats")
+        },
+    );
+    let player = game.player_entity();
+    let before = snapshot(&game);
+    let base = *game.world.get::<Stats>(player).unwrap();
+    let base_derived = *game
+        .world
+        .get::<crate::components::Derived>(player)
+        .unwrap();
+
+    install(&mut game, &["all_stats"]);
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    let derived = *game
+        .world
+        .get::<crate::components::Derived>(player)
+        .unwrap();
+    assert_eq!(stats.max_hp, base.max_hp + 7);
+    assert_eq!(stats.atk, base.atk + 3);
+    assert_eq!(stats.mitigation, base.mitigation + 2);
+    assert_eq!(derived.max_power, base_derived.max_power + 25.0);
+    assert!((derived.crit - base_derived.crit - 0.05).abs() < 1e-9);
+    assert_eq!(derived.status_resist, base_derived.status_resist + 4);
+    assert_eq!(game.world.get::<Decompiler>(player).unwrap().skill, 2);
+
+    install(&mut game, &[]);
+    assert_eq!(snapshot(&game), before);
+}
+
+#[test]
+fn dermal_lattice_lowers_evasion_in_the_profile_and_the_manifest() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    let swing = crate::battle::Swing::default();
+    let evasion = |g: &Game| g.combatant_profile(player, swing).evasion;
+    let shown = |g: &Game| g.manifest(player).unwrap().evasion;
+    let (profile_before, shown_before) = (evasion(&game), shown(&game));
+
+    install(&mut game, &["dermal_lattice"]);
+    assert!(evasion(&game) < profile_before);
+    assert!(shown(&game) < shown_before);
+}
+
+#[test]
+fn accuracy_comes_from_implants_in_the_profile() {
+    let mut game = new_game();
+    add_def(
+        &mut game,
+        ImplantDef {
+            stats: ImplantStats {
+                accuracy: 5,
+                ..Default::default()
+            },
+            ..def("aim")
+        },
+    );
+    let player = game.player_entity();
+    let swing = crate::battle::Swing::default();
+    let before = game.combatant_profile(player, swing).accuracy;
+    let shown_before = game.manifest(player).unwrap().accuracy;
+    install(&mut game, &["aim"]);
+    assert!(game.combatant_profile(player, swing).accuracy > before);
+    assert!(game.manifest(player).unwrap().accuracy > shown_before);
+}
+
+#[test]
+fn a_missing_def_contributes_nothing() {
+    let mut game = new_game();
+    let before = snapshot(&game);
+    install(&mut game, &["no_such_implant"]);
+    assert_eq!(snapshot(&game), before);
+}

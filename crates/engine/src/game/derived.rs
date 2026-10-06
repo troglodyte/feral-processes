@@ -346,7 +346,19 @@ impl Game {
         if self.world.get::<Derived>(entity).is_none() {
             return;
         }
-        let derived = self.derived_stats(entity);
+        let mut derived = self.derived_stats(entity);
+        // Before anything reads `derived`, so `Stats`, the decompiler skill,
+        // the inserted `Derived` and the Power clamp all see an implant's
+        // deltas. Accuracy and evasion are not here: they are read live
+        // through `Game::hit_bonus`.
+        let implants = self.implant_stats(entity);
+        derived.max_hp += implants.max_hp;
+        derived.atk += implants.atk;
+        derived.mitigation += implants.mitigation;
+        derived.decompiler += implants.decompiler;
+        derived.max_power += implants.max_power;
+        derived.status_resist += implants.status_resist;
+        derived.crit += implants.crit;
         let receipt = self
             .world
             .get::<BoughtStats>(entity)

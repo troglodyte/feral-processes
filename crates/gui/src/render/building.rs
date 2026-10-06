@@ -1712,8 +1712,13 @@ pub(super) fn structure_headline(s: &StructureReport) -> String {
         .durability
         .map(|(hp, max)| format!("  {hp}/{max} HP"))
         .unwrap_or_default();
+    let room = s
+        .room
+        .as_deref()
+        .map(|r| format!("  {r}"))
+        .unwrap_or_default();
     format!(
-        "{}{tier}  ({}, {})  {}d{durability}",
+        "{}{tier}  ({}, {})  {}d{durability}{room}",
         s.label, s.pos.0, s.pos.1, s.distance
     )
 }

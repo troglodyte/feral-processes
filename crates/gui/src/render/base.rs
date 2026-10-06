@@ -66,6 +66,21 @@ const MARK_FILL: Color = wash(0.18);
 const MARK_EDGE: Color = wash(0.45);
 const PREVIEW_FILL: Color = wash(0.35);
 
+/// How strongly an Alt-held room tint covers the ground. Low enough that the
+/// floor finish and the biome pattern still read through it.
+const ROOM_TINT_ALPHA: f32 = 0.28;
+
+/// Point size of a room's Alt label: small enough that a four-cell room
+/// holds "Fine dormitory" at the default zoom.
+const ROOM_LABEL_SIZE: u16 = 14;
+
+/// Whether a room label of `text_w` pixels sits inside a room whose widest
+/// row spans `cols` cells. Text never clips or wraps, so a label that does
+/// not fit is dropped.
+fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
+    text_w <= cols as f32 * tile_px
+}
+
 /// The excavate brush's header line, in from the map pane's own corner —
 /// not the window's, which is what a literal `0.0` would draw under.
 const EXCAVATE_LABEL_INSET: f32 = 4.0;
@@ -714,6 +729,16 @@ fn draw_surface_map(
     // Base space only, and `floor_piles` already answers empty elsewhere.
     let piles: std::collections::HashSet<(i32, i32)> =
         game.floor_piles().into_iter().map(|p| p.pos).collect();
+    // Alt shows the rooms. `view_rooms` answers empty outside base space.
+    let rooms = if reveal {
+        game.view_rooms()
+    } else {
+        Vec::new()
+    };
+    let room_tint: std::collections::HashMap<(i32, i32), (u8, u8, u8)> = rooms
+        .iter()
+        .flat_map(|r| r.cells.iter().map(|&c| (c, r.tint)))
+        .collect();
     // Cloud shadows are the zone map's alone. Base space is a pocket cut
     // out of rock with no sky over it, and the Stack draws through
     // `render/stack.rs` and never reaches here at all — so this one flag is
@@ -1005,6 +1030,22 @@ fn draw_surface_map(
                     cell.w,
                     cell.h,
                     at_level(STATION_FLOOR_FILL, vig),
+                );
+            }
+            // Under structures and above the floor, so a room reads as a
+            // property of the ground.
+            if let Some(&(r, g, b)) = room_tint.get(&world) {
+                painter.rect(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    Color::new(
+                        r as f32 / 255.0,
+                        g as f32 / 255.0,
+                        b as f32 / 255.0,
+                        ROOM_TINT_ALPHA,
+                    ),
                 );
             }
             // A structure the crew has not raised yet: a flat dark slab with
@@ -1561,6 +1602,43 @@ fn draw_surface_map(
             )
         });
     }
+    for room in &rooms {
+        let label = format!("{} {}", room.band.label(), room.role);
+        let (min_x, max_x) = room.cells.iter().fold((i32::MAX, i32::MIN), |(lo, hi), c| {
+            (lo.min(c.0), hi.max(c.0))
+        });
+        let size = ROOM_LABEL_SIZE;
+        if !room_label_fits(
+            painter.measure_ui(&label, size).width,
+            max_x - min_x + 1,
+            tile_px,
+        ) {
+            continue;
+        }
+        let (px, py) = tile_origin_px(
+            room.label_at,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        let w = painter.measure_ui(&label, size).width;
+        let x = px + tile_px / 2.0 - w / 2.0;
+        let fully_inside = x >= pane.x
+            && x + w <= pane.x + pane.w
+            && py >= pane.y
+            && py + tile_px <= pane.y + pane.h;
+        if fully_inside {
+            painter.ui(
+                &label,
+                x,
+                py + tile_px / 2.0 + size as f32 * 0.3,
+                size,
+                TEXT,
+            );
+        }
+    }
     // Over every body and effect, since it marks one of them when the walk
     // is a chase; resolved against `entities` — what this frame drew — so
     // the outline follows the hostile and never lands where nothing is.
@@ -1776,6 +1854,12 @@ mod tests {
     use feral_processes_engine::components::{GlyphColor, MachineStatus, POWER_MAX};
     use feral_processes_engine::floors::FloorShade;
     use feral_processes_engine::{CharacterChoice, DifficultyMode, Game};
+
+    #[test]
+    fn a_room_label_wider_than_its_room_is_dropped() {
+        assert!(room_label_fits(80.0, 5, 16.0));
+        assert!(!room_label_fits(81.0, 5, 16.0));
+    }
 
     fn test_assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")

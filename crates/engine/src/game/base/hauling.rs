@@ -988,39 +988,48 @@ fn note_haul(
     });
 }
 
-/// The pile a hauler with nothing else to do should fetch: the nearest by
-/// tile, and only when the machine has no output of its own to clear
-/// (`Errand::Tend`'s job) and some depot would take what the lift is. The
-/// caller asks whether the walk reaches it.
+/// The pile a hauler with nothing else to do should fetch, and only when the
+/// machine has no output of its own to clear (`Errand::Tend`'s job).
+///
+/// Piles are tried nearest first and a pile's items lowest first, and the
+/// first that the walk reaches *and* some reachable depot takes wins: one
+/// pile nobody can use must not hide every other. The depot has to be
+/// reachable, not merely willing — lifting for a walled-in shelf is the
+/// lift, strand, set down, lift-again loop `Errand::Tend` also refuses.
 fn pickup_errand(
-    machine: Entity,
-    from: Position,
-    structures: &Query<HaulStructure, Without<Tamed>>,
+    machine_is_clear: bool,
     piles: &Query<(Entity, &Position, &FloorPile), Without<Tamed>>,
     depots: &[(Entity, Position)],
     accepts: &impl Fn(Entity, &ItemId) -> bool,
+    reach_pile: &impl Fn(Position) -> bool,
+    reach_depot: &impl Fn(Entity, Position) -> bool,
+    from: Position,
 ) -> Option<Errand> {
-    let clear = structures
-        .get(machine)
-        .is_ok_and(|(_, _, stock, _)| stock.output.is_empty());
-    if !clear {
+    if !machine_is_clear {
         return None;
     }
-    let (pile, at, contents) = piles
-        .iter()
-        .map(|(e, p, c)| (e, *p, c))
-        .min_by_key(|(_, p, _)| (chebyshev(*p, from), p.x, p.y))?;
-    let item = contents.items.keys().next()?.clone();
-    if !depots.iter().any(|&(d, _)| accepts(d, &item)) {
-        return None;
+    let mut ranked: Vec<_> = piles.iter().map(|(e, p, c)| (e, *p, c)).collect();
+    ranked.sort_by_key(|(_, p, _)| (chebyshev(*p, from), p.x, p.y));
+    let mut depot_reach: HashMap<Entity, bool> = HashMap::new();
+    for (pile, at, contents) in ranked {
+        if !reach_pile(at) {
+            continue;
+        }
+        for (item, &qty) in &contents.items {
+            let takes = depots.iter().any(|&(d, p)| {
+                accepts(d, item) && *depot_reach.entry(d).or_insert_with(|| reach_depot(d, p))
+            });
+            if takes {
+                return Some(Errand::Pickup {
+                    pile,
+                    at,
+                    item: item.clone(),
+                    want: qty.min(tuning::HAUL_CARRY_CAPACITY),
+                });
+            }
+        }
     }
-    let want = contents.items[&item].min(tuning::HAUL_CARRY_CAPACITY);
-    Some(Errand::Pickup {
-        pile,
-        at,
-        item,
-        want,
-    })
+    None
 }
 
 pub(crate) fn haul_step_system(
@@ -1278,15 +1287,21 @@ pub(crate) fn haul_step_system(
                         (want > 0).then_some(Errand::Collect { depot, item, want })
                     })
                     .unwrap_or_else(|| {
-                        pickup_errand(machine, worker_pos, &structures, &piles, &depots, &accepts)
-                            .filter(|e| match e {
-                                Errand::Pickup { at, .. } => {
-                                    post_reach(&grid, worker_pos, *at, 1, &blocked, pocket_radius)
-                                        .is_ok()
-                                }
-                                _ => true,
-                            })
-                            .unwrap_or(Errand::Tend(machine))
+                        pickup_errand(
+                            structures
+                                .get(machine)
+                                .is_ok_and(|(_, _, stock, _)| stock.output.is_empty()),
+                            &piles,
+                            &depots,
+                            &accepts,
+                            &|at| {
+                                post_reach(&grid, worker_pos, at, 1, &blocked, pocket_radius)
+                                    .is_ok()
+                            },
+                            &reachable,
+                            worker_pos,
+                        )
+                        .unwrap_or(Errand::Tend(machine))
                     }),
             }
         };

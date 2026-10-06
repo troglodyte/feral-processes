@@ -2458,3 +2458,44 @@ fn two_haulers_sent_to_one_pile_conserve_the_total() {
     assert_eq!(node_output(&game, depot, "cache_grain"), 3);
     assert_eq!(pile_total(&mut game), 0);
 }
+
+/// A node, a hauler posted to it and only a walled-in Depot: the pile is
+/// within reach but nothing it could be taken to is.
+#[test]
+fn a_pile_is_left_alone_when_the_only_accepting_depot_is_walled_in() {
+    let mut game = base(36);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    walled_depot(&mut game, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 3, "cache_grain", 3);
+
+    for _ in 0..3 * tuning::STRANDED_SET_DOWN_TICKS {
+        game.tick();
+        assert!(
+            game.world.get::<Carrying>(worker).is_none(),
+            "lifted a pile no Depot can be reached for, tick {}",
+            game.current_tick()
+        );
+    }
+    assert_eq!(pile_total(&mut game), 3);
+}
+
+/// One pile the shelf refuses must not hide a farther one it takes.
+#[test]
+fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
+    let (mut game, _, depot, _) = pickup_fixture(37);
+    game.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+    let (px, py) = game.base_pos().unwrap();
+    pile_on(&mut game, px + 1, py + 1, ids::CORE_FRAGMENT, 2);
+    pile_on(&mut game, px + 2, py + 2, "cache_grain", 4);
+
+    tick_until(&mut game, 400, |g| {
+        node_output(g, depot, "cache_grain") >= 4
+    });
+
+    assert_eq!(node_output(&game, depot, "cache_grain"), 4);
+    assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+}

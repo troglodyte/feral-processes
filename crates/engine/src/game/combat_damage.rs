@@ -361,6 +361,7 @@ impl Game {
     /// requested number claims damage the target never took.
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) -> i32 {
         let dealt = self.mitigate_incoming_damage(target, dmg);
+        let dealt = self.dead_mans_switch(target, dealt);
         self.lower_hp(target, dealt);
         // "An area attack connected." The third and last `break_cloak`
         // caller, and the only one naming the body on the receiving end —

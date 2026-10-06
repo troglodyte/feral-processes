@@ -3127,6 +3127,11 @@ pub const REJECTION_CHANCE_MAX: f64 = 0.5;
 /// `assets/statuses/`; one missing from the loaded set is skipped.
 pub const REJECTION_STATUSES: [&str; 3] = ["throttled", "exposed", "stun"];
 
+/// Rounds a battle-start status (a rejection, or an implant's own
+/// `BattleStartStatus`) lasts. Two, so even a stun is a bad opening and not a
+/// lost fight.
+pub const REJECTION_STATUS_DURATION: u32 = 2;
+
 /// `core_fragment`s charged per point of Load to take an implant back out.
 /// Core fragments are zone-local and lost at a breach, so this is a price
 /// paid in the current zone's own currency. A cheap 2-Load implant costs 12

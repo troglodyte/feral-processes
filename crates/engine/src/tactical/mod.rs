@@ -178,6 +178,8 @@ pub struct TacticalBattle {
     /// snapshot for its reason: by the time a fight is won the question is
     /// unanswerable.
     pub(crate) outmatched: bool,
+    /// `BattleState::dead_mans_switch_spent`'s counterpart on the battle map.
+    pub(crate) dead_mans_switch_spent: bool,
     /// Every decoy a Hallucination has placed and nobody has struck through
     /// yet, in placement order — `bodies`' reason for a `Vec`.
     decoys: Vec<Decoy>,
@@ -259,6 +261,7 @@ impl TacticalBattle {
             walk: None,
             round: 1,
             outmatched: false,
+            dead_mans_switch_spent: false,
             decoys: Vec::new(),
             fallen: Vec::new(),
             reacted: Vec::new(),

@@ -355,3 +355,181 @@ fn trace_rises_faster_with_a_downside_and_slower_with_a_damp_and_never_stops() {
         "the obfuscation floor still holds"
     );
 }
+
+fn open_battle(game: &mut Game) {
+    let wild = spawn_wild_on_player_tile(game);
+    let groups = game.group_pack(vec![wild]);
+    game.begin_battle(groups);
+}
+
+/// The next number the world's RNG would hand out, after the same set-up a
+/// battle gets but with `begin` deciding whether the battle opens. Two games
+/// on one seed agree on it only if opening the battle drew nothing.
+fn next_draw_after_setup(seed: u32, implants: &[&str], begin: bool) -> u64 {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    add_def(&mut game, def("light"));
+    install(&mut game, implants);
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let groups = game.group_pack(vec![wild]);
+    if begin {
+        game.begin_battle(groups);
+    }
+    game.world.resource_mut::<GameRng>().0.random::<u64>()
+}
+
+fn player_status_ids(game: &Game) -> Vec<String> {
+    game.world
+        .get::<StatusEffects>(game.player_entity())
+        .unwrap()
+        .active
+        .iter()
+        .map(|a| a.id.0.clone())
+        .collect()
+}
+
+fn rejecting_def(id: &str, chance: f32) -> ImplantDef {
+    ImplantDef {
+        downside: Some(ImplantDownside::BattleStartStatus("stun".into(), chance)),
+        ..def(id)
+    }
+}
+
+#[test]
+fn a_player_with_no_implants_draws_nothing_from_the_rng_at_battle_start() {
+    assert_eq!(
+        next_draw_after_setup(4471, &[], true),
+        next_draw_after_setup(4471, &[], false)
+    );
+}
+
+#[test]
+fn a_battle_start_status_lands_at_chance_one_and_never_at_zero() {
+    let mut game = new_game();
+    add_def(&mut game, rejecting_def("always", 1.0));
+    add_def(&mut game, rejecting_def("never", 0.0));
+
+    install(&mut game, &["never"]);
+    open_battle(&mut game);
+    assert!(player_status_ids(&game).is_empty());
+
+    let mut game = new_game();
+    add_def(&mut game, rejecting_def("always", 1.0));
+    install(&mut game, &["always"]);
+    open_battle(&mut game);
+    assert_eq!(player_status_ids(&game), vec!["stun"]);
+}
+
+#[test]
+fn overload_can_arm_a_rejection_status_and_not_overloaded_never_does() {
+    let heavy = |game: &mut Game| {
+        add_def(
+            game,
+            ImplantDef {
+                load: 40,
+                ..def("heavy")
+            },
+        );
+        install(game, &["heavy"]);
+    };
+    let mut landed = 0;
+    for seed in 0..40 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        heavy(&mut game);
+        open_battle(&mut game);
+        landed += usize::from(!player_status_ids(&game).is_empty());
+    }
+    assert!(landed > 0 && landed < 40, "{landed} of 40 rejected");
+
+    // Within the cap, with no downside, there is no roll either.
+    assert_eq!(
+        next_draw_after_setup(4471, &["light"], true),
+        next_draw_after_setup(4471, &["light"], false)
+    );
+}
+
+fn switch_game() -> Game {
+    let mut game = new_game();
+    install(&mut game, &["dead_mans_switch"]);
+    open_battle(&mut game);
+    game
+}
+
+fn player_hp(game: &Game) -> i32 {
+    game.world.get::<Stats>(game.player_entity()).unwrap().hp
+}
+
+#[test]
+fn the_switch_saves_once_per_battle_and_spends_power() {
+    let mut game = switch_game();
+    let player = game.player_entity();
+    let power = |g: &Game| g.world.get::<PowerReserve>(player).unwrap().get();
+    let before = power(&game);
+
+    game.apply_damage(player, 10_000);
+    assert_eq!(player_hp(&game), 1);
+    assert_eq!(before - power(&game), crate::tuning::DEAD_MANS_SWITCH_POWER);
+
+    game.apply_damage(player, 10_000);
+    assert_eq!(player_hp(&game), 0, "the second lethal hit kills");
+}
+
+#[test]
+fn the_switch_does_not_stop_kill_outright() {
+    let mut game = switch_game();
+    let player = game.player_entity();
+    game.kill_outright(player);
+    assert_eq!(player_hp(&game), 0);
+}
+
+#[test]
+fn the_switch_needs_power_a_battle_and_the_implant() {
+    let mut game = switch_game();
+    let player = game.player_entity();
+    let max = game
+        .world
+        .get::<crate::components::Derived>(player)
+        .unwrap()
+        .max_power;
+    let mut reserve = PowerReserve::new(0.0, max);
+    reserve.restore(crate::tuning::DEAD_MANS_SWITCH_POWER - 1.0, max);
+    game.world.entity_mut(player).insert(reserve);
+    game.apply_damage(player, 10_000);
+    assert_eq!(player_hp(&game), 0, "not enough Power to pay for it");
+
+    let mut game = new_game();
+    open_battle(&mut game);
+    game.apply_damage(game.player_entity(), 10_000);
+    assert_eq!(player_hp(&game), 0, "no implant");
+
+    let mut game = new_game();
+    install(&mut game, &["dead_mans_switch"]);
+    game.apply_damage(game.player_entity(), 10_000);
+    assert_eq!(player_hp(&game), 0, "no battle");
+}
+
+/// Whether `signature` changes what the game does once installed. No
+/// wildcard arm: a new variant fails to compile until it names its query,
+/// modelled on `perks::one_level_is_worth_something`.
+fn signature_moves_the_game(signature: ImplantSignature) -> bool {
+    match signature {
+        ImplantSignature::DeadMansSwitch => {
+            let survives = |installed: bool| {
+                let mut game = new_game();
+                if installed {
+                    install(&mut game, &["dead_mans_switch"]);
+                }
+                open_battle(&mut game);
+                game.apply_damage(game.player_entity(), 10_000);
+                player_hp(&game) > 0
+            };
+            survives(true) && !survives(false)
+        }
+    }
+}
+
+#[test]
+fn every_signature_moves_the_game() {
+    // One arm per variant in `signature_moves_the_game`; add the new
+    // variant's call here when it gains one.
+    assert!(signature_moves_the_game(ImplantSignature::DeadMansSwitch));
+}

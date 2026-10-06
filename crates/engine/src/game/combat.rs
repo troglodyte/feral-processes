@@ -563,6 +563,7 @@ impl Game {
             rewards: BattleRewards::default(),
             lair: None,
             outmatched: hostile_weight > party_weight,
+            dead_mans_switch_spent: false,
         });
         // After `BattleState` is in place, deliberately: the party slots and
         // the groups are both read back off it, so a record taken earlier
@@ -578,6 +579,7 @@ impl Game {
         });
         let line = self.intercept_line_named(&name, others);
         self.log(line);
+        self.roll_implant_battle_start();
         // The first nemesis in the opening groups, group-then-slot order —
         // deterministic, and there is no notion of "the" nemesis when a
         // pack holds two, so picking one rather than logging every one of

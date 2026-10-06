@@ -44,16 +44,15 @@ pub fn power_drain_per_tick(multiplier: f32) -> f32 {
     HUNGER_DECAY_PER_TICK * multiplier
 }
 
+type NeedsTickRow = (
+    &'static mut PowerReserve,
+    &'static mut Stats,
+    Option<&'static Perks>,
+    Option<&'static crate::components::Implants>,
+);
+
 pub fn needs_tick_system(
-    mut query: Query<
-        (
-            &mut PowerReserve,
-            &mut Stats,
-            Option<&Perks>,
-            Option<&crate::components::Implants>,
-        ),
-        With<Player>,
-    >,
+    mut query: Query<NeedsTickRow, With<Player>>,
     implant_db: Res<crate::implants::ImplantDb>,
     mut log: ResMut<MessageLog>,
 ) {

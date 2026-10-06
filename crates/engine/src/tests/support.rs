@@ -419,6 +419,7 @@ pub(super) fn insert_battle_with_groups(
         // A hand-built fight is not weighed: `begin_battle` is what judges a
         // pack, and a fixture that wants the verdict sets it itself.
         outmatched: false,
+        dead_mans_switch_spent: false,
     });
 }
 

@@ -640,6 +640,7 @@ pub(super) fn minimal_active_battle(game: &Game) -> BattleState {
         rewards: BattleRewards::default(),
         lair: None,
         outmatched: false,
+        dead_mans_switch_spent: false,
     }
 }
 

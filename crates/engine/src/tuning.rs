@@ -6051,6 +6051,22 @@ pub const OUTPOST_RAID_DAMAGE: u32 = 25;
 /// rounded down. Unmeasured — see design spec §11.
 pub const OUTPOST_RAID_STEAL_FRACTION: f32 = 0.5;
 
+/// Cells at which a room's area stops adding to its quality score.
+pub const ROOM_AREA_FULL: f32 = 16.0;
+/// Weight of the area term in `rooms::quality`.
+pub const ROOM_AREA_WEIGHT: f32 = 0.5;
+/// Weight of the finished-floor share in `rooms::quality`.
+pub const ROOM_FINISH_WEIGHT: f32 = 0.5;
+/// Weight of the crowding penalty in `rooms::quality`.
+pub const ROOM_CROWD_WEIGHT: f32 = 1.0;
+/// Structure anchors per cell a room holds before crowding starts to cost.
+pub const ROOM_CROWD_FREE: f32 = 0.25;
+/// Lower score bounds of the Plain, Fine and Superb bands; below the first
+/// is Cramped.
+pub const ROOM_BAND_PLAIN: f32 = 0.25;
+pub const ROOM_BAND_FINE: f32 = 0.6;
+pub const ROOM_BAND_SUPERB: f32 = 0.85;
+
 #[cfg(test)]
 mod tests {
     use super::*;

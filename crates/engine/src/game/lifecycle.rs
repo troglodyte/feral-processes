@@ -486,6 +486,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            rooms: room_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -532,6 +533,7 @@ impl Game {
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(floor_db);
+        world.insert_resource(room_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -1387,6 +1389,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            rooms: room_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -1523,6 +1526,7 @@ impl Game {
         // behind — `BaseGrid::revert`'s own rule, applied once at load.
         load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
         world.insert_resource(floor_db);
+        world.insert_resource(room_db);
         world.insert_resource(data.base_grid);
         world.insert_resource(crate::resources::MiningMode(data.mining));
         world.insert_resource(data.enemy_strength);
@@ -3516,6 +3520,7 @@ struct AssetDbs {
     research: ResearchDb,
     rock: crate::rock::RockDb,
     floors: crate::floors::FloorDb,
+    rooms: crate::rooms::RoomDb,
     items: ItemDb,
     perks: PerkDb,
     talents: crate::talents::TalentDb,
@@ -3698,6 +3703,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // the pre-finish game.
     let (floors, floor_warnings) = crate::floors::FloorDb::load_dir(&assets_dir.join("floors"))?;
     warnings.extend(floor_warnings);
+    let (rooms, room_warnings) = crate::rooms::RoomDb::load_dir(&assets_dir.join("rooms"))?;
+    warnings.extend(room_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -3745,6 +3752,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         rock,
         floors,
+        rooms,
         items,
         perks,
         affixes,

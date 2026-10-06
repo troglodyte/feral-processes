@@ -9,4 +9,5 @@
     capacity: 20,
     assembles: Some((item: "honeypot", ticks_per_unit: 20)),
     power_draw: 2,
+    room_tags: ["workshop"],
 )

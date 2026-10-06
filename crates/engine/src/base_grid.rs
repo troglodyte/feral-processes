@@ -244,8 +244,8 @@ impl BaseGrid {
     }
 
     /// The map in key order — the deterministic iteration this type exists
-    /// to guarantee. `tests::base_grid` walks it to check the order itself.
-    #[cfg(test)]
+    /// to guarantee. `tests::base_grid` walks it to check the order itself,
+    /// and `rooms::detect` seeds its flood fill from it.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&(i32, i32), &BaseCell)> {
         self.cells.iter()
     }

@@ -548,6 +548,15 @@ pub struct StructureDef {
     /// because every structure's anchor does. `#[serde(default)]`.
     #[serde(default)]
     pub barrier: bool,
+    /// A door: its anchor bounds a room like a wall does (`rooms::detect`),
+    /// yet the crew and the player walk through it — `Game::blocked_tiles`
+    /// skips a door's anchor. `#[serde(default)]`.
+    #[serde(default)]
+    pub door: bool,
+    /// What this structure counts as when `rooms::detect` matches a room
+    /// against `assets/rooms/*.ron` `requires`. `#[serde(default)]`.
+    #[serde(default)]
+    pub room_tags: Vec<String>,
     /// How much this structure reduces raid damage by, for *every* raid
     /// against *any* deployed structure — not just itself — while it's
     /// standing (see `Game::raid_check`). Stacks additively across every

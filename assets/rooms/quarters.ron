@@ -1,0 +1,8 @@
+(
+    id: "quarters",
+    name: "quarters",
+    priority: 30,
+    requires: [(tag: "bed", min: 1, max: Some(1))],
+    living: true,
+    tint: (90, 140, 220),
+)

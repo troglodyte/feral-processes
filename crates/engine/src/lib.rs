@@ -41,6 +41,7 @@ pub mod progression;
 pub mod research;
 pub mod resources;
 pub mod rock;
+pub mod rooms;
 pub mod routes;
 pub mod routine_tree;
 pub mod save;

@@ -10,4 +10,5 @@
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
     extracts_programs: true,
     power_draw: 3,
+    room_tags: ["workshop"],
 )

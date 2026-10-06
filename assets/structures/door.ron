@@ -1,0 +1,11 @@
+(
+    id: "door",
+    name: "Door",
+    description: "A hinged slab of entropy. Programs walk through it; it closes off a room from the corridor beside it, so the space inside counts as a room of its own.",
+    glyph: '|',
+    color: Yellow,
+    build_cost: [("core_fragment", 3)],
+    work: None,
+    swept: false,
+    door: true,
+)

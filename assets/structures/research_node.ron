@@ -10,4 +10,5 @@
     power_draw: 1,
     footprint: 2,
     studies: true,
+    room_tags: ["workshop"],
 )

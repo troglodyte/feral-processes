@@ -79,9 +79,10 @@ fn body_rows(screen: &SpliceRigScreen, selected: usize) -> Vec<Row> {
         ));
     }
     body.push(text_row(format!(
-        "{} core fragments in your pack - taking an implant out costs them, and they are lost at a breach",
+        "{} core fragments in your pack. Taking an implant out costs them,",
         view.fragments
     )));
+    body.push(text_row("and they are lost at a breach."));
     body.push(text_row(""));
 
     if let Some(question) = &screen.confirm {
@@ -103,8 +104,9 @@ fn body_rows(screen: &SpliceRigScreen, selected: usize) -> Vec<Row> {
     }
 
     body.push(text_row(
-        "[I] install the highlighted pack implant  [R] remove the highlighted one  Esc to go back",
+        "[I] install the highlighted pack implant  [R] remove an installed one",
     ));
+    body.push(text_row("Esc to go back"));
     body.push(text_row(""));
     body.push(text_row("Installed"));
     if view.installed.is_empty() {

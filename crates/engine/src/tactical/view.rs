@@ -17,8 +17,8 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{AbilityShape, TamperKind};
 use crate::components::{
-    Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Respawned,
-    Squad, Stats, Tampered,
+    Creature, Experience, Glyph, GlyphColor, Hostile, Player, Rarity, Respawned, Squad, Stats,
+    Tampered,
 };
 use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
@@ -562,14 +562,7 @@ impl Game {
                 .flatten(),
             label: self.entity_label(entity),
             is_player,
-            look: is_player.then(|| {
-                let identity = self.world.get::<PlayerIdentity>(entity);
-                PlayerLook {
-                    sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
-                    colour: identity.and_then(|i| i.colour),
-                    icon: identity.and_then(|i| i.icon.clone()),
-                }
-            }),
+            look: is_player.then(|| self.player_look(entity)),
             form: self.form_look(entity),
             is_hostile,
             is_boss: self.is_boss_creature(entity),

@@ -860,6 +860,70 @@ impl Game {
         Some(format!("{species_name} {noun} ({})", squad.members.len()))
     }
 
+    /// `entity`'s def sprite name — `EntityView::sprite` and the battle
+    /// portrait's one source. `sprite_name()` is the one expression of the
+    /// override-or-id fallback (see its doc comment on both defs); an
+    /// entity with neither component resolves to `None` rather than
+    /// inventing a name.
+    pub(crate) fn sprite_of(&self, entity: Entity) -> Option<String> {
+        self.world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|def| def.sprite_name().to_string())
+            .or_else(|| {
+                self.world.get::<Structure>(entity).and_then(|s| {
+                    self.world
+                        .resource::<StructureDb>()
+                        .get(&s.kind)
+                        .map(|def| def.sprite_name().to_string())
+                })
+            })
+    }
+
+    /// The player's chosen look off `PlayerIdentity`; empty for an entity
+    /// without one. Callers gate on being the player.
+    pub(crate) fn player_look(&self, entity: Entity) -> PlayerLook {
+        let identity = self.world.get::<PlayerIdentity>(entity);
+        PlayerLook {
+            sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
+            colour: identity.and_then(|i| i.colour),
+            icon: identity.and_then(|i| i.icon.clone()),
+        }
+    }
+
+    /// What the battle screen's picture window shows for `entity`, in the
+    /// map's own priority order: an emulated form, then the player's drawn
+    /// icon or chosen sprite, then the def's sprite, with the glyph as the
+    /// renderer's fallback for whichever name has no art.
+    pub(crate) fn portrait_of(&self, entity: Entity) -> Option<PortraitView> {
+        let glyph = self.world.get::<Glyph>(entity);
+        let form = self.form_look(entity);
+        let look = self
+            .world
+            .get::<Player>(entity)
+            .map(|_| self.player_look(entity));
+        let player_sprite = look
+            .as_ref()
+            .map(|l| l.sprite.clone())
+            .filter(|s| !s.is_empty());
+        let drawn_icon = form.is_none() && look.as_ref().is_some_and(|l| l.icon.is_some());
+        Some(PortraitView {
+            sprite: form
+                .as_ref()
+                .and_then(|f| f.sprite.clone())
+                .or(player_sprite)
+                .or_else(|| self.sprite_of(entity)),
+            glyph: form
+                .as_ref()
+                .map(|f| f.glyph)
+                .or(glyph.map(|g| g.ch))
+                .unwrap_or('?'),
+            color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
+            name: self.creature_label(entity),
+            drawn_icon,
+        })
+    }
+
     pub(crate) fn entity_label(&self, entity: Entity) -> String {
         if let Some(name) = self.squad_label(entity) {
             name
@@ -1305,32 +1369,9 @@ impl Game {
                     .get::<Durability>(entity)
                     .map(|d| (d.hp, d.max_hp));
                 let label = self.entity_label(entity);
-                let look = is_player.then(|| {
-                    let identity = self.world.get::<PlayerIdentity>(entity);
-                    PlayerLook {
-                        sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
-                        colour: identity.and_then(|i| i.colour),
-                        icon: identity.and_then(|i| i.icon.clone()),
-                    }
-                });
+                let look = is_player.then(|| self.player_look(entity));
                 let form = self.form_look(entity);
-                // `sprite_name()` is the one expression of the
-                // override-or-id fallback (see its doc comment on both
-                // defs) — an entity with neither component resolves to
-                // `None` rather than inventing a name.
-                let sprite = self
-                    .world
-                    .get::<Creature>(entity)
-                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-                    .map(|def| def.sprite_name().to_string())
-                    .or_else(|| {
-                        self.world.get::<Structure>(entity).and_then(|s| {
-                            self.world
-                                .resource::<StructureDb>()
-                                .get(&s.kind)
-                                .map(|def| def.sprite_name().to_string())
-                        })
-                    });
+                let sprite = self.sprite_of(entity);
                 // A site's own row when this *is* a site, and the row of the
                 // request standing on this cell when it is a machine being
                 // upgraded: an upgrade site carries no glyph, so

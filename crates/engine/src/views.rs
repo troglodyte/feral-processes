@@ -1042,6 +1042,20 @@ pub struct FormLook {
     pub sprite: Option<String>,
 }
 
+/// The battle screen's picture window — one body, resolved the way the map
+/// would draw it, so the window and the map never show different looks.
+/// See `Game::portrait_of`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PortraitView {
+    pub sprite: Option<String>,
+    pub glyph: char,
+    pub color: GlyphColor,
+    pub name: String,
+    /// Try the player's drawn icon before `sprite` — set exactly when the
+    /// map would draw it: the player, not emulating, with an icon drawn.
+    pub drawn_icon: bool,
+}
+
 /// What a Depot holds against what it can hold — its own `Stock::output`
 /// total and `Stock::capacity`, carried as counts rather than a fraction so
 /// "full" is an integer comparison and never a float landing at 0.9999.

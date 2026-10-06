@@ -20,6 +20,8 @@ paths:
   - "**/lifecycle*"
   - "**/memories*"
   - "assets/structures/**"
+  - "**/rooms*"
+  - "assets/rooms/**"
   - "assets/needs/**"
 ---
 
@@ -422,3 +424,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**
 - **A held program is `ProgramRole::Siphoned` and grid supply is counted off the `Siphoned` marker, so removing the marker is the whole release; every despawn path for a siphon must release first.**
 - **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `floor::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.
+
+- **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**

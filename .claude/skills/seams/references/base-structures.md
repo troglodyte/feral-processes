@@ -356,3 +356,14 @@
   leaves the program holding a dangling `Entity` forever, supplying nothing and
   never freed. The plan found the second path (raid destruction) that the spec
   named only as deconstruct.
+
+- **Rooms are derived per call and never stored, and a door is the only structure anchor the crew can walk through.**
+  `rooms::of_world` flood-fills the live floor each time it is asked, so a
+  build, a demolish, a raid or a dig changes the answer with nothing to
+  invalidate; a `Rooms` Resource would go stale and feed amenity refill,
+  workshop time and the room thoughts a wrong band without a sign. Callers
+  compute once per pass and hand the result down (`Surroundings`,
+  `SiteScales`). `StructureDef::door` marks the one non-barrier anchor
+  `blocked_tiles` skips; every other anchor still blocks, and a door cell
+  bounds a room like a wall does. Nothing is saved: `door` and `room_tags` are
+  asset-side, so `SAVE_FORMAT_VERSION` did not move.

@@ -1,0 +1,7 @@
+(
+    id: "ripper_fibers",
+    name: "Ripper Fibers",
+    description: "Tendon-weave spliced along the strike arm. Every blow lands harder.",
+    load: 2,
+    stats: (atk: 3),
+)

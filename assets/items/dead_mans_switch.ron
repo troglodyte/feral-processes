@@ -1,0 +1,7 @@
+(
+    id: "dead_mans_switch",
+    name: "Dead Man's Switch",
+    description: "Implant. Installed at a Splice Rig. Once per battle, a killing blow leaves you at 1 Integrity instead, and costs Power.",
+    value: Some(36),
+    implant: Some("dead_mans_switch"),
+)

@@ -1,0 +1,8 @@
+(
+    id: "overclock_spine",
+    name: "Overclock Spine",
+    description: "Runs the whole nervous system hot. One more routine slot, and you start some fights throttled.",
+    load: 4,
+    hooks: [RoutineSlots(1)],
+    downside: Some(BattleStartStatus("throttled", 0.2)),
+)

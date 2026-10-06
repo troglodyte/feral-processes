@@ -1,0 +1,7 @@
+(
+    id: "dead_mans_switch",
+    name: "Dead Man's Switch",
+    description: "Once per battle, a killing blow leaves you at 1 Integrity instead, and costs Power.",
+    load: 3,
+    signature: Some(DeadMansSwitch),
+)

@@ -1,0 +1,7 @@
+(
+    id: "ghost_handshake",
+    name: "Ghost Handshake",
+    description: "Implant. Installed at a Splice Rig. Opens a quiet side channel during a decompile. Captures land more often, and the Stack notices.",
+    value: Some(24),
+    implant: Some("ghost_handshake"),
+)

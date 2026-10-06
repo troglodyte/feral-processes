@@ -1,0 +1,7 @@
+(
+    id: "dermal_lattice",
+    name: "Dermal Lattice",
+    description: "A rigid mesh under the skin. Tougher and sturdier, and slower to dodge.",
+    load: 3,
+    stats: (max_hp: 12, mitigation: 4, evasion: -3),
+)

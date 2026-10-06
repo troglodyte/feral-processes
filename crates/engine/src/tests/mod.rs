@@ -54,6 +54,7 @@ mod field;
 mod gear_detail;
 mod gear_passives;
 mod hauling;
+mod implants;
 mod inspection;
 mod interactions;
 mod kit;

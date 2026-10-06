@@ -1,0 +1,7 @@
+(
+    id: "ripper_fibers",
+    name: "Ripper Fibers",
+    description: "Implant. Installed at a Splice Rig. Tendon-weave spliced along the strike arm. Every blow lands harder.",
+    value: Some(24),
+    implant: Some("ripper_fibers"),
+)

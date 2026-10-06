@@ -5917,3 +5917,51 @@ fn the_decompiler_research_chain_is_loaded_reachable_and_strictly_increasing() {
     let shipped = db.all().filter(|d| d.decompiler.is_some()).count();
     assert_eq!(shipped, chain.len(), "no stray decompiler node");
 }
+
+#[test]
+fn six_implants_ship_and_every_implant_links_to_its_item_both_ways() {
+    let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let implants = game.world.resource::<crate::implants::ImplantDb>();
+    let items = game.world.resource::<ItemDb>();
+    let ids = implants.ids();
+    assert_eq!(ids.len(), 6, "the first set: {ids:?}");
+    for id in &ids {
+        let linked: Vec<_> = items
+            .all()
+            .filter(|item| item.implant.as_ref() == Some(*id))
+            .collect();
+        assert_eq!(
+            linked.len(),
+            1,
+            "implant {id:?} must have exactly one item installing it"
+        );
+    }
+    for item in items.all().filter(|item| item.implant.is_some()) {
+        let target = item.implant.as_ref().unwrap();
+        assert!(
+            implants.get(target).is_some(),
+            "item {:?} installs implant {target:?}, which does not exist",
+            item.id.0
+        );
+    }
+    let (_, warnings) =
+        crate::implants::ImplantDb::load_dir(&test_assets_dir().join("implants")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn every_shipped_rejection_status_exists() {
+    let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let statuses = game.world.resource::<StatusDb>();
+    for id in tuning::REJECTION_STATUSES {
+        assert!(statuses.contains(&StatusId::from(id)), "{id}");
+    }
+    let implants = game.world.resource::<crate::implants::ImplantDb>();
+    for id in implants.ids() {
+        if let Some(crate::implants::ImplantDownside::BattleStartStatus(status, _)) =
+            &implants.get(id).unwrap().downside
+        {
+            assert!(statuses.contains(status), "{id:?} arms unknown {status:?}");
+        }
+    }
+}

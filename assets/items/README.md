@@ -62,6 +62,13 @@ any non-finite `taming_potency`, `consume.power`, or
     // structure `build_cost`s, since a banked item can't be an ingredient.
     banked: true,
 
+    // Optional; can be left out entirely (defaults to ordinary cargo). Marks
+    // this item as an implant carrier: the id of a file in `assets/implants/`
+    // that a Splice Rig installs when the item is spent. A census holds every
+    // implant and every item naming one to a partner, so an implant needs
+    // exactly one item and this id must resolve. See ../implants/README.md.
+    implant: Some("ripper_fibers"),
+
     // Optional; can be left out entirely (defaults to 1, the flat rate every
     // item traded at before this field existed — so a mod written against
     // the older schema keeps behaving exactly as it did). What one unit is

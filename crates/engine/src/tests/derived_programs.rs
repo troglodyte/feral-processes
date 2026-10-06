@@ -11,7 +11,12 @@ fn game() -> Game {
 }
 
 fn species(game: &Game) -> String {
-    game.species_defs()[0].id.to_string()
+    game.species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string()
 }
 
 fn set_attribute(game: &mut Game, entity: Entity, id: &str, value: i32) {

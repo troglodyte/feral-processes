@@ -16,7 +16,7 @@ fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species")
             .id
             .clone()
@@ -642,7 +642,7 @@ fn install_test_species(
     let template = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let def = SpeciesDef {
         id: id.to_string(),

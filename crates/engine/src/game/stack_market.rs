@@ -227,7 +227,7 @@ impl Game {
                 .world
                 .resource::<SpeciesDb>()
                 .all()
-                .filter(|def| !def.is_boss)
+                .filter(|def| !def.is_boss && !def.is_hybrid())
                 .map(|def| def.id.as_str())
                 .collect();
             if !roster.is_empty() {

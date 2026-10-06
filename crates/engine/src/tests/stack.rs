@@ -4483,6 +4483,40 @@ fn a_markets_shelf_survives_a_save_and_load() {
     );
 }
 
+/// A hybrid is bred, never bought: a shelf that sold one would skip the
+/// pairing the species exists to reward.
+#[test]
+fn a_market_never_lists_a_hybrid_program() {
+    let game = game_at_a_market();
+    let hybrids: Vec<String> = game
+        .species_defs()
+        .into_iter()
+        .filter(|d| d.is_hybrid())
+        .map(|d| d.id)
+        .collect();
+    assert!(!hybrids.is_empty(), "the census needs a hybrid to look for");
+    let pos = game.stack_pos().unwrap();
+    let mut programs = 0;
+    for depth in 1..=60 {
+        for frames in 0..10 {
+            for offer in game.market_offers(StackPos {
+                depth,
+                frames,
+                ..pos
+            }) {
+                if let MarketOfferKind::Program { species } = offer {
+                    programs += 1;
+                    assert!(!hybrids.contains(&species), "a market sold {species}");
+                }
+            }
+        }
+    }
+    assert!(
+        programs > 0,
+        "no shelf listed a program, so this proved nothing"
+    );
+}
+
 /// The design boundary `no_species_or_research_file_grants_a_wild_only_ability`
 /// states for species and research files, extended to the one other thing
 /// that can now hand a routine over. A shop selling hunt-only routines is

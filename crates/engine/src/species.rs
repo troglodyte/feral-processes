@@ -374,6 +374,15 @@ pub struct SpeciesDef {
     /// pick.
     #[serde(default)]
     pub can_nest: bool,
+    /// The two species this one is bred from, unordered. Present, this is a
+    /// hybrid: obtainable only by breeding that pair (see `SpeciesDb::hybrid_of`),
+    /// so it ships `habitats: []` and every player-facing draw from the
+    /// roster skips it. `#[serde(default)]` so every existing species file,
+    /// including a mod's, keeps parsing as an ordinary species. A hybrid may
+    /// itself be a parent; `SpeciesDb::load_dir` refuses unknown parents, a
+    /// self-pair and a second hybrid for one pair.
+    #[serde(default)]
+    pub parents: Option<(SpeciesId, SpeciesId)>,
 }
 
 /// The role a species is read as, independent of its tier — the axis the
@@ -397,6 +406,11 @@ pub enum AffinityClass {
 }
 
 impl SpeciesDef {
+    /// Whether this species exists only as the offspring of `parents`.
+    pub fn is_hybrid(&self) -> bool {
+        self.parents.is_some()
+    }
+
     /// This species' basic attacks as abilities — the one conversion, so
     /// combat never sees a `MoveDef`. `moves` stays the authored shape: a
     /// species file, including a mod's, parses exactly as it did.
@@ -1093,7 +1107,69 @@ impl SpeciesDb {
                 Err(e) => warnings.push(format!("skipped invalid species file {path:?}: {e}")),
             }
         }
+        db.drop_invalid_hybrids(&mut warnings);
         Ok((db, warnings))
+    }
+
+    /// Removes every hybrid the roster cannot honour, one warning each, in id
+    /// order so the "first by id wins" rule and the warnings are stable.
+    ///
+    /// Repeats until nothing more falls out: a hybrid is a legal parent, so
+    /// skipping one can orphan another that was checked before it went.
+    fn drop_invalid_hybrids(&mut self, warnings: &mut Vec<String>) {
+        loop {
+            let mut ids: Vec<SpeciesId> = self
+                .species
+                .values()
+                .filter(|d| d.is_hybrid())
+                .map(|d| d.id.clone())
+                .collect();
+            ids.sort();
+            let mut claimed: Vec<(SpeciesId, SpeciesId)> = Vec::new();
+            let mut doomed: Vec<(SpeciesId, String)> = Vec::new();
+            for id in ids {
+                let Some((a, b)) = self.species[&id].parents.clone() else {
+                    continue;
+                };
+                let pair = if a <= b {
+                    (a.clone(), b.clone())
+                } else {
+                    (b.clone(), a.clone())
+                };
+                let why = if a == b {
+                    Some(format!("it names {a:?} as both parents"))
+                } else if let Some(missing) = [&a, &b]
+                    .into_iter()
+                    .find(|p| !self.species.contains_key(*p))
+                {
+                    Some(format!("parent {missing:?} is not a loaded species"))
+                } else if claimed.contains(&pair) {
+                    Some(format!("an earlier hybrid already covers {a:?} x {b:?}"))
+                } else {
+                    claimed.push(pair);
+                    None
+                };
+                if let Some(why) = why {
+                    doomed.push((id, why));
+                }
+            }
+            if doomed.is_empty() {
+                return;
+            }
+            for (id, why) in doomed {
+                warnings.push(format!("skipped invalid species {id:?}: {why}"));
+                self.species.remove(&id);
+            }
+        }
+    }
+
+    /// The authored hybrid of `a` and `b`, in either order.
+    pub fn hybrid_of(&self, a: &str, b: &str) -> Option<&SpeciesDef> {
+        self.all().find(|d| {
+            d.parents
+                .as_ref()
+                .is_some_and(|(x, y)| (x == a && y == b) || (x == b && y == a))
+        })
     }
 
     pub fn get(&self, id: &str) -> Option<&SpeciesDef> {
@@ -1215,16 +1291,16 @@ impl SpeciesDb {
             .collect()
     }
 
-    /// Every species that is not apex, by id — the flat pool a forked
-    /// program draws from, unfiltered by biome or danger band because a
-    /// fork is not a spawn of anywhere.
+    /// Every species that is neither apex nor a hybrid, by id — the flat pool
+    /// a forked program draws from, unfiltered by biome or danger band because
+    /// a fork is not a spawn of anywhere. Hybrids are bred, never handed out.
     ///
     /// Sorted for `NeedDb::iter`'s reason and not for tidiness: `HashMap`
     /// iteration order is randomized per instance, so an unsorted pool is
     /// an RNG-stream shift between two runs of the same seed, and the
     /// symptom surfaces as an intermittent failure somewhere unrelated.
     pub fn non_boss_ids(&self) -> Vec<&str> {
-        self.sorted_matches(|s| !s.is_boss)
+        self.sorted_matches(|s| !s.is_boss && !s.is_hybrid())
             .into_iter()
             .map(|s| s.id.as_str())
             .collect()
@@ -1517,7 +1593,8 @@ mod tests {
     fn the_shipped_roster_fills_three_bands_and_an_apex() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         let mut counts = [0usize; 4];
-        for s in db.all() {
+        // A hybrid never spawns wild, so it stands on no rung of the ladder.
+        for s in db.all().filter(|s| !s.is_hybrid()) {
             match s.danger_band() {
                 DangerBand::Tier(i) => counts[i] += 1,
                 DangerBand::Apex => counts[3] += 1,
@@ -2005,6 +2082,11 @@ mod tests {
                 entries[0].level
             );
             let rung = abilities.get(&entries[1].id).unwrap();
+            // A hybrid shares a class with a wild trio without being a member
+            // of it: the one-per-band rule below counts the wild ladder.
+            if species.is_hybrid() {
+                continue;
+            }
             kits.push((
                 class,
                 species.growth_multiplier,
@@ -2164,5 +2246,161 @@ mod tests {
         let mv: MoveDef = ron::from_str(r#"(name: "Fray", power: 8, spread: 3)"#)
             .expect("a move with a spread must parse");
         assert_eq!(mv.range(), crate::battle::DamageRange { min: 5, max: 11 });
+    }
+
+    /// A species file naming only what a species needs, plus `extra` fields.
+    fn species_file(id: &str, extra: &str) -> String {
+        format!(
+            r#"(id: "{id}", name: "{id}", glyph: 'q', color: Green, base_hp: 10, base_atk: 2,
+                base_mitigation: 1, taming_difficulty: 0.5, habitats: [OpenGrid],
+                moves: [(name: "Poke", power: 1)], work_resource: None{extra})"#
+        )
+    }
+
+    /// Loads `files` (file stem, body) from a scratch directory.
+    fn load_files(tag: &str, files: &[(&str, String)]) -> (SpeciesDb, Vec<String>) {
+        let dir = crate::tests::support::scratch_assets_dir(tag);
+        std::fs::create_dir_all(&*dir).unwrap();
+        for (stem, body) in files {
+            std::fs::write(dir.join(format!("{stem}.ron")), body).unwrap();
+        }
+        SpeciesDb::load_dir(&dir, &shipped_abilities()).unwrap()
+    }
+
+    fn pair(a: &str, b: &str) -> String {
+        format!(r#", parents: Some(("{a}", "{b}"))"#)
+    }
+
+    #[test]
+    fn a_species_file_without_parents_is_not_a_hybrid() {
+        let def: SpeciesDef = ron::from_str(&species_file("t", "")).unwrap();
+        assert!(def.parents.is_none());
+        assert!(!def.is_hybrid());
+    }
+
+    #[test]
+    fn a_hybrid_is_found_by_either_order_of_its_parents() {
+        let (db, warnings) = load_files(
+            "hybrid-lookup",
+            &[
+                ("a", species_file("a", "")),
+                ("b", species_file("b", "")),
+                ("ab", species_file("ab", &pair("b", "a"))),
+            ],
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(db.hybrid_of("a", "b").map(|d| d.id.as_str()), Some("ab"));
+        assert_eq!(db.hybrid_of("b", "a").map(|d| d.id.as_str()), Some("ab"));
+        assert!(db.hybrid_of("a", "a").is_none());
+    }
+
+    #[test]
+    fn a_hybrid_naming_a_missing_parent_is_skipped_with_a_warning() {
+        let (db, warnings) = load_files(
+            "hybrid-missing",
+            &[
+                ("a", species_file("a", "")),
+                ("ax", species_file("ax", &pair("a", "ghost"))),
+            ],
+        );
+        assert!(db.get("ax").is_none());
+        assert!(db.get("a").is_some(), "the rest of the roster still loads");
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("ax") && w.contains("ghost"))
+        );
+    }
+
+    #[test]
+    fn a_hybrid_of_a_species_with_itself_is_skipped_with_a_warning() {
+        let (db, warnings) = load_files(
+            "hybrid-self",
+            &[
+                ("a", species_file("a", "")),
+                ("aa", species_file("aa", &pair("a", "a"))),
+            ],
+        );
+        assert!(db.get("aa").is_none());
+        assert!(warnings.iter().any(|w| w.contains("aa")));
+    }
+
+    #[test]
+    fn a_second_hybrid_for_the_same_pair_is_skipped_and_the_first_by_id_kept() {
+        let (db, warnings) = load_files(
+            "hybrid-duplicate",
+            &[
+                ("a", species_file("a", "")),
+                ("b", species_file("b", "")),
+                ("first", species_file("first", &pair("a", "b"))),
+                ("second", species_file("second", &pair("b", "a"))),
+            ],
+        );
+        assert!(db.get("first").is_some());
+        assert!(db.get("second").is_none());
+        assert_eq!(db.hybrid_of("a", "b").map(|d| d.id.as_str()), Some("first"));
+        assert!(warnings.iter().any(|w| w.contains("second")));
+    }
+
+    #[test]
+    fn a_hybrid_may_be_a_parent_of_another_hybrid() {
+        let (db, warnings) = load_files(
+            "hybrid-fertile",
+            &[
+                ("a", species_file("a", "")),
+                ("b", species_file("b", "")),
+                ("c", species_file("c", "")),
+                ("ab", species_file("ab", &pair("a", "b"))),
+                ("abc", species_file("abc", &pair("ab", "c"))),
+            ],
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(db.hybrid_of("ab", "c").map(|d| d.id.as_str()), Some("abc"));
+    }
+
+    #[test]
+    fn a_hybrid_whose_parent_hybrid_was_skipped_is_skipped_too() {
+        let (db, _) = load_files(
+            "hybrid-orphaned",
+            &[
+                ("a", species_file("a", "")),
+                ("c", species_file("c", "")),
+                ("ax", species_file("ax", &pair("a", "ghost"))),
+                ("axc", species_file("axc", &pair("ax", "c"))),
+            ],
+        );
+        assert!(db.get("ax").is_none());
+        assert!(db.get("axc").is_none());
+    }
+
+    #[test]
+    fn hybrids_stay_out_of_the_flat_non_boss_pool() {
+        let (db, _) = load_files(
+            "hybrid-pool",
+            &[
+                ("a", species_file("a", "")),
+                ("b", species_file("b", "")),
+                ("ab", species_file("ab", &pair("a", "b"))),
+            ],
+        );
+        assert_eq!(db.non_boss_ids(), vec!["a", "b"]);
+    }
+
+    /// The parent ids are what `hybrid_of` and breeding read, so a typo in a
+    /// shipped hybrid would load as a warning and cost the player the species
+    /// without failing anything else.
+    #[test]
+    fn every_shipped_hybrid_has_real_parents_and_never_spawns_wild() {
+        let (db, warnings) =
+            SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let hybrids: Vec<&SpeciesDef> = db.all().filter(|d| d.is_hybrid()).collect();
+        assert!(!hybrids.is_empty(), "a census over no hybrids is vacuous");
+        for h in hybrids {
+            let (a, b) = h.parents.as_ref().unwrap();
+            assert!(db.get(a).is_some() && db.get(b).is_some(), "{}", h.id);
+            assert!(h.habitats.is_empty(), "{} must never spawn wild", h.id);
+            assert_eq!(db.hybrid_of(a, b).map(|d| &d.id), Some(&h.id));
+        }
     }
 }

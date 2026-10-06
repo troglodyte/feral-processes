@@ -76,7 +76,7 @@ fn emulating_tactical_app() -> App {
             .unwrap()
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species ships")
             .id;
         install_player_routines(&mut app, &["emulate"]);

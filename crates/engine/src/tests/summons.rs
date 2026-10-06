@@ -213,11 +213,11 @@ mod non_boss_pool {
                 "{id} is apex and has no business being forked"
             );
         }
-        let apex = db.all().filter(|s| s.is_boss).count();
+        let unforkable = db.all().filter(|s| s.is_boss || s.is_hybrid()).count();
         assert_eq!(
             ids.len(),
-            db.all().count() - apex,
-            "every non-apex species is in the pool"
+            db.all().count() - unforkable,
+            "every non-apex, non-hybrid species is in the pool"
         );
     }
 

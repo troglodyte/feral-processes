@@ -609,7 +609,7 @@ mod tests {
         let species = probe
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one shipped species");
 
         let held = vec![program(&species.id, 3, Rarity::Ordinary)];
@@ -639,7 +639,12 @@ mod tests {
     #[test]
     fn the_reinitialize_row_is_plain_when_nothing_blocks_it() {
         let probe = Game::new(9707, DifficultyMode::Forgiving, &assets_dir()).unwrap();
-        let species = probe.species_defs().into_iter().next().unwrap().id;
+        let species = probe
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id;
         let held = DownedProgram {
             boss: false,
             ..program(&species, 5, Rarity::Ordinary)

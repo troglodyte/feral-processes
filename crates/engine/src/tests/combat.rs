@@ -12,7 +12,7 @@ fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -54,7 +54,7 @@ fn first_jack_out_against_an_overwhelming_pack(seed: u32) -> (Game, bool) {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -289,7 +289,12 @@ fn all_attack_needs_a_target_only_while_more_than_one_group_lives() {
 fn battle_party_commands_offers_all_attack_all_defend_resolve_and_jack_out() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();
     insert_battle(&mut game, player, vec![wild]);
 
@@ -318,7 +323,12 @@ fn battle_party_commands_offers_all_attack_all_defend_resolve_and_jack_out() {
 fn battle_plan_remaining_fills_only_unplanned_slots() {
     let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let companion = game.spawn_wild_creature(&species, 4, 5).unwrap();
     game.world.resource_mut::<Party>().0.push(companion);
     let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();
@@ -353,7 +363,12 @@ fn battle_plan_remaining_fills_only_unplanned_slots() {
 fn battle_plan_remaining_skips_a_slot_that_cannot_act() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let companion = game.spawn_wild_creature(&species, 4, 5).unwrap();
     game.world.resource_mut::<Party>().0.push(companion);
     let wild = game.spawn_wild_creature(&species, 5, 5).unwrap();

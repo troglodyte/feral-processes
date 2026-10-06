@@ -4155,7 +4155,7 @@ fn species_sprite_name_falls_back_to_the_id_and_honours_an_override() {
     let mut species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("the shipped roster is not empty");
     assert!(
         species.sprite.is_none(),
@@ -4177,7 +4177,7 @@ fn species_sprite_name_falls_back_to_the_id_when_the_override_names_the_drawn_ic
     let mut species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("the shipped roster is not empty");
 
     species.sprite = Some("@drawn".to_string());
@@ -6022,5 +6022,66 @@ fn rooms_and_structure_room_fields_agree() {
             carried.contains(&tag),
             "no structure carries room tag {tag:?}"
         );
+    }
+}
+
+/// A structure file written before incubation existed still parses, as a
+/// building with no incubation slots.
+#[test]
+fn a_structure_file_without_incubation_slots_still_parses() {
+    const PLAIN: &str = r#"(
+        id: "plain_structure",
+        name: "Plain Structure",
+        glyph: '?',
+        color: White,
+        build_cost: [],
+        work: None,
+    )"#;
+    let dir = assets_dir_with_extra_structure("plain_incubation", "plain_structure.ron", PLAIN);
+    let game = Game::new(907, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    assert_eq!(db.get("plain_structure").unwrap().incubation_slots, 0);
+}
+
+/// `#[serde(default)]` lets every file omit `incubation_slots`, which is also
+/// what lets the Breeding Bay forget it and ship a feature that never
+/// unlocks. Only the bay incubates, and it holds exactly one child.
+#[test]
+fn the_breeding_bay_is_the_one_structure_that_incubates() {
+    let game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let incubators: Vec<(&str, u32)> = db
+        .all()
+        .filter(|d| d.incubation_slots > 0)
+        .map(|d| (d.id.as_str(), d.incubation_slots))
+        .collect();
+    assert_eq!(incubators, vec![("breeding_bay", 1)]);
+}
+
+/// The seed is the cost of a breeding and drops only from wild species a
+/// player can actually fight: a typo or a hybrid in its table would ship an
+/// item nothing ever drops.
+#[test]
+fn the_breeding_seed_drops_only_from_real_wild_species() {
+    let game = Game::new(909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let seed = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.id.as_str() == "breeding_seed")
+        .expect("breeding_seed ships");
+    let sources = seed.droppable.expect("the seed has a drop table");
+    assert!(!sources.is_empty());
+    let species = game.species_defs();
+    for (id, chance) in sources {
+        let def = species
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap_or_else(|| panic!("the seed drops from unknown species {id}"));
+        assert!(
+            !def.is_boss && !def.is_hybrid() && !def.habitats.is_empty(),
+            "{id}"
+        );
+        assert!((0.05..=0.10).contains(&chance), "{id}: {chance}");
     }
 }

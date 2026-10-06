@@ -100,7 +100,7 @@ fn set_companion_rejects_a_wild_creature() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -529,7 +529,11 @@ fn fuse_companions_averages_the_parents_potential() {
     let mut game = Game::new(422, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "program_refactoring");
     let player = game.player_entity();
-    let species = game.species_defs();
+    let species: Vec<_> = game
+        .species_defs()
+        .into_iter()
+        .filter(|d| !d.is_hybrid())
+        .collect();
     let species_a = species[0].id.clone();
     let species_b = species[1 % species.len()].id.clone();
 
@@ -609,7 +613,11 @@ fn a_creatures_potential_survives_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(423, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let companion = game
         .world
         .spawn((
@@ -669,7 +677,7 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species")
             .id
             .clone()
@@ -1021,7 +1029,7 @@ fn a_special_is_refused_for_a_program_not_in_the_party() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -1060,7 +1068,11 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
     let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "program_refactoring");
     let player = game.player_entity();
-    let species = game.species_defs();
+    let species: Vec<_> = game
+        .species_defs()
+        .into_iter()
+        .filter(|d| !d.is_hybrid())
+        .collect();
     let species_a = species[0].id.clone();
     let species_b = species[1 % species.len()].id.clone();
 
@@ -1259,7 +1271,11 @@ fn fuse_companions_rejects_a_wild_creature() {
     let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "program_refactoring");
     let a = spawn_tamed(&mut game, 10, 3);
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let wild = game
         .world
         .spawn((
@@ -2107,7 +2123,13 @@ fn a_captured_program_joins_the_roster_with_a_full_reserve() {
 #[test]
 fn an_adopted_program_joins_the_roster_with_a_full_reserve() {
     let mut game = Game::new(7401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     let adopted = game
         .adopt_program(&species, 4, 4, 1.0)
         .expect("adoption succeeds");
@@ -2293,7 +2315,11 @@ fn a_program_tamed_to_somebody_else_is_not_your_staff() {
 #[test]
 fn a_wild_program_is_never_base_staff() {
     let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let wild = game.spawn_wild_creature(&species.id, 5, 5).unwrap();
 
     assert_eq!(game.program_role(wild), None);

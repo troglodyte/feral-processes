@@ -151,7 +151,7 @@ fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species ships");
     let pack: Vec<Entity> = (0..count)
         .map(|i| {
@@ -1420,7 +1420,7 @@ fn loose_pack(game: &mut Game, guardian: bool) -> Vec<Entity> {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species ships");
     let body = game.world.spawn((
         Creature {
@@ -7078,7 +7078,7 @@ mod squad_capture {
         let species = game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species ships")
             .id;
         let at = *game.world.get::<Position>(game.player_entity()).unwrap();

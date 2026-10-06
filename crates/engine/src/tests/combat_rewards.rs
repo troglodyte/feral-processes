@@ -507,7 +507,7 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

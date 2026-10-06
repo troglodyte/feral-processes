@@ -591,7 +591,12 @@ fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
         .world
         .spawn((
             Creature {
-                species: game.species_defs().into_iter().next().unwrap().id,
+                species: game
+                    .species_defs()
+                    .into_iter()
+                    .find(|d| !d.is_hybrid())
+                    .unwrap()
+                    .id,
             },
             Hostile,
             Position {
@@ -1030,7 +1035,12 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
     // `start_battle`: the pack ceiling at the player's own tile caps a
     // same-species group at one member, and this test needs a capture on
     // the front not to end the battle before the second slot's action runs.
-    let species = game.species_defs().into_iter().next().unwrap().id;
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id;
     let player_pos = *game.world.get::<Position>(player).unwrap();
     let e1 = game
         .world

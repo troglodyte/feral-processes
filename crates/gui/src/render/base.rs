@@ -2889,7 +2889,7 @@ mod tests {
             let species = game
                 .species_defs()
                 .into_iter()
-                .next()
+                .find(|d| !d.is_hybrid())
                 .expect("at least one species ships")
                 .id;
 
@@ -6230,7 +6230,13 @@ mod tests {
     ) -> (Game, Entity) {
         let mut game = game_with_a_research_station(seed, anchor);
         let pen = (anchor.0 + 1, anchor.1 + 1);
-        let species = game.species_defs()[0].id.clone();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone();
         let path = crate::render::test_support::scratch_path("pinned_subject", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();

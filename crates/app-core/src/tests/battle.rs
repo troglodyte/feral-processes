@@ -78,7 +78,7 @@ fn battling_app_with_emulate() -> App {
             .expect("the fixture has a game")
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species ships")
             .id;
         install_player_routines(app, &["emulate"]);

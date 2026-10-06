@@ -1446,7 +1446,7 @@ mod tests {
             let species = game
                 .species_defs()
                 .into_iter()
-                .next()
+                .find(|d| !d.is_hybrid())
                 .expect("at least one species ships")
                 .id;
 
@@ -1507,7 +1507,7 @@ mod tests {
             .expect("the assets parse")
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species ships")
             .id;
         let scenario = Scenario {

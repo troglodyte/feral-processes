@@ -526,7 +526,7 @@ fn cronjob_assignment_survives_save_and_load() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let player = game.player_entity();
     let worker = game

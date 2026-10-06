@@ -11,7 +11,7 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species")
             .id
             .clone()
@@ -563,7 +563,12 @@ fn trimming_to_the_total_ceiling_is_deterministic() {
 fn gather_radius_widens_with_the_local_group_size() {
     let species_id = {
         let game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.species_defs().into_iter().next().unwrap().id.clone()
+        game.species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone()
     };
     let mut game = Game::new(312, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 8;

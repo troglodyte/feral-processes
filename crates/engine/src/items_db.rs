@@ -1194,7 +1194,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 81);
+        assert_eq!(db.all().count(), 82);
     }
 
     #[test]

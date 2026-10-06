@@ -673,6 +673,12 @@ pub struct StructureDef {
     /// structure file, including any mod, keeps parsing as an ordinary one.
     #[serde(default)]
     pub siphons: bool,
+    /// How many children this structure incubates at once — see
+    /// `Game::breed`. Above zero, a built one unlocks the Breed action. `0`,
+    /// the default, is every structure but the Breeding Bay, so an existing
+    /// file and any mod that never heard of the field is unaffected.
+    #[serde(default)]
+    pub incubation_slots: u32,
 }
 
 fn default_durability() -> u32 {

@@ -120,7 +120,13 @@ pub(super) fn game_with_a_rare_party_companion(
     let mut game = new_game(seed);
     let path = scratch_path("rare_party_companion", seed);
     let _cleanup = RemoveOnDrop(&path);
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -219,7 +225,13 @@ pub(super) fn game_with_tweaked_programs(
     let mut game = new_game(seed);
     let path = scratch_path(fixture, seed);
     let _cleanup = RemoveOnDrop(&path);
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();

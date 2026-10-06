@@ -273,7 +273,7 @@ mod emulation_tests {
         let species = game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species ships");
         game.world
             .spawn((
@@ -745,7 +745,7 @@ mod emulation_tests {
         let species = game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species");
         let wild = game
             .world

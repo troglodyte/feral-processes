@@ -17,7 +17,7 @@ fn a_fight_that_survives_a_round() -> (Game, Entity) {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

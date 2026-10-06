@@ -180,7 +180,7 @@ fn a_tick_with_another_fight_running_holds_the_clock() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world
@@ -765,7 +765,7 @@ mod opening {
         let species = game
             .species_defs()
             .into_iter()
-            .next()
+            .find(|d| !d.is_hybrid())
             .expect("at least one species");
         let wild = game
             .world

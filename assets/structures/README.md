@@ -213,6 +213,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // with is the RIG's standing tool, set by the player's own hand-load.
     racks: Some((slots: 8)),
 
+    // Optional; can be left out entirely (defaults to 0, no incubation). How
+    // many children this structure incubates at once. Above zero, a built one
+    // unlocks the Breed action: two owned programs and a Breeding Seed start
+    // a child here, which joins the roster when it hatches. Each slot holds
+    // one child until then, and the structure cannot be demolished while a
+    // slot is occupied. Only `breeding_bay.ron` ships it, at 1.
+    incubation_slots: 1,
+
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned

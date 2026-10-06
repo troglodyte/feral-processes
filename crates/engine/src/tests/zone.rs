@@ -577,7 +577,11 @@ fn a_breach_carries_companions_moves_nobody_and_clears_the_local_wild() {
     let companion = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, companion);
 
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let wild = game
         .world
         .spawn((

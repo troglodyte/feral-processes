@@ -17,7 +17,16 @@ fn biome_at(app: &mut App, tile: (i32, i32)) -> String {
 fn a_hostiles_tile_names_the_hostile_then_the_ground() {
     let mut app = test_app(2801);
     place_wild_program_east(&mut app, 4);
-    let species = app.game.as_ref().unwrap().species_defs()[0].name.clone();
+    let species = app
+        .game
+        .as_ref()
+        .unwrap()
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .name
+        .clone();
     let start = player_pos(&app);
     let tile = (start.0 + 4, start.1);
 
@@ -77,7 +86,13 @@ fn a_renamed_staff_member_names_its_species_too() {
         .entity;
     game.rename_companion(staff, Some("Bob".to_string()))
         .unwrap();
-    let species = game.species_defs()[0].name.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .name
+        .clone();
 
     let lines = app.hover_lines(start.0, start.1);
 
@@ -95,7 +110,16 @@ fn a_renamed_staff_member_names_its_species_too() {
 fn a_staff_member_on_its_handle_names_its_species_too() {
     let mut app = app_inside_a_small_base_with_programs(2806, false, 1);
     let start = player_pos(&app);
-    let species = app.game.as_ref().unwrap().species_defs()[0].name.clone();
+    let species = app
+        .game
+        .as_ref()
+        .unwrap()
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .name
+        .clone();
 
     let lines = app.hover_lines(start.0, start.1);
 

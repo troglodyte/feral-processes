@@ -11,7 +11,7 @@ fn a_hostile(game: &mut Game, hp: i32) -> Entity {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     game.world
         .spawn((
@@ -39,7 +39,11 @@ fn a_hostile(game: &mut Game, hp: i32) -> Entity {
 fn a_hostiles_portrait_carries_its_species_sprite_and_glyph() {
     let mut game = a_game();
     let wild = a_hostile(&mut game, 50);
-    let def = game.species_defs().into_iter().next().unwrap();
+    let def = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
 
     let portrait = game.portrait_of(wild).expect("a creature has a portrait");
 

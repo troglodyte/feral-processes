@@ -25,7 +25,13 @@ fn minting_attributes_spends_no_rng_draw() {
             game.world
                 .insert_resource(crate::attributes::AttributeDb::default());
         }
-        let species = game.species_defs()[0].id.to_string();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .to_string();
         let a = game
             .spawn_wild_creature_scaled(&species, 40, 40, 1.0, false)
             .unwrap();
@@ -49,7 +55,13 @@ fn minting_attributes_spends_no_rng_draw() {
 #[test]
 fn two_bodies_of_one_species_on_two_tiles_differ() {
     let mut game = Game::new(4243, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let a = game
         .spawn_wild_creature_scaled(&species, 60, 60, 1.0, false)
         .unwrap();
@@ -86,7 +98,13 @@ fn the_player_has_attributes_from_its_class() {
 #[test]
 fn adopting_a_program_keeps_the_attributes_it_had_wild() {
     let mut game = Game::new(4245, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let wild = game
         .spawn_wild_creature_scaled(&species, 70, 70, 1.0, false)
         .unwrap();
@@ -136,7 +154,13 @@ fn attributes_survive_a_save_and_a_load() {
         std::process::id()
     ));
     let mut game = Game::new(4246, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let wild = game
         .spawn_wild_creature_scaled(&species, 80, 80, 1.0, false)
         .unwrap();
@@ -181,7 +205,13 @@ fn an_old_save_mints_on_load_rather_than_staying_blank() {
         std::process::id()
     ));
     let mut game = Game::new(4247, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     game.spawn_wild_creature_scaled(&species, 90, 90, 1.0, false)
         .unwrap();
     game.save(&path).unwrap();
@@ -221,7 +251,13 @@ fn a_minted_old_save_agrees_with_a_fresh_spawn() {
     ));
     // Spawned fresh, and never saved: this is the answer the place gives.
     let mut fresh = Game::new(4251, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = fresh.species_defs()[0].id.to_string();
+    let species = fresh
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let body = fresh
         .spawn_wild_creature_scaled(&species, 95, 95, 1.0, false)
         .unwrap();
@@ -252,7 +288,13 @@ fn a_minted_old_save_agrees_with_a_fresh_spawn() {
 #[test]
 fn the_dossier_reports_every_attribute_with_both_its_names() {
     let mut game = Game::new(4248, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let wild = game
         .spawn_wild_creature_scaled(&species, 100, 100, 1.0, false)
         .unwrap();
@@ -343,7 +385,13 @@ fn the_dossier_is_trimmed_to_its_row_ceiling() {
 #[test]
 fn a_despawned_body_has_no_dossier() {
     let mut game = Game::new(4250, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game.species_defs()[0].id.to_string();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
     let wild = game
         .spawn_wild_creature_scaled(&species, 110, 110, 1.0, false)
         .unwrap();

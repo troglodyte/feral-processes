@@ -454,6 +454,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
         sorted,
         vec![
             "assembly_bay".to_string(),
+            "breeding_bay".to_string(),
             "contract_broker".to_string(),
             "data_cache".to_string(),
             "defrag_bay".to_string(),
@@ -2579,7 +2580,7 @@ fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
     let species = game
         .species_defs()
         .into_iter()
-        .next()
+        .find(|d| !d.is_hybrid())
         .expect("at least one species");
     let wild = game
         .world

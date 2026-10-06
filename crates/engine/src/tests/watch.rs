@@ -23,7 +23,11 @@ fn base(seed: u32) -> Game {
 /// from base space's origin.
 fn staffer(game: &mut Game, dx: i32, dy: i32) -> Entity {
     let (ox, oy) = game.base_pos().expect("call from inside base space");
-    let species = game.species_defs().into_iter().next().unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap();
     let owner = game.player_entity();
     game.world
         .spawn((

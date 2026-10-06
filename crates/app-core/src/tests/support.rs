@@ -218,7 +218,13 @@ pub(crate) fn test_app(seed: u32) -> App {
 /// exposes no way to hand-place a tamed program from outside the crate.
 pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     distant_programs(seed, |game| {
-        let species = game.species_defs()[0].id.clone();
+        let species = game
+            .species_defs()
+            .into_iter()
+            .find(|d| !d.is_hybrid())
+            .unwrap()
+            .id
+            .clone();
         (0..count).map(|_| species.clone()).collect()
     })
 }
@@ -665,7 +671,13 @@ pub(crate) fn box_in_player_with_hostiles(app: &mut App) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("box_in", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -700,7 +712,13 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
     let assets_dir = test_assets_dir();
     let path = scratch_path("wild_east", east as u32);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -807,7 +825,13 @@ pub(crate) fn place_pursuing_guardian_adjacent(app: &mut App, dx: i32, dy: i32) 
     let assets_dir = test_assets_dir();
     let path = scratch_path("pursuing_guardian", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -987,7 +1011,13 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
     let assets_dir = test_assets_dir();
     let path = scratch_path("outpost_staff", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1092,7 +1122,13 @@ pub(crate) fn place_outpost_with_crew_and_stock(
     let assets_dir = test_assets_dir();
     let path = scratch_path("outpost_crew_stock", 0);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1395,7 +1431,13 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     let path = scratch_path("extract", seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1545,7 +1587,13 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
     let path = scratch_path(label, seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1680,7 +1728,13 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     game.warp_to_zone(breach_zone).unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -1795,7 +1849,13 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
     let mut app = test_app(seed);
     let path = scratch_path("market", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2158,7 +2218,13 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
     let mut app = test_app(seed);
     let path = scratch_path("field_own", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2262,7 +2328,13 @@ pub(crate) fn app_with_companions_and_cargo(
     let mut app = test_app(seed);
     let path = scratch_path("party", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -2593,7 +2665,13 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     let path = scratch_path("small_base", seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -3071,7 +3149,13 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
     let assets_dir = test_assets_dir();
     let path = scratch_path("tame_at_zone", zone);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();

@@ -1,0 +1,8 @@
+(
+    id: "breeding_seed",
+    name: "Breeding Seed",
+    description: "Spent at a Breeding Bay to grow a child program from two of yours. Wild programs shed them now and then.",
+    value: Some(25),
+    abbrev: Some("BD"),
+    droppable: Some([("glitch", 0.08), ("drone", 0.08), ("scrapper", 0.06), ("worm", 0.06)]),
+)

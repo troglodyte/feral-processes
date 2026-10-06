@@ -2882,6 +2882,26 @@ fn the_manual_binds_the_excavation_plan_key() {
     assert!(says, "no help page binds the m key to the Excavation plan");
 }
 
+/// `I` beside a Splice Rig is a map key with no other way to be found, and
+/// the manual is also where removal's fragment price (lost at a breach) is
+/// told, so both are held.
+#[test]
+fn the_manual_teaches_the_splice_rig_key_and_what_removal_costs() {
+    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    let text = |id: &str| {
+        let page = db
+            .pages()
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("no help page {id}"));
+        help::page_rows(page, help::WRAP_COLUMNS).join(" ")
+    };
+    assert!(text("controls").contains("I — open the Splice Rig"));
+    let implants = text("implants");
+    assert!(implants.contains("core fragments"));
+    assert!(implants.contains("lost at a"));
+}
+
 /// Two piles cannot share a tag in the base pane's PRODUCTION rows, where a
 /// column of tags is read down for the pile that is filling, and a duplicate
 /// fails silently: both rows draw, both look right.

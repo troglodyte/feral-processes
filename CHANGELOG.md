@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.15.14
+
+**The battle screen's picture now has a column of its own.** The program being shown sits centred in a panel at the left of the battle log, divided from the log by a line in the same colour as the frame, rather than in the log's top corner. The "Your party" heading also no longer has the log's border drawn through it.
+
 ## 0.15.13
 
 **You can now build implants into your own avatar at a Splice Rig.** Everything else that raises you either swaps out or only ever adds; an implant is the one thing that trades. Each costs Neural Load against a cap that grows with your level, drains Power for as long as it is installed, and can be removed again, at a price. Standing next to a Splice Rig, press `I` to install or remove one. Six implants ship: Ripper Fibers, Dermal Lattice, Overclock Spine, Ghost Handshake, Black Ledger and Dead Man's Switch. The rig and its two splicing research nodes unlock at the base, the status bar shows your Load, and the help pages explain the rest.

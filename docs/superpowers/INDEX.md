@@ -58,7 +58,7 @@ spec resolves to a release tag.
 | `2026-10-01-sulking-behaviours-design` | **built**, unplayed; path-pinned | `note_sabotage` and `ConsumeSource::Sabotage` in `crates/engine/`; `rival_beside` in `crates/engine/src/game/base/morale.rs`; `sulking` in `crates/engine/src/interactions.rs` |
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
-| `2026-10-05-player-implants-design` | spec, **unbuilt**, awaiting review | `Implants` / `ImplantDef` exist nowhere in `crates/` |
+| `2026-10-05-player-implants-design` | spec + plan (`plans/2026-10-06-player-implants.md`), **unbuilt** | `Implants` / `ImplantDef` exist nowhere in `crates/` |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | **superseded** | departure memories (`let_go`, `lost_in_battle`, ...) shipped with `2026-09-30-bonds-and-social-tab-design` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |

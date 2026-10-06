@@ -1,6 +1,6 @@
 # Player Implants — design
 
-**Date:** 2026-10-05 · **Status:** spec, awaiting review · **Weight:**
+**Date:** 2026-10-05 · **Status:** spec, reviewed; plan written · **Weight:**
 spec-and-plan (engine + app-core + gui, new content kind, new structure, new
 save field)
 
@@ -181,14 +181,13 @@ Total Load 16. Names checked against `assets/research` (`neural_amp` is
   Add an implant-loadout curve only if the plan finds a reason.
 - Seeded RNG only, for rejection and `BattleStartStatus` rolls.
 
-## Open questions (for review)
+## Decisions (2026-10-06)
 
-1. **Black Ledger's `DropBoost`:** Stack-only, or everywhere? Stack-only
-   matches its `TraceRise` downside and needs a scope flag on the hook.
-2. **`LowPowerMode` versus implant upkeep:** additive (perk can't zero
-   implant drain, as proposed) or multiplied?
-3. **`ItemDef::implant` field** versus an id convention (§1).
-4. **Seams:** this adds a load-bearing seam (implant effects read only at
-   §4's sites). The plan writes `seam:implants` to the memory graph, the
-   `seams` skill reference and `.claude/rules/seams-implants.md`, in the order
-   the skill documents.
+The user answered the open questions: `DropBoost` applies only in the Stack;
+implant upkeep is multiplied by `LowPowerMode`, not added; items link through
+`ItemDef::implant`; the seam is written last. Checking the spec against the
+source corrected §1 and §4 (accuracy/evasion, where the deltas are added), §6
+(recipes live in research nodes) and §7 (the rig opens by adjacency, like the
+Teardown Rig). All of these are in
+`docs/superpowers/plans/2026-10-06-player-implants.md`, which takes precedence
+where it differs.

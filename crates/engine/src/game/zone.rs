@@ -443,7 +443,11 @@ impl Game {
     /// **The narrower of the two sets** — see `structure_tiles`' doc for why
     /// a structure's own floor cells are walkable here and taken there.
     pub(crate) fn blocked_tiles(&mut self) -> crate::game::base::hauling::Occupancy {
-        let rows = self.structure_footprints();
+        let rows: Vec<_> = self
+            .structure_footprints()
+            .into_iter()
+            .filter(|(entity, ..)| !self.is_door(*entity))
+            .collect();
         let bodies: Vec<Position> = self.base_bodies().into_iter().map(|(_, p)| p).collect();
         crate::game::base::hauling::blocked_tiles(
             rows.into_iter().map(|(_, p, side)| (p, side)),
@@ -584,6 +588,15 @@ impl Game {
                 (e, p, side)
             })
             .collect()
+    }
+
+    /// Whether `entity` is a structure whose def is a door
+    /// (`StructureDef::door`) — a room boundary the crew walks through.
+    pub(crate) fn is_door(&self, entity: Entity) -> bool {
+        self.world
+            .get::<Structure>(entity)
+            .and_then(|s| self.world.resource::<StructureDb>().get(s.kind.as_str()))
+            .is_some_and(|def| def.door)
     }
 
     /// Whether `entity` is a structure whose def is a barrier

@@ -1083,6 +1083,9 @@ pub(crate) fn haul_step_system(
     let mut blocked = blocked_tiles(
         structures
             .iter()
+            // A door bounds a room but is walked through, as in
+            // `Game::blocked_tiles`.
+            .filter(|(_, _, _, s)| !db.get(&s.kind).is_some_and(|d| d.door))
             .map(|(_, p, _, s)| (*p, db.get(&s.kind).map(|d| d.footprint).unwrap_or(1))),
         workers
             .iter()

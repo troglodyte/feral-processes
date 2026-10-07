@@ -270,3 +270,87 @@ fn ruins_and_an_awaiting_site_survive_a_real_save_and_load() {
         ("mining_node", px + 1, py)
     );
 }
+
+/// `adjacent_interactions`: what `[c]` can do beside the party.
+mod adjacent {
+    use super::*;
+
+    fn file_node_east(game: &mut Game) -> Entity {
+        let (px, py) = game.base_pos().unwrap();
+        game.world
+            .resource_mut::<Ruins>()
+            .0
+            .push(ruin("mining_node", px + 1, py));
+        game.file_ruins();
+        sites(game)[0].0
+    }
+
+    #[test]
+    fn nothing_beside_the_party_offers_nothing() {
+        let game = base(2301);
+        assert!(game.adjacent_interactions().is_empty());
+    }
+
+    #[test]
+    fn an_awaiting_site_beside_the_party_offers_its_rebuild() {
+        let mut game = base(2302);
+        let site = file_node_east(&mut game);
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![Interaction {
+                dir: (1, 0),
+                kind: InteractionKind::RebuildProgram(site)
+            }]
+        );
+    }
+
+    #[test]
+    fn a_site_two_tiles_away_or_already_committed_offers_nothing() {
+        let mut game = base(2303);
+        let (px, py) = game.base_pos().unwrap();
+        game.world
+            .resource_mut::<Ruins>()
+            .0
+            .push(ruin("mining_node", px + 3, py));
+        game.file_ruins();
+        assert!(game.adjacent_interactions().is_empty());
+
+        let mut game = base(2304);
+        let site = file_node_east(&mut game);
+        spawn_tamed(&mut game, 500, 3);
+        let program = tame_at_zone(&mut game, 1);
+        let spare = tame_at_zone(&mut game, 1);
+        game.world.resource_mut::<Party>().0.push(spare);
+        game.commit_rebuild_program(site, program).unwrap();
+        assert!(game.adjacent_interactions().is_empty());
+    }
+
+    #[test]
+    fn a_depot_beside_the_party_offers_a_transfer_in_its_direction() {
+        let mut game = base(2305);
+        let (px, py) = game.base_pos().unwrap();
+        spawn_machine_at(&mut game, "depot", px - 1, py);
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![Interaction {
+                dir: (-1, 0),
+                kind: InteractionKind::Transfer
+            }]
+        );
+    }
+
+    #[test]
+    fn a_depot_and_a_site_offer_both() {
+        let mut game = base(2306);
+        let (px, py) = game.base_pos().unwrap();
+        spawn_machine_at(&mut game, "depot", px - 1, py);
+        let site = file_node_east(&mut game);
+        let found = game.adjacent_interactions();
+        assert_eq!(found.len(), 2);
+        assert!(found.contains(&Interaction {
+            dir: (1, 0),
+            kind: InteractionKind::RebuildProgram(site)
+        }));
+        assert!(found.iter().any(|i| i.kind == InteractionKind::Transfer));
+    }
+}

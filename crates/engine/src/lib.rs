@@ -101,6 +101,7 @@ use components::{
 };
 pub use game::auto_resolve::AutoResolve;
 pub use game::base::building::AwaitingSite;
+pub use game::base::interact::{Interaction, InteractionKind};
 pub use game::base::lines::LineKey;
 pub use game::base::transfer::TransferBasket;
 pub use game::base::work_orders::WorkOrder;

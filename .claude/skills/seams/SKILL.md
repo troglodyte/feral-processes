@@ -66,7 +66,7 @@ Three tiers, and which one you want depends on what you are doing:
 | what a program remembers (memories, morale, opinion) | `references/memories.md` | 12 |
 | the HUD (attention, panes, the palette, glyph colour) | `references/hud.md` | 14 |
 | sorties | `references/sorties.md` | 10 |
-| the player's implants | `references/implants.md` | 3 |
+| the player's implants and Phase Keys | `references/implants.md` | 4 |
 | notifications | `references/notifications.md` | 6 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |

@@ -1376,4 +1376,90 @@ mod tests {
         }
         assert_steps_stay_flat(&required_levels, "geared");
     }
+
+    /// Phase Keys 1..=N held at zone N's level cap, fought against the same
+    /// full group and gear as the geared sweep. The keys must not turn a
+    /// clearable zone unclearable, and the delta they buy is printed so a
+    /// moved key shows up as progression change. Keys ride the same implant
+    /// readers as the live game: percents through `apply_key_pct`, flat
+    /// stats added, accuracy/evasion/crit read live.
+    #[test]
+    fn held_phase_keys_never_make_a_capped_zone_harder() {
+        use crate::phase_keys::{PhaseKeyDb, StatPct, apply_key_pct};
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let toughest = toughest_ordinary_species(&db);
+        let party = median_ordinary_species(&db);
+        let (weapon, armor) = best_gear_stats();
+        let attrs = shipped_attribute_db();
+        let (keys, warnings) = PhaseKeyDb::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/phase_keys"),
+        )
+        .unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        for zone in 1..=crate::tuning::PHASE_KEY_COUNT {
+            let level = crate::tuning::zone_level_cap(zone);
+            let (gear_atk, gear_mit, gear_acc, gear_eva, weapon_range) =
+                best_case_gear_bonus(zone, weapon, armor);
+            let swing = if weapon_range == DamageRange::default() {
+                crate::tuning::PLAYER_UNARMED_DAMAGE
+            } else {
+                weapon_range
+            };
+            let groups = full_group_at_zone(toughest, zone);
+            let companion_level = companion_level_for_player_level(level);
+            let companions: Vec<Stats> = (0..BASE_PET_CAPACITY)
+                .map(|_| companion_stats(party, zone, companion_level, &attrs))
+                .collect();
+            let fight = |held: u32| {
+                let mut pct = StatPct::default();
+                let (mut hp, mut atk, mut mit, mut acc, mut eva, mut crit) = (0, 0, 0, 0, 0, 0.0);
+                for key in keys.all().iter().filter(|k| k.zone <= held) {
+                    pct = pct.sum(key.effect.stat_pct);
+                    let s = &key.effect.stats;
+                    hp += s.max_hp;
+                    atk += s.atk;
+                    mit += s.mitigation;
+                    acc += s.accuracy;
+                    eva += s.evasion;
+                    crit += s.crit;
+                }
+                let mut player = player_stats_after_levels(level - 1, &attrs);
+                player.max_hp = apply_key_pct(player.max_hp + hp, pct.max_hp);
+                player.hp = player.max_hp;
+                player.atk = apply_key_pct(player.atk + atk, pct.atk) + gear_atk;
+                player.mitigation =
+                    apply_key_pct(player.mitigation + mit, pct.mitigation) + gear_mit;
+                let mut profile = player_profile(level, gear_acc + acc, gear_eva + eva, swing);
+                profile.crit += crit;
+                simulate_roster_fight(
+                    player,
+                    profile,
+                    &companions,
+                    companion_profile(party, companion_level, &attrs),
+                    &groups,
+                )
+            };
+            let bare = fight(0);
+            let keyed = fight(zone);
+            eprintln!(
+                "[keys] zone {zone} at level {level}: no keys won={} {:.0}% HP {} rounds; \
+                 keys 1..={zone} won={} {:.0}% HP {} rounds",
+                bare.player_won,
+                bare.player_hp_fraction * 100.0,
+                bare.turns,
+                keyed.player_won,
+                keyed.player_hp_fraction * 100.0,
+                keyed.turns
+            );
+            assert!(
+                keyed.player_won || !bare.player_won,
+                "zone {zone}: keys 1..={zone} lost a fight the keyless player won"
+            );
+            assert!(
+                keyed.player_hp_fraction >= bare.player_hp_fraction,
+                "zone {zone}: held keys left the player with less HP than none"
+            );
+        }
+    }
 }

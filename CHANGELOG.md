@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**There are now ten Phase Keys, and with all ten you can leave the Basin.** The guardian at the end of each Stack zone from 1 to 10 can drop that zone's key, and the third guardian you beat in a zone always drops it. You cannot build or step through the zone portal until you hold the key for the zone you are in. Each key gives a small permanent boost, listed on a new Phase Keys tab in the inventory (press Tab). With all ten keys, from zone 10 on, you can build the Basin Exit; using it plays the ending, marks your character sheet as Escaped, and lets you keep playing. Warping to a deeper zone gives you the keys of the zones you skipped. Twelve new achievements track the keys and the escape.
+
+**Breaking: saves from before this version no longer load.** Phase Keys are stored in the save, so the save format goes from 35 to 36.
+
+**The setting is now called the Phase-Manifold Basin, not the Grid.** Item, structure and story text said "the Grid" for the world you are trapped in, which clashed with the Power Grid that senses power. The world is now the Basin everywhere, and "Power Grid" is unchanged. The Core Fragment's breach text is corrected to match.
+
 ## 0.16.6
 
 **The tutorial now teaches how you get Core Fragments and ICE Breakers.** A beaten program leaves its body rather than fragments, and the old missions never said so, so a new player could fight for a long time and never see a fragment. Two new missions cover it: Strip It Down has you press D and take a downed program apart with the Salvage Clamp, and Arm a Decompile has you compile an ICE Breaker before your first decompile. It pays two more ICE Breakers, so a failed decompile can be retried. Scrap Run, First Decompile, Collect and Break Ground are reworded to match. The hint under an extraction job now points to D and the tool you already have rather than to a Teardown Rig. A run already past these steps skips them, and a finished tutorial stays finished.

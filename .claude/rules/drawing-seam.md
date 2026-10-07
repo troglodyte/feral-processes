@@ -22,8 +22,10 @@ overhang their pane by construction, and hand-clipping a trapezoid changes
 the perspective it was drawn with. **The fifteenth is `sprite`**, the only
 one that names a texture: a one-cell sprite **substitutes** for an entity's
 glyph and never draws beside it, and a name the table has nothing under
-returns `false` so the caller draws that glyph instead. `sprite` takes a `phase_key` and picks a cell of a two-frame sheet from the painter's animation clock, which is `None` (first cell) when effects are off. Three things hold it
-up. `assets/sprites/` is optional by construction — a missing directory, file
+returns `false` so the caller draws that glyph instead. `sprite` takes a
+`phase_key` and picks a cell of a two-frame sheet from the painter's
+animation clock, which is `None` (first cell) when effects are off. Three
+things hold it up. `assets/sprites/` is optional by construction — a missing directory, file
 or name all end at the glyph, so never gate the draw or the loader on it
 being non-empty. `color` is a **multiplying tint**, so art is authored
 near-white and inherits `difficulty_color`, `biome_tint` and the damage

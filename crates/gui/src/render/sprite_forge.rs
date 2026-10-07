@@ -395,6 +395,16 @@ fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
     }
 }
 
+/// Text for a control that does nothing on this sprite: dimmer than
+/// `TEXT_DIM`, which is the ordinary secondary colour.
+const TEXT_OFF: Color = Color::new(0.35, 0.35, 0.4, 1.0);
+
+/// The speed controls only mean something on a sheet: a one-frame sprite
+/// saves no `.anim.ron`, so the pace is discarded.
+fn speed_is_live(view: &SpriteEditorView) -> bool {
+    view.frames > 1
+}
+
 fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorView, m: &Metrics) {
     for (button, r) in &g.buttons {
         painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
@@ -408,12 +418,14 @@ fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorVie
         painter.rect_lines(r.x, r.y, r.w, r.h, thickness, color);
         let label = button_label(*button, view);
         let text_w = painter.measure_ui(&label, m.small()).width;
+        let off =
+            matches!(button, EditorButton::Slower | EditorButton::Faster) && !speed_is_live(view);
         painter.ui(
             &label,
             r.x + (r.w - text_w) / 2.0,
             r.y + (r.h + m.line_height) / 2.0 - m.gap,
             m.small(),
-            TEXT,
+            if off { TEXT_OFF } else { TEXT },
         );
     }
 }
@@ -536,7 +548,11 @@ fn draw_sprite_editor_session(
         g.preview.x + (g.preview.w - speed_w) / 2.0,
         g.preview.y + g.preview.h + m.line_height,
         m.small(),
-        TEXT_DIM,
+        if speed_is_live(view) {
+            TEXT_DIM
+        } else {
+            TEXT_OFF
+        },
     );
 
     let mut y = g.footer_y;
@@ -1673,6 +1689,31 @@ mod tests {
         for label in ["[1] Frame 1", "[2] Frame 2", "600 ms"] {
             assert!(drawn.iter().any(|t| t.contains(label)), "{label:?}");
         }
+    }
+
+    #[test]
+    fn the_speed_controls_draw_dim_on_a_one_frame_sprite_only() {
+        let m = crate::text::ui_metrics(900.0);
+        let dim_texts = |frames2: bool| {
+            let mut app = sprite_forge_app();
+            open_editor(&mut app, 0);
+            if frames2 {
+                app.handle_key(GameKey::Char('2'));
+            }
+            let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+            crate::paint::painted_runs_in(&shapes, TEXT_OFF, false)
+        };
+        let one = dim_texts(false);
+        for want in ["[-] Slower", "[=] Faster", "600 ms"] {
+            assert!(
+                one.iter().any(|t| t.contains(want)),
+                "{want:?} not dim: {one:?}"
+            );
+        }
+        assert!(
+            dim_texts(true).is_empty(),
+            "a sheet's speed controls are live"
+        );
     }
 
     #[test]

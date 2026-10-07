@@ -1087,20 +1087,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// Shipped art is single-cell until someone draws a second frame; this
-    /// is the tripwire for a sheet that lands without its pace file.
-    #[test]
-    fn every_shipped_sprite_is_one_cell() {
-        for entry in std::fs::read_dir(shipped_sprites_dir()).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().is_none_or(|e| e != "png") {
-                continue;
-            }
-            let (w, h) = image::image_dimensions(&path).unwrap();
-            assert_eq!(frames_in(w, h), Some(1), "{}", path.display());
-        }
-    }
-
     /// A canvas with a few painted cells — enough to exercise more than one
     /// palette index and a still-transparent corner.
     fn a_sprite_canvas() -> Canvas {

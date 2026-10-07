@@ -398,7 +398,7 @@ pub(super) fn draw_finish(painter: &Painter, r: Rect, finish: &FinishView, dim: 
         r.w / 16.0,
         at_level(shade, FINISH_EDGE_LEVEL),
     );
-    let _ = painter.sprite(&finish.sprite, ix, iy, iw, shade);
+    let _ = painter.sprite(&finish.sprite, ix, iy, iw, shade, 0);
 }
 
 /// DataVoid: concentric rings falling away to black, so a hole in the map

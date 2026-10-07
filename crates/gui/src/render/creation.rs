@@ -369,8 +369,9 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
             cell.y + inset,
             art,
             Color::new(1.0, 1.0, 1.0, color.a),
+            0,
         ))
-        || name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color));
+        || name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color, 0));
     if !drew {
         let glyph = choice.glyph.to_string();
         let size = art as u16;
@@ -1049,7 +1050,7 @@ mod tests {
         assert_eq!(app.creation_step(), CreationStep::Colour);
 
         let mut sprites = crate::paint::SpriteTable::default();
-        sprites.insert("player", bevy_egui::egui::TextureId::User(7));
+        sprites.insert_still("player", bevy_egui::egui::TextureId::User(7));
         let m = ui_metrics(900.0);
         let (_, shapes) =
             crate::paint::with_sprites(sprites, |p| draw_create_character(&app, None, p, &m));
@@ -1089,8 +1090,8 @@ mod tests {
 
         // Both keys present, so this cannot pass on a lookup that missed.
         let mut sprites = crate::paint::SpriteTable::default();
-        sprites.insert("player", bevy_egui::egui::TextureId::User(7));
-        sprites.insert(
+        sprites.insert_still("player", bevy_egui::egui::TextureId::User(7));
+        sprites.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );

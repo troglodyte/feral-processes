@@ -777,7 +777,7 @@ fn frame(
     mut exit: MessageWriter<AppExit>,
 ) -> Result {
     let now = input.time.elapsed_secs_f64();
-    let painter = Painter::for_frame(
+    let mut painter = Painter::for_frame(
         contexts.ctx_mut()?,
         input.time.delta_secs(),
         sprites.table(),
@@ -858,6 +858,9 @@ fn frame(
         ));
         fe.toast_until = now + TOAST_SECONDS;
     }
+    // After the toggle, so the frame that turns effects off already holds
+    // every sprite on its first cell.
+    painter.set_anim_now(fe.fx.enabled.then_some(now));
     // A function key rather than a letter for the same reason backslash is
     // one, and one better: letters reach the game as typed text, and F3
     // produces no text at all, so it cannot collide with a binding on any

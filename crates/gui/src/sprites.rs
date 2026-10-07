@@ -297,7 +297,7 @@ impl Sprites {
         image.sampler = ImageSampler::nearest();
         let handle = images.add(image);
         let id = textures.add_image(EguiTextureHandle::Strong(handle.clone()));
-        table.insert(DRAWN_ICON_KEY, id);
+        table.insert(DRAWN_ICON_KEY, id, 1, DEFAULT_SPRITE_FRAME_MS);
         self.drawn = Some((icon.clone(), handle));
     }
 }
@@ -350,6 +350,58 @@ pub fn install_library(app: &mut feral_processes_app_core::App) {
     let dir = app.assets_dir().join("sprites");
     let (enabled, disabled) = scan_library(&dir);
     app.install_sprite_library(enabled, disabled);
+}
+
+/// Milliseconds a cell shows when a sheet ships without an `.anim.ron`.
+pub const DEFAULT_SPRITE_FRAME_MS: u32 = 600;
+/// The most cells a sheet may have. Two is the idle breath the art budget
+/// affords; the check lives in `frames_in` so raising it is one edit.
+pub const MAX_SPRITE_FRAMES: usize = 2;
+
+/// A sheet's `<name>.anim.ron`: how long each cell shows. Per name, not per
+/// variant, so the plain and `.colour` sheets of one sprite keep one pace.
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct SpriteAnim {
+    pub frame_ms: u32,
+}
+
+fn anim_path(dir: &Path, name: &str) -> PathBuf {
+    dir.join(format!("{name}.anim.ron"))
+}
+
+/// The pace for `name`'s sheet. A missing file is the ordinary case and is
+/// silent; a malformed one warns and falls back, like every other asset
+/// file, so a bad edit never costs the sprite itself.
+pub fn read_frame_ms(dir: &Path, name: &str) -> u32 {
+    let path = anim_path(dir, name);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return DEFAULT_SPRITE_FRAME_MS;
+    };
+    match ron::from_str::<SpriteAnim>(&text) {
+        Ok(anim) if anim.frame_ms > 0 => anim.frame_ms,
+        Ok(_) => {
+            warn!(
+                "{}: frame_ms must be positive, using the default",
+                path.display()
+            );
+            DEFAULT_SPRITE_FRAME_MS
+        }
+        Err(e) => {
+            warn!("{}: {e}, using the default", path.display());
+            DEFAULT_SPRITE_FRAME_MS
+        }
+    }
+}
+
+/// How many 16x16 cells a `width` x `height` image holds, or `None` when it
+/// is not a whole row of at most `MAX_SPRITE_FRAMES`.
+fn frames_in(width: u32, height: u32) -> Option<usize> {
+    let cell = ICON_SIZE as u32;
+    if height != cell || !width.is_multiple_of(cell) {
+        return None;
+    }
+    let frames = (width / cell) as usize;
+    (1..=MAX_SPRITE_FRAMES).contains(&frames).then_some(frames)
 }
 
 fn sprite_stem(name: &str, full_colour: bool) -> String {
@@ -538,6 +590,8 @@ pub fn register(
     asset_server: Res<AssetServer>,
     mut sprites: ResMut<Sprites>,
     mut textures: ResMut<EguiUserTextures>,
+    images: Res<Assets<Image>>,
+    frontend: Res<crate::Frontend>,
 ) {
     if sprites.pending.is_empty() {
         return;
@@ -562,10 +616,21 @@ pub fn register(
     }
     // `Arc::make_mut` rather than rebuilding: the renderer may be holding a
     // clone of the old table from this frame, and this leaves that one alone.
+    let dir = frontend.app.assets_dir().join("sprites");
     let table = Arc::make_mut(&mut sprites.table);
     for (name, handle) in ready {
+        let frames = images
+            .get(&handle)
+            .and_then(|image| frames_in(image.width(), image.height()));
+        let Some(frames) = frames else {
+            warn!(
+                "sprite `{name}` is not a 16px-tall row of 1-{MAX_SPRITE_FRAMES} cells, falling back to its glyph"
+            );
+            continue;
+        };
         let id = textures.add_image(EguiTextureHandle::Strong(handle));
-        table.insert(name, id);
+        let pace = name.strip_suffix(FULL_COLOUR_SUFFIX).unwrap_or(&name);
+        table.insert(name.as_str(), id, frames, read_frame_ms(&dir, pace));
     }
 }
 
@@ -956,6 +1021,43 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn frames_in_counts_whole_16px_cells() {
+        assert_eq!(frames_in(16, 16), Some(1));
+        assert_eq!(frames_in(32, 16), Some(2));
+        assert_eq!(frames_in(24, 16), None);
+        assert_eq!(frames_in(48, 16), None);
+        assert_eq!(frames_in(16, 32), None);
+        assert_eq!(frames_in(0, 16), None);
+    }
+
+    #[test]
+    fn frame_ms_reads_the_file_and_defaults_otherwise() {
+        let dir = codec_test_dir("frame_ms");
+        assert_eq!(read_frame_ms(&dir, "none"), DEFAULT_SPRITE_FRAME_MS);
+        std::fs::write(anim_path(&dir, "ok"), "(frame_ms: 250)").unwrap();
+        assert_eq!(read_frame_ms(&dir, "ok"), 250);
+        std::fs::write(anim_path(&dir, "bad"), "not ron").unwrap();
+        assert_eq!(read_frame_ms(&dir, "bad"), DEFAULT_SPRITE_FRAME_MS);
+        std::fs::write(anim_path(&dir, "zero"), "(frame_ms: 0)").unwrap();
+        assert_eq!(read_frame_ms(&dir, "zero"), DEFAULT_SPRITE_FRAME_MS);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Shipped art is single-cell until someone draws a second frame; this
+    /// is the tripwire for a sheet that lands without its pace file.
+    #[test]
+    fn every_shipped_sprite_is_one_cell() {
+        for entry in std::fs::read_dir(shipped_sprites_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "png") {
+                continue;
+            }
+            let (w, h) = image::image_dimensions(&path).unwrap();
+            assert_eq!(frames_in(w, h), Some(1), "{}", path.display());
+        }
     }
 
     /// A canvas with a few painted cells — enough to exercise more than one

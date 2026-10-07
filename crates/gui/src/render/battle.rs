@@ -863,11 +863,11 @@ fn draw_battle_portrait(
     let color = hud::palette::glyph(portrait.color);
     // The drawn icon is the one untinted sprite — see `drawing-seam.md`.
     let drew_sprite = (portrait.drawn_icon
-        && painter.sprite(crate::sprites::DRAWN_ICON_KEY, x, y, side, WHITE))
+        && painter.sprite(crate::sprites::DRAWN_ICON_KEY, x, y, side, WHITE, 0))
         || portrait
             .sprite
             .as_deref()
-            .is_some_and(|name| painter.sprite(name, x, y, side, color));
+            .is_some_and(|name| painter.sprite(name, x, y, side, color, 0));
     if !drew_sprite {
         let glyph = portrait.glyph.to_string();
         let size = side as u16;
@@ -1010,7 +1010,7 @@ mod tests {
     #[test]
     fn a_portrait_with_art_paints_the_sprite_and_not_the_glyph() {
         let mut table = SpriteTable::default();
-        table.insert("scrapper", egui::TextureId::User(9));
+        table.insert_still("scrapper", egui::TextureId::User(9));
         let shapes = draw_portrait_with(table, &a_portrait(false));
         let images = crate::paint::painted_images(&shapes);
         let (_, rect, _) = images
@@ -1031,8 +1031,8 @@ mod tests {
     #[test]
     fn the_player_portrait_prefers_the_drawn_icon() {
         let mut table = SpriteTable::default();
-        table.insert("scrapper", egui::TextureId::User(9));
-        table.insert(crate::sprites::DRAWN_ICON_KEY, egui::TextureId::User(4));
+        table.insert_still("scrapper", egui::TextureId::User(9));
+        table.insert_still(crate::sprites::DRAWN_ICON_KEY, egui::TextureId::User(4));
         let shapes = draw_portrait_with(table, &a_portrait(true));
         let ids: Vec<_> = crate::paint::painted_images(&shapes)
             .into_iter()
@@ -1679,7 +1679,7 @@ mod tests {
             .clone()
             .expect("a hostile has a sprite name");
         let mut table = SpriteTable::default();
-        table.insert(name, egui::TextureId::User(9));
+        table.insert_still(name, egui::TextureId::User(9));
         let mut fx = crate::fx::Fx::new();
         let m = ui_metrics(900.0);
 

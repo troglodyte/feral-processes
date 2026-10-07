@@ -848,7 +848,14 @@ fn draw_body(
         .and_then(|f| f.sprite.as_deref())
         .or(body.sprite.as_deref());
     let drew_sprite = sprite.is_some_and(|name| {
-        painter.sprite(name, px + inset, py + inset, body_glyph_px as f32, ink)
+        painter.sprite(
+            name,
+            px + inset,
+            py + inset,
+            body_glyph_px as f32,
+            ink,
+            body.entity.to_bits(),
+        )
     });
     let con = ConRead::of(
         body.difficulty,
@@ -1559,7 +1566,7 @@ mod tests {
             .expect("the player is on the board");
         let form = player.form.clone().expect("the fixture must be emulating");
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             form.sprite
                 .clone()
                 .expect("the fixture's image has a sprite name"),
@@ -2268,7 +2275,7 @@ mod tests {
             .expect("a body with a Creature always resolves a sprite name");
 
         let mut table = SpriteTable::default();
-        table.insert(name, bevy_egui::egui::TextureId::User(9));
+        table.insert_still(name, bevy_egui::egui::TextureId::User(9));
 
         let mut fx = Fx::new();
         let (_, shapes) = with_sprites(table, |p| {

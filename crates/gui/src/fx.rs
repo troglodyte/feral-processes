@@ -169,7 +169,7 @@ const STAFFED_BOB_PX: f32 = 4.0;
 const STAFFED_BOB_HZ: f64 = 1.0;
 const STAFFED_BOB_PHASE_STEP: f64 = 0.15;
 /// How many distinct phases marks are spread across before repeating.
-const PHASE_KEYS: u64 = 64;
+pub(crate) const PHASE_KEYS: u64 = 64;
 
 /// What share of the room it has a subject under study rattles within, how
 /// often it re-sites, and how far out of step two subjects are.

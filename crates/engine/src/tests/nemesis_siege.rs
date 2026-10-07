@@ -843,6 +843,41 @@ fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
 }
 
 #[test]
+fn a_band_is_ordered_by_cell_not_entity_order() {
+    // The band's order seats the raiders at the door and breaks initiative
+    // ties, so it must not depend on entity indices a reload reshuffles.
+    for upper_first in [true, false] {
+        let mut game = new_game();
+        let (x, y) = open_ground(&mut game);
+        let leader = nemesis_at(&mut game, x, y);
+        let cells = if upper_first {
+            [(x + 1, y - 1), (x + 1, y + 1)]
+        } else {
+            [(x + 1, y + 1), (x + 1, y - 1)]
+        };
+        let spawned: Vec<Entity> = cells
+            .iter()
+            .map(|&(cx, cy)| {
+                let f = wild_at(&mut game, cx, cy);
+                game.world.entity_mut(f).insert(NemesisFollower(leader));
+                f
+            })
+            .collect();
+        let expected = if upper_first {
+            vec![spawned[0], spawned[1]]
+        } else {
+            vec![spawned[1], spawned[0]]
+        };
+
+        assert_eq!(
+            game.nemesis_band(leader),
+            expected,
+            "upper_first={upper_first}: the lower cell comes first"
+        );
+    }
+}
+
+#[test]
 fn equidistant_recruits_are_chosen_by_cell_not_entity_order() {
     // Both spawn orders, so the answer cannot be whichever way entity
     // indices happen to compare.

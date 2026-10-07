@@ -151,7 +151,7 @@ impl Game {
             .filter(|(_, f)| f.0 == leader)
             .map(|(e, _)| e)
             .collect();
-        band.sort();
+        band.sort_by_cached_key(|&e| self.nemesis_sort_key(e));
         band
     }
 

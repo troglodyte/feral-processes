@@ -25,7 +25,7 @@ use crate::resources::{
 /// are the four immutable readings every trigger is evaluated against, and
 /// the system writes none of them.
 #[derive(SystemParam)]
-pub struct RunStanding<'w> {
+pub struct RunStanding<'w, 's> {
     clock: Res<'w, GameClock>,
     zone: Res<'w, ZoneLevel>,
     /// Read instead of `Position`, always: `Position` is pinned to the
@@ -34,6 +34,7 @@ pub struct RunStanding<'w> {
     /// `pursuit_tick` needs its guard for.
     locale: Res<'w, Locale>,
     difficulty: Res<'w, DifficultyMode>,
+    keys: Query<'w, 's, &'static PhaseKeys, With<Player>>,
 }
 
 /// Evaluates every authored rung against the run's current state, records
@@ -51,19 +52,19 @@ pub fn achievement_system(
     db: Res<AchievementDb>,
     mut profile: ResMut<Profile>,
     mut feats: ResMut<RunFeats>,
-    standing: RunStanding,
+    standing: RunStanding<'_, '_>,
     mut pending: ResMut<PendingProfileWrites>,
     mut notifications: ResMut<crate::resources::Notifications>,
     mut log: ResMut<MessageLog>,
-    keys: Query<&PhaseKeys, With<Player>>,
 ) {
-    let keys = keys.single().ok().copied().unwrap_or_default();
     let RunStanding {
         clock,
         zone,
         locale,
         difficulty,
+        keys,
     } = standing;
+    let keys = keys.single().ok().copied().unwrap_or_default();
     let permadeath = matches!(*difficulty, DifficultyMode::Permadeath);
     for def in db.iter() {
         if profile.contains(&def.id) {

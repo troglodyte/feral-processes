@@ -12,6 +12,15 @@ cargo run -- --template extraction   # regenerate the world and play it
 cargo run --bin savetool -- template # what's available
 ```
 
+## Migrated at v36: Phase Keys
+
+`SAVE_FORMAT_VERSION` 36 added `player.phase_keys`, and a portal is refused
+without the key of the zone it leaves. Each template past zone 1 was
+hand-edited to hold the key of every zone behind it (`held` is a bitmask:
+zone 2 holds `1`, zone 3 holds `3`), which is what `savetool warp` now grants
+on its own. `every_template_holds_the_keys_of_the_zones_behind_it` fails if a
+new capture forgets.
+
 ## Migrated at v34: seated programs
 
 `SAVE_FORMAT_VERSION` 34 gave every tamed program a `base`, `stat_points` and

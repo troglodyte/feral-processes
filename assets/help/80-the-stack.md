@@ -46,6 +46,8 @@ came in by collapses, and a fresh one opens elsewhere in the sector with an uncl
 That is what makes a zone's fragment supply renewable rather than fixed, and it is why spending
 fragments at a bench can never strand a run.
 
+A guardian in zones 1 through 10 can also drop that zone's Phase Key, which the portal out of the zone will not work without.
+
 Two warnings. A guardian cannot be decompiled, whatever you spend on it. And a Recharger Node cannot
 reach you down here, so the Power you carry in is the Power you have.
 

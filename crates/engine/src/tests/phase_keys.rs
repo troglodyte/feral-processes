@@ -226,6 +226,15 @@ fn percents_sum_before_they_apply_and_are_derived_not_baked() {
 }
 
 #[test]
+fn the_count_ignores_stray_high_bits() {
+    let keys = PhaseKeys {
+        held: 0xFC00 | 0b100,
+        ..PhaseKeys::default()
+    };
+    assert_eq!(keys.count(), 1);
+}
+
+#[test]
 fn a_small_stat_still_gains_one() {
     let mut game = new_game();
     let mut db = game.world.resource::<PhaseKeyDb>().clone();

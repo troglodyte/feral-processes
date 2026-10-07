@@ -2027,9 +2027,9 @@ pub struct SaveData {
 /// bay empty, which is the same as losing a child mid-incubation.
 ///
 /// 35 → 36: Phase Keys. `PlayerSave::phase_keys` is written; bincode is
-/// positional, so a v35 file would misread every field after it. A save
-/// already past zone 1 loads with no keys and cannot finish the story
-/// (no migration, by design).
+/// positional, so a v35 file would misread every field after it. Load
+/// rejects any other version, so a pre-v36 save is refused rather than
+/// migrated (no migration, by design).
 pub const SAVE_FORMAT_VERSION: u32 = 36;
 
 /// `CreatureSave::power`'s serde default — see that field.

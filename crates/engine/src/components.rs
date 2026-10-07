@@ -789,7 +789,7 @@ impl PhaseKeys {
     }
 
     pub fn count(&self) -> u32 {
-        self.held.count_ones()
+        self.zones().count() as u32
     }
 
     /// Zones whose key is held, ascending.

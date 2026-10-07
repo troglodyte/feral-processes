@@ -13,6 +13,7 @@ You leave a zone through a Zone Portal. Deploy one and walk onto it.
   Kernels.
 - Fragments come out of the Stack and nowhere else. Beating a lair's guardian underground is what
   pays for the way out, which is why a run that never goes down never breaches.
+- Through zone 10 the portal also needs that zone's Phase Key, which a Stack guardian can drop; without it the portal cannot be built or stepped through.
 - The portal is consumed as you step through it. It is the one structure that does not make the
   trip, so every breach is a fresh build.
 - There is no way back.

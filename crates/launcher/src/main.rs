@@ -140,6 +140,9 @@ fn main() {
     // whole purpose is writing into a source tree that build does not have.
     if paths.dev.is_some() {
         app.install_sprite_dir();
+        // Before the scripted keys below: they can open the forge, whose
+        // editor loads its art from this library as it opens.
+        feral_processes_gui::install_sprite_library(&mut app);
     }
     // Generated into an expendable copy under `saves/`, never opened on the
     // `dev-saves/` source — the game autosaves, so playing the fixture

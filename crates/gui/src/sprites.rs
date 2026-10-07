@@ -332,7 +332,9 @@ pub fn load(
     }
 }
 
-/// Installs `App::sprite_library`/`sprite_disabled` once at startup, so the
+/// Installs `App::sprite_library`/`sprite_disabled` once before the first
+/// frame — and before any scripted `--keys` are replayed, which would
+/// otherwise open the editor on an empty library — so the
 /// picker's art column and the editor's opening canvas answer "what's
 /// installed" correctly from the very first frame rather than only after
 /// the first save.
@@ -341,13 +343,13 @@ pub fn load(
 /// readers of this state, and both are unreachable without the flag *and*
 /// a checkout, so decoding every shipped sprite into a `Canvas` here would
 /// be pure cost with no reader on every other build and every ordinary run.
-pub fn install_library(mut frontend: ResMut<crate::Frontend>) {
-    if !frontend.app.sprite_forge_enabled() {
+pub fn install_library(app: &mut feral_processes_app_core::App) {
+    if !app.sprite_forge_enabled() {
         return;
     }
-    let dir = frontend.app.assets_dir().join("sprites");
+    let dir = app.assets_dir().join("sprites");
     let (enabled, disabled) = scan_library(&dir);
-    frontend.app.install_sprite_library(enabled, disabled);
+    app.install_sprite_library(enabled, disabled);
 }
 
 /// What `apply_sprite_write` did, and what `drain_writes` must therefore do

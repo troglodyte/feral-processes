@@ -43,6 +43,7 @@ use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
 use sounds::SoundBank;
+pub use sprites::install_library as install_sprite_library;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
     match key {
@@ -643,15 +644,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             wheel_acc: 0.0,
         })
         .init_resource::<sprites::Sprites>()
-        .add_systems(
-            Startup,
-            (
-                setup,
-                sprites::load,
-                sprites::install_library,
-                effects::load,
-            ),
-        )
+        .add_systems(Startup, (setup, sprites::load, effects::load))
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.

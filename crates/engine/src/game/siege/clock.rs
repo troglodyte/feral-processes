@@ -47,11 +47,13 @@ impl Game {
         }
     }
 
-    pub(crate) fn siege_check(&mut self) {
+    /// Whether a siege opened or resolved this tick, so the nemesis march
+    /// that follows can hold: one siege at a time.
+    pub(crate) fn siege_check(&mut self) -> bool {
         // Frozen rather than held at a siege point: with no accrual there is
         // no warning to fire, and switching back on resumes the banked clock.
         if !self.sieges_enabled() {
-            return;
+            return false;
         }
         let zone = self.world.resource::<ZoneLevel>().0;
         // **The sector gate is on accrual and not on firing** —
@@ -60,7 +62,7 @@ impl Game {
         // crossing into a sector that can fire would be sieged within a
         // tick or two of arriving.
         if zone < SIEGE_MIN_ZONE {
-            return;
+            return false;
         }
 
         let target = match self
@@ -87,14 +89,14 @@ impl Game {
         self.warn_of_approaching_siege(zone, target, level);
 
         if level < target {
-            return;
+            return false;
         }
 
         // **The departure from `raid_check`: three holds, not one.** Each is
         // a `return` before the reset, so the pressure a held tick built is
         // still owed and the siege waits rather than being forgiven.
         if self.siege_holds() {
-            return;
+            return false;
         }
 
         // **Fire, then reset — and only if the fire reported a siege
@@ -118,12 +120,13 @@ impl Game {
             None => self.resolve_siege_offscreen(),
         };
         if !fired {
-            return;
+            return false;
         }
         let mut pressure = self.world.resource_mut::<crate::resources::SiegePressure>();
         pressure.level = 0;
         pressure.warned = false;
         pressure.next_at = None;
+        true
     }
 
     /// The three conditions under which a siege waits rather than fires, shared

@@ -870,3 +870,31 @@ fn equidistant_recruits_are_chosen_by_cell_not_entity_order() {
         );
     }
 }
+
+#[test]
+fn a_march_waits_out_a_tick_where_the_regular_siege_fired() {
+    let mut game = new_game();
+    established_base(&mut game);
+    let (leader, band) = marching_band(&mut game);
+    *game.world.resource_mut::<crate::resources::SiegePressure>() =
+        crate::resources::SiegePressure {
+            level: u32::MAX / 2,
+            next_at: Some(1),
+            warned: true,
+        };
+
+    game.tick_inner(false);
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::SiegePressure>()
+            .level,
+        0,
+        "test premise: the regular siege fired"
+    );
+    for f in &band {
+        assert!(game.world.get_entity(*f).is_ok(), "one siege per tick");
+    }
+    assert!(game.world.get::<NemesisHome>(leader).is_none());
+    assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, 1, "no march");
+}

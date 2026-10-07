@@ -400,10 +400,14 @@ impl Game {
         // standing in something resolved the tick it arrives, and ordered
         // fixed against the sweep so a tick that fires both reads as two
         // events rather than an interleaving.
-        self.siege_check();
+        let siege_fired = self.siege_check();
         // After the regular clock so a tick that fires both reads as two
-        // events, the regular siege first: its fight then holds the march.
-        self.nemesis_march_check();
+        // events, the regular siege first: its fight then holds the march,
+        // and one that resolved off-screen left no fight to hold it, so the
+        // tick itself does.
+        if !siege_fired {
+            self.nemesis_march_check();
+        }
         // Immediately after the ambient sweep, so the two raid sources
         // resolve in a fixed order and a tick that produces both reads as
         // two events rather than an interleaving. After `caravan_tick` for

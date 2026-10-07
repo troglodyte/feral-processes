@@ -31,8 +31,8 @@ opposite and slow Trace down.
 
 Removal is priced in core fragments, a few for every point of Load the implant carries, paid from
 your pack. The implant comes back to your pack as an item and nothing else is refunded. Core
-fragments are local to the zone you are in and are lost at a [breach](extraction), so keep some
-back if you mean to re-fit before then. An implant the game no longer recognises shows as unknown:
+fragments stay in your pack across a [breach](zones), so you can save them up for a re-fit.
+An implant the game no longer recognises shows as unknown:
 it does nothing, and it comes out for free.
 
 You cannot splice or remove anything in the middle of a fight.

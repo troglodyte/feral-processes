@@ -21,9 +21,11 @@ Moving and living:
 Your menus and stores:
 
 - b — base menu: deploy, compile, work orders, base staff, work it yourself, upgrade, demolish,
-  structure roster, research, contracts, recipes
+  structure roster, research, study a program, routine and affix research, contracts, caravan,
+  dispatch, base output, recipes
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
-  develop, perks
+  develop, perks, tools
+- ? — this manual
 - i — your pack
 - D — the downed programs you are holding, and the tools that take them apart. The same key opens
   it from inside your pack. See [taking a program apart](extraction).
@@ -33,7 +35,8 @@ Acting on the world:
 - c — move cargo between you and the structures beside you: one window with a row per item, where
   the columns read you, container — so Left takes off a machine's shelf toward you and
   Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
-  row and Ctrl halves the gap; [F] sets what a Depot beside you will accept
+  row and Ctrl halves the gap; typing digits sets an amount; [N] clears the basket; [F] sets what a
+  Depot beside you will accept
 - t — trade
 - F — fit a tool to the Teardown Rig beside you, or pull the one it has
 - I — open the Splice Rig beside you, to build an implant into your body or take one out
@@ -45,7 +48,8 @@ Acting on the world:
 - n — cutting tools out, or away again: with them out, walking into rock cuts it yourself, and your
   own tile wears a blue ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
-  and floored, and drawing a plan costs no time.
+  and, with the default brush, floored; F cycles the finish between plain, the floor types and
+  strip. Drawing a plan costs no time.
 - < — phase up into the base, standing on the anchor
 - > — phase back down to the grid, at the exit
 
@@ -110,8 +114,8 @@ In an intrusion:
 
 On a [battle map](battle-maps), which surface fights use if you turn them on
 in Options, the keys are different: arrows or the numpad step the acting
-body, a attacks, d defends, s runs a routine, V drops an active emulation,
-E ends the turn, and R resolves the fight.
+body, a attacks, d defends, s runs a routine, U uses an item, V drops an active emulation,
+E ends the turn, A hands your side over to fight on its own, and R resolves the fight.
 
 This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
 screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:

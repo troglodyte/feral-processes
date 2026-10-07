@@ -1,7 +1,7 @@
 # Routines and field buffs
 
 A routine is an ability sitting in a slot. Levels buy slots in pairs — you and a fresh program both
-start with two, and twelve is the ceiling for anybody. One of your two already holds Decompile and
+start with two, and levels alone take anybody to twelve. A class, talents and some implants add slots past that. One of your two already holds Decompile and
 the other holds whatever you took at creation, and a program arrives with its innate kit in its own,
 so installing something new eventually means displacing something old, and a program's innate
 routine, once displaced, is gone.
@@ -38,8 +38,8 @@ buy at home and carry with you rather than something you time against a fight yo
 
 - Every buff on that list except Repair Loop and Trickle Charge runs until you rest. Nothing else ends
   one but a Forgiving reboot, or running another of the same kind over it.
-- Repair Loop and Trickle Charge keep a tick counter, because they are the two that pay out
-  per tick, and unbounded Integrity or unbounded Power would answer scarcity the game is built on.
+- Repair Loop and Trickle Charge run on a timer of 300 and 60 turns, because they are the two that pay out
+  over time, and unbounded Integrity or unbounded Power would answer scarcity the game is built on.
 - What they buy: mitigation, attack, Integrity regeneration, a Power trickle, more XP, better
   drops, better decompile odds, and fewer wandering encounters.
 - Buffer Overrun and Wild Jump are Stack-only. They read and write coordinates that exist only
@@ -48,9 +48,8 @@ buy at home and carry with you rather than something you time against a fight yo
 A patch routine that costs Power is on that list too, and it is the one kind of routine you can
 call in a fight and out of one. Out here it charges the same Power, spends a turn, and repairs the
 same amount it would have in the fight — and it refuses outright if everyone it would land on is
-already whole, so you cannot spend a reserve on nothing. Patch Single v1.0 is the exception: it
-costs nothing, and a routine with no price has nothing pacing it once there are no rounds to count,
-so it stays a Special. Powering down still mends you completely, so the reason to patch in the field
+already whole, so you cannot spend a reserve on nothing. A patch that costs nothing is left off
+the list, because nothing would pace it once there are no rounds to count. Powering down still mends you completely, so the reason to patch in the field
 is that you are out there with no charge to burn and a long way still to go.
 
 An item's buff is not a routine's. A Patch Routine runs on its own clock whatever it arms, because

@@ -23,4 +23,14 @@ One worker per line is slower than one worker per machine. The trade is that the
 stays free for other work. Splitting a line in two by leaving a gap between the machines gives each
 half its own worker.
 
+A Mod Bench makes no goods, so it works apart from the lines above. Research Mod Bench, which
+needs the weapon and armor benches first, then build one for 18 Core Fragments. One standing
+anywhere in the base is enough, and you do not have to be beside it. Open a weapon or armor in your
+pack and press M to modify its affixes. A piece has one affix slot, plus one for each time it has
+been fused. Enter on an empty slot lists the affixes you have researched for that kind of gear, and
+fitting one is paid in materials from your pack. R strips the highlighted affix for free, and the
+affix is destroyed, whether you found it or fitted it. The Mod Bench research also opens the
+Affixes research tree, whose nodes stay hidden until a study attempt finds them. Some affixes can
+only be had this way and never drop.
+
 See [your base](your-base) for building and staffing.

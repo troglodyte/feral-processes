@@ -16,8 +16,9 @@ Shift commands everybody at once: A has the whole party attack — it asks for a
 there is more than one to choose between — and D has it all defend.
 
 Hostiles are sorted into groups, one group per species. A zone decides how deep that can go — zone 1
-fields a single program, zone 2 up to ten in a group and two groups at once, and by zone 4 four
-groups. Only the front two groups are in reach of you; the ones behind can act only with a routine
+fields one group of up to two programs, zone 2 up to ten in a group and two groups at once, and by
+zone 4 four groups. A bigger party of your own raises those numbers. One fight never fields more than eight bodies in all; whoever does not fit stays
+standing on the map for the next bump. Only the front two groups are in reach of you; the ones behind can act only with a routine
 flagged to reach that far, which is why wiping the front group is a real decision — it promotes one
 of the back groups into the fight.
 
@@ -40,7 +41,7 @@ percentage that grew every level would end at immunity — so what a level buys 
 Evasion instead.
 
 Decompiling is how a program becomes yours, and it is a routine like any other: pick Decompile with
-s. It spends a taming catalyst, it is refused outright if you carry none or your roster is full, and
+s. It spends a taming catalyst, it is refused outright if you carry none or already hold 200 programs, and
 a boss or a lair guardian is beyond it whatever you spend. What moves the odds is the target's
 remaining Integrity — a program you have nearly finished is far easier to crack — your Decompiler
 stat, and the attempts you have already made on that same program, which count for you up to five of
@@ -49,5 +50,14 @@ them.
 Jacking out is a roll, not a door. It weighs your side's strength against the pack's, and a failed
 attempt costs you the round while every engaged group gets its attempt in. Getting clear costs a little XP and
 sometimes a parting counter, so it is a decision rather than a free reset.
+
+Several status effects can sit on one body at once, and the screen lists every one of them beside
+its group or party member as a short tag and the rounds left, such as PSN×3 (2) for Poisoned, three
+stacks, two rounds to go. Poison stacks up to five times; [battle maps](battle-maps) explains the
+others, Throttled and Locked among them.
+
+When the window is wide enough, a square to the left of the battle log is a picture window. It shows the program whose turn is
+being told — yours, a companion's, or a hostile's — and returns to the first hostile in line between
+turns. A program without art shows its symbol, and you appear as the icon you drew if you drew one.
 
 Read on: [routines](routines), [your companions](companions), and [getting stronger](getting-stronger).

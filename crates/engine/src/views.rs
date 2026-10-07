@@ -3915,3 +3915,28 @@ impl IncubatingChild {
 pub struct IncubationView {
     pub child: Option<IncubatingChild>,
 }
+
+/// One held Phase Key as the inventory's Phase Keys tab shows it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct HeldPhaseKey {
+    pub name: String,
+    pub flavour: String,
+    /// One line, from `KeyEffect::summary`; empty for a key with no effect.
+    pub effect: String,
+}
+
+/// A Phase Key slot: the zone it belongs to, and the key if recovered.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PhaseKeySlot {
+    pub zone: u32,
+    pub held: Option<HeldPhaseKey>,
+}
+
+/// The Phase Keys tab's whole picture. `slots` always has
+/// `tuning::PHASE_KEY_COUNT` rows in zone order.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PhaseKeysView {
+    pub slots: Vec<PhaseKeySlot>,
+    pub held_count: u32,
+    pub story_complete: bool,
+}

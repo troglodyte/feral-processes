@@ -770,6 +770,34 @@ pub struct Implants {
     pub installed: Vec<crate::implants::ImplantId>,
 }
 
+/// The Phase Keys the player holds — see `phase_keys`. Player only. Keys are
+/// state, not items: no sell, trade or consume path ever sees one, and their
+/// effects are derived from `held` on every read, never baked into stats.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhaseKeys {
+    /// Bit `zone - 1` is set when that zone's key is held.
+    pub held: u16,
+    /// Eligible guardian kills in the current zone that did not drop the key.
+    pub misses: u32,
+    /// Set once the player has escaped through the Basin Exit.
+    pub story_complete: bool,
+}
+
+impl PhaseKeys {
+    pub fn holds(&self, zone: u32) -> bool {
+        (1..=crate::tuning::PHASE_KEY_COUNT).contains(&zone) && self.held & (1 << (zone - 1)) != 0
+    }
+
+    pub fn count(&self) -> u32 {
+        self.zones().count() as u32
+    }
+
+    /// Zones whose key is held, ascending.
+    pub fn zones(&self) -> impl Iterator<Item = u32> + '_ {
+        (1..=crate::tuning::PHASE_KEY_COUNT).filter(|zone| self.holds(*zone))
+    }
+}
+
 impl Inventory {
     pub fn add(&mut self, item: ItemId, qty: u32) {
         // Saturating so an unbounded Buffer can never wrap a stack's count.

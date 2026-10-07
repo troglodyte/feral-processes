@@ -1,7 +1,7 @@
 (
     id: "log_scraper",
     name: "Log Scraper",
-    description: "Mine Raw Trace off the Grid's chatter.",
+    description: "Mine Raw Trace off the Basin's chatter.",
     glyph: 'T',
     color: Cyan,
     build_cost: [("core_fragment", 14)],

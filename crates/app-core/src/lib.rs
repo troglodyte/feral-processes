@@ -1039,6 +1039,25 @@ pub enum InfoTab {
     Contracts,
 }
 
+/// Which page of `Mode::Inventory` is showing. UI state only, like
+/// [`InfoTab`]: the keys tab is a read-only view, so it decides what is
+/// drawn and which keys do anything.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum InventoryTab {
+    #[default]
+    Items,
+    PhaseKeys,
+}
+
+impl InventoryTab {
+    pub fn other(self) -> Self {
+        match self {
+            Self::Items => Self::PhaseKeys,
+            Self::PhaseKeys => Self::Items,
+        }
+    }
+}
+
 impl InfoTab {
     /// Every tab, in the order the column draws them and the digits select
     /// them — `1` is `ALL[0]`. The two have to agree or a digit would open a
@@ -2237,6 +2256,16 @@ pub enum Mode {
     /// Confirming `q` from `Mode::MainMenu`, which ends the process. Nothing
     /// is in memory to lose here; the key simply sits between `n` and `l`.
     QuitAppConfirm,
+    /// Asked on stepping onto the Basin Exit (`Game::take_basin_exit_prompt`):
+    /// leave the Phase-Manifold Basin? `y` calls `Game::escape_basin` and
+    /// opens `Mode::Ending`; `n` or Esc stays. Nothing has happened yet.
+    BasinExitConfirm,
+    /// The ending text, paged through: `App::ending_screens` is the subject
+    /// and `App::ending_page` the cursor (`Mode` is `Copy` with unit
+    /// variants, so neither can ride the variant). Enter or Right turns the
+    /// page, Left goes back, and past the last page (or Esc) play resumes.
+    /// The escape has already happened by the time this opens.
+    Ending,
     /// The dev arena's scenario editor, and the screen the whole family
     /// returns to. Reached from the main menu when `FERAL_DEV_ARENA` is set;
     /// Esc drops the session. Rows come from `App::arena_builder_rows`.
@@ -2445,6 +2474,10 @@ impl Mode {
             | Mode::GameOver
             | Mode::QuitRunConfirm
             | Mode::QuitAppConfirm
+            // Opened from `Mode::Playing` by a step, and nothing in a fight
+            // can step onto a base structure.
+            | Mode::BasinExitConfirm
+            | Mode::Ending
             // The arena's own screens are not battle screens; the fight it
             // stages runs in `Mode::Battle` like any other.
             | Mode::ArenaBuilder
@@ -2727,6 +2760,11 @@ pub struct App {
     /// The report on screen in `Mode::PerkBought`. Its one writer is
     /// `handle_perks_key`.
     pub pending_perk_report: Option<PerkReport>,
+    /// The screens on show in `Mode::Ending`, fetched once by
+    /// `App::escape_basin`, its one writer.
+    pub ending_screens: Vec<feral_processes_engine::story::EndingScreen>,
+    /// Which of `ending_screens` is showing.
+    pub ending_page: usize,
     /// The spend pending on `stat_allocation`, per attribute. Empty when
     /// the screen opens; the allocation's methods take it as an argument.
     pub allocation_spent:
@@ -2744,6 +2782,9 @@ pub struct App {
     /// which a manual `1`/`2`/`3`/`4` press overrides until the next
     /// crossing.
     pub info_tab: InfoTab,
+    /// Which page `Mode::Inventory` shows; reset to `Items` on every
+    /// opening from the map. See [`InventoryTab`].
+    pub inventory_tab: InventoryTab,
     /// Which side of the base boundary `info_tab` was last synced
     /// against — `true` for base space, `false` for everywhere else
     /// (surface and the Stack read the same here; see `Game::in_base`).

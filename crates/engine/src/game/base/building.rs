@@ -42,6 +42,13 @@ impl Game {
         if !self.structure_unlocked(structure_id) {
             return Err(format!("{} hasn't been researched yet.", def.name));
         }
+        if def.zone_portal {
+            let zone = self.world.resource::<ZoneLevel>().0;
+            self.phase_key_gate(zone)?;
+        }
+        if def.basin_exit {
+            self.basin_exit_gate()?;
+        }
         // Both before the locale guard below, deliberately. A player on the
         // open grid with no base yet who picks a machine out of the build
         // menu is told the thing they can act on — deploy a Home — rather

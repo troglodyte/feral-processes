@@ -1,0 +1,7 @@
+(
+    id: "phase_keys_all",
+    name: "Full Ring",
+    description: "Hold all ten Phase Keys at once.",
+    trigger: AllPhaseKeys,
+    reward: None,
+)

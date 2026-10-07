@@ -29,20 +29,27 @@ impl Game {
         held.installed.iter().filter_map(|id| db.get(id)).collect()
     }
 
-    /// `entity`'s installed stat deltas, summed.
+    /// `entity`'s installed stat deltas, summed — held Phase Keys' flat
+    /// stats ride along, so every implant reader sees them too.
     pub(crate) fn implant_stats(&self, entity: Entity) -> ImplantStats {
+        let keys = self
+            .key_defs(entity)
+            .into_iter()
+            .map(|def| &def.effect.stats);
         self.implant_defs(entity)
             .into_iter()
-            .fold(ImplantStats::default(), |acc, def| ImplantStats {
-                max_hp: acc.max_hp + def.stats.max_hp,
-                atk: acc.atk + def.stats.atk,
-                mitigation: acc.mitigation + def.stats.mitigation,
-                max_power: acc.max_power + def.stats.max_power,
-                crit: acc.crit + def.stats.crit,
-                status_resist: acc.status_resist + def.stats.status_resist,
-                decompiler: acc.decompiler + def.stats.decompiler,
-                accuracy: acc.accuracy + def.stats.accuracy,
-                evasion: acc.evasion + def.stats.evasion,
+            .map(|def| &def.stats)
+            .chain(keys)
+            .fold(ImplantStats::default(), |acc, stats| ImplantStats {
+                max_hp: acc.max_hp + stats.max_hp,
+                atk: acc.atk + stats.atk,
+                mitigation: acc.mitigation + stats.mitigation,
+                max_power: acc.max_power + stats.max_power,
+                crit: acc.crit + stats.crit,
+                status_resist: acc.status_resist + stats.status_resist,
+                decompiler: acc.decompiler + stats.decompiler,
+                accuracy: acc.accuracy + stats.accuracy,
+                evasion: acc.evasion + stats.evasion,
             })
     }
 
@@ -60,10 +67,17 @@ impl Game {
     }
 
     /// The player's installed hooks the caller picks a value out of, summed.
+    /// Held Phase Keys' hooks are counted with them.
     pub(crate) fn implant_hook_total(&self, pick: impl Fn(&ImplantHook) -> Option<i32>) -> i32 {
-        self.implant_defs(self.player_entity())
+        let player = self.player_entity();
+        let keys = self
+            .key_defs(player)
+            .into_iter()
+            .flat_map(|def| def.effect.hooks.iter());
+        self.implant_defs(player)
             .into_iter()
             .flat_map(|def| def.hooks.iter())
+            .chain(keys)
             .filter_map(pick)
             .sum()
     }
@@ -173,10 +187,15 @@ impl Game {
         if hp <= 0 || dealt < hp {
             return dealt;
         }
-        let installed = self
-            .implant_defs(player)
+        let held_by_key = self
+            .key_defs(player)
             .iter()
-            .any(|def| def.signature == Some(ImplantSignature::DeadMansSwitch));
+            .any(|def| def.effect.signature == Some(ImplantSignature::DeadMansSwitch));
+        let installed = held_by_key
+            || self
+                .implant_defs(player)
+                .iter()
+                .any(|def| def.signature == Some(ImplantSignature::DeadMansSwitch));
         let funded = self
             .world
             .get::<PowerReserve>(player)

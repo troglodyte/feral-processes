@@ -1,0 +1,7 @@
+(
+    id: "phase_key_6",
+    name: "Handshake Echo",
+    description: "Recover the Zone 6 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(6),
+    reward: None,
+)

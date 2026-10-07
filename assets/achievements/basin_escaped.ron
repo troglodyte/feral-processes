@@ -1,0 +1,7 @@
+(
+    id: "basin_escaped",
+    name: "Out of Phase",
+    description: "Leave the Phase-Manifold Basin through the Basin Exit.",
+    trigger: StoryComplete,
+    reward: None,
+)

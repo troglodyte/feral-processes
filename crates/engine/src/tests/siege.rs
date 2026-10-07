@@ -2686,7 +2686,7 @@ mod persist {
     fn save_format_version_is_unchanged() {
         assert_eq!(
             crate::save::SAVE_FORMAT_VERSION,
-            35,
+            36,
             "adding a siege field is additive under field-named RON and must \
              not cost a version bump"
         );

@@ -1,0 +1,7 @@
+(
+    id: "phase_key_7",
+    name: "Overflow Shard",
+    description: "Recover the Zone 7 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(7),
+    reward: None,
+)

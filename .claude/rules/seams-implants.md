@@ -3,6 +3,8 @@ paths:
   - "crates/engine/src/implants.rs"
   - "crates/engine/src/game/implants.rs"
   - "assets/implants/**"
+  - "crates/engine/src/phase_keys.rs"
+  - "assets/phase_keys/**"
 ---
 
 # Load-bearing seams: Implants
@@ -12,3 +14,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Implant effects are read only at the sites in `game/implants.rs`'s callers (stats, Power drain, routine slots, capture odds, Trace, drops, XP, battle start, Dead Man's Switch), always through `ImplantDb`, and a def that is missing contributes nothing.**
 - **A player with no implants draws nothing from `GameRng`.**
 - **`DeadMansSwitch` hooks `apply_damage`, not `lower_hp`, so `kill_outright` still kills.**
+- **Phase Key effects ride the implant readers in `game/implants.rs` and apply percents only through `phase_keys::apply_key_pct`; a new key effect never gets a reader of its own.**

@@ -149,6 +149,7 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
                 DownedPrograms::default(),
                 Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
                 crate::components::Implants::default(),
+                crate::components::PhaseKeys::default(),
             ),
         ))
         .id()
@@ -453,6 +454,7 @@ fn spawn_player_from_save(
                 crate::components::Implants {
                     installed: player_save.implants,
                 },
+                player_save.phase_keys,
             ),
         ))
         .id()
@@ -483,6 +485,7 @@ impl Game {
             memories: memory_db,
             statuses: status_db,
             implants: implant_db,
+            phase_keys: phase_key_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -528,6 +531,7 @@ impl Game {
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
         world.insert_resource(implant_db);
+        world.insert_resource(phase_key_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -702,7 +706,9 @@ impl Game {
         game.ensure_local_population();
         game.ensure_local_settlements();
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
-        game.log("Connection established. You materialize at the edge of the Grid.");
+        game.log(
+            "Connection established. You materialize at the edge of the Phase-Manifold Basin.",
+        );
         // Before the first tick, so the very first contracts screen a run
         // opens already has the chain's first mission in hand.
         game.ensure_tutorial_held();
@@ -1368,7 +1374,7 @@ impl Game {
         if let Some(reason) = &data.game_over {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("that run is over — it {reason}. Its signal is gone from the Grid."),
+                format!("that run is over — it {reason}. Its signal is gone from the Basin."),
             ));
         }
         // Every door seats a tamed program and the writer always records its
@@ -1399,6 +1405,7 @@ impl Game {
             memories: memory_db,
             statuses: status_db,
             implants: implant_db,
+            phase_keys: phase_key_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -1462,6 +1469,7 @@ impl Game {
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
         world.insert_resource(implant_db);
+        world.insert_resource(phase_key_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -1928,7 +1936,7 @@ impl Game {
             game.sync_settlement_footprint(key);
         }
 
-        game.log("Session restored. Reconnecting to the Grid.");
+        game.log("Session restored. Reconnecting to the Basin.");
         // A save from before the chain existed: file every mission as
         // finished so an established run is left alone. New runs are seeded
         // by `Game::new`, which sets the flag, so this fires exactly once
@@ -2967,6 +2975,11 @@ impl Game {
             .get::<crate::components::Implants>(player)
             .map(|i| i.installed.clone())
             .unwrap_or_default();
+        let phase_keys = self
+            .world
+            .get::<crate::components::PhaseKeys>(player)
+            .copied()
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -3129,6 +3142,7 @@ impl Game {
             downed_programs,
             tools,
             implants,
+            phase_keys,
             perk_points: perks.points,
             unlocked_perks: perks.unlocked,
             bought_stats,
@@ -3504,6 +3518,7 @@ impl Game {
                     self.world.get_mut::<Perks>(player).unwrap().points += n;
                     perk_points += n;
                 }
+                Reward::None => {}
                 Reward::StartingProgram(species_id) => match self
                     .grant_starting_program(&species_id)
                 {
@@ -3570,6 +3585,7 @@ struct AssetDbs {
     memories: crate::memories::MemoryDb,
     statuses: crate::statuses::StatusDb,
     implants: crate::implants::ImplantDb,
+    phase_keys: crate::phase_keys::PhaseKeyDb,
     thoughts: crate::situations::ThoughtDb,
     interactions: crate::interactions::InteractionDb,
     needs: crate::needs::NeedDb,
@@ -3623,6 +3639,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (implants, implant_warnings) =
         crate::implants::ImplantDb::load_dir(&assets_dir.join("implants"))?;
     warnings.extend(implant_warnings);
+    let (mut phase_keys, phase_key_warnings) =
+        crate::phase_keys::PhaseKeyDb::load_dir(&assets_dir.join("phase_keys"))?;
+    warnings.extend(phase_key_warnings);
+    let (ending, ending_warnings) = crate::story::EndingText::load_dir(&assets_dir.join("story"))?;
+    warnings.extend(ending_warnings);
+    phase_keys.ending = ending;
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.
@@ -3802,6 +3824,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         memories,
         statuses,
         implants,
+        phase_keys,
         thoughts,
         interactions,
         needs,

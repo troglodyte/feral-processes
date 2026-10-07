@@ -1,0 +1,8 @@
+(
+    zone: 2,
+    name: "Drift Compass",
+    flavour: "Always points toward the edge.",
+    effect: (
+        hooks: [TraceDamp(10)],
+    ),
+)

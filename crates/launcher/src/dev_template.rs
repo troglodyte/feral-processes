@@ -229,6 +229,31 @@ mod tests {
         }
     }
 
+    /// A template past zone 1 stands where a breach had to be earned, so it
+    /// holds the key of every zone behind it. Without them the first
+    /// portal a session built would be refused.
+    #[test]
+    fn every_template_holds_the_keys_of_the_zones_behind_it() {
+        for name in list() {
+            let out =
+                std::env::temp_dir().join(format!("feral_processes_template_{name}_keys.bin"));
+            generate(&name, &out).unwrap();
+            let game = Game::load(&out, &assets_dir()).unwrap();
+            let _ = std::fs::remove_file(&out);
+
+            let zone = game.player_status().zone as u32;
+            let view = game.phase_keys();
+            for slot in view.slots.iter().filter(|slot| slot.zone <= zone) {
+                assert_eq!(
+                    slot.held.is_some(),
+                    slot.zone < zone,
+                    "template `{name}` is in zone {zone}; zone {}'s key",
+                    slot.zone
+                );
+            }
+        }
+    }
+
     /// The gate that stops the next template being captured short:
     /// `every_checked_in_template_still_loads` only proves the RON parses —
     /// this is what proves the base it describes can actually power itself,

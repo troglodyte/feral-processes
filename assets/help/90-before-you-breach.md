@@ -14,6 +14,8 @@ improve by playing it better. A routine whose name ends in Group
 is the answer, and it is worth going into the Stack for the Portal Fragments knowing you also need
 the levels, the disks or the research to bring one across.
 
+Through zone 10 the portal also needs that zone's Phase Key, dropped by Stack guardians, so a guardian kill comes before the build.
+
 Take across as well:
 
 - A party. Five can fight beside you, and past zone 1 you want the front slot filled by something

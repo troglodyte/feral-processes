@@ -1,0 +1,7 @@
+(
+    id: "phase_key_3",
+    name: "Seam Lens",
+    description: "Recover the Zone 3 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(3),
+    reward: None,
+)

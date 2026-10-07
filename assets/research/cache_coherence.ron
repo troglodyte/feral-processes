@@ -1,7 +1,7 @@
 (
     id: "cache_coherence",
     name: "Cache Coherence",
-    description: "Lets the base mine Cache Grain, the material most things from sector 2 onward are made of, and adds a machine that burns Power Cells to power the Grid.",
+    description: "Lets the base mine Cache Grain, the material most things from sector 2 onward are made of, and adds a machine that burns Power Cells to feed the Power Grid.",
     cost: 40,
     materials: [("bytecode_block", 20), ("charge_coil", 8)],
     min_zone: 2,

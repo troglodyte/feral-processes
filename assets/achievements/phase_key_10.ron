@@ -1,0 +1,7 @@
+(
+    id: "phase_key_10",
+    name: "Last Boundary",
+    description: "Recover the Zone 10 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(10),
+    reward: None,
+)

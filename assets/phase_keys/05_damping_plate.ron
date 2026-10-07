@@ -1,0 +1,9 @@
+(
+    zone: 5,
+    name: "Damping Plate",
+    flavour: "Absorbs the phase shear between tiers.",
+    effect: (
+        stat_pct: (mitigation: 10),
+        stats: (status_resist: 10),
+    ),
+)

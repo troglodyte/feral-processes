@@ -3,6 +3,7 @@
     tick: 5344,
     difficulty: Forgiving,
     player: (
+        phase_keys: (held: 3, misses: 0, story_complete: false),
         position: (0, 0),
         hp: 509,
         power: 100.0,

@@ -1104,6 +1104,15 @@ pub struct LevelSnapshot {
 #[derive(Resource, Default)]
 pub struct PendingLevelUp(pub Option<LevelSnapshot>);
 
+/// Present from the player's step onto the Basin Exit until the frontend
+/// answers with `Game::escape_basin` or ignores it (`take_basin_exit_prompt`
+/// removes it). **Not saved**, `PendingLevelUp`'s reason, and inserted on
+/// demand rather than at the constructors, `HandCraft`'s way: a resource
+/// registered at construction shifts every `ComponentId` after it and with
+/// them query iteration order.
+#[derive(Resource)]
+pub struct PendingBasinExit;
+
 /// The hand-compile the player is currently standing over — the item, how
 /// much of the batch is left, and how far into the unit in flight they are.
 ///

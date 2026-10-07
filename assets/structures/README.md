@@ -302,8 +302,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // draw doesn't fit the base's remaining supply goes unpowered and makes
     // no progress until the base has spare capacity again.
     //
-    // The Grid is NOT the same resource as `power_regen` above: `power_regen`
-    // restores the player's Power (their `PowerReserve` stat), while the Grid
+    // The Power Grid is NOT the same resource as `power_regen` above: `power_regen`
+    // restores the player's Power (their `PowerReserve` stat), while the Power Grid
     // is a base-wide capacity that only machines draw against. A structure
     // can set either, both, or neither — the Recharger Node sets both, at
     // different values, which is exactly why they're two fields instead of
@@ -321,7 +321,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // burns to keep running. A structure that names one takes one unit of
     // that item out of an orthogonally adjacent structure's output buffer
     // every POWER_UPKEEP_TICKS, and while it cannot pay it does NOTHING —
-    // zero `power_supply` on the Grid, and zero `power_regen` trickle to the
+    // zero `power_supply` on the Power Grid, and zero `power_regen` trickle to the
     // player if it sets that too. It reports "out of fuel" and wears
     // `palette::OFFLINE` red on the map (its own `MachineStatus::Dry`, not
     // the `Starved` an input-short machine wears), and the base's machines
@@ -371,6 +371,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // exit. ResearchCurrency is banked progress and is kept, as are gear
     // (fused copies included) and supplies.
     zone_portal: true,
+
+    // Optional; can be left out entirely (defaults to false). Marks the
+    // Basin Exit: walking onto it asks the player to leave the
+    // Phase-Manifold Basin, and confirming plays `assets/story/ending.ron`,
+    // marks the story complete and removes the structure. Whether it can be
+    // built (all ten Phase Keys, zone 10 or deeper, not yet escaped) is a
+    // rule in Rust, not in this file. If no file sets this, a built-in
+    // "basin_exit" structure is used so the game stays completable.
+    basin_exit: false,
 
     // Optional; can be left out entirely (defaults to an empty list). Extra
     // bill lines that only apply once the current zone reaches `min_zone`:

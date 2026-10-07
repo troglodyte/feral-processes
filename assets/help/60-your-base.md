@@ -66,7 +66,7 @@ until the thing is up. If your whole roster is out fighting beside you, nothing 
 somebody is free. Changing your mind costs nothing: d and a direction at a pending site calls it off
 and puts every part already carried there back on a shelf.
 
-Machines run on the Grid, and the Grid has to cover them. Every tick the base sums what it supplies
+Machines run on the Power Grid, and the Power Grid has to cover them. Every tick the base sums what it supplies
 against what its machines draw, and anything over the line is cut in a fixed order until the rest
 fit. A Power Conduit is cut last of all and a Mining Node just before it, because those are how a
 base with every Recharger dry lights itself again on the Home's four alone. A cut machine reads
@@ -74,14 +74,14 @@ dark: no progress, no pulling from its neighbours, and nothing to be had by
 working it by hand either. Home supplies four and so does each Recharger Node, there is no limit on
 how many Rechargers you build, and a Line Driver is pure supply with nothing else attached. A
 machine draws whether or not anybody is posted to it, which makes an idle machine kept for later a
-real expense. This is the Grid and it is not your Power — the two are separate resources that happen
+real expense. This is the Power Grid and it is not your Power — the two are separate resources that happen
 to share a word.
 
 The base staffs itself. Any program you own that is not out fighting with you is staff, and the
 scheduler decides the whole assignment every tick by priority: pending builds first, then keeping a
 Recharger Node or a Line Driver fuelled, then the research project, then work orders, then standing
 jobs, then digging. Those
-two burn a Power Cell to stay on the Grid, and a program will walk one over from a shelf ahead of
+two burn a Power Cell to stay on the Power Grid, and a program will walk one over from a shelf ahead of
 almost anything else — on a base short of hands, that means a machine stands idle while the lights
 stay on. With no cell on any shelf, that program goes to a Power Conduit and makes some instead. A work order is an item and a quantity and nothing else — say what you want and
 the base works out which machines make it, who stands on each, and what has to be fetched. The queue
@@ -168,10 +168,10 @@ The rest of what a base does:
   naming what it is short of. Worth knowing because a bill's work order is removed once the base is
   holding the goods — if something else spends them before the project settles, that row is the only
   thing that will tell you.
-- A Power Siphon pins one staff program into the Grid and runs the base off it. Research Grid
+- A Power Siphon pins one staff program into the Power Grid and runs the base off it. Research Grid
   Tapping, then build one for 24 Core Fragments and 4 Bytecode Blocks. Stand beside it and press P
   to load a staff program or release the one inside. A siphon with someone in it supplies 4 to the
-  Grid, the same as a Recharger Node, and an empty one supplies nothing. The held program does no
+  Power Grid, the same as a Recharger Node, and an empty one supplies nothing. The held program does no
   other work. It resents the hold, and the grudge builds slowly: a few strikes make it sulk, and a
   long enough hold makes it down tools. Letting go always costs it, because it comes out with at
   most a quarter of its Integrity left, though a release never kills. See

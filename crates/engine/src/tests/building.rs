@@ -2132,8 +2132,8 @@ fn a_structure_that_declares_no_limit_is_unlimited() {
         .collect();
     assert_eq!(
         capped,
-        vec!["line_driver".to_string()],
-        "only the grid supplier is capped; the field defaults to no limit"
+        vec!["basin_exit".to_string(), "line_driver".to_string()],
+        "only the grid supplier and the one-off Basin Exit are capped; the field defaults to no limit"
     );
 }
 
@@ -3708,6 +3708,7 @@ fn a_depot_is_filed_without_spending_a_program() {
 fn a_zone_portal_is_filed_without_spending_a_program() {
     let mut game = a_base_with_programs(20260909, 2);
     let held = game.owned_pets().len();
+    game.grant_phase_key(1);
 
     game.place_structure("portal", 1, 0, None)
         .expect("a doorway costs no body");

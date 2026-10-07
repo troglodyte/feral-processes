@@ -202,7 +202,7 @@ fn the_screens_row_count_matches_the_report() {
     let _ = std::fs::remove_file(&path);
 
     let rows = app.achievement_rows();
-    assert_eq!(rows.len(), 13, "every authored rung is listed");
+    assert_eq!(rows.len(), 25, "every authored rung is listed");
     assert_eq!(
         rows.iter().filter(|r| r.earned.is_some()).count(),
         1,

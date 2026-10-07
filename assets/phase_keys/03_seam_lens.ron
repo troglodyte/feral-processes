@@ -1,0 +1,8 @@
+(
+    zone: 3,
+    name: "Seam Lens",
+    flavour: "Shows where the Basin was stitched together.",
+    effect: (
+        stats: (accuracy: 5, crit: 0.03),
+    ),
+)

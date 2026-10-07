@@ -34,7 +34,7 @@ const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 const HINT: &str = "Press Esc to continue";
 
 /// The panel for a `w` x `h` window, centred.
-fn panel_rect(w: f32, h: f32) -> Rect {
+pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
     let (pw, ph) = (w * PANEL_FRACTION, h * PANEL_FRACTION);
     Rect::new((w - pw) / 2.0, (h - ph) / 2.0, pw, ph)
 }
@@ -42,7 +42,7 @@ fn panel_rect(w: f32, h: f32) -> Rect {
 /// How many UI cells the prose wraps at inside `panel`. Measured in UI cells
 /// because the body is UI text — the map face is only ever used here for
 /// the one glyph.
-fn body_columns(painter: &Painter, panel: Rect, body_size: u16) -> usize {
+pub(super) fn body_columns(painter: &Painter, panel: Rect, body_size: u16) -> usize {
     let columns = (panel.w * BODY_WIDTH_FRACTION) / painter.measure_ui_advance("M", body_size);
     (columns.floor() as usize).max(20)
 }

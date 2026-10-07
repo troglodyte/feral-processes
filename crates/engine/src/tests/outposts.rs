@@ -153,7 +153,7 @@ fn a_pre_outposts_save_loads_with_none_standing() {
 fn save_format_version_is_unchanged_by_outposts() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        35,
+        36,
         "adding an outpost field is additive under field-named RON and must \
          not cost a version bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

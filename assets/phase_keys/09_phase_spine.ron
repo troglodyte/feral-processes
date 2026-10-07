@@ -1,0 +1,9 @@
+(
+    zone: 9,
+    name: "Phase Spine",
+    flavour: "You move half a step out of phase.",
+    effect: (
+        stat_pct: (atk: 8, max_power: 10),
+        stats: (evasion: 5),
+    ),
+)

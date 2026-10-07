@@ -626,6 +626,24 @@ impl Game {
     /// `find_blocking_structure_at`'s doc for why that guard belongs here
     /// rather than at each caller.
     pub(crate) fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        self.find_structure_at_where(x, y, |d| d.zone_portal)
+    }
+
+    /// `find_zone_portal_at`'s shape for the Basin Exit
+    /// (`StructureDef::basin_exit`).
+    pub(crate) fn find_basin_exit_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        self.find_structure_at_where(x, y, |d| d.basin_exit)
+    }
+
+    /// The structure on base-space `(x, y)` whose def satisfies `wanted`.
+    /// Answers nothing outside base space, where `(x, y)` is another
+    /// coordinate system.
+    fn find_structure_at_where(
+        &mut self,
+        x: i32,
+        y: i32,
+        wanted: impl Fn(&StructureDef) -> bool,
+    ) -> Option<Entity> {
         if !self.in_base() {
             return None;
         }
@@ -639,7 +657,7 @@ impl Game {
         self.world
             .resource::<StructureDb>()
             .get(&kind)
-            .is_some_and(|d| d.zone_portal)
+            .is_some_and(wanted)
             .then_some(entity)
     }
 
@@ -768,6 +786,14 @@ impl Game {
             self.notify(crate::notifications::NotificationKind::SweepsBegin);
         }
 
+        // Breach is one-way and gated on the key, so one counter serves.
+        if let Some(mut keys) = self
+            .world
+            .get_mut::<crate::components::PhaseKeys>(self.player_entity())
+        {
+            keys.misses = 0;
+        }
+
         self.world.insert_resource(StackMemory::default());
         self.world
             .insert_resource(crate::resources::PopulatedChunks::default());
@@ -802,7 +828,10 @@ impl Game {
                 "already in zone {current}; a breach only runs forward, so zone {zone} is unreachable"
             ));
         }
-        for _ in current..zone {
+        // The keys of the zones left behind, so a warped save is one the
+        // gate would have let through.
+        for left in current..zone {
+            self.grant_phase_key(left);
             self.enter_next_zone();
         }
         Ok(())

@@ -1089,9 +1089,26 @@ impl Game {
         // portal that travelled would make every breach after the first
         // free, bypassing its per-zone cost.
         if let Some(portal) = self.find_zone_portal_at(nx, ny) {
+            // Refused like a barrier: free, no tick, and the portal stands
+            // so the key can be found and the step tried again. This is the
+            // check that catches a portal already standing in an old save.
+            let zone = self.world.resource::<ZoneLevel>().0;
+            if let Err(why) = self.phase_key_gate(zone) {
+                self.log(why);
+                return;
+            }
             self.world.despawn(portal);
             self.enter_next_zone();
             self.tick();
+            return;
+        }
+        // Asked, never acted on: the frontend confirms and calls
+        // `escape_basin`. Refused like the portal when the gate is shut.
+        if self.find_basin_exit_at(nx, ny).is_some() {
+            match self.basin_exit_gate() {
+                Ok(()) => self.raise_basin_exit_prompt(),
+                Err(why) => self.log(why),
+            }
             return;
         }
         self.world.insert_resource(Locale::Base { x: nx, y: ny });

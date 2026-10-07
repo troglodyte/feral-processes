@@ -5,7 +5,7 @@ time a game session starts — no recompiling required. A malformed file is
 skipped with a warning logged in-game rather than crashing startup.
 
 Unlike `assets/perks/`, this **is** a content directory: a new achievement is a
-new file, not a new enum variant. The four `trigger` shapes and three `reward`
+new file, not a new enum variant. The `trigger` and `reward`
 shapes below are the whole vocabulary, and every combination of them already
 works.
 
@@ -41,16 +41,16 @@ there is no in-game reset.
     // retuned threshold leaves the wording stale until you edit it.
     description: "Reach sector 4. Everything out here was compiled against a harder spec than you were.",
 
-    // What earns it. Exactly one of the four below.
+    // What earns it. Exactly one of the shapes below.
     trigger: ZoneReached(4),
 
     // What it pays, once, at the start of the next run. Exactly one of the
-    // three below.
+    // four below.
     reward: PerkPoints(1),
 )
 ```
 
-All five fields are required.
+`id`, `name`, `description` and `trigger` are required; `reward` defaults to `None`.
 
 ### `trigger`
 
@@ -61,6 +61,9 @@ All five fields are required.
 | `CyclesSurvived(500)` | the run's clock reaches 500 cycles |
 | `BossDefeated(None)` | any boss program dies |
 | `BossDefeated(Some("overseer"))` | that species' boss dies |
+| `PhaseKeyFound(3)` | the player holds the Zone 3 Phase Key (`assets/phase_keys/`) |
+| `AllPhaseKeys` | the player holds all ten Phase Keys |
+| `StoryComplete` | the player has left the Basin through the Basin Exit |
 
 The first three are high-water marks: the game checks them every cycle, so
 they fire the moment the number is crossed and never again. A threshold of 0
@@ -84,6 +87,7 @@ riding in on this note.
 | `RandomMainStat(1)` | 1 stat point, banked at the start of the next run and spent on the Points screen |
 | `PerkPoints(1)` | 1 Perk Point, spent in the perk picker like any other |
 | `StartingProgram("scrapper")` | that species, tamed and owned, at the start of the next run |
+| `None` | nothing; recognition only. This is also what a missing `reward` means |
 
 The name is a leftover from when the reward rolled one of four stats; it now
 banks plain stat points, and the name stays because it is what the shipped
@@ -108,8 +112,8 @@ by `the_full_ladder_stays_under_its_ceiling` in
 - at most **5** total `PerkPoints`
 - at most **1** `StartingProgram`
 
-The shipped thirteen spend 7 / 5 / 1. Add a fourteenth rung paying a stat point
-and you're at the line; add a fifteenth and the engine's test suite fails.
+The shipped rungs that pay anything spend 7 / 5 / 1. Add another rung paying a stat point
+and you're at the line; add a second and the engine's test suite fails.
 
 This exists because `balance_sim.rs` — the game's balance regression gate —
 simulates a *single run's* curve and does not model the profile at all. The

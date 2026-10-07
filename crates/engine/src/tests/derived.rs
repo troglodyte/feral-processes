@@ -436,13 +436,14 @@ fn the_stat_bonus_is_what_gear_and_perks_add_to_the_derivation() {
 
     let bonus = game.stat_bonus(game.player_entity());
     let derived = game.derived_stats(player);
+    let applied = bonus.apply(derived);
     let stats = stats_of(&game, player);
-    assert!(bonus.atk > 0, "the fixture must add Atk: {bonus:?}");
-    assert_eq!(derived.atk + bonus.atk, stats.atk);
-    assert_eq!(derived.max_hp + bonus.max_hp, stats.max_hp);
-    assert_eq!(derived.mitigation + bonus.mitigation, stats.mitigation);
+    assert!(applied.atk > derived.atk, "the fixture must add Atk");
+    assert_eq!(applied.atk, stats.atk);
+    assert_eq!(applied.max_hp, stats.max_hp);
+    assert_eq!(applied.mitigation, stats.mitigation);
     assert_eq!(
-        derived.decompiler + bonus.decompiler,
+        applied.decompiler,
         game.world.get::<Decompiler>(player).unwrap().skill
     );
 }

@@ -479,6 +479,15 @@ pub struct StructureDef {
     /// plain, non-portal structure).
     #[serde(default)]
     pub zone_portal: bool,
+    /// If true, this is the Basin Exit: stepping onto it asks to leave the
+    /// Phase-Manifold Basin (`Game::escape_basin`). *Whether* it can be built
+    /// — all ten Phase Keys, zone 10 or deeper, not yet escaped — is code
+    /// (`Game::basin_exit_gate`), not data; the flag only names which
+    /// structure the rule applies to, so a mod can reskin it. A missing or
+    /// malformed file is replaced by `FALLBACK_BASIN_EXIT`.
+    /// `#[serde(default)]`.
+    #[serde(default)]
+    pub basin_exit: bool,
     /// Extra bill lines that only apply once the current zone reaches
     /// `min_zone`: `(min_zone, item, base_qty)`. Additive on top of
     /// `build_cost`, which is implicitly `min_zone: 1` — a separate field
@@ -693,6 +702,17 @@ fn default_footprint() -> u8 {
     1
 }
 
+/// The id the built-in Basin Exit is filed under.
+pub const BASIN_EXIT_ID: &str = "basin_exit";
+
+/// Used when no loaded file declares `basin_exit: true`, so the game stays
+/// completable whatever a mod does to `assets/structures/`. A literal parsed
+/// through the same `StructureDef` the files use, so serde defaults fill the
+/// rest.
+const FALLBACK_BASIN_EXIT: &str = "(id: \"basin_exit\", name: \"Basin Exit\", \
+    description: \"A way out of the Phase-Manifold Basin.\", glyph: '>', color: Cyan, \
+    build_cost: [], work: None, basin_exit: true, max_deployed: 1)";
+
 #[derive(Resource, Default)]
 pub struct StructureDb {
     structures: HashMap<StructureId, StructureDef>,
@@ -831,6 +851,13 @@ impl StructureDb {
                 }
                 Err(e) => warnings.push(format!("skipped invalid structure file {path:?}: {e}")),
             }
+        }
+        // Silent when the file is merely absent (a malformed one has already
+        // warned above), so a fixture directory of one structure stays quiet.
+        if !db.structures.values().any(|def| def.basin_exit) {
+            let fallback: StructureDef =
+                ron::from_str(FALLBACK_BASIN_EXIT).expect("the built-in Basin Exit def parses");
+            db.structures.insert(fallback.id.clone(), fallback);
         }
         Ok((db, warnings))
     }

@@ -1,0 +1,7 @@
+(
+    id: "phase_key_8",
+    name: "Salvage Vector",
+    description: "Recover the Zone 8 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(8),
+    reward: None,
+)

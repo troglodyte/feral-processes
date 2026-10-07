@@ -1,7 +1,7 @@
 (
     id: "line_driver",
     name: "Line Driver",
-    description: "Burns a Power Cell to supply the Grid even more power.",
+    description: "Burns a Power Cell to supply the Power Grid even more power.",
     glyph: 'E',
     color: Yellow,
     build_cost: [("core_fragment", 30), ("cache_grain", 6)],

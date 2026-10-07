@@ -1,6 +1,6 @@
 # Start here
 
-You are a process loose on the Grid, and everything else running out here would rather you were
+You are a process loose in the Phase-Manifold Basin, and everything else running out here would rather you were
 not. A run is one long push outward: fight what you meet, take what it drops, build a base that
 works while you walk, and breach into the next zone once you can afford the way through.
 
@@ -34,7 +34,7 @@ where everything you build has to stand. After that the run is yours.
 Read on: [the controls](controls), [what a fight is](intrusions), [zones and
 breaching](zones), [getting stronger](getting-stronger), and [your base](your-base).
 
-The Grid has its own word for most things an old-school RPG already has a name for. The second
+The Basin has its own word for most things an old-school RPG already has a name for. The second
 word, in parentheses, is the one it stands in for.
 
 - Process (player character) — you.

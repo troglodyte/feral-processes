@@ -901,10 +901,11 @@ fn the_points_screen_bonus_includes_implant_power_resist_and_crit() {
         },
     );
     install(&mut game, &["bonus"]);
-    let bonus = game.stat_bonus(player);
-    assert_eq!(bonus.max_power, 25.0);
-    assert_eq!(bonus.status_resist, 4);
-    assert!((bonus.crit - 0.05).abs() < 1e-9);
+    let derived = game.derived_stats(player);
+    let applied = game.stat_bonus(player).apply(derived);
+    assert_eq!(applied.max_power, derived.max_power + 25.0);
+    assert_eq!(applied.status_resist, derived.status_resist + 4);
+    assert!((applied.crit - derived.crit - 0.05).abs() < 1e-9);
 }
 
 #[test]

@@ -197,6 +197,7 @@ impl App {
             // No menu of its own: the pack is a single screen, so the group
             // key opens it directly.
             GameKey::Char('i') => {
+                self.inventory_tab = InventoryTab::Items;
                 self.mode = Mode::Inventory;
                 return;
             }
@@ -836,6 +837,11 @@ impl App {
     /// not routed through here — they come down a different path and have
     /// always narrated their own damage.
     pub(crate) fn after_world_action(&mut self, acted: bool, is_move_key: bool, ground_bite: i32) {
+        // Before the `acted` return: the step onto the Basin Exit is asked,
+        // never taken, so no turn passes and `acted` is false.
+        if self.open_basin_exit_prompt() {
+            return;
+        }
         if !acted {
             return;
         }

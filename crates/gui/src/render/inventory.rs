@@ -1,7 +1,8 @@
 //! The inventory list, its per-item action page, and the erase prompt.
 
+use feral_processes_app_core::InventoryTab;
 use feral_processes_engine::battle::DamageRange;
-use feral_processes_engine::views::RoutineDetailView;
+use feral_processes_engine::views::{PhaseKeysView, RoutineDetailView};
 
 use super::field::cap_entries;
 use super::popup::*;
@@ -56,13 +57,21 @@ pub(super) fn draw_erase_quantity(
 
 pub(super) fn draw_inventory(
     game: &mut Game,
+    tab: InventoryTab,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
+    if tab == InventoryTab::PhaseKeys {
+        let rows = phase_key_rows(&game.phase_keys(), selected);
+        draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
+        return;
+    }
     let status = game.player_status();
     let mut rows = vec![
+        text_row(tab_header(InventoryTab::Items)),
+        text_row(""),
         Row::TextColored(
             format!(
                 "Level {}   Attack {}   Defense {}   Power {}   Decompiler {}",
@@ -149,6 +158,73 @@ pub(super) fn draw_inventory(
     }
     draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
 }
+
+/// The tab strip both pages open with; the active page is bracketed.
+fn tab_header(active: InventoryTab) -> String {
+    let label = |tab: InventoryTab, name: &str| {
+        if tab == active {
+            format!("[{name}]")
+        } else {
+            format!(" {name} ")
+        }
+    };
+    format!(
+        "{}  {}   Tab to switch",
+        label(InventoryTab::Items, "Items"),
+        label(InventoryTab::PhaseKeys, "Phase Keys")
+    )
+}
+
+/// What a wrapped effect or flavour line is indented by under its key row.
+const PHASE_KEY_INDENT: &str = "    ";
+
+/// The Phase Keys page: the tab strip, one row per zone (always ten), the
+/// highlighted key's flavour, the count, and the key footer. Held keys carry
+/// their one-line effect on a continuation under the name, wrapped, so a
+/// long summary never runs off the popup (text never clips or wraps itself).
+fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
+    let mut rows = vec![text_row(tab_header(InventoryTab::PhaseKeys)), text_row("")];
+    for (i, slot) in view.slots.iter().enumerate() {
+        match &slot.held {
+            Some(key) => {
+                rows.push(item_row(
+                    format!("Zone {}: {}", slot.zone, key.name),
+                    selected == i,
+                ));
+                if !key.effect.is_empty() {
+                    for line in wrap_text(&key.effect, ROW_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
+                        rows.push(text_row(format!("{PHASE_KEY_INDENT}{line}")));
+                    }
+                }
+            }
+            None => rows.push(colored_item_row(
+                format!("Zone {}: not recovered", slot.zone),
+                selected == i,
+                TEXT_DIM,
+            )),
+        }
+    }
+    rows.push(text_row(""));
+    if let Some(key) = view.slots.get(selected).and_then(|slot| slot.held.as_ref()) {
+        for line in wrap_text(&key.flavour, ROW_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
+            rows.push(text_row(format!("{PHASE_KEY_INDENT}{line}")));
+        }
+        rows.push(text_row(""));
+    }
+    rows.push(text_row(format!(
+        "{} / {} recovered",
+        view.held_count,
+        feral_processes_engine::tuning::PHASE_KEY_COUNT
+    )));
+    if view.held_count == feral_processes_engine::tuning::PHASE_KEY_COUNT {
+        rows.push(text_row("The Basin Exit can be built."));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row(PHASE_KEY_HELP));
+    rows
+}
+
+const PHASE_KEY_HELP: &str = "Tab for items; Esc to close; Up/Down to read a key";
 
 /// The screen's own key footer, as its own array — `party.rs`'s
 /// `companion_help`'s reason: a width or content census can walk these
@@ -1658,5 +1734,55 @@ mod tests {
             cell.text().trim().is_empty(),
             "the unequip row drew a figure where it has nothing to rate"
         );
+    }
+
+    /// **No Phase Keys row overflows the popup**, for every shipped key held
+    /// and each row highlighted in turn (the flavour line follows the
+    /// highlight). Rows are wrapped from the data, so this is the check that
+    /// the wrap column and the popup agree at the smallest window we ship.
+    #[test]
+    fn no_phase_key_row_overflows_the_popup_body_at_1280x720() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game = Game::new(78, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let path = std::env::temp_dir().join("feral_processes_gui_phase_keys_tab.sav");
+        game.save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.player.phase_keys.held = 0x3FF;
+        save::save_to_file(&path, &data).unwrap();
+        let game = Game::load(&path, assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let view = game.phase_keys();
+        assert_eq!(view.held_count, 10);
+        let m = ui_metrics(720.0);
+        let body = popup_body_width(1280.0, PopupSize::Large, &m);
+        with_painter(|p| {
+            for selected in 0..view.slots.len() {
+                let rows = super::phase_key_rows(&view, selected);
+                for row in &rows {
+                    let text = match row {
+                        Row::Text(t) | Row::TextColored(t, _) => t,
+                        Row::Item { text, .. } => text,
+                    };
+                    let width = p.measure_ui_advance(format!("  {text}"), m.font_size);
+                    assert!(
+                        width <= body,
+                        "a Phase Keys row draws {width}px into a {body}px body: {text:?}"
+                    );
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn the_phase_keys_page_always_has_ten_zone_rows() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(79, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let rows = super::phase_key_rows(&game.phase_keys(), 0);
+        let zones = rows
+            .iter()
+            .filter(|r| matches!(r, Row::Item { text, .. } if text.starts_with("Zone ")))
+            .count();
+        assert_eq!(zones, 10);
     }
 }

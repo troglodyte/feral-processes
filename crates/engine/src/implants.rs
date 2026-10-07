@@ -67,7 +67,7 @@ pub struct ImplantStats {
 }
 
 impl ImplantStats {
-    fn is_finite(&self) -> bool {
+    pub(crate) fn is_finite(&self) -> bool {
         self.max_power.is_finite() && self.crit.is_finite()
     }
 }

@@ -1,0 +1,8 @@
+(
+    zone: 4,
+    name: "Ledger Fragment",
+    flavour: "A page of the Basin's own accounts.",
+    effect: (
+        hooks: [XpBoost(10)],
+    ),
+)

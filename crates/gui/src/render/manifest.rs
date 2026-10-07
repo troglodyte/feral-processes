@@ -105,8 +105,10 @@ pub(super) fn draw_manifest(
     painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
     painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
 
+    let escaped = game.phase_keys().story_complete;
     draw_header(
         &view,
+        escaped,
         social.is_some().then_some(nav.tab),
         l.header,
         painter,
@@ -224,6 +226,7 @@ fn meter_rows(view: &ManifestView) -> Vec<Meter> {
 
 fn draw_header(
     view: &ManifestView,
+    escaped: bool,
     tab: Option<ManifestTab>,
     rect: Rect,
     painter: &Painter,
@@ -308,6 +311,9 @@ fn draw_header(
         ManifestSubject::Player(p) => {
             tags.push(format!("Zone {}", p.zone));
             tags.push(format!("Pets {}/{}", p.pet_count, p.pet_capacity));
+            if escaped {
+                tags.push("Escaped".to_string());
+            }
         }
     }
     if !view.statuses.is_empty() {
@@ -2608,6 +2614,46 @@ mod tests {
             !footer(false).contains("[w] watch"),
             "and must not be offered where it would be refused"
         );
+    }
+
+    /// The "Escaped" marker rides the player's own header and appears only
+    /// once the story is complete.
+    #[test]
+    fn the_players_sheet_says_escaped_only_after_the_exit() {
+        use feral_processes_engine::{DifficultyMode, Game, save};
+        let m = ui_metrics(900.0);
+        let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let sheet = |escaped: bool| {
+            let mut game =
+                Game::new(7, DifficultyMode::Forgiving, &assets).expect("shipped assets");
+            let path = std::env::temp_dir().join(format!("gui_escaped_{escaped}.sav"));
+            game.save(&path).unwrap();
+            let mut data = save::load_from_file(&path).unwrap();
+            data.player.phase_keys.story_complete = escaped;
+            save::save_to_file(&path, &data).unwrap();
+            let mut game = Game::load(&path, &assets).unwrap();
+            let _ = std::fs::remove_file(&path);
+            let subject = game.manifest_subjects()[0];
+            let (_, shapes) = with_painter(|p| {
+                draw_manifest(
+                    &mut game,
+                    Some(subject),
+                    ManifestNav {
+                        cyclable: false,
+                        back_to_list: false,
+                        watchable: false,
+                        tab: ManifestTab::Stats,
+                        level_up: Some(false),
+                    },
+                    None,
+                    p,
+                    &m,
+                );
+            });
+            crate::paint::painted_text(&shapes).join("|")
+        };
+        assert!(sheet(true).contains("Escaped"));
+        assert!(!sheet(false).contains("Escaped"));
     }
 
     /// `[D]` works on every sheet — `Game::dossier_report` answers for any

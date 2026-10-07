@@ -1,0 +1,8 @@
+(
+    zone: 7,
+    name: "Overflow Shard",
+    flavour: "Room the Basin didn't know it had.",
+    effect: (
+        hooks: [RoutineSlots(1)],
+    ),
+)

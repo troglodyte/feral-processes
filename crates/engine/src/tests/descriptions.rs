@@ -1686,7 +1686,7 @@ fn loading_a_save_announces_no_sightings() {
     // freshly in view.
     assert_eq!(
         log_lines(&reloaded),
-        vec!["Session restored. Reconnecting to the Grid."],
+        vec!["Session restored. Reconnecting to the Basin."],
         "the load path replayed sightings"
     );
 }

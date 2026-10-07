@@ -10,9 +10,10 @@
 //!
 //! **The preview is `progression::derive` called**, once on the opening
 //! attributes and once on those plus the spend, from the owner's own
-//! `DerivedBase` with its perk and gear bonus (`Game::stat_bonus`) added to
-//! both - so a before->after figure is that owner's base stat now and
-//! after. It is not the HUD's effective figure: low-Power, program, buff
+//! `DerivedBase`, each passed through the owner's `StatBonus`
+//! (`Game::stat_bonus`) - the call `recompute_derived` itself makes, so held
+//! Phase Keys scale the after figure too and a before->after figure is that
+//! owner's base stat now and after. It is not the HUD's effective figure: low-Power, program, buff
 //! and emulation adjustments and the mitigation cap apply on top, outside a
 //! spend.
 
@@ -21,7 +22,7 @@ use std::collections::BTreeMap;
 use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::{AttributeDb, AttributeDef, AttributeId, DerivedStat};
 use feral_processes_engine::components::Attributes;
-use feral_processes_engine::progression::{DerivedBase, DerivedStats, derive};
+use feral_processes_engine::progression::{DerivedBase, DerivedStats, StatBonus, derive};
 use feral_processes_engine::tuning::CREATION_COST_PER_ATTRIBUTE_POINT;
 
 use crate::{App, CreationRow, GameKey, Mode};
@@ -57,9 +58,9 @@ pub struct StatAllocation {
     rows: Vec<AttributeDef>,
     db: AttributeDb,
     start: Attributes,
-    /// What perks and gear hold on top of the derivation. `None` at
-    /// creation, where neither exists yet.
-    bonus: Option<DerivedStats>,
+    /// What perks, gear, implants and keys hold on top of the derivation.
+    /// `None` at creation, where none exists yet.
+    bonus: Option<StatBonus>,
 }
 
 /// What a Points-screen key does to the highlighted row's count, as
@@ -109,9 +110,9 @@ impl StatAllocation {
         }
     }
 
-    /// Previews on top of `bonus`, `Game::stat_bonus` for a player
-    /// who already holds perks or gear.
-    pub fn with_bonus(mut self, bonus: DerivedStats) -> Self {
+    /// Previews through `bonus`, `Game::stat_bonus` for an owner who
+    /// already holds perks, gear, implants or keys.
+    pub fn with_bonus(mut self, bonus: StatBonus) -> Self {
         self.bonus = Some(bonus);
         self
     }
@@ -161,8 +162,9 @@ impl StatAllocation {
 
     /// One row per offered attribute, in id order.
     pub fn rows(&self, spent: &BTreeMap<AttributeId, u32>) -> Vec<CreationRow> {
-        let before = derive(&self.base, &self.start, &self.db);
-        let after = derive(&self.base, &self.spent_attributes(spent), &self.db);
+        let held = |derived: DerivedStats| self.bonus.map_or(derived, |b| b.apply(derived));
+        let before = held(derive(&self.base, &self.start, &self.db));
+        let after = held(derive(&self.base, &self.spent_attributes(spent), &self.db));
         self.rows
             .iter()
             .map(|def| {
@@ -180,10 +182,7 @@ impl StatAllocation {
                     value: self.value(def, spent),
                     effects: stats
                         .into_iter()
-                        .map(|stat| {
-                            let bonus = self.bonus.map_or(0.0, |b| b.get(stat));
-                            (stat, before.get(stat) + bonus, after.get(stat) + bonus)
-                        })
+                        .map(|stat| (stat, before.get(stat), after.get(stat)))
                         .collect(),
                     cost: self.purpose.cost(),
                 }

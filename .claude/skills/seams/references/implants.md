@@ -22,3 +22,10 @@
   battle, once per battle, and it costs Power. **The trap**: hooking
   `lower_hp` would also save the player from `kill_outright` (dying inside
   rock) and every non-battle source, which are meant to kill.
+- **Phase Key effects ride the implant readers, and percents go through the one `apply_key_pct`.**
+  Held keys add flat stats and hooks inside `implant_stats`, `implant_hook_total`
+  and the `DeadMansSwitch` check, and summed percents apply once where the
+  final stat is formed. Worn gear sits outside the percent because it is baked
+  at equip. **The trap**: a parallel key reader misses a call site silently (the
+  stat is just absent), and a second copy of the percent formula drifts on
+  rounding. `recompute_derived` must run whenever `held` changes.

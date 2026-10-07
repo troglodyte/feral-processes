@@ -57,6 +57,7 @@ spec resolves to a release tag.
 | `2026-10-01-conversations-design` | **built**, unplayed; path-pinned | `v0.14.3`; `ConversationRecord` in `crates/engine/src/interactions.rs`, `crates/gui/src/render/talk.rs`, `exchanges` in `assets/interactions/` |
 | `2026-10-01-sulking-behaviours-design` | **built**, unplayed; path-pinned | `note_sabotage` and `ConsumeSource::Sabotage` in `crates/engine/`; `rival_beside` in `crates/engine/src/game/base/morale.rs`; `sulking` in `crates/engine/src/interactions.rs` |
 | `2026-10-06-base-rooms-design` | **built**, unplayed; on branch `base-rooms`, unreleased; path-pinned | `crates/engine/src/rooms.rs`, `assets/rooms/`, `assets/structures/door.ron`; plan `plans/2026-10-06-base-rooms.md`; argument `seam:rooms-derived` |
+| `2026-10-07-phase-keys-endgame-design` | **built**, unplayed; on branch `phase-keys-endgame`, unreleased; path-pinned | `crates/engine/src/phase_keys.rs`, `assets/phase_keys/`, `assets/story/ending.ron`, `Mode::Ending` in app-core; plan `plans/2026-10-07-phase-keys-endgame.md`; argument `seam:phase-key-effects-ride-the-implant-readers`; balance case `held_phase_keys_never_make_a_capped_zone_harder` in `balance_sim.rs` |
 | `2026-09-16-dwarf-fortress-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-09-16-rimworld-social-survey` | research, not a spec | input to the social roadmap; nothing to build from it directly |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |

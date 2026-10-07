@@ -3,7 +3,7 @@
     name: "Handshake Echo",
     flavour: "Every program it has met still answers.",
     effect: (
-        stat_pct: (decompiler: 10),
+        stat_pct: (decompiler: 20),
         hooks: [CaptureOdds(10)],
     ),
 )

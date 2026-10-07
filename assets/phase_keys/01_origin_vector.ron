@@ -3,6 +3,6 @@
     name: "Origin Vector",
     flavour: "The coordinate you woke up at, still warm.",
     effect: (
-        stat_pct: (max_hp: 5),
+        stat_pct: (max_hp: 10),
     ),
 )

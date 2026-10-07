@@ -3,7 +3,7 @@
     name: "Last Boundary",
     flavour: "The Basin will not let you go quietly, so it can't let you end either.",
     effect: (
-        stat_pct: (max_hp: 10),
+        stat_pct: (max_hp: 20),
         signature: Some(DeadMansSwitch),
     ),
 )

@@ -3,7 +3,7 @@
     name: "Phase Spine",
     flavour: "You move half a step out of phase.",
     effect: (
-        stat_pct: (atk: 8, max_power: 10),
+        stat_pct: (atk: 15, max_power: 20),
         stats: (evasion: 5),
     ),
 )

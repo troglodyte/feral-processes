@@ -1402,7 +1402,7 @@ mod tests {
         // a retune of keys, gear or the zone curve lands here and has to be
         // re-read rather than slipping by.
         const KEYED_HP_LEFT_PERCENT: [f32; 10] =
-            [97.0, 78.0, 74.0, 72.0, 74.0, 79.0, 79.0, 75.0, 71.0, 69.0];
+            [97.0, 79.0, 75.0, 73.0, 75.0, 80.0, 80.0, 76.0, 72.0, 72.5];
         const KEYED_HP_BAND: f32 = 2.0;
         assert_eq!(
             KEYED_HP_LEFT_PERCENT.len() as u32,

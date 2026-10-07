@@ -94,6 +94,10 @@ pub(crate) struct CanvasEditor {
     /// editor's 15 and the sprite editor's 19 are different palettes, and
     /// `Canvas` itself knows nothing about which one it is drawn from.
     palette_len: u8,
+    /// Swatches per drawn row, the transparent one included. The icon
+    /// editor's single row is `palette_len + 1` wide, which is what keeps
+    /// every arrow stepping one swatch there.
+    palette_cols: u8,
     history: VecDeque<Canvas>,
     /// Whether a stroke is open — set by `begin_stroke`, cleared by
     /// `end_stroke`. While set, `record` pushes at most once — see
@@ -110,7 +114,7 @@ impl CanvasEditor {
     /// Opens on `canvas` at brush 1, cursor at the origin, the first
     /// swatch selected. `palette_len` bounds `selected` and `pick_swatch`
     /// for as long as this editor is open.
-    pub(crate) fn open(canvas: Canvas, palette_len: u8) -> CanvasEditor {
+    pub(crate) fn open(canvas: Canvas, palette_len: u8, palette_cols: u8) -> CanvasEditor {
         CanvasEditor {
             canvas,
             cursor: (0, 0),
@@ -118,6 +122,7 @@ impl CanvasEditor {
             focus: CanvasFocus::Canvas,
             brush: 1,
             palette_len,
+            palette_cols: palette_cols.max(1),
             history: VecDeque::new(),
             stroke: false,
             stroke_recorded: false,
@@ -266,8 +271,9 @@ impl CanvasEditor {
     /// One arrow press, on the focused panel alone. Neither cursor wraps.
     /// On the canvas the step is a whole brush-width and the landing
     /// coordinates are snapped to a multiple of the brush — see
-    /// `Self::snap`. The palette is a sequence rather than a grid, so both
-    /// axes walk it — back on Left and Up, forward on Right and Down.
+    /// `Self::snap`. The palette is a grid of `palette_cols` columns: Left
+    /// and Right step one swatch, Up and Down a whole row. A palette that is
+    /// one row wide is a sequence, so all four arrows step one swatch.
     fn step(&mut self, dx: i32, dy: i32) {
         match self.focus {
             CanvasFocus::Canvas => {
@@ -277,8 +283,10 @@ impl CanvasEditor {
                 self.cursor.1 = Self::snap(self.cursor.1 as i32 + dy * brush, last, brush);
             }
             CanvasFocus::Palette => {
-                self.selected =
-                    (self.selected as i32 + dx + dy).clamp(0, self.palette_len as i32) as u8;
+                let one_row = self.palette_cols as i32 > self.palette_len as i32;
+                let row_step = if one_row { 1 } else { self.palette_cols as i32 };
+                self.selected = (self.selected as i32 + dx + dy * row_step)
+                    .clamp(0, self.palette_len as i32) as u8;
             }
         }
     }

@@ -1,6 +1,6 @@
 //! The two dev-only Sprite Forge screens: `Mode::SpritePicker` (every name
 //! the map can draw a sprite for, and its art state) and `Mode::SpriteEditor`
-//! (`canvas::draw_canvas_grid`, `canvas::draw_swatch_row` and a live preview
+//! (`canvas::draw_canvas_grid`, `canvas::draw_swatch_grid` and a live preview
 //! cell). Both close `render::tests::every_screen_draws_a_refusal_exactly_once`'s
 //! two undrawn entries — see `render/mod.rs::ALL_MODES`.
 //!
@@ -222,7 +222,6 @@ struct EditorGeometry {
     cell: f32,
     palette_label_y: f32,
     palette: Rect,
-    swatch: f32,
     preview_label_y: f32,
     preview: Rect,
     footer_y: f32,
@@ -238,6 +237,7 @@ fn editor_geometry(
     m: &Metrics,
     edge: usize,
     palette_len: usize,
+    palette_cols: usize,
     zoom: u16,
 ) -> EditorGeometry {
     let gap = m.line_height * SPRITE_SECTION_GAP_LINES;
@@ -259,18 +259,19 @@ fn editor_geometry(
     // `icon_editor.rs::SWATCH_LINES`, which shipped 120px past `canvas.w`
     // for a whole task before a test caught it (Task 6's report). Deriving
     // the swatch size from the width it must fit closes that class of bug
-    // by construction: whatever `palette_len` is, the strip cannot disagree
+    // by construction: whatever `palette_len` is, the grid cannot disagree
     // with `canvas.w` about how wide a swatch is allowed to be.
-    // `draw_swatch_row`'s own gap is a third of the swatch
-    // (`canvas::SWATCH_GAP_RATIO`), so the strip's total width is
-    // `swatch * (n + (n - 1) / 3)`, with `n` counting the transparent
-    // swatch as well as the palette.
+    // `draw_swatch_grid`'s own gap is a third of the swatch
+    // (`canvas::SWATCH_GAP_RATIO`), so a row's total width is
+    // `swatch * (cols + (cols - 1) / 3)`.
     let target_w = canvas.w - m.inset * 2.0;
-    let n = canvas::swatch_count(palette_len) as f32;
-    let swatch = target_w / (n + (n - 1.0) / 3.0);
-    let swatch_gap = swatch / 3.0;
-    let palette_w = swatch * n + swatch_gap * (n - 1.0) + m.inset * 2.0;
-    let palette_h = swatch + m.inset * 2.0;
+    let cols = palette_cols as f32;
+    let swatch = target_w / (cols + (cols - 1.0) * canvas::SWATCH_GAP_RATIO);
+    let swatch_gap = swatch * canvas::SWATCH_GAP_RATIO;
+    let rows = canvas::swatch_rows(canvas::swatch_count(palette_len), palette_cols);
+    let grid_h = swatch * rows as f32 + swatch_gap * (rows - 1) as f32;
+    let palette_w = swatch * cols + swatch_gap * (cols - 1.0) + m.inset * 2.0;
+    let palette_h = grid_h + m.inset * 2.0;
     let palette = Rect::new(
         (w - palette_w) / 2.0,
         palette_label_y + m.gap,
@@ -278,16 +279,13 @@ fn editor_geometry(
         palette_h,
     );
 
-    let preview_label_y = palette.y + palette.h + gap + m.line_height;
+    // Beside the canvas rather than under the palette: the palette grid is
+    // four rows tall, and a column of three panels no longer fits 720px.
+    let preview_label_y = canvas_label_y;
     let (tile_px, _) = map_cell(zoom);
-    let preview = Rect::new(
-        (w - tile_px) / 2.0,
-        preview_label_y + m.gap,
-        tile_px,
-        tile_px,
-    );
+    let preview = Rect::new(canvas.x + canvas.w + gap, canvas.y, tile_px, tile_px);
 
-    let footer_top = preview.y + preview.h + gap;
+    let footer_top = palette.y + palette.h + gap;
     // Measured in UI cells, `icon_editor.rs::geometry`'s pattern for a
     // screen with no popup body to wrap against.
     let columns = ((w - m.pad * 2.0) / painter.measure_ui_advance("M", m.small()))
@@ -302,7 +300,6 @@ fn editor_geometry(
         cell,
         palette_label_y,
         palette,
-        swatch,
         preview_label_y,
         preview,
         footer_y: footer_top + m.line_height,
@@ -369,6 +366,7 @@ fn draw_sprite_editor_session(
         m,
         edge,
         view.palette.len(),
+        view.palette_cols as usize,
         zoom,
     );
 
@@ -394,10 +392,29 @@ fn draw_sprite_editor_session(
     painter.rect(p.x, p.y, p.w, p.h, PANEL_BG);
     let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Palette);
     painter.rect_lines(p.x, p.y, p.w, p.h, thickness, color);
-    let palette_inner = Rect::new(p.x + m.inset, p.y + m.inset, p.w - m.inset * 2.0, g.swatch);
-    canvas::draw_swatch_row(painter, palette_inner, view.canvas.selected, view.palette);
+    let palette_inner = Rect::new(
+        p.x + m.inset,
+        p.y + m.inset,
+        p.w - m.inset * 2.0,
+        p.h - m.inset * 2.0,
+    );
+    canvas::draw_swatch_grid(
+        painter,
+        palette_inner,
+        view.palette_cols as usize,
+        view.canvas.selected,
+        view.palette,
+    );
 
-    centered_ui(painter, "Preview", g.preview_label_y, m.small(), TEXT_DIM);
+    let preview_label = "Preview";
+    let label_w = painter.measure_ui(preview_label, m.small()).width;
+    painter.ui(
+        preview_label,
+        g.preview.x + (g.preview.w - label_w) / 2.0,
+        g.preview_label_y,
+        m.small(),
+        TEXT_DIM,
+    );
     draw_preview_cell(painter, g.preview, view, hue);
 
     let mut y = g.footer_y;
@@ -500,29 +517,28 @@ pub(crate) fn cell_at(pos: (f32, f32), rect: Rect, edge: u8) -> Option<(u8, u8)>
     Some((x, y))
 }
 
-/// Resolves a pointer position to a swatch index — `draw_swatch_row`'s own
-/// 0-based drawn position, which is also the palette index
-/// (`canvas::swatch_count`). `count` is swatches drawn, not palette
-/// colours. `rect` is the exact strip
-/// `draw_swatch_row` fills, and `canvas::SWATCH_GAP_RATIO` is the same gap
-/// it draws with — a pointer landing in that gap between two swatches
-/// resolves to no hit rather than snapping to whichever is nearer, so an
-/// accidental miss between two swatches stays a miss.
-pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, count: u8) -> Option<u8> {
-    if count == 0 || pos.0 < rect.x || pos.1 < rect.y || pos.1 > rect.y + rect.h {
+/// Resolves a pointer position to a swatch index — `draw_swatch_grid`'s own
+/// row-major drawn position, which is also the palette index
+/// (`canvas::swatch_count`). `cols` is swatches per row and `count` is
+/// swatches drawn, not palette colours. `rect` is the exact grid
+/// `draw_swatch_grid` fills, sized through the same `canvas::swatch_side`
+/// and `canvas::SWATCH_GAP_RATIO` it draws with — a pointer landing in the
+/// gap between two swatches resolves to no hit rather than snapping to
+/// whichever is nearer, so an accidental miss stays a miss.
+pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, cols: u8, count: u8) -> Option<u8> {
+    if count == 0 || cols == 0 || pos.0 < rect.x || pos.1 < rect.y {
         return None;
     }
-    let swatch = rect.h;
+    let (cols, count) = (cols as usize, count as usize);
+    let swatch = canvas::swatch_side(rect.h, canvas::swatch_rows(count, cols));
     let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
-    let offset = pos.0 - rect.x;
-    let i = (offset / stride) as u8;
-    if i >= count {
+    let (dx, dy) = (pos.0 - rect.x, pos.1 - rect.y);
+    let (col, row) = ((dx / stride) as usize, (dy / stride) as usize);
+    if col >= cols || dx - col as f32 * stride > swatch || dy - row as f32 * stride > swatch {
         return None;
     }
-    if offset - i as f32 * stride > swatch {
-        return None;
-    }
-    Some(i)
+    let i = row * cols + col;
+    (i < count).then_some(i as u8)
 }
 
 /// The sprite editor's own two hit-test rects, recomputed from the exact
@@ -535,6 +551,7 @@ pub(crate) struct HitRects {
     edge: u8,
     palette: Rect,
     swatches: u8,
+    swatch_cols: u8,
 }
 
 impl HitRects {
@@ -545,7 +562,7 @@ impl HitRects {
         if let Some((x, y)) = cell_at(pos, self.canvas, self.edge) {
             return Some(PointerHit::Cell(x, y));
         }
-        swatch_at(pos, self.palette, self.swatches).map(PointerHit::Swatch)
+        swatch_at(pos, self.palette, self.swatch_cols, self.swatches).map(PointerHit::Swatch)
     }
 }
 
@@ -561,20 +578,29 @@ pub(crate) fn hit_rects(
     zoom: u16,
 ) -> HitRects {
     let edge = view.canvas.edge as usize;
-    let g = editor_geometry(painter, w, m, edge, view.palette.len(), zoom);
+    let g = editor_geometry(
+        painter,
+        w,
+        m,
+        edge,
+        view.palette.len(),
+        view.palette_cols as usize,
+        zoom,
+    );
     let side = edge as f32 * g.cell;
     let canvas = Rect::new(g.canvas.x + m.inset, g.canvas.y + m.inset, side, side);
     let palette = Rect::new(
         g.palette.x + m.inset,
         g.palette.y + m.inset,
         g.palette.w - m.inset * 2.0,
-        g.swatch,
+        g.palette.h - m.inset * 2.0,
     );
     HitRects {
         canvas,
         edge: view.canvas.edge,
         palette,
         swatches: canvas::swatch_count(view.palette.len()) as u8,
+        swatch_cols: view.palette_cols,
     }
 }
 
@@ -782,7 +808,7 @@ mod tests {
     fn the_editor_screen_fits_at_1280x720() {
         let m = crate::text::ui_metrics(CENSUS_H);
         let ((bottom, lines), _shapes) = crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 2);
+            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
             (editor_content_bottom(&g, &m), g.footer_lines.len())
         });
         assert!(
@@ -797,7 +823,7 @@ mod tests {
     fn the_editor_screen_fits_1280_wide() {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 2);
+            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
             for (name, rect) in [
                 ("canvas", g.canvas),
                 ("palette", g.palette),
@@ -826,7 +852,7 @@ mod tests {
     fn the_palette_strip_fits_under_the_canvas() {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 2);
+            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
             assert!(
                 g.palette.w <= g.canvas.w + 0.01,
                 "the palette is {}px wide under a {}px canvas",
@@ -844,13 +870,22 @@ mod tests {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
             for zoom in feral_processes_app_core::MIN_ZOOM..=feral_processes_app_core::MAX_ZOOM {
-                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), zoom);
+                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, zoom);
                 let (tile_px, _) = crate::text::map_cell(zoom);
                 assert_eq!(
                     g.preview.w, tile_px,
                     "zoom {zoom}'s preview cell is the wrong size"
                 );
                 assert_eq!(g.preview.h, tile_px);
+                assert!(
+                    g.preview.x + g.preview.w <= CENSUS_W,
+                    "zoom {zoom}'s preview runs off the window: {:?}",
+                    g.preview
+                );
+                assert!(
+                    g.preview.x >= g.canvas.x + g.canvas.w,
+                    "the preview must sit clear of the canvas panel"
+                );
             }
         });
     }
@@ -1109,22 +1144,26 @@ mod tests {
         // Two swatches, 30px side, 10px gap (`SWATCH_GAP_RATIO` = 1/3).
         let rect = Rect::new(0.0, 0.0, 70.0, 30.0);
         assert_eq!(
-            swatch_at((15.0, 15.0), rect, 2),
+            swatch_at((15.0, 15.0), rect, 2, 2),
             Some(0),
             "inside the first swatch"
         );
         assert_eq!(
-            swatch_at((35.0, 15.0), rect, 2),
+            swatch_at((35.0, 15.0), rect, 2, 2),
             None,
             "in the gap between the two swatches"
         );
         assert_eq!(
-            swatch_at((55.0, 15.0), rect, 2),
+            swatch_at((55.0, 15.0), rect, 2, 2),
             Some(1),
             "inside the second swatch"
         );
-        assert_eq!(swatch_at((-1.0, 15.0), rect, 2), None, "left of the strip");
-        assert_eq!(swatch_at((15.0, 31.0), rect, 2), None, "below the strip");
+        assert_eq!(
+            swatch_at((-1.0, 15.0), rect, 2, 2),
+            None,
+            "left of the strip"
+        );
+        assert_eq!(swatch_at((15.0, 31.0), rect, 2, 2), None, "below the strip");
     }
 
     /// `HitRects::resolve` tries the canvas rect first and the palette rect
@@ -1149,7 +1188,7 @@ mod tests {
 
     /// **The seam neither side's own test spanned.** `swatch_at` answers in
     /// drawn positions, `pick_swatch` writes `CanvasView::selected`, and
-    /// `draw_swatch_row` reads that back to outline exactly one swatch — so
+    /// `draw_swatch_grid` reads that back to outline exactly one swatch — so
     /// the only honest question is whether the outline lands on the swatch
     /// the pointer was actually over. Asked of the first drawn position (the
     /// transparent swatch), a middle one and the **last**, `SPRITE_PALETTE`'s
@@ -1163,13 +1202,15 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
         let rects = crate::paint::with_painter(|p| hit_rects(p, CENSUS_W, &m, &view, app.zoom)).0;
         let palette = rects.palette;
-        let swatch = palette.h;
+        let cols = view.palette_cols as usize;
+        let positions = canvas::swatch_count(SPRITE_PALETTE.len());
+        let swatch = canvas::swatch_side(palette.h, canvas::swatch_rows(positions, cols));
         let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
 
-        let positions = canvas::swatch_count(SPRITE_PALETTE.len());
         for i in [0usize, positions / 2, positions - 1] {
-            let left = palette.x + i as f32 * stride;
-            let pos = (left + swatch * 0.5, palette.y + swatch * 0.5);
+            let left = palette.x + (i % cols) as f32 * stride;
+            let top = palette.y + (i / cols) as f32 * stride;
+            let pos = (left + swatch * 0.5, top + swatch * 0.5);
             let hit = rects.resolve(pos).expect("inside a swatch");
             app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Down);
             app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Up);
@@ -1180,17 +1221,70 @@ mod tests {
                 .canvas
                 .selected;
             let (_, shapes) = crate::paint::with_painter(|p| {
-                canvas::draw_swatch_row(p, palette, selected, &SPRITE_PALETTE)
+                canvas::draw_swatch_grid(p, palette, 16, selected, &SPRITE_PALETTE)
             });
             let outlined =
                 crate::paint::painted_rect_stroke_boxes(&shapes, canvas::SELECTED_SWATCH_COLOR);
             assert_eq!(outlined.len(), 1, "exactly one swatch is outlined");
             assert!(
-                (outlined[0].min.x - left).abs() < 0.5,
-                "clicking swatch {i} (drawn at x={left}) must outline that swatch, \
-                 not the one at x={}",
-                outlined[0].min.x
+                (outlined[0].min.x - left).abs() < 0.5 && (outlined[0].min.y - top).abs() < 0.5,
+                "clicking swatch {i} (drawn at {left},{top}) must outline that swatch, \
+                 not the one at {:?}",
+                outlined[0].min
             );
         }
+    }
+
+    /// A 16-column grid: every swatch centre hits its own index and every
+    /// gap between swatches, in both directions, misses.
+    #[test]
+    fn swatch_at_hits_every_centre_and_misses_every_gap_in_a_16_column_grid() {
+        let (cols, count) = (16usize, 64usize);
+        let rect = Rect::new(40.0, 30.0, 16.0 * 12.0 + 15.0 * 4.0, 4.0 * 12.0 + 3.0 * 4.0);
+        let swatch = canvas::swatch_side(rect.h, 4);
+        assert!((swatch - 12.0).abs() < 1e-4);
+        let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
+        for i in 0..count {
+            let (cx, cy) = (
+                rect.x + (i % cols) as f32 * stride + swatch / 2.0,
+                rect.y + (i / cols) as f32 * stride + swatch / 2.0,
+            );
+            assert_eq!(
+                swatch_at((cx, cy), rect, 16, 64),
+                Some(i as u8),
+                "centre {i}"
+            );
+            let gap_right = (cx + stride / 2.0, cy);
+            let gap_below = (cx, cy + stride / 2.0);
+            assert_eq!(swatch_at(gap_right, rect, 16, 64), None, "gap right of {i}");
+            assert_eq!(swatch_at(gap_below, rect, 16, 64), None, "gap below {i}");
+        }
+    }
+
+    /// A short last row: a position past the final swatch is no hit.
+    #[test]
+    fn swatch_at_ignores_the_empty_tail_of_the_last_row() {
+        let rect = Rect::new(
+            0.0,
+            0.0,
+            3.0 * 10.0 + 2.0 * (10.0 / 3.0),
+            2.0 * 10.0 + 10.0 / 3.0,
+        );
+        assert_eq!(swatch_at((18.0, 15.0), rect, 3, 5), Some(4));
+        assert_eq!(swatch_at((32.0, 15.0), rect, 3, 5), None);
+    }
+
+    /// The sprite editor's whole screen, grid included, still fits inside
+    /// the window and the palette is as wide as its canvas allows.
+    #[test]
+    fn the_palette_grid_is_four_rows_of_sixteen() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let view = app.sprite_editor_view().expect("just opened");
+        assert_eq!(view.palette_cols, 16);
+        assert_eq!(
+            canvas::swatch_rows(canvas::swatch_count(view.palette.len()), 16),
+            4
+        );
     }
 }

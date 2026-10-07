@@ -155,6 +155,11 @@ fn saves_as_full_colour(canvas: &Canvas) -> bool {
     (0..edge).any(|y| (0..edge).any(|x| canvas.get(x, y) > GREY_RAMP_LEN))
 }
 
+/// Swatches per row of the sprite palette grid: 64 swatches (the transparent
+/// one and 63 colours) as four rows of sixteen, nine families of six colours
+/// reading across and the greys leading.
+const SPRITE_PALETTE_COLS: u8 = 16;
+
 /// Entries `1..=GREY_RAMP_LEN` of the sprite canvas are the grey ramp.
 const GREY_RAMP_LEN: u8 = 9;
 
@@ -179,7 +184,7 @@ impl SpriteEditor {
     /// player's own `@`: nothing filters it away before it can be saved.
     fn open(subject: String, canvas: Canvas, full_colour: Option<bool>) -> SpriteEditor {
         SpriteEditor {
-            editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8),
+            editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8, SPRITE_PALETTE_COLS),
             subject,
             full_colour,
         }
@@ -201,6 +206,7 @@ impl SpriteEditor {
             subject: self.subject.clone(),
             palette: &SPRITE_PALETTE,
             full_colour: self.full_colour(),
+            palette_cols: SPRITE_PALETTE_COLS,
         }
     }
 }
@@ -213,6 +219,9 @@ pub struct SpriteEditorView {
     /// The variant a save would write, so the preview can tint the way the
     /// map will.
     pub full_colour: bool,
+    /// Swatches per drawn row, the transparent swatch counted — the same
+    /// number the keyboard's Up and Down move by.
+    pub palette_cols: u8,
 }
 
 /// One cue for the frontend to act on. app-core queues it and forgets —
@@ -601,7 +610,7 @@ impl App {
     /// erase — on `Secondary`), a `Swatch` selects.
     ///
     /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
-    /// and that is the palette index itself**: `draw_swatch_row` draws the
+    /// and that is the palette index itself**: `draw_swatch_grid` draws the
     /// transparent swatch (index 0) first and palette entry `n` at position
     /// `n`. It used to be a `+ 1` conversion here, and getting that wrong
     /// selected the swatch left of the one outlined; with no conversion

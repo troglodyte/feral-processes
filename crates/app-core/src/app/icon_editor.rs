@@ -95,7 +95,11 @@ impl IconEditor {
     pub(crate) fn open(icon: PlayerIcon) -> Self {
         let canvas = canvas_from_icon(&icon);
         IconEditor {
-            editor: CanvasEditor::open(canvas, ICON_PALETTE.len() as u8),
+            editor: CanvasEditor::open(
+                canvas,
+                ICON_PALETTE.len() as u8,
+                ICON_PALETTE.len() as u8 + 1,
+            ),
             opened_with: icon,
         }
     }

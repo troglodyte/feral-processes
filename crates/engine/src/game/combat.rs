@@ -602,7 +602,7 @@ impl Game {
     /// `MessageLog::retain_outcomes_since_battle` keeps only `Outcome`,
     /// `Loot`, `LevelUp`, `Raid` and `Complete`, so this line is pruned the
     /// moment the fight ends and never follows the player onto the map.
-    fn log_nemesis_taunt(&mut self, hostile: Entity) {
+    pub(crate) fn log_nemesis_taunt(&mut self, hostile: Entity) {
         let Some(nemesis) = self.world.get::<Nemesis>(hostile).copied() else {
             return;
         };

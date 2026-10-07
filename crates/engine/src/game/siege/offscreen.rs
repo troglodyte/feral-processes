@@ -36,6 +36,13 @@ impl Game {
     /// standing, so there is always something for a shortfall to spend
     /// itself against, even if the shortfall itself turns out to be zero.
     pub(crate) fn resolve_siege_offscreen(&mut self) -> bool {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        self.resolve_siege_offscreen_with(pack_size(zone))
+    }
+
+    /// `resolve_siege_offscreen` for a pack of a given `strength`: a regular
+    /// siege's `pack_size(zone)`, or a nemesis band's headcount.
+    pub(crate) fn resolve_siege_offscreen_with(&mut self, strength: u32) -> bool {
         // Posted unconditionally, even when the shortfall below turns out to
         // be zero: a siege fully held off while the player was away is still
         // worth seeing on the board (correction 2).
@@ -44,8 +51,6 @@ impl Game {
             "siege",
             "A siege hits the base while you're away.",
         );
-        let zone = self.world.resource::<ZoneLevel>().0;
-        let strength = pack_size(zone);
         let staff = self.defending_base_staff();
         let defence = self.total_raid_defense()
             + turret_defense(self)

@@ -180,14 +180,25 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
 /// Despawns every `Besieger` among `members` — `restore`'s own cleanup for
 /// a save it is about to drop rather than resume, so a raider that already
 /// reloaded as an ordinary creature does not outlive the fight it was only
-/// ever a member of.
+/// ever a member of. A nemesis leader (`NemesisHome`) is the exception: it
+/// is a persistent program that only borrowed the siege, so it goes home as
+/// it would after any other end of one.
 fn despawn_stranded_besiegers(game: &mut Game, members: &[(u32, Entity, (i32, i32))]) {
     for &(_, entity, _) in members {
         if game
             .world
             .get::<crate::components::Besieger>(entity)
+            .is_none()
+        {
+            continue;
+        }
+        if game
+            .world
+            .get::<crate::components::NemesisHome>(entity)
             .is_some()
         {
+            game.nemesis_return_home(entity);
+        } else {
             game.world.despawn(entity);
         }
     }

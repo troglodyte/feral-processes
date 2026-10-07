@@ -1202,12 +1202,12 @@ impl Game {
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
         let doomed: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<
-                    (Entity, &Position),
-                    (With<Hostile>, Without<NestGuardian>, Without<Nemesis>),
-                >();
+            let mut query = self.world.query_filtered::<(Entity, &Position), (
+                With<Hostile>,
+                Without<NestGuardian>,
+                Without<Nemesis>,
+                Without<crate::components::NemesisFollower>,
+            )>();
             query
                 .iter(&self.world)
                 .filter(|(_, p)| {
@@ -1541,11 +1541,17 @@ impl Game {
                 // `Without<Besieger>` — a besieger's `Position` is a base-space
                 // cell for the length of the siege, not a zone-surface one,
                 // and it is neither ambient population nor culled the way a
-                // wild pack is.
-                let mut query = self.world.query_filtered::<
-                    (Entity, &Position),
-                    (With<Hostile>, Without<crate::components::Besieger>),
-                >();
+                // wild pack is. A nemesis and its band are filtered out here, not
+                // skipped at the despawn below: a victim chunk holding only
+                // them would never shrink the count and the loop would not
+                // end. They are exempt because a grudge that the cap could
+                // delete never gets to gather a band.
+                let mut query = self.world.query_filtered::<(Entity, &Position), (
+                    With<Hostile>,
+                    Without<crate::components::Besieger>,
+                    Without<Nemesis>,
+                    Without<crate::components::NemesisFollower>,
+                )>();
                 query
                     .iter(&self.world)
                     .map(|(e, p)| (e, (p.x.div_euclid(CHUNK_SIZE), p.y.div_euclid(CHUNK_SIZE))))

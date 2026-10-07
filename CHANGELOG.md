@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**A program that beat you can now come back with a band of its own and lay siege to your base.** Before, a nemesis only grew stronger where it stood. Now it gathers other wild programs around it, up to three followers, and once the band has mustered for long enough it marches on your base. If you are at home the fight is a real siege on your base map; if you are away it is settled off-screen at the band's size. If the leader survives, whether the siege is won or the band loses heart, it returns to where it started, one grudge worse, a rung higher in rarity, and starts gathering again. Capture the leader mid-fight and it is yours, and the march ends. Saves from before this version still load.
+
 ## 0.16.0
 
 **You can now breed two of your programs in a new Breeding Bay and raise a child that can end up stronger than either parent.** Before, the only ways to grow your roster were taming and fusing. Now you build a Breeding Bay, spend a Breeding Seed, and pick two parents (a program cannot breed with itself, and bosses cannot breed). The child hatches in about a sortie's time, arrives at your base as a level 1 program, and shows its generation on the program sheet. Some pairs have a fixed hybrid: a worm and a virus always breed a botnet, and the rest breed one parent's kind at random. The child's rolls come from its parents' with a small random nudge, and each generation of breeding raises the ceiling a little, so a deep bloodline can read above 100% on the potential line (for example "Excellent (112%)"). Both parents rest for a while afterwards but can otherwise still fight, work and be fused. A bay holding a child cannot be demolished, but a raid or siege can still destroy it, and the log names each child lost. A mod's hybrid species no longer spawns in the wild even if its file lists habitats. This changes the save format, so saves from before this version will not load.

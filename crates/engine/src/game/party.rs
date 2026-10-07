@@ -1944,6 +1944,7 @@ impl Game {
             pending_outpost_crew,
             pending_siphon,
             pending_siege_members,
+            pending_nemesis_band,
             pending_stolen_from,
             pending_ranks,
             max_rank_seen: _,
@@ -1986,6 +1987,12 @@ impl Game {
         debug_assert!(
             pending_siege_members.is_empty(),
             "a committed program is never seated in a battle"
+        );
+        // Wild-only, `pending_patrols`' own reason: only a wild body is in a
+        // nemesis band.
+        debug_assert!(
+            pending_nemesis_band.is_empty(),
+            "a refunded program is tamed"
         );
         // Wild-only, `pending_patrols`' own reason: only a besieger carries
         // `components::StolenFrom`.

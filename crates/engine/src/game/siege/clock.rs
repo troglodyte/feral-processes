@@ -40,18 +40,20 @@ impl Game {
         self.world.insert_resource(crate::resources::DevSieges(on));
     }
 
-    fn sieges_enabled(&self) -> bool {
+    pub(crate) fn sieges_enabled(&self) -> bool {
         match self.world.get_resource::<crate::resources::DevSieges>() {
             Some(dev) => dev.0,
             None => !dev_no_sieges_env(),
         }
     }
 
-    pub(crate) fn siege_check(&mut self) {
+    /// Whether a siege opened or resolved this tick, so the nemesis march
+    /// that follows can hold: one siege at a time.
+    pub(crate) fn siege_check(&mut self) -> bool {
         // Frozen rather than held at a siege point: with no accrual there is
         // no warning to fire, and switching back on resumes the banked clock.
         if !self.sieges_enabled() {
-            return;
+            return false;
         }
         let zone = self.world.resource::<ZoneLevel>().0;
         // **The sector gate is on accrual and not on firing** —
@@ -60,7 +62,7 @@ impl Game {
         // crossing into a sector that can fire would be sieged within a
         // tick or two of arriving.
         if zone < SIEGE_MIN_ZONE {
-            return;
+            return false;
         }
 
         let target = match self
@@ -87,28 +89,14 @@ impl Game {
         self.warn_of_approaching_siege(zone, target, level);
 
         if level < target {
-            return;
+            return false;
         }
 
         // **The departure from `raid_check`: three holds, not one.** Each is
         // a `return` before the reset, so the pressure a held tick built is
         // still owed and the siege waits rather than being forgiven.
-        //
-        // No base — an opening run has not earned the event yet.
-        if !self.base_is_established() {
-            return;
-        }
-        // Nothing standing to besiege — `run_raid`'s own emptiness check,
-        // asked up front rather than inside the fire, because Task 1's fire
-        // is a stub that cannot yet answer it itself.
-        if self.nothing_to_besiege() {
-            return;
-        }
-        // Another fight already running — a siege must not open, or resolve,
-        // on top of one. `Game::has_active_battle` covers both combat
-        // models in one call.
-        if self.has_active_battle() {
-            return;
+        if self.siege_holds() {
+            return false;
         }
 
         // **Fire, then reset — and only if the fire reported a siege
@@ -132,12 +120,26 @@ impl Game {
             None => self.resolve_siege_offscreen(),
         };
         if !fired {
-            return;
+            return false;
         }
         let mut pressure = self.world.resource_mut::<crate::resources::SiegePressure>();
         pressure.level = 0;
         pressure.warned = false;
         pressure.next_at = None;
+        true
+    }
+
+    /// The three conditions under which a siege waits rather than fires, shared
+    /// by the clock and a nemesis's march so the two cannot disagree on when a
+    /// base is fair game:
+    ///
+    /// - no base — an opening run has not earned the event yet;
+    /// - nothing standing to besiege — `run_raid`'s own emptiness check,
+    ///   asked up front rather than inside the fire;
+    /// - another fight already running — a siege must not open, or resolve,
+    ///   on top of one. `Game::has_active_battle` covers both combat models.
+    pub(crate) fn siege_holds(&mut self) -> bool {
+        !self.base_is_established() || self.nothing_to_besiege() || self.has_active_battle()
     }
 
     /// Whether there is nothing standing for a siege to take or break —

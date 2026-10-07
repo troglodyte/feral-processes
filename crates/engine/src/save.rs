@@ -786,6 +786,20 @@ pub struct CreatureSave {
     /// documents just above.
     #[serde(default)]
     pub nemesis_grudges: u32,
+    /// Ticks into this nemesis's `components::NemesisMuster`: how far it is
+    /// from its next recruit, or from marching once its band is full.
+    #[serde(default)]
+    pub nemesis_muster_ticks: u32,
+    /// The zone cell a nemesis marched from (`components::NemesisHome`).
+    #[serde(default)]
+    pub nemesis_home: Option<(i32, i32)>,
+    /// Which band this body belongs to, or `None` for one that is in none.
+    /// `sortie_index`'s reason: entity ids are not stable across a save, so a
+    /// follower cannot name its leader by `Entity`. At save every leader that
+    /// has followers is numbered and it and its followers all carry the
+    /// number; at load the body that is also a `Nemesis` is the leader.
+    #[serde(default)]
+    pub nemesis_band: Option<u32>,
     /// This program's hidden temperament — see
     /// `crate::disposition::Disposition`. Only meaningful for an owned
     /// program; a wild creature's is written `None` and read back nowhere,
@@ -2393,6 +2407,9 @@ mod tests {
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,
+            nemesis_muster_ticks: 0,
+            nemesis_home: None,
+            nemesis_band: None,
             equipment: Vec::new(),
             program_id: 1,
             disposition: None,

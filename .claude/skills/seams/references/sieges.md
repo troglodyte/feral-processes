@@ -122,3 +122,19 @@
   mentions sight at all. `StructureDef::swept` is the companion flag: it
   narrows the sweep's pool *without* taking `Durability` away, because
   `raidable: false` does that and would make a wall unbreakable in a siege.
+- **A nemesis leader survives its own siege.** `siege_pack` is no longer
+  always a fresh sector pack: `open_siege_with` seats either
+  `spawn_siege_pack`'s output (`open_siege`) or a nemesis band's real bodies
+  (`nemesis_march`), and the empty-pack and nobody-seated refusals live in
+  it so both callers get them — a refused fresh pack is despawned, a refused
+  band is kept. The marching leader carries `NemesisHome`, and that marker is
+  what exempts it from every place a besieger is deleted: the end-of-fight
+  besieger sweep (`Without<NemesisHome>`), the morale-break exit in
+  `siege::raiders` (it strips `Carrying`/`StolenFrom` and leaves the body
+  alive instead of despawning it) and `mark_nemeses` (its grudge is not
+  raised twice). Teardown then calls `nemesis_return_home`: marker and
+  `Besieger` removed, leader back at its home cell, `NemesisMuster` restarted
+  at 0, and `escalate_nemesis` for grudge +1 and a rarity rung. A leader the
+  player decompiled mid-fight only loses the march. Drop the exemption at any
+  one site and the leader is deleted, left wandering the base as a besieger,
+  or escalated twice.

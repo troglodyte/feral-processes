@@ -400,7 +400,14 @@ impl Game {
         // standing in something resolved the tick it arrives, and ordered
         // fixed against the sweep so a tick that fires both reads as two
         // events rather than an interleaving.
-        self.siege_check();
+        let siege_fired = self.siege_check();
+        // After the regular clock so a tick that fires both reads as two
+        // events, the regular siege first: its fight then holds the march,
+        // and one that resolved off-screen left no fight to hold it, so the
+        // tick itself does.
+        if !siege_fired {
+            self.nemesis_march_check();
+        }
         // Immediately after the ambient sweep, so the two raid sources
         // resolve in a fixed order and a tick that produces both reads as
         // two events rather than an interleaving. After `caravan_tick` for
@@ -408,6 +415,10 @@ impl Game {
         // standing in something resolved the tick it arrives.
         self.town_raid_check();
         self.nest_respawn_tick();
+        // After the nest respawn so a band recruits from the population as
+        // this tick left it, and before the pursuit step so a follower that
+        // has just been tagged is not also walked by the shared chase.
+        self.nemesis_muster();
         // Immediately after respawn: a guardian that just replaced a fallen
         // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`
         // via `nest_has_pursuers`) and should get its step the same tick it

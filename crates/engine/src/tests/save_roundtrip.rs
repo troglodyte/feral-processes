@@ -414,6 +414,11 @@ fn a_rich_program_writes_every_field_it_was_given() {
         hold_points: _,
         generation: _,
         breed_ready_at: _,
+        // Asserted by `nemesis_siege`'s band round trip, which has a band
+        // to carry; this fixture's nemesis has no followers.
+        nemesis_muster_ticks: _,
+        nemesis_home: _,
+        nemesis_band: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");

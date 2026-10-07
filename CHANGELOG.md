@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.16.1
 
 **A program that beat you can now come back with a band of its own and lay siege to your base.** Before, a nemesis only grew stronger where it stood. Now it gathers other wild programs around it, up to three followers, and once the band has mustered for long enough it marches on your base. If you are at home the fight is a real siege on your base map; if you are away it is settled off-screen at the band's size. If the leader survives, whether the siege is won or the band loses heart, it returns to where it started, one grudge worse, a rung higher in rarity, and starts gathering again. Capture the leader mid-fight and it is yours, and the march ends. Saves from before this version still load.
 

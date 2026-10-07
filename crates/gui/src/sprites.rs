@@ -352,6 +352,26 @@ pub fn install_library(app: &mut feral_processes_app_core::App) {
     app.install_sprite_library(enabled, disabled);
 }
 
+fn sprite_stem(name: &str, full_colour: bool) -> String {
+    if full_colour {
+        format!("{name}{FULL_COLOUR_SUFFIX}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// The one place a sprite's file path is derived: `<name>.png`, or
+/// `<name>.colour.png` for the colour variant, plus `.off` when disabled.
+/// Each variant is its own file, so a write never touches the other's.
+fn sprite_path(dir: &Path, name: &str, full_colour: bool, off: bool) -> PathBuf {
+    let stem = sprite_stem(name, full_colour);
+    dir.join(if off {
+        format!("{stem}.png.off")
+    } else {
+        format!("{stem}.png")
+    })
+}
+
 /// What `apply_sprite_write` did, and what `drain_writes` must therefore do
 /// next — the frontend's reload/removal half, kept out of the pure function
 /// below so that half stays testable without a bevy `AssetServer`.
@@ -362,7 +382,10 @@ enum WriteOutcome {
     Reload,
     /// A `Disable` landed; the name should come straight back out of the
     /// table rather than waiting on a load that will never happen.
-    Disabled,
+    /// `plain_remains` is true when the colour variant was disabled while
+    /// the plain `<name>.png` is still on disk: removing the name would hide
+    /// art that is still enabled, so the plain file is loaded in its place.
+    Disabled { plain_remains: bool },
     /// The write did not happen — already warned to the log; nothing else
     /// to do.
     Failed,
@@ -384,26 +407,6 @@ enum WriteOutcome {
 /// `Enable`/`Disable` each refuse — warning rather than clobbering — if
 /// their destination is already occupied, which closes the class even for a
 /// pair of files left in that state by a build that shipped before this fix.
-fn sprite_stem(name: &str, full_colour: bool) -> String {
-    if full_colour {
-        format!("{name}{FULL_COLOUR_SUFFIX}")
-    } else {
-        name.to_string()
-    }
-}
-
-/// The one place a sprite's file path is derived: `<name>.png`, or
-/// `<name>.colour.png` for the colour variant, plus `.off` when disabled.
-/// Each variant is its own file, so a write never touches the other's.
-fn sprite_path(dir: &Path, name: &str, full_colour: bool, off: bool) -> PathBuf {
-    let stem = sprite_stem(name, full_colour);
-    dir.join(if off {
-        format!("{stem}.png.off")
-    } else {
-        format!("{stem}.png")
-    })
-}
-
 fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
     let full_colour = op.full_colour();
     let path = sprite_path(dir, name, full_colour, false);
@@ -454,9 +457,21 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
                 warn!("sprite `{name}` failed to disable: {e}");
                 return WriteOutcome::Failed;
             }
-            WriteOutcome::Disabled
+            WriteOutcome::Disabled {
+                plain_remains: full_colour && sprite_path(dir, name, false, false).exists(),
+            }
         }
     }
+}
+
+fn queue_load(asset_server: &AssetServer, sprites: &mut Sprites, stem: String) {
+    let handle = asset_server
+        .load_builder()
+        .with_settings(|settings: &mut ImageLoaderSettings| {
+            settings.sampler = ImageSampler::nearest();
+        })
+        .load(format!("sprites/{stem}.png"));
+    sprites.pending.push((stem, handle));
 }
 
 /// Drains `App::take_sprite_writes`, performs the write or the rename each
@@ -491,19 +506,15 @@ pub fn drain_writes(
         let full_colour = write.op.full_colour();
         match apply_sprite_write(&dir, &name, write.op) {
             WriteOutcome::Reload => {
-                let stem = sprite_stem(&name, full_colour);
-                let handle = asset_server
-                    .load_builder()
-                    .with_settings(|settings: &mut ImageLoaderSettings| {
-                        settings.sampler = ImageSampler::nearest();
-                    })
-                    .load(format!("sprites/{stem}.png"));
-                sprites.pending.push((stem, handle));
+                queue_load(&asset_server, &mut sprites, sprite_stem(&name, full_colour))
             }
-            WriteOutcome::Disabled => {
+            WriteOutcome::Disabled { plain_remains } => {
                 // `Arc::make_mut` for `register`'s reason: the renderer may
                 // be holding a clone of the old table from this frame.
                 Arc::make_mut(&mut sprites.table).remove(&name);
+                if plain_remains {
+                    queue_load(&asset_server, &mut sprites, name);
+                }
             }
             WriteOutcome::Failed => {}
         }
@@ -797,7 +808,7 @@ mod tests {
     /// a test.
     #[test]
     fn every_shipped_sprite_snaps_within_the_bound() {
-        use feral_processes_engine::icon::{SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE};
+        use feral_processes_engine::icon::{SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE, quantise};
         let mut worst = (0.0f64, String::new());
         let mut seen = 0;
         for entry in std::fs::read_dir(shipped_sprites_dir()).unwrap() {
@@ -808,13 +819,9 @@ mod tests {
             let img = image::open(&path).unwrap().into_rgba8();
             for p in img.pixels().filter(|p| p[3] >= SPRITE_ALPHA_THRESHOLD) {
                 seen += 1;
-                let nearest = SPRITE_PALETTE
-                    .iter()
-                    .map(|&(r, g, b)| {
-                        let d = |a: u8, b: u8| (a as f64 - b as f64).powi(2);
-                        (d(p[0], r) + d(p[1], g) + d(p[2], b)).sqrt()
-                    })
-                    .fold(f64::MAX, f64::min);
+                let (r, g, b) = SPRITE_PALETTE[quantise((p[0], p[1], p[2], p[3])) as usize - 1];
+                let d = |a: u8, b: u8| (a as f64 - b as f64).powi(2);
+                let nearest = (d(p[0], r) + d(p[1], g) + d(p[2], b)).sqrt();
                 if nearest > worst.0 {
                     worst = (nearest, format!("{path:?} {:?}", p.0));
                 }
@@ -1116,7 +1123,9 @@ mod tests {
         // `t`: disable. The art moves to `.png.off`, unmodified.
         assert_eq!(
             apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false }),
-            WriteOutcome::Disabled
+            WriteOutcome::Disabled {
+                plain_remains: false
+            }
         );
         assert!(!dir.join("subject.png").exists());
         assert!(dir.join("subject.png.off").exists());
@@ -1170,7 +1179,9 @@ mod tests {
         // left under `subject.png.off` to clobber.
         assert_eq!(
             apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false }),
-            WriteOutcome::Disabled
+            WriteOutcome::Disabled {
+                plain_remains: false
+            }
         );
 
         let (enabled_final, disabled_final) = scan_library(&dir);
@@ -1267,7 +1278,12 @@ mod tests {
         let recovered = png_to_canvas(&dir.join("subject.png.off"));
         std::fs::remove_dir_all(&dir).ok();
 
-        assert_eq!(first, WriteOutcome::Disabled);
+        assert_eq!(
+            first,
+            WriteOutcome::Disabled {
+                plain_remains: false
+            }
+        );
         assert_eq!(
             second,
             WriteOutcome::Failed,
@@ -1340,6 +1356,8 @@ mod tests {
         let dir = codec_test_dir("colour_precedence");
         write_png(&dir.join("both.png"), &dot(1));
         write_png(&dir.join("both.colour.png"), &dot(12));
+        write_png(&dir.join("late.colour.png"), &dot(12));
+        write_png(&dir.join("late.png"), &dot(1));
         write_png(&dir.join("gone.png.off"), &dot(1));
         write_png(&dir.join("gone.colour.png.off"), &dot(12));
 
@@ -1354,10 +1372,42 @@ mod tests {
             }
         );
         assert_eq!(
+            enabled["late"],
+            InstalledSprite {
+                canvas: dot(12),
+                full_colour: true
+            }
+        );
+        assert_eq!(
             disabled["gone"],
             InstalledSprite {
                 canvas: dot(12),
                 full_colour: true
+            }
+        );
+    }
+
+    #[test]
+    fn disabling_colour_art_keeps_the_plain_twin_drawing() {
+        let dir = codec_test_dir("colour_disable_plain_twin");
+        write_png(&dir.join("x.colour.png"), &dot(12));
+        write_png(&dir.join("x.png"), &dot(1));
+        write_png(&dir.join("y.colour.png"), &dot(12));
+
+        let with_twin = apply_sprite_write(&dir, "x", SpriteOp::Disable { full_colour: true });
+        let without = apply_sprite_write(&dir, "y", SpriteOp::Disable { full_colour: true });
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(
+            with_twin,
+            WriteOutcome::Disabled {
+                plain_remains: true
+            }
+        );
+        assert_eq!(
+            without,
+            WriteOutcome::Disabled {
+                plain_remains: false
             }
         );
     }
@@ -1427,7 +1477,12 @@ mod tests {
         let sentinel = std::fs::read(dir.join("x.png.off")).unwrap();
         std::fs::remove_dir_all(&dir).ok();
 
-        assert_eq!(disable, WriteOutcome::Disabled);
+        assert_eq!(
+            disable,
+            WriteOutcome::Disabled {
+                plain_remains: false
+            }
+        );
         assert_eq!(after_disable, (false, true));
         assert_eq!(enable, WriteOutcome::Reload);
         assert_eq!(after_enable, (true, false));

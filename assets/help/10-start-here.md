@@ -32,3 +32,29 @@ where everything you build has to stand. After that the run is yours.
 
 Read on: [the controls](controls), [what a fight is](intrusions), [zones and
 breaching](zones), [getting stronger](getting-stronger), and [your base](your-base).
+
+The Grid has its own word for most things an old-school RPG already has a name for. The second
+word, in parentheses, is the one it stands in for.
+
+- Process (player character) — you.
+- Program (monster) — everything else alive out here. One you decompile becomes a companion.
+- Integrity (hit points) — your health.
+- Flatline (death) and reboot (respawn) — a reboot is the Forgiving setting's second chance.
+- Power (food and mana) — it drains as you go and pays for every routine.
+- Recharge (rest) — fills Integrity and Power.
+- Routine (spell or skill) — an ability sitting in a slot.
+- Perk (talent) — a permanent upgrade bought with the points each level gives you.
+- Intrusion (combat encounter) — a fight.
+- Decompile (tame) — turn a beaten program into one of yours. ICE is what resists it, and an ICE
+  Breaker (taming item) is what it costs.
+- Roster (party) — the programs you hold.
+- Manifest (character sheet) — one program's stats and kit.
+- Zone (level) — one overworld map. Breaching (taking the stairs down) is the one-way step to the
+  next, and Portal Fragments are its price.
+- The Stack (dungeon) — what lies underneath a zone. A frame is one dungeon floor, a cache is a
+  treasure chest, and the lair is the boss room.
+- Nest (monster spawner) — it replaces its guardians as they fall until you destroy it.
+- Credits (gold) — what traders take, and the only currency that survives a breach.
+- Core Fragments (crafting materials) — what your base builds with.
+- Settlement (town) — a place to trade.
+- Contract (quest) — a job taken from a Contract Broker.

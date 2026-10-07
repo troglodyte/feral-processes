@@ -521,13 +521,9 @@ fn tint_multiply(c: Color, t: Color) -> Color {
 /// rather than a standalone tool actually shows up on screen: a near-white
 /// canvas comes out hued, and a saturated one goes muddy, right here. A
 /// colour sprite (`view.full_colour`) is tinted the way the map tints it,
-/// through `colour_sprite_tint`.
+/// through `sprite_tint`.
 fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue: Color) {
-    let hue = if view.full_colour {
-        crate::paint::colour_sprite_tint(hue)
-    } else {
-        hue
-    };
+    let hue = crate::paint::sprite_tint(hue, view.full_colour);
     painter.rect(rect.x, rect.y, rect.w, rect.h, PANEL_BG);
 
     let edge = view.canvas.edge as usize;

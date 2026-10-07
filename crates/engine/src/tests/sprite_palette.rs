@@ -3,7 +3,9 @@
 //! `icon.rs`'s doc comments for why this is a **separate** palette from
 //! `ICON_PALETTE` rather than an extension of it.
 
-use crate::icon::{ICON_PALETTE, SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE, quantise, sprite_rgba};
+use crate::icon::{
+    GREY_RAMP_LEN, ICON_PALETTE, SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE, quantise, sprite_rgba,
+};
 
 /// The dev sprite editor's own round trip: painting a palette colour and
 /// reading a file back must land on the same swatch, or every file the
@@ -66,6 +68,7 @@ fn icon_palette_stays_at_exactly_fifteen_entries_because_that_is_the_save_format
 #[test]
 fn the_first_nine_entries_are_the_original_grey_ramp() {
     let ramp = [0x1c, 0x48, 0x70, 0x94, 0xb4, 0xd0, 0xe6, 0xf7, 0xff];
+    assert_eq!(ramp.len(), GREY_RAMP_LEN as usize);
     for (i, v) in ramp.into_iter().enumerate() {
         assert_eq!(SPRITE_PALETTE[i], (v, v, v), "grey step {i}");
     }

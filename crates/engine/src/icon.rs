@@ -48,6 +48,10 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
 /// would silently decode back as transparent on load. This palette answers
 /// to no save format, so it is free to be wider.
 ///
+/// Entries `1..=GREY_RAMP_LEN` of a sprite canvas (palette entries
+/// `0..GREY_RAMP_LEN`) are the grey ramp; a pixel past it carries a hue.
+pub const GREY_RAMP_LEN: u8 = 9;
+
 /// Ordered ramp first, hues after: a nine-step **value** ramp, biased
 /// bright, then nine hue families of six shades each, dark to light. The
 /// families are fitted to the hues the shipped art in `assets/sprites/`

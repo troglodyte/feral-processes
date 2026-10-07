@@ -170,6 +170,16 @@ pub fn colour_sprite_tint(color: Color) -> Color {
     Color::new(value, value, value, color.a)
 }
 
+/// The tint a sprite is drawn with: its own multiplying tint, or the grey
+/// `colour_sprite_tint` for the full-colour variant.
+pub fn sprite_tint(color: Color, full_colour: bool) -> Color {
+    if full_colour {
+        colour_sprite_tint(color)
+    } else {
+        color
+    }
+}
+
 /// The sprites the frontend has loaded, by name.
 ///
 /// A `TextureId` is a cheap handle egui resolves at paint time; the pixels
@@ -436,11 +446,7 @@ impl Painter {
         let Some((texture, full_colour)) = self.sprites.get(name) else {
             return false;
         };
-        let color = if full_colour {
-            colour_sprite_tint(color)
-        } else {
-            color
-        };
+        let color = sprite_tint(color, full_colour);
         self.painter.image(
             texture,
             rect_of(x, y, size, size),

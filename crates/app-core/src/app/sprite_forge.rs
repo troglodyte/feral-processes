@@ -16,7 +16,7 @@ use std::path::Path;
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
+use feral_processes_engine::icon::{Canvas, GREY_RAMP_LEN, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
 
@@ -159,9 +159,6 @@ fn saves_as_full_colour(canvas: &Canvas) -> bool {
 /// one and 63 colours) as four rows of sixteen, nine families of six colours
 /// reading across and the greys leading.
 const SPRITE_PALETTE_COLS: u8 = 16;
-
-/// Entries `1..=GREY_RAMP_LEN` of the sprite canvas are the grey ramp.
-const GREY_RAMP_LEN: u8 = 9;
 
 /// One `Mode::SpriteEditor` session — `CanvasEditor`'s shared mechanics
 /// plus which subject this is. The subject is a name rather than an index

@@ -213,9 +213,8 @@ struct SpritePointer {
     active: Option<PointerButton>,
     last_hit: Option<PointerHit>,
     /// Whether a frame with no button held has been seen since this tracker
-    /// was reset. A press already down when the editor opens — the double
-    /// click that opened it from the picker — must not paint the cell it
-    /// happens to be over.
+    /// was reset. A button still held when the editor opens by keyboard
+    /// must not paint the cell it happens to be over.
     armed: bool,
 }
 

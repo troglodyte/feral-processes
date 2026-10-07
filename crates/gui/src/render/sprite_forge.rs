@@ -436,8 +436,15 @@ fn tint_multiply(c: Color, t: Color) -> Color {
 /// same multiplying tint `Painter::sprite` would apply to a texture — this
 /// is the one place the argument for putting Sprite Forge in the game
 /// rather than a standalone tool actually shows up on screen: a near-white
-/// canvas comes out hued, and a saturated one goes muddy, right here.
+/// canvas comes out hued, and a saturated one goes muddy, right here. A
+/// colour sprite (`view.full_colour`) is tinted the way the map tints it,
+/// through `colour_sprite_tint`.
 fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue: Color) {
+    let hue = if view.full_colour {
+        crate::paint::colour_sprite_tint(hue)
+    } else {
+        hue
+    };
     painter.rect(rect.x, rect.y, rect.w, rect.h, PANEL_BG);
     painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
 
@@ -942,6 +949,41 @@ mod tests {
             1,
             "the near-white preview pixel must come out in the subject's own hue"
         );
+    }
+
+    /// The preview must show what the map will draw: a colour sprite takes a
+    /// grey tint at the subject hue's brightest channel, not the hue.
+    #[test]
+    fn a_colour_sprite_previews_with_the_maps_grey_tint_not_the_hue() {
+        use feral_processes_app_core::InstalledSprite;
+        use feral_processes_engine::icon::Canvas;
+        let mut app = sprite_forge_app();
+        let mut art = Canvas::new(16);
+        art.set(0, 0, 9); // pure white
+        let mut enabled = std::collections::HashMap::new();
+        enabled.insert(
+            "cipher".to_string(),
+            InstalledSprite {
+                canvas: art,
+                full_colour: true,
+            },
+        );
+        app.install_sprite_library(enabled, Default::default());
+        let index = app
+            .sprite_subjects()
+            .iter()
+            .position(|s| s.name == "cipher")
+            .unwrap();
+        open_editor(&mut app, index);
+
+        let hue = glyph_color(GlyphColor::Cyan);
+        let grey = crate::paint::colour_sprite_tint(hue);
+        assert_ne!(grey, hue, "the fixture must have a hue to drop");
+
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        assert_eq!(crate::paint::painted_rect_fill_count(&shapes, grey), 1);
+        assert_eq!(crate::paint::painted_rect_fill_count(&shapes, hue), 0);
     }
 
     /// A subject with no session open (unreachable through the real picker,

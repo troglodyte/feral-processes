@@ -1,0 +1,7 @@
+(
+    id: "phase_key_2",
+    name: "Drift Compass",
+    description: "Recover the Zone 2 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(2),
+    reward: None,
+)

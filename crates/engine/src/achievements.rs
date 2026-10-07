@@ -68,12 +68,18 @@ pub enum Trigger {
     /// one. Fleeing earns nothing — the record is written at the one point
     /// that knows the boss actually died.
     BossDefeated(Option<String>),
+    /// The player holds this zone's Phase Key.
+    PhaseKeyFound(u32),
+    /// The player holds every Phase Key.
+    AllPhaseKeys,
+    /// The player has left the Basin — `PhaseKeys::story_complete`.
+    StoryComplete,
 }
 
 /// What a rung pays, once, at the start of the next run. Exactly one per
 /// achievement, which is what makes the total power bounded by a finite
 /// authored list and therefore assertable — see `tuning::MAX_PROFILE_*`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reward {
     /// `n` stat points banked at the start of the next run, for the player
     /// to spend on the Points screen. Named for the roll it used to make;
@@ -85,6 +91,10 @@ pub enum Reward {
     /// The next run begins with this species tamed and owned. Whether the id
     /// names a real species is checked where `SpeciesDb` is in hand, not here.
     StartingProgram(String),
+    /// Recognition only. Several rungs are worth earning without being worth
+    /// permanent power, and the ceiling below counts what a ladder pays.
+    #[default]
+    None,
 }
 
 /// One authored rung.
@@ -96,6 +106,7 @@ pub struct AchievementDef {
     /// derived from the trigger, so a modder controls how their rung reads.
     pub description: String,
     pub trigger: Trigger,
+    #[serde(default)]
     pub reward: Reward,
 }
 
@@ -374,6 +385,7 @@ pub fn profile_summary(profile: &Profile, db: &AchievementDb) -> Vec<String> {
         match reward {
             Reward::RandomMainStat(n) => stat_points += n,
             Reward::PerkPoints(n) => perk_points += n,
+            Reward::None => {}
             Reward::StartingProgram(species) => {
                 match programs.iter_mut().find(|(s, _)| *s == species) {
                     Some((_, count)) => *count += 1,
@@ -407,6 +419,7 @@ fn reward_label(reward: &Reward) -> String {
         Reward::RandomMainStat(n) => format!("+{n} stat point"),
         Reward::PerkPoints(n) => format!("+{n} Perk Point"),
         Reward::StartingProgram(species) => format!("start with a {species}"),
+        Reward::None => "no reward".to_string(),
     }
 }
 
@@ -517,7 +530,7 @@ mod tests {
         let rows = report(&db, &Profile::default());
         assert_eq!(
             rows.len(),
-            13,
+            25,
             "the screen lists every rung, earned or not — the point is showing what is left"
         );
         assert!(rows.iter().all(|r| !r.reward.is_empty()));
@@ -562,7 +575,7 @@ mod tests {
             warnings.is_empty(),
             "shipped achievements should all parse: {warnings:?}"
         );
-        assert_eq!(db.iter().count(), 13);
+        assert_eq!(db.iter().count(), 25);
         for def in db.iter() {
             assert!(!def.name.is_empty(), "{} needs a name", def.id);
             assert!(
@@ -630,6 +643,7 @@ mod tests {
                 Reward::RandomMainStat(n) => stat_points += n,
                 Reward::PerkPoints(n) => perk_points += n,
                 Reward::StartingProgram(_) => programs += 1,
+                Reward::None => {}
             }
         }
         assert!(

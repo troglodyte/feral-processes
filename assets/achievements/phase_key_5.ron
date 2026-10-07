@@ -1,0 +1,7 @@
+(
+    id: "phase_key_5",
+    name: "Damping Plate",
+    description: "Recover the Zone 5 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(5),
+    reward: None,
+)

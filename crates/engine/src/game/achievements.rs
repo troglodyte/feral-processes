@@ -12,6 +12,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::achievements::{AchievementDb, Earned, Profile, Trigger};
+use crate::components::{PhaseKeys, Player};
 use crate::notifications::Notification;
 use crate::resources::{
     DifficultyMode, GameClock, Locale, MessageKind, MessageLog, PendingProfileWrites, RunFeats,
@@ -54,7 +55,9 @@ pub fn achievement_system(
     mut pending: ResMut<PendingProfileWrites>,
     mut notifications: ResMut<crate::resources::Notifications>,
     mut log: ResMut<MessageLog>,
+    keys: Query<&PhaseKeys, With<Player>>,
 ) {
+    let keys = keys.single().ok().copied().unwrap_or_default();
     let RunStanding {
         clock,
         zone,
@@ -74,6 +77,9 @@ pub fn achievement_system(
             Trigger::CyclesSurvived(n) => clock.tick >= *n,
             Trigger::BossDefeated(None) => !feats.bosses_defeated.is_empty(),
             Trigger::BossDefeated(Some(species)) => feats.bosses_defeated.contains(species),
+            Trigger::PhaseKeyFound(zone) => keys.holds(*zone),
+            Trigger::AllPhaseKeys => keys.count() == crate::tuning::PHASE_KEY_COUNT,
+            Trigger::StoryComplete => keys.story_complete,
         };
         if !met {
             continue;

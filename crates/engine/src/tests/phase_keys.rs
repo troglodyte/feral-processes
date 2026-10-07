@@ -410,3 +410,335 @@ fn held_misses_and_the_story_flag_survive_a_save_and_load() {
     );
     assert_eq!(stats(&loaded).atk, before.atk);
 }
+
+// ---- drops, gate, warp, achievements ----
+
+fn guardian_species(game: &Game) -> String {
+    game.species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("a boss species ships in assets/species")
+        .id
+}
+
+fn corpse(game: &mut Game, species: &str) -> Entity {
+    game.world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Position { x: 0, y: 0 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                mitigation: 1,
+            },
+        ))
+        .id()
+}
+
+fn stand_underground(game: &mut Game) {
+    game.world.insert_resource(Locale::Stack {
+        depth: 1,
+        frames: 6,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    });
+}
+
+/// One guardian kill in the Stack. Returns whether the zone's key is held
+/// afterwards.
+fn kill_guardian(game: &mut Game) -> bool {
+    stand_underground(game);
+    let species = guardian_species(game);
+    let wild = corpse(game, &species);
+    game.award_loot(wild, 0.0);
+    let zone = game.world.resource::<ZoneLevel>().0;
+    game.world
+        .get::<PhaseKeys>(game.player_entity())
+        .unwrap()
+        .holds(zone)
+}
+
+fn keys(game: &Game) -> PhaseKeys {
+    *game.world.get::<PhaseKeys>(game.player_entity()).unwrap()
+}
+
+#[test]
+fn the_roll_is_a_pure_function_of_its_inputs() {
+    use crate::game::phase_keys::phase_key_roll;
+    for seed in [0, 1, 4471, u32::MAX] {
+        for zone in 1..=10 {
+            for kill in 0..4 {
+                assert_eq!(
+                    phase_key_roll(seed, zone, kill),
+                    phase_key_roll(seed, zone, kill)
+                );
+            }
+        }
+    }
+    let hits = (0..2000).filter(|&seed| phase_key_roll(seed, 3, 0)).count();
+    assert!(
+        (500..800).contains(&hits),
+        "about a third of 2000 seeds should drop, got {hits}"
+    );
+}
+
+#[test]
+fn the_third_eligible_kill_always_drops() {
+    for seed in 0..40 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let mut kills = 0;
+        while !kill_guardian(&mut game) {
+            kills += 1;
+            assert!(
+                kills < crate::tuning::PHASE_KEY_GUARANTEE_KILLS,
+                "seed {seed}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_miss_is_counted_and_a_held_key_is_not_rolled_again() {
+    let mut game = new_game();
+    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let first_drops = crate::game::phase_keys::phase_key_roll(seed, 1, 0);
+    let held = kill_guardian(&mut game);
+    assert_eq!(held, first_drops);
+    assert_eq!(keys(&game).misses, u32::from(!first_drops));
+    if held {
+        let before = keys(&game);
+        kill_guardian(&mut game);
+        assert_eq!(keys(&game), before, "a held key is ineligible");
+    }
+}
+
+#[test]
+fn a_surface_boss_never_drops_a_key() {
+    let mut game = new_game();
+    let species = guardian_species(&game);
+    for _ in 0..5 {
+        let wild = corpse(&mut game, &species);
+        game.award_loot(wild, 0.0);
+    }
+    assert_eq!(keys(&game), PhaseKeys::default());
+}
+
+#[test]
+fn no_key_drops_past_zone_ten() {
+    let mut game = new_game();
+    game.world.resource_mut::<ZoneLevel>().0 = 11;
+    for _ in 0..5 {
+        kill_guardian(&mut game);
+    }
+    assert_eq!(keys(&game), PhaseKeys::default());
+}
+
+#[test]
+fn a_drop_raises_the_screen_and_the_log_line() {
+    let mut game = new_game();
+    while !kill_guardian(&mut game) {}
+    let mut screens = Vec::new();
+    while let Some(n) = game
+        .world
+        .resource_mut::<crate::resources::Notifications>()
+        .pop()
+    {
+        screens.push(n);
+    }
+    let screen = screens
+        .iter()
+        .find(|n| n.title == "Phase Key Recovered")
+        .expect("the drop should queue its modal screen");
+    assert!(screen.body.contains("Origin Vector"), "{}", screen.body);
+    assert!(
+        screen.detail.is_some(),
+        "the effect line rides as the detail"
+    );
+    assert!(
+        game.message_log(60)
+            .iter()
+            .any(|l| l.text.contains("Origin Vector")),
+        "the drop should write a log line naming the key"
+    );
+}
+
+#[test]
+fn breaching_clears_the_miss_counter() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    game.world.get_mut::<PhaseKeys>(player).unwrap().misses = 2;
+    game.enter_next_zone();
+    assert_eq!(keys(&game).misses, 0);
+}
+
+#[test]
+fn the_same_seed_gives_the_same_outcomes() {
+    let run = || {
+        let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let mut outcomes = Vec::new();
+        for zone in 1..=4 {
+            for _ in 0..3 {
+                outcomes.push((zone, keys(&game).misses, kill_guardian(&mut game)));
+            }
+            game.enter_next_zone();
+        }
+        outcomes
+    };
+    assert_eq!(run(), run());
+}
+
+#[test]
+fn the_roll_leaves_the_rng_stream_alone() {
+    let mut draws = Vec::new();
+    for pre_held in [false, true] {
+        let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        if pre_held {
+            game.grant_phase_key(1);
+        }
+        kill_guardian(&mut game);
+        let next: u64 = game.world.resource_mut::<GameRng>().0.random();
+        draws.push(next);
+    }
+    assert_eq!(
+        draws[0], draws[1],
+        "rolling for a key must not consume a draw from the shared stream"
+    );
+}
+
+fn portal_game() -> Game {
+    let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(crate::items::ids::PORTAL_FRAGMENT), 200);
+    stand_in_base(&mut game);
+    game
+}
+
+#[test]
+fn the_gate_is_open_past_zone_ten_and_for_a_held_key() {
+    let mut game = new_game();
+    assert!(game.phase_key_gate(1).is_err());
+    assert!(game.phase_key_gate(11).is_ok());
+    game.grant_phase_key(1);
+    assert!(game.phase_key_gate(1).is_ok());
+    assert!(game.phase_key_gate(2).is_err());
+}
+
+#[test]
+fn a_portal_cannot_be_built_without_the_key() {
+    let mut game = portal_game();
+    let err = game.place_structure("portal", 1, 0, None).unwrap_err();
+    assert!(err.contains("Zone 1 Phase Key"), "{err}");
+    assert!(find_structure_by_kind(&mut game, "portal").is_none());
+
+    game.grant_phase_key(1);
+    place_now(&mut game, "portal", 1, 0).unwrap();
+}
+
+#[test]
+fn a_portal_builds_freely_in_zone_eleven() {
+    let mut game = portal_game();
+    game.world.resource_mut::<ZoneLevel>().0 = 11;
+    place_now(&mut game, "portal", 1, 0).unwrap();
+}
+
+#[test]
+fn stepping_onto_a_standing_portal_without_the_key_is_refused() {
+    let mut game = portal_game();
+    game.grant_phase_key(1);
+    place_now(&mut game, "portal", 1, 0).unwrap();
+    // An old save can hold a portal the build gate never saw.
+    let player = game.player_entity();
+    game.world.get_mut::<PhaseKeys>(player).unwrap().held = 0;
+    let tick = game.world.resource::<GameClock>().tick;
+
+    game.move_player(1, 0);
+
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1, "no breach");
+    assert!(
+        find_structure_by_kind(&mut game, "portal").is_some(),
+        "the refused portal is not consumed"
+    );
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        tick,
+        "a refusal is free"
+    );
+    assert!(
+        game.message_log(20)
+            .iter()
+            .any(|l| l.text.contains("Zone 1 Phase Key")),
+        "the refusal says why"
+    );
+}
+
+#[test]
+fn warping_grants_the_key_of_every_zone_left_behind() {
+    let mut game = new_game();
+    game.warp_to_zone(4).unwrap();
+    let held = keys(&game);
+    assert_eq!(held.zones().collect::<Vec<_>>(), vec![1, 2, 3]);
+    assert_eq!(held.misses, 0);
+}
+
+#[test]
+fn the_phase_key_achievements_fire() {
+    use crate::achievements::{AchievementDb, AchievementId, Profile};
+    let mut game = new_game();
+    let earned = |game: &Game, id: &str| {
+        game.world
+            .resource::<Profile>()
+            .contains(&AchievementId::from(id))
+    };
+    assert!(
+        game.world
+            .resource::<AchievementDb>()
+            .get(&AchievementId::from("phase_key_3"))
+            .is_some()
+    );
+    game.tick();
+    assert!(!earned(&game, "phase_key_3"));
+
+    game.grant_phase_key(3);
+    game.tick();
+    assert!(earned(&game, "phase_key_3"));
+    assert!(!earned(&game, "phase_key_1"));
+    assert!(!earned(&game, "phase_keys_all"));
+
+    for zone in 1..=10 {
+        game.grant_phase_key(zone);
+    }
+    game.tick();
+    assert!(earned(&game, "phase_key_10"));
+    assert!(earned(&game, "phase_keys_all"));
+    assert!(!earned(&game, "basin_escaped"));
+
+    let player = game.player_entity();
+    game.world
+        .get_mut::<PhaseKeys>(player)
+        .unwrap()
+        .story_complete = true;
+    game.tick();
+    assert!(earned(&game, "basin_escaped"));
+}
+
+#[test]
+fn every_shipped_key_has_an_achievement_that_pays_nothing() {
+    use crate::achievements::{AchievementDb, AchievementId, Reward, Trigger};
+    let game = new_game();
+    let db = game.world.resource::<AchievementDb>();
+    for zone in 1..=10u32 {
+        let def = db
+            .get(&AchievementId::from(format!("phase_key_{zone}").as_str()))
+            .unwrap_or_else(|| panic!("no achievement for zone {zone}"));
+        assert_eq!(def.trigger, Trigger::PhaseKeyFound(zone));
+        assert_eq!(def.reward, Reward::None);
+    }
+}

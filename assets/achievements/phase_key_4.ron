@@ -1,0 +1,7 @@
+(
+    id: "phase_key_4",
+    name: "Ledger Fragment",
+    description: "Recover the Zone 4 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(4),
+    reward: None,
+)

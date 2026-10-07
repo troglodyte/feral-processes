@@ -837,6 +837,12 @@ pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result
 /// The exempt structures — the Home — are passed `None`, which is what
 /// `structure_needs_program` answers and what a frontend would do.
 pub(super) fn file_build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result<(), String> {
+    if kind == "portal" {
+        // As `breach_through_a_portal`: a fixture builds the doorway, and
+        // whether it may is `tests::phase_keys`' question.
+        let zone = game.world.resource::<ZoneLevel>().0;
+        game.grant_phase_key(zone);
+    }
     let program = build_program(game, &kind.to_string(), 1);
     game.place_structure(kind, dx, dy, program)
 }
@@ -1618,6 +1624,10 @@ pub(super) fn stand_player_at_post(game: &mut Game, structure: Entity) {
 /// and spawned rather than deployed because a Portal costs Portal Fragments
 /// this is never trying to measure.
 pub(super) fn breach_through_a_portal(game: &mut Game) {
+    // The gate is `tests::phase_keys`' to measure; a breach test is about
+    // what the breach does.
+    let zone = game.world.resource::<ZoneLevel>().0;
+    game.grant_phase_key(zone);
     game.lay_starting_pocket();
     game.world.spawn((
         Structure {

@@ -3518,6 +3518,7 @@ impl Game {
                     self.world.get_mut::<Perks>(player).unwrap().points += n;
                     perk_points += n;
                 }
+                Reward::None => {}
                 Reward::StartingProgram(species_id) => match self
                     .grant_starting_program(&species_id)
                 {

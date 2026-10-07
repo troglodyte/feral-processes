@@ -1,0 +1,7 @@
+(
+    id: "phase_key_1",
+    name: "Origin Vector",
+    description: "Recover the Zone 1 Phase Key from the guardian at the bottom of a Stack.",
+    trigger: PhaseKeyFound(1),
+    reward: None,
+)

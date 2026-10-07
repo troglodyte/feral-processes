@@ -768,6 +768,14 @@ impl Game {
             self.notify(crate::notifications::NotificationKind::SweepsBegin);
         }
 
+        // Breach is one-way and gated on the key, so one counter serves.
+        if let Some(mut keys) = self
+            .world
+            .get_mut::<crate::components::PhaseKeys>(self.player_entity())
+        {
+            keys.misses = 0;
+        }
+
         self.world.insert_resource(StackMemory::default());
         self.world
             .insert_resource(crate::resources::PopulatedChunks::default());
@@ -802,7 +810,10 @@ impl Game {
                 "already in zone {current}; a breach only runs forward, so zone {zone} is unreachable"
             ));
         }
-        for _ in current..zone {
+        // The keys of the zones left behind, so a warped save is one the
+        // gate would have let through.
+        for left in current..zone {
+            self.grant_phase_key(left);
             self.enter_next_zone();
         }
         Ok(())

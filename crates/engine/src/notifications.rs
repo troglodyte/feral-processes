@@ -200,6 +200,10 @@ pub enum NotificationKind {
     /// No `detail`: what the node *unlocks* is what finishing it buys, and
     /// quoting it here would read as the node already being researched.
     ResearchDiscovered,
+    /// A lair guardian drops the current zone's Phase Key —
+    /// `Game::roll_phase_key`. `Always`: one per zone per run, so a latch
+    /// would silence every run after the first.
+    PhaseKeyFound,
 }
 
 /// One notification's authored copy.
@@ -232,7 +236,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 18] {
+    pub fn all() -> [NotificationKind; 19] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -252,6 +256,7 @@ impl NotificationKind {
             NotificationKind::LevelCapReached,
             NotificationKind::ResearchComplete,
             NotificationKind::ResearchDiscovered,
+            NotificationKind::PhaseKeyFound,
         ]
     }
 
@@ -481,6 +486,14 @@ impl NotificationKind {
                 color: GlyphColor::Cyan,
                 repeat: Repeat::Always,
             },
+            NotificationKind::PhaseKeyFound => NotificationDef {
+                title: "Phase Key Recovered",
+                body: "{name}\n\n{flavour}",
+                sprite: None,
+                glyph: '*',
+                color: GlyphColor::Yellow,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -522,6 +535,7 @@ impl NotificationKind {
             // match is exhaustive and the string is a file format from here
             // on all the same.
             NotificationKind::ResearchDiscovered => "milestone_research_discovered",
+            NotificationKind::PhaseKeyFound => "milestone_phase_key_found",
         }
     }
 }

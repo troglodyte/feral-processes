@@ -860,6 +860,7 @@ impl Game {
                 Some(pos) => {
                     self.pay_stack_boss_fragments(pos.depth);
                     self.pay_stack_boss_privilege_ring();
+                    self.roll_phase_key();
                 }
                 None => self.pay_surface_boss_gear(),
             }

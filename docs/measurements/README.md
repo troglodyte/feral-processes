@@ -54,6 +54,13 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-10-07 — What the running game costs: CPU, GPU and memory](2026-10-07-whole-process-resource-cost.md)
+  — the first whole-process figure. In the debug build on the dev box, a
+  developed base map uses 24% of a core, ~450 MB RSS, ~580 MB GPU memory and
+  4% GPU. The main menu used 59% because `list_saves` parsed every save every
+  frame, and now uses 9.8%. Open: idle redraw, fps and peaks, long-session
+  memory, integrated graphics.
+
 - [2026-10-05 — Base bench: the `bench-economy` baseline and a tune](2026-10-05-base-bench-economy-baseline.md)
   — a rearranged `chains` that keeps flowing under orders: over the 4902 ticks
   seed 1 survives, the Assembly Bay makes **58** units against a capacity of

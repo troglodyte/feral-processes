@@ -4,7 +4,7 @@
         (
             openers: [
                 "Compiled somewhere that kept no build log.",
-                "Signed by a key nobody on the Grid still holds.",
+                "Signed by a key nobody in the Basin still holds.",
                 "Forked off something larger, and never merged back.",
                 "Shipped as a patch, and outlived what it patched.",
                 "Left behind by a contractor who did not document it.",

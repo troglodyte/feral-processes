@@ -6096,3 +6096,43 @@ fn the_breeding_seed_drops_only_from_real_wild_species() {
         assert!((0.05..=0.10).contains(&chance), "{id}: {chance}");
     }
 }
+
+/// The setting is the Phase-Manifold Basin, not the Grid. The Power Grid, the
+/// base's supply, keeps its name, so the census forbids only the bare setting
+/// sense and requires the power sense to survive. Text is whitespace-folded so
+/// a phrase wrapped across lines in a help page is still caught.
+#[test]
+fn no_shipped_asset_calls_the_setting_the_grid() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mut files = Vec::new();
+    walk(&root, &mut files);
+    let mut power_grid_seen = false;
+    for path in &files {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let folded = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        power_grid_seen |= folded.contains("Power Grid");
+        for phrase in ["the Grid", "The Grid", "a Grid"] {
+            assert!(
+                !folded.contains(phrase),
+                "{} says `{phrase}`; the setting is the Phase-Manifold Basin",
+                path.display()
+            );
+        }
+    }
+    assert!(
+        power_grid_seen,
+        "the Power Grid terms must survive the rename"
+    );
+}

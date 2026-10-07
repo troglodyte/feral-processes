@@ -1,6 +1,6 @@
 # Zones and breaching
 
-A zone is a tier of the Grid, not a separate place: there is one map for the whole run, and each
+A zone is a tier of the Phase-Manifold Basin (the Basin), not a separate place: there is one map for the whole run, and each
 breach raises the tier everything on it is scaled against. Every wild program carries the zone it
 was born in appended to its name, and each zone up is a step harder than the last — a steady climb,
 not a doubling, so the levels it takes to keep pace stay roughly the same however deep you go.

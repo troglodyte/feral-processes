@@ -1,10 +1,10 @@
 # Attributes
 
-Every program in the Grid — and you — carries a second, non-combat stat block. Six numbers that
+Every program in the Phase-Manifold Basin — and you — carries a second, non-combat stat block. Six numbers that
 say what something is *like*, as opposed to what it can do in a fight. Open a program's manifest
 and press D to read its dossier.
 
-Each one is named twice. The first name is the Grid's own word for it; the second, in parentheses,
+Each one is named twice. The first name is the Basin's own word for it; the second, in parentheses,
 is the old-school word it stands in for. You do not need to know the setting's vocabulary to read
 the sheet.
 

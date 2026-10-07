@@ -60,7 +60,7 @@ impl DeathReport<'_> {
     /// Ends the run, stamped with the tick it ended on.
     fn flatline(&mut self) {
         self.log
-            .push("FLATLINE. Your signal drops from the Grid for good.");
+            .push("FLATLINE. Your signal drops from the Basin for good.");
         self.game_over.reason = Some(format!("flatlined at cycle {}", self.clock.tick));
     }
 

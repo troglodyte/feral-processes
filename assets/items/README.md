@@ -22,7 +22,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // that also means nothing checks it against the fields below, so if you
     // change `equipment`, `consume`, or another capability, update the text
     // to match by hand.
-    description: "Restores 25 Power. The staple of staying on the Grid.",
+    description: "Restores 25 Power. The staple of staying alive in the Basin.",
 
     // Optional. The battle effect that plays when this is swung or cast on
     // a battle map: an id from `assets/effects/` (`Some("laser_pulse")`).

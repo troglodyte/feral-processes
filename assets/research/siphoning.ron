@@ -1,7 +1,7 @@
 (
     id: "siphoning",
     name: "Grid Tapping",
-    description: "A machine that pins one of your staff programs into the Grid and runs the base off its power, for as long as you keep it there.",
+    description: "A machine that pins one of your staff programs into the Power Grid and runs the base off its power, for as long as you keep it there.",
     cost: 15,
     materials: [("core_fragment", 30)],
     requires: ["power_grid"],

@@ -702,7 +702,9 @@ impl Game {
         game.ensure_local_population();
         game.ensure_local_settlements();
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
-        game.log("Connection established. You materialize at the edge of the Grid.");
+        game.log(
+            "Connection established. You materialize at the edge of the Phase-Manifold Basin.",
+        );
         // Before the first tick, so the very first contracts screen a run
         // opens already has the chain's first mission in hand.
         game.ensure_tutorial_held();
@@ -1368,7 +1370,7 @@ impl Game {
         if let Some(reason) = &data.game_over {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("that run is over — it {reason}. Its signal is gone from the Grid."),
+                format!("that run is over — it {reason}. Its signal is gone from the Basin."),
             ));
         }
         // Every door seats a tamed program and the writer always records its
@@ -1928,7 +1930,7 @@ impl Game {
             game.sync_settlement_footprint(key);
         }
 
-        game.log("Session restored. Reconnecting to the Grid.");
+        game.log("Session restored. Reconnecting to the Basin.");
         // A save from before the chain existed: file every mission as
         // finished so an established run is left alone. New runs are seeded
         // by `Game::new`, which sets the flag, so this fires exactly once

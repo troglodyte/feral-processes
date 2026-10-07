@@ -12,7 +12,7 @@ pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter
     );
     let mut rows = vec![
         Row::TextColored("feral-processes".to_string(), TEXT),
-        Row::TextColored("// jack into the Grid".to_string(), CYAN),
+        Row::TextColored("// jack into the Basin".to_string(), CYAN),
         text_row(""),
     ];
     for (i, opt) in options.iter().enumerate() {

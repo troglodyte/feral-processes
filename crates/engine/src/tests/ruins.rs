@@ -471,13 +471,35 @@ fn dropped_and_said(game: &Game) -> bool {
 }
 
 #[test]
-fn a_program_standing_on_the_wreck_drops_the_ruin_and_says_so() {
-    let (game, filed) = files_after(2208, "shield", |game, x, y| {
-        let body = spawn_tamed(game, 10, 3);
-        *game.world.get_mut::<Position>(body).unwrap() = Position { x, y };
+fn a_program_standing_on_the_wreck_keeps_the_ruin_until_it_moves() {
+    let mut body = None;
+    let (mut game, filed) = files_after(2208, "shield", |game, x, y| {
+        let b = spawn_tamed(game, 10, 3);
+        *game.world.get_mut::<Position>(b).unwrap() = Position { x, y };
+        body = Some(b);
     });
+    let (px, py) = game.base_pos().unwrap();
     assert!(!filed, "a body stands on the tile");
-    assert!(dropped_and_said(&game));
+    assert_eq!(
+        game.world.resource::<Ruins>().0,
+        vec![ruin("shield", px + 1, py)],
+        "standing is temporary: the ruin waits"
+    );
+    assert!(
+        !game
+            .message_history(50)
+            .iter()
+            .any(|m| m.text.contains("could not be rebuilt")),
+        "no log for a retry"
+    );
+
+    game.file_ruins();
+    assert!(sites(&mut game).is_empty(), "still standing there");
+
+    *game.world.get_mut::<Position>(body.unwrap()).unwrap() = Position { x: px, y: py + 5 };
+    game.file_ruins();
+    assert_eq!(sites(&mut game).len(), 1, "filed once the tile is clear");
+    assert!(game.world.resource::<Ruins>().0.is_empty());
 }
 
 #[test]

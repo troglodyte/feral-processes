@@ -425,6 +425,7 @@ impl Game {
             return;
         }
         let ruins = std::mem::take(&mut self.world.resource_mut::<crate::resources::Ruins>().0);
+        let mut waiting = Vec::new();
         for ruin in ruins {
             let Some(def) = self
                 .world
@@ -439,13 +440,21 @@ impl Game {
                 continue;
             };
             let footprint = crate::tactical::footprint_cells_at((ruin.x, ruin.y), def.footprint);
-            let blocked = self.placement_refusal(&footprint, false, None).is_some();
-            if blocked {
-                self.log_base(format!(
-                    "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
-                    def.name, ruin.x, ruin.y
-                ));
-                continue;
+            match self.placement_refusal(&footprint, false, None) {
+                // A program standing on the wreck walks off; the ground is
+                // not taken, so keep the ruin for the next filing tick.
+                Some(PlacementRefusal::BodyStanding) => {
+                    waiting.push(ruin);
+                    continue;
+                }
+                None => {}
+                Some(_) => {
+                    self.log_base(format!(
+                        "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
+                        def.name, ruin.x, ruin.y
+                    ));
+                    continue;
+                }
             }
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
@@ -455,6 +464,10 @@ impl Game {
                 def.name, ruin.x, ruin.y
             ));
         }
+        self.world
+            .resource_mut::<crate::resources::Ruins>()
+            .0
+            .extend(waiting);
     }
 
     /// Commits `program` to a rebuild site that is waiting for one,

@@ -976,3 +976,27 @@ fn an_away_march_prices_the_band_at_its_headcount_leader_included() {
         "shortfall is band strength less defence"
     );
 }
+
+#[test]
+fn a_march_that_opens_this_tick_holds_a_pending_ruins_filing() {
+    let mut game = new_game();
+    established_base(&mut game);
+    stand_in_base(&mut game);
+    let (leader, _band) = marching_band(&mut game);
+    game.world
+        .resource_mut::<crate::resources::Ruins>()
+        .0
+        .push(crate::resources::Ruin {
+            kind: "shield".to_string(),
+            x: 0,
+            y: 1,
+        });
+    game.tick();
+    assert!(
+        has_siege_tags(&game, leader) && game.siege_running(),
+        "the march opened a fight this tick"
+    );
+    let mut sites = game.world.query::<&BuildSite>();
+    assert_eq!(sites.iter(&game.world).count(), 0, "no site filed under it");
+    assert_eq!(game.world.resource::<crate::resources::Ruins>().0.len(), 1);
+}

@@ -8,19 +8,23 @@ A perk is bought over and over. Each purchase stacks another level on the last a
 what the first one did, so a perk you like is a place to keep putting points rather than a box to
 tick once. Nothing refunds, and nothing is lost on a breach.
 
-There are twenty, and they fall into five jobs.
+There are twenty-one, and they fall into five jobs.
 
 - Raw numbers. Attacker and Defender add two points of Attack or Mitigation the moment you buy
-  them. Buffer widens Integrity by a percentage and heals you in full on the way through.
+  them. Buffer widens Integrity by a percentage and heals you in full on the way through. Target
+  Lock adds 2 Accuracy per level to every attack you make.
 - Your routines. Payload Tuning and Siphon Protocol sharpen what you do to other programs by 15% a
   level; Field Medic, Overclocker and Corruption Vector do the same at 5% for healing, boosts and
-  afflictions. All five move your own invocations and nothing else's.
+  afflictions. All five move your own invocations and nothing else's. Scheduler widens the rarity a
+  forked process can roll, Emulation Fidelity adds 10 points a level to an emulated image's attack
+  and mitigation, and Spawn Priority adds 10% a level to the strength of a Respawn body or a fork.
 - Decompiling. Exploit Focus makes a target's remaining Integrity count for less against your odds,
   which means it is worth most against a program you have not worn down and nothing at all against
   one already finished. Roster room is Process Pool, one more program per level.
 - Your economy. Lean Compiler shaves an item off every compile cost, never below one of each. Keen
   Scavenger raises every mining node's success rate. Teardown pulls an extra unit out of every
-  teardown, whatever tool is doing the stripping. Failover patches your structures while you are
+  teardown, whatever tool is doing the stripping. Tighten Tolerances rolls the quality of everything
+  you compile 5 points higher per level. Failover patches your structures while you are
   away, with or without a Patch Node.
 - Staying alive out there. Low Power Mode slows your Power drain by a point a level, and enough
   levels stop the drain entirely. Obfuscation makes everything you do in the Stack raise Trace 10%

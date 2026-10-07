@@ -1,6 +1,6 @@
 (
     id: "privilege_ring",
     name: "Privilege Ring",
-    description: "A ring of raised privilege, prised out of a lair guardian. Spend it on one program to give it room to grow past its own ceiling.",
+    description: "A ring of raised privilege, prised out of a lair guardian. Spend it at the Develop screen to open one program's next Kernel Ring.",
     value: Some(24),
 )

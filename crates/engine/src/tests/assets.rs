@@ -2883,7 +2883,7 @@ fn the_manual_binds_the_excavation_plan_key() {
 }
 
 /// `I` beside a Splice Rig is a map key with no other way to be found, and
-/// the manual is also where removal's fragment price (lost at a breach) is
+/// the manual is also where removal's fragment price is
 /// told, so both are held.
 #[test]
 fn the_manual_teaches_the_splice_rig_key_and_what_removal_costs() {
@@ -2899,7 +2899,6 @@ fn the_manual_teaches_the_splice_rig_key_and_what_removal_costs() {
     assert!(text("controls").contains("I — open the Splice Rig"));
     let implants = text("implants");
     assert!(implants.contains("core fragments"));
-    assert!(implants.contains("lost at a"));
 }
 
 /// Two piles cannot share a tag in the base pane's PRODUCTION rows, where a

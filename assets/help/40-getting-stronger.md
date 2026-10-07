@@ -7,7 +7,7 @@ Where power comes from:
 
 - Levels. Every kill and every successful decompile pays XP, priced by how much of a challenge the
   target actually was, so grinding something far beneath you is a poor use of an afternoon. Each
-  level grows your stats, fully restores Integrity, and hands you two Perk Points.
+  level grows your stats, fully restores Integrity, and hands you six attribute points and two Perk Points.
 - [Perks](perks). Permanent passive upgrades, bought over and over — each purchase stacks another
   level on the last, at the same price every time.
 - Gear. Weapons, armour and modules, scavenged in the field or built at a bench once the research

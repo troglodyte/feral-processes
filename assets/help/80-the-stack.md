@@ -23,8 +23,9 @@ What a frame holds:
   not a one-shot: a fault works every time.
 - Corruption, rotten substrate that costs Integrity while you stand on it. A stretch of it is a
   route you can decide to walk around.
-- Breakpoints, which map the whole frame at a stroke and tell the Stack exactly where you are —
-  the single loudest thing you can do down there, and one use each.
+- Breakpoints, which usually map the whole frame at a stroke and tell the Stack exactly where you
+  are. Sometimes the jack-in only shows the area right around you, and the breakpoint is spent
+  either way. It is the single loudest thing you can do down there, and one use each.
 - Orphans — a process left running with nothing left to serve. o adopts one for a catalyst rather
   than for a won fight. What species it is was decided by the place, so it is the same one every
   time you come back.

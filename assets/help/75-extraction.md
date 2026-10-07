@@ -20,7 +20,7 @@ keep the knowledge, so anything you have researched can be forged again.
   for the old one.
 - The Salvage Clamp prises off loose material. The Component Stripper pulls whole components. The
   Core Tap draws out the compiled core. Each reaches into a different band of what a body is worth.
-- The Routine Reader reads the program for what it was running and teaches you one, favouring the
+- The Routine Extractor reads the program for what it was running and teaches you one, favouring the
   earliest thing it knows that you do not. It hands over knowledge, never a disk.
 - The Gear Puller takes the worn kit. It rolls that program's own gear chances, and what lands
   is a real find — it can be rare, it can carry names, and it rolls for quality exactly like a
@@ -34,7 +34,7 @@ same tool than an Ordinary you barely left standing.
 
 The Tools row on the party menu is where you forge, install and pull. The store's own screen is
 where you spend a program: pick the body, and every installed tool is listed with what it would
-draw out before you commit to one. Material tools quote units. The Reader names the pool it would
+draw out before you commit to one. Material tools quote units. The Routine Extractor names the pool it would
 draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually
 rolls — the screen and the pull read the same figure.
 
@@ -75,9 +75,9 @@ to pull it out entirely, which stops the rig until something else is fitted.
   machine makes.
 - If the buffer has no room for a whole body's worth, the rig holds that program rather than paying
   part of it. Clear the buffer and it picks up where it left off.
-- The Routine Reader and the Gear Puller stay work for your hands. One teaches you something and
-  the other pays a piece of gear, and neither is a material a buffer could hold, so the rig will not
-  take either one.
+- The Routine Extractor, the Gear Puller and the Image Extractor stay work for your hands. One
+  teaches you a routine, one pays a piece of gear and one teaches you a species, and none of those
+  is a material a buffer could hold, so the rig will not take any of them.
 
 A Teardown Rig is also an extraction bench, so building one makes your own teardowns quicker too,
 and upgrading it pays them richer — the same way a Compiler does.

@@ -16,17 +16,21 @@ not a thing to do idly.
 
 Everything past that first pocket is solid, and you cut it out yourself.
 
-- Walk into a wall and you swing at it, the same way you wear a nest down. Swings are deterministic,
-  so a wall is never a gamble: it takes about three hits early in a run and one hit late. Rock is
-  the same thickness in every zone at every depth — what changes is you. A cell that opens sometimes
-  shakes a Core Fragment loose.
+- Press n to take your cutting tools out. With them out, walking into a wall swings at it, the same
+  way you wear a nest down; with them away, a bump stops short and costs no turn. Swings are
+  deterministic, so a wall is never a gamble. Ordinary entropy rock takes at least two swings,
+  compacted rock at least three and fused rock at least four, and your level shortens the count down
+  to that floor and no further. The rock comes in patches, so thickness varies from cell to cell,
+  not from zone to zone. A cell that opens sometimes shakes a Core Fragment loose.
 - A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for one
   Blank Substrate, and only laid tile is buildable. Bare cut ground stays open, but nothing can
   stand on it until it is floored.
 - m opens the Excavation plan. The cursor costs no time at all: space drops one corner, moving
   previews a rectangle, and space again commits it. Starting the box on a cell that is already
   marked clears instead of marking, which is why there is no separate erase. A marked wall is cut
-  and then floored in one go, and the mark outlives the cut.
+  and then floored in one go, and the mark outlives the cut. [F] changes the brush: it cycles
+  through each laid finish, then strip, then plain tile. A finish costs 3 extra Blank Substrate per
+  cell on top of the tile.
 
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a
@@ -36,18 +40,25 @@ Substrate spare for the tile that follows it, and says so once. Cells already cu
 their floor are served first. The plan asks for its own tiles: while anything is marked, a standing
 Blank Substrate order sits in your work order queue, sized to what the plan will spend. It is filed
 at the bottom, so move it up if the floor matters more than what you are making. Clearing the marks
-is how it goes away. Your own swings are never held back this way — walking into a wall
-still cuts it, whatever the shelves hold.
+is how it goes away. Your own swings are never held back this way — with your cutting
+tools out, walking into a wall still cuts it, whatever the shelves hold.
 
 Building works the same way, and the Home is the one exception. Every other structure you pick out
 of the build menu is a *request*: it marks the cell with a dark slab and an orange caret, and one of
-your programs comes and raises it. Nothing is charged when you file it, so you may ask for a machine
+your programs comes and raises it. No materials are charged when you file it, so you may ask for a machine
 the base cannot afford yet and let production catch up — the builder will say once that it has
 nothing to fetch, and start the moment the last part exists. It gathers from anywhere the base keeps
 things: a Depot, a machine's own output shelf, or straight out of your pack if you are standing in
 there with it. It carries five at a time, so a big machine takes several trips, and the parts pile up
 on the cell as they arrive — press x at it to see what is still to come and how far along it is. A
 structure takes two ticks to raise for every part it costs.
+
+Anything that runs a job, meaning an extractor, an assembler or a rig, also costs one of your
+programs when you file it, and upgrading one costs another. A picker opens and you choose which
+program pays. It is spent, and it has to come from a zone at least as deep as the tier you are
+raising. Your last program cannot be spent, and neither can one that is downed, out on a sortie,
+carrying something or pinned to a Research Station. Shields, Patch Nodes, Relays, Depots and the
+Portal cost no program. Calling the request off gives the program back along with the parts.
 
 Building is the *highest* priority the base has, above work orders and standing jobs — the mirror of
 digging. A spare body takes the job if you have one; if you do not, somebody comes off a machine
@@ -68,7 +79,8 @@ to share a word.
 
 The base staffs itself. Any program you own that is not out fighting with you is staff, and the
 scheduler decides the whole assignment every tick by priority: pending builds first, then keeping a
-Recharger Node or a Line Driver fuelled, then work orders, then standing jobs, then digging. Those
+Recharger Node or a Line Driver fuelled, then the research project, then work orders, then standing
+jobs, then digging. Those
 two burn a Power Cell to stay on the Grid, and a program will walk one over from a shelf ahead of
 almost anything else — on a base short of hands, that means a machine stands idle while the lights
 stay on. With no cell on any shelf, that program goes to a Power Conduit and makes some instead. A work order is an item and a quantity and nothing else — say what you want and
@@ -115,8 +127,8 @@ The rest of what a base does:
   row off the base menu and then point at the machine: it has to be the tile right beside you, north,
   south, east or west. An upgrade is a request like any other build: nothing is charged when you ask
   for it, your crew fetches the parts out of the base and works on the spot, and the machine keeps
-  running the whole time. Call one off from the build orders screen and you get back whatever has
-  been carried there.
+  running the whole time. Call one off with d and a direction, as with any pending site, and you get
+  back whatever has been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. Sweeps start in the second sector: the base you raise in sector 1 is
   never swept, so the first one you lose ground to is one you had a breach to prepare for. A Shield
@@ -124,13 +136,16 @@ The rest of what a base does:
   whole base, and a program posted to the structure that gets hit defends it with its own
   Mitigation.
 - Research is one project at a time, and the base works it. Pick a node on the research screen and
-  every Research Station you have deployed staffs itself and starts feeding it; with nothing picked
-  they stand idle, which the base panel will tell you about. The tree is what unlocks the benches,
+  every Research Station you have deployed staffs itself and starts feeding it; with nothing picked,
+  a staffed Station banks its Research Data into study attempts of 4 Data each instead, and a
+  Station nobody is working stands idle, which the base panel will tell you about. The tree is what unlocks the benches,
   the recipes and several routines.
 - A Research Station is a 2x2 building with a pen in the corner diagonally opposite its own tile.
   "Study a program" on the base menu pins one of your own programs there — it stops working
   whatever post it held and walks to the pen by itself, and the same row unpins it again once
-  nothing needs it there.
+  nothing needs it there. While a program is pinned, each full study attempt has a 35% chance to
+  uncover a hidden research node; a miss spends the attempt and the log says the study turned up
+  nothing.
 - From sector 2 on, most nodes refuse selection until a program is pinned. The research screen
   marks those rows locked and says so; any program you own satisfies it, and which one does not
   matter. Finishing the project spends the pinned one: it leaves your roster and lands in your
@@ -153,8 +168,26 @@ The rest of what a base does:
   naming what it is short of. Worth knowing because a bill's work order is removed once the base is
   holding the goods — if something else spends them before the project settles, that row is the only
   thing that will tell you.
+- A Power Siphon pins one staff program into the Grid and runs the base off it. Research Grid
+  Tapping, then build one for 24 Core Fragments and 4 Bytecode Blocks. Stand beside it and press P
+  to load a staff program or release the one inside. A siphon with someone in it supplies 4 to the
+  Grid, the same as a Recharger Node, and an empty one supplies nothing. The held program does no
+  other work. It resents the hold, and the grudge builds slowly: a few strikes make it sulk, and a
+  long enough hold makes it down tools. Letting go always costs it, because it comes out with at
+  most a quarter of its Integrity left, though a release never kills. See
+  [staff morale](staff-morale) for what a sulking program does.
+- Staff that are hurt wear a health bar on the base map: green, then amber below half, then the
+  colour that means they are headed for the Repair Bay. A job bar on the same tile takes precedence,
+  and a program at full health wears nothing.
+- A program that loses its job while carrying something sets the load down on the floor as a pile,
+  drawn on the base map. An idle hauler carries the nearest pile that a reachable Depot will take
+  home, so a dropped load is recollected without your help.
 - A Contract Broker posts work the sector is paying for. Read its board from anywhere; sign and
   deliver at the base.
+
+Wild programs can besiege a base, and a program that beat you may march on it with followers; see
+[sieges](sieges). The mood of the crew decides how well they work, which [staff morale](staff-morale)
+explains.
 
 Read on: [supplies](supplies), [your companions](companions), [getting stronger](getting-stronger),
 and [outposts](outposts).

@@ -4,15 +4,16 @@ You are a process loose on the Grid, and everything else running out here would 
 not. A run is one long push outward: fight what you meet, take what it drops, build a base that
 works while you walk, and breach into the next zone once you can afford the way through.
 
-Nothing is on a timer. A turn passes when you act, so reading a screen costs you nothing.
+On the map the world keeps moving by itself, and space pauses it. Menus and fights hold it still, and
+while it is paused each thing you do takes its own turn, so reading a screen costs you nothing.
 
 Two meters on the left panel decide how long a run lasts.
 
 - Integrity is your health. At zero you flatline — the end of the run on Permadeath, an expensive
   reboot on Forgiving. Levelling up restores it completely, and so does recharging.
-- Power is what everything else runs on. It drains a little every tick, and it is also what a
-  routine costs when you call one in a fight. Below half, your own attacks start to weaken; at zero
-  you take Integrity damage every tick until you find some. Drain a Power Cell to top it up,
+- Power is what everything else runs on. It drains a little as time passes, and it is also what a
+  routine costs when you call one in a fight. Below 50, your own attacks start to weaken; at zero
+  you take Integrity damage each turn until you find some. Drain a Power Cell to top it up,
   recharge to fill it outright, or stand in a base with a Recharger Node and it refills on its own.
 
 Every hostile program is wrapped in ICE. You break it with an ICE Breaker, a catalyst spent on a
@@ -42,7 +43,7 @@ word, in parentheses, is the one it stands in for.
 - Flatline (death) and reboot (respawn) — a reboot is the Forgiving setting's second chance.
 - Power (food and mana) — it drains as you go and pays for every routine.
 - Recharge (rest) — fills Integrity and Power.
-- Routine (spell or skill) — an ability sitting in a slot.
+- Routine (special ability) — an ability sitting in a slot.
 - Perk (talent) — a permanent upgrade bought with the points each level gives you.
 - Intrusion (combat encounter) — a fight.
 - Decompile (tame) — turn a beaten program into one of yours. ICE is what resists it, and an ICE
@@ -54,7 +55,7 @@ word, in parentheses, is the one it stands in for.
 - The Stack (dungeon) — what lies underneath a zone. A frame is one dungeon floor, a cache is a
   treasure chest, and the lair is the boss room.
 - Nest (monster spawner) — it replaces its guardians as they fall until you destroy it.
-- Credits (gold) — what traders take, and the only currency that survives a breach.
+- Credits (gold) — the only currency a trader takes.
 - Core Fragments (crafting materials) — what your base builds with.
 - Settlement (town) — a place to trade.
 - Contract (quest) — a job taken from a Contract Broker.

@@ -197,6 +197,7 @@ impl App {
             // No menu of its own: the pack is a single screen, so the group
             // key opens it directly.
             GameKey::Char('i') => {
+                self.inventory_tab = InventoryTab::Items;
                 self.mode = Mode::Inventory;
                 return;
             }

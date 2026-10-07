@@ -1039,6 +1039,25 @@ pub enum InfoTab {
     Contracts,
 }
 
+/// Which page of `Mode::Inventory` is showing. UI state only, like
+/// [`InfoTab`]: the keys tab is a read-only view, so it decides what is
+/// drawn and which keys do anything.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum InventoryTab {
+    #[default]
+    Items,
+    PhaseKeys,
+}
+
+impl InventoryTab {
+    pub fn other(self) -> Self {
+        match self {
+            Self::Items => Self::PhaseKeys,
+            Self::PhaseKeys => Self::Items,
+        }
+    }
+}
+
 impl InfoTab {
     /// Every tab, in the order the column draws them and the digits select
     /// them — `1` is `ALL[0]`. The two have to agree or a digit would open a
@@ -2763,6 +2782,9 @@ pub struct App {
     /// which a manual `1`/`2`/`3`/`4` press overrides until the next
     /// crossing.
     pub info_tab: InfoTab,
+    /// Which page `Mode::Inventory` shows; reset to `Items` on every
+    /// opening from the map. See [`InventoryTab`].
+    pub inventory_tab: InventoryTab,
     /// Which side of the base boundary `info_tab` was last synced
     /// against — `true` for base space, `false` for everywhere else
     /// (surface and the Stack read the same here; see `Game::in_base`).

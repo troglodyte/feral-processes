@@ -46,6 +46,7 @@ impl App {
             status_line: profile_warning,
             log_filter: LogFilter::default(),
             info_tab: InfoTab::default(),
+            inventory_tab: InventoryTab::default(),
             last_in_base: false,
             history_written: false,
             assets_dir,

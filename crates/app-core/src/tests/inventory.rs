@@ -1004,3 +1004,74 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
         WIDEST_MEASURED_SWAP_STATS
     );
 }
+
+fn app_holding_keys(held: u16) -> App {
+    use feral_processes_engine::save;
+    let mut app = test_app(9021);
+    let path = scratch_path("phase_keys_tab", 9021);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.phase_keys.held = held;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
+#[test]
+fn tab_switches_the_inventory_between_items_and_phase_keys() {
+    let mut app = test_app(9020);
+    app.mode = Mode::Inventory;
+    assert_eq!(app.inventory_tab, InventoryTab::Items);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.inventory_tab, InventoryTab::PhaseKeys);
+    assert_eq!(app.mode, Mode::Inventory);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.inventory_tab, InventoryTab::Items);
+}
+
+#[test]
+fn opening_the_inventory_lands_on_items() {
+    let mut app = test_app(9020);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.mode, Mode::Inventory);
+    assert_eq!(app.inventory_tab, InventoryTab::Items);
+}
+
+#[test]
+fn the_keys_tab_always_has_ten_rows_to_walk() {
+    let mut app = app_holding_keys(0b11);
+    assert_eq!(app.game.as_ref().unwrap().phase_keys().slots.len(), 10);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.menu_selected, 0);
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.menu_selected, 9);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 0);
+}
+
+#[test]
+fn item_actions_are_inert_on_the_keys_tab() {
+    let mut app = app_holding_keys(0b1);
+    app.mode = Mode::Inventory;
+    app.handle_key(GameKey::Tab);
+    let before = app.game.as_ref().unwrap().player_status().inventory.clone();
+    // Sell, fuse-all, inspect, downed store, row pick and Enter.
+    for key in [
+        GameKey::Char('S'),
+        GameKey::Char('U'),
+        GameKey::Char('I'),
+        GameKey::Char('D'),
+        GameKey::Char('1'),
+        GameKey::Char('4'),
+        GameKey::Enter,
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Inventory, "{key:?} left the keys tab");
+    }
+    assert_eq!(app.game.as_ref().unwrap().player_status().inventory, before);
+}

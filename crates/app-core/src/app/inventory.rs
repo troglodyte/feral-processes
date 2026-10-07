@@ -39,6 +39,21 @@ impl App {
             self.close_screen();
             return;
         }
+        // Not a letter: lowercase picks rows and uppercase acts, and this is
+        // neither. A `return` for the info tab's reason: changing page is
+        // not an action.
+        if key == GameKey::Tab {
+            self.inventory_tab = self.inventory_tab.other();
+            self.menu_selected = 0;
+            return;
+        }
+        // The keys tab is read-only: Up/Down move the highlight and nothing
+        // else resolves, so sell, fuse, inspect and equip cannot reach a
+        // row that is not an item.
+        if self.inventory_tab == InventoryTab::PhaseKeys {
+            self.scroll(key, feral_processes_engine::tuning::PHASE_KEY_COUNT as usize);
+            return;
+        }
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
         let total = 3 + inventory.len();

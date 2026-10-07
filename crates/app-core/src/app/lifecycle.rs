@@ -50,6 +50,7 @@ impl App {
             history_written: false,
             assets_dir,
             saves_dir,
+            save_cache: std::sync::Mutex::default(),
             current_save_path: None,
             pending_save: None,
             history_path,
@@ -213,57 +214,58 @@ impl App {
     /// Every `*.bin` file in the saves directory, newest first. Missing
     /// directory reads as no saves rather than an error — nothing to show
     /// on a first run before anything's ever been saved.
+    ///
+    /// The directory is listed on every call but a file is parsed only when
+    /// its size or modification time moved since the last one, through
+    /// `save_cache`; a file gone from the directory leaves the cache too.
     pub fn list_saves(&self) -> Vec<SaveEntry> {
         let Ok(entries) = std::fs::read_dir(&self.saves_dir) else {
             return Vec::new();
         };
-        let mut saves: Vec<(std::time::SystemTime, SaveEntry)> = entries
+        // Poisoning only follows a panic mid-listing, which leaves at worst a
+        // stale entry that the next size or timestamp change replaces.
+        let mut cache = self
+            .save_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut seen = std::collections::HashSet::new();
+        let mut saves: Vec<(SystemTime, SaveEntry)> = entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
             .map(|e| {
                 let path = e.path();
-                let modified = e
-                    .metadata()
-                    .and_then(|m| m.modified())
-                    .unwrap_or(std::time::UNIX_EPOCH);
-                let data = feral_processes_engine::save::load_from_file(&path).ok();
-                // The player's own name, which is most of why the creation
-                // wizard's Name step is worth having. A save from before it
-                // — or one whose player left the field blank — falls back to
-                // the filename, which is what every save used to show.
-                let name = data
+                let meta = e.metadata().ok();
+                let modified = meta
                     .as_ref()
-                    .map(|d| d.player.name.clone())
-                    .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| {
-                        path.file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.to_string_lossy().into_owned())
-                    });
-                let summary = data.map(|data| {
-                    // A run that ended says so in place of its clock:
-                    // the tick it stopped at is the one figure that
-                    // cannot help anyone here, and the slot is not
-                    // loadable.
-                    let state = match data.game_over {
-                        Some(_) => "FLATLINED".to_string(),
-                        None => format!("tick {}", data.tick),
-                    };
-                    format!(
-                        "Lv{} · Zone {} · {:?} · {state}",
-                        data.player.level, data.zone, data.difficulty
-                    )
-                });
-                (
-                    modified,
-                    SaveEntry {
-                        path,
-                        name,
-                        summary,
-                    },
-                )
+                    .and_then(|m| m.modified().ok())
+                    .unwrap_or(UNIX_EPOCH);
+                let len = meta.as_ref().map_or(0, |m| m.len());
+                let fresh = cache
+                    .get(&path)
+                    .is_some_and(|c| c.modified == modified && c.len == len);
+                if !fresh {
+                    let (name, summary) = read_save_entry(&path);
+                    cache.insert(
+                        path.clone(),
+                        CachedSave {
+                            modified,
+                            len,
+                            name,
+                            summary,
+                        },
+                    );
+                }
+                let cached = &cache[&path];
+                let entry = SaveEntry {
+                    path: path.clone(),
+                    name: cached.name.clone(),
+                    summary: cached.summary.clone(),
+                };
+                seen.insert(path);
+                (modified, entry)
             })
             .collect();
+        cache.retain(|path, _| seen.contains(path));
         saves.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
         saves.into_iter().map(|(_, entry)| entry).collect()
     }
@@ -722,4 +724,38 @@ impl App {
         }
         self.mode = Mode::GameOver;
     }
+}
+
+/// A save's name and one-line summary for the load list, parsed from the
+/// file. The summary is `None` when the file does not read under the
+/// current `save::SAVE_FORMAT_VERSION`.
+fn read_save_entry(path: &Path) -> (String, Option<String>) {
+    let data = feral_processes_engine::save::load_from_file(path).ok();
+    // The player's own name, which is most of why the creation wizard's
+    // Name step is worth having. A save from before it — or one whose
+    // player left the field blank — falls back to the filename, which is
+    // what every save used to show.
+    let name = data
+        .as_ref()
+        .map(|d| d.player.name.clone())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned())
+        });
+    let summary = data.map(|data| {
+        // A run that ended says so in place of its clock: the tick it
+        // stopped at is the one figure that cannot help anyone here, and
+        // the slot is not loadable.
+        let state = match data.game_over {
+            Some(_) => "FLATLINED".to_string(),
+            None => format!("tick {}", data.tick),
+        };
+        format!(
+            "Lv{} · Zone {} · {:?} · {state}",
+            data.player.level, data.zone, data.difficulty
+        )
+    });
+    (name, summary)
 }

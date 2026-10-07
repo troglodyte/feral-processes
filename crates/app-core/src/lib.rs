@@ -2587,6 +2587,12 @@ pub struct App {
     assets_dir: PathBuf,
     /// Directory saves are read from/written to — see `App::list_saves`.
     saves_dir: PathBuf,
+    /// `list_saves`' parsed entries, keyed by file and kept while the file's
+    /// size and modification time hold. The menus call `list_saves` every
+    /// frame, and a full parse of every save per frame cost a core. A
+    /// `Mutex` because the renderer only ever holds `&App`, and `App` sits
+    /// in a bevy `Resource`, which must be `Sync`.
+    save_cache: std::sync::Mutex<HashMap<PathBuf, CachedSave>>,
     /// Which file the active session's manual/auto-saves go to. `None`
     /// until a game is started (which immediately saves to claim a new
     /// slot) or loaded (which points this at the picked file).
@@ -3288,6 +3294,15 @@ pub struct App {
     /// Cues for the frontend to write, since app-core does no file I/O of
     /// its own — `take_sounds`'s seam, drained by `App::take_sprite_writes`.
     pending_sprite_writes: Vec<SpriteWrite>,
+}
+
+/// One `App::save_cache` entry: what a save file parsed to, and the
+/// size and modification time it had when it did.
+struct CachedSave {
+    modified: SystemTime,
+    len: u64,
+    name: String,
+    summary: Option<String>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

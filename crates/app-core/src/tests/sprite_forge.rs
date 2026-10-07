@@ -15,14 +15,16 @@ use crate::*;
 
 fn plain(canvas: Canvas) -> InstalledSprite {
     InstalledSprite {
-        canvas,
+        frames: vec![canvas],
+        frame_ms: DEFAULT_SPRITE_FRAME_MS,
         full_colour: false,
     }
 }
 
 fn colour(canvas: Canvas) -> InstalledSprite {
     InstalledSprite {
-        canvas,
+        frames: vec![canvas],
+        frame_ms: DEFAULT_SPRITE_FRAME_MS,
         full_colour: true,
     }
 }
@@ -381,7 +383,10 @@ fn s_queues_exactly_one_save_carrying_the_edited_canvas() {
     assert_eq!(writes.len(), 1, "exactly one cue, not one per keystroke");
     assert_eq!(writes[0].name, "anchor");
     match &writes[0].op {
-        SpriteOp::Save { canvas, .. } => assert_eq!(canvas.get(0, 0), 1, "the edit is in the cue"),
+        SpriteOp::Save { frames, .. } => {
+            assert_eq!(frames.len(), 1);
+            assert_eq!(frames[0].get(0, 0), 1, "the edit is in the cue");
+        }
         other => panic!("expected SpriteOp::Save, got {other:?}"),
     }
 }
@@ -760,9 +765,10 @@ fn saved_variant(app: &mut App) -> (Canvas, bool) {
     assert_eq!(writes.len(), 1);
     match writes.into_iter().next().unwrap().op {
         SpriteOp::Save {
-            canvas,
+            mut frames,
             full_colour,
-        } => (canvas, full_colour),
+            ..
+        } => (frames.remove(0), full_colour),
         other => panic!("expected Save, got {other:?}"),
     }
 }
@@ -1133,14 +1139,22 @@ fn press(app: &mut App, button: EditorButton) {
     );
 }
 
-/// Cells, brush, tool and selected swatch.
-type EditorState = (Vec<u8>, u8, Tool, u8);
+/// Cells, brush, tool, selected swatch, frame count, active frame, frame_ms.
+type EditorState = (Vec<u8>, u8, Tool, u8, usize, usize, u32);
 
 /// Everything a button can change, read back from the outside.
 fn observed(app: &mut App) -> (Mode, Option<EditorState>, Vec<SpriteWrite>) {
-    let view = app
-        .sprite_editor_view()
-        .map(|v| (v.canvas.cells, v.canvas.brush, v.tool, v.canvas.selected));
+    let view = app.sprite_editor_view().map(|v| {
+        (
+            v.canvas.cells,
+            v.canvas.brush,
+            v.tool,
+            v.canvas.selected,
+            v.frames,
+            v.active_frame,
+            v.frame_ms,
+        )
+    });
     (app.mode, view, app.take_sprite_writes())
 }
 
@@ -1163,6 +1177,11 @@ fn every_button_does_exactly_what_its_key_does() {
 fn the_buttons_are_not_vacuous_each_one_changes_something() {
     let changed = |button| {
         let mut app = app_ready_for_buttons(70);
+        if matches!(button, EditorButton::Frame1 | EditorButton::DeleteFrame) {
+            // These only act once a second frame exists.
+            app.handle_key(GameKey::Char('2'));
+            click(&mut app, 1, 1, PointerButton::Primary);
+        }
         let before = observed(&mut app);
         press(&mut app, button);
         before != observed(&mut app)
@@ -1212,6 +1231,11 @@ fn each_button_names_the_key_the_footer_documents() {
         (EditorButton::Brush, GameKey::Char('g')),
         (EditorButton::Tool, GameKey::Char('f')),
         (EditorButton::Back, GameKey::Esc),
+        (EditorButton::Frame1, GameKey::Char('1')),
+        (EditorButton::Frame2, GameKey::Char('2')),
+        (EditorButton::DeleteFrame, GameKey::Char('D')),
+        (EditorButton::Slower, GameKey::Char('-')),
+        (EditorButton::Faster, GameKey::Char('=')),
     ];
     assert_eq!(table.len(), EditorButton::ALL.len());
     for (button, key) in table {
@@ -1326,4 +1350,241 @@ fn editor_hits_do_nothing_on_the_picker_and_subject_hits_do_nothing_in_the_edito
         app.menu_selected, 0,
         "the picker's highlight is not the editor's"
     );
+}
+
+// -----------------------------------------------------------------------
+// Two-frame sprites
+// -----------------------------------------------------------------------
+
+fn view_cells(app: &App, frame: usize) -> Vec<u8> {
+    app.sprite_editor_view().unwrap().frame_cells[frame].clone()
+}
+
+fn saved_frames(app: &mut App) -> (Vec<Canvas>, u32) {
+    app.handle_key(GameKey::Char('s'));
+    let mut writes = app.take_sprite_writes();
+    assert_eq!(writes.len(), 1);
+    match writes.remove(0).op {
+        SpriteOp::Save {
+            frames, frame_ms, ..
+        } => (frames, frame_ms),
+        other => panic!("expected Save, got {other:?}"),
+    }
+}
+
+/// An editor on `cipher`'s ring with frame 2 made and painted differently.
+fn app_with_two_frames(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    open_on_a_ring(&mut app);
+    app.handle_key(GameKey::Char('2'));
+    pick_swatch(&mut app, 5);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    app
+}
+
+#[test]
+fn a_fresh_subject_is_one_frame_at_the_default_speed() {
+    let mut app = app_with_sprite_forge(300);
+    open_editor(&mut app, "anchor");
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame), (1, 0));
+    assert_eq!(view.frame_ms, DEFAULT_SPRITE_FRAME_MS);
+}
+
+#[test]
+fn two_copies_frame_one_once_and_a_second_two_does_not_recopy() {
+    let mut app = app_with_sprite_forge(301);
+    open_on_a_ring(&mut app);
+    app.handle_key(GameKey::Char('2'));
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame), (2, 1));
+    assert_eq!(view_cells(&app, 0), view_cells(&app, 1), "a copy");
+
+    pick_swatch(&mut app, 5);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(app.sprite_editor_view().unwrap().frames, 2);
+    assert_eq!(cells(&app)[0], 5, "frame 2 keeps its edit");
+}
+
+#[test]
+fn painting_frame_two_leaves_frame_one_alone() {
+    let app = app_with_two_frames(302);
+    assert_eq!(view_cells(&app, 1)[0], 5);
+    assert_eq!(view_cells(&app, 0)[0], 0);
+}
+
+#[test]
+fn one_then_two_keeps_both_frames() {
+    let mut app = app_with_two_frames(303);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.sprite_editor_view().unwrap().active_frame, 0);
+    assert_eq!(cells(&app)[0], 0, "the canvas now shows frame 1");
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(cells(&app)[0], 5);
+    assert_eq!(view_cells(&app, 0)[0], 0);
+}
+
+#[test]
+fn one_on_a_single_frame_sprite_does_nothing() {
+    let mut app = app_with_sprite_forge(304);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(cells(&app), before);
+    assert_eq!(app.sprite_editor_view().unwrap().frames, 1);
+}
+
+#[test]
+fn capital_d_deletes_frame_two_and_returns_to_frame_one() {
+    let mut app = app_with_two_frames(305);
+    app.handle_key(GameKey::Char('D'));
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame), (1, 0));
+    assert_eq!(cells(&app)[0], 0, "frame 1 is what remains");
+}
+
+#[test]
+fn undo_after_delete_restores_frame_two() {
+    let mut app = app_with_two_frames(306);
+    app.handle_key(GameKey::Char('D'));
+    app.handle_key(GameKey::Char('u'));
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame), (2, 1));
+    assert_eq!(cells(&app)[0], 5, "frame 2's edit came back with it");
+}
+
+#[test]
+fn undo_after_the_copying_two_removes_frame_two() {
+    let mut app = app_with_sprite_forge(307);
+    open_on_a_ring(&mut app);
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('u'));
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame), (1, 0));
+}
+
+#[test]
+fn undo_reverts_a_paint_on_the_frame_it_was_made_on() {
+    let mut app = app_with_two_frames(308);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(cells(&app)[0], 0);
+    assert_eq!(app.sprite_editor_view().unwrap().frames, 2);
+}
+
+#[test]
+fn a_drag_is_one_forge_undo_entry() {
+    let mut app = app_with_sprite_forge(309);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    for x in 1..4 {
+        app.handle_pointer(
+            PointerHit::Cell(x, 0),
+            PointerButton::Primary,
+            PointerPhase::Drag,
+        );
+    }
+    app.handle_pointer(
+        PointerHit::Cell(3, 0),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    assert_eq!(&cells(&app)[0..4], &[3, 3, 3, 3]);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(&cells(&app)[0..4], &[0, 0, 0, 0]);
+}
+
+#[test]
+fn undo_still_reaches_edits_after_the_editors_own_ring_is_full() {
+    let mut app = app_with_sprite_forge(310);
+    open_on_a_ring(&mut app);
+    // More distinct edits than the shared ring holds, so its depth stops
+    // growing; the forge must still see each one.
+    pick_swatch(&mut app, 3);
+    for i in 0..40u8 {
+        click(&mut app, i % 16, 10 + i / 16, PointerButton::Primary);
+    }
+    let before = cells(&app);
+    click(&mut app, 15, 15, PointerButton::Primary);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(cells(&app), before);
+}
+
+#[test]
+fn speed_steps_by_a_hundred_and_clamps_at_both_ends() {
+    let mut app = app_with_sprite_forge(311);
+    open_editor(&mut app, "anchor");
+    let ms = |app: &App| app.sprite_editor_view().unwrap().frame_ms;
+    app.handle_key(GameKey::Char('='));
+    assert_eq!(ms(&app), DEFAULT_SPRITE_FRAME_MS + SPRITE_FRAME_MS_STEP);
+    for _ in 0..40 {
+        app.handle_key(GameKey::Char('='));
+    }
+    assert_eq!(ms(&app), SPRITE_FRAME_MS_MAX);
+    for _ in 0..40 {
+        app.handle_key(GameKey::Char('-'));
+    }
+    assert_eq!(ms(&app), SPRITE_FRAME_MS_MIN);
+}
+
+#[test]
+fn s_queues_one_save_carrying_both_frames_and_the_speed() {
+    let mut app = app_with_two_frames(312);
+    app.handle_key(GameKey::Char('='));
+    app.handle_key(GameKey::Char('='));
+    let (frames, frame_ms) = saved_frames(&mut app);
+    assert_eq!(frames.len(), 2);
+    assert_eq!(frames[0].get(0, 0), 0);
+    assert_eq!(frames[1].get(0, 0), 5, "the live canvas is in the cue");
+    assert_eq!(frame_ms, DEFAULT_SPRITE_FRAME_MS + 2 * SPRITE_FRAME_MS_STEP);
+}
+
+#[test]
+fn a_hue_used_only_on_frame_two_picks_the_colour_variant() {
+    let mut app = app_with_sprite_forge(313);
+    open_editor(&mut app, "anchor");
+    app.handle_key(GameKey::Char('2'));
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    app.handle_key(GameKey::Char('1'));
+    assert!(app.sprite_editor_view().unwrap().full_colour);
+    app.handle_key(GameKey::Char('s'));
+    assert!(app.take_sprite_writes()[0].op.full_colour());
+}
+
+#[test]
+fn a_pinned_variant_survives_a_hue_only_on_frame_two() {
+    let mut app = app_with_sprite_forge(314);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    app.handle_key(GameKey::Char('2'));
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(!app.sprite_editor_view().unwrap().full_colour);
+}
+
+#[test]
+fn an_installed_two_frame_sprite_opens_with_both_frames_and_its_speed() {
+    let mut app = app_with_sprite_forge(315);
+    let mut second = Canvas::new(16);
+    second.set(2, 2, 4);
+    let mut enabled = HashMap::new();
+    enabled.insert(
+        "anchor".to_string(),
+        InstalledSprite {
+            frames: vec![Canvas::new(16), second],
+            frame_ms: 900,
+            full_colour: false,
+        },
+    );
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!((view.frames, view.active_frame, view.frame_ms), (2, 0, 900));
+    assert_eq!(view_cells(&app, 1)[2 * 16 + 2], 4);
 }

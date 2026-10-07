@@ -257,7 +257,12 @@ impl SpriteTable {
     /// sheet's width is not the point.
     #[cfg(test)]
     pub(crate) fn insert_still(&mut self, stem: impl Into<String>, texture: egui::TextureId) {
-        self.insert(stem, texture, 1, crate::sprites::DEFAULT_SPRITE_FRAME_MS);
+        self.insert(
+            stem,
+            texture,
+            1,
+            feral_processes_app_core::DEFAULT_SPRITE_FRAME_MS,
+        );
     }
 
     /// Drops the entry `name` holds, if any. The runtime-built player icon
@@ -318,6 +323,12 @@ impl Painter {
             sprites,
             anim_now: None,
         }
+    }
+
+    /// The animation clock, for a view that plays a sheet itself instead of
+    /// going through `sprite`. `None` means effects are off: show frame one.
+    pub fn anim_now(&self) -> Option<f64> {
+        self.anim_now
     }
 
     pub fn set_anim_now(&mut self, now: Option<f64>) {

@@ -288,8 +288,15 @@ fn editor_geometry(
     let (tile_px, _) = map_cell(zoom);
     let preview = Rect::new(canvas.x + canvas.w + gap, canvas.y, tile_px, tile_px);
 
-    let buttons = button_rects(painter, w, palette.y + palette.h + m.gap, m);
+    let mut buttons = button_rects(painter, w, palette.y + palette.h + m.gap, m);
     let bar_bottom = buttons.last().map_or(0.0, |(_, r)| r.y + r.h);
+    // Under the preview's speed readout, where the screen has room.
+    buttons.extend(frame_button_rects(
+        painter,
+        preview.x,
+        preview.y + preview.h + m.line_height * FRAME_COLUMN_LINES,
+        m,
+    ));
     let footer_top = bar_bottom + gap;
     // Measured in UI cells, `icon_editor.rs::geometry`'s pattern for a
     // screen with no popup body to wrap against.
@@ -317,23 +324,53 @@ fn editor_geometry(
 /// `[g] Brush 2`, is eleven; the rest is padding on both sides.
 const BUTTON_CHARS: f32 = 13.0;
 
-/// The button bar's rects, centred on the window at `y`. Every button is
-/// the same width, so a label that changes with state (`Brush 1`/`Brush 2`,
-/// `Paint`/`Fill`) cannot shift its neighbours or the hit rects.
+/// Buttons on the bottom bar; the frame and speed buttons stack in the
+/// column under the preview instead, since eleven in a row would run off a
+/// 1280px window and a second row costs the height this screen does not have.
+const BAR_BUTTONS: usize = 6;
+
+/// Lines between the preview's bottom and the frame column: one for the
+/// speed readout, one of air.
+const FRAME_COLUMN_LINES: f32 = 2.0;
+
+/// The bottom button bar's rects, centred on the window at `y`. Every button
+/// is the same width, so a label that changes with state (`Brush 1`/`Brush
+/// 2`, `Paint`/`Fill`) cannot shift its neighbours or the hit rects.
 fn button_rects(painter: &Painter, w: f32, y: f32, m: &Metrics) -> Vec<(EditorButton, Rect)> {
-    let button_w = painter.measure_ui_advance("M", m.small()) * BUTTON_CHARS;
-    let button_h = m.line_height * 1.3;
-    let gap = m.gap.max(4.0);
-    let n = EditorButton::ALL.len() as f32;
+    let (button_w, button_h, gap) = button_size(painter, m);
+    let bar = &EditorButton::ALL[..BAR_BUTTONS];
+    let n = bar.len() as f32;
     let left = (w - (button_w * n + gap * (n - 1.0))) / 2.0;
-    EditorButton::ALL
-        .into_iter()
+    bar.iter()
         .enumerate()
-        .map(|(i, b)| {
+        .map(|(i, &b)| {
             let x = left + i as f32 * (button_w + gap);
             (b, Rect::new(x, y, button_w, button_h))
         })
         .collect()
+}
+
+/// The frame and speed buttons, stacked down from `(x, y)`.
+fn frame_button_rects(painter: &Painter, x: f32, y: f32, m: &Metrics) -> Vec<(EditorButton, Rect)> {
+    let (button_w, button_h, gap) = button_size(painter, m);
+    EditorButton::ALL[BAR_BUTTONS..]
+        .iter()
+        .enumerate()
+        .map(|(i, &b)| {
+            (
+                b,
+                Rect::new(x, y + i as f32 * (button_h + gap), button_w, button_h),
+            )
+        })
+        .collect()
+}
+
+fn button_size(painter: &Painter, m: &Metrics) -> (f32, f32, f32) {
+    (
+        painter.measure_ui_advance("M", m.small()) * BUTTON_CHARS,
+        m.line_height * 1.3,
+        m.gap.max(4.0),
+    )
 }
 
 /// A button's label: the key it presses, then what it does now. The tool and
@@ -350,13 +387,23 @@ fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
             Tool::Fill => "[f] Fill".to_string(),
         },
         EditorButton::Back => "[Esc] Back".to_string(),
+        EditorButton::Frame1 => "[1] Frame 1".to_string(),
+        EditorButton::Frame2 => "[2] Frame 2".to_string(),
+        EditorButton::DeleteFrame => "[D] Delete 2".to_string(),
+        EditorButton::Slower => "[-] Slower".to_string(),
+        EditorButton::Faster => "[=] Faster".to_string(),
     }
 }
 
 fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorView, m: &Metrics) {
     for (button, r) in &g.buttons {
         painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
-        let lit = *button == EditorButton::Tool && view.tool == Tool::Fill;
+        let lit = match button {
+            EditorButton::Tool => view.tool == Tool::Fill,
+            EditorButton::Frame1 => view.active_frame == 0,
+            EditorButton::Frame2 => view.active_frame == 1,
+            _ => false,
+        };
         let (thickness, color) = if lit { (3.0, BORDER) } else { (1.0, TEXT_DIM) };
         painter.rect_lines(r.x, r.y, r.w, r.h, thickness, color);
         let label = button_label(*button, view);
@@ -482,6 +529,15 @@ fn draw_sprite_editor_session(
         TEXT_DIM,
     );
     draw_preview_cell(painter, g.preview, view, hue);
+    let speed = format!("{} ms", view.frame_ms);
+    let speed_w = painter.measure_ui(&speed, m.small()).width;
+    painter.ui(
+        &speed,
+        g.preview.x + (g.preview.w - speed_w) / 2.0,
+        g.preview.y + g.preview.h + m.line_height,
+        m.small(),
+        TEXT_DIM,
+    );
 
     let mut y = g.footer_y;
     for line in &g.footer_lines {
@@ -528,9 +584,16 @@ fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue
 
     let edge = view.canvas.edge as usize;
     let cell = rect.w / edge as f32;
+    // Plays the sheet at the pace the save would write, so the player sees
+    // the animation before committing it. Effects off shows frame one, as
+    // the map does.
+    let shown = painter.anim_now().map_or(0, |now| {
+        crate::paint::sprite_frame(now, 0, view.frames, view.frame_ms)
+    });
+    let cells = &view.frame_cells[shown];
     for y in 0..edge {
         for x in 0..edge {
-            let idx = view.canvas.cells[y * edge + x];
+            let idx = cells[y * edge + x];
             let color = match idx {
                 // A transparent cell stays transparent — there is no pixel
                 // for the tint to multiply into.
@@ -1141,7 +1204,8 @@ mod tests {
         enabled.insert(
             "cipher".to_string(),
             InstalledSprite {
-                canvas: art,
+                frames: vec![art],
+                frame_ms: feral_processes_app_core::DEFAULT_SPRITE_FRAME_MS,
                 full_colour: true,
             },
         );
@@ -1461,7 +1525,7 @@ mod tests {
         crate::paint::with_painter(|p| {
             let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
             let mut right = 0.0_f32;
-            for (b, r) in &g.buttons {
+            for (b, r) in &g.buttons[..BAR_BUTTONS] {
                 assert!(r.x >= 0.0 && r.x + r.w <= CENSUS_W, "{b:?} off the window");
                 assert!(
                     r.y >= g.palette.y + g.palette.h,
@@ -1510,6 +1574,11 @@ mod tests {
             "[g] Brush 1",
             "[f] Paint",
             "[Esc] Back",
+            "[1] Frame 1",
+            "[2] Frame 2",
+            "[D] Delete 2",
+            "[-] Slower",
+            "[=] Faster",
         ] {
             assert!(
                 drawn.iter().any(|t| t == label),
@@ -1581,5 +1650,92 @@ mod tests {
             frame > last_fill,
             "frame at {frame}, last pixel at {last_fill}"
         );
+    }
+
+    /// A two-frame view whose frames differ in cell (0,0), so which one the
+    /// preview drew is readable off the fills.
+    fn two_frame_view() -> SpriteEditorView {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        app.handle_key(GameKey::Char('2'));
+        app.handle_key(GameKey::Char(' '));
+        app.sprite_editor_view().expect("open")
+    }
+
+    #[test]
+    fn a_two_frame_sprite_draws_both_tab_labels_and_its_speed() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        app.handle_key(GameKey::Char('2'));
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let drawn = crate::paint::painted_text(&shapes);
+        for label in ["[1] Frame 1", "[2] Frame 2", "600 ms"] {
+            assert!(drawn.iter().any(|t| t.contains(label)), "{label:?}");
+        }
+    }
+
+    #[test]
+    fn the_preview_draws_the_frame_sprite_frame_picks() {
+        let view = two_frame_view();
+        assert_ne!(view.frame_cells[0][0], view.frame_cells[1][0]);
+        let rect = Rect::new(500.0, 40.0, 32.0, 32.0);
+        let first_cell_fill = |now: Option<f64>| {
+            let (_, shapes) = crate::paint::with_sprites_at(Default::default(), now, |p| {
+                draw_preview_cell(p, rect, &view, WHITE)
+            });
+            // The first pixel drawn after the background panel is cell (0,0).
+            shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) if r.stroke.width == 0.0 => Some(r.fill),
+                    _ => None,
+                })
+                .nth(1)
+        };
+        let frame_ms = f64::from(view.frame_ms) / 1000.0;
+        let on_first = first_cell_fill(Some(0.0));
+        let on_second = first_cell_fill(Some(frame_ms));
+        assert_eq!(crate::paint::sprite_frame(0.0, 0, 2, view.frame_ms), 0);
+        assert_eq!(crate::paint::sprite_frame(frame_ms, 0, 2, view.frame_ms), 1);
+        assert_ne!(on_first, on_second, "the preview must follow the clock");
+        assert_eq!(on_first, first_cell_fill(None), "no clock shows frame one");
+    }
+
+    /// The frame column sits inside the window, clear of the canvas, the
+    /// palette, the preview and each other, at every zoom the map offers.
+    #[test]
+    fn the_frame_buttons_fit_beside_the_canvas_without_overlap() {
+        let m = crate::text::ui_metrics(CENSUS_H);
+        let apart = |a: &Rect, b: &Rect| {
+            a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y
+        };
+        for zoom in 0..=4 {
+            crate::paint::with_painter(|p| {
+                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, zoom);
+                for (i, (b, r)) in g.buttons.iter().enumerate() {
+                    assert!(
+                        r.x >= 0.0 && r.x + r.w <= CENSUS_W,
+                        "zoom {zoom}: {b:?} off the window"
+                    );
+                    assert!(
+                        r.y + r.h <= g.footer_y,
+                        "zoom {zoom}: {b:?} past the footer"
+                    );
+                    for (c, q) in g.buttons.iter().skip(i + 1) {
+                        assert!(apart(r, q), "zoom {zoom}: {b:?} overlaps {c:?}");
+                    }
+                    if i >= BAR_BUTTONS {
+                        for (name, other) in [
+                            ("canvas", &g.canvas),
+                            ("palette", &g.palette),
+                            ("preview", &g.preview),
+                        ] {
+                            assert!(apart(r, other), "zoom {zoom}: {b:?} overlaps the {name}");
+                        }
+                    }
+                }
+            });
+        }
     }
 }

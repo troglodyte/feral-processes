@@ -118,6 +118,10 @@ pub(crate) struct CanvasEditor {
     /// that follows a real change sets it and pushes, so a stroke that
     /// never changes anything pushes nothing at all.
     stroke_recorded: bool,
+    /// Snapshots ever pushed. Unlike `history.len()` it still moves once the
+    /// ring is full, which is how a wrapper learns an edit really changed
+    /// something.
+    snapshots_taken: u64,
 }
 
 impl CanvasEditor {
@@ -137,6 +141,7 @@ impl CanvasEditor {
             history: VecDeque::new(),
             stroke: false,
             stroke_recorded: false,
+            snapshots_taken: 0,
         }
     }
 
@@ -157,6 +162,10 @@ impl CanvasEditor {
             focus: self.focus,
             brush: self.brush,
         }
+    }
+
+    pub(crate) fn snapshots_taken(&self) -> u64 {
+        self.snapshots_taken
     }
 
     pub(crate) fn canvas(&self) -> &Canvas {
@@ -445,5 +454,6 @@ impl CanvasEditor {
             self.history.pop_front();
         }
         self.history.push_back(self.canvas.clone());
+        self.snapshots_taken += 1;
     }
 }

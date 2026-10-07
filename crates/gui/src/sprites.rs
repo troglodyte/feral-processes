@@ -22,7 +22,9 @@ use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
-use feral_processes_app_core::{InstalledSprite, SpriteOp};
+use feral_processes_app_core::{
+    DEFAULT_SPRITE_FRAME_MS, InstalledSprite, MAX_SPRITE_FRAMES, SpriteOp,
+};
 use feral_processes_engine::icon::{Canvas, FULL_COLOUR_SUFFIX, quantise, sprite_rgba};
 use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
@@ -61,27 +63,30 @@ fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
     names
 }
 
-/// Encodes `canvas` through `sprite_rgba` — the quantiser's exact inverse —
-/// and writes it to `path` as a PNG, overwriting whatever was there.
+/// Encodes `frames` through `sprite_rgba` — the quantiser's exact inverse —
+/// and writes them side by side as one `16n x 16` PNG, overwriting whatever
+/// was there.
 ///
-/// The one door the sprite editor's `[s]` reaches disk through. `canvas`'s
-/// own `edge()` sizes the image rather than assuming `ICON_SIZE`: the sprite
+/// The one door the sprite editor's `[s]` reaches disk through. The frames'
+/// own `edge()` sizes each cell rather than assuming `ICON_SIZE`: the sprite
 /// canvas is always 16x16 by construction (`app-core`'s `SPRITE_EDGE`), but
 /// this codec has no reason to assume that of its caller.
-pub fn canvas_to_png(canvas: &Canvas, path: &Path) -> std::io::Result<()> {
-    let edge = canvas.edge();
-    let mut buf = image::RgbaImage::new(edge as u32, edge as u32);
-    for y in 0..edge {
-        for x in 0..edge {
-            let (r, g, b, a) = sprite_rgba(canvas.get(x, y));
-            buf.put_pixel(x as u32, y as u32, image::Rgba([r, g, b, a]));
+pub fn frames_to_png(frames: &[Canvas], path: &Path) -> std::io::Result<()> {
+    let edge = frames.first().map_or(ICON_SIZE, Canvas::edge);
+    let mut buf = image::RgbaImage::new((edge * frames.len()) as u32, edge as u32);
+    for (i, canvas) in frames.iter().enumerate() {
+        for y in 0..edge {
+            for x in 0..edge {
+                let (r, g, b, a) = sprite_rgba(canvas.get(x, y));
+                buf.put_pixel((i * edge + x) as u32, y as u32, image::Rgba([r, g, b, a]));
+            }
         }
     }
     buf.save(path)
         .map_err(|e| std::io::Error::other(format!("{path:?}: {e}")))
 }
 
-/// Decodes a PNG at `path` back into a `Canvas`, quantising every pixel onto
+/// Decodes a PNG at `path` back into its frames, quantising every pixel onto
 /// `SPRITE_PALETTE` through `quantise` — the codec's other half.
 ///
 /// **The format is guessed from the bytes, not the extension.** A disabled
@@ -92,8 +97,8 @@ pub fn canvas_to_png(canvas: &Canvas, path: &Path) -> std::io::Result<()> {
 /// counterpart identically.
 ///
 /// **`None` on any failure**: missing file, a file that isn't a PNG, a
-/// corrupt one, or — I3's fix — one that is not exactly `ICON_SIZE` square.
-/// `assets/sprites/README.md` calls 16x16 non-negotiable and `text::map_cell`
+/// corrupt one, or — I3's fix — one `frames_in` refuses. `assets/sprites/
+/// README.md` calls the 16px cell non-negotiable and `text::map_cell`
 /// depends on it; a merely-square image used to pass here and open an
 /// off-format editor that would write the same wrong size back out. This is
 /// the same warn-and-carry-on contract `register`'s `LoadState::Failed` arm
@@ -101,7 +106,7 @@ pub fn canvas_to_png(canvas: &Canvas, path: &Path) -> std::io::Result<()> {
 /// There is nothing to log to here (this runs off the render thread, ahead
 /// of the frame that would show a refusal), so the caller decides what a
 /// `None` means.
-pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
+pub fn png_to_frames(path: &Path) -> Option<Vec<Canvas>> {
     let img = image::ImageReader::open(path)
         .ok()?
         .with_guessed_format()
@@ -110,18 +115,22 @@ pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
         .ok()?
         .into_rgba8();
     let (w, h) = img.dimensions();
-    if w as usize != ICON_SIZE || h as usize != ICON_SIZE {
-        return None;
-    }
-    let edge = w as usize;
-    let mut canvas = Canvas::new(edge);
-    for y in 0..h {
-        for x in 0..w {
-            let p = img.get_pixel(x, y);
-            canvas.set(x as usize, y as usize, quantise((p[0], p[1], p[2], p[3])));
-        }
-    }
-    Some(canvas)
+    let count = frames_in(w, h)?;
+    let edge = ICON_SIZE as u32;
+    Some(
+        (0..count as u32)
+            .map(|i| {
+                let mut canvas = Canvas::new(ICON_SIZE);
+                for y in 0..edge {
+                    for x in 0..edge {
+                        let p = img.get_pixel(i * edge + x, y);
+                        canvas.set(x as usize, y as usize, quantise((p[0], p[1], p[2], p[3])));
+                    }
+                }
+                canvas
+            })
+            .collect(),
+    )
 }
 
 /// Everything installed art `dir` holds: every enabled sprite decoded to a
@@ -131,7 +140,7 @@ pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
 /// **Both maps carry pixels, not bare names — I2's fix.** `App::
 /// install_sprite_library`'s `disabled` half used to be a `HashSet<String>`,
 /// so `Enter` on an `Off` subject had no art to open and fell back to blank;
-/// decoding `.png.off` files here (through `png_to_canvas`'s guessed-format
+/// decoding `.png.off` files here (through `png_to_frames`'s guessed-format
 /// read, since the real extension is `off`) is what lets the picker's own
 /// promise — "toggling it off... keeps the art on disk" — reach the one tool
 /// that can show it back to the player.
@@ -142,7 +151,7 @@ pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
 /// loader nor the map ever ask for. A missing directory, like
 /// `scan_sprite_dir`, is the supported empty state rather than an error. A
 /// `.png`/`.png.off` that fails to decode is silently dropped from its map
-/// rather than surfaced — the same contract `png_to_canvas` keeps on its
+/// rather than surfaced — the same contract `png_to_frames` keeps on its
 /// own.
 pub fn scan_library(
     dir: &Path,
@@ -173,7 +182,7 @@ pub fn scan_library(
         if name.starts_with('@') {
             continue;
         }
-        if let Some(canvas) = png_to_canvas(&path) {
+        if let Some(frames) = png_to_frames(&path) {
             // The colour file wins whatever order the directory lists them
             // in — `SpriteTable::insert`'s own rule, so the editor opens what
             // the map draws.
@@ -182,7 +191,8 @@ pub fn scan_library(
                 map.insert(
                     name.to_string(),
                     InstalledSprite {
-                        canvas,
+                        frames,
+                        frame_ms: read_frame_ms(dir, name),
                         full_colour,
                     },
                 );
@@ -352,12 +362,6 @@ pub fn install_library(app: &mut feral_processes_app_core::App) {
     app.install_sprite_library(enabled, disabled);
 }
 
-/// Milliseconds a cell shows when a sheet ships without an `.anim.ron`.
-pub const DEFAULT_SPRITE_FRAME_MS: u32 = 600;
-/// The most cells a sheet may have. Two is the idle breath the art budget
-/// affords; the check lives in `frames_in` so raising it is one edit.
-pub const MAX_SPRITE_FRAMES: usize = 2;
-
 /// A sheet's `<name>.anim.ron`: how long each cell shows. Per name, not per
 /// variant, so the plain and `.colour` sheets of one sprite keep one pace.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -402,6 +406,28 @@ fn frames_in(width: u32, height: u32) -> Option<usize> {
     }
     let frames = (width / cell) as usize;
     (1..=MAX_SPRITE_FRAMES).contains(&frames).then_some(frames)
+}
+
+/// Keeps `<name>.anim.ron` in step with a save: written for a sheet that
+/// animates, removed for one that no longer does, so deleting frame 2 and
+/// saving leaves nothing behind that claims a pace for a still sprite.
+/// Best-effort like the `.off` retirement below: the PNG already landed.
+fn write_anim(dir: &Path, name: &str, frames: usize, frame_ms: u32) {
+    let path = anim_path(dir, name);
+    if frames < 2 {
+        if path.exists()
+            && let Err(e) = std::fs::remove_file(&path)
+        {
+            warn!("sprite `{name}` saved, but its stale `.anim.ron` could not be removed: {e}");
+        }
+        return;
+    }
+    let written = ron::to_string(&SpriteAnim { frame_ms })
+        .map_err(std::io::Error::other)
+        .and_then(|text| std::fs::write(&path, text));
+    if let Err(e) = written {
+        warn!("sprite `{name}` saved, but its `.anim.ron` could not be written: {e}");
+    }
 }
 
 fn sprite_stem(name: &str, full_colour: bool) -> String {
@@ -465,11 +491,14 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
     let off_path = sprite_path(dir, name, full_colour, true);
     let file = sprite_stem(name, full_colour);
     match op {
-        SpriteOp::Save { canvas, .. } => {
-            if let Err(e) = canvas_to_png(&canvas, &path) {
+        SpriteOp::Save {
+            frames, frame_ms, ..
+        } => {
+            if let Err(e) = frames_to_png(&frames, &path) {
                 warn!("sprite `{name}` failed to save: {e}");
                 return WriteOutcome::Failed;
             }
+            write_anim(dir, name, frames.len(), frame_ms);
             // Retires a stale disabled backup under the same name — see this
             // function's own doc comment. Best-effort: a backup that is
             // already gone (the common case) is not a failure.
@@ -642,9 +671,21 @@ mod tests {
 
     fn plain(canvas: Canvas) -> InstalledSprite {
         InstalledSprite {
-            canvas,
+            frames: vec![canvas],
+            frame_ms: DEFAULT_SPRITE_FRAME_MS,
             full_colour: false,
         }
+    }
+
+    /// One-frame views of the sheet codec, for the tests whose subject is
+    /// the toggle and variant rules rather than the frame count.
+    fn canvas_to_png(canvas: &Canvas, path: &Path) -> std::io::Result<()> {
+        frames_to_png(std::slice::from_ref(canvas), path)
+    }
+
+    fn png_to_canvas(path: &Path) -> Option<Canvas> {
+        let mut frames = png_to_frames(path)?;
+        (frames.len() == 1).then(|| frames.remove(0))
     }
 
     /// A drawing with one lit cell — enough to be non-blank, and it pins
@@ -1198,6 +1239,87 @@ mod tests {
         );
     }
 
+    fn two_frames() -> Vec<Canvas> {
+        let mut second = a_sprite_canvas();
+        second.set(7, 7, 4);
+        vec![a_sprite_canvas(), second]
+    }
+
+    fn two_frame_save(frame_ms: u32) -> SpriteOp {
+        SpriteOp::Save {
+            frames: two_frames(),
+            frame_ms,
+            full_colour: false,
+        }
+    }
+
+    #[test]
+    fn a_two_frame_sheet_written_and_read_back_is_the_same_frames() {
+        let dir = codec_test_dir("two_frame_roundtrip");
+        let path = dir.join("subject.png");
+
+        frames_to_png(&two_frames(), &path).unwrap();
+        let read_back = png_to_frames(&path);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(read_back, Some(two_frames()));
+    }
+
+    #[test]
+    fn a_two_frame_file_is_32x16() {
+        let dir = codec_test_dir("two_frame_dims");
+        let path = dir.join("subject.png");
+
+        frames_to_png(&two_frames(), &path).unwrap();
+        let img = image::open(&path).unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!((img.width(), img.height()), (32, 16));
+    }
+
+    #[test]
+    fn png_to_frames_refuses_a_row_that_is_not_one_or_two_whole_cells() {
+        let dir = codec_test_dir("odd_widths");
+        for (w, h) in [(24, 16), (48, 16), (16, 32)] {
+            let path = dir.join(format!("{w}x{h}.png"));
+            image::RgbaImage::new(w, h).save(&path).unwrap();
+            assert!(png_to_frames(&path).is_none(), "{w}x{h}");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn saving_two_frames_writes_a_sheet_and_an_anim_file_that_reads_back() {
+        let dir = codec_test_dir("save_two_frames");
+
+        let outcome = apply_sprite_write(&dir, "subject", two_frame_save(900));
+
+        let img = image::open(dir.join("subject.png")).unwrap();
+        let ms = read_frame_ms(&dir, "subject");
+        let (enabled, _) = scan_library(&dir);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(outcome, WriteOutcome::Reload);
+        assert_eq!((img.width(), img.height()), (32, 16));
+        assert_eq!(ms, 900);
+        assert_eq!(enabled["subject"].frames, two_frames());
+        assert_eq!(enabled["subject"].frame_ms, 900);
+    }
+
+    #[test]
+    fn saving_one_frame_removes_a_stale_anim_file() {
+        let dir = codec_test_dir("save_one_frame_clears_anim");
+        apply_sprite_write(&dir, "subject", two_frame_save(900));
+        assert!(anim_path(&dir, "subject").exists());
+
+        apply_sprite_write(&dir, "subject", save(dot(3), false));
+
+        let gone = !anim_path(&dir, "subject").exists();
+        let img = image::open(dir.join("subject.png")).unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(gone);
+        assert_eq!((img.width(), img.height()), (16, 16));
+    }
+
     /// **I1 + I2, the exact sequence the final review's I1 finding walks
     /// through: `t` (disable), Enter (open), draw, `s` (save), `t` (disable
     /// again).** Before this task's fix that sequence destroyed the
@@ -1240,7 +1362,7 @@ mod tests {
         let (_, disabled) = scan_library(&dir);
         let opened = disabled
             .get("subject")
-            .map(|sprite| sprite.canvas.clone())
+            .map(|sprite| sprite.frames[0].clone())
             .expect("I2: Enter on an Off subject must find its art, not open blank");
         assert_eq!(
             opened, original,
@@ -1264,7 +1386,8 @@ mod tests {
                 &dir,
                 "subject",
                 SpriteOp::Save {
-                    canvas: edited.clone(),
+                    frames: vec![edited.clone()],
+                    frame_ms: DEFAULT_SPRITE_FRAME_MS,
                     full_colour: false
                 }
             ),
@@ -1418,9 +1541,17 @@ mod tests {
         canvas
     }
 
+    fn plain_or_colour(canvas: Canvas, full_colour: bool) -> InstalledSprite {
+        InstalledSprite {
+            full_colour,
+            ..plain(canvas)
+        }
+    }
+
     fn save(canvas: Canvas, full_colour: bool) -> SpriteOp {
         SpriteOp::Save {
-            canvas,
+            frames: vec![canvas],
+            frame_ms: DEFAULT_SPRITE_FRAME_MS,
             full_colour,
         }
     }
@@ -1434,20 +1565,8 @@ mod tests {
         let (enabled, disabled) = scan_library(&dir);
         std::fs::remove_dir_all(&dir).ok();
 
-        assert_eq!(
-            enabled.get("on"),
-            Some(&InstalledSprite {
-                canvas: dot(12),
-                full_colour: true
-            })
-        );
-        assert_eq!(
-            disabled.get("off"),
-            Some(&InstalledSprite {
-                canvas: dot(13),
-                full_colour: true
-            })
-        );
+        assert_eq!(enabled.get("on"), Some(&plain_or_colour(dot(12), true)));
+        assert_eq!(disabled.get("off"), Some(&plain_or_colour(dot(13), true)));
         assert!(!enabled.contains_key("on.colour") && !disabled.contains_key("off.colour"));
     }
 
@@ -1466,27 +1585,9 @@ mod tests {
         let (enabled, disabled) = scan_library(&dir);
         std::fs::remove_dir_all(&dir).ok();
 
-        assert_eq!(
-            enabled["both"],
-            InstalledSprite {
-                canvas: dot(12),
-                full_colour: true
-            }
-        );
-        assert_eq!(
-            enabled["late"],
-            InstalledSprite {
-                canvas: dot(12),
-                full_colour: true
-            }
-        );
-        assert_eq!(
-            disabled["gone"],
-            InstalledSprite {
-                canvas: dot(12),
-                full_colour: true
-            }
-        );
+        assert_eq!(enabled["both"], plain_or_colour(dot(12), true));
+        assert_eq!(enabled["late"], plain_or_colour(dot(12), true));
+        assert_eq!(disabled["gone"], plain_or_colour(dot(12), true));
     }
 
     #[test]
@@ -1520,13 +1621,7 @@ mod tests {
         write_png(&dir.join("x.png"), &dot(3));
         let (enabled, _) = scan_library(&dir);
         std::fs::remove_dir_all(&dir).ok();
-        assert_eq!(
-            enabled["x"],
-            InstalledSprite {
-                canvas: dot(3),
-                full_colour: false
-            }
-        );
+        assert_eq!(enabled["x"], plain_or_colour(dot(3), false));
     }
 
     #[test]

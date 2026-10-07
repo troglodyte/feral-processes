@@ -140,6 +140,12 @@ someone dropping in a file — a stray `.png.off` sitting next to an enabled
 sprite is normal, not a leftover to clean up, and is exactly how a piece of
 art gets shelved without losing it.
 
+The editor edits two-frame sheets too: `[2]` makes frame 2 as a copy of
+frame 1, `[1]` goes back, `[D]` deletes frame 2, and `[-]`/`[=]` step the
+pace by 100 ms between 100 and 2000. A save with two frames writes the
+32x16 sheet and `<name>.anim.ron`; a save with one frame writes 16x16 and
+removes any `.anim.ron` left beside it.
+
 ## A save quantises the file, irreversibly
 
 The dev-only sprite editor reads any 16x16 PNG in this directory back onto

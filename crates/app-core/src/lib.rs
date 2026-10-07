@@ -28,8 +28,9 @@ pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_forge::{
-    EditorButton, InstalledSprite, PointerButton, PointerHit, PointerPhase, SpriteArt,
-    SpriteEditorView, SpriteOp, SpriteSubject, SpriteWrite, SubjectTint,
+    DEFAULT_SPRITE_FRAME_MS, EditorButton, InstalledSprite, MAX_SPRITE_FRAMES, PointerButton,
+    PointerHit, PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP,
+    SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject, SpriteWrite, SubjectTint,
 };
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::telemetry::append_records;

@@ -2578,3 +2578,31 @@ fn a_dry_miner_does_not_hold_the_assembler_back() {
         "the miner has nothing to fetch, so the assembler's coils are carried"
     );
 }
+
+/// A miner nobody can walk to is dropped as cut off, and must not have
+/// already held the assemblers above it back: the level cut counts only
+/// sites the crew can reach.
+#[test]
+fn a_cut_off_miner_does_not_hold_the_assembler_back() {
+    let mut game = base(1203);
+    builder(&mut game);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(px + far, py + far);
+        grid.lay_floor(px + far + 1, py + far);
+    }
+    file_build(&mut game, "mining_node", far, far).unwrap();
+    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert!(
+        delivered_total(&mut game, 1, 0) > 0,
+        "the unreachable miner is dropped, so the assembler is worked"
+    );
+}

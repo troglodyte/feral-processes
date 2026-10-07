@@ -1120,6 +1120,7 @@ impl Game {
             // **Recorded on the way out**, because this is the state a
             // player is most likely to have the screen open on and an
             // unwritten demand would read as no wants rather than no bodies.
+            self.cut_to_lowest_build_level(&mut wanted);
             let unworked = self.unworked_by_duty(wanted.iter().copied());
             self.record_labour_demand(wanted.len(), 0, unworked);
             return;
@@ -1239,6 +1240,10 @@ impl Game {
                 }
             }
         }
+
+        // After the drop, so a site the crew cannot reach does not set the
+        // level the rest are cut to.
+        self.cut_to_lowest_build_level(&mut wanted);
 
         // **After the unreachable drop and before the matching**, so the
         // substrate a plan the crew cannot walk to would have claimed goes
@@ -1891,8 +1896,9 @@ impl Game {
     /// rest of the run.
     ///
     /// Sorted by `(level, x, y)` — `StructureDb::level`, so a base raises
-    /// its miners before the machines that eat what they mine — and cut to
-    /// the lowest level that has a workable site. Within a level the tile
+    /// its miners before the machines that eat what they mine; the cut to
+    /// the lowest level is `cut_to_lowest_build_level`, applied once
+    /// unreachable sites are gone. Within a level the tile
     /// order is `assembler_system`'s, so two requests filed in the same tick
     /// are always raised in the same order.
     fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
@@ -1923,15 +1929,34 @@ impl Game {
                 self.announce_dry(site);
             }
         }
-        // Sorted ascending, so the first workable site names the lowest
-        // workable level. Dry sites never reached `workable`, which is why
-        // a stuck miner cannot freeze the assemblers above it.
-        let lowest = workable.first().map(|(level, _)| *level);
         workable
             .into_iter()
-            .take_while(|(level, _)| Some(*level) == lowest)
             .map(|(_, e)| (e, TaskKind::Construct))
             .collect()
+    }
+
+    /// Keeps only the build wants at the lowest level any of them has.
+    ///
+    /// **Run after the unreachable drop, never in `build_wants`.** A cut-off
+    /// miner counted here would hold every assembler above it back and then
+    /// be dropped itself, leaving nothing built: a stuck miner must not
+    /// freeze the base. Dry sites never reach the wants at all, which is the
+    /// same guarantee for the other way a miner gets stuck.
+    fn cut_to_lowest_build_level(&self, wanted: &mut Vec<(Entity, TaskKind)>) {
+        let db = self.world.resource::<StructureDb>();
+        let level_of = |site: Entity| {
+            self.world
+                .get::<BuildSite>(site)
+                .map(|b| db.level(&b.structure))
+        };
+        let lowest = wanted
+            .iter()
+            .filter(|(_, kind)| *kind == TaskKind::Construct)
+            .filter_map(|&(site, _)| level_of(site))
+            .min();
+        wanted.retain(|&(site, kind)| {
+            kind != TaskKind::Construct || level_of(site).is_none() || level_of(site) == lowest
+        });
     }
 
     /// Says once that there is nothing anywhere to fetch for `site`.

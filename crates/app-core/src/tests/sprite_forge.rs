@@ -790,6 +790,19 @@ fn new_art_that_uses_a_hue_saves_as_full_colour() {
 }
 
 #[test]
+fn a_second_save_keeps_the_variant_the_first_one_chose() {
+    let mut app = app_with_sprite_forge(75);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(saved_variant(&mut app).1);
+    paint_cursor_cell(&mut app, 0);
+    assert!(
+        saved_variant(&mut app).1,
+        "re-deriving would write x.png beside the x.colour.png the first save made"
+    );
+}
+
+#[test]
 fn new_grey_only_art_saves_as_plain() {
     let mut app = app_with_sprite_forge(71);
     open_editor(&mut app, "anchor");

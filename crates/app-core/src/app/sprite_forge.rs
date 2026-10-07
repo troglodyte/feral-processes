@@ -644,11 +644,16 @@ impl App {
                 sprite_editor.editor.pick_colour_at(x, y);
             }
             GameKey::Char('s') => {
+                // Pinned after the first save: re-deriving would let a later
+                // hue-free save write `x.png` beside the `x.colour.png`
+                // already on disk, and the stale colour file would win.
+                let full_colour = sprite_editor.full_colour();
+                sprite_editor.full_colour = Some(full_colour);
                 let write = SpriteWrite {
                     name: sprite_editor.subject.clone(),
                     op: SpriteOp::Save {
                         canvas: sprite_editor.editor.canvas().clone(),
-                        full_colour: sprite_editor.full_colour(),
+                        full_colour,
                     },
                 };
                 self.pending_sprite_writes.push(write);

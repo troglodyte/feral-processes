@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.16.3
+
+**The sprite editor can now open and change the game's own sprites, and you can use it with the mouse.** It is a developer tool, turned on by starting the game with `FERAL_DEV_SPRITES=1`. Before, it could not open the full-colour sprites the game ships with (`name.colour.png`). Now it opens them and saves them back to the same file. Its palette goes from 19 colours to 63: the nine-step grey ramp plus nine colour families of six shades, picked to match the shipped art. The palette is a grid you can click, and the preview shows a colour sprite tinted the way the map draws it. New tools: fill (`f`) and a colour picker (`i`, or Alt+click or middle-click). A row of buttons under the canvas does the same as the save, undo, clear, brush size, tool and back keys. In the sprite list, click a sprite to select it and double-click to open it. New art is saved as a colour sprite if it uses any colour outside the grey ramp. Saves from before this version still load.
+
 ## 0.16.2
 
 **The main menu and the load list no longer burn CPU while they sit open.** Both screens re-read and decoded every save file on every frame, so a player with a few saves had the menu using over half a CPU core while idle (about 59% with four saves, against 10% with none). Each save is now read once and only read again when the file changes.

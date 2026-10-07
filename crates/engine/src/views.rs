@@ -3260,6 +3260,10 @@ pub struct BuildOrderRow {
     /// The program posted to this site, if one is. `None` is a real state
     /// and not a fault: a base with no spare body leaves requests standing.
     pub builder: Option<String>,
+    /// A rebuild site still waiting for the player to commit a program
+    /// (`Game::commit_rebuild_program`). Nothing is fetched or raised until
+    /// they do, so the crew-facing fields above are not the story.
+    pub awaiting_program: bool,
 }
 
 impl BuildOrderRow {

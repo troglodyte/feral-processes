@@ -727,6 +727,13 @@ impl Game {
     /// bare percentage.
     pub fn build_site_blurb(&self, entity: Entity) -> Option<String> {
         let row = self.build_order_row(entity)?;
+        if row.awaiting_program {
+            return Some(format!(
+                "{} — a wreck waiting for a program. Stand beside it and press [c] to choose one; \
+                 the crew starts once you do.",
+                row.label()
+            ));
+        }
         let mut line = format!("{} — {}% raised.", row.label(), row.percent());
         if row.outstanding.is_empty() {
             line.push_str(&format!(
@@ -819,6 +826,7 @@ impl Game {
             ticks: site.progress,
             required_ticks: site.required_ticks(),
             builder,
+            awaiting_program: site.awaiting_program,
         })
     }
 

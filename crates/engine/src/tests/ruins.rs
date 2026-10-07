@@ -354,3 +354,18 @@ mod adjacent {
         assert!(found.iter().any(|i| i.kind == InteractionKind::Transfer));
     }
 }
+
+#[test]
+fn an_awaiting_sites_examine_line_says_it_needs_a_program() {
+    let mut game = base(2310);
+    let (px, py) = game.base_pos().unwrap();
+    game.world
+        .resource_mut::<Ruins>()
+        .0
+        .push(ruin("mining_node", px + 1, py));
+    game.file_ruins();
+    let (site, _) = sites(&mut game)[0];
+    let blurb = game.build_site_blurb(site).unwrap();
+    assert!(blurb.contains("waiting for a program"), "{blurb}");
+    assert!(game.build_order_report()[0].awaiting_program);
+}

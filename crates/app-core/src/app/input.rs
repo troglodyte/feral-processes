@@ -153,6 +153,12 @@ impl App {
     /// left to the caller, whose way back differs. One door for every
     /// confirm, so they cannot disagree about what Enter means.
     pub(crate) fn yes_no(&mut self, key: GameKey) -> Option<bool> {
+        // Digits pick rows everywhere else, but a confirm labels its rows
+        // `[y]`/`[n]`, and the menus that lead into one are picked by digit:
+        // a repeated `1` would otherwise answer Yes unseen.
+        if matches!(key, GameKey::Char(c) if c.is_ascii_digit()) {
+            return None;
+        }
         let options = ['y', 'n'];
         self.selected_index(key, options.len())
             .or_else(|| match key {

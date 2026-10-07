@@ -244,3 +244,18 @@ fn an_unrelated_key_leaves_the_extract_confirm_open() {
     app.handle_key(GameKey::Char('n'));
     assert_eq!(app.mode, Mode::ExtractPick);
 }
+
+/// Extract is reached by `1` then `1`; a third `1` from key repeat must not
+/// answer the question. The confirm's rows are `[y]`/`[n]`, so a digit is
+/// a stray key here, not a row pick.
+#[test]
+fn a_digit_leaves_the_extract_confirm_open() {
+    let mut app = on_the_extract_confirm(68);
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Char('2'));
+
+    assert_eq!(app.mode, Mode::ExtractConfirm);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets().len(), before);
+}

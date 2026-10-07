@@ -3663,7 +3663,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // a shipped species.
     #[cfg(test)]
     species.insert(crate::tests::support::generic_species());
-    let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
+    let (mut structures, structure_warnings) =
+        StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
@@ -3676,6 +3677,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
+    structures.compute_levels(&items);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty

@@ -467,6 +467,8 @@ impl App {
         let goal = match &pending {
             PendingBuild::Deploy { .. } => BuildGoal::New,
             PendingBuild::Upgrade { to_tier, .. } => BuildGoal::Upgrade { to_tier: *to_tier },
+            // A rebuild is paid for as a fresh deploy is, tier 1.
+            PendingBuild::Rebuild { .. } => BuildGoal::New,
         };
         let Some(kind) = self.pending_build_kind() else {
             return;
@@ -495,6 +497,7 @@ impl App {
             PendingBuild::Upgrade { structure, .. } => {
                 game.upgrade_structure(structure, Some(chosen))
             }
+            PendingBuild::Rebuild { site } => game.commit_rebuild_program(site, chosen),
         };
         self.report(outcome);
         self.pending_build = None;
@@ -559,6 +562,13 @@ impl App {
             PendingBuild::Upgrade { structure, .. } => {
                 self.game.as_ref()?.structure_kind(structure)
             }
+            PendingBuild::Rebuild { site } => self
+                .game
+                .as_ref()?
+                .awaiting_program_sites()
+                .into_iter()
+                .find(|s| s.site == site)
+                .map(|s| s.structure),
         }
     }
 
@@ -741,6 +751,54 @@ impl App {
             to_tier: tier + 1,
         });
         self.mode = Mode::BuildProgram;
+    }
+
+    /// Runs what `[c]` found on one side. The single place an
+    /// `InteractionKind` becomes a screen, so the direct path and the
+    /// direction prompt cannot disagree about what a kind does.
+    pub(crate) fn run_interaction(&mut self, kind: InteractionKind) {
+        match kind {
+            InteractionKind::Transfer => {
+                let Some(game) = &self.game else { return };
+                let (rows, carriers, room, rack_room) = (
+                    game.transfer_offer(),
+                    game.rack_offer(),
+                    game.transfer_room(),
+                    game.total_rack_room(),
+                );
+                self.open_transfer(rows, carriers, room, rack_room, TransferSource::Base);
+            }
+            InteractionKind::RebuildProgram(site) => {
+                self.pending_build = Some(PendingBuild::Rebuild { site });
+                self.menu_selected = 0;
+                self.mode = Mode::BuildProgram;
+            }
+        }
+    }
+
+    pub(crate) fn handle_interact_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => (0, -1),
+            GameKey::Down | GameKey::Char('j') => (0, 1),
+            GameKey::Left | GameKey::Char('h') => (-1, 0),
+            GameKey::Right | GameKey::Char('l') => (1, 0),
+            _ => return,
+        };
+        let found = self
+            .game
+            .as_ref()
+            .and_then(|g| g.adjacent_interactions().into_iter().find(|i| i.dir == dir));
+        match found {
+            Some(i) => self.run_interaction(i.kind),
+            None => {
+                self.refuse("Nothing to do that way.");
+                self.mode = Mode::Playing;
+            }
+        }
     }
 
     pub(crate) fn handle_remove_confirm_key(&mut self, key: GameKey) {

@@ -3,14 +3,11 @@
 use crate::DEV_CONSOLE_KEY;
 use crate::*;
 
-/// What `c` hands out past the `self.game` borrow: everything
-/// `App::open_transfer` needs. Opening a screen is not an action, so it
-/// cannot happen inside the borrow that answered the key.
-struct TransferOpening {
-    rows: Vec<TransferRow>,
-    carriers: Vec<TransferCarrier>,
-    room: Option<u32>,
-    rack_room: u32,
+/// What `c` resolved to: one interaction to run now, or several sides to
+/// ask about with `Mode::InteractDirection`.
+enum Interact {
+    Run(InteractionKind),
+    Ask,
 }
 
 /// The shared "did the world actually move" rule behind `stepped` and
@@ -474,10 +471,8 @@ impl App {
         // `acted` false and `after_world_action` returns before it can clear
         // the line that explains why.
         let mut refusal = None;
-        // What the transfer picker will open on, if `c` found anything —
-        // the rows and the Depot room, handed out past the `self.game`
-        // borrow together.
-        let mut opening: Option<TransferOpening> = None;
+        // What `c` decided to do, handed out past the `self.game` borrow.
+        let mut interaction: Option<Interact> = None;
         // What the ground took off the party, for the cue
         // `after_world_action` picks. Declared out here because the four
         // movement arms below sit inside a `self.game` borrow and have to
@@ -545,39 +540,36 @@ impl App {
                 // on the lists, never here), and not one of the hidden keys.
                 // Uppercase, as every map action is.
                 GameKey::Char('I') => self.open_splice_rig(),
+                // The interact key: whatever the structures beside the party
+                // offer (`Game::adjacent_interactions`). Nothing → the
+                // engine's own transfer refusal; one → act on it; several
+                // sides → ask which. Opening a screen is not an action, so
+                // the choice is handed out past the `self.game` borrow.
                 GameKey::Char('c') => {
-                    let offer = game.transfer_offer();
-                    let carriers = game.rack_offer();
-                    // An empty offer is still worth a screen when a Depot
-                    // is standing here: `[F]` is reached from inside the
-                    // picker, and a Depot built five seconds ago with an
-                    // empty pack beside it is exactly when the player wants
-                    // to set it up. Without this the one Depot that most
-                    // needs configuring is the one that cannot be.
-                    let configurable = !game.adjacent_depot_entities().is_empty();
-                    if offer.is_empty() && carriers.is_empty() && !configurable {
-                        // Straight back through the engine, which speaks
-                        // its own refusal and spends no turn. A
-                        // `status_line` copy of that sentence here would be
-                        // a second home for it, and a copy of an engine
-                        // message reads as the key doing nothing.
-                        game.refuse_transfer();
-                        true
-                    } else {
-                        // Handed out past the `self.game` borrow, the way
-                        // `refusal` is. Opening a screen is not an action.
-                        //
-                        // The room travels with the offer, and it travels as
-                        // an `Option`: `None` is no Depot beside you at all,
-                        // `Some(0)` a Depot with nothing left, and the
-                        // screen has to be able to tell them apart.
-                        opening = Some(TransferOpening {
-                            rows: offer,
-                            carriers,
-                            room: game.transfer_room(),
-                            rack_room: game.total_rack_room(),
-                        });
-                        false
+                    let found = game.adjacent_interactions();
+                    // A transfer with no neighbouring shelf (the pack's
+                    // downed programs alone) sits at `(0, 0)` and cannot be
+                    // aimed at, so it only counts when it is all there is.
+                    let aimed: Vec<_> = found.iter().filter(|i| i.dir != (0, 0)).collect();
+                    match (found.first(), aimed.len()) {
+                        (None, _) => {
+                            // Straight back through the engine, which speaks
+                            // its own refusal and spends no turn. A
+                            // `status_line` copy of that sentence here would
+                            // be a second home for it, and a copy of an
+                            // engine message reads as the key doing nothing.
+                            game.refuse_transfer();
+                            true
+                        }
+                        (Some(only), 0 | 1) => {
+                            interaction =
+                                Some(Interact::Run(aimed.first().map_or(only.kind, |i| i.kind)));
+                            false
+                        }
+                        _ => {
+                            interaction = Some(Interact::Ask);
+                            false
+                        }
                     }
                 }
                 // Refused through the shared tail rather than silently, for
@@ -654,14 +646,10 @@ impl App {
         if let Some(reason) = refusal {
             self.refuse(reason);
         }
-        if let Some(o) = opening {
-            self.open_transfer(
-                o.rows,
-                o.carriers,
-                o.room,
-                o.rack_room,
-                TransferSource::Base,
-            );
+        match interaction {
+            Some(Interact::Run(kind)) => self.run_interaction(kind),
+            Some(Interact::Ask) => self.mode = Mode::InteractDirection,
+            None => {}
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }

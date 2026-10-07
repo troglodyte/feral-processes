@@ -422,9 +422,11 @@ impl App {
     /// `Some` makes four of those five lie while the fifth (the upload,
     /// which filters blanks itself) quietly disagrees.
     ///
-    /// **Both endings return to the Icon step**, the spec's key table:
-    /// `Enter` keeps and `Esc` discards, and neither advances. The row is
-    /// still selected because opening the editor put the cursor on it.
+    /// **Enter is forward, in the editor as everywhere in the wizard**:
+    /// `Enter` keeps the drawing and advances to the next step, as taking
+    /// a preset does; `Esc` discards and returns to the Icon list with the
+    /// drawn row still selected, because opening the editor put the cursor
+    /// on it.
     pub(crate) fn handle_creation_key(&mut self, key: GameKey) {
         if let Some(editor) = self.creation_icon_editor.as_mut() {
             match editor.handle_key(key) {
@@ -433,6 +435,7 @@ impl App {
                     let drawn = editor.icon().clone();
                     self.creation_icon_editor = None;
                     self.creation_choice.icon = (!drawn.is_blank()).then_some(drawn);
+                    self.advance_creation();
                 }
                 IconEditorOutcome::Discard => self.creation_icon_editor = None,
             }
@@ -768,8 +771,7 @@ impl App {
     /// **The sixth row opens the editor instead of advancing.** Taking it
     /// is not itself the decision — `handle_creation_key`'s editor
     /// interception is what turns `Enter`/`Esc` inside it into the actual
-    /// keep-or-discard, and neither of those advances either: the spec's
-    /// key table has both endings return here. Opening moves the cursor
+    /// keep-and-advance or discard-and-return. Opening moves the cursor
     /// onto the row so that "with that row selected" holds even when the
     /// editor was opened by its number key, which `selected_index` does not
     /// move the cursor for.

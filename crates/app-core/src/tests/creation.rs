@@ -1452,17 +1452,11 @@ fn open_the_editor(app: &mut App) {
 
 /// Paints one pixel through the editor's real key table and keeps it —
 /// `Tab` to the palette is not needed, since the editor opens with a
-/// paintable colour already selected. Leaves the wizard on the Icon step,
-/// which is where the spec's key table says both editor endings land.
+/// paintable colour already selected. Keep advances the wizard to the
+/// Colour step.
 fn draw_and_keep(app: &mut App) {
     press(app, GameKey::Char(' '));
     press(app, GameKey::Enter);
-}
-
-/// Pages off the Icon step onto Colour. `Right` rather than `Enter`,
-/// because `Enter` on the drawn row reopens the editor.
-fn leave_the_icon_step(app: &mut App) {
-    press(app, GameKey::Right);
 }
 
 /// The Icon step offers the five presets plus the drawn row, and the drawn
@@ -1499,15 +1493,11 @@ fn taking_the_drawn_row_opens_the_editor() {
     );
 }
 
-/// `Enter` inside the editor lands the drawing on the choice and returns
-/// to the Icon step with the drawn row still selected — the spec's key
-/// table, which pairs `Enter` ("keep the drawing, return to the Icon
-/// step") with `Esc` ("discard changes, return to the Icon step"). The
-/// editor is the one place in the wizard where a decision is not also a
-/// step forward: the player has just been shown their own art, and the
-/// screen that shows it again is the one they came from.
+/// `Enter` inside the editor lands the drawing on the choice and moves on
+/// to the Colour step, exactly as taking a preset does: Enter is forward
+/// everywhere in the wizard. `Esc` (discard) is the way back to the list.
 #[test]
-fn enter_in_the_editor_keeps_the_drawing_and_returns_to_the_icon_step() {
+fn enter_in_the_editor_keeps_the_drawing_and_advances_to_the_colour_step() {
     let mut app = on_the_icon_step("editor_keep");
     open_the_editor(&mut app);
     assert!(app.icon_editor_view().is_some());
@@ -1524,16 +1514,16 @@ fn enter_in_the_editor_keeps_the_drawing_and_returns_to_the_icon_step() {
     );
     assert_eq!(
         app.creation_step(),
-        CreationStep::Icon,
-        "keeping a drawing returns to the Icon step rather than advancing"
+        CreationStep::Colour,
+        "keeping a drawing advances like taking a preset"
     );
+    press(&mut app, GameKey::Esc);
     assert!(
         matches!(
-            app.creation_rows().get(app.menu_selected),
+            app.creation_rows().last(),
             Some(CreationRow::DrawnIcon { drawn: true })
         ),
-        "the drawn row must still be the selected one: {:?}",
-        app.creation_rows().get(app.menu_selected)
+        "the kept drawing must still be on the Icon step's sixth row"
     );
 }
 
@@ -1594,7 +1584,8 @@ fn taking_a_preset_row_clears_a_drawn_icon() {
     open_the_editor(&mut app);
     draw_and_keep(&mut app);
     assert!(app.creation_choice().icon.is_some());
-    assert_eq!(app.creation_step(), CreationStep::Icon);
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+    press(&mut app, GameKey::Esc); // back to the Icon list
 
     press(&mut app, ch('1')); // the first preset
 
@@ -1752,8 +1743,7 @@ fn a_drawn_icon_reaches_the_profile_when_creation_finishes() {
         .icon
         .clone()
         .expect("the drawing must have landed on the choice");
-    assert_eq!(app.creation_step(), CreationStep::Icon);
-    leave_the_icon_step(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Colour);
 
     press(&mut app, ch('n')); // skip the swatch
     spend_the_points(&mut app);
@@ -1790,7 +1780,6 @@ fn the_colour_step_explains_a_drawn_icon_hides_the_swatch() {
 
     open_the_editor(&mut app);
     draw_and_keep(&mut app);
-    leave_the_icon_step(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Colour);
 
     let note = app
@@ -1819,6 +1808,7 @@ fn keeping_a_blank_canvas_is_not_a_drawing() {
         app.creation_choice().icon.is_none(),
         "an all-transparent canvas must not be kept as a drawing"
     );
+    press(&mut app, GameKey::Esc); // back to the Icon list to read its rows
     assert!(
         matches!(
             app.creation_rows().last(),

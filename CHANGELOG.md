@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.16.5
+
+**The in-game help is up to date again.** Every page was checked against the game and corrected where it had drifted. Character creation now describes all eleven steps, eight classes and the 20-point stat pool. Level caps, portal costs, roster limits, the perk list and several keys are fixed. The help no longer says a breach clears your fragments, because it does not. Three new pages cover breeding, sieges (wild sieges, nemesis bands, the Entropy Sweep and settlement raiders) and staff morale (needs, mood, sulking, friends and rivals). Existing pages now cover the Mod Bench, the Power Siphon, stacked status effects, opportunity attacks and the remote and broadcast decompile research. Outside the help, the Splice Rig no longer says removal fragments are lost at a breach, the Privilege Ring says what it actually does, and the Breeding Bay gives the real hatch time of about ten minutes. Also fixes the 0.16.4 glossary, whose word "spell" broke a test that keeps fantasy words out of the game's text.
+
 ## 0.16.4
 
 **The first help page now ends with a glossary.** "Start here" lists the game's own words with the usual RPG word for each in brackets, for example Integrity (hit points), Program (monster), Routine (spell or skill), Decompile (tame), The Stack (dungeon) and Credits (gold). Twenty terms in all.

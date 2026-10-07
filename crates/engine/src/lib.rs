@@ -54,6 +54,7 @@ pub mod sorties;
 pub mod species;
 pub mod stack;
 pub mod statuses;
+pub mod story;
 pub mod structures;
 pub mod systems;
 pub mod tactical;

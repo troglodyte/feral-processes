@@ -1,0 +1,26 @@
+// The screens shown when the player leaves the Phase-Manifold Basin.
+// See README.md in this directory.
+(
+    screens: [
+        (
+            title: "The Exit Opens",
+            body: [
+                "Ten keys sit warm in your hands, and the Basin does not argue. The seam you stitched across ten tiers of the Stack parts without a sound.",
+                "Beyond it there is no corridor, no tier, no guardian. Only a coordinate you have never been to.",
+            ],
+        ),
+        (
+            title: "Out of Phase",
+            body: [
+                "You step through. For one cycle you are in no place at all, and then the Basin is behind you, a world you can see the edges of.",
+                "The keys do not fade. Whatever you carried out is yours to keep.",
+            ],
+        ),
+        (
+            title: "Escaped",
+            body: [
+                "The Basin is not gone, and neither is your base. The work goes on, only now it is yours to choose.",
+            ],
+        ),
+    ],
+)

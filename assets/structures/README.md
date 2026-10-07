@@ -372,6 +372,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (fused copies included) and supplies.
     zone_portal: true,
 
+    // Optional; can be left out entirely (defaults to false). Marks the
+    // Basin Exit: walking onto it asks the player to leave the
+    // Phase-Manifold Basin, and confirming plays `assets/story/ending.ron`,
+    // marks the story complete and removes the structure. Whether it can be
+    // built (all ten Phase Keys, zone 10 or deeper, not yet escaped) is a
+    // rule in Rust, not in this file. If no file sets this, a built-in
+    // "basin_exit" structure is used so the game stays completable.
+    basin_exit: false,
+
     // Optional; can be left out entirely (defaults to an empty list). Extra
     // bill lines that only apply once the current zone reaches `min_zone`:
     // a list of (min_zone, item id, base quantity) triples, additive on top

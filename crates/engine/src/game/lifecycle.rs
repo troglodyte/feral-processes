@@ -3639,9 +3639,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (implants, implant_warnings) =
         crate::implants::ImplantDb::load_dir(&assets_dir.join("implants"))?;
     warnings.extend(implant_warnings);
-    let (phase_keys, phase_key_warnings) =
+    let (mut phase_keys, phase_key_warnings) =
         crate::phase_keys::PhaseKeyDb::load_dir(&assets_dir.join("phase_keys"))?;
     warnings.extend(phase_key_warnings);
+    let (ending, ending_warnings) = crate::story::EndingText::load_dir(&assets_dir.join("story"))?;
+    warnings.extend(ending_warnings);
+    phase_keys.ending = ending;
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.

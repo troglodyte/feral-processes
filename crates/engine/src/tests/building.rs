@@ -2132,8 +2132,8 @@ fn a_structure_that_declares_no_limit_is_unlimited() {
         .collect();
     assert_eq!(
         capped,
-        vec!["line_driver".to_string()],
-        "only the grid supplier is capped; the field defaults to no limit"
+        vec!["basin_exit".to_string(), "line_driver".to_string()],
+        "only the grid supplier and the one-off Basin Exit are capped; the field defaults to no limit"
     );
 }
 

@@ -830,12 +830,14 @@ impl Game {
 
     /// The structures the build menu offers: `structure_defs` minus anything
     /// still behind unfinished research. `structure_defs` itself stays
-    /// unfiltered — it's the general lookup, not the menu.
+    /// unfiltered — it's the general lookup, not the menu. The Basin Exit
+    /// appears only once `basin_exit_gate` is open.
     pub fn buildable_structure_defs(&self) -> Vec<StructureDef> {
         self.world
             .resource::<StructureDb>()
             .all()
             .filter(|def| self.structure_unlocked(&def.id))
+            .filter(|def| !def.basin_exit || self.basin_exit_gate().is_ok())
             .cloned()
             .collect()
     }

@@ -1,0 +1,13 @@
+(
+    id: "basin_exit",
+    name: "Basin Exit",
+    description: "A way out of the Phase-Manifold Basin. Needs all ten Phase Keys.",
+    glyph: '>',
+    color: Cyan,
+    build_cost: [
+        ("portal_fragment", 50),
+    ],
+    work: None,
+    basin_exit: true,
+    max_deployed: 1,
+)

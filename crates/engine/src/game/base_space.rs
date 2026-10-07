@@ -1102,6 +1102,15 @@ impl Game {
             self.tick();
             return;
         }
+        // Asked, never acted on: the frontend confirms and calls
+        // `escape_basin`. Refused like the portal when the gate is shut.
+        if self.find_basin_exit_at(nx, ny).is_some() {
+            match self.basin_exit_gate() {
+                Ok(()) => self.raise_basin_exit_prompt(),
+                Err(why) => self.log(why),
+            }
+            return;
+        }
         self.world.insert_resource(Locale::Base { x: nx, y: ny });
         self.tick();
     }

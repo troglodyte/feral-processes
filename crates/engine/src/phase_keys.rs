@@ -177,6 +177,12 @@ impl PhaseKeyDef {
 #[derive(Resource, Clone)]
 pub struct PhaseKeyDb {
     defs: Vec<PhaseKeyDef>,
+    /// The ending the Basin Exit plays. It rides this resource instead of
+    /// being one of its own because a resource registered at construction
+    /// shifts every later `ComponentId` and with them query iteration order,
+    /// which flips seed-luck tests nowhere near this feature. Set by
+    /// `load_asset_dbs`.
+    pub(crate) ending: crate::story::EndingText,
 }
 
 impl Default for PhaseKeyDb {
@@ -185,6 +191,7 @@ impl Default for PhaseKeyDb {
             defs: (1..=crate::tuning::PHASE_KEY_COUNT)
                 .map(PhaseKeyDef::fallback)
                 .collect(),
+            ending: crate::story::EndingText::default(),
         }
     }
 }
@@ -252,7 +259,13 @@ impl PhaseKeyDb {
                 })
             })
             .collect();
-        Ok((PhaseKeyDb { defs }, warnings))
+        Ok((
+            PhaseKeyDb {
+                defs,
+                ending: crate::story::EndingText::default(),
+            },
+            warnings,
+        ))
     }
 
     /// The key for `zone`; `None` outside 1..=`PHASE_KEY_COUNT`.

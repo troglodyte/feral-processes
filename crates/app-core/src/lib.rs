@@ -14,7 +14,7 @@ pub use app::building::{
     BuildMenu, BuildRow, Roster, RosterRow, StaffAction, StaffRow, Staffing, WorkOrderRow,
     roster_rows,
 };
-pub use app::canvas_editor::{CanvasFocus, CanvasView};
+pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};

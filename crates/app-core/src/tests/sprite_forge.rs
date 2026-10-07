@@ -859,3 +859,236 @@ fn picker_t_carries_the_installed_variant() {
         ]
     );
 }
+
+// -----------------------------------------------------------------------
+// The fill tool and the eyedropper
+// -----------------------------------------------------------------------
+
+/// A hollow box of index 2 around a 3x3 hole, on an otherwise blank canvas,
+/// opened in the forge on `cipher`.
+fn open_on_a_ring(app: &mut App) {
+    let mut art = Canvas::new(16);
+    for i in 4..=8 {
+        for (x, y) in [(i, 4), (i, 8), (4, i), (8, i)] {
+            art.set(x, y, 2);
+        }
+    }
+    let mut enabled = HashMap::new();
+    enabled.insert("cipher".to_string(), plain(art));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(app, "cipher");
+}
+
+fn cells(app: &App) -> Vec<u8> {
+    app.sprite_editor_view().unwrap().canvas.cells
+}
+
+fn pick_swatch(app: &mut App, index: u8) {
+    app.handle_pointer(
+        PointerHit::Swatch(index),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Swatch(index),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+}
+
+fn click(app: &mut App, x: u8, y: u8, button: PointerButton) {
+    app.handle_pointer(PointerHit::Cell(x, y), button, PointerPhase::Down);
+    app.handle_pointer(PointerHit::Cell(x, y), button, PointerPhase::Up);
+}
+
+#[test]
+fn f_toggles_the_fill_tool_and_the_view_reports_it() {
+    let mut app = app_with_sprite_forge(40);
+    open_editor(&mut app, "anchor");
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Paint);
+    app.handle_key(GameKey::Char('f'));
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Fill);
+    app.handle_key(GameKey::Char('f'));
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Paint);
+}
+
+#[test]
+fn a_fill_stays_inside_the_ring_that_bounds_it() {
+    let mut app = app_with_sprite_forge(41);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 6, 6, PointerButton::Primary);
+
+    let after = cells(&app);
+    for y in 0..16usize {
+        for x in 0..16usize {
+            let inside = (5..=7).contains(&x) && (5..=7).contains(&y);
+            let ring = (4..=8).contains(&x) && (4..=8).contains(&y) && !inside;
+            let want = if inside {
+                3
+            } else if ring {
+                2
+            } else {
+                0
+            };
+            assert_eq!(after[y * 16 + x], want, "cell ({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn a_fill_ignores_the_brush_size() {
+    let mut app = app_with_sprite_forge(42);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_key(GameKey::Char('g'));
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.brush, 2);
+    click(&mut app, 6, 6, PointerButton::Primary);
+
+    let filled = cells(&app).iter().filter(|&&c| c == 3).count();
+    assert_eq!(filled, 9, "the whole 3x3 hole, not a 2x2 block of it");
+}
+
+#[test]
+fn a_fill_click_is_not_snapped_to_the_brush_grid() {
+    let mut app = app_with_sprite_forge(49);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_key(GameKey::Char('g'));
+    // (5, 5) would snap to (4, 4), the ring's corner.
+    click(&mut app, 5, 5, PointerButton::Primary);
+    assert_eq!(cells(&app).iter().filter(|&&c| c == 3).count(), 9);
+}
+
+#[test]
+fn one_undo_takes_back_the_whole_fill() {
+    let mut app = app_with_sprite_forge(43);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 6, 6, PointerButton::Primary);
+    assert_ne!(cells(&app), before);
+
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(cells(&app), before);
+}
+
+#[test]
+fn a_fill_that_changes_nothing_records_no_undo_entry() {
+    let mut app = app_with_sprite_forge(44);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    // One real edit, so there is something for `u` to reach.
+    pick_swatch(&mut app, 3);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    // Fill the blank outside with the colour it already is.
+    pick_swatch(&mut app, 0);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 12, 12, PointerButton::Primary);
+    // The fill landed on the painted cell's neighbours, which are index 0.
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo must reach the paint, so the no-op fill pushed nothing"
+    );
+}
+
+#[test]
+fn a_fill_drag_fills_once_and_the_rest_of_the_gesture_does_nothing() {
+    let mut app = app_with_sprite_forge(45);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_pointer(
+        PointerHit::Cell(6, 6),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    let after_down = cells(&app);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(12, 12),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(12, 12),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    assert_eq!(
+        cells(&app),
+        after_down,
+        "Drag and Up after a fill Down act on nothing"
+    );
+}
+
+#[test]
+fn space_fills_at_the_cursor_in_fill_mode() {
+    let mut app = app_with_sprite_forge(46);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    for _ in 0..6 {
+        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(cells(&app).iter().filter(|&&c| c == 3).count(), 9);
+}
+
+#[test]
+fn the_eyedropper_key_selects_the_cursor_cells_colour_without_history() {
+    let mut app = app_with_sprite_forge(47);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    // Cursor to the ring corner (4, 4), whose index is 2.
+    for _ in 0..4 {
+        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 2);
+
+    // After a real edit, the pick must not take the undo slot that edit owns.
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo reaches the paint, past the pick"
+    );
+}
+
+#[test]
+fn a_middle_click_picks_the_cells_colour_and_records_nothing() {
+    let mut app = app_with_sprite_forge(48);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    pick_swatch(&mut app, 3);
+    click(&mut app, 4, 4, PointerButton::Middle);
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 2);
+    assert_eq!(cells(&app), before, "the pick painted nothing");
+
+    // After a real edit, a pick must not take the undo slot that edit owns.
+    click(&mut app, 0, 0, PointerButton::Primary);
+    click(&mut app, 4, 4, PointerButton::Middle);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo reaches the paint, past the pick"
+    );
+}

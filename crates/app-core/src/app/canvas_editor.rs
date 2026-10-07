@@ -58,6 +58,15 @@ pub enum CanvasFocus {
     Palette,
 }
 
+/// What a press on a canvas cell does. `Paint` is the brush; `Fill` floods
+/// the clicked cell's region and ignores the brush. The icon editor never
+/// leaves `Paint`: the key that toggles it is the sprite forge's alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tool {
+    Paint,
+    Fill,
+}
+
 /// What a canvas screen draws — the grid flattened row-major, the three
 /// cursors laid over it, and the brush.
 ///
@@ -90,6 +99,7 @@ pub(crate) struct CanvasEditor {
     selected: u8,
     focus: CanvasFocus,
     brush: u8,
+    tool: Tool,
     /// The highest selectable swatch, one per opening caller — the icon
     /// editor's 15 and the sprite editor's 19 are different palettes, and
     /// `Canvas` itself knows nothing about which one it is drawn from.
@@ -121,6 +131,7 @@ impl CanvasEditor {
             selected: FIRST_COLOUR,
             focus: CanvasFocus::Canvas,
             brush: 1,
+            tool: Tool::Paint,
             palette_len,
             palette_cols: palette_cols.max(1),
             history: VecDeque::new(),
@@ -174,6 +185,87 @@ impl CanvasEditor {
         }
     }
 
+    pub(crate) fn tool(&self) -> Tool {
+        self.tool
+    }
+
+    /// `[f]`'s effect: the other tool. Called only from the sprite forge's
+    /// key table, never the icon editor's.
+    pub(crate) fn toggle_tool(&mut self) {
+        self.tool = match self.tool {
+            Tool::Paint => Tool::Fill,
+            Tool::Fill => Tool::Paint,
+        };
+    }
+
+    /// The eyedropper: selects the colour already at `(x, y)`. Reads only,
+    /// so it takes no snapshot.
+    pub(crate) fn pick_colour_at(&mut self, x: u8, y: u8) {
+        self.selected = self.canvas.get(x as usize, y as usize);
+    }
+
+    /// Applies the active tool at `(x, y)` with `index`: the brush's block
+    /// for `Paint`, the whole 4-connected region for `Fill`. The keyboard
+    /// and the pointer's `Down` both come through here, so a tool cannot
+    /// mean one thing to a key and another to a click.
+    pub(crate) fn apply_tool(&mut self, x: u8, y: u8, index: u8) {
+        match self.tool {
+            Tool::Paint => {
+                // A pointer lands on any cell; the keyboard's cursor is
+                // already an anchor, so snapping is a no-op for it. A fill
+                // must not snap: it would land the click on a different
+                // region.
+                let (x, y) = self.snap_to_brush(x, y);
+                self.paint_at(x, y, index);
+            }
+            Tool::Fill => self.fill_at(x, y, index),
+        }
+    }
+
+    /// Floods the 4-connected region of cells holding `(x, y)`'s colour with
+    /// `index`, snapshotting first. A region already `index` is not an edit,
+    /// so nothing is recorded — `paint_at`'s rule, and inside a stroke the
+    /// one lazy snapshot makes the whole fill one undo entry.
+    fn fill_at(&mut self, x: u8, y: u8, index: u8) {
+        let edge = self.canvas.edge();
+        let (x, y) = (x as usize, y as usize);
+        if x >= edge || y >= edge {
+            return;
+        }
+        let target = self.canvas.get(x, y);
+        if target == index {
+            return;
+        }
+        let mut region = vec![(x, y)];
+        let mut seen = vec![false; edge * edge];
+        seen[y * edge + x] = true;
+        let mut next = 0;
+        while next < region.len() {
+            let (cx, cy) = region[next];
+            next += 1;
+            let around = [
+                (cx.wrapping_sub(1), cy),
+                (cx + 1, cy),
+                (cx, cy.wrapping_sub(1)),
+                (cx, cy + 1),
+            ];
+            for (nx, ny) in around {
+                if nx < edge
+                    && ny < edge
+                    && !seen[ny * edge + nx]
+                    && self.canvas.get(nx, ny) == target
+                {
+                    seen[ny * edge + nx] = true;
+                    region.push((nx, ny));
+                }
+            }
+        }
+        self.record();
+        for (cx, cy) in region {
+            self.canvas.set(cx, cy, index);
+        }
+    }
+
     /// Opens a stroke. Pushes no snapshot yet — `record`'s first call
     /// inside the stroke that follows a real change takes the one snapshot
     /// the whole stroke gets, so a stroke that changes nothing (a swatch
@@ -205,7 +297,7 @@ impl CanvasEditor {
     /// resolves straight from pixels to a cell with no such guarantee — at
     /// brush 2, an unsnapped click anchors on whatever coordinate the
     /// pointer happened to land on, disagreeing with what the cursor the
-    /// same screen draws would have painted from. `App::handle_pointer`
+    /// same screen draws would have painted from. `apply_tool`
     /// calls this before `paint_at` so both input paths agree on what brush
     /// 2 means. At brush 1 every legal coordinate is already its own
     /// anchor, so this is a no-op.
@@ -259,8 +351,8 @@ impl CanvasEditor {
             GameKey::Down => self.step(0, 1),
             GameKey::Left => self.step(-1, 0),
             GameKey::Right => self.step(1, 0),
-            GameKey::Char(' ') => self.paint_at(self.cursor.0, self.cursor.1, self.selected),
-            GameKey::Backspace => self.paint_at(self.cursor.0, self.cursor.1, 0),
+            GameKey::Char(' ') => self.apply_tool(self.cursor.0, self.cursor.1, self.selected),
+            GameKey::Backspace => self.apply_tool(self.cursor.0, self.cursor.1, 0),
             GameKey::Char('u') => self.undo(),
             GameKey::Char('x') => self.clear(),
             _ => return CanvasKey::Unhandled,

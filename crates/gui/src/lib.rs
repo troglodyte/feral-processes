@@ -239,14 +239,19 @@ fn handle_sprite_pointer(
         return;
     };
 
-    let (primary_down, secondary_down, hover) = ctx.input(|i| {
+    let (primary_down, secondary_down, middle_down, alt, hover) = ctx.input(|i| {
         (
             i.pointer.primary_down(),
             i.pointer.secondary_down(),
+            i.pointer.middle_down(),
+            i.modifiers.alt,
             i.pointer.hover_pos(),
         )
     });
-    let now_button = if primary_down {
+    // Alt+click is the eyedropper too, for a mouse with no middle button.
+    let now_button = if primary_down && alt || middle_down {
+        Some(PointerButton::Middle)
+    } else if primary_down {
         Some(PointerButton::Primary)
     } else if secondary_down {
         Some(PointerButton::Secondary)

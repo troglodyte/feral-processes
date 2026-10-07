@@ -206,7 +206,7 @@ fn subject_row_text(subject: &SpriteSubject, selected: bool) -> String {
 
 const EDITOR_HEADER: &str = "Sprite Forge";
 const EDITOR_FOOTER_TEXT: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   g: brush size   s: save   Esc: back";
+    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
 
 /// `icon_editor.rs::CANVAS_CELL_LINES`, halved: the sprite canvas is 16x16
 /// against the icon's 8x8, and this is what keeps the two screens' canvas
@@ -1053,6 +1053,8 @@ mod tests {
             "u",
             "x",
             "g",
+            "f",
+            "i",
             "s",
             "Esc",
         ] {

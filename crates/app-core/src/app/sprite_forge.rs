@@ -20,7 +20,7 @@ use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
 
-use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView};
+use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, Tool};
 use crate::{App, GameKey, Mode};
 
 /// The sprite canvas's edge — always 16, never a brush-dependent size (the
@@ -207,6 +207,7 @@ impl SpriteEditor {
             palette: &SPRITE_PALETTE,
             full_colour: self.full_colour(),
             palette_cols: SPRITE_PALETTE_COLS,
+            tool: self.editor.tool(),
         }
     }
 }
@@ -222,6 +223,7 @@ pub struct SpriteEditorView {
     /// Swatches per drawn row, the transparent swatch counted — the same
     /// number the keyboard's Up and Down move by.
     pub palette_cols: u8,
+    pub tool: Tool,
 }
 
 /// One cue for the frontend to act on. app-core queues it and forgets —
@@ -277,6 +279,8 @@ pub enum PointerButton {
     /// Paints index 0 — erase, the same thing `Backspace` already means on
     /// this editor.
     Secondary,
+    /// Picks the cell's colour, the eyedropper — `[i]`'s pointer twin.
+    Middle,
 }
 
 /// Where in a click-or-drag gesture a `PointerHit` was reported.
@@ -586,6 +590,11 @@ impl App {
                 };
                 sprite_editor.editor.set_brush(next);
             }
+            GameKey::Char('f') => sprite_editor.editor.toggle_tool(),
+            GameKey::Char('i') => {
+                let (x, y) = sprite_editor.editor.view().cursor;
+                sprite_editor.editor.pick_colour_at(x, y);
+            }
             GameKey::Char('s') => {
                 let write = SpriteWrite {
                     name: sprite_editor.subject.clone(),
@@ -626,17 +635,18 @@ impl App {
             sprite_editor.editor.begin_stroke();
         }
         match hit {
+            PointerHit::Cell(x, y) if button == PointerButton::Middle => {
+                sprite_editor.editor.pick_colour_at(x, y);
+            }
+            // A fill is one press, not a gesture: only `Down` acts.
+            PointerHit::Cell(..)
+                if sprite_editor.editor.tool() == Tool::Fill && phase != PointerPhase::Down => {}
             PointerHit::Cell(x, y) => {
                 let index = match button {
                     PointerButton::Primary => sprite_editor.editor.view().selected,
-                    PointerButton::Secondary => 0,
+                    PointerButton::Secondary | PointerButton::Middle => 0,
                 };
-                // M5, final review: snap to the brush grid before painting,
-                // or brush 2 anchors on whatever odd coordinate the pointer
-                // happened to land on — see `snap_to_brush`'s own doc
-                // comment.
-                let (x, y) = sprite_editor.editor.snap_to_brush(x, y);
-                sprite_editor.editor.paint_at(x, y, index);
+                sprite_editor.editor.apply_tool(x, y, index);
             }
             PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
         }

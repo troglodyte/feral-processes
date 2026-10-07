@@ -139,8 +139,9 @@ impl App {
         }
     }
 
-    /// Enter destroys the program; anything else backs out. Deliberately not
-    /// a numbered menu — this is the last stop before an irreversible act.
+    /// `y`, or Enter on Yes, destroys the program; `n`, Esc, or Enter on the
+    /// default No back out, and any other key leaves the question standing.
+    /// The last stop before an irreversible act, so it opens on No.
     pub(crate) fn handle_extract_confirm_key(&mut self, key: GameKey) {
         let (Some(program), Some(index)) =
             (self.pending_extract_program, self.pending_extract_index)
@@ -148,10 +149,18 @@ impl App {
             self.mode = Mode::Extract;
             return;
         };
-        if key != GameKey::Enter {
-            self.pending_extract_index = None;
-            self.mode = Mode::ExtractPick;
-            return;
+        let confirmed = match key {
+            GameKey::Esc => Some(false),
+            _ => self.yes_no(key),
+        };
+        match confirmed {
+            None => return,
+            Some(false) => {
+                self.pending_extract_index = None;
+                self.mode = Mode::ExtractPick;
+                return;
+            }
+            Some(true) => {}
         }
         self.pending_extract_program = None;
         self.pending_extract_index = None;

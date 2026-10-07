@@ -63,7 +63,7 @@ const HEADER_TEXT: &str = "Draw Your Icon";
 /// which are unconditional there too. Colons make each token an
 /// unambiguous substring for a test to look for.
 const FOOTER_TEXT: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   Enter: keep   Esc: discard";
+    Backspace: erase   u: undo   x: clear   Enter: keep and continue   Esc: discard";
 
 /// Everything geometric about the screen, computed once so drawing and the
 /// layout census below share one derivation — `frame_map::layout`'s

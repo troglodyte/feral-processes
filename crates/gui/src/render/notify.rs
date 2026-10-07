@@ -31,7 +31,7 @@ const BODY_WIDTH_FRACTION: f32 = 0.84;
 /// the notice, dark enough that the map does not compete with it.
 const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 
-const HINT: &str = "Press Esc to continue";
+const HINT: &str = "Enter or Esc to continue";
 
 /// The panel for a `w` x `h` window, centred.
 pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
@@ -560,7 +560,7 @@ mod tests {
         // text this fixture draws with no detail set.
         assert_eq!(
             texts,
-            vec![">", "T", "B", "Press Esc to continue"],
+            vec![">", "T", "B", "Enter or Esc to continue"],
             "an absent detail must draw nothing beyond the glyph, title, body and hint"
         );
     }

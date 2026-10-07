@@ -267,7 +267,7 @@ fn footer(app: &App, step: CreationStep) -> String {
     match step {
         CreationStep::Kit => format!(
             "{}c left - Left/Right takes (Shift/Ctrl); [r] rerolls the basket; \
-             Enter moves on once it is spent",
+             Enter: next once it is spent   Esc: back",
             app.creation_credits_left()
         ),
         CreationStep::Points => {
@@ -284,7 +284,7 @@ fn footer(app: &App, step: CreationStep) -> String {
             };
             format!(
                 "{} of {CREATION_PERK_POINTS} Perk Points{earned} - Left/Right buys; \
-                 Enter moves on, unspent points carry over",
+                 Enter: next, rest carries over   Esc: back",
                 app.creation_perk_points_left()
             )
         }
@@ -295,26 +295,29 @@ fn footer(app: &App, step: CreationStep) -> String {
 /// The seven steps whose keys never change.
 fn plain_footer(step: CreationStep) -> &'static str {
     match step {
-        CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
+        CreationStep::Difficulty => {
+            "[p]/[f] or Up/Down picks   Enter: next   Esc: back to the menu"
+        }
         CreationStep::Profile => {
             "Bonuses from past achievements, granted when this run starts - \
-             Enter or Right moves on; Left goes back"
+             Left/Right pages   Enter: next   Esc: back"
         }
-        CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
+        CreationStep::Class => "Up/Down picks; Left/Right pages   Enter: next   Esc: back",
         // Written by `footer` above, which is the only caller — every
         // step `CreationStep::spends` names carries a live figure.
         CreationStep::Kit | CreationStep::Points | CreationStep::Perks => "",
-        // One arm, because the two halves of a look are one key table —
-        // an icon row and a swatch row are picked the same way and skipped
-        // the same way, and two copies of the sentence could drift.
-        CreationStep::Icon | CreationStep::Colour => {
-            "Up/Down + Enter picks; [n] or Right moves on; Left goes back"
+        // The sixth Icon row is "Draw your own": Enter on it opens the
+        // editor rather than picking, and the footer is where that is said.
+        CreationStep::Icon => {
+            "Up/Down picks; Draw your own opens the editor; [n] or Right skips   \
+             Enter: next   Esc: back"
         }
-        CreationStep::Routine => "Up/Down + Enter; [n] or Right takes none; Left goes back",
+        CreationStep::Colour => "Up/Down picks; [n] or Right skips   Enter: next   Esc: back",
+        CreationStep::Routine => "Up/Down picks; [n] or Right takes none   Enter: next   Esc: back",
         // The last two steps, and the only place the wizard says what
         // *finishes* it — the summary is accepted, the name starts the run.
-        CreationStep::Summary => "Enter or Right accepts; Left goes back",
-        CreationStep::Name => "Type a name; Enter starts the run; Esc goes back",
+        CreationStep::Summary => "Left/Right pages   Enter: next   Esc: back",
+        CreationStep::Name => "Type a name   Enter: start the run   Esc: back",
     }
 }
 
@@ -569,7 +572,6 @@ mod tests {
             // that step unmeasured.
             CreationStep::Icon => {
                 draw_an_icon(app);
-                app.handle_key(GameKey::Right);
             }
             CreationStep::Colour | CreationStep::Routine => app.handle_key(GameKey::Char('n')),
             CreationStep::Summary | CreationStep::Name => app.handle_key(GameKey::Enter),
@@ -577,8 +579,8 @@ mod tests {
     }
 
     /// Paints one pixel through the real editor and keeps it, leaving the
-    /// wizard on the Icon step with a drawing on the choice — `Enter` in
-    /// the editor returns there rather than advancing.
+    /// wizard on the Colour step with a drawing on the choice — `Enter` in
+    /// the editor keeps and advances.
     ///
     /// Shared by `walk_past` and the two tests that need a kept drawing, so
     /// the state the censuses measure is the one the real key table
@@ -1080,10 +1082,10 @@ mod tests {
         assert_eq!(app.creation_step(), CreationStep::Icon);
 
         // The sixth row opens the editor; one painted pixel and `Enter`
-        // keeps it and returns here, so the cell is drawn on the step the
+        // keeps it and advances, so the cell is drawn on the step the
         // player is actually standing on with a real drawing on the choice.
         draw_an_icon(&mut app);
-        assert_eq!(app.creation_step(), CreationStep::Icon);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
 
         // Both keys present, so this cannot pass on a lookup that missed.
         let mut sprites = crate::paint::SpriteTable::default();
@@ -1129,10 +1131,8 @@ mod tests {
         assert_eq!(app.creation_step(), CreationStep::Icon);
 
         // The sixth row opens the editor; one painted pixel and `Enter`
-        // keeps it and returns to the Icon step, so `Right` is what lands
-        // on Colour with a real drawing on the choice.
+        // keeps it and lands on Colour with a real drawing on the choice.
         draw_an_icon(&mut app);
-        app.handle_key(GameKey::Right);
         assert_eq!(app.creation_step(), CreationStep::Colour);
 
         let m = ui_metrics(900.0);

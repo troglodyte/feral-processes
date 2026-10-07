@@ -6,7 +6,13 @@ use crate::app::building::Roster;
 use crate::*;
 
 impl App {
+    /// Esc asks the question `q` asks — the menu has nowhere to go back to,
+    /// and a quit still needs a yes.
     pub(crate) fn handle_main_menu_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::QuitAppConfirm;
+            return;
+        }
         let mut options = vec!['n'];
         if !self.list_saves().is_empty() {
             options.push('l');

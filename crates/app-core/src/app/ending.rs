@@ -29,16 +29,9 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let options = ['y', 'n'];
-        let idx = self
-            .selected_index(key, options.len())
-            .or_else(|| match key {
-                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-                _ => None,
-            });
-        match idx.map(|i| options[i]) {
-            Some('y') => self.escape_basin(),
-            Some('n') => self.mode = Mode::Playing,
+        match self.yes_no(key) {
+            Some(true) => self.escape_basin(),
+            Some(false) => self.mode = Mode::Playing,
             _ => {}
         }
     }

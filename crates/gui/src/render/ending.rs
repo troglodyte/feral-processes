@@ -26,8 +26,8 @@ const CUT_MARK: &str = "...";
 
 fn hint(page: usize, pages: usize) -> String {
     let next = match page + 1 < pages {
-        true => "Enter: next",
-        false => "Enter: continue",
+        true => "Enter/Right: next",
+        false => "Enter/Right: continue",
     };
     format!("{}/{}   {next}   Left: back   Esc: skip", page + 1, pages)
 }

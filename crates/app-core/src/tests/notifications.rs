@@ -70,12 +70,12 @@ fn esc_dismisses_one_and_the_last_returns_to_the_map() {
     assert!(app.pending_notification.is_none(), "the subject is cleared");
 }
 
-/// Anything but Esc must leave the notification exactly as it was — the
+/// Anything but Esc or Enter must leave the notification exactly as it was — the
 /// player reading it must not lose it to an incidental keypress. `.` and
 /// `x` stand in for "any ordinary key"; neither is special-cased anywhere
 /// near this path.
 #[test]
-fn only_esc_dismisses_a_notification() {
+fn only_esc_or_enter_dismisses_a_notification() {
     let mut app = test_app(9105);
     queue(
         &mut app,
@@ -85,7 +85,7 @@ fn only_esc_dismisses_a_notification() {
     assert_eq!(app.mode, Mode::Notification);
     let shown = app.pending_notification.clone().expect("one on screen");
 
-    for key in [GameKey::Char('.'), GameKey::Char('x'), GameKey::Enter] {
+    for key in [GameKey::Char('.'), GameKey::Char('x'), GameKey::Right] {
         app.handle_key(key);
         assert_eq!(
             app.mode,
@@ -146,4 +146,22 @@ fn founding_the_base_opens_the_tutorial() {
         app.pending_notification.as_ref().map(|n| n.title.as_str()),
         Some("Base Space")
     );
+}
+
+/// Enter closes a notification as Esc does: it is the key a player reaches
+/// for to dismiss, and the footer says so.
+#[test]
+fn enter_dismisses_a_notification() {
+    let mut app = test_app(9106);
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::Breach,
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Notification);
+
+    app.handle_key(GameKey::Enter);
+
+    assert_ne!(app.mode, Mode::Notification);
+    assert!(app.pending_notification.is_none());
 }

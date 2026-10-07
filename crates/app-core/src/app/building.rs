@@ -749,15 +749,8 @@ impl App {
             self.close_screen();
             return;
         }
-        let options = ['y', 'n'];
-        let idx = self
-            .selected_index(key, options.len())
-            .or_else(|| match key {
-                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-                _ => None,
-            });
-        match idx.map(|i| options[i]) {
-            Some('y') => {
+        match self.yes_no(key) {
+            Some(true) => {
                 if let Some(structure) = self.pending_remove_structure.take() {
                     let Some(game) = &mut self.game else { return };
                     let outcome = game.remove_structure(structure);
@@ -765,7 +758,7 @@ impl App {
                 }
                 self.mode = Mode::Playing;
             }
-            Some('n') => {
+            Some(false) => {
                 self.pending_remove_structure = None;
                 self.mode = Mode::Playing;
             }

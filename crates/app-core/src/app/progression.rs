@@ -78,16 +78,20 @@ impl App {
 
     /// Confirms or backs out of a full perk refund.
     pub(crate) fn handle_respec_perks_confirm_key(&mut self, key: GameKey) {
-        match key {
-            GameKey::Char('y') | GameKey::Char('Y') => {
+        let confirmed = match key {
+            GameKey::Esc => Some(false),
+            _ => self.yes_no(key),
+        };
+        match confirmed {
+            Some(true) => {
                 if let Some(game) = &mut self.game {
                     let outcome = game.respec_perks();
                     self.report(outcome);
                 }
                 self.open_perks();
             }
-            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => self.open_perks(),
-            _ => {}
+            Some(false) => self.open_perks(),
+            None => {}
         }
     }
 

@@ -63,7 +63,7 @@ pub(super) fn footer(pool: u32, left: u32, spends_pool: bool, owner: Option<&str
     let keys = "Left/Right spends (Shift: all, Ctrl: half)";
     match spends_pool {
         true => format!(
-            "{}/{pool} points spent, {left} left - {keys}; Enter moves on once it is spent",
+            "{}/{pool} points spent, {left} left - {keys}; Enter: next once it is spent   Esc: back",
             pool - left
         ),
         false => format!(

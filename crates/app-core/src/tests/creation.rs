@@ -265,6 +265,46 @@ fn the_wizard_walks_forward_and_back() {
     assert_eq!(app.mode, Mode::MainMenu, "Esc on the first step leaves");
 }
 
+/// Enter is forward on every step, on the highlighted row where the step
+/// has rows: the same key walks the whole wizard, gated steps aside.
+#[test]
+fn enter_alone_walks_every_step_forward() {
+    let mut app = wizard_app("enter_walk");
+    press(&mut app, ch('n'));
+    for (step, next) in [
+        (CreationStep::Difficulty, CreationStep::Profile),
+        (CreationStep::Profile, CreationStep::Class),
+        (CreationStep::Class, CreationStep::Kit),
+    ] {
+        assert_eq!(app.creation_step(), step);
+        press(&mut app, GameKey::Enter);
+        assert_eq!(app.creation_step(), next, "Enter on {step:?}");
+    }
+    spend_the_kit(&mut app);
+    for (step, next) in [
+        (CreationStep::Kit, CreationStep::Icon),
+        (CreationStep::Icon, CreationStep::Colour),
+        (CreationStep::Colour, CreationStep::Points),
+    ] {
+        assert_eq!(app.creation_step(), step);
+        press(&mut app, GameKey::Enter);
+        assert_eq!(app.creation_step(), next, "Enter on {step:?}");
+    }
+    spend_the_points(&mut app);
+    for (step, next) in [
+        (CreationStep::Points, CreationStep::Perks),
+        (CreationStep::Perks, CreationStep::Routine),
+        (CreationStep::Routine, CreationStep::Summary),
+        (CreationStep::Summary, CreationStep::Name),
+    ] {
+        assert_eq!(app.creation_step(), step);
+        press(&mut app, GameKey::Enter);
+        assert_eq!(app.creation_step(), next, "Enter on {step:?}");
+    }
+    press(&mut app, GameKey::Enter);
+    assert!(app.game.is_some(), "Enter on the Name step starts the run");
+}
+
 /// Backing out of the wizard must not have started anything — no `Game`,
 /// and no save file claimed for a run that was never begun.
 #[test]

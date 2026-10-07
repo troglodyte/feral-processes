@@ -160,3 +160,60 @@ fn a_flatlined_permadeath_run_cannot_be_reloaded_from_the_load_list() {
 
     let _ = std::fs::remove_dir_all(&saves_dir);
 }
+
+/// The main menu and the load list call `list_saves` every frame, and a
+/// whole-file parse of every save per frame cost over half a core on a menu
+/// that draws seven rows. A file is parsed again only once its size or
+/// modification time moves.
+#[test]
+fn list_saves_parses_a_file_again_only_once_it_changes() {
+    let tag = format!(
+        "feral_processes_appcore_test_savecache_{}",
+        std::process::id()
+    );
+    let saves_dir = std::env::temp_dir().join(&tag);
+    let _ = std::fs::remove_dir_all(&saves_dir);
+    std::fs::create_dir_all(&saves_dir).unwrap();
+    let mut app = App::new(
+        super::support::test_assets_dir(),
+        saves_dir.clone(),
+        std::env::temp_dir().join(format!("{tag}.log")),
+        std::env::temp_dir().join(format!("{tag}_profile.ron")),
+        super::support::arenas_dir(),
+        std::env::temp_dir().join(format!("{tag}_telemetry.jsonl")),
+    );
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
+    let path = app
+        .current_save_path
+        .clone()
+        .expect("a new run owns a slot");
+    let summary = app.list_saves()[0].summary.clone();
+    assert!(summary.is_some(), "a fresh save reads back");
+
+    // Same length, same timestamp, unreadable contents: only a cached
+    // entry can still answer with the old summary.
+    let len = std::fs::metadata(&path).unwrap().len() as usize;
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, vec![0u8; len]).unwrap();
+    let file = std::fs::File::options().write(true).open(&path).unwrap();
+    file.set_modified(modified).unwrap();
+    drop(file);
+    assert_eq!(
+        app.list_saves()[0].summary,
+        summary,
+        "an unchanged file is not parsed again"
+    );
+
+    // A different length is a changed file.
+    std::fs::write(&path, vec![0u8; len + 1]).unwrap();
+    let file = std::fs::File::options().write(true).open(&path).unwrap();
+    file.set_modified(modified).unwrap();
+    drop(file);
+    assert_eq!(
+        app.list_saves()[0].summary,
+        None,
+        "a changed file is parsed again"
+    );
+
+    let _ = std::fs::remove_dir_all(&saves_dir);
+}

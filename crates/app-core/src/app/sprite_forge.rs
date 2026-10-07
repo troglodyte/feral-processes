@@ -239,6 +239,17 @@ pub enum SpriteOp {
     Disable { full_colour: bool },
 }
 
+impl SpriteOp {
+    /// Which file variant this op acts on.
+    pub fn full_colour(&self) -> bool {
+        match self {
+            SpriteOp::Save { full_colour, .. }
+            | SpriteOp::Enable { full_colour }
+            | SpriteOp::Disable { full_colour } => *full_colour,
+        }
+    }
+}
+
 /// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
 /// cell or a swatch by the gui — never a pixel. The gui owns the canvas and
 /// swatch rects (it draws them), so it tests the pointer against those

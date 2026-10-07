@@ -14,7 +14,7 @@
 //! towns in it.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bevy::asset::{LoadState, RenderAssetUsages};
@@ -23,7 +23,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
 use feral_processes_app_core::{InstalledSprite, SpriteOp};
-use feral_processes_engine::icon::{Canvas, quantise, sprite_rgba};
+use feral_processes_engine::icon::{Canvas, FULL_COLOUR_SUFFIX, quantise, sprite_rgba};
 use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
@@ -159,35 +159,37 @@ pub fn scan_library(
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if let Some(name) = file_name.strip_suffix(".png.off") {
-            if !name.starts_with('@')
-                && let Some(canvas) = png_to_canvas(&path)
-            {
-                disabled.insert(name.to_string(), plain(canvas));
-            }
-            continue;
-        }
-        if path.extension().is_none_or(|ext| ext != "png") {
-            continue;
-        }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
+        let (stem, map) = match file_name.strip_suffix(".png.off") {
+            Some(stem) => (stem, &mut disabled),
+            None => match file_name.strip_suffix(".png") {
+                Some(stem) => (stem, &mut enabled),
+                None => continue,
+            },
         };
-        if stem.starts_with('@') {
+        let (name, full_colour) = match stem.strip_suffix(FULL_COLOUR_SUFFIX) {
+            Some(name) => (name, true),
+            None => (stem, false),
+        };
+        if name.starts_with('@') {
             continue;
         }
         if let Some(canvas) = png_to_canvas(&path) {
-            enabled.insert(stem.to_string(), plain(canvas));
+            // The colour file wins whatever order the directory lists them
+            // in — `SpriteTable::insert`'s own rule, so the editor opens what
+            // the map draws.
+            let wins = full_colour || map.get(name).is_none_or(|have| !have.full_colour);
+            if wins {
+                map.insert(
+                    name.to_string(),
+                    InstalledSprite {
+                        canvas,
+                        full_colour,
+                    },
+                );
+            }
         }
     }
     (enabled, disabled)
-}
-
-fn plain(canvas: Canvas) -> InstalledSprite {
-    InstalledSprite {
-        canvas,
-        full_colour: false,
-    }
 }
 
 /// The `SpriteTable` key the player's own drawing is registered under.
@@ -369,8 +371,9 @@ enum WriteOutcome {
 /// resource in sight, which is what makes the seam this closes —
 /// `apply_sprite_write` writes are TDD tests, `drain_writes` is glue.
 ///
-/// **The invariant this maintains: `<name>.png` and `<name>.png.off` never
-/// both exist.** That is I1's fix for the loss chain the final review
+/// **The invariant this maintains, per variant (`sprite_path`): `<name>.png`
+/// and `<name>.png.off` never both exist, nor do `<name>.colour.png` and
+/// `<name>.colour.png.off`.** That is I1's fix for the loss chain the final review
 /// caught — `t` disable, Enter (now reopens the disabled art, not blank —
 /// I2), edit, `s` save used to write `<name>.png` *beside* the still-present
 /// `.off`, so `scan_library` reported the name in both maps and the next `t`
@@ -379,9 +382,31 @@ enum WriteOutcome {
 /// `Enable`/`Disable` each refuse — warning rather than clobbering — if
 /// their destination is already occupied, which closes the class even for a
 /// pair of files left in that state by a build that shipped before this fix.
+fn sprite_stem(name: &str, full_colour: bool) -> String {
+    if full_colour {
+        format!("{name}{FULL_COLOUR_SUFFIX}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// The one place a sprite's file path is derived: `<name>.png`, or
+/// `<name>.colour.png` for the colour variant, plus `.off` when disabled.
+/// Each variant is its own file, so a write never touches the other's.
+fn sprite_path(dir: &Path, name: &str, full_colour: bool, off: bool) -> PathBuf {
+    let stem = sprite_stem(name, full_colour);
+    dir.join(if off {
+        format!("{stem}.png.off")
+    } else {
+        format!("{stem}.png")
+    })
+}
+
 fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
-    let path = dir.join(format!("{name}.png"));
-    let off_path = dir.join(format!("{name}.png.off"));
+    let full_colour = op.full_colour();
+    let path = sprite_path(dir, name, full_colour, false);
+    let off_path = sprite_path(dir, name, full_colour, true);
+    let file = sprite_stem(name, full_colour);
     match op {
         SpriteOp::Save { canvas, .. } => {
             if let Err(e) = canvas_to_png(&canvas, &path) {
@@ -404,8 +429,8 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
         SpriteOp::Enable { .. } => {
             if path.exists() {
                 warn!(
-                    "sprite `{name}` failed to enable: `{name}.png` already exists; \
-                     leaving `{name}.png.off` in place rather than overwriting it"
+                    "sprite `{name}` failed to enable: `{file}.png` already exists; \
+                     leaving `{file}.png.off` in place rather than overwriting it"
                 );
                 return WriteOutcome::Failed;
             }
@@ -418,8 +443,8 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
         SpriteOp::Disable { .. } => {
             if off_path.exists() {
                 warn!(
-                    "sprite `{name}` failed to disable: `{name}.png.off` already exists; \
-                     leaving `{name}.png` in place rather than overwriting it"
+                    "sprite `{name}` failed to disable: `{file}.png.off` already exists; \
+                     leaving `{file}.png` in place rather than overwriting it"
                 );
                 return WriteOutcome::Failed;
             }
@@ -461,15 +486,17 @@ pub fn drain_writes(
     let dir = frontend.app.assets_dir().join("sprites");
     for write in writes {
         let name = write.name;
+        let full_colour = write.op.full_colour();
         match apply_sprite_write(&dir, &name, write.op) {
             WriteOutcome::Reload => {
+                let stem = sprite_stem(&name, full_colour);
                 let handle = asset_server
                     .load_builder()
                     .with_settings(|settings: &mut ImageLoaderSettings| {
                         settings.sampler = ImageSampler::nearest();
                     })
-                    .load(format!("sprites/{name}.png"));
-                sprites.pending.push((name, handle));
+                    .load(format!("sprites/{stem}.png"));
+                sprites.pending.push((stem, handle));
             }
             WriteOutcome::Disabled => {
                 // `Arc::make_mut` for `register`'s reason: the renderer may
@@ -534,6 +561,13 @@ mod tests {
     use super::*;
     use bevy::image::ImageFilterMode;
     use feral_processes_engine::ICON_CELL_PIXELS;
+
+    fn plain(canvas: Canvas) -> InstalledSprite {
+        InstalledSprite {
+            canvas,
+            full_colour: false,
+        }
+    }
 
     /// A drawing with one lit cell — enough to be non-blank, and it pins
     /// the byte order at a coordinate that is not the origin.
@@ -1242,5 +1276,192 @@ mod tests {
             Some(art),
             "the art must be intact after the doubled toggle"
         );
+    }
+
+    // ---- the colour variant ------------------------------------------
+
+    /// `canvas_to_png` dispatches on the extension, so a `.off` file is
+    /// written under its `.png` name and renamed, as a real toggle does.
+    fn write_png(path: &Path, canvas: &Canvas) {
+        match path.to_str().and_then(|p| p.strip_suffix(".off")) {
+            Some(png) => {
+                canvas_to_png(canvas, Path::new(png)).unwrap();
+                std::fs::rename(png, path).unwrap();
+            }
+            None => canvas_to_png(canvas, path).unwrap(),
+        }
+    }
+
+    fn dot(index: u8) -> Canvas {
+        let mut canvas = Canvas::new(ICON_SIZE);
+        canvas.set(2, 2, index);
+        canvas
+    }
+
+    fn save(canvas: Canvas, full_colour: bool) -> SpriteOp {
+        SpriteOp::Save {
+            canvas,
+            full_colour,
+        }
+    }
+
+    #[test]
+    fn a_colour_file_is_keyed_without_its_suffix_enabled_or_off() {
+        let dir = codec_test_dir("colour_keying");
+        write_png(&dir.join("on.colour.png"), &dot(12));
+        write_png(&dir.join("off.colour.png.off"), &dot(13));
+
+        let (enabled, disabled) = scan_library(&dir);
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(
+            enabled.get("on"),
+            Some(&InstalledSprite {
+                canvas: dot(12),
+                full_colour: true
+            })
+        );
+        assert_eq!(
+            disabled.get("off"),
+            Some(&InstalledSprite {
+                canvas: dot(13),
+                full_colour: true
+            })
+        );
+        assert!(!enabled.contains_key("on.colour") && !disabled.contains_key("off.colour"));
+    }
+
+    /// The loader's own precedence (`SpriteTable::insert`): the editor must
+    /// open what the map draws.
+    #[test]
+    fn the_colour_file_wins_when_both_variants_exist() {
+        let dir = codec_test_dir("colour_precedence");
+        write_png(&dir.join("both.png"), &dot(1));
+        write_png(&dir.join("both.colour.png"), &dot(12));
+        write_png(&dir.join("gone.png.off"), &dot(1));
+        write_png(&dir.join("gone.colour.png.off"), &dot(12));
+
+        let (enabled, disabled) = scan_library(&dir);
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(
+            enabled["both"],
+            InstalledSprite {
+                canvas: dot(12),
+                full_colour: true
+            }
+        );
+        assert_eq!(
+            disabled["gone"],
+            InstalledSprite {
+                canvas: dot(12),
+                full_colour: true
+            }
+        );
+    }
+
+    #[test]
+    fn a_plain_file_is_still_plain() {
+        let dir = codec_test_dir("plain_still_plain");
+        write_png(&dir.join("x.png"), &dot(3));
+        let (enabled, _) = scan_library(&dir);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            enabled["x"],
+            InstalledSprite {
+                canvas: dot(3),
+                full_colour: false
+            }
+        );
+    }
+
+    #[test]
+    fn saving_a_colour_sprite_writes_only_the_colour_file() {
+        let dir = codec_test_dir("colour_save");
+        write_png(&dir.join("x.colour.png"), &dot(12));
+        std::fs::write(dir.join("x.png"), b"sentinel").unwrap();
+
+        let outcome = apply_sprite_write(&dir, "x", save(dot(14), true));
+
+        let plain_bytes = std::fs::read(dir.join("x.png")).unwrap();
+        let saved = png_to_canvas(&dir.join("x.colour.png"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(outcome, WriteOutcome::Reload);
+        assert_eq!(
+            plain_bytes, b"sentinel",
+            "the plain twin is not this sprite's file"
+        );
+        assert_eq!(saved, Some(dot(14)));
+    }
+
+    #[test]
+    fn saving_a_fresh_colour_sprite_creates_no_plain_file() {
+        let dir = codec_test_dir("colour_save_fresh");
+        apply_sprite_write(&dir, "x", save(dot(14), true));
+        let (colour, plain) = (
+            dir.join("x.colour.png").exists(),
+            dir.join("x.png").exists(),
+        );
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(colour && !plain);
+    }
+
+    #[test]
+    fn disable_and_enable_move_only_the_colour_pair() {
+        let dir = codec_test_dir("colour_toggle");
+        write_png(&dir.join("x.colour.png"), &dot(12));
+        std::fs::write(dir.join("x.png.off"), b"sentinel").unwrap();
+
+        let disable = apply_sprite_write(&dir, "x", SpriteOp::Disable { full_colour: true });
+        let after_disable = (
+            dir.join("x.colour.png").exists(),
+            dir.join("x.colour.png.off").exists(),
+        );
+        let enable = apply_sprite_write(&dir, "x", SpriteOp::Enable { full_colour: true });
+        let after_enable = (
+            dir.join("x.colour.png").exists(),
+            dir.join("x.colour.png.off").exists(),
+        );
+        let sentinel = std::fs::read(dir.join("x.png.off")).unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(disable, WriteOutcome::Disabled);
+        assert_eq!(after_disable, (false, true));
+        assert_eq!(enable, WriteOutcome::Reload);
+        assert_eq!(after_enable, (true, false));
+        assert_eq!(
+            sentinel, b"sentinel",
+            "the plain `.off` is a different sprite's file"
+        );
+    }
+
+    #[test]
+    fn a_colour_save_retires_only_its_own_stale_off_backup() {
+        let dir = codec_test_dir("colour_never_both");
+        write_png(&dir.join("x.colour.png.off"), &dot(12));
+        std::fs::write(dir.join("x.png.off"), b"sentinel").unwrap();
+
+        apply_sprite_write(&dir, "x", save(dot(14), true));
+
+        let state = (
+            dir.join("x.colour.png").exists(),
+            dir.join("x.colour.png.off").exists(),
+            dir.join("x.png.off").exists(),
+        );
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(state, (true, false, true));
+    }
+
+    #[test]
+    fn a_colour_enable_refuses_to_clobber_an_existing_colour_file() {
+        let dir = codec_test_dir("colour_enable_refuse");
+        write_png(&dir.join("x.colour.png.off"), &dot(13));
+        write_png(&dir.join("x.colour.png"), &dot(12));
+
+        let outcome = apply_sprite_write(&dir, "x", SpriteOp::Enable { full_colour: true });
+        let kept = png_to_canvas(&dir.join("x.colour.png"));
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(outcome, WriteOutcome::Failed);
+        assert_eq!(kept, Some(dot(12)));
     }
 }

@@ -14,12 +14,15 @@ use feral_processes_engine::text;
 use super::notify::{body_columns, panel_rect};
 use super::popup::*;
 use super::{BORDER, CYAN, Metrics, PANEL_BG, TEXT, TEXT_DIM};
-use crate::paint::{Color, Painter};
+use crate::paint::{Color, Painter, Rect};
 
 const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 
 /// How wide the prose runs inside the panel, `notify`'s measure.
 const BODY_WIDTH_FRACTION: f32 = 0.84;
+
+/// The last line of a page cut to fit.
+const CUT_MARK: &str = "...";
 
 fn hint(page: usize, pages: usize) -> String {
     let next = match page + 1 < pages {
@@ -42,14 +45,46 @@ fn wrapped(screen: &EndingScreen, columns: usize) -> Vec<String> {
     lines
 }
 
+/// A page ready to draw: the title wrapped to the panel and the body cut to
+/// what the panel holds. A cut body ends in the line `...`.
+struct Page {
+    title: Vec<String>,
+    body: Vec<String>,
+}
+
 /// The block's height, title to hint. **The one sum** the draw centres on
 /// and the census measures.
-fn block_height(painter: &Painter, m: &Metrics, screen: &EndingScreen, lines: usize) -> f32 {
-    painter.measure_ui(&screen.title, m.title() + 6).height
+fn block_height(painter: &Painter, m: &Metrics, title: &[String], lines: usize) -> f32 {
+    let title_size = m.title() + 6;
+    title
+        .iter()
+        .map(|line| painter.measure_ui(line, title_size).height)
+        .sum::<f32>()
         + m.gap
         + lines as f32 * m.line_height
         + m.gap * 2.0
         + painter.measure_ui("M", m.small()).height
+}
+
+/// Wraps the title and cuts the body with an ellipsis rather than let a long
+/// modded page run off the panel - the screen has no scroll. Shipped pages
+/// are held un-cut by `every_shipped_ending_screen_fits`.
+fn lay_out(painter: &Painter, m: &Metrics, panel: Rect, screen: &EndingScreen) -> Page {
+    let columns = body_columns(painter, panel, m.font_size);
+    let title_columns = (columns as f32 * m.font_size as f32 / (m.title() + 6) as f32) as usize;
+    let title = text::wrap(&screen.title, title_columns.max(1));
+    let mut body = wrapped(screen, columns);
+    let room = panel.h - 2.0 * m.pad;
+    let mut cut = false;
+    while block_height(painter, m, &title, body.len()) > room && !body.is_empty() {
+        body.pop();
+        cut = true;
+    }
+    if cut {
+        body.pop();
+        body.push(CUT_MARK.to_string());
+    }
+    Page { title, body }
 }
 
 pub(super) fn draw_ending(screens: &[EndingScreen], page: usize, painter: &Painter, m: &Metrics) {
@@ -64,23 +99,25 @@ pub(super) fn draw_ending(screens: &[EndingScreen], page: usize, painter: &Paint
 
     let title_size = m.title() + 6;
     let centre_x = |width: f32| panel.x + (panel.w - width) / 2.0;
-    let columns = body_columns(painter, panel, m.font_size);
-    let lines = wrapped(screen, columns);
-    let block = block_height(painter, m, screen, lines.len());
+    let laid = lay_out(painter, m, panel, screen);
+    let block = block_height(painter, m, &laid.title, laid.body.len());
     let mut y = panel.y + ((panel.h - block) / 2.0).max(m.pad);
 
-    let title = painter.measure_ui(&screen.title, title_size);
-    painter.ui(
-        &screen.title,
-        centre_x(title.width),
-        y + title.height,
-        title_size,
-        CYAN,
-    );
-    y += title.height + m.gap;
+    for line in &laid.title {
+        let dims = painter.measure_ui(line, title_size);
+        painter.ui(
+            line,
+            centre_x(dims.width),
+            y + dims.height,
+            title_size,
+            CYAN,
+        );
+        y += dims.height;
+    }
+    y += m.gap;
 
     let left = centre_x(panel.w * BODY_WIDTH_FRACTION);
-    for line in &lines {
+    for line in &laid.body {
         y += m.line_height;
         painter.ui(line, left, y, m.font_size, TEXT);
     }
@@ -125,16 +162,14 @@ mod tests {
         let m = crate::text::ui_metrics(720.0);
         crate::paint::with_painter(|p| {
             let panel = panel_rect(1280.0, 720.0);
-            let columns = body_columns(p, panel, m.font_size);
             for screen in ending.screens() {
-                let lines = wrapped(screen, columns);
-                let block = block_height(p, &m, screen, lines.len());
+                let page = lay_out(p, &m, panel, screen);
                 assert!(
-                    block + 2.0 * m.pad < panel.h,
-                    "{:?} is {block}px in a {}px panel ({} lines) — no scroll, so cut it",
+                    page.body.last().map(String::as_str) != Some(CUT_MARK),
+                    "{:?} does not fit the {}px panel ({} lines) — no scroll, so cut it",
                     screen.title,
                     panel.h,
-                    lines.len()
+                    page.body.len()
                 );
             }
         });
@@ -150,6 +185,28 @@ mod tests {
         });
         let drawn = crate::paint::painted_text(&shapes);
         assert!(drawn.iter().any(|t| t.contains("Escaped")), "{drawn:?}");
+    }
+
+    /// A modded page far taller and wider than the panel is wrapped and cut
+    /// to fit instead of running off it.
+    #[test]
+    fn an_oversized_page_is_wrapped_and_cut_to_the_panel() {
+        let screen = EndingScreen {
+            title: "A very long modded ending title ".repeat(12),
+            body: (0..60)
+                .map(|i| format!("Paragraph {i} of a body that goes on and on. ").repeat(6))
+                .collect(),
+        };
+        let m = crate::text::ui_metrics(720.0);
+        let panel = panel_rect(1280.0, 720.0);
+        crate::paint::with_painter(|p| {
+            let page = lay_out(p, &m, panel, &screen);
+            assert!(page.title.len() > 1, "the title wraps: {:?}", page.title);
+            assert_eq!(page.body.last().map(String::as_str), Some(CUT_MARK));
+            let block = block_height(p, &m, &page.title, page.body.len());
+            assert!(block + 2.0 * m.pad <= panel.h, "{block}px in {}px", panel.h);
+            draw_ending(std::slice::from_ref(&screen), 0, p, &m);
+        });
     }
 
     #[test]

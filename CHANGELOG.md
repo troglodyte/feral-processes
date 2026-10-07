@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.18.0
 
 **Breaking: saves from before this version no longer load.** Destroyed structures are now remembered in the save, so the save format goes from 36 to 37.
 

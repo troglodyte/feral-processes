@@ -13,6 +13,20 @@ use feral_processes_engine::icon::Canvas;
 use super::support::test_app;
 use crate::*;
 
+fn plain(canvas: Canvas) -> InstalledSprite {
+    InstalledSprite {
+        canvas,
+        full_colour: false,
+    }
+}
+
+fn colour(canvas: Canvas) -> InstalledSprite {
+    InstalledSprite {
+        canvas,
+        full_colour: true,
+    }
+}
+
 /// An app sitting on the main menu with both gates open — the flag and a
 /// sprite dir installed.
 fn app_with_sprite_forge(seed: u32) -> App {
@@ -180,9 +194,9 @@ fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
 fn sprite_subjects_reads_art_state_off_the_installed_library() {
     let mut app = app_with_sprite_forge(6);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
-    disabled.insert("player".to_string(), Canvas::new(16));
+    disabled.insert("player".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -216,7 +230,7 @@ fn the_static_list_is_cached_but_art_state_stays_live() {
     // what a cache that captured `art` alongside the static fields would
     // get wrong.
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, HashMap::new());
 
     let third = app.sprite_subjects();
@@ -283,7 +297,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
     let mut art = Canvas::new(16);
     art.set(0, 0, 5);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), art);
+    enabled.insert("anchor".to_string(), plain(art));
     app.install_sprite_library(enabled, HashMap::new());
 
     let subjects = app.sprite_subjects();
@@ -323,7 +337,7 @@ fn entering_an_off_subject_reopens_its_disabled_art_not_a_blank_canvas() {
     let mut art = Canvas::new(16);
     art.set(3, 4, 9);
     let mut disabled = HashMap::new();
-    disabled.insert("anchor".to_string(), art.clone());
+    disabled.insert("anchor".to_string(), plain(art.clone()));
     app.install_sprite_library(HashMap::new(), disabled);
 
     let subjects = app.sprite_subjects();
@@ -367,7 +381,7 @@ fn s_queues_exactly_one_save_carrying_the_edited_canvas() {
     assert_eq!(writes.len(), 1, "exactly one cue, not one per keystroke");
     assert_eq!(writes[0].name, "anchor");
     match &writes[0].op {
-        SpriteOp::Save(canvas) => assert_eq!(canvas.get(0, 0), 1, "the edit is in the cue"),
+        SpriteOp::Save { canvas, .. } => assert_eq!(canvas.get(0, 0), 1, "the edit is in the cue"),
         other => panic!("expected SpriteOp::Save, got {other:?}"),
     }
 }
@@ -390,9 +404,9 @@ fn esc_queues_nothing_and_returns_to_the_picker() {
 fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
     let mut app = app_with_sprite_forge(24);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
-    disabled.insert("player".to_string(), Canvas::new(16));
+    disabled.insert("player".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -418,9 +432,9 @@ fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
         "the SpriteArt::None subject has nothing to toggle and queues nothing"
     );
     assert_eq!(writes[0].name, "anchor");
-    assert_eq!(writes[0].op, SpriteOp::Disable);
+    assert_eq!(writes[0].op, SpriteOp::Disable { full_colour: false });
     assert_eq!(writes[1].name, "player");
-    assert_eq!(writes[1].op, SpriteOp::Enable);
+    assert_eq!(writes[1].op, SpriteOp::Enable { full_colour: false });
 }
 
 #[test]
@@ -732,5 +746,116 @@ fn the_forge_row_refuses_when_the_forge_is_shut() {
     assert!(
         app.status_line.is_some(),
         "and it must say why rather than doing nothing"
+    );
+}
+
+// ---- the variant rule ---------------------------------------------------
+
+/// Index 9 is the lightest grey, 10 the first hue: the grey ramp is `1..=9`.
+const FIRST_HUE: u8 = 10;
+
+fn saved_variant(app: &mut App) -> (Canvas, bool) {
+    app.handle_key(GameKey::Char('s'));
+    let writes = app.take_sprite_writes();
+    assert_eq!(writes.len(), 1);
+    match writes.into_iter().next().unwrap().op {
+        SpriteOp::Save {
+            canvas,
+            full_colour,
+        } => (canvas, full_colour),
+        other => panic!("expected Save, got {other:?}"),
+    }
+}
+
+fn paint_cursor_cell(app: &mut App, swatch: u8) {
+    app.handle_pointer(
+        PointerHit::Swatch(swatch),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Swatch(swatch),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    app.handle_key(GameKey::Char(' '));
+}
+
+#[test]
+fn new_art_that_uses_a_hue_saves_as_full_colour() {
+    let mut app = app_with_sprite_forge(70);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(saved_variant(&mut app).1);
+}
+
+#[test]
+fn new_grey_only_art_saves_as_plain() {
+    let mut app = app_with_sprite_forge(71);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE - 1);
+    assert!(!saved_variant(&mut app).1);
+}
+
+#[test]
+fn loaded_colour_art_stays_colour_after_a_grey_only_edit() {
+    let mut app = app_with_sprite_forge(72);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, 2);
+    assert!(saved_variant(&mut app).1);
+}
+
+#[test]
+fn loaded_plain_art_stays_plain_after_a_hued_edit() {
+    let mut app = app_with_sprite_forge(73);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(!saved_variant(&mut app).1);
+}
+
+#[test]
+fn the_view_reports_the_variant_the_art_will_save_as() {
+    let mut app = app_with_sprite_forge(74);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    assert!(app.sprite_editor_view().unwrap().full_colour);
+    open_editor(&mut app, "player");
+    assert!(!app.sprite_editor_view().unwrap().full_colour);
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(
+        app.sprite_editor_view().unwrap().full_colour,
+        "new art's preview follows what it would save as"
+    );
+}
+
+#[test]
+fn picker_t_carries_the_installed_variant() {
+    let mut app = app_with_sprite_forge(75);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    let mut disabled = HashMap::new();
+    disabled.insert("player".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, disabled);
+    let subjects = app.sprite_subjects();
+    app.mode = Mode::SpritePicker;
+    for name in ["anchor", "player"] {
+        app.menu_selected = subjects.iter().position(|s| s.name == name).unwrap();
+        app.handle_key(GameKey::Char('t'));
+    }
+    let ops: Vec<_> = app.take_sprite_writes().into_iter().map(|w| w.op).collect();
+    assert_eq!(
+        ops,
+        [
+            SpriteOp::Disable { full_colour: true },
+            SpriteOp::Enable { full_colour: true }
+        ]
     );
 }

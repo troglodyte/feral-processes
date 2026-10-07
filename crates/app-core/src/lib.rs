@@ -28,8 +28,8 @@ pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_forge::{
-    PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
-    SpriteWrite, SubjectTint,
+    InstalledSprite, PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView,
+    SpriteOp, SpriteSubject, SpriteWrite, SubjectTint,
 };
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::telemetry::append_records;
@@ -101,7 +101,6 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::components::{BuildGoal, FinishOrder, Rarity};
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
-use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::sorties::SortieId;
@@ -3268,14 +3267,14 @@ pub struct App {
     /// The frontend's decoded, quantised sprite library, keyed by sprite
     /// name — `App::install_sprite_library`'s `enabled` half. Empty until
     /// installed, which is every non-dev session's whole life.
-    sprite_library: HashMap<String, Canvas>,
+    sprite_library: HashMap<String, InstalledSprite>,
     /// Sprite names switched off (`<name>.png.off` on disk) but not
     /// deleted — `App::install_sprite_library`'s `disabled` half. Decoded,
     /// same as `sprite_library`'s art, so `Enter` on an `Off` subject can
     /// open the disabled art itself rather than a blank canvas — I2's fix:
     /// the picker already tells the player the art survives the toggle, and
     /// the only tool that can read it back was the one place that didn't.
-    sprite_disabled: HashMap<String, Canvas>,
+    sprite_disabled: HashMap<String, InstalledSprite>,
     /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
     /// tint)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
     /// `assets/structures`/`assets/floors` once and kept for the rest of the

@@ -22,7 +22,7 @@ use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
-use feral_processes_app_core::SpriteOp;
+use feral_processes_app_core::{InstalledSprite, SpriteOp};
 use feral_processes_engine::icon::{Canvas, quantise, sprite_rgba};
 use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
@@ -144,7 +144,12 @@ pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
 /// `.png`/`.png.off` that fails to decode is silently dropped from its map
 /// rather than surfaced — the same contract `png_to_canvas` keeps on its
 /// own.
-pub fn scan_library(dir: &Path) -> (HashMap<String, Canvas>, HashMap<String, Canvas>) {
+pub fn scan_library(
+    dir: &Path,
+) -> (
+    HashMap<String, InstalledSprite>,
+    HashMap<String, InstalledSprite>,
+) {
     let mut enabled = HashMap::new();
     let mut disabled = HashMap::new();
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -158,7 +163,7 @@ pub fn scan_library(dir: &Path) -> (HashMap<String, Canvas>, HashMap<String, Can
             if !name.starts_with('@')
                 && let Some(canvas) = png_to_canvas(&path)
             {
-                disabled.insert(name.to_string(), canvas);
+                disabled.insert(name.to_string(), plain(canvas));
             }
             continue;
         }
@@ -172,10 +177,17 @@ pub fn scan_library(dir: &Path) -> (HashMap<String, Canvas>, HashMap<String, Can
             continue;
         }
         if let Some(canvas) = png_to_canvas(&path) {
-            enabled.insert(stem.to_string(), canvas);
+            enabled.insert(stem.to_string(), plain(canvas));
         }
     }
     (enabled, disabled)
+}
+
+fn plain(canvas: Canvas) -> InstalledSprite {
+    InstalledSprite {
+        canvas,
+        full_colour: false,
+    }
 }
 
 /// The `SpriteTable` key the player's own drawing is registered under.
@@ -371,7 +383,7 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
     let path = dir.join(format!("{name}.png"));
     let off_path = dir.join(format!("{name}.png.off"));
     match op {
-        SpriteOp::Save(canvas) => {
+        SpriteOp::Save { canvas, .. } => {
             if let Err(e) = canvas_to_png(&canvas, &path) {
                 warn!("sprite `{name}` failed to save: {e}");
                 return WriteOutcome::Failed;
@@ -389,7 +401,7 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
             }
             WriteOutcome::Reload
         }
-        SpriteOp::Enable => {
+        SpriteOp::Enable { .. } => {
             if path.exists() {
                 warn!(
                     "sprite `{name}` failed to enable: `{name}.png` already exists; \
@@ -403,7 +415,7 @@ fn apply_sprite_write(dir: &Path, name: &str, op: SpriteOp) -> WriteOutcome {
             }
             WriteOutcome::Reload
         }
-        SpriteOp::Disable => {
+        SpriteOp::Disable { .. } => {
             if off_path.exists() {
                 warn!(
                     "sprite `{name}` failed to disable: `{name}.png.off` already exists; \
@@ -981,7 +993,7 @@ mod tests {
         assert!(enabled.contains_key("on_subject"));
         assert_eq!(
             disabled.get("off_subject"),
-            Some(&off_canvas),
+            Some(&plain(off_canvas.clone())),
             "a disabled sprite's pixels must decode to what was written, not just be noticed by name"
         );
         assert!(
@@ -1067,7 +1079,7 @@ mod tests {
 
         // `t`: disable. The art moves to `.png.off`, unmodified.
         assert_eq!(
-            apply_sprite_write(&dir, "subject", SpriteOp::Disable),
+            apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false }),
             WriteOutcome::Disabled
         );
         assert!(!dir.join("subject.png").exists());
@@ -1081,7 +1093,7 @@ mod tests {
         let (_, disabled) = scan_library(&dir);
         let opened = disabled
             .get("subject")
-            .cloned()
+            .map(|sprite| sprite.canvas.clone())
             .expect("I2: Enter on an Off subject must find its art, not open blank");
         assert_eq!(
             opened, original,
@@ -1101,7 +1113,14 @@ mod tests {
         // instant an enabled copy lands, or the next disable has two
         // different files to choose between.
         assert_eq!(
-            apply_sprite_write(&dir, "subject", SpriteOp::Save(edited.clone())),
+            apply_sprite_write(
+                &dir,
+                "subject",
+                SpriteOp::Save {
+                    canvas: edited.clone(),
+                    full_colour: false
+                }
+            ),
             WriteOutcome::Reload
         );
         assert!(dir.join("subject.png").exists());
@@ -1114,7 +1133,7 @@ mod tests {
         // `t`: disable again. With the invariant held, there is nothing
         // left under `subject.png.off` to clobber.
         assert_eq!(
-            apply_sprite_write(&dir, "subject", SpriteOp::Disable),
+            apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false }),
             WriteOutcome::Disabled
         );
 
@@ -1125,7 +1144,7 @@ mod tests {
         );
         assert_eq!(
             disabled_final.get("subject"),
-            Some(&edited),
+            Some(&plain(edited.clone())),
             "the final recoverable art must be exactly the edit that was saved — \
              not the stale original, and not lost"
         );
@@ -1144,7 +1163,7 @@ mod tests {
         canvas_to_png(&stale_backup, &dir.join("stale.png")).unwrap();
         std::fs::rename(dir.join("stale.png"), dir.join("subject.png.off")).unwrap();
 
-        let outcome = apply_sprite_write(&dir, "subject", SpriteOp::Disable);
+        let outcome = apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false });
 
         let enabled_survived = png_to_canvas(&dir.join("subject.png"));
         let backup_untouched = png_to_canvas(&dir.join("subject.png.off"));
@@ -1173,7 +1192,7 @@ mod tests {
         canvas_to_png(&stale_backup, &dir.join("stale.png")).unwrap();
         std::fs::rename(dir.join("stale.png"), dir.join("subject.png.off")).unwrap();
 
-        let outcome = apply_sprite_write(&dir, "subject", SpriteOp::Enable);
+        let outcome = apply_sprite_write(&dir, "subject", SpriteOp::Enable { full_colour: false });
 
         let enabled_untouched = png_to_canvas(&dir.join("subject.png"));
         let backup_survived = png_to_canvas(&dir.join("subject.png.off"));
@@ -1206,8 +1225,8 @@ mod tests {
         let art = a_sprite_canvas();
         canvas_to_png(&art, &dir.join("subject.png")).unwrap();
 
-        let first = apply_sprite_write(&dir, "subject", SpriteOp::Disable);
-        let second = apply_sprite_write(&dir, "subject", SpriteOp::Disable);
+        let first = apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false });
+        let second = apply_sprite_write(&dir, "subject", SpriteOp::Disable { full_colour: false });
 
         let recovered = png_to_canvas(&dir.join("subject.png.off"));
         std::fs::remove_dir_all(&dir).ok();

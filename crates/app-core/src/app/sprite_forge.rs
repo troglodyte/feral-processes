@@ -135,6 +135,29 @@ pub struct SpriteSubject {
     pub art: SpriteArt,
 }
 
+/// A sprite the frontend found on disk: its pixels and which file variant
+/// holds them. The variant is a fact about the installed art, carried with
+/// it, so the editor never has to guess which file a save belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstalledSprite {
+    pub canvas: Canvas,
+    /// `<name>.colour.png` rather than `<name>.png` — drawn with its tint's
+    /// hue dropped (`assets/sprites/README.md`).
+    pub full_colour: bool,
+}
+
+/// Whether art with no file yet must save as the colour variant: a hued
+/// sprite saved as plain `.png` would be multiplied by the species tint and
+/// go muddy. Index 0 is transparent and `1..=9` the grey ramp, so any index
+/// past 9 is a hue.
+fn saves_as_full_colour(canvas: &Canvas) -> bool {
+    let edge = canvas.edge();
+    (0..edge).any(|y| (0..edge).any(|x| canvas.get(x, y) > GREY_RAMP_LEN))
+}
+
+/// Entries `1..=GREY_RAMP_LEN` of the sprite canvas are the grey ramp.
+const GREY_RAMP_LEN: u8 = 9;
+
 /// One `Mode::SpriteEditor` session — `CanvasEditor`'s shared mechanics
 /// plus which subject this is. The subject is a name rather than an index
 /// into `App::sprite_subjects()`: that list is rebuilt (and re-sorted, once
@@ -143,6 +166,9 @@ pub struct SpriteSubject {
 pub(crate) struct SpriteEditor {
     editor: CanvasEditor,
     subject: String,
+    /// The variant the art was opened with; `None` is new art, whose variant
+    /// is decided by what is drawn on it.
+    full_colour: Option<bool>,
 }
 
 impl SpriteEditor {
@@ -151,11 +177,19 @@ impl SpriteEditor {
     /// falling back to a blank 16x16 canvas only when the subject has never
     /// had art at all. Blank is a legitimate opening state here, unlike the
     /// player's own `@`: nothing filters it away before it can be saved.
-    fn open(subject: String, canvas: Canvas) -> SpriteEditor {
+    fn open(subject: String, canvas: Canvas, full_colour: Option<bool>) -> SpriteEditor {
         SpriteEditor {
             editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8),
             subject,
+            full_colour,
         }
+    }
+
+    /// The variant a save writes: the one the art was loaded as, else what
+    /// the canvas needs.
+    fn full_colour(&self) -> bool {
+        self.full_colour
+            .unwrap_or_else(|| saves_as_full_colour(self.editor.canvas()))
     }
 
     /// What the screen draws — `CanvasEditor`'s own view, the subject name
@@ -166,6 +200,7 @@ impl SpriteEditor {
             canvas: self.editor.view(),
             subject: self.subject.clone(),
             palette: &SPRITE_PALETTE,
+            full_colour: self.full_colour(),
         }
     }
 }
@@ -175,14 +210,17 @@ pub struct SpriteEditorView {
     pub canvas: CanvasView,
     pub subject: String,
     pub palette: &'static [(u8, u8, u8)],
+    /// The variant a save would write, so the preview can tint the way the
+    /// map will.
+    pub full_colour: bool,
 }
 
 /// One cue for the frontend to act on. app-core queues it and forgets —
 /// `App::take_sounds`'s pattern, in the direction of a file instead of a
 /// speaker. **app-core never opens a file and never learns what a PNG
 /// is**: `Save` carries exactly the `Canvas` the loader already knows how
-/// to encode from, and `Enable`/`Disable` carry nothing because the toggle
-/// is a rename on the name alone.
+/// to encode from, and every op carries the variant (`full_colour`) so the
+/// frontend derives the one file it touches from `(name, variant)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpriteWrite {
     pub name: String,
@@ -192,13 +230,13 @@ pub struct SpriteWrite {
 /// What a queued `SpriteWrite` asks the frontend to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpriteOp {
-    /// Write `assets/sprites/<name>.png` from this canvas, replacing
-    /// whatever was there.
-    Save(Canvas),
-    /// Rename `<name>.png.off` back to `<name>.png`.
-    Enable,
-    /// Rename `<name>.png` to `<name>.png.off`.
-    Disable,
+    /// Write `assets/sprites/<name>.png` (`<name>.colour.png` when
+    /// `full_colour`) from this canvas, replacing whatever was there.
+    Save { canvas: Canvas, full_colour: bool },
+    /// Rename `<name>.png.off` back to `<name>.png` (or the colour pair).
+    Enable { full_colour: bool },
+    /// Rename `<name>.png` to `<name>.png.off` (or the colour pair).
+    Disable { full_colour: bool },
 }
 
 /// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
@@ -263,8 +301,8 @@ impl App {
     /// `sprite_disabled`'s own doc comment.
     pub fn install_sprite_library(
         &mut self,
-        enabled: HashMap<String, Canvas>,
-        disabled: HashMap<String, Canvas>,
+        enabled: HashMap<String, InstalledSprite>,
+        disabled: HashMap<String, InstalledSprite>,
     ) {
         self.sprite_library = enabled;
         self.sprite_disabled = disabled;
@@ -454,8 +492,12 @@ impl App {
         if key == GameKey::Char('t') {
             if let Some(subject) = subjects.get(self.menu_selected) {
                 let op = match subject.art {
-                    SpriteArt::On => Some(SpriteOp::Disable),
-                    SpriteArt::Off => Some(SpriteOp::Enable),
+                    SpriteArt::On => Some(SpriteOp::Disable {
+                        full_colour: self.sprite_library[&subject.name].full_colour,
+                    }),
+                    SpriteArt::Off => Some(SpriteOp::Enable {
+                        full_colour: self.sprite_disabled[&subject.name].full_colour,
+                    }),
                     SpriteArt::None => None,
                 };
                 if let Some(op) = op {
@@ -469,13 +511,19 @@ impl App {
         }
         if let Some(idx) = self.selected_index(key, subjects.len()) {
             let subject = &subjects[idx];
-            let canvas = self
+            let installed = self
                 .sprite_library
                 .get(&subject.name)
-                .or_else(|| self.sprite_disabled.get(&subject.name))
-                .cloned()
-                .unwrap_or_else(|| Canvas::new(SPRITE_EDGE));
-            self.sprite_editor = Some(SpriteEditor::open(subject.name.clone(), canvas));
+                .or_else(|| self.sprite_disabled.get(&subject.name));
+            let editor = match installed {
+                Some(sprite) => SpriteEditor::open(
+                    subject.name.clone(),
+                    sprite.canvas.clone(),
+                    Some(sprite.full_colour),
+                ),
+                None => SpriteEditor::open(subject.name.clone(), Canvas::new(SPRITE_EDGE), None),
+            };
+            self.sprite_editor = Some(editor);
             self.mode = Mode::SpriteEditor;
         }
     }
@@ -521,7 +569,10 @@ impl App {
             GameKey::Char('s') => {
                 let write = SpriteWrite {
                     name: sprite_editor.subject.clone(),
-                    op: SpriteOp::Save(sprite_editor.editor.canvas().clone()),
+                    op: SpriteOp::Save {
+                        canvas: sprite_editor.editor.canvas().clone(),
+                        full_colour: sprite_editor.full_colour(),
+                    },
                 };
                 self.pending_sprite_writes.push(write);
             }

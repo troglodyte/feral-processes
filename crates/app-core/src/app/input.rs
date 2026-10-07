@@ -288,6 +288,7 @@ impl App {
             Mode::TrapDirection => self.handle_trap_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::UpgradeDirection => self.handle_upgrade_direction_key(key),
+            Mode::InteractDirection => self.handle_interact_direction_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),

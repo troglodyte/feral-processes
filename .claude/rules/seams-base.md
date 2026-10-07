@@ -426,3 +426,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `floor::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
+
+- **`[c]` is the interact dispatcher: it acts on what `Game::adjacent_interactions` lists and nothing else.**
+- **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
+- **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**

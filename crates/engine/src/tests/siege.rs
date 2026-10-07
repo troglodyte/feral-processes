@@ -2681,14 +2681,15 @@ mod persist {
         );
     }
 
-    /// This feature adds no schema break — every new field is additive.
+    /// The siege fields themselves are additive; the version is 37 because
+    /// ruins (filed after a siege) bumped it, not because sieges did.
     #[test]
     fn save_format_version_is_unchanged() {
         assert_eq!(
             crate::save::SAVE_FORMAT_VERSION,
-            36,
-            "adding a siege field is additive under field-named RON and must \
-             not cost a version bump"
+            37,
+            "the save format version moves only with a deliberate bump; update \
+             this pin and the changelog together"
         );
     }
 }

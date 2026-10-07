@@ -519,6 +519,10 @@ pub(super) struct BuildCommit {
     /// screen that *can* price it, and the list it replaced was the only
     /// place the figure used to appear.
     pub cost: Vec<String>,
+    /// Whether this commits a program to a wrecked structure's rebuild site
+    /// rather than filing a new order, which changes what the picker's
+    /// title, warning and footer call it.
+    pub rebuild: bool,
 }
 
 impl BuildCommit {
@@ -569,9 +573,10 @@ impl BuildCommit {
     /// standing — makes the spend final. A prompt saying "never comes back"
     /// would be a plain lie about a refund the game does pay.
     fn prompt(&self) -> String {
-        let what = match self.to_tier {
-            Some(to_tier) => format!("Upgrading the {} to Mk{to_tier}", self.label),
-            None => format!("Deploying the {}", self.label),
+        let what = match (self.to_tier, self.rebuild) {
+            (Some(to_tier), _) => format!("Upgrading the {} to Mk{to_tier}", self.label),
+            (None, true) => format!("Rebuilding the {}", self.label),
+            (None, false) => format!("Deploying the {}", self.label),
         };
         format!(
             "{what} permanently spends one of your programs. Call the order off \
@@ -595,7 +600,8 @@ impl BuildCommit {
 /// dropping the whole prompt: the *tier* is the part the player cannot
 /// afford to lose, and it is carried on `PendingBuild` itself.
 pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
-    let (label, to_tier, cost) = match app.pending_build.clone()? {
+    let pending = app.pending_build.clone()?;
+    let (label, to_tier, cost) = match pending.clone() {
         PendingBuild::Deploy { structure, .. } => (
             app.game
                 .as_ref()
@@ -605,6 +611,21 @@ pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
                         .find(|def| def.id == structure)
                 })
                 .map(|def| def.name),
+            None,
+            Vec::new(),
+        ),
+        PendingBuild::Rebuild { site } => (
+            app.game.as_ref().and_then(|game| {
+                let kind = game
+                    .awaiting_program_sites()
+                    .into_iter()
+                    .find(|s| s.site == site)?
+                    .structure;
+                game.buildable_structure_defs()
+                    .into_iter()
+                    .find(|def| def.id == kind)
+                    .map(|def| def.name)
+            }),
             None,
             Vec::new(),
         ),
@@ -622,6 +643,7 @@ pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
         to_tier,
         structure: app.pending_build_kind()?,
         cost,
+        rebuild: matches!(pending, PendingBuild::Rebuild { .. }),
     })
 }
 
@@ -654,6 +676,11 @@ const UNNAMED_BUILD_TARGET: &str = "structure";
 
 const PROGRAM_PICKER_PROMPT: &str =
     "Which program pays for it? (Esc to cancel; Up/Down + Enter also work)";
+
+/// `PROGRAM_PICKER_PROMPT` for a wreck's rebuild, which names the job
+/// rather than a payment.
+const REBUILD_PICKER_PROMPT: &str =
+    "Which program rebuilds it? (Esc to cancel; Up/Down + Enter also work)";
 
 /// What the picker says, once and above the list, about a build that runs no
 /// work cycle at all.
@@ -712,7 +739,11 @@ pub(super) fn build_program_rows(
             .map(text_row),
         );
     }
-    rows.push(text_row(PROGRAM_PICKER_PROMPT));
+    rows.push(text_row(if commit.is_some_and(|c| c.rebuild) {
+        REBUILD_PICKER_PROMPT
+    } else {
+        PROGRAM_PICKER_PROMPT
+    }));
     if !candidates.is_empty() && candidates.iter().all(|c| c.effect == BuildEffect::NoCycle) {
         rows.extend(
             wrap_text(NO_CYCLE_NOTE, DESCRIBE_WRAP_COLUMNS)
@@ -784,7 +815,11 @@ pub(super) fn draw_build_program(
         .is_empty()
         .then(|| no_candidates_refusal(tier, last_program));
     draw_popup(
-        "Commit a program",
+        if commit.as_ref().is_some_and(|c| c.rebuild) {
+            "Rebuild a structure"
+        } else {
+            "Commit a program"
+        },
         PopupSize::Large,
         &rows,
         refusal.or(nothing_qualifies.as_deref()),
@@ -2873,6 +2908,7 @@ mod build_program_tests {
             to_tier: None,
             structure: "fabricator".to_string(),
             cost: Vec::new(),
+            rebuild: false,
         }
     }
 
@@ -2888,7 +2924,29 @@ mod build_program_tests {
             to_tier: Some(to_tier),
             structure: "mining_node".to_string(),
             cost,
+            rebuild: false,
         }
+    }
+
+    fn rebuild(label: &str) -> BuildCommit {
+        BuildCommit {
+            rebuild: true,
+            ..deploy(label)
+        }
+    }
+
+    #[test]
+    fn a_rebuild_picker_names_the_rebuild_in_title_warning_and_footer() {
+        let m = crate::text::ui_metrics(900.0);
+        let mut game = crate::render::test_support::game_with_a_free_and_a_wielded_program(4010);
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_build_program(&mut game, Some(rebuild("Mining Node")), 0, None, p, &m);
+        });
+        let drawn = crate::paint::painted_text(&shapes).join("\n");
+        assert!(drawn.contains("Rebuild a structure"), "{drawn}");
+        assert!(drawn.contains("Rebuilding the Mining Node"), "{drawn}");
+        assert!(drawn.contains("Which program rebuilds it?"), "{drawn}");
+        assert!(!drawn.contains("Which program pays for it?"), "{drawn}");
     }
 
     /// A candidate whose machine really does have a rate to change.

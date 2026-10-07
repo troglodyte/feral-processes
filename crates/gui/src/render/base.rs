@@ -1277,9 +1277,20 @@ fn draw_surface_map(
             // drawn under its own work. Under the marks and outlines below,
             // which are all about state rather than about the tile.
             if let Some(ev) = building {
-                let glyph = ev.glyph.to_string();
+                // A wreck waiting for a program has no crew on it, so it
+                // wears a still "!" rather than the working caret.
+                let waiting = ev.build.as_ref().is_some_and(|b| b.awaiting_program);
+                let glyph = if waiting {
+                    "!".to_string()
+                } else {
+                    ev.glyph.to_string()
+                };
                 let dims = painter.measure_map(&glyph, glyph_px);
-                let lift = fx.centred_bob(ev.entity);
+                let lift = if waiting {
+                    0.0
+                } else {
+                    fx.centred_bob(ev.entity)
+                };
                 painter.map(
                     &glyph,
                     px + (tile_px - dims.width) / 2.0,
@@ -3795,6 +3806,17 @@ mod tests {
         request: bool,
         animated: bool,
     ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        drawn_base_site(at, request, animated, false)
+    }
+
+    /// `drawn_base_at` with the request filed as a wreck still waiting for a
+    /// program.
+    fn drawn_base_site(
+        at: f64,
+        request: bool,
+        animated: bool,
+        awaiting_program: bool,
+    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
@@ -3842,6 +3864,7 @@ mod tests {
                     progress: 0,
                     goal: feral_processes_engine::components::BuildGoal::New,
                     program: None,
+                    awaiting_program,
                 });
             feral_processes_engine::save::save_to_file(&path, &data).unwrap();
             game = Game::load(&path, &test_assets()).unwrap();
@@ -4123,6 +4146,32 @@ mod tests {
                 .any(|g| g == "^"),
             "and it is drawn only where a request stands"
         );
+    }
+
+    /// A wreck waiting for a program wears a still "!" in the caret's place:
+    /// the bouncing caret says a crew is on the job, which is the one thing
+    /// not true of it.
+    #[test]
+    fn a_site_awaiting_a_program_wears_a_still_bang_not_the_caret() {
+        let text = |at| {
+            let shapes = drawn_base_site(at, true, true, true);
+            crate::paint::painted_text(&shapes)
+        };
+        let first = text(0.0);
+        assert!(first.iter().any(|g| g == "!"), "{first:?}");
+        assert!(!first.iter().any(|g| g == "^"), "{first:?}");
+
+        let bang_y = |at| {
+            let shapes = drawn_base_site(at, true, true, true);
+            shapes
+                .iter()
+                .find_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Text(t) if t.galley.text() == "!" => Some(t.pos.y),
+                    _ => None,
+                })
+                .expect("the marker is drawn")
+        };
+        assert_eq!(bang_y(0.0), bang_y(0.25), "it does not bounce");
     }
 
     /// ...and the caret bounces.

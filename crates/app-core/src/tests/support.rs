@@ -308,6 +308,28 @@ pub(crate) fn app_holding_downed_programs(
     app
 }
 
+/// The party in base space beside nothing, an empty pack, and one downed
+/// program in it: the one state where the transfer has something to offer
+/// and no neighbouring structure to aim at.
+pub(crate) fn app_in_base_holding_a_downed_program(seed: u32) -> App {
+    let mut app = app_beside_depots(seed, 0, 0, &[]);
+    let path = scratch_path("base_downed", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = vec![feral_processes_engine::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: feral_processes_engine::components::Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    }];
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
 /// `app_holding_downed_programs` plus `protocols` Reinitialization Protocols
 /// in the player's pack — for the `R` key's own tests, which need both a
 /// record and the item that spends on it. Zero is a legitimate call: the
@@ -3083,6 +3105,55 @@ pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
     for _ in 0..programs {
         tame_program_at_zone(&mut app, 1);
     }
+    app
+}
+
+/// A base with two tamed programs and the party at `(0, 0)` in base space,
+/// with a Mining Node rebuild site awaiting a program at `(1, 0)` and, when
+/// `depot` is set, a Depot at `(-1, 0)`.
+///
+/// The site is written into the save as filed, rather than waited for: a
+/// ruin only becomes a site on a tick, and nothing here wants a tick.
+pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
+    let mut app = app_in_base_with_programs(seed, 2);
+    let path = scratch_path("rebuild_site", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.build_sites.push(save::BuildSiteSave {
+        position: (1, 0),
+        structure: "mining_node".to_string(),
+        cost: Vec::new(),
+        delivered: Vec::new(),
+        progress: 0,
+        goal: feral_processes_engine::components::BuildGoal::New,
+        program: None,
+        awaiting_program: true,
+    });
+    if depot {
+        data.structures.push(save::StructureSave {
+            kind: "depot".to_string(),
+            position: (-1, 0),
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
+            denied_items: Vec::new(),
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            build_quality: 1.0,
+            racked: Vec::new(),
+            hopper: Vec::new(),
+            hopper_progress: 0,
+            standing_tool: None,
+            pod_charged: None,
+            incubating: Vec::new(),
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
     app
 }
 

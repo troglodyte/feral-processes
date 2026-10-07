@@ -22,6 +22,7 @@ pub(crate) mod depot_filter;
 pub(crate) mod duties;
 pub(crate) mod floor;
 pub(crate) mod hauling;
+pub(crate) mod interact;
 pub(crate) mod lines;
 pub(crate) mod morale;
 pub(crate) mod offshift;

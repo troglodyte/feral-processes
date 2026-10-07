@@ -599,3 +599,19 @@ fn the_basket_names_carriers_by_their_offer_index() {
     assert_eq!(basket.carriers, vec![1]);
     assert!(basket.take.is_empty() && basket.give.is_empty());
 }
+
+/// A downed program in the pack and no shelf beside the party: the engine
+/// offers the transfer at `(0, 0)` and `c` must open it rather than refuse.
+#[test]
+fn c_opens_the_transfer_for_a_downed_program_with_no_shelf_beside() {
+    let mut app = app_in_base_holding_a_downed_program(973);
+    assert_eq!(
+        app.game.as_ref().unwrap().adjacent_interactions().len(),
+        1,
+        "the engine offers the transfer"
+    );
+
+    app.handle_key(GameKey::Char('c'));
+
+    assert_eq!(app.mode, Mode::Transfer);
+}

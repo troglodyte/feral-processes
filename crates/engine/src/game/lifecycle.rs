@@ -620,6 +620,7 @@ impl Game {
         world.insert_resource(crate::resources::Trace::default());
         world.init_resource::<crate::resources::RaidPressure>();
         world.init_resource::<crate::resources::SiegePressure>();
+        world.init_resource::<crate::resources::Ruins>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // `RunFeats`' precedent: not saved, so quitting between a level-up
@@ -898,6 +899,7 @@ impl Game {
                     announced_stuck: false,
                     goal,
                     program: b.program,
+                    awaiting_program: b.awaiting_program,
                 },
                 Position {
                     x: b.position.0,
@@ -1580,6 +1582,7 @@ impl Game {
         world.insert_resource(crate::resources::Trace::default());
         world.init_resource::<crate::resources::RaidPressure>();
         world.init_resource::<crate::resources::SiegePressure>();
+        world.init_resource::<crate::resources::Ruins>();
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
         // `RunFeats`' precedent: not saved, so quitting between a level-up
@@ -1742,6 +1745,17 @@ impl Game {
         game.restore_caravans(data.caravan_memory, data.caravans);
 
         game.restore_build_sites(data.build_sites);
+
+        game.world.insert_resource(crate::resources::Ruins(
+            data.ruins
+                .into_iter()
+                .map(|r| crate::resources::Ruin {
+                    kind: r.kind,
+                    x: r.x,
+                    y: r.y,
+                })
+                .collect(),
+        ));
 
         game.restore_dig_sites(data.dig_sites);
 
@@ -2919,6 +2933,7 @@ impl Game {
                 progress: site.progress,
                 goal: site.goal,
                 program: site.program.clone(),
+                awaiting_program: site.awaiting_program,
             });
         }
         build_sites
@@ -3221,6 +3236,17 @@ impl Game {
             traps,
             dig_sites,
             build_sites,
+            ruins: self
+                .world
+                .resource::<crate::resources::Ruins>()
+                .0
+                .iter()
+                .map(|r| save::RuinSave {
+                    kind: r.kind.clone(),
+                    x: r.x,
+                    y: r.y,
+                })
+                .collect(),
             caravans,
             caravan_memory: {
                 let memory = self.world.resource::<crate::resources::CaravanMemory>();
@@ -3663,7 +3689,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // a shipped species.
     #[cfg(test)]
     species.insert(crate::tests::support::generic_species());
-    let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
+    let (mut structures, structure_warnings) =
+        StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
@@ -3676,6 +3703,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
+    structures.compute_levels(&items);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty

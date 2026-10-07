@@ -716,6 +716,107 @@ const FALLBACK_BASIN_EXIT: &str = "(id: \"basin_exit\", name: \"Basin Exit\", \
 #[derive(Resource, Default)]
 pub struct StructureDb {
     structures: HashMap<StructureId, StructureDef>,
+    /// `structure_levels` over `structures`, filled by `compute_levels`
+    /// once the item catalogue (an assembler's inputs are its item's recipe)
+    /// has loaded. Derived, never saved.
+    levels: HashMap<StructureId, u32>,
+}
+
+/// Every item `def` consumes: its build cost and, for an assembler, its
+/// item's recipe. `recipe` answers the second, so this stays free of the
+/// item catalogue and a test can hand-build both halves.
+fn consumed_items<'a>(
+    def: &'a StructureDef,
+    recipe: &impl Fn(&StructureDef) -> Option<&'a [(ItemId, u32)]>,
+) -> Vec<&'a ItemId> {
+    let mut items: Vec<&ItemId> = def.build_cost.iter().map(|(i, _)| i).collect();
+    if let Some(inputs) = recipe(def) {
+        items.extend(inputs.iter().map(|(i, _)| i));
+    }
+    items
+}
+
+/// A structure's production level: how many machines deep its inputs run.
+///
+/// A structure with no producer among its inputs is level 0 (a `work` node
+/// paid for in what it mines); any other is 1 + the highest level of the
+/// producers of what it costs and consumes. An item nothing produces
+/// contributes nothing, a structure's own output in its own cost is ignored,
+/// and a producer cycle shares one level (strongly connected components, so
+/// the fixed point cannot climb forever).
+pub fn structure_levels<'a>(
+    defs: &'a HashMap<StructureId, StructureDef>,
+    recipe: impl Fn(&StructureDef) -> Option<&'a [(ItemId, u32)]>,
+) -> HashMap<StructureId, u32> {
+    let mut list: Vec<&StructureDef> = defs.values().collect();
+    list.sort_by(|a, b| a.id.cmp(&b.id));
+    let n = list.len();
+    let mut producers: HashMap<&ItemId, Vec<usize>> = HashMap::new();
+    for (i, def) in list.iter().enumerate() {
+        if let Some(work) = &def.work {
+            producers.entry(&work.produces).or_default().push(i);
+        }
+        if let Some(assembles) = &def.assembles {
+            producers.entry(&assembles.item).or_default().push(i);
+        }
+    }
+    let deps: Vec<Vec<usize>> = list
+        .iter()
+        .enumerate()
+        .map(|(i, def)| {
+            let mut d: Vec<usize> = consumed_items(def, &recipe)
+                .into_iter()
+                .filter_map(|item| producers.get(item))
+                .flatten()
+                .copied()
+                .filter(|&p| p != i)
+                .collect();
+            d.sort_unstable();
+            d.dedup();
+            d
+        })
+        .collect();
+    let mut reach = vec![vec![false; n]; n];
+    for (i, ds) in deps.iter().enumerate() {
+        for &d in ds {
+            reach[i][d] = true;
+        }
+    }
+    for k in 0..n {
+        for i in 0..n {
+            if reach[i][k] {
+                let via = reach[k].clone();
+                for (cell, through) in reach[i].iter_mut().zip(via) {
+                    *cell |= through;
+                }
+            }
+        }
+    }
+    let same = |a: usize, b: usize| a == b || (reach[a][b] && reach[b][a]);
+    let mut level = vec![0u32; n];
+    for _ in 0..=n {
+        let mut changed = false;
+        for i in 0..n {
+            let next = (0..n)
+                .filter(|&m| same(i, m))
+                .flat_map(|m| deps[m].iter().copied())
+                .filter(|&d| !same(i, d))
+                .map(|d| level[d] + 1)
+                .max()
+                .unwrap_or(0);
+            if next != level[i] {
+                level[i] = next;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    list.iter()
+        .zip(level)
+        .map(|(def, l)| (def.id.clone(), l))
+        .collect()
 }
 
 impl StructureDef {
@@ -864,6 +965,20 @@ impl StructureDb {
 
     pub fn get(&self, id: &str) -> Option<&StructureDef> {
         self.structures.get(id)
+    }
+
+    /// Fills `level` from the loaded defs. Called once the item catalogue
+    /// is final, because an assembler's inputs live on its item.
+    pub fn compute_levels(&mut self, items: &crate::items_db::ItemDb) {
+        let levels = structure_levels(&self.structures, |def| {
+            crate::systems::assembly_recipe(def, items)
+        });
+        self.levels = levels;
+    }
+
+    /// Production level (see `structure_levels`); 0 for an unknown id.
+    pub fn level(&self, id: &str) -> u32 {
+        self.levels.get(id).copied().unwrap_or(0)
     }
 
     /// Adds `def`, replacing any structure already under its id.
@@ -1100,5 +1215,129 @@ mod tests {
         assert_eq!(nonsense(f32::INFINITY).rate(), None);
         assert_eq!(nonsense(-5.0).rate(), Some(0.0));
         assert_eq!(nonsense(0.6).rate(), Some(0.6));
+    }
+
+    fn levels_of(defs: &[&str], recipes: &[(&str, &[(&str, u32)])]) -> HashMap<StructureId, u32> {
+        let map: HashMap<StructureId, StructureDef> = defs
+            .iter()
+            .map(|d| {
+                let def: StructureDef = ron::from_str(d).expect("fixture def parses");
+                (def.id.clone(), def)
+            })
+            .collect();
+        let recipes: HashMap<ItemId, Vec<(ItemId, u32)>> = recipes
+            .iter()
+            .map(|(item, cost)| {
+                (
+                    ItemId(item.to_string()),
+                    cost.iter()
+                        .map(|(i, q)| (ItemId(i.to_string()), *q))
+                        .collect(),
+                )
+            })
+            .collect();
+        structure_levels(&map, |def| {
+            recipes
+                .get(&def.assembles.as_ref()?.item)
+                .map(|v| v.as_slice())
+        })
+    }
+
+    fn fixture(id: &str, cost: &str, rest: &str) -> String {
+        format!(
+            "(id: \"{id}\", name: \"{id}\", description: \"\", glyph: 'x', color: Cyan, \
+             build_cost: [{cost}], {rest})"
+        )
+    }
+
+    #[test]
+    fn a_raw_producer_is_level_zero_and_its_own_output_in_its_cost_is_ignored() {
+        let mine = fixture(
+            "mine",
+            "(\"ore\", 5)",
+            "work: Some((produces: \"ore\", ticks_per_unit: 10))",
+        );
+        let levels = levels_of(&[&mine], &[]);
+        assert_eq!(levels["mine"], 0);
+    }
+
+    #[test]
+    fn a_chain_climbs_one_level_per_step() {
+        let mine = fixture(
+            "mine",
+            "(\"ore\", 5)",
+            "work: Some((produces: \"ore\", ticks_per_unit: 10))",
+        );
+        let bench = fixture(
+            "bench",
+            "(\"ore\", 5)",
+            "assembles: Some((item: \"plate\", ticks_per_unit: 10))",
+        );
+        let press = fixture(
+            "press",
+            "",
+            "assembles: Some((item: \"gear\", ticks_per_unit: 10))",
+        );
+        let levels = levels_of(
+            &[&mine, &bench, &press],
+            &[("plate", &[("ore", 1)]), ("gear", &[("plate", 1)])],
+        );
+        assert_eq!(levels["mine"], 0);
+        assert_eq!(levels["bench"], 1);
+        assert_eq!(levels["press"], 2);
+    }
+
+    #[test]
+    fn a_producer_cycle_shares_one_level() {
+        let mine = fixture(
+            "mine",
+            "",
+            "work: Some((produces: \"ore\", ticks_per_unit: 10))",
+        );
+        let a = fixture(
+            "a",
+            "(\"b_out\", 1)",
+            "assembles: Some((item: \"a_out\", ticks_per_unit: 10))",
+        );
+        let b = fixture(
+            "b",
+            "(\"a_out\", 1)",
+            "assembles: Some((item: \"b_out\", ticks_per_unit: 10))",
+        );
+        let levels = levels_of(
+            &[&mine, &a, &b],
+            &[("a_out", &[("ore", 1)]), ("b_out", &[("a_out", 1)])],
+        );
+        assert_eq!(levels["a"], levels["b"]);
+        assert_eq!(levels["a"], 1);
+    }
+
+    #[test]
+    fn an_item_nothing_produces_contributes_nothing() {
+        let wall = fixture("wall", "(\"scrap\", 3)", "");
+        let mine = fixture(
+            "mine",
+            "",
+            "work: Some((produces: \"ore\", ticks_per_unit: 10))",
+        );
+        let post = fixture("post", "(\"ore\", 3)", "");
+        let levels = levels_of(&[&wall, &mine, &post], &[]);
+        assert_eq!(levels["wall"], 0);
+        assert_eq!(levels["post"], 1);
+    }
+
+    #[test]
+    fn a_mining_node_sits_below_an_assembly_bay_in_the_shipped_assets() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (mut db, _) = StructureDb::load_dir(&dir.join("structures")).unwrap();
+        let (items, _) = crate::items_db::ItemDb::load_dir(
+            &dir.join("items"),
+            &crate::abilities::AbilityDb::load_dir(&dir.join("abilities"))
+                .unwrap()
+                .0,
+        )
+        .unwrap();
+        db.compute_levels(&items);
+        assert!(db.level("mining_node") < db.level("assembly_bay"));
     }
 }

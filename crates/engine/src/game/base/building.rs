@@ -9,6 +9,41 @@ use crate::systems::SiteScales;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
+/// A rebuild site waiting for the player to commit a program to it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AwaitingSite {
+    pub site: Entity,
+    pub structure: StructureId,
+    /// Base-space coordinates.
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Why a footprint cannot take a structure, in the order the player is told.
+/// Each is its own refusal because each leaves a different errand: demolish,
+/// let the crew catch up or cancel the request, clear a dig mark, or wait
+/// for a program to move.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PlacementRefusal {
+    NoFloor,
+    Occupied,
+    SiteFiled,
+    DigMark,
+    BodyStanding,
+}
+
+impl PlacementRefusal {
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::NoFloor => "There's no floor there — a structure has to stand on laid ground.",
+            Self::Occupied => "Something is already deployed there.",
+            Self::SiteFiled => "Your crew is already set to build something there.",
+            Self::DigMark => "There's a dig mark there — clear it before building.",
+            Self::BodyStanding => "One of your programs is standing there — give it a moment.",
+        }
+    }
+}
+
 impl Game {
     /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
     /// the party, spending `program` — a tamed program you own — to pay for
@@ -131,65 +166,10 @@ impl Game {
         //
         // The founding Home skips the check: the pocket it lays does not
         // exist to be measured against yet.
-        if !founding
-            && footprint
-                .iter()
-                .any(|&(fx, fy)| !self.world.resource::<BaseGrid>().is_floor(fx, fy))
-        {
-            return Err("There's no floor there — a structure has to stand on laid ground.".into());
-        }
-
-        if footprint
-            .iter()
-            .any(|&(fx, fy)| self.find_blocking_structure_at(fx, fy).is_some())
-        {
-            return Err("Something is already deployed there.".into());
-        }
-        // A cell already spoken for by a request nobody has raised yet. A
-        // refusal of its own rather than folded into the one above, because
-        // the two leave the player different errands: one cell needs
-        // demolishing, the other needs the crew to catch up — or the request
-        // calling off.
-        if footprint
-            .iter()
-            .any(|&(fx, fy)| self.build_site_at(fx, fy).is_some())
-        {
-            return Err("Your crew is already set to build something there.".into());
-        }
-        // A fourth refusal, for the same reason as the two above it: a dig
-        // mark is an instruction the base is already carrying out, and a
-        // structure raised over it would either bury the mark or have the
-        // crew cut the floor out from under a machine standing on it.
-        if !founding
-            && footprint
-                .iter()
-                .any(|&(fx, fy)| self.dig_site_at(fx, fy).is_some())
-        {
-            return Err("There's a dig mark there — clear it before building.".into());
-        }
-        // A fifth refusal on the same ladder, and its own for those two's
-        // reason: this cell needs a moment rather than a demolition or a
-        // cancelled request. Nothing checked it before, so a machine went up
-        // on top of a wandering program and left it standing *inside* the
-        // building — which reads as the base being broken and, now that a
-        // body is a blocker, would wall that body in behind a cell nothing
-        // may cross. Skipped while founding, `is_floor`'s reason: base space
-        // does not exist to be occupied yet, and every program's `Position`
-        // out there is a zone-surface tile these coordinates only alias.
-        //
-        // **The program being spent is exempt**, and it is the one body that
-        // has to be: `commit_program` retires it below, so a request refused
-        // on account of it names a body that would not have been there. It is
-        // also the likely one — the picker offers the whole roster wherever it
-        // happens to be standing, and a program milling around the cell you
-        // are pointing at is exactly the one you would pick.
-        if !founding
-            && self
-                .base_bodies()
-                .iter()
-                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
-        {
-            return Err("One of your programs is standing there — give it a moment.".into());
+        // The ladder itself is `placement_refusal`; what each rung means to
+        // the player is argued in `PlacementRefusal`.
+        if let Some(refusal) = self.placement_refusal(&footprint, founding, program) {
+            return Err(refusal.message().into());
         }
         // Before the materials check, with the other refusals: a structure
         // whose effect accumulates is bounded by a count rather than by
@@ -322,20 +302,7 @@ impl Game {
         // free.
         let mut site = BuildSite::new(def.id.clone(), build_cost);
         site.program = committed;
-        self.world.spawn((
-            site,
-            Position { x, y },
-            // A glyph, unlike a `DigSite` — which is what puts a build site
-            // on the map and under the examine ray for free, through
-            // `view_entities` and `find_target_in_direction` rather than a
-            // second draw path. The renderer paints its own frame around
-            // this; the character is what `x` reads and what a text-mode
-            // fallback would draw.
-            Glyph {
-                ch: BUILD_SITE_GLYPH,
-                color: GlyphColor::Orange,
-            },
-        ));
+        self.spawn_build_site(site, x, y);
         // Two sentences rather than one with an optional clause: the only
         // order that commits nothing is the Home, which never reaches this
         // line, so the `None` arm exists for a modded exempt structure and
@@ -350,6 +317,205 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
+    /// request's components are written, shared by `place_structure` and
+    /// `file_ruins` so a deploy and a rebuild cannot drift.
+    fn spawn_build_site(&mut self, site: BuildSite, x: i32, y: i32) -> Entity {
+        self.world
+            .spawn((
+                site,
+                Position { x, y },
+                // A glyph, unlike a `DigSite` — which is what puts a build
+                // site on the map and under the examine ray for free,
+                // through `view_entities` and `find_target_in_direction`
+                // rather than a second draw path. The renderer paints its own
+                // frame around this; the character is what `x` reads and
+                // what a text-mode fallback would draw.
+                Glyph {
+                    ch: BUILD_SITE_GLYPH,
+                    color: GlyphColor::Orange,
+                },
+            ))
+            .id()
+    }
+
+    /// Whether a siege is under way: an open tactical fight seated as one.
+    /// `TacticalBattle::siege_pack` is that field's own answer, and an
+    /// off-screen siege resolves inside a single tick so is never "running"
+    /// between ticks.
+    pub(crate) fn siege_running(&self) -> bool {
+        self.world
+            .get_resource::<crate::tactical::TacticalBattle>()
+            .is_some_and(|b| b.siege_pack > 0)
+    }
+
+    /// The first reason `footprint` cannot take a structure, or `None`.
+    ///
+    /// **The one placement predicate** `place_structure` and `file_ruins`
+    /// both call, without `place_structure`'s locale gate (`file_ruins` files
+    /// from wherever the party stands). The floor check and the dig-mark and
+    /// body checks are skipped while `founding`: the pocket does not exist
+    /// to be measured, and every program's `Position` out on the surface only
+    /// aliases these coordinates. `program` is exempt from the body check —
+    /// it is the one being spent, and `commit_program` retires it.
+    fn placement_refusal(
+        &mut self,
+        footprint: &[(i32, i32)],
+        founding: bool,
+        program: Option<Entity>,
+    ) -> Option<PlacementRefusal> {
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| !self.world.resource::<BaseGrid>().is_floor(fx, fy))
+        {
+            return Some(PlacementRefusal::NoFloor);
+        }
+        let standing = self.structure_footprints();
+        if footprint.iter().any(|&(fx, fy)| {
+            standing.iter().any(|(_, p, side)| {
+                crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(fx, fy))
+            })
+        }) {
+            return Some(PlacementRefusal::Occupied);
+        }
+        if footprint
+            .iter()
+            .any(|&(fx, fy)| self.base_space_build_site_at(fx, fy).is_some())
+        {
+            return Some(PlacementRefusal::SiteFiled);
+        }
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| self.dig_site_at(fx, fy).is_some())
+        {
+            return Some(PlacementRefusal::DigMark);
+        }
+        if !founding
+            && self
+                .base_bodies()
+                .iter()
+                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
+        {
+            return Some(PlacementRefusal::BodyStanding);
+        }
+        None
+    }
+
+    /// Files a rebuild site for every recorded wreck, once no siege is
+    /// running. Called from the base tick, so one call site serves a siege
+    /// ending on the board, in a tactical fight or off-screen, and a raid —
+    /// which is not a siege — files on the next tick.
+    ///
+    /// A wreck whose ground is taken is dropped and said so. A rebuild
+    /// costs what a fresh deploy costs, tier 1, and a structure that runs a
+    /// job is filed `awaiting_program` rather than paid for here: the
+    /// program is the player's to choose (`commit_rebuild_program`).
+    pub(crate) fn file_ruins(&mut self) {
+        if self
+            .world
+            .resource::<crate::resources::Ruins>()
+            .0
+            .is_empty()
+            || self.siege_running()
+        {
+            return;
+        }
+        let ruins = std::mem::take(&mut self.world.resource_mut::<crate::resources::Ruins>().0);
+        let mut waiting = Vec::new();
+        for ruin in ruins {
+            let Some(def) = self
+                .world
+                .resource::<StructureDb>()
+                .get(&ruin.kind)
+                .cloned()
+            else {
+                self.log_base(format!(
+                    "The {} wreck at ({}, {}) could not be rebuilt: its structure no longer loads.",
+                    ruin.kind, ruin.x, ruin.y
+                ));
+                continue;
+            };
+            let footprint = crate::tactical::footprint_cells_at((ruin.x, ruin.y), def.footprint);
+            match self.placement_refusal(&footprint, false, None) {
+                // A program standing on the wreck walks off; the ground is
+                // not taken, so keep the ruin for the next filing tick.
+                Some(PlacementRefusal::BodyStanding) => {
+                    waiting.push(ruin);
+                    continue;
+                }
+                None => {}
+                Some(_) => {
+                    self.log_base(format!(
+                        "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
+                        def.name, ruin.x, ruin.y
+                    ));
+                    continue;
+                }
+            }
+            let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
+            site.awaiting_program = def.needs_program();
+            self.spawn_build_site(site, ruin.x, ruin.y);
+            self.log_base(format!(
+                "Your crew marks out the {} wreck at ({}, {}) to be rebuilt.",
+                def.name, ruin.x, ruin.y
+            ));
+        }
+        self.world
+            .resource_mut::<crate::resources::Ruins>()
+            .0
+            .extend(waiting);
+    }
+
+    /// Commits `program` to a rebuild site that is waiting for one,
+    /// spending it through the same ladder a fresh deploy uses
+    /// (`commit_for_build`), then lets the crew work the site.
+    pub fn commit_rebuild_program(&mut self, site: Entity, program: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't deploy right now.".into());
+        }
+        let kind = match self.world.get::<BuildSite>(site) {
+            Some(build) if build.awaiting_program => build.structure.clone(),
+            _ => return Err("That site isn't waiting for a program.".into()),
+        };
+        let def = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .cloned()
+            .ok_or_else(|| "Unknown structure".to_string())?;
+        let committed = self.commit_for_build(Some(program), &def, BuildGoal::New)?;
+        let mut build = self
+            .world
+            .get_mut::<BuildSite>(site)
+            .expect("checked above, and commit_for_build despawns only the program");
+        build.program = committed;
+        build.awaiting_program = false;
+        Ok(())
+    }
+
+    /// Every rebuild site waiting for a program, in `(y, x)` order, for a
+    /// frontend to offer them.
+    pub fn awaiting_program_sites(&self) -> Vec<AwaitingSite> {
+        let mut found: Vec<AwaitingSite> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let build = e.get::<BuildSite>()?;
+                let pos = e.get::<Position>()?;
+                build.awaiting_program.then(|| AwaitingSite {
+                    site: e.id(),
+                    structure: build.structure.clone(),
+                    x: pos.x,
+                    y: pos.y,
+                })
+            })
+            .collect();
+        found.sort_by_key(|s| (s.y, s.x));
+        found
     }
 
     /// The whole program cost of a build order, answered once for both
@@ -856,6 +1022,12 @@ impl Game {
         if !self.in_base() {
             return None;
         }
+        self.base_space_build_site_at(x, y)
+    }
+
+    /// `build_site_at` without the locale gate, for the one caller that
+    /// files from wherever the party happens to be standing.
+    fn base_space_build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self.world.query::<(Entity, &Position, &BuildSite)>();
         let rows: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)

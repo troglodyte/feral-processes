@@ -1130,6 +1130,7 @@ fn a_part_supplied_upgrade_request_survives_a_reload() {
             announced_stuck: false,
             goal: crate::components::BuildGoal::Upgrade { to_tier: 3 },
             program: None,
+            awaiting_program: false,
         },
         Position { x: px + 1, y: py },
     ));
@@ -2505,5 +2506,103 @@ fn a_spent_pod_survives_a_save_and_load() {
             .expect("a drop_pod_terminal always carries the component")
             .charged,
         "a reload does not hand the run its charge back for free"
+    );
+}
+
+/// Delivered units on the site at `(dx, dy)`, summed over the bill.
+fn delivered_total(game: &mut Game, dx: i32, dy: i32) -> u32 {
+    let site = site_at(game, dx, dy);
+    game.world
+        .get::<BuildSite>(site)
+        .map(|b| b.delivered.iter().map(|(_, q)| q).sum())
+        .unwrap_or(0)
+}
+
+/// **Build order is by production level, not by tile.** The assembler is
+/// filed on the lower-`x` tile, which the old `(x, y)` sort raised first.
+#[test]
+fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
+    let mut game = base(1201);
+    // Two bodies, so a want left unfiltered would have somewhere to go.
+    builder(&mut game);
+    builder(&mut game);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    file_build(&mut game, "assembly_bay", -1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
+
+    let (px, py) = game.base_pos().unwrap();
+    let mut raised = false;
+    for _ in 0..200 {
+        game.tick();
+        let untouched = game
+            .build_site_at(px - 1, py)
+            .and_then(|e| {
+                game.world
+                    .get::<BuildSite>(e)
+                    .map(|b| b.delivered.is_empty())
+            })
+            .unwrap_or(false);
+        if structure_at(&mut game, 1, 0).is_some() {
+            raised = true;
+            break;
+        }
+        assert!(
+            untouched,
+            "the assembler waits while a lower-level site is workable"
+        );
+    }
+    assert!(raised, "the miner is raised");
+}
+
+/// A dry miner never freezes the base: the assembler is worked instead.
+#[test]
+fn a_dry_miner_does_not_hold_the_assembler_back() {
+    let mut game = base(1202);
+    builder(&mut game);
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(ItemId::from(ids::CORE_FRAGMENT), held);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", -1, 0).unwrap();
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert!(
+        delivered_total(&mut game, 1, 0) > 0,
+        "the miner has nothing to fetch, so the assembler's coils are carried"
+    );
+}
+
+/// A miner nobody can walk to is dropped as cut off, and must not have
+/// already held the assemblers above it back: the level cut counts only
+/// sites the crew can reach.
+#[test]
+fn a_cut_off_miner_does_not_hold_the_assembler_back() {
+    let mut game = base(1203);
+    builder(&mut game);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(px + far, py + far);
+        grid.lay_floor(px + far + 1, py + far);
+    }
+    file_build(&mut game, "mining_node", far, far).unwrap();
+    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert!(
+        delivered_total(&mut game, 1, 0) > 0,
+        "the unreachable miner is dropped, so the assembler is worked"
     );
 }

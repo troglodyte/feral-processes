@@ -1201,6 +1201,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::InteractDirection => draw_direction_prompt(
+            "Interact Direction",
+            "Interact with which neighbour? (arrows/hjkl, Esc to cancel)",
+            refusal,
+            painter,
+            m,
+        ),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
@@ -1625,7 +1632,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 132] = [
+    const ALL_MODES: [Mode; 133] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1670,6 +1677,7 @@ mod tests {
         Mode::RemoveDirection,
         Mode::TrapDirection,
         Mode::UpgradeDirection,
+        Mode::InteractDirection,
         Mode::InspectDirection,
         Mode::FrameMap,
         Mode::Manifest,

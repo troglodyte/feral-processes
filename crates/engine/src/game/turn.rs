@@ -408,6 +408,9 @@ impl Game {
         if !siege_fired {
             self.nemesis_march_check();
         }
+        // After both siege clocks, so a siege that opens this tick is already
+        // running and holds the filing.
+        self.file_ruins();
         // Immediately after the ambient sweep, so the two raid sources
         // resolve in a fixed order and a tick that produces both reads as
         // two events rather than an interleaving. After `caravan_tick` for

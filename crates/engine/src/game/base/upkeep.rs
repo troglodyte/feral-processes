@@ -1113,6 +1113,23 @@ impl Game {
             self.release_siphon_at(structure);
             self.announce_lost_shelf(structure);
             self.announce_lost_children(structure);
+            // Recorded here and not in `remove_structure`: a wreck is a loss
+            // and a demolish is the player's choice. Before the despawn,
+            // which takes the `Position` with it.
+            if let (Some(kind), Some(pos)) = (
+                self.world
+                    .get::<Structure>(structure)
+                    .map(|s| s.kind.clone()),
+                self.world.get::<Position>(structure).copied(),
+            ) {
+                self.world.resource_mut::<crate::resources::Ruins>().0.push(
+                    crate::resources::Ruin {
+                        kind,
+                        x: pos.x,
+                        y: pos.y,
+                    },
+                );
+            }
             self.world.despawn(structure);
         } else {
             self.log_base_kind(

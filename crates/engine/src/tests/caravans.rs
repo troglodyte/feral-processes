@@ -1015,13 +1015,14 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
     assert_eq!((found[0].1.x, found[0].1.y), (2, -1), "and where it stood");
 }
 
-/// The field is additive behind `#[serde(default)]`, so it costs nothing.
+/// The field is additive behind `#[serde(default)]` and costs no bump of its
+/// own; this pins the current version, 37, which ruins raised.
 #[test]
 fn caravans_cost_no_save_format_bump() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        36,
-        "a caravan is an additive named-struct field and must not bump this"
+        37,
+        "a caravan field adds no bump of its own; a changed version is a deliberate bump"
     );
 }
 
@@ -1706,8 +1707,8 @@ fn caravan_memory_survives_a_save_and_load() {
     );
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        36,
-        "both caravan fields are additive named-struct ones"
+        37,
+        "the caravan fields add no bump of their own; the version stays at the current pin"
     );
 }
 

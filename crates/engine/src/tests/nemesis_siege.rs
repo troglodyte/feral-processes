@@ -610,7 +610,13 @@ fn a_leader_that_outlives_the_siege_goes_home_alone_with_a_grudge() {
     }
     assert!(game.world.get_entity(leader).is_ok(), "the leader survives");
     let pos = *game.world.get::<Position>(leader).unwrap();
-    assert_eq!((pos.x, pos.y), (home.x, home.y));
+    // Home, give or take the one wander step the round's owed tick can take:
+    // which creature moves first depends on query order, which no test may
+    // lean on.
+    assert!(
+        (pos.x - home.x).abs() <= 1 && (pos.y - home.y).abs() <= 1,
+        "the leader is back at its home, not somewhere else"
+    );
     assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, grudge + 1);
     // `end_tactical_battle` owes the round's tick, so the reset muster has
     // already counted once.
@@ -969,4 +975,28 @@ fn an_away_march_prices_the_band_at_its_headcount_leader_included() {
         (strength - defence) * crate::tuning::SIEGE_DAMAGE_PER_POINT,
         "shortfall is band strength less defence"
     );
+}
+
+#[test]
+fn a_march_that_opens_this_tick_holds_a_pending_ruins_filing() {
+    let mut game = new_game();
+    established_base(&mut game);
+    stand_in_base(&mut game);
+    let (leader, _band) = marching_band(&mut game);
+    game.world
+        .resource_mut::<crate::resources::Ruins>()
+        .0
+        .push(crate::resources::Ruin {
+            kind: "shield".to_string(),
+            x: 0,
+            y: 1,
+        });
+    game.tick();
+    assert!(
+        has_siege_tags(&game, leader) && game.siege_running(),
+        "the march opened a fight this tick"
+    );
+    let mut sites = game.world.query::<&BuildSite>();
+    assert_eq!(sites.iter(&game.world).count(), 0, "no site filed under it");
+    assert_eq!(game.world.resource::<crate::resources::Ruins>().0.len(), 1);
 }

@@ -92,6 +92,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use feral_processes_engine::InteractionKind;
 use feral_processes_engine::achievements::{AchievementDb, Profile};
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::battle::DamageRange;
@@ -1742,6 +1743,12 @@ pub enum Mode {
     /// row moved down one screen to `Mode::BuildProgram`, which is the
     /// first point the target is known.
     UpgradeDirection,
+    /// Aiming `[c]` when more than one neighbouring structure has
+    /// something to do — see `Game::adjacent_interactions`. The side picked
+    /// runs that side's interaction; a side with none is refused. Only
+    /// reached with two or more sides, so the common single-target `[c]`
+    /// never sees it.
+    InteractDirection,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -2380,6 +2387,7 @@ impl Mode {
             | Mode::RemoveDirection
             | Mode::TrapDirection
             | Mode::UpgradeDirection
+            | Mode::InteractDirection
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::ManifestPick
@@ -2554,6 +2562,11 @@ pub enum PendingBuild {
     /// read off — re-reading it here would trust the structure to still
     /// exist and still report the same tier it did when it was pointed at.
     Upgrade { structure: Entity, to_tier: u32 },
+    /// A wrecked structure's rebuild site that is waiting for a program —
+    /// `Game::commit_rebuild_program` is where the pick lands. The site is
+    /// already filed and its materials already owed; only the program is
+    /// the player's to choose.
+    Rebuild { site: Entity },
 }
 
 pub const MIN_ZOOM: u16 = 1;

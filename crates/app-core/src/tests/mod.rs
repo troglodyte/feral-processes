@@ -28,6 +28,7 @@ mod group_menus;
 mod hover;
 mod icon_editor;
 mod info_tab;
+mod interact;
 mod inventory;
 mod key_names;
 mod keys;

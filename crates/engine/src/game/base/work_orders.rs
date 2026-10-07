@@ -1120,6 +1120,7 @@ impl Game {
             // **Recorded on the way out**, because this is the state a
             // player is most likely to have the screen open on and an
             // unwritten demand would read as no wants rather than no bodies.
+            self.cut_to_lowest_build_level(&mut wanted);
             let unworked = self.unworked_by_duty(wanted.iter().copied());
             self.record_labour_demand(wanted.len(), 0, unworked);
             return;
@@ -1239,6 +1240,10 @@ impl Game {
                 }
             }
         }
+
+        // After the drop, so a site the crew cannot reach does not set the
+        // level the rest are cut to.
+        self.cut_to_lowest_build_level(&mut wanted);
 
         // **After the unreachable drop and before the matching**, so the
         // substrate a plan the crew cannot walk to would have claimed goes
@@ -1890,14 +1895,19 @@ impl Game {
     /// very material it is waiting for, and a one-program base stops for the
     /// rest of the run.
     ///
-    /// Sorted by tile like `assembler_system`'s machines, so two requests
-    /// filed in the same tick are always raised in the same order.
+    /// Sorted by `(level, x, y)` — `StructureDb::level`, so a base raises
+    /// its miners before the machines that eat what they mine; the cut to
+    /// the lowest level is `cut_to_lowest_build_level`, applied once
+    /// unreachable sites are gone. Within a level the tile
+    /// order is `assembler_system`'s, so two requests filed in the same tick
+    /// are always raised in the same order.
     fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
-        let mut sites: Vec<(i32, i32, Entity)> = {
+        let mut sites: Vec<(u32, i32, i32, Entity)> = {
             let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
+            let db = self.world.resource::<StructureDb>();
             query
                 .iter(&self.world)
-                .map(|(e, _, p)| (p.x, p.y, e))
+                .map(|(e, b, p)| (db.level(&b.structure), p.x, p.y, e))
                 .collect()
         };
         sites.sort_unstable();
@@ -1909,21 +1919,44 @@ impl Game {
         // beside the unreachable drop: only the thing that decides not to
         // staff a job knows the job went unstaffed.
         let mut workable = Vec::with_capacity(sites.len());
-        for (x, y, site) in sites {
+        for (level, _, _, site) in sites {
             if self.build_is_workable(site) {
                 if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
                     build.announced_dry = false;
                 }
-                workable.push((x, y, site));
+                workable.push((level, site));
             } else {
                 self.announce_dry(site);
             }
         }
-        let sites = workable;
-        sites
+        workable
             .into_iter()
-            .map(|(_, _, e)| (e, TaskKind::Construct))
+            .map(|(_, e)| (e, TaskKind::Construct))
             .collect()
+    }
+
+    /// Keeps only the build wants at the lowest level any of them has.
+    ///
+    /// **Run after the unreachable drop, never in `build_wants`.** A cut-off
+    /// miner counted here would hold every assembler above it back and then
+    /// be dropped itself, leaving nothing built: a stuck miner must not
+    /// freeze the base. Dry sites never reach the wants at all, which is the
+    /// same guarantee for the other way a miner gets stuck.
+    fn cut_to_lowest_build_level(&self, wanted: &mut Vec<(Entity, TaskKind)>) {
+        let db = self.world.resource::<StructureDb>();
+        let level_of = |site: Entity| {
+            self.world
+                .get::<BuildSite>(site)
+                .map(|b| db.level(&b.structure))
+        };
+        let lowest = wanted
+            .iter()
+            .filter(|(_, kind)| *kind == TaskKind::Construct)
+            .filter_map(|&(site, _)| level_of(site))
+            .min();
+        wanted.retain(|&(site, kind)| {
+            kind != TaskKind::Construct || level_of(site).is_none() || level_of(site) == lowest
+        });
     }
 
     /// Says once that there is nothing anywhere to fetch for `site`.
@@ -1940,10 +1973,12 @@ impl Game {
     /// stay silent about running dry later, whether the drought is a bill
     /// of several items over many trips or a single dig plan's many cells.
     fn announce_dry(&mut self, site: Entity) {
+        // A rebuild waiting for a program is not short of material, and the
+        // player is the one who can answer it.
         if self
             .world
             .get::<BuildSite>(site)
-            .is_none_or(|b| b.announced_dry)
+            .is_none_or(|b| b.announced_dry || b.awaiting_program)
         {
             return;
         }

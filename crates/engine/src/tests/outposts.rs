@@ -146,16 +146,16 @@ fn a_pre_outposts_save_loads_with_none_standing() {
     );
 }
 
-/// The whole feature is additive behind `#[serde(default)]` — no
-/// `SAVE_FORMAT_VERSION` bump. `tests::routes::save_format_version_is_unchanged_by_routes`'s
+/// Outposts are additive behind `#[serde(default)]` and cost no bump of
+/// their own; this pins the current version, 37, which ruins raised. `tests::routes::save_format_version_is_unchanged_by_routes`'s
 /// shape.
 #[test]
 fn save_format_version_is_unchanged_by_outposts() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        36,
-        "adding an outpost field is additive under field-named RON and must \
-         not cost a version bump — see the doc comment on SAVE_FORMAT_VERSION"
+        37,
+        "outposts add no bump of their own; a changed version is a deliberate \
+         bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
 }
 

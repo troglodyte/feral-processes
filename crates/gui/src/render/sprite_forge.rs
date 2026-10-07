@@ -529,7 +529,6 @@ fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue
         hue
     };
     painter.rect(rect.x, rect.y, rect.w, rect.h, PANEL_BG);
-    painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
 
     let edge = view.canvas.edge as usize;
     let cell = rect.w / edge as f32;
@@ -551,6 +550,9 @@ fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue
             );
         }
     }
+    // After the cells: a stroke is centred on the edge, so drawn first its
+    // inner half is painted over and a sparse sprite shows a stray line.
+    painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
 }
 
 // ---------------------------------------------------------------------
@@ -1554,6 +1556,34 @@ mod tests {
         assert!(
             rows[2].y + rows[2].h <= rows[3].y + 0.01,
             "rows do not overlap"
+        );
+    }
+
+    /// The preview's frame is drawn over its pixels, not under them: drawn
+    /// first, a sparse sprite left only the uncovered outer half of the
+    /// stroke showing, which read as a stray vertical line.
+    #[test]
+    fn the_preview_frame_is_drawn_after_its_pixels() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let view = app.sprite_editor_view().expect("open");
+        let rect = Rect::new(500.0, 40.0, 32.0, 32.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_preview_cell(p, rect, &view, WHITE));
+        let mut frame = None;
+        let mut last_fill = None;
+        for (i, cs) in shapes.iter().enumerate() {
+            if let bevy_egui::egui::Shape::Rect(r) = &cs.shape {
+                if r.stroke.width > 0.0 {
+                    frame = Some(i);
+                } else {
+                    last_fill = Some(i);
+                }
+            }
+        }
+        let (frame, last_fill) = (frame.expect("a frame"), last_fill.expect("pixels"));
+        assert!(
+            frame > last_fill,
+            "frame at {frame}, last pixel at {last_fill}"
         );
     }
 }

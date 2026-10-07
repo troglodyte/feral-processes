@@ -340,6 +340,83 @@ mod adjacent {
     }
 
     #[test]
+    fn the_transfer_aims_at_the_terminal_not_whatever_structure_was_spawned_first() {
+        let mut game = base(2307);
+        let (px, py) = game.base_pos().unwrap();
+        let bare = |game: &mut Game, kind: &str, x: i32, y: i32| {
+            game.world.spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position { x, y },
+            ));
+        };
+        bare(&mut game, "wall", px - 1, py);
+        bare(&mut game, "storage_terminal", px + 1, py);
+        let far = spawn_machine_at(&mut game, "depot", px + 6, py + 3);
+        game.world
+            .get_mut::<Stock>(far)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), 7);
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![Interaction {
+                dir: (1, 0),
+                kind: InteractionKind::Transfer
+            }]
+        );
+    }
+
+    #[test]
+    fn a_wall_beside_the_party_offers_no_transfer() {
+        let mut game = base(2308);
+        let (px, py) = game.base_pos().unwrap();
+        game.world
+            .get_mut::<Inventory>(game.player_entity())
+            .unwrap()
+            .take(ItemId::from(ids::CORE_FRAGMENT), 500);
+        let bare = |game: &mut Game, kind: &str, x: i32, y: i32| {
+            game.world.spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position { x, y },
+            ));
+        };
+        bare(&mut game, "wall", px - 1, py);
+        assert!(game.transfer_offer().is_empty() && game.rack_offer().is_empty());
+        assert!(game.adjacent_interactions().is_empty());
+    }
+
+    #[test]
+    fn a_downed_program_alone_offers_a_transfer_at_the_origin() {
+        let mut game = base(2309);
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(ItemId::from(ids::CORE_FRAGMENT), 500);
+        game.world
+            .entity_mut(player)
+            .insert(DownedPrograms(vec![crate::items::DownedProgram {
+                species: "scrapper".to_string(),
+                level: 4,
+                rarity: crate::components::Rarity::Ordinary,
+                boss: false,
+                condition: 70,
+                carried: None,
+            }]));
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![Interaction {
+                dir: (0, 0),
+                kind: InteractionKind::Transfer
+            }]
+        );
+    }
+
+    #[test]
     fn a_depot_and_a_site_offer_both() {
         let mut game = base(2306);
         let (px, py) = game.base_pos().unwrap();

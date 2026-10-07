@@ -38,9 +38,9 @@ impl Game {
         let transferable = !self.transfer_offer().is_empty()
             || !self.rack_offer().is_empty()
             || !self.adjacent_depot_entities().is_empty();
-        if transferable && let Some(dir) = self.transfer_direction(px, py) {
+        if transferable {
             found.push(Interaction {
-                dir,
+                dir: self.transfer_direction(px, py).unwrap_or((0, 0)),
                 kind: InteractionKind::Transfer,
             });
         }
@@ -63,8 +63,10 @@ impl Game {
     }
 
     /// The side the transfer's first shelf or rack is on, falling back to
-    /// the first neighbouring structure for an Index Terminal that holds
-    /// no stock itself. `None` when the offer is the pack alone.
+    /// the neighbouring storage-indexing structure (an Index Terminal holds
+    /// no stock itself), lowest `(x, y)` first so the answer does not depend
+    /// on spawn order. `None` when the offer is the pack alone — the
+    /// interaction then sits at `(0, 0)`, which no key can aim at.
     fn transfer_direction(&self, px: i32, py: i32) -> Option<(i32, i32)> {
         let side_of = |e: Entity| {
             let p = self.world.get::<Position>(e)?;
@@ -78,10 +80,22 @@ impl Game {
             .chain(self.adjacent_racks())
             .find_map(side_of)
             .or_else(|| {
-                self.world
+                let db = self.world.resource::<StructureDb>();
+                let mut terminals: Vec<(i32, i32, Entity)> = self
+                    .world
                     .iter_entities()
-                    .filter(|e| e.contains::<Structure>())
-                    .find_map(|e| side_of(e.id()))
+                    .filter(|e| {
+                        e.get::<Structure>()
+                            .and_then(|s| db.get(&s.kind))
+                            .is_some_and(|d| d.indexes_storage)
+                    })
+                    .filter_map(|e| {
+                        let p = e.get::<Position>()?;
+                        Some((p.x, p.y, e.id()))
+                    })
+                    .collect();
+                terminals.sort();
+                terminals.into_iter().find_map(|(_, _, e)| side_of(e))
             })
     }
 }

@@ -650,12 +650,8 @@ impl App {
             self.close_screen();
             return;
         }
-        let dir = match key {
-            GameKey::Up | GameKey::Char('k') => (0, -1),
-            GameKey::Down | GameKey::Char('j') => (0, 1),
-            GameKey::Left | GameKey::Char('h') => (-1, 0),
-            GameKey::Right | GameKey::Char('l') => (1, 0),
-            _ => return,
+        let Some(dir) = direction_of(key) else {
+            return;
         };
         let Some(game) = &mut self.game else { return };
         // **On the surface this is a different question entirely, and it must
@@ -725,12 +721,8 @@ impl App {
             self.close_screen();
             return;
         }
-        let dir = match key {
-            GameKey::Up | GameKey::Char('k') => (0, -1),
-            GameKey::Down | GameKey::Char('j') => (0, 1),
-            GameKey::Left | GameKey::Char('h') => (-1, 0),
-            GameKey::Right | GameKey::Char('l') => (1, 0),
-            _ => return,
+        let Some(dir) = direction_of(key) else {
+            return;
         };
         let Some(game) = &mut self.game else { return };
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
@@ -781,12 +773,8 @@ impl App {
             self.close_screen();
             return;
         }
-        let dir = match key {
-            GameKey::Up | GameKey::Char('k') => (0, -1),
-            GameKey::Down | GameKey::Char('j') => (0, 1),
-            GameKey::Left | GameKey::Char('h') => (-1, 0),
-            GameKey::Right | GameKey::Char('l') => (1, 0),
-            _ => return,
+        let Some(dir) = direction_of(key) else {
+            return;
         };
         let found = self
             .game
@@ -1099,5 +1087,17 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+/// The `(dx, dy)` step a direction key points, arrows or vi keys; `None` for
+/// anything else. The one mapping the base menu's pick-a-side prompts share.
+fn direction_of(key: GameKey) -> Option<(i32, i32)> {
+    match key {
+        GameKey::Up | GameKey::Char('k') => Some((0, -1)),
+        GameKey::Down | GameKey::Char('j') => Some((0, 1)),
+        GameKey::Left | GameKey::Char('h') => Some((-1, 0)),
+        GameKey::Right | GameKey::Char('l') => Some((1, 0)),
+        _ => None,
     }
 }

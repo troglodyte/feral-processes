@@ -308,6 +308,28 @@ pub(crate) fn app_holding_downed_programs(
     app
 }
 
+/// The party in base space beside nothing, an empty pack, and one downed
+/// program in it: the one state where the transfer has something to offer
+/// and no neighbouring structure to aim at.
+pub(crate) fn app_in_base_holding_a_downed_program(seed: u32) -> App {
+    let mut app = app_beside_depots(seed, 0, 0, &[]);
+    let path = scratch_path("base_downed", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = vec![feral_processes_engine::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: feral_processes_engine::components::Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    }];
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
 /// `app_holding_downed_programs` plus `protocols` Reinitialization Protocols
 /// in the player's pack — for the `R` key's own tests, which need both a
 /// record and the item that spends on it. Zero is a legitimate call: the

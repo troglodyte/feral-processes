@@ -429,4 +429,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **`[c]` is the interact dispatcher: it acts on what `Game::adjacent_interactions` lists and nothing else.**
 - **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
-- **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never a field.**
+- **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**

@@ -370,4 +370,4 @@
 
 - **`[c]` is the interact dispatcher: `Game::adjacent_interactions` lists Transfer and each awaiting rebuild site beside the party, and the key handler dispatches off that list, never its own adjacency check.** A second adjacency test in app-core would drift from what the engine offers; several results ask for a direction.
 - **Destruction records a ruin in `damage_structure` (not `remove_structure`, which is the player's demolish), and `file_ruins` files it as a rebuild site only when no siege runs.** Filing mid-siege would raise a build site on a board still being fought over; a raid files on the next tick.
-- **Build sites are raised lowest production level first (`StructureDb::level`, derived at load from what a structure makes and needs, never a field).** A stored level would let a mod disagree with its own recipes.
+- **Build sites are raised lowest production level first (`StructureDb::level`, derived at load from what a structure makes and needs, never authored in assets).** A stored level would let a mod disagree with its own recipes.

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.16.4
+
+**The first help page now ends with a glossary.** "Start here" lists the game's own words with the usual RPG word for each in brackets, for example Integrity (hit points), Program (monster), Routine (spell or skill), Decompile (tame), The Stack (dungeon) and Credits (gold). Twenty terms in all.
+
 ## 0.16.3
 
 **The sprite editor can now open and change the game's own sprites, and you can use it with the mouse.** It is a developer tool, turned on by starting the game with `FERAL_DEV_SPRITES=1`. Before, it could not open the full-colour sprites the game ships with (`name.colour.png`). Now it opens them and saves them back to the same file. Its palette goes from 19 colours to 63: the nine-step grey ramp plus nine colour families of six shades, picked to match the shipped art. The palette is a grid you can click, and the preview shows a colour sprite tinted the way the map draws it. New tools: fill (`f`) and a colour picker (`i`, or Alt+click or middle-click). A row of buttons under the canvas does the same as the save, undo, clear, brush size, tool and back keys. In the sprite list, click a sprite to select it and double-click to open it. New art is saved as a colour sprite if it uses any colour outside the grey ramp. Saves from before this version still load.

@@ -1205,3 +1205,112 @@ fn each_button_names_the_key_the_footer_documents() {
         assert_eq!(button.key(), key, "{button:?}");
     }
 }
+
+// -----------------------------------------------------------------------
+// The picker by mouse
+// -----------------------------------------------------------------------
+
+fn on_the_picker(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(app.mode, Mode::SpritePicker);
+    app
+}
+
+fn subject_pointer(app: &mut App, index: usize, phase: PointerPhase) {
+    app.handle_pointer(PointerHit::Subject(index), PointerButton::Primary, phase);
+}
+
+#[test]
+fn a_click_on_a_subject_selects_it_and_opens_nothing() {
+    let mut app = on_the_picker(80);
+    subject_pointer(&mut app, 7, PointerPhase::Down);
+    subject_pointer(&mut app, 7, PointerPhase::Up);
+    assert_eq!(app.menu_selected, 7);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_double_click_on_the_selected_subject_opens_it_with_its_art_and_variant() {
+    let mut app = on_the_picker(81);
+    let index = app
+        .sprite_subjects()
+        .iter()
+        .position(|s| s.name == "cipher")
+        .unwrap();
+    let mut art = Canvas::new(16);
+    art.set(3, 3, 12);
+    let mut enabled = HashMap::new();
+    enabled.insert("cipher".to_string(), colour(art.clone()));
+    app.install_sprite_library(enabled, HashMap::new());
+
+    subject_pointer(&mut app, index, PointerPhase::Down);
+    subject_pointer(&mut app, index, PointerPhase::DoubleClick);
+
+    assert_eq!(app.mode, Mode::SpriteEditor);
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!(view.subject, "cipher");
+    assert!(view.full_colour, "the installed variant travels with it");
+    assert_eq!(view.canvas.cells[3 * 16 + 3], 12);
+}
+
+#[test]
+fn a_double_click_on_an_unselected_subject_only_selects_it() {
+    let mut app = on_the_picker(82);
+    app.menu_selected = 2;
+    subject_pointer(&mut app, 9, PointerPhase::DoubleClick);
+    assert_eq!(app.menu_selected, 9);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_subject_index_past_the_list_is_ignored() {
+    let mut app = on_the_picker(83);
+    app.menu_selected = 4;
+    let len = app.sprite_subjects().len();
+    subject_pointer(&mut app, len, PointerPhase::Down);
+    subject_pointer(&mut app, len, PointerPhase::DoubleClick);
+    assert_eq!(app.menu_selected, 4);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_double_click_opens_what_enter_opens() {
+    let mut by_mouse = on_the_picker(84);
+    let mut by_key = on_the_picker(84);
+    by_mouse.menu_selected = 5;
+    by_key.menu_selected = 5;
+    subject_pointer(&mut by_mouse, 5, PointerPhase::DoubleClick);
+    by_key.handle_key(GameKey::Enter);
+    assert_eq!(by_mouse.mode, by_key.mode);
+    assert_eq!(
+        by_mouse
+            .sprite_editor_view()
+            .map(|v| (v.subject, v.canvas.cells)),
+        by_key
+            .sprite_editor_view()
+            .map(|v| (v.subject, v.canvas.cells)),
+    );
+}
+
+#[test]
+fn editor_hits_do_nothing_on_the_picker_and_subject_hits_do_nothing_in_the_editor() {
+    let mut app = on_the_picker(85);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert!(app.sprite_editor_view().is_none());
+
+    open_editor(&mut app, "anchor");
+    app.menu_selected = 0;
+    subject_pointer(&mut app, 3, PointerPhase::Down);
+    subject_pointer(&mut app, 3, PointerPhase::DoubleClick);
+    assert_eq!(app.mode, Mode::SpriteEditor);
+    assert_eq!(
+        app.menu_selected, 0,
+        "the picker's highlight is not the editor's"
+    );
+}

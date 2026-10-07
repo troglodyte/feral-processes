@@ -271,6 +271,8 @@ pub enum PointerHit {
     Cell(u8, u8),
     Swatch(u8),
     Button(EditorButton),
+    /// A picker row, by its index in `App::sprite_subjects`.
+    Subject(usize),
 }
 
 /// A clickable stand-in for one of the editor's keys. **A button has no
@@ -333,6 +335,8 @@ pub enum PointerPhase {
     Down,
     Drag,
     Up,
+    /// Only the picker reads this, and only on a `PointerHit::Subject`.
+    DoubleClick,
 }
 
 impl App {
@@ -572,22 +576,28 @@ impl App {
             return;
         }
         if let Some(idx) = self.selected_index(key, subjects.len()) {
-            let subject = &subjects[idx];
-            let installed = self
-                .sprite_library
-                .get(&subject.name)
-                .or_else(|| self.sprite_disabled.get(&subject.name));
-            let editor = match installed {
-                Some(sprite) => SpriteEditor::open(
-                    subject.name.clone(),
-                    sprite.canvas.clone(),
-                    Some(sprite.full_colour),
-                ),
-                None => SpriteEditor::open(subject.name.clone(), Canvas::new(SPRITE_EDGE), None),
-            };
-            self.sprite_editor = Some(editor);
-            self.mode = Mode::SpriteEditor;
+            self.open_sprite_subject(&subjects[idx].name);
         }
+    }
+
+    /// Opens `Mode::SpriteEditor` on `name`'s art — what `Enter` and a double
+    /// click both do. Enabled art first, then the disabled copy, and a blank
+    /// canvas only for a subject that never had any.
+    fn open_sprite_subject(&mut self, name: &str) {
+        let installed = self
+            .sprite_library
+            .get(name)
+            .or_else(|| self.sprite_disabled.get(name));
+        let editor = match installed {
+            Some(sprite) => SpriteEditor::open(
+                name.to_string(),
+                sprite.canvas.clone(),
+                Some(sprite.full_colour),
+            ),
+            None => SpriteEditor::open(name.to_string(), Canvas::new(SPRITE_EDGE), None),
+        };
+        self.sprite_editor = Some(editor);
+        self.mode = Mode::SpriteEditor;
     }
 
     /// What `Mode::SpriteEditor` draws, or `None` while it is not open.
@@ -650,7 +660,7 @@ impl App {
     }
 
     /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
-    /// is open, every other mode drops it silently, since nothing else in
+    /// or `Mode::SpritePicker` is open, every other mode drops it silently, since nothing else in
     /// the game reads a pointer at all. `phase` governs the stroke
     /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
     /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
@@ -663,9 +673,52 @@ impl App {
     /// selected the swatch left of the one outlined; with no conversion
     /// there is nothing at this seam to get wrong.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
-        if self.mode != Mode::SpriteEditor {
+        match self.mode {
+            Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),
+            Mode::SpritePicker => self.handle_picker_pointer(hit, button, phase),
+            _ => {}
+        }
+    }
+
+    /// A press on a picker row selects it, and a double click on the row that
+    /// is already selected opens it — `Enter`'s own door. An index past the
+    /// list is ignored, since the gui sizes its rects off the same list but a
+    /// stale frame must not be able to select nothing.
+    fn handle_picker_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
+        let PointerHit::Subject(index) = hit else {
+            return;
+        };
+        if button != PointerButton::Primary {
             return;
         }
+        let subjects = self.sprite_subjects();
+        let Some(subject) = subjects.get(index) else {
+            return;
+        };
+        match phase {
+            PointerPhase::Down => self.menu_selected = index,
+            PointerPhase::DoubleClick => {
+                if self.menu_selected == index {
+                    self.open_sprite_subject(&subject.name);
+                } else {
+                    self.menu_selected = index;
+                }
+            }
+            PointerPhase::Drag | PointerPhase::Up => {}
+        }
+    }
+
+    fn handle_editor_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
         // A button is a key press, not a gesture: only a primary `Down`
         // acts, and it opens no stroke.
         if let PointerHit::Button(pressed) = hit {
@@ -695,7 +748,7 @@ impl App {
                 sprite_editor.editor.apply_tool(x, y, index);
             }
             PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
-            PointerHit::Button(_) => {}
+            PointerHit::Button(_) | PointerHit::Subject(_) => {}
         }
         if phase == PointerPhase::Up {
             sprite_editor.editor.end_stroke();

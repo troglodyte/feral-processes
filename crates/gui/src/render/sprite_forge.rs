@@ -54,7 +54,8 @@ use feral_processes_app_core::{
 const PICKER_COLUMNS: usize = 4;
 
 const PICKER_TITLE: &str = "Sprite Forge";
-const PICKER_HELP_TEXT: &str = "Up/Down: move   Enter: edit   t: toggle art   Esc: back to menu";
+const PICKER_HELP_TEXT: &str =
+    "Up/Down or click: move   Enter or double-click: edit   t: toggle art   Esc: back to menu";
 
 struct PickerGeometry {
     header_y: f32,
@@ -604,6 +605,71 @@ pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, cols: u8, count: u8) -> Opt
     }
     let i = row * cols + col;
     (i < count).then_some(i as u8)
+}
+
+/// One rect per picker row, from the same `picker_geometry` and
+/// `picker_slot` the rows are drawn at. Text is placed by baseline, so a row
+/// spans the line above its `y`.
+fn picker_row_rects(w: f32, m: &Metrics, subject_count: usize) -> Vec<Rect> {
+    let g = picker_geometry(w, m, subject_count);
+    (0..subject_count)
+        .map(|i| {
+            let (col, row) = picker_slot(i, g.rows_per_column);
+            Rect::new(
+                m.pad + col as f32 * g.column_width,
+                g.grid_top + row as f32 * m.line_height - m.line_height,
+                g.column_width,
+                m.line_height,
+            )
+        })
+        .collect()
+}
+
+/// What the pointer can land on, for whichever Sprite Forge screen is open.
+pub(crate) enum SpriteHits {
+    Editor(HitRects),
+    Picker(Vec<Rect>),
+}
+
+impl SpriteHits {
+    pub(crate) fn resolve(&self, pos: (f32, f32)) -> Option<PointerHit> {
+        match self {
+            SpriteHits::Editor(rects) => rects.resolve(pos),
+            SpriteHits::Picker(rows) => rows
+                .iter()
+                .position(|r| {
+                    pos.0 >= r.x && pos.0 < r.x + r.w && pos.1 >= r.y && pos.1 < r.y + r.h
+                })
+                .map(PointerHit::Subject),
+        }
+    }
+}
+
+/// The hit rects for the screen on show, or `None` on any other screen —
+/// which is also when `lib.rs` has no pointer to read.
+pub(crate) fn sprite_hits(app: &mut App, painter: &Painter) -> Option<SpriteHits> {
+    let m = ui_metrics(painter.screen_h());
+    match app.mode {
+        Mode::SpriteEditor => {
+            let view = app.sprite_editor_view()?;
+            Some(SpriteHits::Editor(hit_rects(
+                painter,
+                painter.screen_w(),
+                &m,
+                &view,
+                app.zoom,
+            )))
+        }
+        Mode::SpritePicker => {
+            let count = app.sprite_subjects().len();
+            Some(SpriteHits::Picker(picker_row_rects(
+                painter.screen_w(),
+                &m,
+                count,
+            )))
+        }
+        _ => None,
+    }
 }
 
 /// The button under `pos`, if any.
@@ -1452,5 +1518,42 @@ mod tests {
                 "{label:?} missing: {drawn:?}"
             );
         }
+    }
+
+    /// A click on the middle of each picker row resolves to that row's index,
+    /// through the geometry the rows are drawn from, and the margin around
+    /// the grid is no row.
+    #[test]
+    fn a_click_on_each_picker_row_resolves_to_its_subject() {
+        let mut app = sprite_forge_app();
+        let count = app.sprite_subjects().len();
+        let m = crate::text::ui_metrics(CENSUS_H);
+        let hits = SpriteHits::Picker(picker_row_rects(CENSUS_W, &m, count));
+        let rows = picker_row_rects(CENSUS_W, &m, count);
+        assert_eq!(rows.len(), count);
+        for (i, r) in rows.iter().enumerate() {
+            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+            assert_eq!(
+                hits.resolve(centre),
+                Some(PointerHit::Subject(i)),
+                "row {i}"
+            );
+        }
+        assert_eq!(hits.resolve((1.0, 1.0)), None, "the title area is no row");
+    }
+
+    /// A row's rect holds the baseline its text is drawn on, and nothing of
+    /// the row above.
+    #[test]
+    fn a_picker_row_rect_spans_the_line_its_text_sits_on() {
+        let m = crate::text::ui_metrics(CENSUS_H);
+        let g = picker_geometry(CENSUS_W, &m, 40);
+        let rows = picker_row_rects(CENSUS_W, &m, 40);
+        let baseline = g.grid_top + 3.0 * m.line_height;
+        assert!(rows[3].y < baseline && baseline <= rows[3].y + rows[3].h);
+        assert!(
+            rows[2].y + rows[2].h <= rows[3].y + 0.01,
+            "rows do not overlap"
+        );
     }
 }

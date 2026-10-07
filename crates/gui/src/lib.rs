@@ -211,6 +211,11 @@ struct Frontend {
 struct SpritePointer {
     active: Option<PointerButton>,
     last_hit: Option<PointerHit>,
+    /// Whether a frame with no button held has been seen since this tracker
+    /// was reset. A press already down when the editor opens — the double
+    /// click that opened it from the picker — must not paint the cell it
+    /// happens to be over.
+    armed: bool,
 }
 
 /// Reads the egui pointer and drives `App::handle_pointer` for the sprite
@@ -219,7 +224,7 @@ struct SpritePointer {
 /// everything past `rects.resolve` is a `PointerHit`
 /// (`render::sprite_forge::cell_at`/`swatch_at`, tested headlessly).
 ///
-/// A no-op whenever `render::sprite_editor_hit_rects` returns `None` — no
+/// A no-op whenever `render::sprite_forge::sprite_hits` returns `None` — no
 /// mode check needed here beyond that, since a session is only ever open in
 /// `Mode::SpriteEditor` — and the tracker is reset in that case so a stroke
 /// cannot survive into a session that opens later.
@@ -234,7 +239,7 @@ fn handle_sprite_pointer(
     painter: &Painter,
     tracker: &mut SpritePointer,
 ) {
-    let Some(rects) = render::sprite_editor_hit_rects(app, painter) else {
+    let Some(rects) = render::sprite_forge::sprite_hits(app, painter) else {
         *tracker = SpritePointer::default();
         return;
     };
@@ -248,6 +253,28 @@ fn handle_sprite_pointer(
             i.pointer.hover_pos(),
         )
     });
+    if let render::sprite_forge::SpriteHits::Picker(_) = rects {
+        // The picker has no strokes: a press selects a row and a double
+        // click opens it, both read straight off egui.
+        *tracker = SpritePointer::default();
+        let (pressed, double) = ctx.input(|i| {
+            (
+                i.pointer.primary_pressed(),
+                i.pointer
+                    .button_double_clicked(egui::PointerButton::Primary),
+            )
+        });
+        let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
+        if let Some(h) = hit {
+            if pressed {
+                app.handle_pointer(h, PointerButton::Primary, PointerPhase::Down);
+            }
+            if double {
+                app.handle_pointer(h, PointerButton::Primary, PointerPhase::DoubleClick);
+            }
+        }
+        return;
+    }
     // Alt+click is the eyedropper too, for a mouse with no middle button.
     let now_button = if primary_down && alt || middle_down {
         Some(PointerButton::Middle)
@@ -263,7 +290,11 @@ fn handle_sprite_pointer(
         tracker.last_hit = Some(h);
     }
 
+    if now_button.is_none() {
+        tracker.armed = true;
+    }
     match (tracker.active, now_button) {
+        (None, Some(_)) if !tracker.armed => {}
         (None, Some(button)) => {
             // A press that starts outside both panels opens no stroke —
             // there is nothing to paint or select yet, and one may still
@@ -808,7 +839,7 @@ fn frame(
         fe.key_repeat.block_held();
         fe.last_mode = fe.app.mode;
     }
-    // Confined to `Mode::SpriteEditor` by `render::sprite_editor_hit_rects`
+    // Confined to `Mode::SpriteEditor` by `render::sprite_forge::sprite_hits`
     // returning `None` everywhere else — see `handle_sprite_pointer`'s own
     // doc comment for why no separate mode check is needed here.
     {

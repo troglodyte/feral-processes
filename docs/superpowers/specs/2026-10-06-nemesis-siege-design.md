@@ -30,7 +30,9 @@ What the user chose (2026-10-06):
   from the player. That would end this feature before it starts, so it is
   fixed here.
 - `gather_pack` (`game/combat.rs`) already pulls nearby hostiles into a
-  map fight, so a band trailing its leader joins any fight against it.
+  map fight, so a band trailing its leader joins any fight against it, up
+  to the zone's group ceiling (a low zone may field only part of the band;
+  accepted, 2026-10-06).
 
 ## Design
 

@@ -353,6 +353,50 @@ impl DerivedStats {
     }
 }
 
+/// Everything the player holds on top of `progression::derive`'s output,
+/// and the one place that composes it into the stats the game runs on.
+/// `Game::recompute_derived` writes `apply`'s answer and the Points screen
+/// previews through the same call, so a preview cannot drift from the
+/// spend: held Phase Keys scale attributes, receipt and implants together,
+/// and worn gear is added raw after.
+#[derive(Clone, Copy, Debug)]
+pub struct StatBonus {
+    pub implants: crate::implants::ImplantStats,
+    pub bought: crate::components::BoughtStats,
+    pub gear: crate::items::EquipmentStats,
+    pub pct: crate::phase_keys::StatPct,
+}
+
+impl StatBonus {
+    /// `derived` (from `derive`) with implants, the receipt, keys and gear
+    /// applied. Only the fields a held bonus can move change.
+    pub fn apply(&self, derived: DerivedStats) -> DerivedStats {
+        use crate::phase_keys::{apply_key_pct, key_scaled_power, keyed_stat};
+        let (i, b, g, p) = (&self.implants, &self.bought, &self.gear, &self.pct);
+        // A negative implant delta must not leave a body that cannot exist.
+        let max_hp = (derived.max_hp + i.max_hp).max(1);
+        let max_power = (derived.max_power + i.max_power).max(0.0);
+        DerivedStats {
+            max_hp: apply_key_pct(max_hp + b.max_hp, p.max_hp),
+            atk: keyed_stat(derived.atk + i.atk + b.atk, p.atk, g.atk),
+            mitigation: keyed_stat(
+                derived.mitigation + i.mitigation + b.mitigation,
+                p.mitigation,
+                g.mitigation,
+            ),
+            decompiler: keyed_stat(
+                derived.decompiler + i.decompiler,
+                p.decompiler,
+                g.decompiler,
+            ),
+            max_power: key_scaled_power(max_power, p.max_power),
+            status_resist: derived.status_resist + i.status_resist,
+            crit: derived.crit + i.crit,
+            ..derived
+        }
+    }
+}
+
 /// How many rounds a status armed for `duration` lasts on a body with
 /// `status_resist` percent Persistence: shortened by that share, lengthened
 /// when it is negative, and never below one round. No RNG - resist changes

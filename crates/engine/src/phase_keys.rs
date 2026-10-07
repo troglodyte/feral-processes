@@ -68,6 +68,13 @@ pub fn apply_key_pct(value: i32, pct: i32) -> i32 {
     value + (value * pct / 100).max(1)
 }
 
+/// A stat as `recompute_derived` writes it: the keyed percent applies to the
+/// figure `non_gear` (attributes, receipt, implants) and worn gear is added
+/// raw on top, so a key never scales gear.
+pub fn keyed_stat(non_gear: i32, pct: i32, gear: i32) -> i32 {
+    apply_key_pct(non_gear, pct) + gear
+}
+
 /// `apply_key_pct` for the float Power maximum: the figure rounds to a whole
 /// point only when a key actually scales it.
 pub fn key_scaled_power(max_power: f32, pct: i32) -> f32 {

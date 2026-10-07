@@ -2,7 +2,6 @@
 //! entity's attributes, written back through the one door.
 
 use crate::components::{Attributes, Derived, HoldPoints, ProgramBase, StatPoints, Tamed};
-use crate::phase_keys::apply_key_pct;
 use crate::progression::{SpendError, StatOwner};
 use crate::resources::PendingProgramLevels;
 use crate::*;
@@ -241,34 +240,20 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// What `entity` holds on top of its attributes' derivation - the
-    /// perk receipt, worn gear and installed implants - so the Points screen
-    /// can preview the figures the HUD will show. HP, attack, mitigation and
-    /// the decompiler are read off the live stats rather than summed again,
-    /// so they cannot drift from `recompute_derived`; Power, status resist
-    /// and crit live in `Derived` and only an implant moves them, so those
-    /// are the implant deltas themselves.
-    pub fn stat_bonus(&self, entity: Entity) -> crate::progression::DerivedStats {
-        let derived = self.derived_stats(entity);
-        let stats = *self
-            .world
-            .get::<Stats>(entity)
-            .expect("an entity with a stat bonus has Stats");
-        let skill = self.world.get::<Decompiler>(entity).map_or(0, |d| d.skill);
-        let implants = self.implant_stats(entity);
-        crate::progression::DerivedStats {
-            max_hp: stats.max_hp - derived.max_hp,
-            atk: stats.atk - derived.atk,
-            mitigation: stats.mitigation - derived.mitigation,
-            decompiler: skill - derived.decompiler,
-            max_power: crate::phase_keys::key_scaled_power(
-                (derived.max_power + implants.max_power).max(0.0),
-                self.key_pct(entity).max_power,
-            ) - derived.max_power,
-            status_resist: implants.status_resist,
-            extraction: 0.0,
-            crit: implants.crit,
-            fumble: 0.0,
+    /// What `entity` holds on top of its attributes' derivation - implants,
+    /// the perk receipt, held keys and worn gear - which `recompute_derived`
+    /// applies and the Points screen previews through, so the two cannot
+    /// disagree.
+    pub fn stat_bonus(&self, entity: Entity) -> crate::progression::StatBonus {
+        crate::progression::StatBonus {
+            implants: self.implant_stats(entity),
+            bought: self
+                .world
+                .get::<BoughtStats>(entity)
+                .copied()
+                .unwrap_or_default(),
+            gear: self.gear_bonus(entity),
+            pct: self.key_pct(entity),
         }
     }
 
@@ -353,44 +338,16 @@ impl Game {
         if self.world.get::<Derived>(entity).is_none() {
             return;
         }
-        let mut derived = self.derived_stats(entity);
-        // Before anything reads `derived`, so `Stats`, the decompiler skill,
-        // the inserted `Derived` and the Power clamp all see an implant's
-        // deltas. Accuracy and evasion are not here: they are read live
-        // through `Game::hit_bonus`.
-        let implants = self.implant_stats(entity);
-        derived.max_hp += implants.max_hp;
-        derived.atk += implants.atk;
-        derived.mitigation += implants.mitigation;
-        derived.decompiler += implants.decompiler;
-        derived.max_power += implants.max_power;
-        derived.status_resist += implants.status_resist;
-        derived.crit += implants.crit;
-        // A negative delta must not leave a body that cannot exist.
-        derived.max_hp = derived.max_hp.max(1);
-        derived.max_power = derived.max_power.max(0.0);
-        // Held Phase Keys' percent bonuses go on last, over everything but
-        // worn gear (which `apply_equipment_delta` adds raw on top, here and
-        // at every equip, so the two cannot disagree).
-        let pct = self.key_pct(entity);
-        derived.max_power = crate::phase_keys::key_scaled_power(derived.max_power, pct.max_power);
-        let receipt = self
-            .world
-            .get::<BoughtStats>(entity)
-            .copied()
-            .unwrap_or_default();
-        let gear = self.gear_bonus(entity);
+        let derived = self.stat_bonus(entity).apply(self.derived_stats(entity));
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
-            stats.max_hp = apply_key_pct(derived.max_hp + receipt.max_hp, pct.max_hp);
-            stats.atk = apply_key_pct(derived.atk + receipt.atk, pct.atk);
-            stats.mitigation =
-                apply_key_pct(derived.mitigation + receipt.mitigation, pct.mitigation);
+            stats.max_hp = derived.max_hp;
+            stats.atk = derived.atk;
+            stats.mitigation = derived.mitigation;
             stats.hp = stats.hp.min(stats.max_hp);
         }
         if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(entity) {
-            decompiler.skill = apply_key_pct(derived.decompiler, pct.decompiler);
+            decompiler.skill = derived.decompiler;
         }
-        self.apply_equipment_delta(entity, gear, 1);
         if let Some(mut power) = self.world.get_mut::<PowerReserve>(entity) {
             power.restore(0.0, derived.max_power);
         }

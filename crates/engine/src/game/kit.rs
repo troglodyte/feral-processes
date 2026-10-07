@@ -20,7 +20,7 @@
 
 use crate::abilities::AbilityId;
 use crate::perks::emulation_fidelity_level;
-use crate::phase_keys::apply_key_pct;
+use crate::phase_keys::keyed_stat;
 use crate::progression::{EmulatedStats, emulated_stats};
 use crate::*;
 
@@ -109,11 +109,12 @@ impl Game {
         // Phase Keys scale the same non-gear sum `recompute_derived` scales.
         let pct = self.key_pct(entity);
         (
-            apply_key_pct(stats.atk + bought.atk + implants.atk, pct.atk) + gear.atk,
-            apply_key_pct(
+            keyed_stat(stats.atk + bought.atk + implants.atk, pct.atk, gear.atk),
+            keyed_stat(
                 stats.mitigation + bought.mitigation + implants.mitigation,
                 pct.mitigation,
-            ) + gear.mitigation,
+                gear.mitigation,
+            ),
         )
     }
 

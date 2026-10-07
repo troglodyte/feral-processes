@@ -225,6 +225,63 @@ fn percents_sum_before_they_apply_and_are_derived_not_baked() {
     assert_eq!(stats(&game), before);
 }
 
+/// The Points screen's "after" figure is what the spend then produces, keys
+/// included.
+#[test]
+fn the_points_preview_matches_the_spend_with_keys_held() {
+    use crate::attributes::AttributeId;
+    use crate::components::StatPoints;
+    let mut game = new_game();
+    let mut db = game.world.resource::<PhaseKeyDb>().clone();
+    let pct = StatPct {
+        max_hp: 40,
+        atk: 40,
+        mitigation: 40,
+        decompiler: 40,
+        max_power: 40,
+    };
+    db.set(keyed(1, pct_effect(pct)));
+    db.set(keyed(10, pct_effect(pct)));
+    game.world.insert_resource(db);
+    let player = game.player_entity();
+    game.grant_phase_key(1);
+    game.grant_phase_key(10);
+    game.world.get_mut::<StatPoints>(player).unwrap().0 = 3;
+    let spend = [
+        (AttributeId::from("parity"), 2),
+        (AttributeId::from("analysis"), 1),
+    ];
+
+    let bonus = game.stat_bonus(player);
+    let mut attrs = game.attributes_of(player);
+    let db = game.attribute_db();
+    for (id, points) in &spend {
+        let base = db.get(id).unwrap().base;
+        attrs.set(id, attrs.get(id).unwrap_or(base) + *points as i32);
+    }
+    let preview = bonus.apply(crate::progression::derive(
+        &game.derived_base(player),
+        &attrs,
+        &db,
+    ));
+    game.spend_stat_points(StatOwner::Player, &spend).unwrap();
+    let actual = stats(&game);
+    assert_eq!(preview.max_hp, actual.max_hp);
+    assert_eq!(preview.atk, actual.atk);
+    assert_eq!(preview.mitigation, actual.mitigation);
+    assert_eq!(
+        preview.decompiler,
+        game.world.get::<Decompiler>(player).unwrap().skill
+    );
+    assert_eq!(
+        preview.max_power,
+        game.world
+            .get::<crate::components::Derived>(player)
+            .unwrap()
+            .max_power
+    );
+}
+
 #[test]
 fn the_count_ignores_stray_high_bits() {
     let keys = PhaseKeys {

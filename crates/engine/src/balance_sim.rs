@@ -1385,7 +1385,7 @@ mod tests {
     /// stats added, accuracy/evasion/crit read live.
     #[test]
     fn held_phase_keys_never_make_a_capped_zone_harder() {
-        use crate::phase_keys::{PhaseKeyDb, StatPct, apply_key_pct};
+        use crate::phase_keys::{PhaseKeyDb, StatPct, apply_key_pct, keyed_stat};
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         let toughest = toughest_ordinary_species(&db);
         let party = median_ordinary_species(&db);
@@ -1427,9 +1427,8 @@ mod tests {
                 let mut player = player_stats_after_levels(level - 1, &attrs);
                 player.max_hp = apply_key_pct(player.max_hp + hp, pct.max_hp);
                 player.hp = player.max_hp;
-                player.atk = apply_key_pct(player.atk + atk, pct.atk) + gear_atk;
-                player.mitigation =
-                    apply_key_pct(player.mitigation + mit, pct.mitigation) + gear_mit;
+                player.atk = keyed_stat(player.atk + atk, pct.atk, gear_atk);
+                player.mitigation = keyed_stat(player.mitigation + mit, pct.mitigation, gear_mit);
                 let mut profile = player_profile(level, gear_acc + acc, gear_eva + eva, swing);
                 profile.crit += crit;
                 simulate_roster_fight(

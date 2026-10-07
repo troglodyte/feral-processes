@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.17.0
 
 **There are now ten Phase Keys, and with all ten you can leave the Basin.** The guardian at the end of each Stack zone from 1 to 10 can drop that zone's key, and the third guardian you beat in a zone always drops it. You cannot build or step through the zone portal until you hold the key for the zone you are in. Each key gives a small permanent boost, listed on a new Phase Keys tab in the inventory (press Tab). With all ten keys, from zone 10 on, you can build the Basin Exit; using it plays the ending, marks your character sheet as Escaped, and lets you keep playing. Warping to a deeper zone gives you the keys of the zones you skipped. Twelve new achievements track the keys and the escape.
 

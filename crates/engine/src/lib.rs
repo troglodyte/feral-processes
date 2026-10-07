@@ -37,6 +37,7 @@ pub mod nemesis;
 pub mod notifications;
 pub mod outposts;
 pub mod perks;
+pub mod phase_keys;
 pub mod policy;
 pub mod progression;
 pub mod research;

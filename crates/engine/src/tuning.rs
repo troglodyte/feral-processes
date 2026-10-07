@@ -3182,6 +3182,21 @@ pub const IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD: u32 = 6;
 pub const DEAD_MANS_SWITCH_POWER: f32 = 30.0;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Phase Keys
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Phase Key slots, one per zone 1..=`PHASE_KEY_COUNT`. Fixed in code so a
+/// mod can change what a key is but never whether the story can be finished.
+pub const PHASE_KEY_COUNT: u32 = 10;
+
+/// Chance an eligible Stack guardian kill drops its zone's Phase Key.
+pub const PHASE_KEY_DROP_CHANCE: f64 = 0.33;
+
+/// The eligible guardian kill (counting misses) on which the key drops for
+/// certain, so bad luck costs a few kills and never the run.
+pub const PHASE_KEY_GUARANTEE_KILLS: u32 = 3;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Perk magnitudes
 // ─────────────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,9 @@
+(
+    zone: 6,
+    name: "Handshake Echo",
+    flavour: "Every program it has met still answers.",
+    effect: (
+        stat_pct: (decompiler: 10),
+        hooks: [CaptureOdds(10)],
+    ),
+)

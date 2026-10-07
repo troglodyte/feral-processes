@@ -155,6 +155,11 @@ pub struct PlayerSave {
     /// gone is kept and contributes nothing.
     #[serde(default)]
     pub implants: Vec<crate::implants::ImplantId>,
+    /// The Phase Keys held, the drop-guarantee counter and the story flag —
+    /// see `components::PhaseKeys`. Bincode is positional, so this field is
+    /// what the 35 → 36 bump is for.
+    #[serde(default)]
+    pub phase_keys: crate::components::PhaseKeys,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -2020,7 +2025,12 @@ pub struct SaveData {
 /// 34 → 35: breeding. `CreatureSave::{generation, breed_ready_at}` and
 /// `StructureSave::incubating` are written; a v34 file would load with every
 /// bay empty, which is the same as losing a child mid-incubation.
-pub const SAVE_FORMAT_VERSION: u32 = 35;
+///
+/// 35 → 36: Phase Keys. `PlayerSave::phase_keys` is written; bincode is
+/// positional, so a v35 file would misread every field after it. A save
+/// already past zone 1 loads with no keys and cannot finish the story
+/// (no migration, by design).
+pub const SAVE_FORMAT_VERSION: u32 = 36;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2295,6 +2305,7 @@ mod tests {
                 downed_programs: Vec::new(),
                 tools: Vec::new(),
                 implants: Vec::new(),
+                phase_keys: crate::components::PhaseKeys::default(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 bought_stats: crate::components::BoughtStats::default(),

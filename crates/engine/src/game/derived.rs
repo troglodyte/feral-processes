@@ -2,6 +2,7 @@
 //! entity's attributes, written back through the one door.
 
 use crate::components::{Attributes, Derived, HoldPoints, ProgramBase, StatPoints, Tamed};
+use crate::phase_keys::apply_key_pct;
 use crate::progression::{SpendError, StatOwner};
 use crate::resources::PendingProgramLevels;
 use crate::*;
@@ -260,7 +261,10 @@ impl Game {
             atk: stats.atk - derived.atk,
             mitigation: stats.mitigation - derived.mitigation,
             decompiler: skill - derived.decompiler,
-            max_power: implants.max_power,
+            max_power: crate::phase_keys::key_scaled_power(
+                (derived.max_power + implants.max_power).max(0.0),
+                self.key_pct(entity).max_power,
+            ) - derived.max_power,
             status_resist: implants.status_resist,
             extraction: 0.0,
             crit: implants.crit,
@@ -365,6 +369,11 @@ impl Game {
         // A negative delta must not leave a body that cannot exist.
         derived.max_hp = derived.max_hp.max(1);
         derived.max_power = derived.max_power.max(0.0);
+        // Held Phase Keys' percent bonuses go on last, over everything but
+        // worn gear (which `apply_equipment_delta` adds raw on top, here and
+        // at every equip, so the two cannot disagree).
+        let pct = self.key_pct(entity);
+        derived.max_power = crate::phase_keys::key_scaled_power(derived.max_power, pct.max_power);
         let receipt = self
             .world
             .get::<BoughtStats>(entity)
@@ -372,13 +381,14 @@ impl Game {
             .unwrap_or_default();
         let gear = self.gear_bonus(entity);
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
-            stats.max_hp = derived.max_hp + receipt.max_hp;
-            stats.atk = derived.atk + receipt.atk;
-            stats.mitigation = derived.mitigation + receipt.mitigation;
+            stats.max_hp = apply_key_pct(derived.max_hp + receipt.max_hp, pct.max_hp);
+            stats.atk = apply_key_pct(derived.atk + receipt.atk, pct.atk);
+            stats.mitigation =
+                apply_key_pct(derived.mitigation + receipt.mitigation, pct.mitigation);
             stats.hp = stats.hp.min(stats.max_hp);
         }
         if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(entity) {
-            decompiler.skill = derived.decompiler;
+            decompiler.skill = apply_key_pct(derived.decompiler, pct.decompiler);
         }
         self.apply_equipment_delta(entity, gear, 1);
         if let Some(mut power) = self.world.get_mut::<PowerReserve>(entity) {

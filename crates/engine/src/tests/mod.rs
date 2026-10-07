@@ -74,6 +74,7 @@ mod outposts;
 mod party;
 mod perks;
 mod permadeath;
+mod phase_keys;
 mod player_icon;
 mod policy;
 mod power;

@@ -1,0 +1,8 @@
+(
+    zone: 8,
+    name: "Salvage Vector",
+    flavour: "Leads to what the guardians hid.",
+    effect: (
+        hooks: [DropBoost(15)],
+    ),
+)

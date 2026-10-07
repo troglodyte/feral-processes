@@ -149,6 +149,7 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
                 DownedPrograms::default(),
                 Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
                 crate::components::Implants::default(),
+                crate::components::PhaseKeys::default(),
             ),
         ))
         .id()
@@ -453,6 +454,7 @@ fn spawn_player_from_save(
                 crate::components::Implants {
                     installed: player_save.implants,
                 },
+                player_save.phase_keys,
             ),
         ))
         .id()
@@ -483,6 +485,7 @@ impl Game {
             memories: memory_db,
             statuses: status_db,
             implants: implant_db,
+            phase_keys: phase_key_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -528,6 +531,7 @@ impl Game {
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
         world.insert_resource(implant_db);
+        world.insert_resource(phase_key_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -1401,6 +1405,7 @@ impl Game {
             memories: memory_db,
             statuses: status_db,
             implants: implant_db,
+            phase_keys: phase_key_db,
             thoughts: thought_db,
             interactions: interaction_db,
             needs: need_db,
@@ -1464,6 +1469,7 @@ impl Game {
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
         world.insert_resource(implant_db);
+        world.insert_resource(phase_key_db);
         world.insert_resource(thought_db);
         world.insert_resource(interaction_db);
         world.insert_resource(need_db);
@@ -2969,6 +2975,11 @@ impl Game {
             .get::<crate::components::Implants>(player)
             .map(|i| i.installed.clone())
             .unwrap_or_default();
+        let phase_keys = self
+            .world
+            .get::<crate::components::PhaseKeys>(player)
+            .copied()
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -3131,6 +3142,7 @@ impl Game {
             downed_programs,
             tools,
             implants,
+            phase_keys,
             perk_points: perks.points,
             unlocked_perks: perks.unlocked,
             bought_stats,
@@ -3572,6 +3584,7 @@ struct AssetDbs {
     memories: crate::memories::MemoryDb,
     statuses: crate::statuses::StatusDb,
     implants: crate::implants::ImplantDb,
+    phase_keys: crate::phase_keys::PhaseKeyDb,
     thoughts: crate::situations::ThoughtDb,
     interactions: crate::interactions::InteractionDb,
     needs: crate::needs::NeedDb,
@@ -3625,6 +3638,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (implants, implant_warnings) =
         crate::implants::ImplantDb::load_dir(&assets_dir.join("implants"))?;
     warnings.extend(implant_warnings);
+    let (phase_keys, phase_key_warnings) =
+        crate::phase_keys::PhaseKeyDb::load_dir(&assets_dir.join("phase_keys"))?;
+    warnings.extend(phase_key_warnings);
     // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
     // empty catalogue leaves nothing to forge or install, which is the
     // pre-extraction game.
@@ -3804,6 +3820,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         memories,
         statuses,
         implants,
+        phase_keys,
         thoughts,
         interactions,
         needs,

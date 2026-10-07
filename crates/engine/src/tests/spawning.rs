@@ -1706,6 +1706,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             downed_programs: Vec::new(),
             tools: Vec::new(),
             implants: Vec::new(),
+            phase_keys: crate::components::PhaseKeys::default(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             sorties: Vec::new(),

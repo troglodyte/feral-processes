@@ -44,6 +44,7 @@ pub(crate) mod notify;
 pub(crate) mod outposts;
 pub(crate) mod party;
 pub(crate) mod passives;
+pub(crate) mod phase_keys;
 pub(crate) mod preview;
 pub(crate) mod pursuit;
 pub(crate) mod refactor;

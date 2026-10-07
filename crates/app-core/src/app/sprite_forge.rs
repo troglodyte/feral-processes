@@ -270,6 +270,44 @@ impl SpriteOp {
 pub enum PointerHit {
     Cell(u8, u8),
     Swatch(u8),
+    Button(EditorButton),
+}
+
+/// A clickable stand-in for one of the editor's keys. **A button has no
+/// effect of its own**: `handle_pointer` presses it by calling the key
+/// handler with `key()`, so a button and its key cannot drift apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorButton {
+    Save,
+    Undo,
+    Clear,
+    Brush,
+    Tool,
+    Back,
+}
+
+impl EditorButton {
+    /// Every button, in the order the bar draws them.
+    pub const ALL: [EditorButton; 6] = [
+        EditorButton::Save,
+        EditorButton::Undo,
+        EditorButton::Clear,
+        EditorButton::Brush,
+        EditorButton::Tool,
+        EditorButton::Back,
+    ];
+
+    /// The key this button presses.
+    pub fn key(self) -> GameKey {
+        match self {
+            EditorButton::Save => GameKey::Char('s'),
+            EditorButton::Undo => GameKey::Char('u'),
+            EditorButton::Clear => GameKey::Char('x'),
+            EditorButton::Brush => GameKey::Char('g'),
+            EditorButton::Tool => GameKey::Char('f'),
+            EditorButton::Back => GameKey::Esc,
+        }
+    }
 }
 
 /// Which mouse button a `PointerHit` was reported for.
@@ -628,6 +666,14 @@ impl App {
         if self.mode != Mode::SpriteEditor {
             return;
         }
+        // A button is a key press, not a gesture: only a primary `Down`
+        // acts, and it opens no stroke.
+        if let PointerHit::Button(pressed) = hit {
+            if phase == PointerPhase::Down && button == PointerButton::Primary {
+                self.handle_sprite_editor_key(pressed.key());
+            }
+            return;
+        }
         let Some(sprite_editor) = &mut self.sprite_editor else {
             return;
         };
@@ -649,6 +695,7 @@ impl App {
                 sprite_editor.editor.apply_tool(x, y, index);
             }
             PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
+            PointerHit::Button(_) => {}
         }
         if phase == PointerPhase::Up {
             sprite_editor.editor.end_stroke();

@@ -39,7 +39,8 @@
 use super::canvas;
 use super::*;
 use feral_processes_app_core::{
-    CanvasFocus, PointerHit, SpriteArt, SpriteEditorView, SpriteSubject, SubjectTint,
+    CanvasFocus, EditorButton, PointerHit, SpriteArt, SpriteEditorView, SpriteSubject, SubjectTint,
+    Tool,
 };
 
 // ---------------------------------------------------------------------
@@ -222,6 +223,7 @@ struct EditorGeometry {
     cell: f32,
     palette_label_y: f32,
     palette: Rect,
+    buttons: Vec<(EditorButton, Rect)>,
     preview_label_y: f32,
     preview: Rect,
     footer_y: f32,
@@ -285,7 +287,9 @@ fn editor_geometry(
     let (tile_px, _) = map_cell(zoom);
     let preview = Rect::new(canvas.x + canvas.w + gap, canvas.y, tile_px, tile_px);
 
-    let footer_top = palette.y + palette.h + gap;
+    let buttons = button_rects(painter, w, palette.y + palette.h + m.gap, m);
+    let bar_bottom = buttons.last().map_or(0.0, |(_, r)| r.y + r.h);
+    let footer_top = bar_bottom + gap;
     // Measured in UI cells, `icon_editor.rs::geometry`'s pattern for a
     // screen with no popup body to wrap against.
     let columns = ((w - m.pad * 2.0) / painter.measure_ui_advance("M", m.small()))
@@ -300,10 +304,69 @@ fn editor_geometry(
         cell,
         palette_label_y,
         palette,
+        buttons,
         preview_label_y,
         preview,
         footer_y: footer_top + m.line_height,
         footer_lines,
+    }
+}
+
+/// How many monospace cells a button's label is given. The longest label,
+/// `[g] Brush 2`, is eleven; the rest is padding on both sides.
+const BUTTON_CHARS: f32 = 13.0;
+
+/// The button bar's rects, centred on the window at `y`. Every button is
+/// the same width, so a label that changes with state (`Brush 1`/`Brush 2`,
+/// `Paint`/`Fill`) cannot shift its neighbours or the hit rects.
+fn button_rects(painter: &Painter, w: f32, y: f32, m: &Metrics) -> Vec<(EditorButton, Rect)> {
+    let button_w = painter.measure_ui_advance("M", m.small()) * BUTTON_CHARS;
+    let button_h = m.line_height * 1.3;
+    let gap = m.gap.max(4.0);
+    let n = EditorButton::ALL.len() as f32;
+    let left = (w - (button_w * n + gap * (n - 1.0))) / 2.0;
+    EditorButton::ALL
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let x = left + i as f32 * (button_w + gap);
+            (b, Rect::new(x, y, button_w, button_h))
+        })
+        .collect()
+}
+
+/// A button's label: the key it presses, then what it does now. The tool and
+/// brush buttons name the state a press would leave, so the bar reads as the
+/// current mode.
+fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
+    match button {
+        EditorButton::Save => "[s] Save".to_string(),
+        EditorButton::Undo => "[u] Undo".to_string(),
+        EditorButton::Clear => "[x] Clear".to_string(),
+        EditorButton::Brush => format!("[g] Brush {}", view.canvas.brush),
+        EditorButton::Tool => match view.tool {
+            Tool::Paint => "[f] Paint".to_string(),
+            Tool::Fill => "[f] Fill".to_string(),
+        },
+        EditorButton::Back => "[Esc] Back".to_string(),
+    }
+}
+
+fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorView, m: &Metrics) {
+    for (button, r) in &g.buttons {
+        painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
+        let lit = *button == EditorButton::Tool && view.tool == Tool::Fill;
+        let (thickness, color) = if lit { (3.0, BORDER) } else { (1.0, TEXT_DIM) };
+        painter.rect_lines(r.x, r.y, r.w, r.h, thickness, color);
+        let label = button_label(*button, view);
+        let text_w = painter.measure_ui(&label, m.small()).width;
+        painter.ui(
+            &label,
+            r.x + (r.w - text_w) / 2.0,
+            r.y + (r.h + m.line_height) / 2.0 - m.gap,
+            m.small(),
+            TEXT,
+        );
     }
 }
 
@@ -405,6 +468,8 @@ fn draw_sprite_editor_session(
         view.canvas.selected,
         view.palette,
     );
+
+    draw_button_bar(painter, &g, view, m);
 
     let preview_label = "Preview";
     let label_w = painter.measure_ui(preview_label, m.small()).width;
@@ -541,7 +606,15 @@ pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, cols: u8, count: u8) -> Opt
     (i < count).then_some(i as u8)
 }
 
-/// The sprite editor's own two hit-test rects, recomputed from the exact
+/// The button under `pos`, if any.
+fn button_at(pos: (f32, f32), buttons: &[(EditorButton, Rect)]) -> Option<EditorButton> {
+    buttons
+        .iter()
+        .find(|(_, r)| pos.0 >= r.x && pos.0 <= r.x + r.w && pos.1 >= r.y && pos.1 <= r.y + r.h)
+        .map(|(b, _)| *b)
+}
+
+/// The sprite editor's own hit-test rects, recomputed from the exact
 /// `editor_geometry` `draw_sprite_editor_session` draws from — a pointer
 /// resolved through `resolve` can never disagree with what's on screen.
 /// Fields stay private: `lib.rs` never reads one directly, only calls
@@ -552,6 +625,7 @@ pub(crate) struct HitRects {
     palette: Rect,
     swatches: u8,
     swatch_cols: u8,
+    buttons: Vec<(EditorButton, Rect)>,
 }
 
 impl HitRects {
@@ -559,6 +633,9 @@ impl HitRects {
     /// never overlap on screen, so trying both in this order and returning
     /// the first hit is exactly "which panel was the pointer over."
     pub(crate) fn resolve(&self, pos: (f32, f32)) -> Option<PointerHit> {
+        if let Some(button) = button_at(pos, &self.buttons) {
+            return Some(PointerHit::Button(button));
+        }
         if let Some((x, y)) = cell_at(pos, self.canvas, self.edge) {
             return Some(PointerHit::Cell(x, y));
         }
@@ -601,6 +678,7 @@ pub(crate) fn hit_rects(
         palette,
         swatches: canvas::swatch_count(view.palette.len()) as u8,
         swatch_cols: view.palette_cols,
+        buttons: g.buttons,
     }
 }
 
@@ -1288,5 +1366,91 @@ mod tests {
             canvas::swatch_rows(canvas::swatch_count(view.palette.len()), 16),
             4
         );
+    }
+
+    /// A click on the middle of each drawn button resolves to that button,
+    /// through the same geometry the bar is drawn from.
+    #[test]
+    fn a_click_on_each_button_rect_resolves_to_that_button() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let view = app.sprite_editor_view().expect("just opened");
+        let m = crate::text::ui_metrics(CENSUS_H);
+        let (g, rects) = crate::paint::with_painter(|p| {
+            (
+                editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, app.zoom),
+                hit_rects(p, CENSUS_W, &m, &view, app.zoom),
+            )
+        })
+        .0;
+        assert_eq!(g.buttons.len(), EditorButton::ALL.len());
+        for (button, r) in &g.buttons {
+            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+            assert_eq!(rects.resolve(centre), Some(PointerHit::Button(*button)));
+        }
+    }
+
+    /// The bar sits below the palette, inside the window, without overlap.
+    #[test]
+    fn the_button_bar_fits_at_1280x720_below_the_palette() {
+        let m = crate::text::ui_metrics(CENSUS_H);
+        crate::paint::with_painter(|p| {
+            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+            let mut right = 0.0_f32;
+            for (b, r) in &g.buttons {
+                assert!(r.x >= 0.0 && r.x + r.w <= CENSUS_W, "{b:?} off the window");
+                assert!(
+                    r.y >= g.palette.y + g.palette.h,
+                    "{b:?} overlaps the palette"
+                );
+                assert!(r.x >= right, "{b:?} overlaps its neighbour");
+                assert!(r.y + r.h <= g.footer_y, "{b:?} overlaps the footer");
+                right = r.x + r.w;
+            }
+        });
+    }
+
+    /// Every label fits its button, in every state the label can take.
+    #[test]
+    fn every_button_label_fits_its_button() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let m = crate::text::ui_metrics(CENSUS_H);
+        for keys in [vec![], vec!['f'], vec!['g'], vec!['f', 'g']] {
+            for k in keys {
+                app.handle_key(GameKey::Char(k));
+            }
+            let view = app.sprite_editor_view().expect("open");
+            crate::paint::with_painter(|p| {
+                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+                for (b, r) in &g.buttons {
+                    let label = button_label(*b, &view);
+                    assert!(p.measure_ui(&label, m.small()).width < r.w, "{label:?}");
+                }
+            });
+        }
+    }
+
+    /// The bar is drawn: every label shows up on screen.
+    #[test]
+    fn the_editor_draws_every_button_label() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let drawn = crate::paint::painted_text(&shapes);
+        for label in [
+            "[s] Save",
+            "[u] Undo",
+            "[x] Clear",
+            "[g] Brush 1",
+            "[f] Paint",
+            "[Esc] Back",
+        ] {
+            assert!(
+                drawn.iter().any(|t| t == label),
+                "{label:?} missing: {drawn:?}"
+            );
+        }
     }
 }

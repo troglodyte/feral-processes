@@ -1092,3 +1092,116 @@ fn a_middle_click_picks_the_cells_colour_and_records_nothing() {
         "one undo reaches the paint, past the pick"
     );
 }
+
+// -----------------------------------------------------------------------
+// The button bar
+// -----------------------------------------------------------------------
+
+/// An editor on the ring with some history behind it, so every button has
+/// something to do.
+fn app_ready_for_buttons(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    app
+}
+
+fn press(app: &mut App, button: EditorButton) {
+    app.handle_pointer(
+        PointerHit::Button(button),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Button(button),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+}
+
+/// Cells, brush, tool and selected swatch.
+type EditorState = (Vec<u8>, u8, Tool, u8);
+
+/// Everything a button can change, read back from the outside.
+fn observed(app: &mut App) -> (Mode, Option<EditorState>, Vec<SpriteWrite>) {
+    let view = app
+        .sprite_editor_view()
+        .map(|v| (v.canvas.cells, v.canvas.brush, v.tool, v.canvas.selected));
+    (app.mode, view, app.take_sprite_writes())
+}
+
+#[test]
+fn every_button_does_exactly_what_its_key_does() {
+    for (n, button) in EditorButton::ALL.into_iter().enumerate() {
+        let mut by_button = app_ready_for_buttons(60 + n as u32);
+        let mut by_key = app_ready_for_buttons(60 + n as u32);
+        // Same starting point, or the comparison below proves nothing.
+        assert_eq!(observed(&mut by_button), observed(&mut by_key));
+
+        press(&mut by_button, button);
+        by_key.handle_key(button.key());
+        let (b, k) = (observed(&mut by_button), observed(&mut by_key));
+        assert_eq!(b, k, "{button:?} must match its key {:?}", button.key());
+    }
+}
+
+#[test]
+fn the_buttons_are_not_vacuous_each_one_changes_something() {
+    let changed = |button| {
+        let mut app = app_ready_for_buttons(70);
+        let before = observed(&mut app);
+        press(&mut app, button);
+        before != observed(&mut app)
+    };
+    for button in EditorButton::ALL {
+        assert!(changed(button), "{button:?} did nothing");
+    }
+}
+
+#[test]
+fn a_button_acts_on_down_only() {
+    let mut app = app_ready_for_buttons(71);
+    let before = observed(&mut app);
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Clear),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Clear),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    assert_eq!(observed(&mut app), before);
+}
+
+#[test]
+fn only_the_primary_button_presses_a_button() {
+    let mut app = app_ready_for_buttons(72);
+    let before = observed(&mut app);
+    for other in [PointerButton::Secondary, PointerButton::Middle] {
+        app.handle_pointer(
+            PointerHit::Button(EditorButton::Clear),
+            other,
+            PointerPhase::Down,
+        );
+    }
+    assert_eq!(observed(&mut app), before);
+}
+
+#[test]
+fn each_button_names_the_key_the_footer_documents() {
+    let table = [
+        (EditorButton::Save, GameKey::Char('s')),
+        (EditorButton::Undo, GameKey::Char('u')),
+        (EditorButton::Clear, GameKey::Char('x')),
+        (EditorButton::Brush, GameKey::Char('g')),
+        (EditorButton::Tool, GameKey::Char('f')),
+        (EditorButton::Back, GameKey::Esc),
+    ];
+    assert_eq!(table.len(), EditorButton::ALL.len());
+    for (button, key) in table {
+        assert_eq!(button.key(), key, "{button:?}");
+    }
+}

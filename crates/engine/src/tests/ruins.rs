@@ -369,3 +369,58 @@ fn an_awaiting_sites_examine_line_says_it_needs_a_program() {
     assert!(blurb.contains("waiting for a program"), "{blurb}");
     assert!(game.build_order_report()[0].awaiting_program);
 }
+
+/// Files `kind` at one cell east of the party and returns whether a site
+/// came of it, after `setup` has had its say.
+fn files_after(seed: u32, kind: &str, setup: impl FnOnce(&mut Game, i32, i32)) -> (Game, bool) {
+    let mut game = base(seed);
+    let (px, py) = game.base_pos().unwrap();
+    setup(&mut game, px + 1, py);
+    game.world
+        .resource_mut::<Ruins>()
+        .0
+        .push(ruin(kind, px + 1, py));
+    game.file_ruins();
+    let filed = !sites(&mut game).is_empty();
+    (game, filed)
+}
+
+fn dropped_and_said(game: &Game) -> bool {
+    game.world.resource::<Ruins>().0.is_empty()
+        && game
+            .message_history(50)
+            .iter()
+            .any(|m| m.text.contains("could not be rebuilt"))
+}
+
+#[test]
+fn a_program_standing_on_the_wreck_drops_the_ruin_and_says_so() {
+    let (game, filed) = files_after(2208, "shield", |game, x, y| {
+        let body = spawn_tamed(game, 10, 3);
+        *game.world.get_mut::<Position>(body).unwrap() = Position { x, y };
+    });
+    assert!(!filed, "a body stands on the tile");
+    assert!(dropped_and_said(&game));
+}
+
+#[test]
+fn a_filed_request_on_the_wreck_drops_the_ruin_and_says_so() {
+    let (mut game, _) = files_after(2209, "shield", |game, _, _| {
+        file_build(game, "depot", 1, 0).unwrap();
+    });
+    assert_eq!(sites(&mut game).len(), 1, "only the request already there");
+    assert!(dropped_and_said(&game));
+}
+
+#[test]
+fn a_ruin_whose_structure_no_longer_loads_is_dropped_and_said() {
+    let (game, filed) = files_after(2210, "no_such_structure", |_, _, _| {});
+    assert!(!filed);
+    assert!(
+        game.world.resource::<Ruins>().0.is_empty()
+            && game
+                .message_history(50)
+                .iter()
+                .any(|m| m.text.contains("no longer loads"))
+    );
+}

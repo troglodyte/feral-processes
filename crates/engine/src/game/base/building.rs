@@ -19,6 +19,31 @@ pub struct AwaitingSite {
     pub y: i32,
 }
 
+/// Why a footprint cannot take a structure, in the order the player is told.
+/// Each is its own refusal because each leaves a different errand: demolish,
+/// let the crew catch up or cancel the request, clear a dig mark, or wait
+/// for a program to move.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PlacementRefusal {
+    NoFloor,
+    Occupied,
+    SiteFiled,
+    DigMark,
+    BodyStanding,
+}
+
+impl PlacementRefusal {
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::NoFloor => "There's no floor there — a structure has to stand on laid ground.",
+            Self::Occupied => "Something is already deployed there.",
+            Self::SiteFiled => "Your crew is already set to build something there.",
+            Self::DigMark => "There's a dig mark there — clear it before building.",
+            Self::BodyStanding => "One of your programs is standing there — give it a moment.",
+        }
+    }
+}
+
 impl Game {
     /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
     /// the party, spending `program` — a tamed program you own — to pay for
@@ -141,65 +166,10 @@ impl Game {
         //
         // The founding Home skips the check: the pocket it lays does not
         // exist to be measured against yet.
-        if !founding
-            && footprint
-                .iter()
-                .any(|&(fx, fy)| !self.world.resource::<BaseGrid>().is_floor(fx, fy))
-        {
-            return Err("There's no floor there — a structure has to stand on laid ground.".into());
-        }
-
-        if footprint
-            .iter()
-            .any(|&(fx, fy)| self.find_blocking_structure_at(fx, fy).is_some())
-        {
-            return Err("Something is already deployed there.".into());
-        }
-        // A cell already spoken for by a request nobody has raised yet. A
-        // refusal of its own rather than folded into the one above, because
-        // the two leave the player different errands: one cell needs
-        // demolishing, the other needs the crew to catch up — or the request
-        // calling off.
-        if footprint
-            .iter()
-            .any(|&(fx, fy)| self.build_site_at(fx, fy).is_some())
-        {
-            return Err("Your crew is already set to build something there.".into());
-        }
-        // A fourth refusal, for the same reason as the two above it: a dig
-        // mark is an instruction the base is already carrying out, and a
-        // structure raised over it would either bury the mark or have the
-        // crew cut the floor out from under a machine standing on it.
-        if !founding
-            && footprint
-                .iter()
-                .any(|&(fx, fy)| self.dig_site_at(fx, fy).is_some())
-        {
-            return Err("There's a dig mark there — clear it before building.".into());
-        }
-        // A fifth refusal on the same ladder, and its own for those two's
-        // reason: this cell needs a moment rather than a demolition or a
-        // cancelled request. Nothing checked it before, so a machine went up
-        // on top of a wandering program and left it standing *inside* the
-        // building — which reads as the base being broken and, now that a
-        // body is a blocker, would wall that body in behind a cell nothing
-        // may cross. Skipped while founding, `is_floor`'s reason: base space
-        // does not exist to be occupied yet, and every program's `Position`
-        // out there is a zone-surface tile these coordinates only alias.
-        //
-        // **The program being spent is exempt**, and it is the one body that
-        // has to be: `commit_program` retires it below, so a request refused
-        // on account of it names a body that would not have been there. It is
-        // also the likely one — the picker offers the whole roster wherever it
-        // happens to be standing, and a program milling around the cell you
-        // are pointing at is exactly the one you would pick.
-        if !founding
-            && self
-                .base_bodies()
-                .iter()
-                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
-        {
-            return Err("One of your programs is standing there — give it a moment.".into());
+        // The ladder itself is `placement_refusal`; what each rung means to
+        // the player is argued in `PlacementRefusal`.
+        if let Some(refusal) = self.placement_refusal(&footprint, founding, program) {
+            return Err(refusal.message().into());
         }
         // Before the materials check, with the other refusals: a structure
         // whose effect accumulates is bounded by a count rather than by
@@ -381,6 +351,60 @@ impl Game {
             .is_some_and(|b| b.siege_pack > 0)
     }
 
+    /// The first reason `footprint` cannot take a structure, or `None`.
+    ///
+    /// **The one placement predicate** `place_structure` and `file_ruins`
+    /// both call, without `place_structure`'s locale gate (`file_ruins` files
+    /// from wherever the party stands). The floor check and the dig-mark and
+    /// body checks are skipped while `founding`: the pocket does not exist
+    /// to be measured, and every program's `Position` out on the surface only
+    /// aliases these coordinates. `program` is exempt from the body check —
+    /// it is the one being spent, and `commit_program` retires it.
+    fn placement_refusal(
+        &mut self,
+        footprint: &[(i32, i32)],
+        founding: bool,
+        program: Option<Entity>,
+    ) -> Option<PlacementRefusal> {
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| !self.world.resource::<BaseGrid>().is_floor(fx, fy))
+        {
+            return Some(PlacementRefusal::NoFloor);
+        }
+        let standing = self.structure_footprints();
+        if footprint.iter().any(|&(fx, fy)| {
+            standing.iter().any(|(_, p, side)| {
+                crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(fx, fy))
+            })
+        }) {
+            return Some(PlacementRefusal::Occupied);
+        }
+        if footprint
+            .iter()
+            .any(|&(fx, fy)| self.base_space_build_site_at(fx, fy).is_some())
+        {
+            return Some(PlacementRefusal::SiteFiled);
+        }
+        if !founding
+            && footprint
+                .iter()
+                .any(|&(fx, fy)| self.dig_site_at(fx, fy).is_some())
+        {
+            return Some(PlacementRefusal::DigMark);
+        }
+        if !founding
+            && self
+                .base_bodies()
+                .iter()
+                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
+        {
+            return Some(PlacementRefusal::BodyStanding);
+        }
+        None
+    }
+
     /// Files a rebuild site for every recorded wreck, once no siege is
     /// running. Called from the base tick, so one call site serves a siege
     /// ending on the board, in a tactical fight or off-screen, and a raid —
@@ -408,18 +432,14 @@ impl Game {
                 .get(&ruin.kind)
                 .cloned()
             else {
+                self.log_base(format!(
+                    "The {} wreck at ({}, {}) could not be rebuilt: its structure no longer loads.",
+                    ruin.kind, ruin.x, ruin.y
+                ));
                 continue;
             };
             let footprint = crate::tactical::footprint_cells_at((ruin.x, ruin.y), def.footprint);
-            let standing = self.structure_footprints();
-            let blocked = footprint.iter().any(|&(fx, fy)| {
-                !self.world.resource::<BaseGrid>().is_floor(fx, fy)
-                    || standing.iter().any(|(_, p, side)| {
-                        crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(fx, fy))
-                    })
-                    || self.base_space_build_site_at(fx, fy).is_some()
-                    || self.dig_site_at(fx, fy).is_some()
-            });
+            let blocked = self.placement_refusal(&footprint, false, None).is_some();
             if blocked {
                 self.log_base(format!(
                     "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",

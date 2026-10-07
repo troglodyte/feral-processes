@@ -898,3 +898,40 @@ fn a_march_waits_out_a_tick_where_the_regular_siege_fired() {
     assert!(game.world.get::<NemesisHome>(leader).is_none());
     assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, 1, "no march");
 }
+
+#[test]
+fn an_away_march_prices_the_band_at_its_headcount_leader_included() {
+    let mut game = new_game();
+    established_base(&mut game);
+    // Nobody defends, so the shortfall is the strength less structure
+    // defence alone.
+    let staff: Vec<Entity> = game
+        .world
+        .query_filtered::<Entity, With<Tamed>>()
+        .iter(&game.world)
+        .collect();
+    for s in staff {
+        game.world.entity_mut(s).insert(crate::components::Downed);
+    }
+    let (_leader, _band) = marching_band(&mut game);
+    assert_eq!(game.defending_base_staff().len(), 0, "test premise");
+    let defence = game.total_raid_defense() + crate::game::siege::turrets::turret_defense(&game);
+    let strength = 1 + NEMESIS_BAND_MAX as u32;
+    assert!(defence < strength, "test premise: the band gets through");
+    let structure = game
+        .world
+        .query_filtered::<Entity, (With<Structure>, With<Durability>)>()
+        .iter(&game.world)
+        .next()
+        .unwrap();
+    let hp_before = game.world.get::<Durability>(structure).unwrap().hp;
+
+    game.nemesis_march_check();
+
+    let hp_after = game.world.get::<Durability>(structure).unwrap().hp;
+    assert_eq!(
+        hp_before - hp_after,
+        (strength - defence) * crate::tuning::SIEGE_DAMAGE_PER_POINT,
+        "shortfall is band strength less defence"
+    );
+}

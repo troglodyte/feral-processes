@@ -51,7 +51,10 @@ impl App {
         // else resolves, so sell, fuse, inspect and equip cannot reach a
         // row that is not an item.
         if self.inventory_tab == InventoryTab::PhaseKeys {
-            self.scroll(key, feral_processes_engine::tuning::PHASE_KEY_COUNT as usize);
+            self.scroll(
+                key,
+                feral_processes_engine::tuning::PHASE_KEY_COUNT as usize,
+            );
             return;
         }
         let Some(game) = &self.game else { return };

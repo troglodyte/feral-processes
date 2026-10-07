@@ -1283,7 +1283,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::OutpostPost => {
             draw_outpost_post(&outpost_post_candidates, selected, refusal, painter, m)
         }
-        Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
+        Mode::Inventory => draw_inventory(game, app.inventory_tab, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
             app.pending_equip_program,

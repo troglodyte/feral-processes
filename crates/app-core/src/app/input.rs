@@ -146,6 +146,22 @@ impl App {
         }
     }
 
+    /// The answer to a two-row `[Yes, No]` confirm, `None` while the player
+    /// has not given one. `y`/`n` answer directly, Up/Down moves the
+    /// highlight and Enter answers for whichever row it is on; every other
+    /// key is ignored so a stray press never settles the question. Esc is
+    /// left to the caller, whose way back differs. One door for every
+    /// confirm, so they cannot disagree about what Enter means.
+    pub(crate) fn yes_no(&mut self, key: GameKey) -> Option<bool> {
+        let options = ['y', 'n'];
+        self.selected_index(key, options.len())
+            .or_else(|| match key {
+                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
+                _ => None,
+            })
+            .map(|i| i == 0)
+    }
+
     /// Up/Down scrolling for a screen with nothing to pick: the read-only
     /// views (see `handle_history_key`) are drawn into the same popup as every
     /// menu, and its window follows the highlighted row, so moving that
@@ -167,6 +183,12 @@ impl App {
                 .as_ref()
                 .map(|g| g.message_history(MESSAGE_LOG_CAP).len().saturating_sub(1))
                 .unwrap_or(0),
+            // A confirm for something that cannot be taken back opens on its
+            // "No" row, so Enter alone never destroys anything.
+            Mode::TradeProgramConfirm
+            | Mode::RespecPerksConfirm
+            | Mode::RespecTalentsConfirm
+            | Mode::ExtractConfirm => 1,
             _ => 0,
         }
     }

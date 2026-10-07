@@ -430,8 +430,12 @@ impl App {
     /// `Mode::Develop`: the player was looking at one program's ladder and a
     /// declined confirmation should leave them there.
     pub(crate) fn handle_respec_talents_confirm_key(&mut self, key: GameKey) {
-        match key {
-            GameKey::Char('y') | GameKey::Char('Y') => {
+        let confirmed = match key {
+            GameKey::Esc => Some(false),
+            _ => self.yes_no(key),
+        };
+        match confirmed {
+            Some(true) => {
                 if let Some(target) = self.pending_develop_target
                     && let Some(game) = &mut self.game
                 {
@@ -440,10 +444,8 @@ impl App {
                 }
                 self.mode = Mode::DevelopProgram;
             }
-            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => {
-                self.mode = Mode::DevelopProgram
-            }
-            _ => {}
+            Some(false) => self.mode = Mode::DevelopProgram,
+            None => {}
         }
     }
 

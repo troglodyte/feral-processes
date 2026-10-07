@@ -488,6 +488,7 @@ pub(super) fn draw_research_menu(
 pub(super) fn draw_respec_confirm(
     quote: &RespecQuote,
     subject: &str,
+    selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -513,7 +514,10 @@ pub(super) fn draw_respec_confirm(
         rows.push(Row::TextColored(why.clone(), RED));
     }
     rows.push(text_row(""));
-    rows.push(text_row("[y] refund    [n] keep them    Esc to cancel"));
+    rows.push(item_row("[y] Yes, refund", selected == 0));
+    rows.push(item_row("[n] No, keep them", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup(
         "Confirm refund",
         PopupSize::Small,

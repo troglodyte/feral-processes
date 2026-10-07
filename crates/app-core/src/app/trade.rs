@@ -227,13 +227,16 @@ impl App {
     }
 
     /// Confirms or abandons the program sale picked in `Mode::TradeAction`.
-    /// `y` sells; Esc and `n` both back out, because a mis-hit on a screen
+    /// `y` (or Enter on Yes) sells; Esc and `n` both back out, the highlight
+    /// opens on No, because a mis-hit on a screen
     /// that permanently destroys a levelled program must not be a sale.
     pub(crate) fn handle_trade_program_confirm_key(&mut self, key: GameKey) {
         let confirmed = match key {
-            GameKey::Char('y') | GameKey::Char('Y') => true,
-            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => false,
-            _ => return,
+            GameKey::Esc => false,
+            _ => match self.yes_no(key) {
+                Some(answer) => answer,
+                None => return,
+            },
         };
         let Some(option) = self.pending_trade_program.take() else {
             self.mode = Mode::Trade;

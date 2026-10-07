@@ -494,3 +494,48 @@ fn traders_in_range_is_empty_on_the_surface_even_near_a_base_market() {
         "a base-space Market must not answer a surface-space scan, however close the numbers land"
     );
 }
+
+/// Standing on the sale confirm for the fixture's one program, reached by
+/// the real key path so the opening highlight is the one a player gets.
+fn on_the_sale_confirm() -> App {
+    let mut app = app_at_a_trading_post(924, &[(ids::CREDITS, 4)]);
+    open_the_trading_post(&mut app);
+    app.handle_key(GameKey::Up); // wraps to the last row: the program
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.mode, Mode::TradeProgramConfirm);
+    app
+}
+
+/// A sale permanently destroys a levelled program, so the confirm opens on
+/// "No" and Enter alone sells nothing.
+#[test]
+fn the_sale_confirm_opens_on_no_and_enter_sells_nothing() {
+    let mut app = on_the_sale_confirm();
+    assert_eq!(app.menu_selected, 1, "the highlight starts on No");
+    let credits = held(&app, ids::CREDITS);
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::TradeAction);
+    assert_eq!(held(&app, ids::CREDITS), credits);
+}
+
+#[test]
+fn up_then_enter_sells_the_program() {
+    let mut app = on_the_sale_confirm();
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::TradeAction);
+    assert!(held(&app, ids::CREDITS) > 4, "the program sold");
+}
+
+#[test]
+fn an_unrelated_key_leaves_the_sale_confirm_open() {
+    let mut app = on_the_sale_confirm();
+
+    app.handle_key(GameKey::Char('k'));
+
+    assert_eq!(app.mode, Mode::TradeProgramConfirm);
+    assert!(app.pending_trade_program.is_some());
+}

@@ -425,16 +425,9 @@ impl App {
             self.mode = Mode::MainMenu;
             return;
         }
-        let options = ['y', 'n'];
-        let idx = self
-            .selected_index(key, options.len())
-            .or_else(|| match key {
-                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-                _ => None,
-            });
-        match idx.map(|i| options[i]) {
-            Some('y') => self.quit = true,
-            Some('n') => self.mode = Mode::MainMenu,
+        match self.yes_no(key) {
+            Some(true) => self.quit = true,
+            Some(false) => self.mode = Mode::MainMenu,
             _ => {}
         }
     }

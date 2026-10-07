@@ -298,6 +298,7 @@ pub(super) fn draw_extract_confirm(
     game: &Game,
     program: Option<Entity>,
     index: Option<usize>,
+    selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -322,7 +323,11 @@ pub(super) fn draw_extract_confirm(
     if !lost.is_empty() {
         rows.push(text_row(format!("This loses: {}.", lost.join(", "))));
     }
-    rows.push(text_row("Enter to confirm, Esc to back out."));
+    rows.push(text_row(""));
+    rows.push(item_row("[y] Yes, destroy it", selected == 0));
+    rows.push(item_row("[n] No, keep it", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -204,6 +204,7 @@ pub(super) fn draw_trade_action_menu(
 pub(super) fn draw_trade_program_confirm(
     option: Option<&ProgramSaleOption>,
     money: &str,
+    selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -226,7 +227,10 @@ pub(super) fn draw_trade_program_confirm(
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row("[y] sell    [n] keep it    Esc to cancel"));
+    rows.push(item_row("[y] Yes, sell it", selected == 0));
+    rows.push(item_row("[n] No, keep it", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);
 }
 

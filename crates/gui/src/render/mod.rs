@@ -1427,6 +1427,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             game,
             app.pending_extract_program,
             app.pending_extract_index,
+            selected,
             refusal,
             painter,
             m,
@@ -1477,6 +1478,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_trade_program_confirm(
                 app.pending_trade_program.as_ref(),
                 &money,
+                selected,
                 refusal,
                 painter,
                 m,
@@ -1488,12 +1490,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::RespecPerksConfirm => {
             let quote = game.respec_quote(RespecSubject::Perks);
-            draw_respec_confirm(&quote, "perk", refusal, painter, m)
+            draw_respec_confirm(&quote, "perk", selected, refusal, painter, m)
         }
         Mode::RespecTalentsConfirm => {
             if let Some(target) = app.pending_develop_target {
                 let quote = game.respec_quote(RespecSubject::Talents(target));
-                draw_respec_confirm(&quote, "talent", refusal, painter, m);
+                draw_respec_confirm(&quote, "talent", selected, refusal, painter, m);
             }
         }
         Mode::Research if graph_view => research_graph::draw_research_graph(

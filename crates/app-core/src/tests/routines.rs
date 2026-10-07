@@ -90,7 +90,7 @@ fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
     let before = app.game.as_mut().unwrap().owned_pets().len();
     app.handle_key(GameKey::Char('2'));
     assert_eq!(app.mode, Mode::ExtractConfirm);
-    app.handle_key(GameKey::Enter);
+    app.handle_key(GameKey::Char('y'));
     assert_eq!(
         app.status_line, None,
         "extraction was refused with: {:?}",
@@ -136,7 +136,7 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
     open_via_menu(&mut app, 'p', "Extract a routine");
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Enter);
+    app.handle_key(GameKey::Char('y'));
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(
         app.game.as_mut().unwrap().owned_pets().len(),
@@ -191,4 +191,56 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
     assert_eq!(app.mode, Mode::RoutineTarget);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::PartyMenu);
+}
+
+/// Standing on the extract confirm for the fixture's one program.
+fn on_the_extract_confirm(seed: u32) -> App {
+    let mut app = app_owning_a_program_and_a_compiler(seed, &[FALLBACK_ABILITY_ID]);
+    open_via_menu(&mut app, 'p', "Extract a routine");
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::ExtractConfirm);
+    app
+}
+
+/// Destroying a program is the last thing a stray Enter should do, so the
+/// confirm opens on "No" and Enter alone backs out.
+#[test]
+fn the_extract_confirm_opens_on_no_and_enter_backs_out() {
+    let mut app = on_the_extract_confirm(66);
+    assert_eq!(app.menu_selected, 1, "the highlight starts on No");
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::ExtractPick);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets().len(), before);
+}
+
+#[test]
+fn up_then_enter_extracts() {
+    let mut app = on_the_extract_confirm(67);
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets().len(), before - 1);
+}
+
+/// "Any other key cancels" was the old rule; a stray keypress now leaves the
+/// question standing, and `n` is the explicit no.
+#[test]
+fn an_unrelated_key_leaves_the_extract_confirm_open() {
+    let mut app = on_the_extract_confirm(68);
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    app.handle_key(GameKey::Char('k'));
+
+    assert_eq!(app.mode, Mode::ExtractConfirm);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets().len(), before);
+
+    app.handle_key(GameKey::Char('n'));
+    assert_eq!(app.mode, Mode::ExtractPick);
 }

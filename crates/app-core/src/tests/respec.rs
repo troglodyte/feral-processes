@@ -126,3 +126,88 @@ fn r_still_opens_a_kernel_ring_on_the_talent_ladder() {
         "`r` is the ring, never the wipe"
     );
 }
+
+/// A refund is not undone by a second one, so a destructive confirm opens
+/// on "No": Enter alone, the key a player reaches for to dismiss, cancels.
+#[test]
+fn the_perk_confirm_opens_on_no_and_enter_cancels() {
+    let mut app = app_on_the_perk_screen(77);
+    app.handle_key(GameKey::Char('X'));
+    assert_eq!(app.menu_selected, 1, "the highlight starts on No");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Perks);
+    assert!(
+        app.status_line.is_none(),
+        "Enter on No cancels; reaching the engine would have refused out loud"
+    );
+}
+
+#[test]
+fn up_then_enter_confirms_the_perk_refund() {
+    let mut app = app_on_the_perk_screen(78);
+    app.handle_key(GameKey::Char('X'));
+
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Perks);
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("no perks")),
+        "Enter on Yes reaches the engine: {:?}",
+        app.status_line
+    );
+}
+
+#[test]
+fn an_unrelated_key_leaves_the_perk_confirm_open() {
+    let mut app = app_on_the_perk_screen(79);
+    app.handle_key(GameKey::Char('X'));
+
+    app.handle_key(GameKey::Char('k'));
+
+    assert_eq!(app.mode, Mode::RespecPerksConfirm);
+}
+
+#[test]
+fn the_talent_confirm_opens_on_no_and_enter_cancels() {
+    let mut app = app_on_the_talent_ladder(80);
+    app.handle_key(GameKey::Char('X'));
+    assert_eq!(app.menu_selected, 1, "the highlight starts on No");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::DevelopProgram);
+    assert!(app.status_line.is_none(), "{:?}", app.status_line);
+}
+
+#[test]
+fn up_then_enter_confirms_the_talent_refund() {
+    let mut app = app_on_the_talent_ladder(81);
+    app.handle_key(GameKey::Char('X'));
+
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::DevelopProgram);
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("no talents")),
+        "{:?}",
+        app.status_line
+    );
+}
+
+#[test]
+fn an_unrelated_key_leaves_the_talent_confirm_open() {
+    let mut app = app_on_the_talent_ladder(82);
+    app.handle_key(GameKey::Char('X'));
+
+    app.handle_key(GameKey::Char('k'));
+
+    assert_eq!(app.mode, Mode::RespecTalentsConfirm);
+}

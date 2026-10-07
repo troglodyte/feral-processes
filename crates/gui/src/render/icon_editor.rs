@@ -16,11 +16,11 @@
 //! pixel the player painted on purpose.
 //!
 //! **The grid, its cursor and the palette's swatches are `canvas::
-//! draw_canvas_grid` and `canvas::draw_swatch_row`'s**, shared with the
+//! draw_canvas_grid` and `canvas::draw_swatch_grid`'s**, shared with the
 //! dev-only sprite editor (a later task). This screen keeps its own chrome
 //! — the header, the two panels' background/border/label, and the footer —
 //! and calls one of the two per panel: `draw_canvas_grid` for the canvas
-//! panel, `draw_swatch_row` for the palette panel. Two panels, two
+//! panel, `draw_swatch_grid` for the palette panel. Two panels, two
 //! functions, each given its own `Rect` — the panes' own convention, "the
 //! caller takes the origin".
 
@@ -190,10 +190,10 @@ fn draw_canvas_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: 
 }
 
 /// The palette panel's chrome — content (the swatch row and its selection
-/// outline) is `canvas::draw_swatch_row`. `rect.h` is what tells it the
+/// outline) is `canvas::draw_swatch_grid`. `rect.h` is what tells it the
 /// swatch's own side, so passing `g.swatch` here is what keeps this
 /// panel's own, narrower-than-the-canvas strip width (see `SWATCH_LINES`'s
-/// doc comment) rather than a size `draw_swatch_row` would have to invent.
+/// doc comment) rather than a size `draw_swatch_grid` would have to invent.
 fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, "Palette", g.palette_label_y, m.small(), TEXT_DIM);
 
@@ -208,7 +208,13 @@ fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m:
         g.palette.w - m.inset * 2.0,
         g.swatch,
     );
-    canvas::draw_swatch_row(painter, inner, view.canvas.selected, &ICON_PALETTE);
+    canvas::draw_swatch_grid(
+        painter,
+        inner,
+        canvas::swatch_count(ICON_PALETTE.len()),
+        view.canvas.selected,
+        &ICON_PALETTE,
+    );
 }
 
 fn draw_footer(painter: &Painter, g: &Geometry, m: &Metrics) {

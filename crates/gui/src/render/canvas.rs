@@ -1,9 +1,9 @@
-//! `draw_canvas_grid` and `draw_swatch_row`: the pixel grid with its
+//! `draw_canvas_grid` and `draw_swatch_grid`: the pixel grid with its
 //! brush-sized cursor, and a row of palette swatches — the mechanics
 //! `render/icon_editor.rs` used to own outright, extracted so the dev-only
 //! sprite editor (a later task) can draw the same thing against a wider
 //! grid and a different palette. `draw_canvas_grid` consumes app-core's
-//! `CanvasView` the same way `icon_editor.rs` already did; `draw_swatch_row`
+//! `CanvasView` the same way `icon_editor.rs` already did; `draw_swatch_grid`
 //! takes only a selected index and a palette — it was never really an
 //! operation on a canvas, just one this file used to perform alongside one.
 //!
@@ -106,28 +106,51 @@ pub(crate) fn swatch_count(palette_len: usize) -> usize {
     palette_len + 1
 }
 
-/// Draws a row of palette swatches and the selected one's outline, and
-/// nothing else — no background, no border, no label. `rect` is the exact
-/// box the row fills — `rect.h` is the swatch side, `rect.w` its total
-/// width — so a caller that already computed a narrower strip than its
-/// canvas (the icon editor's palette panel) hands over something this
+pub(crate) fn swatch_rows(count: usize, cols: usize) -> usize {
+    count.div_ceil(cols.max(1))
+}
+
+/// A swatch's side for a grid `rect_h` tall and `rows` rows deep: the rows
+/// and the gaps between them fill the height. At one row the gap term is
+/// zero and this is `rect_h` itself, which is what keeps the icon editor's
+/// single strip exactly as it was drawn before the grid existed. Drawing and
+/// hit-testing both call this, so a click lands on the swatch that is drawn.
+pub(crate) fn swatch_side(rect_h: f32, rows: usize) -> f32 {
+    rect_h / (rows as f32 + rows.saturating_sub(1) as f32 * SWATCH_GAP_RATIO)
+}
+
+/// Draws palette swatches in a grid `cols` wide and the selected one's
+/// outline, and nothing else — no background, no border, no label. `rect` is
+/// the exact box the grid fills; the swatch side comes from its height
+/// (`swatch_side`), so a caller that already computed a strip narrower than
+/// its canvas (the icon editor's palette panel) hands over something this
 /// function reproduces exactly rather than re-deriving. `selected` is a
-/// palette index and also the drawn position — see `swatch_count`. Takes no
-/// `CanvasView`: a swatch row is not a property of a canvas, only of a
-/// palette and which entry is selected.
-pub(crate) fn draw_swatch_row(p: &Painter, rect: Rect, selected: u8, palette: &[(u8, u8, u8)]) {
-    let swatch = rect.h;
+/// palette index and also the drawn position, row-major — see
+/// `swatch_count`. The icon editor's palette is the one-row case,
+/// `cols == swatch_count`. Takes no `CanvasView`: a swatch grid is not a
+/// property of a canvas, only of a palette and which entry is selected.
+pub(crate) fn draw_swatch_grid(
+    p: &Painter,
+    rect: Rect,
+    cols: usize,
+    selected: u8,
+    palette: &[(u8, u8, u8)],
+) {
+    let count = swatch_count(palette.len());
+    let cols = cols.max(1);
+    let swatch = swatch_side(rect.h, swatch_rows(count, cols));
     let gap = swatch * SWATCH_GAP_RATIO;
-    for i in 0..swatch_count(palette.len()) {
-        let x = rect.x + i as f32 * (swatch + gap);
+    for i in 0..count {
+        let x = rect.x + (i % cols) as f32 * (swatch + gap);
+        let y = rect.y + (i / cols) as f32 * (swatch + gap);
         match i {
-            0 => draw_checker(p, x, rect.y, swatch),
-            n => p.rect(x, rect.y, swatch, swatch, palette_color(palette[n - 1])),
+            0 => draw_checker(p, x, y, swatch),
+            n => p.rect(x, y, swatch, swatch, palette_color(palette[n - 1])),
         }
         if selected as usize == i {
             p.rect_lines(
                 x,
-                rect.y,
+                y,
                 swatch,
                 swatch,
                 SELECTED_SWATCH_THICKNESS,
@@ -215,7 +238,7 @@ mod tests {
         let stride = 10.0 * (1.0 + SWATCH_GAP_RATIO);
         for selected in [0u8, 1, 3] {
             let (_, shapes) =
-                crate::paint::with_painter(|p| draw_swatch_row(p, rect, selected, &palette));
+                crate::paint::with_painter(|p| draw_swatch_grid(p, rect, 4, selected, &palette));
             let outlined = crate::paint::painted_rect_stroke_boxes(&shapes, SELECTED_SWATCH_COLOR);
             assert_eq!(outlined.len(), 1, "exactly one swatch is outlined");
             let want = selected as f32 * stride;
@@ -225,7 +248,7 @@ mod tests {
                 outlined[0].min.x
             );
         }
-        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_row(p, rect, 1, &palette));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_grid(p, rect, 4, 1, &palette));
         assert!(
             crate::paint::painted_rect_fill_count(&shapes, CHECKER_LIGHT) >= 1,
             "the transparent swatch is drawn as a checker"
@@ -233,13 +256,13 @@ mod tests {
         assert_eq!(swatch_count(palette.len()), 4);
     }
 
-    /// `draw_swatch_row` draws only the row: no grid cell and no cursor,
+    /// `draw_swatch_grid` draws only the row: no grid cell and no cursor,
     /// since it never receives a `CanvasView` to draw either from.
     #[test]
     fn the_swatch_row_draws_only_the_row() {
         let palette: [(u8, u8, u8); 3] = [(255, 0, 0), (0, 255, 0), (0, 0, 255)];
         let rect = Rect::new(0.0, 0.0, 30.0, 10.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_row(p, rect, 2, &palette));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_grid(p, rect, 4, 2, &palette));
 
         assert_eq!(
             crate::paint::painted_rect_fill_count(&shapes, palette_color(palette[1])),
@@ -251,5 +274,41 @@ mod tests {
             1,
             "exactly the selected swatch is outlined"
         );
+    }
+
+    /// **The icon editor's strip is the one-row case, unchanged.** Every
+    /// swatch sits at `x = i * (side + gap)` on the strip's own top edge, at
+    /// the strip's own height — the geometry the row drew before the grid
+    /// existed, asserted against those exact rects.
+    #[test]
+    fn a_one_row_grid_draws_exactly_the_old_strip() {
+        let palette: [(u8, u8, u8); 3] = [(255, 0, 0), (0, 255, 0), (0, 0, 255)];
+        let rect = Rect::new(7.0, 3.0, 60.0, 10.0);
+        let stride = 10.0 * (1.0 + SWATCH_GAP_RATIO);
+        for selected in 0..=3u8 {
+            let (_, shapes) = crate::paint::with_painter(|p| {
+                draw_swatch_grid(p, rect, swatch_count(palette.len()), selected, &palette)
+            });
+            let outlined = crate::paint::painted_rect_stroke_boxes(&shapes, SELECTED_SWATCH_COLOR);
+            assert_eq!(outlined.len(), 1);
+            let o = outlined[0];
+            assert_eq!(o.min.x, rect.x + selected as f32 * stride);
+            assert_eq!(o.min.y, rect.y);
+            assert_eq!(o.width(), 10.0);
+            assert_eq!(o.height(), 10.0);
+        }
+    }
+
+    /// Past the first row a swatch drops a stride, and wraps at `cols`.
+    #[test]
+    fn a_swatch_past_the_first_row_wraps_a_stride_down() {
+        let palette = [(1u8, 2u8, 3u8); 5];
+        let rect = Rect::new(0.0, 0.0, 60.0, 23.0);
+        let side = swatch_side(23.0, 2);
+        let stride = side * (1.0 + SWATCH_GAP_RATIO);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_grid(p, rect, 4, 5, &palette));
+        let o = crate::paint::painted_rect_stroke_boxes(&shapes, SELECTED_SWATCH_COLOR)[0];
+        assert!((o.min.x - stride).abs() < 1e-3, "5 % 4 = column 1");
+        assert!((o.min.y - stride).abs() < 1e-3, "5 / 4 = row 1");
     }
 }

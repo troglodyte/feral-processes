@@ -160,6 +160,26 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// The tint a full-colour (`.colour`) sprite is drawn with: grey at the
+/// brightest channel of `color`, so the hue is dropped while the map's
+/// shading and the damage dimming still reach it. `Painter::sprite` and the
+/// Sprite Forge preview both call this, so the preview cannot drift from the
+/// map.
+pub fn colour_sprite_tint(color: Color) -> Color {
+    let value = color.r.max(color.g).max(color.b);
+    Color::new(value, value, value, color.a)
+}
+
+/// The tint a sprite is drawn with: its own multiplying tint, or the grey
+/// `colour_sprite_tint` for the full-colour variant.
+pub fn sprite_tint(color: Color, full_colour: bool) -> Color {
+    if full_colour {
+        colour_sprite_tint(color)
+    } else {
+        color
+    }
+}
+
 /// The sprites the frontend has loaded, by name.
 ///
 /// A `TextureId` is a cheap handle egui resolves at paint time; the pixels
@@ -426,12 +446,7 @@ impl Painter {
         let Some((texture, full_colour)) = self.sprites.get(name) else {
             return false;
         };
-        let color = if full_colour {
-            let value = color.r.max(color.g).max(color.b);
-            Color::new(value, value, value, color.a)
-        } else {
-            color
-        };
+        let color = sprite_tint(color, full_colour);
         self.painter.image(
             texture,
             rect_of(x, y, size, size),
@@ -1131,6 +1146,14 @@ mod tests {
         assert_eq!(
             to_egui(Color::new(2.0, -1.0, 0.0, 1.0)).to_srgba_unmultiplied(),
             [255, 0, 0, 255]
+        );
+    }
+
+    #[test]
+    fn colour_sprite_tint_is_grey_at_the_max_channel_and_keeps_alpha() {
+        assert_eq!(
+            colour_sprite_tint(Color::new(0.1, 0.6, 0.5, 0.25)),
+            Color::new(0.6, 0.6, 0.6, 0.25)
         );
     }
 

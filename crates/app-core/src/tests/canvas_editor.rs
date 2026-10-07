@@ -12,7 +12,14 @@ const EDGE: usize = 8;
 const PALETTE_LEN: u8 = 15;
 
 fn editor() -> CanvasEditor {
-    CanvasEditor::open(Canvas::new(EDGE), PALETTE_LEN)
+    CanvasEditor::open(Canvas::new(EDGE), PALETTE_LEN, PALETTE_LEN + 1)
+}
+
+/// A 16-column, four-row palette — the sprite forge's shape.
+fn grid_editor() -> CanvasEditor {
+    let mut editor = CanvasEditor::open(Canvas::new(EDGE), 63, 16);
+    editor.handle_key(GameKey::Tab);
+    editor
 }
 
 /// The drawn cell at `(x, y)` as the view reports it.
@@ -324,4 +331,50 @@ fn a_key_the_editor_does_not_bind_is_reported_unhandled() {
     // them, which is how `IconEditor` takes them back.
     assert_eq!(editor.handle_key(GameKey::Enter), CanvasKey::Unhandled);
     assert_eq!(editor.handle_key(GameKey::Esc), CanvasKey::Unhandled);
+}
+
+#[test]
+fn up_and_down_move_a_whole_row_in_a_multi_row_palette_and_clamp_at_the_edges() {
+    let mut editor = grid_editor();
+    assert_eq!(editor.view().selected, 1);
+    editor.handle_key(GameKey::Up);
+    assert_eq!(
+        editor.view().selected,
+        0,
+        "row 0 clamps to the first swatch"
+    );
+    editor.handle_key(GameKey::Down);
+    assert_eq!(editor.view().selected, 16);
+    editor.handle_key(GameKey::Down);
+    editor.handle_key(GameKey::Down);
+    assert_eq!(editor.view().selected, 48);
+    editor.handle_key(GameKey::Down);
+    assert_eq!(
+        editor.view().selected,
+        63,
+        "the last row clamps to the last swatch"
+    );
+    editor.handle_key(GameKey::Up);
+    assert_eq!(editor.view().selected, 47);
+}
+
+#[test]
+fn left_and_right_still_step_one_swatch_in_a_multi_row_palette() {
+    let mut editor = grid_editor();
+    editor.handle_key(GameKey::Right);
+    assert_eq!(editor.view().selected, 2);
+    editor.handle_key(GameKey::Left);
+    editor.handle_key(GameKey::Left);
+    assert_eq!(editor.view().selected, 0);
+}
+
+#[test]
+fn a_one_row_palette_still_walks_on_all_four_arrows() {
+    let mut editor = editor();
+    editor.handle_key(GameKey::Tab);
+    editor.handle_key(GameKey::Down);
+    assert_eq!(editor.view().selected, 2);
+    editor.handle_key(GameKey::Up);
+    editor.handle_key(GameKey::Up);
+    assert_eq!(editor.view().selected, 0);
 }

@@ -73,6 +73,9 @@ it. `depot.colour.png` is the shipped example: every depot tier points at
 from disagreeing.
 
 If both `<key>.png` and `<key>.colour.png` exist, the colour one draws.
+The sprite editor opens and saves the colour file the same way: a sprite
+loaded from `<key>.colour.png` is written back to it, and new art that uses
+any hue (not just the grey ramp) is saved as `<key>.colour.png`.
 
 ### The one exception: a player-drawn icon
 
@@ -103,8 +106,9 @@ entity it was drawn for falls back to its glyph exactly as if the file were
 absent.
 
 The dev-only sprite editor (`FERAL_DEV_SPRITES`, a checkout-only screen —
-see `crates/gui/src/render/sprite_forge.rs`) is what writes `.png` files
-into this directory and what renames them to and from `.png.off`; nothing
+see `crates/gui/src/render/sprite_forge.rs`) is what writes `.png` and
+`.colour.png` files into this directory and what renames them to and from
+`.png.off` and `.colour.png.off` (each variant has its own pair); nothing
 else in the game does either. It is invisible in an installed build and to
 a player, so this directory's population is still meant to change only by
 someone dropping in a file — a stray `.png.off` sitting next to an enabled
@@ -114,12 +118,15 @@ art gets shelved without losing it.
 ## A save quantises the file, irreversibly
 
 The dev-only sprite editor reads any 16x16 PNG in this directory back onto
-its own `SPRITE_PALETTE`, snapping every pixel to the nearest of that
-palette's colours — so opening a piece of hand-authored art with a richer
-palette and pressing `[s]` writes back a quantised copy, with no warning and
-no backup kept anywhere. There is no undo for this once the file is
-overwritten (the editor's own `[u]` only reaches back through the session's
-own strokes). If you want to keep the original, copy it elsewhere first.
+its own 63-colour `SPRITE_PALETTE` (a nine-step grey ramp plus nine hue
+families of six shades), snapping every pixel to the nearest colour. The
+palette is fitted to the shipped art, so shipped sprites snap by at most
+about 72 in RGB distance (mean 13), but hand-authored art with other colours
+still changes, and pressing `[s]` writes back that quantised copy with no
+warning and no backup kept anywhere. There is no undo for this once the file
+is overwritten (the editor's own `[u]` only reaches back through the
+session's own strokes). If you want to keep the original, copy it elsewhere
+first.
 
 ## Fallback
 

@@ -13,6 +13,20 @@ use feral_processes_engine::icon::Canvas;
 use super::support::test_app;
 use crate::*;
 
+fn plain(canvas: Canvas) -> InstalledSprite {
+    InstalledSprite {
+        canvas,
+        full_colour: false,
+    }
+}
+
+fn colour(canvas: Canvas) -> InstalledSprite {
+    InstalledSprite {
+        canvas,
+        full_colour: true,
+    }
+}
+
 /// An app sitting on the main menu with both gates open — the flag and a
 /// sprite dir installed.
 fn app_with_sprite_forge(seed: u32) -> App {
@@ -180,9 +194,9 @@ fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
 fn sprite_subjects_reads_art_state_off_the_installed_library() {
     let mut app = app_with_sprite_forge(6);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
-    disabled.insert("player".to_string(), Canvas::new(16));
+    disabled.insert("player".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -216,7 +230,7 @@ fn the_static_list_is_cached_but_art_state_stays_live() {
     // what a cache that captured `art` alongside the static fields would
     // get wrong.
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, HashMap::new());
 
     let third = app.sprite_subjects();
@@ -283,7 +297,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
     let mut art = Canvas::new(16);
     art.set(0, 0, 5);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), art);
+    enabled.insert("anchor".to_string(), plain(art));
     app.install_sprite_library(enabled, HashMap::new());
 
     let subjects = app.sprite_subjects();
@@ -323,7 +337,7 @@ fn entering_an_off_subject_reopens_its_disabled_art_not_a_blank_canvas() {
     let mut art = Canvas::new(16);
     art.set(3, 4, 9);
     let mut disabled = HashMap::new();
-    disabled.insert("anchor".to_string(), art.clone());
+    disabled.insert("anchor".to_string(), plain(art.clone()));
     app.install_sprite_library(HashMap::new(), disabled);
 
     let subjects = app.sprite_subjects();
@@ -367,7 +381,7 @@ fn s_queues_exactly_one_save_carrying_the_edited_canvas() {
     assert_eq!(writes.len(), 1, "exactly one cue, not one per keystroke");
     assert_eq!(writes[0].name, "anchor");
     match &writes[0].op {
-        SpriteOp::Save(canvas) => assert_eq!(canvas.get(0, 0), 1, "the edit is in the cue"),
+        SpriteOp::Save { canvas, .. } => assert_eq!(canvas.get(0, 0), 1, "the edit is in the cue"),
         other => panic!("expected SpriteOp::Save, got {other:?}"),
     }
 }
@@ -390,9 +404,9 @@ fn esc_queues_nothing_and_returns_to_the_picker() {
 fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
     let mut app = app_with_sprite_forge(24);
     let mut enabled = HashMap::new();
-    enabled.insert("anchor".to_string(), Canvas::new(16));
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
-    disabled.insert("player".to_string(), Canvas::new(16));
+    disabled.insert("player".to_string(), plain(Canvas::new(16)));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -418,9 +432,9 @@ fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
         "the SpriteArt::None subject has nothing to toggle and queues nothing"
     );
     assert_eq!(writes[0].name, "anchor");
-    assert_eq!(writes[0].op, SpriteOp::Disable);
+    assert_eq!(writes[0].op, SpriteOp::Disable { full_colour: false });
     assert_eq!(writes[1].name, "player");
-    assert_eq!(writes[1].op, SpriteOp::Enable);
+    assert_eq!(writes[1].op, SpriteOp::Enable { full_colour: false });
 }
 
 #[test]
@@ -732,5 +746,584 @@ fn the_forge_row_refuses_when_the_forge_is_shut() {
     assert!(
         app.status_line.is_some(),
         "and it must say why rather than doing nothing"
+    );
+}
+
+// ---- the variant rule ---------------------------------------------------
+
+/// Index 9 is the lightest grey, 10 the first hue: the grey ramp is `1..=9`.
+const FIRST_HUE: u8 = 10;
+
+fn saved_variant(app: &mut App) -> (Canvas, bool) {
+    app.handle_key(GameKey::Char('s'));
+    let writes = app.take_sprite_writes();
+    assert_eq!(writes.len(), 1);
+    match writes.into_iter().next().unwrap().op {
+        SpriteOp::Save {
+            canvas,
+            full_colour,
+        } => (canvas, full_colour),
+        other => panic!("expected Save, got {other:?}"),
+    }
+}
+
+fn paint_cursor_cell(app: &mut App, swatch: u8) {
+    app.handle_pointer(
+        PointerHit::Swatch(swatch),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Swatch(swatch),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    app.handle_key(GameKey::Char(' '));
+}
+
+#[test]
+fn new_art_that_uses_a_hue_saves_as_full_colour() {
+    let mut app = app_with_sprite_forge(70);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(saved_variant(&mut app).1);
+}
+
+#[test]
+fn a_second_save_keeps_the_variant_the_first_one_chose() {
+    let mut app = app_with_sprite_forge(75);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(saved_variant(&mut app).1);
+    paint_cursor_cell(&mut app, 0);
+    assert!(
+        saved_variant(&mut app).1,
+        "re-deriving would write x.png beside the x.colour.png the first save made"
+    );
+}
+
+#[test]
+fn new_grey_only_art_saves_as_plain() {
+    let mut app = app_with_sprite_forge(71);
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE - 1);
+    assert!(!saved_variant(&mut app).1);
+}
+
+#[test]
+fn loaded_colour_art_stays_colour_after_a_grey_only_edit() {
+    let mut app = app_with_sprite_forge(72);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, 2);
+    assert!(saved_variant(&mut app).1);
+}
+
+#[test]
+fn loaded_plain_art_stays_plain_after_a_hued_edit() {
+    let mut app = app_with_sprite_forge(73);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(!saved_variant(&mut app).1);
+}
+
+#[test]
+fn the_view_reports_the_variant_the_art_will_save_as() {
+    let mut app = app_with_sprite_forge(74);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(&mut app, "anchor");
+    assert!(app.sprite_editor_view().unwrap().full_colour);
+    open_editor(&mut app, "player");
+    assert!(!app.sprite_editor_view().unwrap().full_colour);
+    paint_cursor_cell(&mut app, FIRST_HUE);
+    assert!(
+        app.sprite_editor_view().unwrap().full_colour,
+        "new art's preview follows what it would save as"
+    );
+}
+
+#[test]
+fn picker_t_carries_the_installed_variant() {
+    let mut app = app_with_sprite_forge(75);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
+    let mut disabled = HashMap::new();
+    disabled.insert("player".to_string(), colour(Canvas::new(16)));
+    app.install_sprite_library(enabled, disabled);
+    let subjects = app.sprite_subjects();
+    app.mode = Mode::SpritePicker;
+    for name in ["anchor", "player"] {
+        app.menu_selected = subjects.iter().position(|s| s.name == name).unwrap();
+        app.handle_key(GameKey::Char('t'));
+    }
+    let ops: Vec<_> = app.take_sprite_writes().into_iter().map(|w| w.op).collect();
+    assert_eq!(
+        ops,
+        [
+            SpriteOp::Disable { full_colour: true },
+            SpriteOp::Enable { full_colour: true }
+        ]
+    );
+}
+
+// -----------------------------------------------------------------------
+// The fill tool and the eyedropper
+// -----------------------------------------------------------------------
+
+/// A hollow box of index 2 around a 3x3 hole, on an otherwise blank canvas,
+/// opened in the forge on `cipher`.
+fn open_on_a_ring(app: &mut App) {
+    let mut art = Canvas::new(16);
+    for i in 4..=8 {
+        for (x, y) in [(i, 4), (i, 8), (4, i), (8, i)] {
+            art.set(x, y, 2);
+        }
+    }
+    let mut enabled = HashMap::new();
+    enabled.insert("cipher".to_string(), plain(art));
+    app.install_sprite_library(enabled, HashMap::new());
+    open_editor(app, "cipher");
+}
+
+fn cells(app: &App) -> Vec<u8> {
+    app.sprite_editor_view().unwrap().canvas.cells
+}
+
+fn pick_swatch(app: &mut App, index: u8) {
+    app.handle_pointer(
+        PointerHit::Swatch(index),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Swatch(index),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+}
+
+fn click(app: &mut App, x: u8, y: u8, button: PointerButton) {
+    app.handle_pointer(PointerHit::Cell(x, y), button, PointerPhase::Down);
+    app.handle_pointer(PointerHit::Cell(x, y), button, PointerPhase::Up);
+}
+
+#[test]
+fn f_toggles_the_fill_tool_and_the_view_reports_it() {
+    let mut app = app_with_sprite_forge(40);
+    open_editor(&mut app, "anchor");
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Paint);
+    app.handle_key(GameKey::Char('f'));
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Fill);
+    app.handle_key(GameKey::Char('f'));
+    assert_eq!(app.sprite_editor_view().unwrap().tool, Tool::Paint);
+}
+
+#[test]
+fn a_fill_stays_inside_the_ring_that_bounds_it() {
+    let mut app = app_with_sprite_forge(41);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 6, 6, PointerButton::Primary);
+
+    let after = cells(&app);
+    for y in 0..16usize {
+        for x in 0..16usize {
+            let inside = (5..=7).contains(&x) && (5..=7).contains(&y);
+            let ring = (4..=8).contains(&x) && (4..=8).contains(&y) && !inside;
+            let want = if inside {
+                3
+            } else if ring {
+                2
+            } else {
+                0
+            };
+            assert_eq!(after[y * 16 + x], want, "cell ({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn a_fill_ignores_the_brush_size() {
+    let mut app = app_with_sprite_forge(42);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_key(GameKey::Char('g'));
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.brush, 2);
+    click(&mut app, 6, 6, PointerButton::Primary);
+
+    let filled = cells(&app).iter().filter(|&&c| c == 3).count();
+    assert_eq!(filled, 9, "the whole 3x3 hole, not a 2x2 block of it");
+}
+
+#[test]
+fn a_fill_click_is_not_snapped_to_the_brush_grid() {
+    let mut app = app_with_sprite_forge(49);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_key(GameKey::Char('g'));
+    // (5, 5) would snap to (4, 4), the ring's corner.
+    click(&mut app, 5, 5, PointerButton::Primary);
+    assert_eq!(cells(&app).iter().filter(|&&c| c == 3).count(), 9);
+}
+
+#[test]
+fn one_undo_takes_back_the_whole_fill() {
+    let mut app = app_with_sprite_forge(43);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 6, 6, PointerButton::Primary);
+    assert_ne!(cells(&app), before);
+
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(cells(&app), before);
+}
+
+#[test]
+fn a_fill_that_changes_nothing_records_no_undo_entry() {
+    let mut app = app_with_sprite_forge(44);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    // One real edit, so there is something for `u` to reach.
+    pick_swatch(&mut app, 3);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    // Fill the blank outside with the colour it already is.
+    pick_swatch(&mut app, 0);
+    app.handle_key(GameKey::Char('f'));
+    click(&mut app, 12, 12, PointerButton::Primary);
+    // The fill landed on the painted cell's neighbours, which are index 0.
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo must reach the paint, so the no-op fill pushed nothing"
+    );
+}
+
+#[test]
+fn a_fill_drag_fills_once_and_the_rest_of_the_gesture_does_nothing() {
+    let mut app = app_with_sprite_forge(45);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    app.handle_pointer(
+        PointerHit::Cell(6, 6),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    let after_down = cells(&app);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(12, 12),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(12, 12),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    assert_eq!(
+        cells(&app),
+        after_down,
+        "Drag and Up after a fill Down act on nothing"
+    );
+}
+
+#[test]
+fn space_fills_at_the_cursor_in_fill_mode() {
+    let mut app = app_with_sprite_forge(46);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Char('f'));
+    for _ in 0..6 {
+        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(cells(&app).iter().filter(|&&c| c == 3).count(), 9);
+}
+
+#[test]
+fn the_eyedropper_key_selects_the_cursor_cells_colour_without_history() {
+    let mut app = app_with_sprite_forge(47);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    // Cursor to the ring corner (4, 4), whose index is 2.
+    for _ in 0..4 {
+        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 2);
+
+    // After a real edit, the pick must not take the undo slot that edit owns.
+    pick_swatch(&mut app, 3);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo reaches the paint, past the pick"
+    );
+}
+
+#[test]
+fn a_middle_click_picks_the_cells_colour_and_records_nothing() {
+    let mut app = app_with_sprite_forge(48);
+    open_on_a_ring(&mut app);
+    let before = cells(&app);
+    pick_swatch(&mut app, 3);
+    click(&mut app, 4, 4, PointerButton::Middle);
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 2);
+    assert_eq!(cells(&app), before, "the pick painted nothing");
+
+    // After a real edit, a pick must not take the undo slot that edit owns.
+    click(&mut app, 0, 0, PointerButton::Primary);
+    click(&mut app, 4, 4, PointerButton::Middle);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cells(&app),
+        before,
+        "one undo reaches the paint, past the pick"
+    );
+}
+
+// -----------------------------------------------------------------------
+// The button bar
+// -----------------------------------------------------------------------
+
+/// An editor on the ring with some history behind it, so every button has
+/// something to do.
+fn app_ready_for_buttons(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    open_on_a_ring(&mut app);
+    pick_swatch(&mut app, 3);
+    click(&mut app, 0, 0, PointerButton::Primary);
+    app
+}
+
+fn press(app: &mut App, button: EditorButton) {
+    app.handle_pointer(
+        PointerHit::Button(button),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Button(button),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+}
+
+/// Cells, brush, tool and selected swatch.
+type EditorState = (Vec<u8>, u8, Tool, u8);
+
+/// Everything a button can change, read back from the outside.
+fn observed(app: &mut App) -> (Mode, Option<EditorState>, Vec<SpriteWrite>) {
+    let view = app
+        .sprite_editor_view()
+        .map(|v| (v.canvas.cells, v.canvas.brush, v.tool, v.canvas.selected));
+    (app.mode, view, app.take_sprite_writes())
+}
+
+#[test]
+fn every_button_does_exactly_what_its_key_does() {
+    for (n, button) in EditorButton::ALL.into_iter().enumerate() {
+        let mut by_button = app_ready_for_buttons(60 + n as u32);
+        let mut by_key = app_ready_for_buttons(60 + n as u32);
+        // Same starting point, or the comparison below proves nothing.
+        assert_eq!(observed(&mut by_button), observed(&mut by_key));
+
+        press(&mut by_button, button);
+        by_key.handle_key(button.key());
+        let (b, k) = (observed(&mut by_button), observed(&mut by_key));
+        assert_eq!(b, k, "{button:?} must match its key {:?}", button.key());
+    }
+}
+
+#[test]
+fn the_buttons_are_not_vacuous_each_one_changes_something() {
+    let changed = |button| {
+        let mut app = app_ready_for_buttons(70);
+        let before = observed(&mut app);
+        press(&mut app, button);
+        before != observed(&mut app)
+    };
+    for button in EditorButton::ALL {
+        assert!(changed(button), "{button:?} did nothing");
+    }
+}
+
+#[test]
+fn a_button_acts_on_down_only() {
+    let mut app = app_ready_for_buttons(71);
+    let before = observed(&mut app);
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Clear),
+        PointerButton::Primary,
+        PointerPhase::Drag,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Clear),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    assert_eq!(observed(&mut app), before);
+}
+
+#[test]
+fn only_the_primary_button_presses_a_button() {
+    let mut app = app_ready_for_buttons(72);
+    let before = observed(&mut app);
+    for other in [PointerButton::Secondary, PointerButton::Middle] {
+        app.handle_pointer(
+            PointerHit::Button(EditorButton::Clear),
+            other,
+            PointerPhase::Down,
+        );
+    }
+    assert_eq!(observed(&mut app), before);
+}
+
+#[test]
+fn each_button_names_the_key_the_footer_documents() {
+    let table = [
+        (EditorButton::Save, GameKey::Char('s')),
+        (EditorButton::Undo, GameKey::Char('u')),
+        (EditorButton::Clear, GameKey::Char('x')),
+        (EditorButton::Brush, GameKey::Char('g')),
+        (EditorButton::Tool, GameKey::Char('f')),
+        (EditorButton::Back, GameKey::Esc),
+    ];
+    assert_eq!(table.len(), EditorButton::ALL.len());
+    for (button, key) in table {
+        assert_eq!(button.key(), key, "{button:?}");
+    }
+}
+
+// -----------------------------------------------------------------------
+// The picker by mouse
+// -----------------------------------------------------------------------
+
+fn on_the_picker(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(app.mode, Mode::SpritePicker);
+    app
+}
+
+fn subject_pointer(app: &mut App, index: usize, phase: PointerPhase) {
+    app.handle_pointer(PointerHit::Subject(index), PointerButton::Primary, phase);
+}
+
+#[test]
+fn a_click_on_a_subject_selects_it_and_opens_nothing() {
+    let mut app = on_the_picker(80);
+    subject_pointer(&mut app, 7, PointerPhase::Down);
+    subject_pointer(&mut app, 7, PointerPhase::Up);
+    assert_eq!(app.menu_selected, 7);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_double_click_on_the_selected_subject_opens_it_with_its_art_and_variant() {
+    let mut app = on_the_picker(81);
+    let index = app
+        .sprite_subjects()
+        .iter()
+        .position(|s| s.name == "cipher")
+        .unwrap();
+    let mut art = Canvas::new(16);
+    art.set(3, 3, 12);
+    let mut enabled = HashMap::new();
+    enabled.insert("cipher".to_string(), colour(art.clone()));
+    app.install_sprite_library(enabled, HashMap::new());
+
+    subject_pointer(&mut app, index, PointerPhase::Down);
+    subject_pointer(&mut app, index, PointerPhase::DoubleClick);
+
+    assert_eq!(app.mode, Mode::SpriteEditor);
+    let view = app.sprite_editor_view().unwrap();
+    assert_eq!(view.subject, "cipher");
+    assert!(view.full_colour, "the installed variant travels with it");
+    assert_eq!(view.canvas.cells[3 * 16 + 3], 12);
+}
+
+#[test]
+fn a_double_click_on_an_unselected_subject_only_selects_it() {
+    let mut app = on_the_picker(82);
+    app.menu_selected = 2;
+    subject_pointer(&mut app, 9, PointerPhase::DoubleClick);
+    assert_eq!(app.menu_selected, 9);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_subject_index_past_the_list_is_ignored() {
+    let mut app = on_the_picker(83);
+    app.menu_selected = 4;
+    let len = app.sprite_subjects().len();
+    subject_pointer(&mut app, len, PointerPhase::Down);
+    subject_pointer(&mut app, len, PointerPhase::DoubleClick);
+    assert_eq!(app.menu_selected, 4);
+    assert_eq!(app.mode, Mode::SpritePicker);
+}
+
+#[test]
+fn a_double_click_opens_what_enter_opens() {
+    let mut by_mouse = on_the_picker(84);
+    let mut by_key = on_the_picker(84);
+    by_mouse.menu_selected = 5;
+    by_key.menu_selected = 5;
+    subject_pointer(&mut by_mouse, 5, PointerPhase::DoubleClick);
+    by_key.handle_key(GameKey::Enter);
+    assert_eq!(by_mouse.mode, by_key.mode);
+    assert_eq!(
+        by_mouse
+            .sprite_editor_view()
+            .map(|v| (v.subject, v.canvas.cells)),
+        by_key
+            .sprite_editor_view()
+            .map(|v| (v.subject, v.canvas.cells)),
+    );
+}
+
+#[test]
+fn editor_hits_do_nothing_on_the_picker_and_subject_hits_do_nothing_in_the_editor() {
+    let mut app = on_the_picker(85);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert!(app.sprite_editor_view().is_none());
+
+    open_editor(&mut app, "anchor");
+    app.menu_selected = 0;
+    subject_pointer(&mut app, 3, PointerPhase::Down);
+    subject_pointer(&mut app, 3, PointerPhase::DoubleClick);
+    assert_eq!(app.mode, Mode::SpriteEditor);
+    assert_eq!(
+        app.menu_selected, 0,
+        "the picker's highlight is not the editor's"
     );
 }

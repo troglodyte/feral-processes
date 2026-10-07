@@ -16,11 +16,11 @@ use std::path::Path;
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
+use feral_processes_engine::icon::{Canvas, GREY_RAMP_LEN, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
 
-use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView};
+use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, Tool};
 use crate::{App, GameKey, Mode};
 
 /// The sprite canvas's edge — always 16, never a brush-dependent size (the
@@ -135,6 +135,31 @@ pub struct SpriteSubject {
     pub art: SpriteArt,
 }
 
+/// A sprite the frontend found on disk: its pixels and which file variant
+/// holds them. The variant is a fact about the installed art, carried with
+/// it, so the editor never has to guess which file a save belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstalledSprite {
+    pub canvas: Canvas,
+    /// `<name>.colour.png` rather than `<name>.png` — drawn with its tint's
+    /// hue dropped (`assets/sprites/README.md`).
+    pub full_colour: bool,
+}
+
+/// Whether art with no file yet must save as the colour variant: a hued
+/// sprite saved as plain `.png` would be multiplied by the species tint and
+/// go muddy. Index 0 is transparent and `1..=9` the grey ramp, so any index
+/// past 9 is a hue.
+fn saves_as_full_colour(canvas: &Canvas) -> bool {
+    let edge = canvas.edge();
+    (0..edge).any(|y| (0..edge).any(|x| canvas.get(x, y) > GREY_RAMP_LEN))
+}
+
+/// Swatches per row of the sprite palette grid: 64 swatches (the transparent
+/// one and 63 colours) as four rows of sixteen, nine families of six colours
+/// reading across and the greys leading.
+const SPRITE_PALETTE_COLS: u8 = 16;
+
 /// One `Mode::SpriteEditor` session — `CanvasEditor`'s shared mechanics
 /// plus which subject this is. The subject is a name rather than an index
 /// into `App::sprite_subjects()`: that list is rebuilt (and re-sorted, once
@@ -143,6 +168,9 @@ pub struct SpriteSubject {
 pub(crate) struct SpriteEditor {
     editor: CanvasEditor,
     subject: String,
+    /// The variant the art was opened with; `None` is new art, whose variant
+    /// is decided by what is drawn on it.
+    full_colour: Option<bool>,
 }
 
 impl SpriteEditor {
@@ -151,11 +179,19 @@ impl SpriteEditor {
     /// falling back to a blank 16x16 canvas only when the subject has never
     /// had art at all. Blank is a legitimate opening state here, unlike the
     /// player's own `@`: nothing filters it away before it can be saved.
-    fn open(subject: String, canvas: Canvas) -> SpriteEditor {
+    fn open(subject: String, canvas: Canvas, full_colour: Option<bool>) -> SpriteEditor {
         SpriteEditor {
-            editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8),
+            editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8, SPRITE_PALETTE_COLS),
             subject,
+            full_colour,
         }
+    }
+
+    /// The variant a save writes: the one the art was loaded as, else what
+    /// the canvas needs.
+    fn full_colour(&self) -> bool {
+        self.full_colour
+            .unwrap_or_else(|| saves_as_full_colour(self.editor.canvas()))
     }
 
     /// What the screen draws — `CanvasEditor`'s own view, the subject name
@@ -166,6 +202,9 @@ impl SpriteEditor {
             canvas: self.editor.view(),
             subject: self.subject.clone(),
             palette: &SPRITE_PALETTE,
+            full_colour: self.full_colour(),
+            palette_cols: SPRITE_PALETTE_COLS,
+            tool: self.editor.tool(),
         }
     }
 }
@@ -175,14 +214,21 @@ pub struct SpriteEditorView {
     pub canvas: CanvasView,
     pub subject: String,
     pub palette: &'static [(u8, u8, u8)],
+    /// The variant a save would write, so the preview can tint the way the
+    /// map will.
+    pub full_colour: bool,
+    /// Swatches per drawn row, the transparent swatch counted — the same
+    /// number the keyboard's Up and Down move by.
+    pub palette_cols: u8,
+    pub tool: Tool,
 }
 
 /// One cue for the frontend to act on. app-core queues it and forgets —
 /// `App::take_sounds`'s pattern, in the direction of a file instead of a
 /// speaker. **app-core never opens a file and never learns what a PNG
 /// is**: `Save` carries exactly the `Canvas` the loader already knows how
-/// to encode from, and `Enable`/`Disable` carry nothing because the toggle
-/// is a rename on the name alone.
+/// to encode from, and every op carries the variant (`full_colour`) so the
+/// frontend derives the one file it touches from `(name, variant)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpriteWrite {
     pub name: String,
@@ -192,13 +238,23 @@ pub struct SpriteWrite {
 /// What a queued `SpriteWrite` asks the frontend to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpriteOp {
-    /// Write `assets/sprites/<name>.png` from this canvas, replacing
-    /// whatever was there.
-    Save(Canvas),
-    /// Rename `<name>.png.off` back to `<name>.png`.
-    Enable,
-    /// Rename `<name>.png` to `<name>.png.off`.
-    Disable,
+    /// Write `assets/sprites/<name>.png` (`<name>.colour.png` when
+    /// `full_colour`) from this canvas, replacing whatever was there.
+    Save { canvas: Canvas, full_colour: bool },
+    /// Rename `<name>.png.off` back to `<name>.png` (or the colour pair).
+    Enable { full_colour: bool },
+    /// Rename `<name>.png` to `<name>.png.off` (or the colour pair).
+    Disable { full_colour: bool },
+}
+
+impl SpriteOp {
+    pub fn full_colour(&self) -> bool {
+        match self {
+            SpriteOp::Save { full_colour, .. }
+            | SpriteOp::Enable { full_colour }
+            | SpriteOp::Disable { full_colour } => *full_colour,
+        }
+    }
 }
 
 /// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
@@ -210,6 +266,43 @@ pub enum SpriteOp {
 pub enum PointerHit {
     Cell(u8, u8),
     Swatch(u8),
+    Button(EditorButton),
+    Subject(usize),
+}
+
+/// A clickable stand-in for one of the editor's keys. **A button has no
+/// effect of its own**: `handle_pointer` presses it by calling the key
+/// handler with `key()`, so a button and its key cannot drift apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorButton {
+    Save,
+    Undo,
+    Clear,
+    Brush,
+    Tool,
+    Back,
+}
+
+impl EditorButton {
+    pub const ALL: [EditorButton; 6] = [
+        EditorButton::Save,
+        EditorButton::Undo,
+        EditorButton::Clear,
+        EditorButton::Brush,
+        EditorButton::Tool,
+        EditorButton::Back,
+    ];
+
+    pub fn key(self) -> GameKey {
+        match self {
+            EditorButton::Save => GameKey::Char('s'),
+            EditorButton::Undo => GameKey::Char('u'),
+            EditorButton::Clear => GameKey::Char('x'),
+            EditorButton::Brush => GameKey::Char('g'),
+            EditorButton::Tool => GameKey::Char('f'),
+            EditorButton::Back => GameKey::Esc,
+        }
+    }
 }
 
 /// Which mouse button a `PointerHit` was reported for.
@@ -219,6 +312,8 @@ pub enum PointerButton {
     /// Paints index 0 — erase, the same thing `Backspace` already means on
     /// this editor.
     Secondary,
+    /// Picks the cell's colour, the eyedropper — `[i]`'s pointer twin.
+    Middle,
 }
 
 /// Where in a click-or-drag gesture a `PointerHit` was reported.
@@ -233,6 +328,8 @@ pub enum PointerPhase {
     Down,
     Drag,
     Up,
+    /// Only the picker reads this, and only on a `PointerHit::Subject`.
+    DoubleClick,
 }
 
 impl App {
@@ -263,8 +360,8 @@ impl App {
     /// `sprite_disabled`'s own doc comment.
     pub fn install_sprite_library(
         &mut self,
-        enabled: HashMap<String, Canvas>,
-        disabled: HashMap<String, Canvas>,
+        enabled: HashMap<String, InstalledSprite>,
+        disabled: HashMap<String, InstalledSprite>,
     ) {
         self.sprite_library = enabled;
         self.sprite_disabled = disabled;
@@ -454,8 +551,12 @@ impl App {
         if key == GameKey::Char('t') {
             if let Some(subject) = subjects.get(self.menu_selected) {
                 let op = match subject.art {
-                    SpriteArt::On => Some(SpriteOp::Disable),
-                    SpriteArt::Off => Some(SpriteOp::Enable),
+                    SpriteArt::On => Some(SpriteOp::Disable {
+                        full_colour: self.sprite_library[&subject.name].full_colour,
+                    }),
+                    SpriteArt::Off => Some(SpriteOp::Enable {
+                        full_colour: self.sprite_disabled[&subject.name].full_colour,
+                    }),
                     SpriteArt::None => None,
                 };
                 if let Some(op) = op {
@@ -468,16 +569,28 @@ impl App {
             return;
         }
         if let Some(idx) = self.selected_index(key, subjects.len()) {
-            let subject = &subjects[idx];
-            let canvas = self
-                .sprite_library
-                .get(&subject.name)
-                .or_else(|| self.sprite_disabled.get(&subject.name))
-                .cloned()
-                .unwrap_or_else(|| Canvas::new(SPRITE_EDGE));
-            self.sprite_editor = Some(SpriteEditor::open(subject.name.clone(), canvas));
-            self.mode = Mode::SpriteEditor;
+            self.open_sprite_subject(&subjects[idx].name);
         }
+    }
+
+    /// Opens `Mode::SpriteEditor` on `name`'s art — what `Enter` and a double
+    /// click both do. Enabled art first, then the disabled copy, and a blank
+    /// canvas only for a subject that never had any.
+    fn open_sprite_subject(&mut self, name: &str) {
+        let installed = self
+            .sprite_library
+            .get(name)
+            .or_else(|| self.sprite_disabled.get(name));
+        let editor = match installed {
+            Some(sprite) => SpriteEditor::open(
+                name.to_string(),
+                sprite.canvas.clone(),
+                Some(sprite.full_colour),
+            ),
+            None => SpriteEditor::open(name.to_string(), Canvas::new(SPRITE_EDGE), None),
+        };
+        self.sprite_editor = Some(editor);
+        self.mode = Mode::SpriteEditor;
     }
 
     /// What `Mode::SpriteEditor` draws, or `None` while it is not open.
@@ -518,10 +631,23 @@ impl App {
                 };
                 sprite_editor.editor.set_brush(next);
             }
+            GameKey::Char('f') => sprite_editor.editor.toggle_tool(),
+            GameKey::Char('i') => {
+                let (x, y) = sprite_editor.editor.view().cursor;
+                sprite_editor.editor.pick_colour_at(x, y);
+            }
             GameKey::Char('s') => {
+                // Pinned after the first save: re-deriving would let a later
+                // hue-free save write `x.png` beside the `x.colour.png`
+                // already on disk, and the stale colour file would win.
+                let full_colour = sprite_editor.full_colour();
+                sprite_editor.full_colour = Some(full_colour);
                 let write = SpriteWrite {
                     name: sprite_editor.subject.clone(),
-                    op: SpriteOp::Save(sprite_editor.editor.canvas().clone()),
+                    op: SpriteOp::Save {
+                        canvas: sprite_editor.editor.canvas().clone(),
+                        full_colour,
+                    },
                 };
                 self.pending_sprite_writes.push(write);
             }
@@ -532,20 +658,71 @@ impl App {
     }
 
     /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
-    /// is open, every other mode drops it silently, since nothing else in
+    /// or `Mode::SpritePicker` is open, every other mode drops it silently, since nothing else in
     /// the game reads a pointer at all. `phase` governs the stroke
     /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
     /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
     /// erase — on `Secondary`), a `Swatch` selects.
     ///
     /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
-    /// and that is the palette index itself**: `draw_swatch_row` draws the
+    /// and that is the palette index itself**: `draw_swatch_grid` draws the
     /// transparent swatch (index 0) first and palette entry `n` at position
     /// `n`. It used to be a `+ 1` conversion here, and getting that wrong
     /// selected the swatch left of the one outlined; with no conversion
     /// there is nothing at this seam to get wrong.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
-        if self.mode != Mode::SpriteEditor {
+        match self.mode {
+            Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),
+            Mode::SpritePicker => self.handle_picker_pointer(hit, button, phase),
+            _ => {}
+        }
+    }
+
+    /// A press on a picker row selects it, and a double click on the row that
+    /// is already selected opens it — `Enter`'s own door. An index past the
+    /// list is ignored, since the gui sizes its rects off the same list but a
+    /// stale frame must not be able to select nothing.
+    fn handle_picker_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
+        let PointerHit::Subject(index) = hit else {
+            return;
+        };
+        if button != PointerButton::Primary {
+            return;
+        }
+        let subjects = self.sprite_subjects();
+        let Some(subject) = subjects.get(index) else {
+            return;
+        };
+        match phase {
+            PointerPhase::Down => self.menu_selected = index,
+            PointerPhase::DoubleClick => {
+                if self.menu_selected == index {
+                    self.open_sprite_subject(&subject.name);
+                } else {
+                    self.menu_selected = index;
+                }
+            }
+            PointerPhase::Drag | PointerPhase::Up => {}
+        }
+    }
+
+    fn handle_editor_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
+        // A button is a key press, not a gesture: only a primary `Down`
+        // acts, and it opens no stroke.
+        if let PointerHit::Button(pressed) = hit {
+            if phase == PointerPhase::Down && button == PointerButton::Primary {
+                self.handle_sprite_editor_key(pressed.key());
+            }
             return;
         }
         let Some(sprite_editor) = &mut self.sprite_editor else {
@@ -555,19 +732,21 @@ impl App {
             sprite_editor.editor.begin_stroke();
         }
         match hit {
+            PointerHit::Cell(x, y) if button == PointerButton::Middle => {
+                sprite_editor.editor.pick_colour_at(x, y);
+            }
+            // A fill is one press, not a gesture: only `Down` acts.
+            PointerHit::Cell(..)
+                if sprite_editor.editor.tool() == Tool::Fill && phase != PointerPhase::Down => {}
             PointerHit::Cell(x, y) => {
                 let index = match button {
                     PointerButton::Primary => sprite_editor.editor.view().selected,
-                    PointerButton::Secondary => 0,
+                    PointerButton::Secondary | PointerButton::Middle => 0,
                 };
-                // M5, final review: snap to the brush grid before painting,
-                // or brush 2 anchors on whatever odd coordinate the pointer
-                // happened to land on — see `snap_to_brush`'s own doc
-                // comment.
-                let (x, y) = sprite_editor.editor.snap_to_brush(x, y);
-                sprite_editor.editor.paint_at(x, y, index);
+                sprite_editor.editor.apply_tool(x, y, index);
             }
             PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
+            PointerHit::Button(_) | PointerHit::Subject(_) => {}
         }
         if phase == PointerPhase::Up {
             sprite_editor.editor.end_stroke();

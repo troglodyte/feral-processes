@@ -391,3 +391,29 @@ fn there_is_no_editor_view_while_the_editor_is_not_open() {
     let app = test_app(1);
     assert!(app.icon_editor_view().is_none());
 }
+
+/// `f` and `i` are the sprite forge's own keys: the icon editor stays a
+/// paint-only screen and ignores both.
+#[test]
+fn the_icon_editor_ignores_the_forges_fill_and_eyedropper_keys() {
+    let mut editor = blank_editor();
+    editor.handle_key(GameKey::Char(' '));
+    let before = editor.view();
+    for key in ['f', 'i'] {
+        editor.handle_key(GameKey::Char(key));
+    }
+    assert_eq!(editor.view(), before);
+    editor.handle_key(GameKey::Right);
+    editor.handle_key(GameKey::Char(' '));
+    assert_eq!(
+        editor
+            .view()
+            .canvas
+            .cells
+            .iter()
+            .filter(|&&c| c != 0)
+            .count(),
+        2,
+        "still painting, not filling"
+    );
+}

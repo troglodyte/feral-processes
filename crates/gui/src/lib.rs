@@ -43,6 +43,7 @@ use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
 use sounds::SoundBank;
+pub use sprites::install_library as install_sprite_library;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
     match key {
@@ -211,6 +212,10 @@ struct Frontend {
 struct SpritePointer {
     active: Option<PointerButton>,
     last_hit: Option<PointerHit>,
+    /// Whether a frame with no button held has been seen since this tracker
+    /// was reset. A button still held when the editor opens by keyboard
+    /// must not paint the cell it happens to be over.
+    armed: bool,
 }
 
 /// Reads the egui pointer and drives `App::handle_pointer` for the sprite
@@ -219,7 +224,7 @@ struct SpritePointer {
 /// everything past `rects.resolve` is a `PointerHit`
 /// (`render::sprite_forge::cell_at`/`swatch_at`, tested headlessly).
 ///
-/// A no-op whenever `render::sprite_editor_hit_rects` returns `None` — no
+/// A no-op whenever `render::sprite_forge::sprite_hits` returns `None` — no
 /// mode check needed here beyond that, since a session is only ever open in
 /// `Mode::SpriteEditor` — and the tracker is reset in that case so a stroke
 /// cannot survive into a session that opens later.
@@ -234,19 +239,46 @@ fn handle_sprite_pointer(
     painter: &Painter,
     tracker: &mut SpritePointer,
 ) {
-    let Some(rects) = render::sprite_editor_hit_rects(app, painter) else {
+    let Some(rects) = render::sprite_forge::sprite_hits(app, painter) else {
         *tracker = SpritePointer::default();
         return;
     };
 
-    let (primary_down, secondary_down, hover) = ctx.input(|i| {
+    let (primary_down, secondary_down, middle_down, alt, hover) = ctx.input(|i| {
         (
             i.pointer.primary_down(),
             i.pointer.secondary_down(),
+            i.pointer.middle_down(),
+            i.modifiers.alt,
             i.pointer.hover_pos(),
         )
     });
-    let now_button = if primary_down {
+    if let render::sprite_forge::SpriteHits::Picker(_) = rects {
+        // The picker has no strokes: a press selects a row and a double
+        // click opens it, both read straight off egui.
+        *tracker = SpritePointer::default();
+        let (pressed, double) = ctx.input(|i| {
+            (
+                i.pointer.primary_pressed(),
+                i.pointer
+                    .button_double_clicked(egui::PointerButton::Primary),
+            )
+        });
+        let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
+        if let Some(h) = hit {
+            if pressed {
+                app.handle_pointer(h, PointerButton::Primary, PointerPhase::Down);
+            }
+            if double {
+                app.handle_pointer(h, PointerButton::Primary, PointerPhase::DoubleClick);
+            }
+        }
+        return;
+    }
+    // Alt+click is the eyedropper too, for a mouse with no middle button.
+    let now_button = if primary_down && alt || middle_down {
+        Some(PointerButton::Middle)
+    } else if primary_down {
         Some(PointerButton::Primary)
     } else if secondary_down {
         Some(PointerButton::Secondary)
@@ -258,7 +290,11 @@ fn handle_sprite_pointer(
         tracker.last_hit = Some(h);
     }
 
+    if now_button.is_none() {
+        tracker.armed = true;
+    }
     match (tracker.active, now_button) {
+        (None, Some(_)) if !tracker.armed => {}
         (None, Some(button)) => {
             // A press that starts outside both panels opens no stroke —
             // there is nothing to paint or select yet, and one may still
@@ -607,15 +643,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             wheel_acc: 0.0,
         })
         .init_resource::<sprites::Sprites>()
-        .add_systems(
-            Startup,
-            (
-                setup,
-                sprites::load,
-                sprites::install_library,
-                effects::load,
-            ),
-        )
+        .add_systems(Startup, (setup, sprites::load, effects::load))
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.
@@ -803,7 +831,7 @@ fn frame(
         fe.key_repeat.block_held();
         fe.last_mode = fe.app.mode;
     }
-    // Confined to `Mode::SpriteEditor` by `render::sprite_editor_hit_rects`
+    // Confined to `Mode::SpriteEditor` by `render::sprite_forge::sprite_hits`
     // returning `None` everywhere else — see `handle_sprite_pointer`'s own
     // doc comment for why no separate mode check is needed here.
     {

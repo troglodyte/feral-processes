@@ -1948,10 +1948,12 @@ impl Game {
     /// stay silent about running dry later, whether the drought is a bill
     /// of several items over many trips or a single dig plan's many cells.
     fn announce_dry(&mut self, site: Entity) {
+        // A rebuild waiting for a program is not short of material, and the
+        // player is the one who can answer it.
         if self
             .world
             .get::<BuildSite>(site)
-            .is_none_or(|b| b.announced_dry)
+            .is_none_or(|b| b.announced_dry || b.awaiting_program)
         {
             return;
         }

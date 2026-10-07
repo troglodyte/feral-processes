@@ -3842,6 +3842,7 @@ mod tests {
                     progress: 0,
                     goal: feral_processes_engine::components::BuildGoal::New,
                     program: None,
+                    awaiting_program: false,
                 });
             feral_processes_engine::save::save_to_file(&path, &data).unwrap();
             game = Game::load(&path, &test_assets()).unwrap();

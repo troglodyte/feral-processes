@@ -401,6 +401,9 @@ impl Game {
         // fixed against the sweep so a tick that fires both reads as two
         // events rather than an interleaving.
         let siege_fired = self.siege_check();
+        // After the siege clock, so a siege that opens this tick is already
+        // running and holds the filing.
+        self.file_ruins();
         // After the regular clock so a tick that fires both reads as two
         // events, the regular siege first: its fight then holds the march,
         // and one that resolved off-screen left no fight to hold it, so the

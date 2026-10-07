@@ -9,6 +9,16 @@ use crate::systems::SiteScales;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
+/// A rebuild site waiting for the player to commit a program to it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AwaitingSite {
+    pub site: Entity,
+    pub structure: StructureId,
+    /// Base-space coordinates.
+    pub x: i32,
+    pub y: i32,
+}
+
 impl Game {
     /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
     /// the party, spending `program` — a tamed program you own — to pay for
@@ -322,20 +332,7 @@ impl Game {
         // free.
         let mut site = BuildSite::new(def.id.clone(), build_cost);
         site.program = committed;
-        self.world.spawn((
-            site,
-            Position { x, y },
-            // A glyph, unlike a `DigSite` — which is what puts a build site
-            // on the map and under the examine ray for free, through
-            // `view_entities` and `find_target_in_direction` rather than a
-            // second draw path. The renderer paints its own frame around
-            // this; the character is what `x` reads and what a text-mode
-            // fallback would draw.
-            Glyph {
-                ch: BUILD_SITE_GLYPH,
-                color: GlyphColor::Orange,
-            },
-        ));
+        self.spawn_build_site(site, x, y);
         // Two sentences rather than one with an optional clause: the only
         // order that commits nothing is the Home, which never reaches this
         // line, so the `None` arm exists for a modded exempt structure and
@@ -350,6 +347,142 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
+    /// request's components are written, shared by `place_structure` and
+    /// `file_ruins` so a deploy and a rebuild cannot drift.
+    fn spawn_build_site(&mut self, site: BuildSite, x: i32, y: i32) -> Entity {
+        self.world
+            .spawn((
+                site,
+                Position { x, y },
+                // A glyph, unlike a `DigSite` — which is what puts a build
+                // site on the map and under the examine ray for free,
+                // through `view_entities` and `find_target_in_direction`
+                // rather than a second draw path. The renderer paints its own
+                // frame around this; the character is what `x` reads and
+                // what a text-mode fallback would draw.
+                Glyph {
+                    ch: BUILD_SITE_GLYPH,
+                    color: GlyphColor::Orange,
+                },
+            ))
+            .id()
+    }
+
+    /// Whether a siege is under way: an open tactical fight seated as one.
+    /// `TacticalBattle::siege_pack` is that field's own answer, and an
+    /// off-screen siege resolves inside a single tick so is never "running"
+    /// between ticks.
+    pub(crate) fn siege_running(&self) -> bool {
+        self.world
+            .get_resource::<crate::tactical::TacticalBattle>()
+            .is_some_and(|b| b.siege_pack > 0)
+    }
+
+    /// Files a rebuild site for every recorded wreck, once no siege is
+    /// running. Called from the base tick, so one call site serves a siege
+    /// ending on the board, in a tactical fight or off-screen, and a raid —
+    /// which is not a siege — files on the next tick.
+    ///
+    /// A wreck whose ground is taken is dropped and said so. A rebuild
+    /// costs what a fresh deploy costs, tier 1, and a structure that runs a
+    /// job is filed `awaiting_program` rather than paid for here: the
+    /// program is the player's to choose (`commit_rebuild_program`).
+    pub(crate) fn file_ruins(&mut self) {
+        if self
+            .world
+            .resource::<crate::resources::Ruins>()
+            .0
+            .is_empty()
+            || self.siege_running()
+        {
+            return;
+        }
+        let ruins = std::mem::take(&mut self.world.resource_mut::<crate::resources::Ruins>().0);
+        for ruin in ruins {
+            let Some(def) = self
+                .world
+                .resource::<StructureDb>()
+                .get(&ruin.kind)
+                .cloned()
+            else {
+                continue;
+            };
+            let footprint = crate::tactical::footprint_cells_at((ruin.x, ruin.y), def.footprint);
+            let standing = self.structure_footprints();
+            let blocked = footprint.iter().any(|&(fx, fy)| {
+                !self.world.resource::<BaseGrid>().is_floor(fx, fy)
+                    || standing.iter().any(|(_, p, side)| {
+                        crate::tactical::footprint_cells_at((p.x, p.y), *side).contains(&(fx, fy))
+                    })
+                    || self.base_space_build_site_at(fx, fy).is_some()
+                    || self.dig_site_at(fx, fy).is_some()
+            });
+            if blocked {
+                self.log_base(format!(
+                    "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
+                    def.name, ruin.x, ruin.y
+                ));
+                continue;
+            }
+            let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
+            site.awaiting_program = def.needs_program();
+            self.spawn_build_site(site, ruin.x, ruin.y);
+            self.log_base(format!(
+                "Your crew marks out the {} wreck at ({}, {}) to be rebuilt.",
+                def.name, ruin.x, ruin.y
+            ));
+        }
+    }
+
+    /// Commits `program` to a rebuild site that is waiting for one,
+    /// spending it through the same ladder a fresh deploy uses
+    /// (`commit_for_build`), then lets the crew work the site.
+    pub fn commit_rebuild_program(&mut self, site: Entity, program: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't deploy right now.".into());
+        }
+        let kind = match self.world.get::<BuildSite>(site) {
+            Some(build) if build.awaiting_program => build.structure.clone(),
+            _ => return Err("That site isn't waiting for a program.".into()),
+        };
+        let def = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .cloned()
+            .ok_or_else(|| "Unknown structure".to_string())?;
+        let committed = self.commit_for_build(Some(program), &def, BuildGoal::New)?;
+        let mut build = self
+            .world
+            .get_mut::<BuildSite>(site)
+            .expect("checked above, and commit_for_build despawns only the program");
+        build.program = committed;
+        build.awaiting_program = false;
+        Ok(())
+    }
+
+    /// Every rebuild site waiting for a program, in `(y, x)` order, for a
+    /// frontend to offer them.
+    pub fn awaiting_program_sites(&self) -> Vec<AwaitingSite> {
+        let mut found: Vec<AwaitingSite> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let build = e.get::<BuildSite>()?;
+                let pos = e.get::<Position>()?;
+                build.awaiting_program.then(|| AwaitingSite {
+                    site: e.id(),
+                    structure: build.structure.clone(),
+                    x: pos.x,
+                    y: pos.y,
+                })
+            })
+            .collect();
+        found.sort_by_key(|s| (s.y, s.x));
+        found
     }
 
     /// The whole program cost of a build order, answered once for both
@@ -856,6 +989,12 @@ impl Game {
         if !self.in_base() {
             return None;
         }
+        self.base_space_build_site_at(x, y)
+    }
+
+    /// `build_site_at` without the locale gate, for the one caller that
+    /// files from wherever the party happens to be standing.
+    fn base_space_build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self.world.query::<(Entity, &Position, &BuildSite)>();
         let rows: Vec<(Entity, Position, StructureId)> = query
             .iter(&self.world)

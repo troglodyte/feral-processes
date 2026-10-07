@@ -610,7 +610,13 @@ fn a_leader_that_outlives_the_siege_goes_home_alone_with_a_grudge() {
     }
     assert!(game.world.get_entity(leader).is_ok(), "the leader survives");
     let pos = *game.world.get::<Position>(leader).unwrap();
-    assert_eq!((pos.x, pos.y), (home.x, home.y));
+    // Home, give or take the one wander step the round's owed tick can take:
+    // which creature moves first depends on query order, which no test may
+    // lean on.
+    assert!(
+        (pos.x - home.x).abs() <= 1 && (pos.y - home.y).abs() <= 1,
+        "the leader is back at its home, not somewhere else"
+    );
     assert_eq!(game.world.get::<Nemesis>(leader).unwrap().0, grudge + 1);
     // `end_tactical_battle` owes the round's tick, so the reset muster has
     // already counted once.

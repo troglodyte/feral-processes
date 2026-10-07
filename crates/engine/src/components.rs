@@ -2839,6 +2839,11 @@ pub struct BuildSite {
     /// `None` only for a Home, the one exempt structure, and for the
     /// hand-spawned sites in test fixtures.
     pub program: Option<crate::save::CreatureSave>,
+    /// A rebuild of a structure that runs a job, filed after its wreck with
+    /// no program committed yet. Not workable and never announced dry, which
+    /// is about materials: it waits on the player, via
+    /// `Game::commit_rebuild_program`. Saved.
+    pub awaiting_program: bool,
 }
 
 impl BuildSite {
@@ -2871,6 +2876,7 @@ impl BuildSite {
             announced_stuck: false,
             goal,
             program: None,
+            awaiting_program: false,
         }
     }
 

@@ -1130,6 +1130,7 @@ fn a_part_supplied_upgrade_request_survives_a_reload() {
             announced_stuck: false,
             goal: crate::components::BuildGoal::Upgrade { to_tier: 3 },
             program: None,
+            awaiting_program: false,
         },
         Position { x: px + 1, y: py },
     ));

@@ -151,6 +151,7 @@ impl Game {
         let Some(outstanding) = self
             .world
             .get::<BuildSite>(site)
+            .filter(|build| !build.awaiting_program)
             .map(|build| build.outstanding())
         else {
             return false;

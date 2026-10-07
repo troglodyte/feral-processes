@@ -1971,6 +1971,26 @@ pub struct SiegePressure {
     pub warned: bool,
 }
 
+/// A structure `Game::damage_structure` destroyed that has not been filed as
+/// a rebuild yet. See `Game::file_ruins`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ruin {
+    pub kind: crate::structures::StructureId,
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Wrecks waiting for the base to be quiet enough to file their rebuilds.
+///
+/// Recorded by `Game::damage_structure` and never by `remove_structure`: a
+/// demolish is the player's choice and a wreck is a loss. Drained by
+/// `Game::file_ruins` once no siege is running, so one call site serves
+/// whatever ended the siege. Saved — a ruin recorded just before a save
+/// would otherwise be a free replacement — and not part of the rebuild
+/// itself, which is an ordinary `BuildSite`.
+#[derive(Resource, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Ruins(pub Vec<Ruin>);
+
 /// A dev override of whether the siege clock runs, set by
 /// `Game::dev_set_sieges`. Never saved and never inserted by `Game::new` or
 /// `load`: absent means "ask `FERAL_DEV_NO_SIEGES`", so inserting it eagerly

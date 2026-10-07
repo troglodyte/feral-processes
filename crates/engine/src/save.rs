@@ -1254,6 +1254,21 @@ pub struct BuildSiteSave {
     /// that run had.
     #[serde(default)]
     pub program: Option<CreatureSave>,
+    /// A rebuild site filed for a structure that runs a job, still waiting
+    /// for the player to commit a program — see
+    /// `components::BuildSite::awaiting_program`. Written in v37.
+    #[serde(default)]
+    pub awaiting_program: bool,
+}
+
+/// A wreck waiting to be filed as a rebuild — see `resources::Ruins`.
+/// Written in v37.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RuinSave {
+    pub kind: crate::structures::StructureId,
+    /// **Base-space** coordinates, `BuildSiteSave::position`'s rule.
+    pub x: i32,
+    pub y: i32,
 }
 
 /// A caravan mid-journey — see `components::Caravan`.
@@ -1558,6 +1573,12 @@ pub struct SaveData {
     /// what that run had.
     #[serde(default)]
     pub dig_sites: Vec<DigSiteSave>,
+    /// Destroyed structures not yet filed as rebuilds — see
+    /// `resources::Ruins`. `#[serde(default)]` keeps `dev-saves/` templates
+    /// (field-named RON with no version line) loading; the v37 bump is for
+    /// bincode-positional readers.
+    #[serde(default)]
+    pub ruins: Vec<RuinSave>,
     /// Every trap standing on the zone surface — see `components::Trap`.
     ///
     /// Additive behind `#[serde(default)]`, so it costs no
@@ -2030,7 +2051,11 @@ pub struct SaveData {
 /// positional, so a v35 file would misread every field after it. Load
 /// rejects any other version, so a pre-v36 save is refused rather than
 /// migrated (no migration, by design).
-pub const SAVE_FORMAT_VERSION: u32 = 36;
+///
+/// 36 → 37: siege rebuilds. `SaveData::ruins` and
+/// `BuildSiteSave::awaiting_program` are written; a v36 file would load with
+/// no wrecks to rebuild and every awaiting site as an ordinary one.
+pub const SAVE_FORMAT_VERSION: u32 = 37;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2328,6 +2353,7 @@ mod tests {
             nests: Vec::new(),
             traps: Vec::new(),
             dig_sites: Vec::new(),
+            ruins: Vec::new(),
             build_sites: Vec::new(),
             caravans: Vec::new(),
             caravan_memory: CaravanMemorySave::default(),

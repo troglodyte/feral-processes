@@ -3174,8 +3174,7 @@ pub const REJECTION_STATUSES: [&str; 3] = ["throttled", "exposed", "stun"];
 pub const REJECTION_STATUS_DURATION: u32 = 2;
 
 /// `core_fragment`s charged per point of Load to take an implant back out.
-/// Core fragments are zone-local and lost at a breach, so this is a price
-/// paid in the current zone's own currency. A cheap 2-Load implant costs 12
+/// A cheap 2-Load implant costs 12
 /// to remove, about what two kinetic edges cost to build.
 pub const IMPLANT_REMOVAL_FRAGMENTS_PER_LOAD: u32 = 6;
 

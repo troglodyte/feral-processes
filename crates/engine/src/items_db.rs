@@ -17,10 +17,9 @@ pub enum EconomyRole {
     ResearchCurrency,
     CraftCurrency,
     /// What a trader pays and charges. Deliberately *not* `Currency`: the
-    /// build economy runs on salvage a trader has no reason to hand out, and
-    /// this is the only currency that survives a zone breach (see
-    /// `Game::breach_portal`), which is why no trader may deal in the
-    /// `Currency` or `CraftCurrency` item — see
+    /// build economy runs on salvage a trader has no reason to hand out,
+    /// which is why no trader may deal in the `Currency` or `CraftCurrency`
+    /// item — see
     /// `StructureDb::strip_reserved_trade_goods`.
     TradeCurrency,
 }

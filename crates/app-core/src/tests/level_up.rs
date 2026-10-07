@@ -429,6 +429,41 @@ fn the_preview_carries_what_perks_and_gear_add() {
     assert_eq!(after, hud(&app));
 }
 
+/// Held Phase Keys scale the figure the spend lands on, so the preview's
+/// "after" must carry them too: keys 1 and 10 hold +15% Max HP, and the row
+/// read before the commit equals the real stat after it.
+#[test]
+fn the_preview_carries_held_phase_keys() {
+    let mut app = test_app(9512);
+    let path = scratch_path("points_preview_keys", 9512);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.phase_keys.held = 0b10_0000_0001;
+    data.player.stat_points = STAT_POINTS_PER_LEVEL;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+
+    app.mode = Mode::Perks;
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    let row = allocation_row(&app, "parity");
+    app.menu_selected = row;
+    app.handle_key(GameKey::ShiftRight);
+    let CreationRow::Attribute { effects, .. } = app.allocation_rows()[row].clone() else {
+        panic!("not an attribute row");
+    };
+    let (_, before, after) = effects
+        .into_iter()
+        .find(|(stat, _, _)| *stat == feral_processes_engine::attributes::DerivedStat::MaxHp)
+        .expect("Parity feeds Max HP");
+    let max_hp = |app: &App| app.game.as_ref().unwrap().player_status().max_hp as f32;
+    assert_eq!(before, max_hp(&app));
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(after, max_hp(&app));
+}
+
 /// Opens the player's own sheet through the picker, whose first row is you.
 fn open_own_manifest(app: &mut App) {
     app.mode = Mode::ManifestPick;

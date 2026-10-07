@@ -115,22 +115,20 @@ impl Game {
     /// The onboarding mission the run is on, or `None` once every step is
     /// finished.
     ///
-    /// **Derived, never stored**: the first mission in
-    /// `ContractDb::tutorial_chain` whose id is not in
-    /// `ActiveContracts::done`. There is no cursor and no index, so nothing
-    /// can disagree with `done` about where the player is — the rule
-    /// `views::BuildOrderRow` and `Game::morale` already follow.
+    /// **Derived, never stored**: the mission at
+    /// `ContractDb::tutorial_position` against `ActiveContracts::done`.
+    /// There is no cursor and no index, so nothing can disagree with `done`
+    /// about where the player is — the rule `views::BuildOrderRow` and
+    /// `Game::morale` already follow.
     ///
     /// Cloned rather than borrowed because every caller goes on to touch
     /// `&mut self`.
     pub(crate) fn current_tutorial(&self) -> Option<crate::contracts::ContractDef> {
         let done = &self.world.resource::<ActiveContracts>().done;
-        self.world
-            .resource::<crate::contracts::ContractDb>()
-            .tutorial_chain()
-            .into_iter()
-            .find(|def| !done.contains(&def.id))
-            .cloned()
+        let db = self.world.resource::<crate::contracts::ContractDb>();
+        db.tutorial_chain()
+            .get(db.tutorial_position(done))
+            .map(|def| (*def).clone())
     }
 
     /// Whether onboarding is still running. The board's suppression, the
@@ -336,8 +334,7 @@ impl Game {
     /// Where the run stands in the onboarding chain, as one sentence for the
     /// completion screen.
     ///
-    /// Counted off `ContractDb::tutorial_chain` against
-    /// `ActiveContracts::done`, `current_tutorial`'s rule: there is no cursor
+    /// `ContractDb::tutorial_position`, `current_tutorial`'s rule: there is no cursor
     /// and no index, so nothing can disagree with `done` about where the
     /// player is. Called *after* `complete_contract` has filed the mission,
     /// so the count includes the one just finished.
@@ -347,13 +344,11 @@ impl Game {
     /// of the chain rather than keeping a copy of it.
     fn onboarding_progress(&self) -> String {
         let done = &self.world.resource::<ActiveContracts>().done;
-        let chain = self
-            .world
-            .resource::<crate::contracts::ContractDb>()
-            .tutorial_chain();
-        let total = chain.len();
-        let finished = chain.iter().filter(|def| done.contains(&def.id)).count();
-        crate::contracts::onboarding_progress_line(finished, total)
+        let db = self.world.resource::<crate::contracts::ContractDb>();
+        crate::contracts::onboarding_progress_line(
+            db.tutorial_position(done),
+            db.tutorial_chain().len(),
+        )
     }
 
     /// How a contract's whole payout reads. The completion line and both

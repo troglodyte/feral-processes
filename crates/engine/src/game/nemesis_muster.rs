@@ -6,15 +6,12 @@ use crate::components::{
     Besieger, Carrying, NemesisFollower, NemesisHome, NemesisMuster, StolenFrom,
 };
 use crate::game::spawning::SpawnEscalation;
+use crate::situations::chebyshev;
 use crate::tuning::{
     NEMESIS_BAND_MAX, NEMESIS_FOLLOW_DISTANCE, NEMESIS_MARCH_DELAY, NEMESIS_RECRUIT_INTERVAL,
     NEMESIS_RECRUIT_RADIUS,
 };
 use crate::*;
-
-fn chebyshev(a: Position, b: Position) -> i32 {
-    (a.x - b.x).abs().max((a.y - b.y).abs())
-}
 
 impl Game {
     /// One world tick of every nemesis band: release followers whose leader
@@ -38,8 +35,8 @@ impl Game {
             .iter(&self.world)
             .collect();
         // Query order is not stable; a fixed order keeps the RNG draws of a
-        // fallback spawn reproducible.
-        leaders.sort();
+        // fallback spawn reproducible, and the same after a reload.
+        leaders.sort_by_key(|&l| self.nemesis_sort_key(l));
         for leader in leaders {
             self.muster_one(leader);
         }
@@ -222,8 +219,8 @@ impl Game {
                 Without<Besieger>,
             )>()
             .iter(&self.world)
-            .map(|(e, p)| (chebyshev(here, *p), e))
-            .filter(|&(d, _)| d <= NEMESIS_RECRUIT_RADIUS)
+            .map(|(e, p)| ((chebyshev(here, *p), p.x, p.y), e))
+            .filter(|&((d, ..), _)| d <= NEMESIS_RECRUIT_RADIUS)
             .min()
             .map(|(_, e)| e)
     }

@@ -4,15 +4,12 @@
 
 use super::support::*;
 use crate::components::{Besieger, NemesisFollower, NemesisHome, NemesisMuster};
+use crate::situations::chebyshev;
 use crate::tuning::{
     NEMESIS_BAND_MAX, NEMESIS_FOLLOW_DISTANCE, NEMESIS_RECRUIT_INTERVAL, NEMESIS_RECRUIT_RADIUS,
     WILD_CREATURE_CAP,
 };
 use crate::*;
-
-fn chebyshev(a: Position, b: Position) -> i32 {
-    (a.x - b.x).abs().max((a.y - b.y).abs())
-}
 
 /// The left end of a stretch of open ground far from the player, where no
 /// seeded wild population stands and a habitat species can spawn. A test
@@ -843,4 +840,33 @@ fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
         0,
         "no raider is left wandering"
     );
+}
+
+#[test]
+fn equidistant_recruits_are_chosen_by_cell_not_entity_order() {
+    // Both spawn orders, so the answer cannot be whichever way entity
+    // indices happen to compare.
+    for upper_first in [true, false] {
+        let mut game = new_game();
+        let (x, y) = open_ground(&mut game);
+        let leader = nemesis_at(&mut game, x, y);
+        let cells = if upper_first {
+            [(x + 3, y - 1), (x + 3, y + 1)]
+        } else {
+            [(x + 3, y + 1), (x + 3, y - 1)]
+        };
+        let spawned: Vec<Entity> = cells
+            .iter()
+            .map(|&(cx, cy)| wild_at(&mut game, cx, cy))
+            .collect();
+        let lower_cell = spawned[if upper_first { 0 } else { 1 }];
+
+        muster_for(&mut game, NEMESIS_RECRUIT_INTERVAL);
+
+        assert_eq!(
+            followers_of(&mut game, leader),
+            vec![lower_cell],
+            "upper_first={upper_first}: the lower cell wins the tie"
+        );
+    }
 }

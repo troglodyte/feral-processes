@@ -1890,14 +1890,18 @@ impl Game {
     /// very material it is waiting for, and a one-program base stops for the
     /// rest of the run.
     ///
-    /// Sorted by tile like `assembler_system`'s machines, so two requests
-    /// filed in the same tick are always raised in the same order.
+    /// Sorted by `(level, x, y)` — `StructureDb::level`, so a base raises
+    /// its miners before the machines that eat what they mine — and cut to
+    /// the lowest level that has a workable site. Within a level the tile
+    /// order is `assembler_system`'s, so two requests filed in the same tick
+    /// are always raised in the same order.
     fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
-        let mut sites: Vec<(i32, i32, Entity)> = {
+        let mut sites: Vec<(u32, i32, i32, Entity)> = {
             let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
+            let db = self.world.resource::<StructureDb>();
             query
                 .iter(&self.world)
-                .map(|(e, _, p)| (p.x, p.y, e))
+                .map(|(e, b, p)| (db.level(&b.structure), p.x, p.y, e))
                 .collect()
         };
         sites.sort_unstable();
@@ -1909,20 +1913,24 @@ impl Game {
         // beside the unreachable drop: only the thing that decides not to
         // staff a job knows the job went unstaffed.
         let mut workable = Vec::with_capacity(sites.len());
-        for (x, y, site) in sites {
+        for (level, _, _, site) in sites {
             if self.build_is_workable(site) {
                 if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
                     build.announced_dry = false;
                 }
-                workable.push((x, y, site));
+                workable.push((level, site));
             } else {
                 self.announce_dry(site);
             }
         }
-        let sites = workable;
-        sites
+        // Sorted ascending, so the first workable site names the lowest
+        // workable level. Dry sites never reached `workable`, which is why
+        // a stuck miner cannot freeze the assemblers above it.
+        let lowest = workable.first().map(|(level, _)| *level);
+        workable
             .into_iter()
-            .map(|(_, _, e)| (e, TaskKind::Construct))
+            .take_while(|(level, _)| Some(*level) == lowest)
+            .map(|(_, e)| (e, TaskKind::Construct))
             .collect()
     }
 

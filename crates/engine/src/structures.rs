@@ -785,10 +785,9 @@ pub fn structure_levels<'a>(
     for k in 0..n {
         for i in 0..n {
             if reach[i][k] {
-                for j in 0..n {
-                    if reach[k][j] {
-                        reach[i][j] = true;
-                    }
+                let via = reach[k].clone();
+                for (cell, through) in reach[i].iter_mut().zip(via) {
+                    *cell |= through;
                 }
             }
         }

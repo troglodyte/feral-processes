@@ -2507,3 +2507,73 @@ fn a_spent_pod_survives_a_save_and_load() {
         "a reload does not hand the run its charge back for free"
     );
 }
+
+/// Delivered units on the site at `(dx, dy)`, summed over the bill.
+fn delivered_total(game: &mut Game, dx: i32, dy: i32) -> u32 {
+    let site = site_at(game, dx, dy);
+    game.world
+        .get::<BuildSite>(site)
+        .map(|b| b.delivered.iter().map(|(_, q)| q).sum())
+        .unwrap_or(0)
+}
+
+/// **Build order is by production level, not by tile.** The assembler is
+/// filed on the lower-`x` tile, which the old `(x, y)` sort raised first.
+#[test]
+fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
+    let mut game = base(1201);
+    // Two bodies, so a want left unfiltered would have somewhere to go.
+    builder(&mut game);
+    builder(&mut game);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    file_build(&mut game, "assembly_bay", -1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
+
+    let (px, py) = game.base_pos().unwrap();
+    let mut raised = false;
+    for _ in 0..200 {
+        game.tick();
+        let untouched = game
+            .build_site_at(px - 1, py)
+            .and_then(|e| {
+                game.world
+                    .get::<BuildSite>(e)
+                    .map(|b| b.delivered.is_empty())
+            })
+            .unwrap_or(false);
+        if structure_at(&mut game, 1, 0).is_some() {
+            raised = true;
+            break;
+        }
+        assert!(
+            untouched,
+            "the assembler waits while a lower-level site is workable"
+        );
+    }
+    assert!(raised, "the miner is raised");
+}
+
+/// A dry miner never freezes the base: the assembler is worked instead.
+#[test]
+fn a_dry_miner_does_not_hold_the_assembler_back() {
+    let mut game = base(1202);
+    builder(&mut game);
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(ItemId::from(ids::CORE_FRAGMENT), held);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", -1, 0).unwrap();
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert!(
+        delivered_total(&mut game, 1, 0) > 0,
+        "the miner has nothing to fetch, so the assembler's coils are carried"
+    );
+}

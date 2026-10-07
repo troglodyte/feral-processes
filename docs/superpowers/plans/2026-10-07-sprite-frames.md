@@ -43,17 +43,15 @@ battle,terrain,creation,notify}.rs`, `assets/sprites/README.md`,
    - 2 frames flip every `frame_ms`.
    - Two `phase_key`s give different frames at the same `now` for at least
      one sampled time.
-   - `now = 0` with phase ignored gives 0. This is the fx-off contract; the
-     caller passes `phase_key = 0` and `now = 0`.
 2. **`SpriteTable` entries.**
    - The `(TextureId, bool)` entry becomes `struct SpriteEntry { texture,
      full_colour, frames: usize, frame_ms: u32 }`.
    - `insert` takes the frame count and `frame_ms`. Update `get`, `remove`
      and every caller.
 3. **`Painter`.**
-   - Add an `anim_now: f64` field, copied in `clipped()` (around line
-     356).
-   - Add `pub fn set_anim_now(&mut self, now: f64)`.
+   - Add an `anim_now: Option<f64>` field, copied in `clipped()` (around
+     line 356).
+   - Add `pub fn set_anim_now(&mut self, now: Option<f64>)`.
    - `sprite(name, x, y, size, color, phase_key: u64)`: the UVs become
      `[f/frames, (f+1)/frames] x [0, 1]` with `f = sprite_frame(...)`.
    - Test: extend `painted_images` (paint.rs:614) or add a sibling that
@@ -61,11 +59,11 @@ battle,terrain,creation,notify}.rs`, `assets/sprites/README.md`,
      - A 2-frame entry draws `u ∈ [0.5, 1]` at a `now` that picks frame 2.
      - A 1-frame entry draws full UVs.
 4. **`lib.rs`.** After the `\` toggle (around line 854), call
-   `painter.set_anim_now(if fe.fx.enabled { now } else { 0.0 })`. When fx
-   is off, sprites also need phase 0: `sprite()` ignores `phase_key` when
-   `anim_now == 0.0`. Document that in the doc comment as the "fx-off"
-   meaning. Update the `for_frame` test caller at lib.rs:2083 if its
-   signature changed.
+   `painter.set_anim_now(fe.fx.enabled.then_some(now))`. The field is
+   `anim_now: Option<f64>`, and `None` means fx is off: frame 1, phase
+   ignored. Don't use a `0.0` sentinel; review has already flagged one of
+   those as a defect. Update the `for_frame` test caller at lib.rs:2083 if
+   its signature changed.
 5. **Call sites.**
    - `base.rs:1222` and `:1230` pass `ev.entity.to_bits()`, using the key
      the nearby fx calls use.
@@ -171,7 +169,7 @@ write paths), `gui/src/render/sprite_forge.rs`.
      a speed readout in ms. Never in ticks (memory:
      no-player-facing-tick-vocabulary).
    - The preview cell draws `frames[sprite_frame(now, 0, n, frame_ms)]`.
-     The view needs `now`; take it from `Painter.anim_now`.
+     The view needs `now`; take it from `Painter.anim_now`, and show frame 1 when it is `None`.
    - Extend the existing render tests: a 2-frame view draws both tab
      labels, and the preview draws the frame `sprite_frame` picks.
    - Check the popup and button-bar width against

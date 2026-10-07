@@ -1397,6 +1397,18 @@ mod tests {
         .unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
 
+        // Where the keyed fight ends today, per zone, in whole percent of HP
+        // left. The no-regression asserts below cannot see a curve move, so
+        // a retune of keys, gear or the zone curve lands here and has to be
+        // re-read rather than slipping by.
+        const KEYED_HP_LEFT_PERCENT: [f32; 10] =
+            [97.0, 78.0, 74.0, 72.0, 74.0, 79.0, 79.0, 75.0, 71.0, 69.0];
+        const KEYED_HP_BAND: f32 = 2.0;
+        assert_eq!(
+            KEYED_HP_LEFT_PERCENT.len() as u32,
+            crate::tuning::PHASE_KEY_COUNT
+        );
+
         for zone in 1..=crate::tuning::PHASE_KEY_COUNT {
             let level = crate::tuning::zone_level_cap(zone);
             let (gear_atk, gear_mit, gear_acc, gear_eva, weapon_range) =
@@ -1454,6 +1466,17 @@ mod tests {
             assert!(
                 keyed.player_won || !bare.player_won,
                 "zone {zone}: keys 1..={zone} lost a fight the keyless player won"
+            );
+            assert!(
+                keyed.player_won && bare.player_won,
+                "zone {zone}: the capped, geared fight is no longer won"
+            );
+            let left = keyed.player_hp_fraction * 100.0;
+            let expected = KEYED_HP_LEFT_PERCENT[zone as usize - 1];
+            assert!(
+                (left - expected).abs() <= KEYED_HP_BAND,
+                "zone {zone}: keyed HP left {left:.1}% moved off {expected}% (+-{KEYED_HP_BAND}) \
+                 - the key or zone curve changed"
             );
             assert!(
                 keyed.player_hp_fraction >= bare.player_hp_fraction,

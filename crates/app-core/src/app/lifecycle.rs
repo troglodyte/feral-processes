@@ -535,15 +535,16 @@ impl App {
         self.mode = Mode::Notification;
     }
 
-    /// Only Esc dismisses — any key used to, and an incidental keypress was
-    /// blowing past a notification before it was read. The next one takes
+    /// Only Esc or Enter dismisses — any key used to, and an incidental
+    /// keypress was blowing past a notification before it was read. Enter is
+    /// the other deliberate key: the one a player reaches for to say "got it". The next one takes
     /// the screen straight away if there is one, so a burst arrives one at
     /// a time rather than being collapsed into the last of them — which is
     /// why this pops here rather than falling back to `Mode::Playing` and
     /// waiting a tick for `after_tick`, a tick that does not come until the
     /// player acts.
     pub(crate) fn handle_notification_key(&mut self, key: GameKey) {
-        if key != GameKey::Esc {
+        if !matches!(key, GameKey::Esc | GameKey::Enter) {
             return;
         }
         self.pending_notification = None;

@@ -229,3 +229,16 @@ fn both_quit_confirms_take_arrows_and_enter() {
     assert_eq!(app.mode, Mode::MainMenu);
     assert!(!app.quit);
 }
+
+/// Esc on the main menu asks the same question `q` does rather than doing
+/// nothing; the answer is still the player's.
+#[test]
+fn esc_on_the_main_menu_opens_the_quit_confirm() {
+    let mut app = test_app(9200);
+    app.mode = Mode::MainMenu;
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::QuitAppConfirm);
+    assert!(!app.quit, "asking is not quitting");
+}

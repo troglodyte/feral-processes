@@ -45,7 +45,8 @@ picked is your whole pack.
 Your look is a glyph and a colour, and it is only a look. They come as two screens: five shapes,
 then the swatches. Enter takes the row you are standing on and moves you along, and n walks past
 without changing anything. A sixth row on the shape screen opens an editor to draw your own map
-icon; the swatch still colours your glyph everywhere else. The preview in the corner follows the
+icon. Enter in the editor keeps the drawing and moves you on to the swatches; Esc throws it away and
+returns you to the shapes. The swatch still colours your glyph everywhere else. The preview in the corner follows the
 cursor, so you can see an option before you take it, and it is drawn the same way the map draws
 you.
 

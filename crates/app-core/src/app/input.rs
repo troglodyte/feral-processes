@@ -342,6 +342,8 @@ impl App {
             Mode::GameOver => self.handle_game_over_key(),
             Mode::QuitRunConfirm => self.handle_quit_run_confirm_key(key),
             Mode::QuitAppConfirm => self.handle_quit_app_confirm_key(key),
+            Mode::BasinExitConfirm => self.handle_basin_exit_confirm_key(key),
+            Mode::Ending => self.handle_ending_key(key),
             Mode::ArenaBuilder => self.handle_arena_builder_key(key),
             Mode::ArenaLoad => self.handle_arena_load_key(key),
             Mode::ArenaSave => self.handle_arena_save_key(key),

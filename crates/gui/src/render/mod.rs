@@ -45,6 +45,7 @@ mod creation;
 mod depot_filter;
 mod dispatch;
 mod dossier;
+mod ending;
 mod extraction;
 mod field;
 mod frame_map;
@@ -574,6 +575,7 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::Notification
             | Mode::LevelUp
             | Mode::PerkBought
+            | Mode::Ending
             | Mode::SpritePicker
             | Mode::SpriteEditor
     )
@@ -662,6 +664,12 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 Some(report) => perk_bought::draw_perk_bought(report, painter, &m),
                 None => draw_mode_overlay(app, None, painter, &m),
             }
+        }
+        // `Mode::PerkBought`'s arrangement: over the map, no popup, and
+        // `needs_status_banner` carries a refusal.
+        Mode::Ending => {
+            draw_playing_base(app, fx, None, painter, &m, reveal);
+            ending::draw_ending(&app.ending_screens, app.ending_page, painter, &m);
         }
         Mode::Battle => draw_battle(app, fx, painter, &m),
         Mode::BattleTarget => {
@@ -1546,6 +1554,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
         Mode::BaseOutput => draw_base_output(game, refusal, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
+        Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
     }
 }
@@ -1614,7 +1623,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 130] = [
+    const ALL_MODES: [Mode; 132] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1735,6 +1744,8 @@ mod tests {
         Mode::Notification,
         Mode::LevelUp,
         Mode::PerkBought,
+        Mode::Ending,
+        Mode::BasinExitConfirm,
         Mode::GameOver,
         Mode::QuitRunConfirm,
         Mode::QuitAppConfirm,

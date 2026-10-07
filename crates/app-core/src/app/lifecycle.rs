@@ -81,6 +81,8 @@ impl App {
             allocation_duel: None,
             perk_previews: Vec::new(),
             pending_perk_report: None,
+            ending_screens: Vec::new(),
+            ending_page: 0,
             allocation_spent: Default::default(),
             allocation_origin: AllocationOrigin::default(),
             manifest_origin: ManifestOrigin::default(),

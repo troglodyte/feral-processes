@@ -18,6 +18,7 @@ mod dev_console;
 mod develop;
 mod dispatch;
 mod dossier;
+mod ending;
 mod excavate;
 mod extraction;
 mod field;

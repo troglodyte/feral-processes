@@ -106,7 +106,6 @@ pub(crate) fn swatch_count(palette_len: usize) -> usize {
     palette_len + 1
 }
 
-/// How many rows `count` swatches take at `cols` per row.
 pub(crate) fn swatch_rows(count: usize, cols: usize) -> usize {
     count.div_ceil(cols.max(1))
 }

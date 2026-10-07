@@ -248,7 +248,6 @@ pub enum SpriteOp {
 }
 
 impl SpriteOp {
-    /// Which file variant this op acts on.
     pub fn full_colour(&self) -> bool {
         match self {
             SpriteOp::Save { full_colour, .. }
@@ -268,7 +267,6 @@ pub enum PointerHit {
     Cell(u8, u8),
     Swatch(u8),
     Button(EditorButton),
-    /// A picker row, by its index in `App::sprite_subjects`.
     Subject(usize),
 }
 
@@ -286,7 +284,6 @@ pub enum EditorButton {
 }
 
 impl EditorButton {
-    /// Every button, in the order the bar draws them.
     pub const ALL: [EditorButton; 6] = [
         EditorButton::Save,
         EditorButton::Undo,
@@ -296,7 +293,6 @@ impl EditorButton {
         EditorButton::Back,
     ];
 
-    /// The key this button presses.
     pub fn key(self) -> GameKey {
         match self {
             EditorButton::Save => GameKey::Char('s'),

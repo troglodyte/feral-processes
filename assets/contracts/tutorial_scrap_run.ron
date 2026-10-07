@@ -1,7 +1,7 @@
 (
     id: "tutorial_scrap_run",
     name: "Scrap Run",
-    description: "Engage wild programs until you are carrying twelve Core Fragments.",
+    description: "Fight wild programs and take the bodies apart with [D] until you are carrying twelve Core Fragments.",
     objective: Hold(item: "core_fragment", count: 12),
     reward: [Credits(20), Item("core_fragment", 6), Xp(80)],
     tutorial: Some(30),

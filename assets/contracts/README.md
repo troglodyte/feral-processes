@@ -5,7 +5,7 @@ time a game session starts — no recompiling required. A malformed file is
 skipped with a warning logged in-game rather than crashing startup.
 
 Like `assets/achievements/`, this **is** a content directory: a new contract is
-a new file, not a new enum variant. The five `objective` shapes and three
+a new file, not a new enum variant. The `objective` shapes and three
 `reward` shapes below are the whole vocabulary, and every combination of them
 already works.
 
@@ -56,7 +56,7 @@ place to edit.
     // leaves the wording stale until you edit it.
     description: "Drones have settled in the shallows around the base. Thin them out before they multiply.",
 
-    // What finishes it. Exactly one of the five below.
+    // What finishes it. Exactly one of the shapes below.
     objective: Terminate(species: Some("drone"), count: 6),
 
     // What it pays, in full, once. One or more of the three below.
@@ -94,6 +94,7 @@ place to edit.
 | `Breach(zone: 3)` | the run reaches sector 3 or deeper |
 | `Build(structure: "refinery")` | one of those is deployed |
 | `Hold(item: "core_fragment", count: 12)` | you have that many in your pack at once |
+| `Standing(band: Warm)` | any settlement holds you at that band or better |
 | `Perform(deed: Examined)` | you do that particular thing once |
 
 `Terminate` names a species id from `assets/species/`; `Deliver` an item id from
@@ -108,7 +109,9 @@ Everything else is measured wherever you are, including four frames down.
 
 `Perform` names a **deed**, which is a fixed list rather than an id from an
 asset directory: `Examined`, `Tamed`, `TookFromContainer`,
-`QueuedStandingOrder`, `UnlockedPerk`, `PostedStaff`. These are things the
+`QueuedStandingOrder`, `UnlockedPerk`, `PostedStaff`, `ClearedNest`,
+`RepelledRaid`, `ReturnedSortie`, `TradedWithTown`, `ExtractedProgram`,
+`CollapsedStack`, `FinishedResearch`. These are things the
 engine emits, so unlike a species or an item they cannot be added by a mod,
 and a name outside the list is refused by `ron` at load rather than costing
 you a contract that never finishes.
@@ -212,6 +215,11 @@ claiming one step is refused at load, as is `tutorial` beside `starter` or
 
 The chain runs on new games only. A save made before this existed has every
 mission filed as finished at load.
+
+A run's place in the chain is one past the **furthest** step it has finished,
+not the first one it has not. A mission added later at a step behind where a
+run already stands is skipped by that run rather than handed out, so a
+finished chain stays finished and its board stays open.
 
 **A mission must be finishable, or onboarding stops for the rest of the
 run.** The shipped chain is held to that by three tests over the real assets

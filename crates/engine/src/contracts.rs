@@ -180,8 +180,8 @@ impl Deed {
                  one and put something across the counter, buying or selling.",
             ),
             Deed::ExtractedProgram => Some(
-                "A downed program goes on the rack. A Teardown Rig with a tool fitted is \
-                 what breaks one down.",
+                "Press D and spend a downed program through a tool. The Salvage Clamp \
+                 you start with will do; a Teardown Rig does it while you are elsewhere.",
             ),
             Deed::CollapsedStack => Some(
                 "Go down a Stack until you find the guardian holding it up. Beating it \
@@ -875,6 +875,19 @@ impl ContractDb {
             .collect();
         chain.sort_by(|a, b| (a.tutorial, &a.id).cmp(&(b.tutorial, &b.id)));
         chain
+    }
+
+    /// How many steps of the chain a run has passed: one past the furthest
+    /// step in `done`, and 0 on a run that has finished none.
+    ///
+    /// The furthest, not the first missing: a mission shipped later at a
+    /// step behind the run is one it walked past, and handing it out would
+    /// send a finished run back into onboarding with its board emptied.
+    pub fn tutorial_position(&self, done: &[ContractId]) -> usize {
+        self.tutorial_chain()
+            .iter()
+            .rposition(|def| done.contains(&def.id))
+            .map_or(0, |i| i + 1)
     }
 }
 

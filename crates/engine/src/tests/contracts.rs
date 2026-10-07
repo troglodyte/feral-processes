@@ -3402,7 +3402,7 @@ fn an_onboarding_missions_row_is_flagged() {
 /// handed out and nothing is flagged.
 #[test]
 fn an_install_with_no_chain_hands_out_nothing() {
-    // The shipped contracts with the eleven missions deleted — the claim is
+    // The shipped contracts with the chain's missions deleted — the claim is
     // that removing the chain gives the pre-chain game back, ordinary
     // contracts and open board included, and a directory with no contracts
     // at all could not say that.
@@ -3563,6 +3563,55 @@ fn a_run_saved_mid_chain_resumes_on_the_same_step() {
         .collect();
     assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
     assert!(loaded.in_tutorial());
+}
+
+/// A mission shipped later, at a step behind where a run already stands, is
+/// one that run walked past. Handing it out would send a run back down the
+/// chain — and empty the board of a run that had finished it.
+#[test]
+fn a_step_inserted_behind_the_run_is_skipped() {
+    let dir = assets_with_fixture_chain("seed_inserted_step");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    let path = save_path("inserted_step");
+    game.save(&path).unwrap();
+
+    std::fs::write(
+        dir.join("contracts").join("fixture_inserted.ron"),
+        r#"(id: "fixture_inserted", name: "Fixture Inserted", description: "d",
+            objective: Perform(deed: Examined), reward: [Xp(1)], tutorial: Some(9000))"#,
+    )
+    .unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let held: Vec<String> = loaded
+        .active_contracts()
+        .iter()
+        .filter(|r| r.tutorial)
+        .map(|r| r.id.to_string())
+        .collect();
+    assert_eq!(held, vec!["fixture_step_2".to_string()]);
+}
+
+/// The same rule at the end of the chain: a finished run stays finished.
+#[test]
+fn a_step_inserted_into_a_finished_chain_is_skipped() {
+    let dir = assets_with_fixture_chain("seed_inserted_finished");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    skip_tutorial(&mut game);
+    let path = save_path("inserted_finished");
+    game.save(&path).unwrap();
+
+    std::fs::write(
+        dir.join("contracts").join("fixture_inserted.ron"),
+        r#"(id: "fixture_inserted", name: "Fixture Inserted", description: "d",
+            objective: Perform(deed: Examined), reward: [Xp(1)], tutorial: Some(9000))"#,
+    )
+    .unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(!loaded.in_tutorial());
 }
 
 /// **The board is the sector's, not the party's.**

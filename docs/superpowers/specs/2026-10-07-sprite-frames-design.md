@@ -70,11 +70,10 @@ the sprite holds still on frame 1 when animations are turned off.
   false, it sets `anim_now` to 0 and the phase is ignored, so every sprite
   shows frame 1.
 - `Painter::sprite` gains a `phase_key: u64` argument.
-  - The map (`render/base.rs`), battle (`render/battle.rs`) and tactical
-    (`render/tactical.rs`) views pass the entity key their fx effects
-    already use.
-  - Notifications, floor finishes, the creation preview and the battle
-    portrait pass 0.
+  - The map (`render/base.rs`) and tactical (`render/tactical.rs`) views
+    pass the entity key their fx effects already use. The battle screen's
+    only sprite is the portrait, which passes 0 like notifications, floor
+    finishes and the creation preview.
 - `paint.rs` stays the only file that names a graphics library
   (`.claude/rules/drawing-seam.md`). The seam rule's "fifteen operations"
   wording gets a note that `sprite` picks a frame.
@@ -95,10 +94,14 @@ The forge's editor state holds a list of frames instead of a single canvas.
   - Each new key must not collide with an existing forge or `CanvasEditor`
     key. The plan checks the key table first.
 - **Buttons** (`EditorButton`): Frame 1, Frame 2, Delete frame 2, and
-  speed −/+. Delete frame 2 is a button only, with no key, so it can't be
-  hit by a stray keypress. It returns to a one-frame sprite on frame 1.
-- **Undo:** each snapshot holds the whole frame set plus `active_frame`, so
-  undoing a delete or the copy that created frame 2 works.
+  speed −/+. Each button presses its own key, as the forge's buttons do
+  today. Delete frame 2 is uppercase `[D]`, so a stray lowercase press
+  can't hit it. It returns to a one-frame sprite on frame 1.
+- **Undo:** `CanvasEditor`'s private ring holds bare canvases, so the forge
+  keeps its own ring of `(frames, active_frame)`, 32 deep. Before handing a
+  key or pointer event to `CanvasEditor`, the forge takes a snapshot, and
+  keeps it if the editor's undo depth grew. The forge handles `u` itself.
+  Undoing a delete, or the copy that created frame 2, works this way.
 - **The save variant** (`saves_as_full_colour`) is decided across all frames.
   The existing pin-after-first-save behaviour still applies.
 - **Load:** a 32x16 file splits into two frames, and `frame_ms` comes from

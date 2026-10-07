@@ -77,16 +77,16 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
     assert_eq!(after.proceeds, before.proceeds);
 }
 
-/// The whole feature is additive behind `#[serde(default)]` — no
-/// `SAVE_FORMAT_VERSION` bump. `sorties::a_pre_sortie_save_loads_with_no_sorties`'
-/// shape.
+/// Routes are additive behind `#[serde(default)]` and cost no bump of their
+/// own; this pins the current version, 37, which ruins raised.
+/// `sorties::a_pre_sortie_save_loads_with_no_sorties`' shape.
 #[test]
 fn save_format_version_is_unchanged_by_routes() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
         37,
-        "adding a route field is additive under field-named RON and must not \
-         cost a version bump — see the doc comment on SAVE_FORMAT_VERSION"
+        "routes add no bump of their own; a changed version is a deliberate \
+         bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
 }
 

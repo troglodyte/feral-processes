@@ -23,6 +23,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
                                     //         Yellow, Blue, Magenta, Cyan, Brown,
                                     //         Orange
+    // A structure's production level is derived at load from what it makes
+    // and needs, not a field: build sites are raised lowest level first.
     build_cost: [("core_fragment", 3)],  // list of (item id, quantity) pairs
     // build_cost above, and every other item reference below (work.produces,
     // trade.buy), all take

@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Breaking: saves from before this version no longer load.** Destroyed structures are now remembered in the save, so the save format goes from 36 to 37.
+
+**A structure destroyed by a raid or siege leaves a ruin you can rebuild.** Once no siege is running, each ruin becomes a rebuild site on the same spot that costs what a fresh deploy costs. A structure that runs a job waits for you to pick the program for it; the rebuild picker and the awaiting sites say what they are waiting for. A ruin whose ground has since been taken is dropped, and the log says so.
+
+**Building goes in order of production level.** Build sites are raised lowest level first, so a base is rebuilt from its foundations up: a structure that makes raw material is built before one that turns it into something else. The level is worked out from what each structure makes and needs when the game loads, so modded structures are ordered too.
+
+**`[c]` is now the interact key.** Beside a rebuild site it opens the program picker; it still opens Transfer where Transfer applies. When several things are next to the party, it asks which direction you mean.
+
 ## 0.17.1
 
 **Menus use the same keys throughout.** In character creation, Enter moves to the next step and Esc goes back on every step, and every step's footer now says so. Pressing Enter after drawing your own sprite keeps the drawing and moves on to Colour; before, it returned you to the sprite list. All confirm prompts now take y or n, or Up/Down and Enter on the highlighted answer, and Esc cancels. Other keys do nothing; extract used to cancel on any other key, and number keys no longer answer a confirm. Selling a program, resetting perks or talents, and extracting a routine now start with No highlighted. Notifications close on Enter as well as Esc, Esc on the main menu asks whether to quit, and the ending screen's footer mentions Right.

@@ -49,15 +49,18 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
 /// to no save format, so it is free to be wider.
 ///
 /// Ordered ramp first, hues after: a nine-step **value** ramp, biased
-/// bright, then `ICON_PALETTE`'s ten hues in their existing order (indices
-/// 5..15 — its own five-step grey ramp is not repeated here). The bias
+/// bright, then nine hue families of six shades each, dark to light. The
+/// families are fitted to the hues the shipped art in `assets/sprites/`
+/// uses (a per-family k-means over its distinct opaque colours; yellow and
+/// lime share one family), so a creature's colour ramps survive a load into
+/// the editor. The bias
 /// matters because the renderer hands egui a sprite's colour as a
 /// **multiplying** tint (`assets/sprites/README.md`) — art authored near
 /// white inherits the species hue, `biome_tint` and the damage dimming for
 /// free, while a mid-grey ramp step multiplied by a dim species hue lands
 /// near black. So the nine steps bunch toward the bright end rather than
 /// spacing evenly — each gap smaller than the last, ending at pure white.
-pub const SPRITE_PALETTE: [(u8, u8, u8); 19] = [
+pub const SPRITE_PALETTE: [(u8, u8, u8); 63] = [
     (0x1c, 0x1c, 0x1c),
     (0x48, 0x48, 0x48),
     (0x70, 0x70, 0x70),
@@ -67,16 +70,69 @@ pub const SPRITE_PALETTE: [(u8, u8, u8); 19] = [
     (0xe6, 0xe6, 0xe6),
     (0xf7, 0xf7, 0xf7),
     (0xff, 0xff, 0xff),
-    ICON_PALETTE[5],
-    ICON_PALETTE[6],
-    ICON_PALETTE[7],
-    ICON_PALETTE[8],
-    ICON_PALETTE[9],
-    ICON_PALETTE[10],
-    ICON_PALETTE[11],
-    ICON_PALETTE[12],
-    ICON_PALETTE[13],
-    ICON_PALETTE[14],
+    // 0° red
+    (0x45, 0x0a, 0x0a),
+    (0x8d, 0x1c, 0x1c),
+    (0xd8, 0x25, 0x25),
+    (0xef, 0x44, 0x44),
+    (0xf9, 0x71, 0x7a),
+    (0xfc, 0xa5, 0xa7),
+    // 20° orange/brown
+    (0x1c, 0x0f, 0x05),
+    (0x43, 0x20, 0x09),
+    (0x80, 0x35, 0x12),
+    (0x7a, 0x51, 0x28),
+    (0xde, 0x5b, 0x0d),
+    (0xa8, 0x87, 0x5a),
+    // 50° yellow/lime
+    (0x1a, 0x2e, 0x05),
+    (0x45, 0x6e, 0x11),
+    (0x6d, 0x96, 0x17),
+    (0xf8, 0xb8, 0x13),
+    (0xa3, 0xe6, 0x35),
+    (0xd2, 0xbf, 0x85),
+    // 140° green
+    (0x05, 0x2e, 0x16),
+    (0x14, 0x53, 0x2d),
+    (0x15, 0x76, 0x3a),
+    (0x16, 0xa3, 0x4a),
+    (0x35, 0xd1, 0x6e),
+    (0x86, 0xef, 0xac),
+    // 160° emerald
+    (0x02, 0x2c, 0x22),
+    (0x05, 0x6a, 0x4d),
+    (0x0a, 0x95, 0x7b),
+    (0x11, 0xb9, 0x88),
+    (0x30, 0xd5, 0xab),
+    (0x84, 0xee, 0xce),
+    // 190° cyan/teal
+    (0x04, 0x2f, 0x2e),
+    (0x12, 0x58, 0x53),
+    (0x0f, 0x76, 0x6e),
+    (0x07, 0x90, 0xb4),
+    (0x27, 0xc3, 0xee),
+    (0x67, 0xe8, 0xf9),
+    // 230° blue
+    (0x0c, 0x11, 0x25),
+    (0x1c, 0x22, 0x48),
+    (0x3d, 0x4a, 0x6e),
+    (0x33, 0x57, 0xdb),
+    (0x78, 0xa0, 0xea),
+    (0xd3, 0xdc, 0xe7),
+    // 280° violet
+    (0x4a, 0x04, 0x4e),
+    (0x79, 0x1a, 0x7f),
+    (0xb2, 0x21, 0xc2),
+    (0xba, 0x50, 0xf4),
+    (0xd1, 0x7f, 0xfb),
+    (0xf0, 0xab, 0xfc),
+    // 340° rose
+    (0x4c, 0x05, 0x19),
+    (0x88, 0x13, 0x37),
+    (0x9f, 0x12, 0x39),
+    (0xbe, 0x12, 0x3c),
+    (0xe1, 0x1d, 0x48),
+    (0xf4, 0x3f, 0x5e),
 ];
 
 /// Below this, a quantised sprite pixel is transparent regardless of its
@@ -92,7 +148,7 @@ pub const FULL_COLOUR_SUFFIX: &str = ".colour";
 
 /// Maps an arbitrary RGBA pixel — a pixel read back from an existing sprite
 /// PNG — onto `SPRITE_PALETTE`, nearest colour by squared euclidean
-/// distance in RGB. A perceptual colour space is overkill at 19 swatches.
+/// distance in RGB. A perceptual colour space is overkill at 63 swatches.
 ///
 /// Returns 0 (transparent) below `SPRITE_ALPHA_THRESHOLD`, otherwise the
 /// matched palette index **plus one** — the same convention `PlayerIcon`'s

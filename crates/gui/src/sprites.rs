@@ -738,6 +738,49 @@ mod tests {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/sprites")
     }
 
+    /// Worst allowed RGB distance from any opaque shipped pixel to its
+    /// nearest `SPRITE_PALETTE` entry. Measured over every opaque pixel in
+    /// `assets/sprites/` (alpha >= `SPRITE_ALPHA_THRESHOLD`, euclidean RGB):
+    /// max 71.8 (`(0,255,204)` in `depot.colour.png`), mean 13.06. A palette
+    /// edit that makes shipped art snap worse fails here.
+    const SPRITE_SNAP_BOUND: f64 = 72.0;
+
+    /// Lives in gui because the engine has no PNG decoder and gains none for
+    /// a test.
+    #[test]
+    fn every_shipped_sprite_snaps_within_the_bound() {
+        use feral_processes_engine::icon::{SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE};
+        let mut worst = (0.0f64, String::new());
+        let mut seen = 0;
+        for entry in std::fs::read_dir(shipped_sprites_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "png") {
+                continue;
+            }
+            let img = image::open(&path).unwrap().into_rgba8();
+            for p in img.pixels().filter(|p| p[3] >= SPRITE_ALPHA_THRESHOLD) {
+                seen += 1;
+                let nearest = SPRITE_PALETTE
+                    .iter()
+                    .map(|&(r, g, b)| {
+                        let d = |a: u8, b: u8| (a as f64 - b as f64).powi(2);
+                        (d(p[0], r) + d(p[1], g) + d(p[2], b)).sqrt()
+                    })
+                    .fold(f64::MAX, f64::min);
+                if nearest > worst.0 {
+                    worst = (nearest, format!("{path:?} {:?}", p.0));
+                }
+            }
+        }
+        assert!(seen > 0, "no opaque pixels, so this proved nothing");
+        assert!(
+            worst.0 < SPRITE_SNAP_BOUND,
+            "worst snap {:.1} at {} exceeds {SPRITE_SNAP_BOUND}",
+            worst.0,
+            worst.1
+        );
+    }
+
     /// The table holds every PNG shipped, keyed by its file stem.
     ///
     /// This is the inversion the whole task turns on: a name with no file

@@ -35,7 +35,7 @@ fn an_alpha_at_or_above_the_threshold_matches_a_colour_instead_of_transparent() 
 /// Two ramp steps or hues that quantised to the same index would silently
 /// merge two swatches the picker still shows as different colours.
 #[test]
-fn all_nineteen_sprite_palette_entries_are_distinct() {
+fn all_sprite_palette_entries_are_distinct() {
     let mut seen = std::collections::HashSet::new();
     for &colour in SPRITE_PALETTE.iter() {
         assert!(seen.insert(colour), "{colour:?} appears more than once");
@@ -58,4 +58,20 @@ fn sprite_rgba_inverts_quantise_for_every_palette_entry() {
 #[test]
 fn icon_palette_stays_at_exactly_fifteen_entries_because_that_is_the_save_format() {
     assert_eq!(ICON_PALETTE.len(), 15);
+}
+
+/// Near-white sprites (`anchor`, `player`, the floor finishes) quantise to
+/// exactly the pixels they did before the palette grew, only if the first
+/// nine entries stay this grey ramp in this order.
+#[test]
+fn the_first_nine_entries_are_the_original_grey_ramp() {
+    let ramp = [0x1c, 0x48, 0x70, 0x94, 0xb4, 0xd0, 0xe6, 0xf7, 0xff];
+    for (i, v) in ramp.into_iter().enumerate() {
+        assert_eq!(SPRITE_PALETTE[i], (v, v, v), "grey step {i}");
+    }
+}
+
+#[test]
+fn the_palette_is_the_grey_ramp_plus_nine_families_of_six() {
+    assert_eq!(SPRITE_PALETTE.len(), 9 + 9 * 6);
 }

@@ -162,8 +162,8 @@ fn a_flatlined_permadeath_run_cannot_be_reloaded_from_the_load_list() {
 }
 
 /// The main menu and the load list call `list_saves` every frame, and a
-/// whole-file parse of every save per frame cost a full core on a menu that
-/// draws seven rows. A file is parsed again only once its size or
+/// whole-file parse of every save per frame cost over half a core on a menu
+/// that draws seven rows. A file is parsed again only once its size or
 /// modification time moves.
 #[test]
 fn list_saves_parses_a_file_again_only_once_it_changes() {

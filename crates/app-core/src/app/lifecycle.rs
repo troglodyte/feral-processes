@@ -222,8 +222,8 @@ impl App {
         let Ok(entries) = std::fs::read_dir(&self.saves_dir) else {
             return Vec::new();
         };
-        // Poisoning only follows a panic mid-listing, which leaves at worst a
-        // stale entry that the next size or timestamp change replaces.
+        // A panic mid-listing poisons the lock, but every insert is whole,
+        // so what it guards is still a set of complete entries.
         let mut cache = self
             .save_cache
             .lock()
@@ -240,22 +240,14 @@ impl App {
                     .and_then(|m| m.modified().ok())
                     .unwrap_or(UNIX_EPOCH);
                 let len = meta.as_ref().map_or(0, |m| m.len());
-                let fresh = cache
-                    .get(&path)
-                    .is_some_and(|c| c.modified == modified && c.len == len);
-                if !fresh {
-                    let (name, summary) = read_save_entry(&path);
-                    cache.insert(
-                        path.clone(),
-                        CachedSave {
-                            modified,
-                            len,
-                            name,
-                            summary,
-                        },
-                    );
-                }
-                let cached = &cache[&path];
+                let cached = cache
+                    .entry(path.clone())
+                    .and_modify(|c| {
+                        if c.modified != modified || c.len != len {
+                            *c = CachedSave::read(&path, modified, len);
+                        }
+                    })
+                    .or_insert_with(|| CachedSave::read(&path, modified, len));
                 let entry = SaveEntry {
                     path: path.clone(),
                     name: cached.name.clone(),
@@ -723,6 +715,18 @@ impl App {
             self.leave_battle_result();
         }
         self.mode = Mode::GameOver;
+    }
+}
+
+impl CachedSave {
+    fn read(path: &Path, modified: SystemTime, len: u64) -> Self {
+        let (name, summary) = read_save_entry(path);
+        Self {
+            modified,
+            len,
+            name,
+            summary,
+        }
     }
 }
 

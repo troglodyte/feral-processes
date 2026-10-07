@@ -2589,9 +2589,9 @@ pub struct App {
     saves_dir: PathBuf,
     /// `list_saves`' parsed entries, keyed by file and kept while the file's
     /// size and modification time hold. The menus call `list_saves` every
-    /// frame, and a full parse of every save per frame cost a core. A
-    /// `Mutex` because the renderer only ever holds `&App`, and `App` sits
-    /// in a bevy `Resource`, which must be `Sync`.
+    /// frame, and a full parse of every save per frame cost over half a
+    /// core. A `Mutex` because the renderer only ever holds `&App`, and
+    /// `App` sits in a bevy `Resource`, which must be `Sync`.
     save_cache: std::sync::Mutex<HashMap<PathBuf, CachedSave>>,
     /// Which file the active session's manual/auto-saves go to. `None`
     /// until a game is started (which immediately saves to claim a new

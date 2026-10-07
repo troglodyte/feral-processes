@@ -1,0 +1,8 @@
+(
+    id: "tutorial_arm_a_decompile",
+    name: "Arm a Decompile",
+    description: "Taking a program alive spends an ICE Breaker, and you start with none. Compile one out of three Core Fragments: 'b' for base menu, 'Compile an item'.",
+    objective: Hold(item: "ice_breaker", count: 1),
+    reward: [Credits(15), Item("ice_breaker", 2), Xp(50)],
+    tutorial: Some(35),
+)

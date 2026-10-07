@@ -1,7 +1,7 @@
 (
     id: "tutorial_break_ground",
     name: "Break Ground",
-    description: "Mining by hand is a way to spend a run. Stand up a Mining Node and let it work while you do something else — assign an entity to it. 'b' for base menu, 'Structure roster'",
+    description: "Mining by hand is a way to spend a run. Stand up a Mining Node ('b' for base menu, 'Deploy a structure'), then put the program you decompiled on it from 'Structure roster' and it digs while you do something else.",
     objective: Build(structure: "mining_node"),
     reward: [Credits(30), Item("core_fragment", 10), Xp(100)],
     tutorial: Some(60),

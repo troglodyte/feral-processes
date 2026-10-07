@@ -1,0 +1,8 @@
+(
+    id: "tutorial_strip_it_down",
+    name: "Strip It Down",
+    description: "A program you beat leaves its body behind, not loot. Press [D] to open your downed programs, pick one, and take it apart with the Salvage Clamp you start with. That is where Core Fragments come from.",
+    objective: Perform(deed: ExtractedProgram),
+    reward: [Credits(15), Xp(60)],
+    tutorial: Some(25),
+)

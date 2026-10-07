@@ -3402,7 +3402,7 @@ fn an_onboarding_missions_row_is_flagged() {
 /// handed out and nothing is flagged.
 #[test]
 fn an_install_with_no_chain_hands_out_nothing() {
-    // The shipped contracts with the eleven missions deleted — the claim is
+    // The shipped contracts with the chain's missions deleted — the claim is
     // that removing the chain gives the pre-chain game back, ordinary
     // contracts and open board included, and a directory with no contracts
     // at all could not say that.

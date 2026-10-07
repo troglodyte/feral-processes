@@ -3686,6 +3686,8 @@ fn the_tutorial_chain_can_always_afford_its_next_step() {
     let (contracts, _) = crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
     let (structures, _) = crate::structures::StructureDb::load_dir(&assets.join("structures"))
         .expect("the shipped structures load");
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
     let fragment = ItemId::from(crate::items::ids::CORE_FRAGMENT);
 
     let chain = contracts.tutorial_chain();
@@ -3706,15 +3708,25 @@ fn the_tutorial_chain_can_always_afford_its_next_step() {
                     .unwrap_or(0);
                 balance -= cost;
             }
-            // A `Hold` is satisfied by *play* — fighting and mining — not by
-            // the chain's own payouts, so there is no balance claim to make
-            // here beyond the one below. What this arm is for is keeping the
-            // model honest about what it tracks.
-            crate::contracts::Objective::Hold { item, .. } => assert!(
-                *item == fragment,
-                "{} holds something the balance does not track: {item}",
-                def.id
-            ),
+            // A `Hold` on fragments is satisfied by *play* — fighting and
+            // mining — not by the chain's own payouts, so there is no balance
+            // claim to make here beyond the one below.
+            crate::contracts::Objective::Hold { item, .. } if *item == fragment => {}
+            // Anything else held is compiled, and paid for in fragments.
+            crate::contracts::Objective::Hold { item, count } => {
+                let recipe = items
+                    .get(item.as_str())
+                    .and_then(|d| d.craftable.as_ref())
+                    .unwrap_or_else(|| panic!("{} holds {item}, which nothing compiles", def.id));
+                for (input, n) in &recipe.cost {
+                    assert!(
+                        *input == fragment && recipe.requires_structure.is_none(),
+                        "{} holds {item}, which the balance cannot price",
+                        def.id
+                    );
+                    balance -= (*n * *count) as i64;
+                }
+            }
             _ => {}
         }
         assert!(

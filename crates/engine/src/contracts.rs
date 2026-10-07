@@ -180,8 +180,8 @@ impl Deed {
                  one and put something across the counter, buying or selling.",
             ),
             Deed::ExtractedProgram => Some(
-                "A downed program goes on the rack. A Teardown Rig with a tool fitted is \
-                 what breaks one down.",
+                "Press D and spend a downed program through a tool. The Salvage Clamp \
+                 you start with will do; a Teardown Rig does it while you are elsewhere.",
             ),
             Deed::CollapsedStack => Some(
                 "Go down a Stack until you find the guardian holding it up. Beating it \

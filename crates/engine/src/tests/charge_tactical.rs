@@ -410,3 +410,14 @@ fn a_hold_at_full_charge_is_refused() {
     assert!(!game.tactical_charge_hold());
     assert_eq!(progress(&game, player), Some(3));
 }
+
+#[test]
+fn the_acting_body_reports_whether_it_is_charging() {
+    let (mut game, player, wild) = fight(3, 0);
+    assert!(!game.tactical_actor_charging());
+    let at = cell_of(&game, wild);
+    start_on(&mut game, at);
+    assert!(!game.tactical_actor_charging(), "the wild side acts now");
+    back_to(&mut game, player);
+    assert!(game.tactical_actor_charging());
+}

@@ -188,16 +188,10 @@ impl App {
     }
 
     /// Whether the body whose turn it is is winding up a charge.
-    fn tactical_acting_charges(&mut self) -> bool {
-        let Some(view) = self.game.as_mut().and_then(|g| g.tactical_view()) else {
-            return false;
-        };
-        let Some(acting) = view.active.map(|i| view.order[i].entity) else {
-            return false;
-        };
-        view.bodies
-            .iter()
-            .any(|b| b.entity == acting && b.charge.is_some())
+    fn tactical_acting_charges(&self) -> bool {
+        self.game
+            .as_ref()
+            .is_some_and(|g| g.tactical_actor_charging())
     }
 
     /// Picks which consumable the acting body spends — `handle_battle_

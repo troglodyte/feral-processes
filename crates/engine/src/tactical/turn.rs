@@ -1896,6 +1896,12 @@ impl Game {
         self.world.get::<Charging>(body).is_some()
     }
 
+    /// Whether the body whose turn it is is winding up a charge. The cheap
+    /// question: a key press asks it, and `tactical_view` clones the board.
+    pub fn tactical_actor_charging(&self) -> bool {
+        self.tactical_actor().is_some_and(|a| self.is_charging(a))
+    }
+
     /// The acting body, when it is a charger the player is asked about: a
     /// party body (the AI's own chargers go through `charger_beat`) with
     /// turn left to spend.

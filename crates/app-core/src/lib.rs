@@ -19,6 +19,7 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
+pub use app::excavate::BrushRow;
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -1995,6 +1996,10 @@ pub enum Mode {
     /// a wing of the base — however large — costs no turns. That is the
     /// property `excavation_plan_never_ticks_the_game` exists to hold.
     Excavate,
+    /// The Excavation plan's brush picker, `[F]` from `Mode::Excavate`:
+    /// plain, every loaded finish, strip. A detour off the plan — picking a
+    /// row or Esc lands back on it with the cursor and anchor untouched.
+    ExcavateBrush,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -2440,6 +2445,8 @@ impl Mode {
             | Mode::FieldRoutineAlly
             | Mode::FieldRoutineCell
             | Mode::Excavate
+            // Opened from the plan only, the plan's own reason.
+            | Mode::ExcavateBrush
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop
@@ -2896,8 +2903,9 @@ pub struct App {
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
     /// Where the Excavation plan's cursor is aimed, in **base-space**
-    /// coordinates. `None` outside `Mode::Excavate` — opening the mode puts
-    /// it on the party's own cell and leaving clears it.
+    /// coordinates. `None` outside `Mode::Excavate` and its brush picker —
+    /// opening the mode puts it on the party's own cell and leaving clears
+    /// it.
     ///
     /// A different coordinate space from `App::field_cursor` above, which is
     /// in Stack frame coordinates. Nothing converts between them and nothing
@@ -2908,8 +2916,8 @@ pub struct App {
     /// two-press verb rather than a drag.
     pub excavate_anchor: Option<(i32, i32)>,
     /// The Excavation plan's brush — `None` is today's plain cut-or-tile
-    /// mark, `[F]` cycles it through every loaded finish and then strip
-    /// before returning here. Reset to `None` whenever the mode opens, the
+    /// mark; `[F]` opens `Mode::ExcavateBrush` to pick a finish or strip
+    /// instead. Reset to `None` whenever the mode opens, the
     /// same way `excavate_anchor` is: a brush left over from the last visit
     /// would paint the first box drawn this time with a choice the player
     /// never made this session.

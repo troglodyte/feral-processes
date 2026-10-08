@@ -195,6 +195,7 @@ impl App {
             | Mode::RespecPerksConfirm
             | Mode::RespecTalentsConfirm
             | Mode::ExtractConfirm => 1,
+            Mode::ExcavateBrush => self.excavate_brush_row(),
             _ => 0,
         }
     }
@@ -333,6 +334,7 @@ impl App {
             Mode::TacticalEmulate => self.handle_tactical_emulate_key(key),
             Mode::TacticalAim => self.handle_tactical_aim_key(key),
             Mode::Excavate => self.handle_excavate_key(key),
+            Mode::ExcavateBrush => self.handle_excavate_brush_key(key),
             Mode::Refactor => self.handle_refactor_key(key),
             Mode::RefactorItem => self.handle_refactor_item_key(key),
             Mode::Develop => self.handle_develop_key(key),

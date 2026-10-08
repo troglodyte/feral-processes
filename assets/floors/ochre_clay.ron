@@ -1,0 +1,6 @@
+(
+    id: "ochre_clay",
+    name: "Ochre Clay",
+    description: "Fired yellow-brown clay tiles, laid in a herringbone.",
+    shade: Ochre,
+)

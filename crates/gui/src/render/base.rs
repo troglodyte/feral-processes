@@ -269,11 +269,12 @@ pub(super) fn draw_playing_base(
     let info_tab = app.info_tab;
     let filtered_out = app.filtered_out_log_lines();
     // Before the `game` borrow, like `status_line` above. `None` outside
-    // `Mode::Excavate`, which is what keeps the cursor off the map the rest
-    // of the time without the renderer having to know the mode's rules.
+    // `Mode::Excavate` and its brush picker, which is what keeps the cursor
+    // off the map the rest of the time without the renderer having to know
+    // the mode's rules.
     let plan = app
         .excavate_cursor
-        .filter(|_| app.mode == Mode::Excavate)
+        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
         .map(|cursor| PlanCursor {
             cursor,
             anchor: app.excavate_anchor,
@@ -287,7 +288,7 @@ pub(super) fn draw_playing_base(
     // not draw a header on the ordinary playing map.
     let excavate_label = app
         .excavate_brush_label()
-        .filter(|_| app.mode == Mode::Excavate);
+        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush));
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the

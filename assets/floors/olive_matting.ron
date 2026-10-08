@@ -1,0 +1,7 @@
+(
+    id: "olive_matting",
+    name: "Olive Matting",
+    description: "Coarse woven reeds the colour of dried leaves.",
+    shade: Olive,
+    comfort: Some("at_ease_on"),
+)

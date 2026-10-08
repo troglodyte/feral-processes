@@ -27,9 +27,9 @@ Drop a file in, restart, and it is in the world. Nothing else to edit.
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | string | Save key and, by convention, the sprite key — see `sprite` below. |
-| `name` | string | The excavate brush's label and the examine line. |
+| `name` | string | The brush picker's row label and the examine line. |
 | `description` | string | One line of flavour. |
-| `shade` | one of the ten below | A named tint, resolved to a colour in the renderer. There is no free RGB field — see "Why shade is a fixed set". |
+| `shade` | one of the fifteen below | A named tint, resolved to a colour in the renderer. There is no free RGB field — see "Why shade is a fixed set". |
 | `sprite` | `Option<string>`, optional | Sprite key override — falls back to `id`, and an `@`-prefixed override is ignored, exactly like a species' or a structure's `sprite:` field (`assets/sprites/README.md`). |
 | `comfort` | `Option<string>`, optional | The id of a def in `assets/memories/` that a program standing on this finish writes. `None` (the default) means the finish is purely cosmetic. |
 
@@ -37,11 +37,12 @@ There is no `cost` field: every finish costs
 `crate::tuning::FLOOR_FINISH_COST` Blank Substrate, a fixed tuning constant,
 on top of the one the tile itself already spent to be floor at all.
 
-## The ten shades
+## The fifteen shades
 
 `Cobalt`, `Teal`, `Moss`, `Olive`, `Ochre`, `Umber`, `Wine`, `Plum`,
-`Violet`, `Slate`. A shade name the enum does not have fails that file's
-parse — the standard skip-and-warn, the same as any other malformed file.
+`Violet`, `Slate`, `Jade`, `Sky`, `Rose`, `Saffron`, `Ash`. A shade name
+the enum does not have fails that file's parse — the standard
+skip-and-warn, the same as any other malformed file.
 
 ## Why `shade` is a fixed set, not an RGB triple
 

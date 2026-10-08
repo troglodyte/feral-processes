@@ -18,6 +18,15 @@ use crate::*;
 /// the player has to erase cell by cell.
 const CURSOR_RANGE: i32 = 12;
 
+/// One row of the brush picker — what picking it sets, what it is called,
+/// and the swatch a finish row draws beside its name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BrushRow {
+    pub brush: Option<FinishOrder>,
+    pub label: String,
+    pub shade: Option<feral_processes_engine::floors::FloorShade>,
+}
+
 impl App {
     /// Moves the cursor, drops and lifts the anchor, and commits the box.
     ///
@@ -67,7 +76,12 @@ impl App {
                 return;
             }
             GameKey::Char('F') => {
-                self.cycle_excavate_brush();
+                // Inert over an empty `FloorDb`: plain is the only brush
+                // there is, and a picker of one row is a screen that does
+                // nothing.
+                if self.excavate_brush_rows().len() > 1 {
+                    self.mode = Mode::ExcavateBrush;
+                }
                 return;
             }
             _ => return,
@@ -78,27 +92,57 @@ impl App {
         ));
     }
 
-    /// `[F]`: plain → each loaded finish, in id order → strip → plain.
-    ///
-    /// **Inert with an empty `FloorDb`.** There is nothing to apply and
-    /// nothing to strip, so cycling would otherwise flip between `None` and
-    /// a `Strip` the player has no finish to have asked for.
-    fn cycle_excavate_brush(&mut self) {
-        let Some(game) = &self.game else { return };
+    /// The picker's rows: plain, every loaded finish in id order, strip.
+    /// The one list both the keys and the popup read, so a row the player
+    /// sees is the row a key picks. Empty with no game, and plain alone
+    /// with an empty `FloorDb` — strip with no finish to lift is not a
+    /// brush anyone asked for.
+    pub fn excavate_brush_rows(&self) -> Vec<BrushRow> {
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
         let defs = game.floor_defs();
+        let mut rows = vec![BrushRow {
+            brush: None,
+            label: "plain — cut rock, lay tile".to_string(),
+            shade: None,
+        }];
         if defs.is_empty() {
+            return rows;
+        }
+        rows.extend(defs.into_iter().map(|d| BrushRow {
+            brush: Some(FinishOrder::Apply(d.id)),
+            label: d.name,
+            shade: Some(d.shade),
+        }));
+        rows.push(BrushRow {
+            brush: Some(FinishOrder::Strip),
+            label: "strip — lift a finish".to_string(),
+            shade: None,
+        });
+        rows
+    }
+
+    /// The row the brush in hand sits on, so the picker opens there and
+    /// Enter alone keeps it. A brush naming a finish no longer loaded falls
+    /// back to plain's row.
+    pub(crate) fn excavate_brush_row(&self) -> usize {
+        self.excavate_brush_rows()
+            .iter()
+            .position(|r| r.brush == self.excavate_brush)
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn handle_excavate_brush_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::Excavate;
             return;
         }
-        self.excavate_brush = match &self.excavate_brush {
-            None => Some(FinishOrder::Apply(defs[0].id.clone())),
-            Some(FinishOrder::Apply(id)) => defs
-                .iter()
-                .position(|d| &d.id == id)
-                .and_then(|i| defs.get(i + 1))
-                .map(|next| FinishOrder::Apply(next.id.clone()))
-                .or(Some(FinishOrder::Strip)),
-            Some(FinishOrder::Strip) => None,
-        };
+        let mut rows = self.excavate_brush_rows();
+        if let Some(idx) = self.selected_index(key, rows.len()) {
+            self.excavate_brush = rows.swap_remove(idx).brush;
+            self.mode = Mode::Excavate;
+        }
     }
 
     /// What the header shows for the current brush — `None` when there is

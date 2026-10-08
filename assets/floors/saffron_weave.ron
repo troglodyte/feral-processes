@@ -1,0 +1,7 @@
+(
+    id: "saffron_weave",
+    name: "Saffron Weave",
+    description: "A bright yellow weave that lifts a dim room.",
+    shade: Saffron,
+    comfort: Some("at_ease_on"),
+)

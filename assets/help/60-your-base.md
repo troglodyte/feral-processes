@@ -28,8 +28,8 @@ Everything past that first pocket is solid, and you cut it out yourself.
 - m opens the Excavation plan. The cursor costs no time at all: space drops one corner, moving
   previews a rectangle, and space again commits it. Starting the box on a cell that is already
   marked clears instead of marking, which is why there is no separate erase. A marked wall is cut
-  and then floored in one go, and the mark outlives the cut. [F] changes the brush: it cycles
-  through each laid finish, then strip, then plain tile. A finish costs 3 extra Blank Substrate per
+  and then floored in one go, and the mark outlives the cut. [F] opens the brush list: plain
+  tile, each floor finish with its colour, or strip. A finish costs 3 extra Blank Substrate per
   cell on top of the tile.
 
 You do not have to be there for any of it. Programs on your roster dig while you are off in a

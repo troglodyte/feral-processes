@@ -12,7 +12,7 @@
 //! supported catalogue (no brush is offered and the game is exactly today's),
 //! a malformed file — including one naming a shade `FloorShade` does not
 //! have — is skipped with a warning, and `iter` is sorted by id because the
-//! brush cycle walks it in that order.
+//! brush picker lists it in that order.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -53,12 +53,17 @@ pub enum FloorShade {
     Plum,
     Violet,
     Slate,
+    Jade,
+    Sky,
+    Rose,
+    Saffron,
+    Ash,
 }
 
 impl FloorShade {
-    /// Every shade, for the censuses that must fail the day an eleventh is
-    /// added rather than passing because they name ten files by hand.
-    pub const ALL: [FloorShade; 10] = [
+    /// Every shade, for the censuses that must fail the day a sixteenth is
+    /// added rather than passing because they name fifteen files by hand.
+    pub const ALL: [FloorShade; 15] = [
         FloorShade::Cobalt,
         FloorShade::Teal,
         FloorShade::Moss,
@@ -69,6 +74,11 @@ impl FloorShade {
         FloorShade::Plum,
         FloorShade::Violet,
         FloorShade::Slate,
+        FloorShade::Jade,
+        FloorShade::Sky,
+        FloorShade::Rose,
+        FloorShade::Saffron,
+        FloorShade::Ash,
     ];
 }
 
@@ -105,7 +115,7 @@ impl FloorDef {
 
 /// Every finish the install knows about, loaded from `assets/floors/`.
 ///
-/// `BTreeMap` rather than `MemoryDb`'s `HashMap`: the brush cycle walks
+/// `BTreeMap` rather than `MemoryDb`'s `HashMap`: the brush picker lists
 /// `iter` in id order, and keying the store itself sorted is simpler than
 /// sorting a `HashMap`'s values on every call.
 #[derive(Resource, Default, Clone)]
@@ -149,7 +159,7 @@ impl FloorDb {
         self.defs.get(id)
     }
 
-    /// Every def in id order — the brush cycle's own order.
+    /// Every def in id order — the brush picker's own order.
     pub fn iter(&self) -> impl Iterator<Item = &FloorDef> {
         self.defs.values()
     }

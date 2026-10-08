@@ -1,0 +1,7 @@
+(
+    id: "rose_carpet",
+    name: "Rose Carpet",
+    description: "A soft pink carpet with a short, dense pile.",
+    shade: Rose,
+    comfort: Some("at_ease_on"),
+)

@@ -1,0 +1,6 @@
+(
+    id: "ash_concrete",
+    name: "Ash Concrete",
+    description: "Plain grey poured floor, smoothed and sealed.",
+    shade: Ash,
+)

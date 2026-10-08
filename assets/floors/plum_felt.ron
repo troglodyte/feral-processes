@@ -1,0 +1,7 @@
+(
+    id: "plum_felt",
+    name: "Plum Felt",
+    description: "Pressed purple felt, quiet underfoot.",
+    shade: Plum,
+    comfort: Some("at_ease_on"),
+)

@@ -46,6 +46,7 @@ mod depot_filter;
 mod dispatch;
 mod dossier;
 mod ending;
+mod excavate_brush;
 mod extraction;
 mod field;
 mod frame_map;
@@ -123,6 +124,7 @@ use contracts::draw_contracts;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
 use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
+use excavate_brush::draw_excavate_brush;
 use extraction::draw_downed_programs;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
@@ -985,6 +987,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RigTool => app.rig_tool.clone(),
         _ => None,
     };
+    let excavate_brush = match app.mode {
+        Mode::ExcavateBrush => app.excavate_brush_rows(),
+        _ => Vec::new(),
+    };
     // The name is resolved here rather than in the renderer, because a
     // carrier row has no `ItemId` to look one up by: its label is the
     // engine's own sentence, and the table is a table of *names* either way.
@@ -1136,6 +1142,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
+        Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
@@ -1632,7 +1639,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 133] = [
+    const ALL_MODES: [Mode; 134] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1714,6 +1721,7 @@ mod tests {
         Mode::FieldRoutineAlly,
         Mode::FieldRoutineCell,
         Mode::Excavate,
+        Mode::ExcavateBrush,
         Mode::Refactor,
         Mode::RefactorItem,
         Mode::Develop,

@@ -1,5 +1,5 @@
-//! `Mode::WorldMap`: pan with the arrows, pick a row with a letter, `C` to
-//! steer the compass, `P` to come back, Esc to close.
+//! `Mode::WorldMap`: pan with the arrows, pick a row with a letter or a
+//! click, `C` to steer the compass, `P` to come back, Esc to close.
 
 use super::support::*;
 use crate::*;
@@ -111,4 +111,56 @@ fn c_on_a_nest_refuses_and_leaves_the_bearing() {
         before
     );
     assert!(app.status_line.as_deref().unwrap_or("").contains("nest"));
+}
+
+#[test]
+fn clicking_a_marked_chunk_selects_its_row() {
+    let mut app = open(916);
+    let marks = app.world_map_marks();
+    let last = marks.len() - 1;
+    app.pick_world_map_chunk(marks[last].chunk);
+    assert_eq!(
+        app.world_map_marks()[app.menu_selected].chunk,
+        marks[last].chunk
+    );
+    assert_eq!(app.mode, Mode::WorldMap);
+}
+
+#[test]
+fn clicking_an_empty_chunk_keeps_the_row() {
+    let mut app = open(917);
+    app.menu_selected = 1;
+    let marks = app.world_map_marks();
+    let empty = (i32::MIN / 2, i32::MIN / 2);
+    assert!(marks.iter().all(|m| m.chunk != empty));
+    app.pick_world_map_chunk(empty);
+    assert_eq!(app.menu_selected, 1);
+}
+
+#[test]
+fn clicking_a_shared_chunk_again_steps_through_its_marks() {
+    let mut app = open(901);
+    let marks = app.world_map_marks();
+    let chunk = marks[0].chunk;
+    let shared: Vec<usize> = (0..marks.len())
+        .filter(|&i| marks[i].chunk == chunk)
+        .collect();
+    assert!(shared.len() >= 2, "seed 901 stacks marks on home's chunk");
+    let mut seen = Vec::new();
+    for _ in 0..shared.len() {
+        app.pick_world_map_chunk(chunk);
+        seen.push(app.menu_selected);
+    }
+    seen.sort_unstable();
+    assert_eq!(seen, shared, "each mark on the chunk once per lap");
+}
+
+#[test]
+fn clicking_a_row_selects_it_and_past_the_list_does_nothing() {
+    let mut app = open(919);
+    let len = app.world_map_marks().len();
+    app.pick_world_map_row(len - 1);
+    assert_eq!(app.menu_selected, len - 1);
+    app.pick_world_map_row(len);
+    assert_eq!(app.menu_selected, len - 1);
 }

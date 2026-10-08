@@ -69,6 +69,36 @@ impl App {
         self.world_map_center.1 += dy;
     }
 
+    /// A click on the grid: selects a mark on `chunk`. Two marks can share a
+    /// chunk (a nest beside home), so a click on the chunk already selected
+    /// steps to its next mark rather than doing nothing. A chunk with no
+    /// mark leaves the selection alone.
+    pub fn pick_world_map_chunk(&mut self, chunk: (i32, i32)) {
+        let on_chunk: Vec<usize> = self
+            .world_map_marks()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.chunk == chunk)
+            .map(|(i, _)| i)
+            .collect();
+        let next = on_chunk
+            .iter()
+            .position(|&i| i == self.menu_selected)
+            .map_or(0, |at| (at + 1) % on_chunk.len());
+        if let Some(&idx) = on_chunk.get(next) {
+            self.menu_selected = idx;
+        }
+    }
+
+    /// A click on the side list. An index past the list is ignored: the gui
+    /// sizes its rows off the same list, but a stale frame must not be able
+    /// to select nothing.
+    pub fn pick_world_map_row(&mut self, index: usize) {
+        if index < self.world_map_marks().len() {
+            self.menu_selected = index;
+        }
+    }
+
     /// Points the compass at `mark`, or refuses when the mark is map-only.
     /// The refusal is a row fragment, `ability_unavailable`'s convention.
     pub(crate) fn steer_compass_at(&mut self, mark: &WorldMapMark) {

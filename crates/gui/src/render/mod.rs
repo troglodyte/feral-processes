@@ -77,6 +77,7 @@ mod settlement_board;
 mod settlement_market;
 mod social;
 mod splice_rig;
+mod world_map;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::SpriteHits` to name the type `sprite_forge::sprite_hits`
 // hands back — every other module here stays private because nothing
@@ -573,6 +574,7 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::Battle
             | Mode::BattleResult
             | Mode::FrameMap
+            | Mode::WorldMap
             | Mode::FieldRoutineCell
             | Mode::Notification
             | Mode::LevelUp
@@ -720,6 +722,26 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 draw_mode_overlay(app, None, painter, &m);
             }
         },
+        // Full-pane like `Mode::FrameMap`: a chunk-scale map you have to peer
+        // around a popup to read is not a map. A refusal (C on a nest) lands
+        // on `needs_status_banner`'s strip.
+        Mode::WorldMap => {
+            let view = app.world_map();
+            let pointing = app
+                .game
+                .as_mut()
+                .and_then(|g| g.compass_bearing())
+                .map(|r| r.target);
+            match view {
+                Some(view) => {
+                    world_map::draw_world_map(&view, app.menu_selected, pointing, painter, &m)
+                }
+                None => {
+                    draw_playing_base(app, fx, None, painter, &m, reveal);
+                    draw_mode_overlay(app, None, painter, &m);
+                }
+            }
+        }
         // Full-pane for the same reason `Mode::FrameMap` is, and doubly so:
         // picking a cell you have never walked to means seeing the whole
         // frame at once.
@@ -1639,7 +1661,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 134] = [
+    const ALL_MODES: [Mode; 135] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1687,6 +1709,7 @@ mod tests {
         Mode::InteractDirection,
         Mode::InspectDirection,
         Mode::FrameMap,
+        Mode::WorldMap,
         Mode::Manifest,
         Mode::ManifestPick,
         Mode::StructureManifest,
@@ -2255,6 +2278,7 @@ mod tests {
             Mode::Battle,
             Mode::BattleResult,
             Mode::FrameMap,
+            Mode::WorldMap,
             Mode::FieldRoutineCell,
             Mode::SpritePicker,
             Mode::SpriteEditor,

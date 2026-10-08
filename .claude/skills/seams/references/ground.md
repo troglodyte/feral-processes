@@ -399,3 +399,12 @@
   silently — it reads as ordinary movement code, and every other test
   spends ticks one at a time already, so nothing else would notice the
   rate changed.
+
+- **Fog stores only where the party walked; derived reveals are never
+  stored.** `resources::ExploredChunks` is written solely by
+  `Game::mark_explored_chunks` (one call in `tick_inner`), and
+  `Game::world_map` unions it at read time with the base, outposts and route
+  corridors. A derived chunk written into the set outlives its cause — sever
+  a route or lose an outpost and the map keeps showing ground nobody walked —
+  and a reveal written from the view makes a read path a writer. A new derived
+  source joins the union in `world_map`, never the store.

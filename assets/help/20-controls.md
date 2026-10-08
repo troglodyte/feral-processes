@@ -64,6 +64,12 @@ Reading and housekeeping:
 - u — the compass: home, the settlements and the Stack entrances you know of, each with its
   heading and distance. Enter points the compass at the highlighted place, and the zone map keeps
   that heading in view; X clears it. It reads the zone surface only, and costs no time.
+- g — on the zone surface, the world map: every region you have walked, with the towns, outposts,
+  Stack links, nests and routes you know of. The arrows pan it, 1-9 then a-z pick a place from the
+  list, C points the compass at the picked place (a nest is not a destination), P puts the view
+  back on you, and Esc closes it. A town's tint shows how it regards you, and its arrow shows
+  whether its trade is rising, holding or falling. It costs no time. In the Stack, g is that
+  frame's map instead.
 - f — filter the log: all, field, or base
 - tab — double the log pane's height, and back
 - space — pause the world, and resume. You can still act while paused; each action takes its

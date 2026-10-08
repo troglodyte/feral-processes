@@ -115,7 +115,7 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
     let drew_sprite = note
         .sprite
         .as_deref()
-        .is_some_and(|name| painter.sprite(name, art_x, y, art_size, color));
+        .is_some_and(|name| painter.sprite(name, art_x, y, art_size, color, 0));
     if !drew_sprite {
         let glyph = note.glyph.to_string();
         let size = art_size as u16;
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn a_loaded_sprite_stands_in_for_the_glyph() {
         let mut table = crate::paint::SpriteTable::default();
-        table.insert("notify_art", bevy_egui::egui::TextureId::User(1));
+        table.insert_still("notify_art", bevy_egui::egui::TextureId::User(1));
 
         let (images, glyphs) = drawn(&note(), table);
 

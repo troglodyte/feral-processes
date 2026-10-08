@@ -1,4 +1,4 @@
-//! Guards the shipped sprite assets against the one-cell contract.
+//! Guards the shipped sprite assets against the 16x16 / 32x16 contract.
 //!
 //! `text::map_cell` draws a map glyph at `16 x zoom` px with zoom clamped
 //! to 1..4, so a 16x16 sprite lands on exactly 16/32/48/64 px — integer
@@ -14,6 +14,13 @@ use std::path::{Path, PathBuf};
 
 /// The authored edge every sprite must have, in pixels.
 const SPRITE_NATIVE: u32 = 16;
+
+/// The shape `sprites::read_frame_ms` reads; that reader is not public.
+#[derive(serde::Deserialize)]
+#[allow(dead_code)]
+struct Anim {
+    frame_ms: u32,
+}
 
 fn sprites_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/sprites")
@@ -48,7 +55,7 @@ fn shipped_sprites() -> Vec<PathBuf> {
 }
 
 #[test]
-fn the_shipped_sprites_are_one_cell() {
+fn the_shipped_sprites_are_one_or_two_cells() {
     let sprites = shipped_sprites();
     assert!(
         !sprites.is_empty(),
@@ -57,12 +64,21 @@ fn the_shipped_sprites_are_one_cell() {
     for path in sprites {
         let (w, h, depth, colour) = png_header(&path);
         let name = path.display();
-        assert_eq!(
-            (w, h),
-            (SPRITE_NATIVE, SPRITE_NATIVE),
-            "{name} is {w}x{h}; a sprite that is not {SPRITE_NATIVE}x{SPRITE_NATIVE} \
-             is scaled by a non-integer factor at some zoom and blurs"
+        assert!(
+            h == SPRITE_NATIVE && (w == SPRITE_NATIVE || w == 2 * SPRITE_NATIVE),
+            "{name} is {w}x{h}; a sprite must be {SPRITE_NATIVE}x{SPRITE_NATIVE} or a \
+             {}x{SPRITE_NATIVE} sheet, or it is refused at load or blurs at some zoom",
+            2 * SPRITE_NATIVE
         );
+        if w == 2 * SPRITE_NATIVE {
+            let stem = path.file_stem().unwrap().to_string_lossy();
+            let key = stem.strip_suffix(".colour").unwrap_or(&stem);
+            let anim = sprites_dir().join(format!("{key}.anim.ron"));
+            let text = std::fs::read_to_string(&anim)
+                .unwrap_or_else(|_| panic!("{name} is a sheet and needs {}", anim.display()));
+            ron::from_str::<Anim>(&text)
+                .unwrap_or_else(|e| panic!("{} does not parse: {e}", anim.display()));
+        }
         assert_eq!(depth, 8, "{name} must be 8 bits per channel");
         // Colour type 6 is RGBA. A sprite without an alpha channel draws an
         // opaque square over the tile's background and biome pattern.

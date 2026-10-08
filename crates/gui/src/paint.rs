@@ -194,7 +194,32 @@ pub fn sprite_tint(color: Color, full_colour: bool) -> Color {
 /// of the pixels, and `depot_mk2`..`mk6` all share one image.
 #[derive(Clone, Default)]
 pub struct SpriteTable {
-    by_name: HashMap<String, (egui::TextureId, bool)>,
+    by_name: HashMap<String, SpriteEntry>,
+}
+
+/// One loaded sheet: `frames` square cells side by side, shown in turn
+/// every `frame_ms`. A one-cell sheet is the ordinary static sprite.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SpriteEntry {
+    pub(crate) texture: egui::TextureId,
+    pub(crate) full_colour: bool,
+    pub(crate) frames: usize,
+    pub(crate) frame_ms: u32,
+}
+
+/// Which cell of a `frames`-wide sheet shows at `now` seconds.
+///
+/// Pure so the flip is testable without a clock. `phase_key` staggers
+/// sprites by up to one frame, spread over `PHASE_KEYS` steps, so a map full
+/// of the same species does not blink in lockstep; the same key space `fx`
+/// uses for its bobs keeps one entity's motions on one phase.
+pub fn sprite_frame(now: f64, phase_key: u64, frames: usize, frame_ms: u32) -> usize {
+    if frames <= 1 || frame_ms == 0 {
+        return 0;
+    }
+    let period = f64::from(frame_ms) / 1000.0;
+    let offset = (phase_key % crate::fx::PHASE_KEYS) as f64 * period / crate::fx::PHASE_KEYS as f64;
+    ((now + offset) / period).floor() as usize % frames
 }
 
 impl SpriteTable {
@@ -202,18 +227,42 @@ impl SpriteTable {
     /// `.colour` twin both claim one key; the colour one wins whatever the
     /// load order, so which art draws cannot depend on which file the asset
     /// server finished first.
-    pub fn insert(&mut self, stem: impl Into<String>, texture: egui::TextureId) {
+    pub fn insert(
+        &mut self,
+        stem: impl Into<String>,
+        texture: egui::TextureId,
+        frames: usize,
+        frame_ms: u32,
+    ) {
         let stem = stem.into();
+        let entry = |full_colour| SpriteEntry {
+            texture,
+            full_colour,
+            frames,
+            frame_ms,
+        };
         match stem.strip_suffix(feral_processes_engine::FULL_COLOUR_SUFFIX) {
             Some(name) => {
-                self.by_name.insert(name.to_string(), (texture, true));
+                self.by_name.insert(name.to_string(), entry(true));
             }
             None => {
-                if !self.by_name.get(&stem).is_some_and(|&(_, colour)| colour) {
-                    self.by_name.insert(stem, (texture, false));
+                if !self.by_name.get(&stem).is_some_and(|e| e.full_colour) {
+                    self.by_name.insert(stem, entry(false));
                 }
             }
         }
+    }
+
+    /// A one-cell sprite at the default pace — what a test needs when the
+    /// sheet's width is not the point.
+    #[cfg(test)]
+    pub(crate) fn insert_still(&mut self, stem: impl Into<String>, texture: egui::TextureId) {
+        self.insert(
+            stem,
+            texture,
+            1,
+            feral_processes_app_core::DEFAULT_SPRITE_FRAME_MS,
+        );
     }
 
     /// Drops the entry `name` holds, if any. The runtime-built player icon
@@ -223,8 +272,9 @@ impl SpriteTable {
         self.by_name.remove(name);
     }
 
-    /// The texture under `name`, and whether it is full-colour art.
-    pub(crate) fn get(&self, name: &str) -> Option<(egui::TextureId, bool)> {
+    /// The entry under `name`: its texture, whether it is full-colour art,
+    /// and how many cells wide the sheet is.
+    pub(crate) fn get(&self, name: &str) -> Option<SpriteEntry> {
         self.by_name.get(name).copied()
     }
 }
@@ -249,6 +299,11 @@ pub struct Painter {
     /// lifetimes and `render/`'s several hundred `&Painter` signatures stay
     /// as they are. The clone is one atomic bump per frame.
     sprites: Arc<SpriteTable>,
+    /// The clock a sprite sheet flips on. `None` is fx off: every sheet
+    /// shows its first cell. An `Option` rather than a `0.0` sentinel,
+    /// because `0.0` is a real time and would freeze phased sprites at
+    /// their offset instead of at frame one.
+    anim_now: Option<f64>,
 }
 
 impl Painter {
@@ -266,7 +321,18 @@ impl Painter {
             height: screen.height(),
             delta,
             sprites,
+            anim_now: None,
         }
+    }
+
+    /// The animation clock, for a view that plays a sheet itself instead of
+    /// going through `sprite`. `None` means effects are off: show frame one.
+    pub fn anim_now(&self) -> Option<f64> {
+        self.anim_now
+    }
+
+    pub fn set_anim_now(&mut self, now: Option<f64>) {
+        self.anim_now = now;
     }
 
     pub fn screen_w(&self) -> f32 {
@@ -360,6 +426,7 @@ impl Painter {
             // Carried through, or a sprite drawn inside the Stack corridor's
             // clip would silently fall back to its glyph.
             sprites: Arc::clone(&self.sprites),
+            anim_now: self.anim_now,
         });
     }
 
@@ -441,16 +508,36 @@ impl Painter {
     /// Returns `false` for a name the table has nothing under, which is what
     /// makes `assets/sprites/` optional: the caller draws its glyph instead,
     /// so a species with no art ships visible rather than blank.
+    ///
+    /// A sheet wider than one cell shows one cell at a time, picked by
+    /// `sprite_frame` from the painter's animation clock and `phase_key`
+    /// (an entity's id, so neighbours drift apart; `0` where there is no
+    /// entity). With the clock off it holds the first cell.
     #[must_use]
-    pub fn sprite(&self, name: &str, x: f32, y: f32, size: f32, color: Color) -> bool {
-        let Some((texture, full_colour)) = self.sprites.get(name) else {
+    pub fn sprite(
+        &self,
+        name: &str,
+        x: f32,
+        y: f32,
+        size: f32,
+        color: Color,
+        phase_key: u64,
+    ) -> bool {
+        let Some(entry) = self.sprites.get(name) else {
             return false;
         };
-        let color = sprite_tint(color, full_colour);
+        let color = sprite_tint(color, entry.full_colour);
+        let frame = self.anim_now.map_or(0, |now| {
+            sprite_frame(now, phase_key, entry.frames, entry.frame_ms)
+        });
+        let cell = 1.0 / entry.frames as f32;
         self.painter.image(
-            texture,
+            entry.texture,
             rect_of(x, y, size, size),
-            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Rect::from_min_max(
+                egui::pos2(frame as f32 * cell, 0.0),
+                egui::pos2((frame + 1) as f32 * cell, 1.0),
+            ),
             to_egui(color),
         );
         true
@@ -592,6 +679,16 @@ pub(crate) fn with_sprites<R>(
     sprites: SpriteTable,
     f: impl FnOnce(&Painter) -> R,
 ) -> (R, Vec<egui::epaint::ClippedShape>) {
+    with_sprites_at(sprites, None, f)
+}
+
+/// `with_sprites` with the animation clock set.
+#[cfg(test)]
+pub(crate) fn with_sprites_at<R>(
+    sprites: SpriteTable,
+    anim_now: Option<f64>,
+    f: impl FnOnce(&Painter) -> R,
+) -> (R, Vec<egui::epaint::ClippedShape>) {
     let ctx = egui::Context::default();
     install_fonts(&ctx);
     ctx.begin_pass(egui::RawInput {
@@ -601,9 +698,29 @@ pub(crate) fn with_sprites<R>(
         )),
         ..Default::default()
     });
-    let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::new(sprites)));
+    let mut painter = Painter::for_frame(&ctx, 1.0 / 60.0, Arc::new(sprites));
+    painter.set_anim_now(anim_now);
+    let out = f(&painter);
     let shapes = ctx.end_pass().shapes;
     (out, shapes)
+}
+
+/// The `u` span of the first textured mesh in `shapes`.
+#[cfg(test)]
+pub(crate) fn painted_u_span(shapes: &[egui::epaint::ClippedShape]) -> (f32, f32) {
+    shapes
+        .iter()
+        .find_map(|cs| match &cs.shape {
+            egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => {
+                let us = m.vertices.iter().map(|v| v.uv.x);
+                Some((
+                    us.clone().fold(f32::MAX, f32::min),
+                    us.fold(f32::MIN, f32::max),
+                ))
+            }
+            _ => None,
+        })
+        .expect("a textured mesh was painted")
 }
 
 /// Every textured mesh `with_painter` recorded, as `(texture, bounds, tint)`.
@@ -1157,13 +1274,61 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_one_frame_sheet_is_always_frame_zero() {
+        for now in [0.0, 0.3, 1.7, 99.0] {
+            assert_eq!(sprite_frame(now, 5, 1, 600), 0);
+        }
+    }
+
+    #[test]
+    fn a_two_frame_sheet_flips_every_frame_ms() {
+        assert_eq!(sprite_frame(0.0, 0, 2, 600), 0);
+        assert_eq!(sprite_frame(0.59, 0, 2, 600), 0);
+        assert_eq!(sprite_frame(0.61, 0, 2, 600), 1);
+        assert_eq!(sprite_frame(1.19, 0, 2, 600), 1);
+        assert_eq!(sprite_frame(1.21, 0, 2, 600), 0);
+    }
+
+    #[test]
+    fn phase_keys_stagger_the_flip() {
+        let differs = (0..120)
+            .map(|i| f64::from(i) * 0.01)
+            .any(|now| sprite_frame(now, 0, 2, 600) != sprite_frame(now, 32, 2, 600));
+        assert!(differs, "two phase keys must not flip in lockstep");
+    }
+
+    #[test]
+    fn a_two_frame_entry_draws_only_its_current_cell() {
+        let sheet = |now| {
+            let mut table = SpriteTable::default();
+            table.insert("hero", egui::TextureId::User(1), 2, 600);
+            let (_, shapes) =
+                with_sprites_at(table, now, |p| p.sprite("hero", 0.0, 0.0, 16.0, WHITE, 0));
+            painted_u_span(&shapes)
+        };
+        assert_eq!(sheet(Some(0.1)), (0.0, 0.5), "first cell");
+        assert_eq!(sheet(Some(0.7)), (0.5, 1.0), "second cell");
+        assert_eq!(sheet(None), (0.0, 0.5), "fx off holds the first cell");
+    }
+
+    #[test]
+    fn a_one_frame_entry_draws_the_whole_texture() {
+        let mut table = SpriteTable::default();
+        table.insert_still("hero", egui::TextureId::User(1));
+        let (_, shapes) = with_sprites_at(table, Some(0.7), |p| {
+            p.sprite("hero", 0.0, 0.0, 16.0, WHITE, 0)
+        });
+        assert_eq!(painted_u_span(&shapes), (0.0, 1.0));
+    }
+
     /// A name the table has nothing under must leave the caller free to draw
     /// the glyph instead — the whole of how `assets/sprites/` stays optional
     /// and a modded species without art ships visible rather than blank.
     #[test]
     fn an_unknown_sprite_paints_nothing_and_says_so() {
         let (drew, shapes) = with_sprites(SpriteTable::default(), |p| {
-            p.sprite("nobody", 10.0, 20.0, 16.0, WHITE)
+            p.sprite("nobody", 10.0, 20.0, 16.0, WHITE, 0)
         });
         assert!(!drew, "an unknown name must report that it drew nothing");
         assert!(
@@ -1181,9 +1346,10 @@ mod tests {
     fn a_sprite_fills_the_square_it_is_given() {
         let id = egui::TextureId::User(7);
         let mut table = SpriteTable::default();
-        table.insert("player", id);
+        table.insert_still("player", id);
 
-        let (drew, shapes) = with_sprites(table, |p| p.sprite("player", 10.0, 20.0, 48.0, WHITE));
+        let (drew, shapes) =
+            with_sprites(table, |p| p.sprite("player", 10.0, 20.0, 48.0, WHITE, 0));
 
         assert!(drew, "a known name must report that it drew");
         let images = painted_images(&shapes);
@@ -1204,10 +1370,10 @@ mod tests {
     #[test]
     fn a_sprite_carries_the_colour_it_was_given() {
         let mut table = SpriteTable::default();
-        table.insert("player", egui::TextureId::User(1));
+        table.insert_still("player", egui::TextureId::User(1));
         let red = Color::new(1.0, 0.0, 0.0, 1.0);
 
-        let (_, shapes) = with_sprites(table, |p| p.sprite("player", 0.0, 0.0, 16.0, red));
+        let (_, shapes) = with_sprites(table, |p| p.sprite("player", 0.0, 0.0, 16.0, red, 0));
 
         assert_eq!(
             painted_images(&shapes)[0].2,
@@ -1221,9 +1387,9 @@ mod tests {
     #[test]
     fn a_colour_file_is_keyed_without_its_suffix() {
         let mut table = SpriteTable::default();
-        table.insert("depot.colour", egui::TextureId::User(3));
+        table.insert_still("depot.colour", egui::TextureId::User(3));
 
-        let (drew, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, WHITE));
+        let (drew, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, WHITE, 0));
 
         assert!(drew, "`depot` must find the art filed as `depot.colour`");
         assert_eq!(painted_images(&shapes)[0].0, egui::TextureId::User(3));
@@ -1234,10 +1400,13 @@ mod tests {
     #[test]
     fn a_plain_file_loaded_second_does_not_displace_its_colour_twin() {
         let mut table = SpriteTable::default();
-        table.insert("depot.colour", egui::TextureId::User(3));
-        table.insert("depot", egui::TextureId::User(4));
+        table.insert_still("depot.colour", egui::TextureId::User(3));
+        table.insert_still("depot", egui::TextureId::User(4));
 
-        assert_eq!(table.get("depot"), Some((egui::TextureId::User(3), true)));
+        assert_eq!(
+            table.get("depot").map(|e| (e.texture, e.full_colour)),
+            Some((egui::TextureId::User(3), true))
+        );
     }
 
     /// Full-colour art drops the tint's hue and keeps its value, so a cyan
@@ -1246,10 +1415,10 @@ mod tests {
     #[test]
     fn a_colour_sprite_is_tinted_grey_at_the_tints_brightest_channel() {
         let mut table = SpriteTable::default();
-        table.insert("depot.colour", egui::TextureId::User(3));
+        table.insert_still("depot.colour", egui::TextureId::User(3));
         let dim_cyan = Color::new(0.1, 0.6, 0.5, 1.0);
 
-        let (_, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, dim_cyan));
+        let (_, shapes) = with_sprites(table, |p| p.sprite("depot", 0.0, 0.0, 16.0, dim_cyan, 0));
 
         assert_eq!(
             painted_images(&shapes)[0].2,

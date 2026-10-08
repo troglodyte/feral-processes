@@ -1196,6 +1196,9 @@ fn draw_surface_map(
                 // `tile_px`, so the sprite keeps the glyph's margin inside
                 // its tile and stays on the integer ladder — 16, 32, 48, 64.
                 let inset = (tile_px - glyph_px as f32) / 2.0;
+                // The same key `Fx`'s bobs phase on, so a worker's sprite
+                // frame and its bob drift together.
+                let phase_key = actor.or(structure).map_or(0, |ev| ev.entity.to_bits());
                 // **The player's own drawing is the top rung, and it is the
                 // one sprite in the game drawn untinted.** Every other
                 // sprite is authored near-white and inherits its tile's
@@ -1225,6 +1228,7 @@ fn draw_surface_map(
                         py + inset + jy,
                         glyph_px as f32,
                         neutral,
+                        phase_key,
                     ))
                     || sprite.is_some_and(|name| {
                         painter.sprite(
@@ -1233,6 +1237,7 @@ fn draw_surface_map(
                             py + inset + jy,
                             glyph_px as f32,
                             color,
+                            phase_key,
                         )
                     })
             });
@@ -3135,7 +3140,7 @@ mod tests {
             ..CharacterChoice::default()
         };
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
@@ -3160,11 +3165,11 @@ mod tests {
             ..CharacterChoice::default()
         };
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
-        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+        table.insert_still("hero", bevy_egui::egui::TextureId::User(4));
 
         let (images, _) = drawn_map_images(table, &choice);
 
@@ -3190,7 +3195,7 @@ mod tests {
             ..CharacterChoice::default()
         };
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
@@ -3230,11 +3235,11 @@ mod tests {
             ..CharacterChoice::default()
         };
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
-        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+        table.insert_still("hero", bevy_egui::egui::TextureId::User(4));
 
         let (images, glyphs) = drawn_map_images(table, &choice);
 
@@ -3284,7 +3289,7 @@ mod tests {
             .find(|d| d.id == species)
             .expect("the fixture's own species must resolve");
         let mut table = SpriteTable::default();
-        table.insert(def.sprite_name(), bevy_egui::egui::TextureId::User(9));
+        table.insert_still(def.sprite_name(), bevy_egui::egui::TextureId::User(9));
 
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
@@ -3346,7 +3351,7 @@ mod tests {
     #[test]
     fn the_player_sprite_stands_in_for_the_at_sign() {
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             feral_processes_engine::DEFAULT_PLAYER_SPRITE,
             bevy_egui::egui::TextureId::User(1),
         );
@@ -3370,7 +3375,7 @@ mod tests {
             ..CharacterChoice::default()
         };
         let mut table = SpriteTable::default();
-        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+        table.insert_still("hero", bevy_egui::egui::TextureId::User(4));
 
         let (images, glyphs) = drawn_map_with_choice(table, &choice);
 
@@ -3515,7 +3520,7 @@ mod tests {
     #[test]
     fn the_anchor_sprite_stands_in_for_the_hash() {
         let mut table = SpriteTable::default();
-        table.insert("anchor", bevy_egui::egui::TextureId::User(2));
+        table.insert_still("anchor", bevy_egui::egui::TextureId::User(2));
 
         let (under, _) = drawn_map_with(table.clone(), 0);
         assert_eq!(
@@ -3640,7 +3645,7 @@ mod tests {
             .clone()
             .expect("a creature always resolves a sprite name");
         let mut table = SpriteTable::default();
-        table.insert(name, bevy_egui::egui::TextureId::User(6));
+        table.insert_still(name, bevy_egui::egui::TextureId::User(6));
 
         let (images, glyphs) = drawn_map_centered_on(&mut game, table, creature.pos);
 
@@ -3944,7 +3949,7 @@ mod tests {
         // Home's `sprite:` field names "anchor" — the same art the base
         // anchor draws on the zone map outside, see `assets/structures/
         // home.ron`.
-        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
+        table.insert_still("anchor", bevy_egui::egui::TextureId::User(7));
 
         let (under, _) = drawn_base_with_sprites(table.clone(), 0);
         assert_eq!(
@@ -3995,11 +4000,11 @@ mod tests {
             .expect("the party steps inside, standing on the Home");
 
         let mut table = SpriteTable::default();
-        table.insert(
+        table.insert_still(
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
-        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
+        table.insert_still("anchor", bevy_egui::egui::TextureId::User(7));
 
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
@@ -4057,7 +4062,7 @@ mod tests {
             .expect("the party steps inside, standing on the Home");
 
         let mut table = SpriteTable::default();
-        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
+        table.insert_still("anchor", bevy_egui::egui::TextureId::User(7));
 
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
@@ -4475,7 +4480,7 @@ mod tests {
     #[test]
     fn draw_finish_draws_the_fill_the_edge_and_the_sprite() {
         let mut table = SpriteTable::default();
-        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        table.insert_still("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
         let finish = a_finish_view("cobalt_carpet");
         let r = Rect::new(0.0, 0.0, 32.0, 32.0);
         let (_, shapes) = with_sprites(table, |p| draw_finish(p, r, &finish, 1.0));
@@ -4504,7 +4509,7 @@ mod tests {
     #[test]
     fn draw_finish_dims_the_edge_and_the_sprite_along_with_the_fill() {
         let mut table = SpriteTable::default();
-        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        table.insert_still("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
         let finish = a_finish_view("cobalt_carpet");
         let r = Rect::new(0.0, 0.0, 32.0, 32.0);
 
@@ -4617,7 +4622,7 @@ mod tests {
     #[test]
     fn a_real_finished_cell_draws_through_the_full_pipeline() {
         let mut table = SpriteTable::default();
-        table.insert("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
+        table.insert_still("cobalt_carpet", bevy_egui::egui::TextureId::User(9));
         let shapes = drawn_base_with_finish(table, "cobalt_carpet", (3, 3));
 
         assert_eq!(

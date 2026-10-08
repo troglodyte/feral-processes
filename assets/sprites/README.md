@@ -41,9 +41,36 @@ nearest-neighbour. That is the same discipline `unscii-16` is held to by
 `crates/gui/tests/font_rasterization.rs`, and it is what keeps pixel art
 crisp instead of resampling into mush.
 
-A sprite of any other size still draws, but it is scaled by a non-integer
-factor at some zoom and will blur. `the_shipped_sprites_are_one_cell` in
-`crates/gui/tests/sprites.rs` refuses one at load.
+A sprite of any other size is refused: `register` accepts only 16x16 or a
+32x16 sheet (below), logs a warning, and the entity draws its glyph instead.
+`the_shipped_sprites_are_one_or_two_cells` in `crates/gui/tests/sprites.rs`
+holds the shipped art to the same sizes.
+
+## Two-frame sheets
+
+A sprite may be a **sheet**: two 16x16 cells side by side, so a 32x16 PNG,
+that flips between cells on a clock. The height must stay 16 and the
+width must be 16 or 32; any other size (24x16, 48x16, 16x32) is refused at
+load with a logged warning, and the entity draws its glyph. Every sprite
+draw animates: the map, the battle portrait, popups and the forge preview
+all flip. Only the map offsets each entity's start; the other callers use
+phase 0, so their sprites flip in step.
+
+The pace comes from an optional `<key>.anim.ron` beside the PNG, where
+`<key>` is the name without `.colour`:
+
+```ron
+(frame_ms: 400)
+```
+
+Each cell shows for `frame_ms` milliseconds. With no file, or a malformed
+one, the pace is 600. Each entity starts at its own offset within a frame,
+so a crowd does not blink in step. With effects off (`\`) every sheet holds
+its first cell everywhere.
+
+A sheet shares everything its name already shares: the plain and `.colour`
+variants of one key each carry their own sheet but one `.anim.ron`, and
+`.png.off` disables the whole sheet.
 
 ## Author them near-white
 
@@ -114,6 +141,12 @@ a player, so this directory's population is still meant to change only by
 someone dropping in a file — a stray `.png.off` sitting next to an enabled
 sprite is normal, not a leftover to clean up, and is exactly how a piece of
 art gets shelved without losing it.
+
+The editor edits two-frame sheets too: `[2]` makes frame 2 as a copy of
+frame 1, `[1]` goes back, `[D]` deletes frame 2, and `[-]`/`[=]` step the
+pace by 100 ms between 100 and 2000. A save with two frames writes the
+32x16 sheet and `<name>.anim.ron`; a save with one frame writes 16x16 and
+removes any `.anim.ron` left beside it.
 
 ## A save quantises the file, irreversibly
 

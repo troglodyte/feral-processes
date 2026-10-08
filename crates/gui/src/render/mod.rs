@@ -78,6 +78,7 @@ mod settlement_market;
 mod social;
 mod splice_rig;
 mod world_map;
+pub(crate) use world_map::{WorldMapHit, world_map_hit};
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::SpriteHits` to name the type `sprite_forge::sprite_hits`
 // hands back — every other module here stays private because nothing

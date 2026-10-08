@@ -457,6 +457,29 @@ fn handle_map_pointer(
     label
 }
 
+/// A primary click on the world map picks the place under it — a grid
+/// cell or a side-list row. A no-op off that screen, since
+/// `render::world_map_hit` answers `None` there.
+fn handle_world_map_pointer(app: &mut App, ctx: &egui::Context, painter: &Painter) {
+    if ctx.egui_wants_pointer_input() {
+        return;
+    }
+    let click = ctx.input(|i| {
+        i.pointer
+            .primary_clicked()
+            .then(|| i.pointer.interact_pos())
+            .flatten()
+    });
+    let Some(pos) = click else {
+        return;
+    };
+    match render::world_map_hit(app, painter, (pos.x, pos.y)) {
+        Some(render::WorldMapHit::Chunk(chunk)) => app.pick_world_map_chunk(chunk),
+        Some(render::WorldMapHit::Row(index)) => app.pick_world_map_row(index),
+        None => {}
+    }
+}
+
 /// Adds `delta_y` to `acc` and spends it in `WHEEL_STEP_POINTS`, returning
 /// the signed number of steps (positive = wheel up = zoom in). The
 /// remainder stays in `acc`, since a touchpad sends many small deltas.
@@ -913,6 +936,7 @@ fn frame(
     {
         let ctx = contexts.ctx_mut()?;
         let hover = handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
+        handle_world_map_pointer(&mut fe.app, ctx, &painter);
         if let Some((cursor, tile)) = hover {
             let lines = fe.app.hover_lines(tile.0, tile.1);
             if !lines.is_empty() {

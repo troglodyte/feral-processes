@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.2
+
+**Picking a floor finish is a menu now.** In the Excavation plan (`m`), `[F]` used to step through the finishes one at a time. Now it opens a list of every finish, each with a colour swatch beside it, plus plain and strip. Pick one with its row key or the arrows and Enter; Esc goes back to the plan without changing the brush. A box you have started stays started.
+
+**Twelve more floor finishes**, for fifteen in all: Teal Tile, Olive Matting, Ochre Clay, Umber Boards, Wine Rug, Plum Felt, Violet Mosaic, Jade Tile, Sky Glass, Rose Carpet, Saffron Weave and Ash Concrete. Five of them use new shades (`Jade`, `Sky`, `Rose`, `Saffron`, `Ash`), which mods can use too. The soft ones — matting, boards, rug, felt, carpet and weave — put programs at ease the way Cobalt Carpet does. None of the new finishes has a sprite yet, so each draws as its colour with an edge, and they appear in the Sprite Forge's list ready to be drawn.
+
 ## 0.18.1
 
 **A sprite can have two frames that alternate.** A sprite drawn 32 pixels wide by 16 tall is split into two frames that take turns, 600 ms each by default; a `<name>.anim.ron` beside it sets `frame_ms`. Programs on the map start their cycle at different moments so a crowd does not blink in step. With effects off (`\`), every sprite shows its first frame. A sprite that is neither 16x16 nor 32x16 is now refused with a warning and the entity draws its letter instead; before, other sizes were stretched to fit.

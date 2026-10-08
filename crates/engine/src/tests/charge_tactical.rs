@@ -360,3 +360,53 @@ fn the_view_shows_who_is_charging_and_where_it_will_land() {
     assert!(view.charge_aims[0].party_side);
     assert!(view.frozen().charge_aims.is_empty());
 }
+
+#[test]
+fn a_captured_charger_stops_charging() {
+    let (mut game, player, wild) = fight(3, 0);
+    let def = charge_def(40, 3, 5, 0);
+    game.start_charge(wild, &def, crate::components::ChargeAim::Cells(Vec::new()));
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+    crate::tests::support::set_inventory(&mut game, &[(crate::ids::ICE_BREAKER, 50)]);
+
+    let mut captured = false;
+    for _ in 0..50 {
+        if game.decompile_body(wild, player) {
+            captured = true;
+            break;
+        }
+    }
+    assert!(captured, "the capture never landed");
+    assert!(game.world.get::<Tamed>(wild).is_some());
+    assert!(
+        game.world.get::<Charging>(wild).is_none(),
+        "a companion kept its wind-up"
+    );
+}
+
+#[test]
+fn a_wrong_model_aim_ends_the_charge_and_the_turn_instead_of_stalling() {
+    let (mut game, player, wild) = fight(3, 0);
+    let at = cell_of(&game, wild);
+    start_on(&mut game, at);
+    back_to(&mut game, player);
+    game.world.get_mut::<Charging>(player).unwrap().aim = ChargeAim::Group(vec![wild]);
+
+    assert!(game.tactical_charge_release());
+
+    assert!(game.world.get::<Charging>(player).is_none());
+    assert_ne!(game.tactical_actor(), Some(player), "the turn was kept");
+}
+
+#[test]
+fn a_hold_at_full_charge_is_refused() {
+    let (mut game, player, wild) = fight(3, 0);
+    let at = cell_of(&game, wild);
+    start_on(&mut game, at);
+    back_to(&mut game, player);
+    game.world.get_mut::<Charging>(player).unwrap().progress = 3;
+
+    assert!(!game.tactical_charge_hold());
+    assert_eq!(progress(&game, player), Some(3));
+}

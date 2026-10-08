@@ -1912,6 +1912,11 @@ impl Game {
         let Some(actor) = self.player_charger() else {
             return false;
         };
+        // Past full charge k/N would read above 1; arrival fires on its own,
+        // so a standing full charge is the release's to take.
+        if self.charge_is_full(actor) {
+            return false;
+        }
         self.tactical_charge_turn(actor, ChargeChoice::Hold);
         true
     }
@@ -1985,6 +1990,10 @@ impl Game {
             return;
         };
         let ChargeAim::Cells(cells) = &charging.aim else {
+            // Another model's aim has nothing to fire over; leaving it
+            // standing would stall the turn on a charger that can never act.
+            self.end_charge(actor);
+            self.end_charger_turn(actor);
             return;
         };
         let Some(def) = self

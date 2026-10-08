@@ -213,3 +213,15 @@
   counts by move name. The group index stayed a `wild_retaliate` parameter,
   but its two real callers read it live off `Game::group_of` at the moment
   the program swings.
+
+- **A charge is cancelled where the stun lands, and its cooldown arms only in
+  `end_charge`.** The battle map never reads stun at turn start
+  (`tactical/turn.rs`), so a check at the charger's own turn lets a stunned
+  charger fire; `arm_status` is the one hook that sees a stun in both models
+  and calls `cancel_charge`. Arming the cooldown at the start instead would
+  tick it down during the wind-up and leave the routine ready the instant it
+  fired, so the start pays Power only and `end_charge` (the sole remover of
+  `Charging`, for both firing and cancelling) arms it through the model's own
+  helper. A cancelled charge keeps its Power spent and still starts the
+  cooldown. A hostile only ever holds a charge routine through the wild roll,
+  never its species kit.

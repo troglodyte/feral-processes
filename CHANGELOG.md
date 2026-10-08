@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.5
+
+**On the world map, a click picks a place.** Click a square on the map or a row in the side list to select that place and see its details, the same as pressing its row key; `C` then points the compass at it. Where two places share a square, such as a nest beside home, clicking it again moves to the next one. Before, only the row keys could pick a place.
+
 ## 0.18.4
 
 **Some routines now wind up over several turns before they land.** Starting one spends its Power at once and roots the program in place. On each later turn you hold it (`h` in a group battle, `H` on a battle map) to build it up, or release it (`x` / `X`) early for a weaker hit. At full charge it fires on its own, and its cooldown only starts once it has fired or been cancelled. A stun cancels it, and so does fleeing a group battle. A charging program shows `charging k/N → target` in the battle rows, or a `CHG k/N` tag and a highlight on the aimed cells on a battle map. On a battle map the hit lands on whoever is standing in those cells when it fires, so a target can step out of the way, and an ally can step in.

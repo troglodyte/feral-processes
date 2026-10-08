@@ -1066,3 +1066,75 @@ fn a_citys_report_carries_its_band_and_a_towns_carries_none() {
         "a Server reports a band it does not have"
     );
 }
+
+fn relation_of(game: &crate::Game, key: SettlementKey) -> crate::settlements::Relation {
+    game.world
+        .resource::<crate::resources::Standings>()
+        .0
+        .get(&key)
+        .copied()
+        .unwrap_or_default()
+}
+
+/// The world map reads `settle_commerce` for pending drift and the settler
+/// writes it, so this asserts they are the one calculation: what the pure
+/// function predicted is what the town ends up holding.
+#[test]
+fn the_pure_settle_equals_what_the_settler_writes() {
+    let mut game = game(4242);
+    let key = a_known_key(&game);
+    game.adjust_commerce(key, 20);
+    let epoch = 4;
+    let before = relation_of(&game, key);
+    let hostile = game.standing_band(key) == crate::settlements::Standing::Hostile;
+    let predicted = growth::settle_commerce(&before, epoch, hostile);
+    game.set_tick_for_test(crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS * epoch);
+    game.settle_commerce_drift(key);
+    let after = relation_of(&game, key);
+    assert_eq!(
+        (after.commerce, after.commerce_epoch, after.commerce_at_epoch),
+        (
+            predicted.commerce,
+            predicted.commerce_epoch,
+            predicted.commerce_at_epoch
+        )
+    );
+    assert_eq!(after.commerce_at_epoch, before.commerce);
+}
+
+#[test]
+fn a_decayed_town_reads_falling_and_a_traded_one_rising() {
+    let mut game = game(4242);
+    let key = a_known_key(&game);
+    game.adjust_commerce(key, 20);
+    game.set_tick_for_test(crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS * 3);
+    game.settle_commerce_drift(key);
+    let r = relation_of(&game, key);
+    assert_eq!(
+        growth::trend(r.commerce, r.commerce_at_epoch),
+        growth::TownTrend::Falling
+    );
+    game.adjust_commerce(key, 30);
+    let r = relation_of(&game, key);
+    assert_eq!(
+        growth::trend(r.commerce, r.commerce_at_epoch),
+        growth::TownTrend::Rising
+    );
+}
+
+#[test]
+fn the_epoch_snapshot_survives_a_save_and_load() {
+    let dir = crate::tests::support::scratch_assets_dir("settlement_growth_snapshot");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = game(4242);
+    let key = a_known_key(&game);
+    game.adjust_commerce(key, 20);
+    game.set_tick_for_test(crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS * 3);
+    game.settle_commerce_drift(key);
+    let saved = relation_of(&game, key).commerce_at_epoch;
+    assert_eq!(saved, 20, "test premise: a snapshot was taken");
+    game.save(&path).unwrap();
+    let loaded = crate::Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+    assert_eq!(relation_of(&loaded, key).commerce_at_epoch, saved);
+}

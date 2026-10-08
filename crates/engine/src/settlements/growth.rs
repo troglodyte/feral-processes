@@ -18,14 +18,15 @@
 //! that does.
 
 use crate::tuning::{
-    SETTLEMENT_COMMERCE_MAX, SETTLEMENT_COMMERCE_MIN, SETTLEMENT_COMMERCE_PULL_TICKS,
+    SETTLEMENT_COMMERCE_DECAY, SETTLEMENT_COMMERCE_HOSTILE_DECAY, SETTLEMENT_COMMERCE_MAX,
+    SETTLEMENT_COMMERCE_MIN, SETTLEMENT_COMMERCE_PULL_TICKS, WORLD_MAP_GROWTH_SOON_TICKS,
     SETTLEMENT_COMMERCE_STARVED, SETTLEMENT_COMMERCE_THRIVING, SETTLEMENT_GROWTH_DUE_MAX,
     SETTLEMENT_GROWTH_DUE_MIN, SETTLEMENT_GROWTH_SALT, SETTLEMENT_MAINFRAME_BONUS_SHARE,
     SETTLEMENT_MAINFRAME_ROWS, SETTLEMENT_SERVER_BONUS_SHARE, SETTLEMENT_SERVER_ROWS,
     SETTLEMENT_STEADY_BONUS_SHARE, SETTLEMENT_STEADY_ROWS,
 };
 
-use super::{SettlementKey, Standing};
+use super::{Relation, SettlementKey, Standing};
 
 /// The tick this region's Server is due to become a Mainframe on the clock
 /// alone, before any trade pulls it forward.
@@ -49,6 +50,98 @@ pub fn due_tick(seed: u32, key: SettlementKey) -> u64 {
 /// against a `u64` clock and the caller does the saturating arithmetic.
 pub fn pull_ticks(commerce: i32) -> i64 {
     commerce as i64 * SETTLEMENT_COMMERCE_PULL_TICKS as i64
+}
+
+/// The tick a Server actually grows on: its derived date, pulled earlier by
+/// commerce. `Game::latch_growth` tests against it and the world map's
+/// `outlook` reads it, so the two cannot disagree about when.
+pub fn due_with_pull(seed: u32, key: SettlementKey, commerce: i32) -> i64 {
+    due_tick(seed, key) as i64 - pull_ticks(commerce)
+}
+
+/// What a town's drift fields read once every elapsed epoch is paid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommerceSettle {
+    pub commerce: i32,
+    pub commerce_epoch: u64,
+    pub commerce_at_epoch: i32,
+}
+
+/// The pure half of `Game::settle_commerce_drift`: `relation` settled up to
+/// `epoch`, with nothing written. The world map reads it for pending drift
+/// and the settler writes it, so the two are one calculation rather than a
+/// copy.
+///
+/// The snapshot is the commerce held **before** this settle's decay, so a
+/// town that has only decayed reads as falling. Nothing elapsed leaves all
+/// three fields as they were.
+pub fn settle_commerce(relation: &Relation, epoch: u64, hostile: bool) -> CommerceSettle {
+    if epoch <= relation.commerce_epoch {
+        return CommerceSettle {
+            commerce: relation.commerce,
+            commerce_epoch: relation.commerce_epoch,
+            commerce_at_epoch: relation.commerce_at_epoch,
+        };
+    }
+    let elapsed = (epoch - relation.commerce_epoch).min(i32::MAX as u64) as i32;
+    let rate = SETTLEMENT_COMMERCE_DECAY
+        + if hostile {
+            SETTLEMENT_COMMERCE_HOSTILE_DECAY
+        } else {
+            0
+        };
+    CommerceSettle {
+        commerce: clamp_commerce(
+            relation
+                .commerce
+                .saturating_add(rate.saturating_mul(elapsed).saturating_neg()),
+        ),
+        commerce_epoch: epoch,
+        commerce_at_epoch: relation.commerce,
+    }
+}
+
+/// Which way a Mainframe is heading. Its own enum rather than
+/// `outposts::Trend`, which has a `Stale` state with outpost-only meaning.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownTrend {
+    Rising,
+    Flat,
+    Falling,
+}
+
+/// `now` against the epoch snapshot. Strict, so equal is `Flat`.
+pub fn trend(now: i32, snapshot: i32) -> TownTrend {
+    match now.cmp(&snapshot) {
+        std::cmp::Ordering::Greater => TownTrend::Rising,
+        std::cmp::Ordering::Equal => TownTrend::Flat,
+        std::cmp::Ordering::Less => TownTrend::Falling,
+    }
+}
+
+/// How near a Server's growth is, in words: the map never shows a tick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrowthOutlook {
+    Soon,
+    InTime,
+}
+
+/// `due` is `due_with_pull`. A Server already past its date is `Soon`.
+pub fn outlook(now: u64, due: i64) -> GrowthOutlook {
+    if due - (now as i64) <= WORLD_MAP_GROWTH_SOON_TICKS as i64 {
+        GrowthOutlook::Soon
+    } else {
+        GrowthOutlook::InTime
+    }
+}
+
+impl GrowthOutlook {
+    pub fn label(self) -> &'static str {
+        match self {
+            GrowthOutlook::Soon => "Grows into a Mainframe soon.",
+            GrowthOutlook::InTime => "Grows into a Mainframe in time.",
+        }
+    }
 }
 
 /// The bounds every commerce writer clamps to.
@@ -362,6 +455,39 @@ mod tests {
     #[test]
     fn the_untraded_floor_is_where_an_untouched_city_bands() {
         assert_eq!(vitality_floor(false, Standing::Neutral), vitality(0));
+    }
+
+    #[test]
+    fn trend_compares_strictly_and_equal_is_flat() {
+        assert_eq!(trend(5, 4), TownTrend::Rising);
+        assert_eq!(trend(4, 4), TownTrend::Flat);
+        assert_eq!(trend(3, 4), TownTrend::Falling);
+    }
+
+    #[test]
+    fn outlook_is_soon_inside_the_cutoff_and_when_overdue() {
+        let soon = WORLD_MAP_GROWTH_SOON_TICKS as i64;
+        assert_eq!(outlook(100, 100 + soon), GrowthOutlook::Soon);
+        assert_eq!(outlook(100, 100 + soon + 1), GrowthOutlook::InTime);
+        assert_eq!(outlook(500, 100), GrowthOutlook::Soon);
+    }
+
+    #[test]
+    fn settle_commerce_snapshots_before_the_decay_and_is_idle_when_settled() {
+        let relation = Relation {
+            commerce: 10,
+            commerce_epoch: 2,
+            commerce_at_epoch: 99,
+            ..Relation::default()
+        };
+        let idle = settle_commerce(&relation, 2, false);
+        assert_eq!((idle.commerce, idle.commerce_at_epoch), (10, 99));
+        let paid = settle_commerce(&relation, 4, false);
+        assert_eq!(paid.commerce_epoch, 4);
+        assert_eq!(paid.commerce_at_epoch, 10);
+        assert_eq!(paid.commerce, 10 - 2 * SETTLEMENT_COMMERCE_DECAY);
+        let hostile = settle_commerce(&relation, 4, true);
+        assert!(hostile.commerce < paid.commerce);
     }
 
     /// Negative commerce pushes the date *later*, which is how a neglected

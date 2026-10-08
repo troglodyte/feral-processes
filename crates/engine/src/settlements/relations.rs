@@ -85,6 +85,15 @@ pub struct Relation {
     /// arithmetic runs over every town every tick.
     #[serde(default)]
     pub commerce_epoch: u64,
+    /// `commerce` as it stood **before** the last epoch's decay was paid —
+    /// the world map's snapshot, so "now" against this reads as the town's
+    /// direction. Written only by `Game::settle_commerce_drift`, from
+    /// `growth::settle_commerce`, beside `commerce_epoch`.
+    ///
+    /// An older save loads it as 0, so the trend can read wrong until the
+    /// next epoch settles.
+    #[serde(default)]
+    pub commerce_at_epoch: i32,
     /// The commerce remainder, `trade_credits`' companion and its reason:
     /// without somewhere to keep what is left over, a player who trades in
     /// ten small baskets feeds a town nothing while one who trades the same

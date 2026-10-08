@@ -118,7 +118,7 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::WorkSection;
 #[cfg(test)]
 use feral_processes_engine::duties::Duty;
-use feral_processes_engine::views::WorkColumnKey;
+use feral_processes_engine::views::{WorkColumnKey, WorldMapMark, WorldMapView};
 use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
@@ -130,6 +130,10 @@ use feral_processes_engine::{
     TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
     WorkTable, condense,
 };
+
+/// Chunks from the centre to the edge of the world map's grid. The grid and
+/// the side list are both built with it, so a row is always a mark drawn.
+pub const WORLD_MAP_VIEW_RADIUS: i32 = 12;
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
 /// visible viewport size.
@@ -2151,6 +2155,16 @@ pub enum Mode {
     /// Uppercase `X` because lowercase letters are row selectors on any
     /// screen with rows.
     Compass,
+    /// The surface at chunk scale: the fog, the places in it and the routes
+    /// between them, from `App::world_map`. Arrows pan, a lowercase letter
+    /// or digit picks a row of the side list (`App::world_map_marks`),
+    /// uppercase `C` points the compass at it and `P` re-centres on the
+    /// party. Esc closes.
+    ///
+    /// Opened by `g` on the surface; underground the same key opens
+    /// `FrameMap`. The pan centre is `App::world_map_center`, because
+    /// `Mode` holds unit variants only.
+    WorldMap,
     /// Every structure in the zone and what is assigned to it — see
     /// `Game::structure_report`. Enter on a workable row staffs it
     /// (`Mode::StructureAssign`); demolishing and upgrading stay on their own
@@ -2480,6 +2494,7 @@ impl Mode {
             | Mode::Alerts
             | Mode::History
             | Mode::Compass
+            | Mode::WorldMap
             | Mode::Structures
             | Mode::StructureAssign
             | Mode::Recipes
@@ -3210,6 +3225,9 @@ pub struct App {
     /// screen has a column to point at; reset to 0 whenever `BaseStaff` is
     /// entered, `menu_selected`'s own rule.
     pub work_column: usize,
+    /// The chunk at the middle of `Mode::WorldMap`'s grid. Set to the
+    /// party's chunk on opening and moved by the arrows; not saved.
+    pub world_map_center: (i32, i32),
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
     /// census stay as they are. Opens on the graph.

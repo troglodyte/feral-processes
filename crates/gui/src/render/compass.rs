@@ -58,7 +58,7 @@ fn compass_rows(
 /// A settlement's kind is not on the row, so both kinds take the Mainframe's
 /// `M`: the picker is about *where*, and the scale cue is something the map
 /// already carries at the tile itself.
-fn target_glyph(target: CompassTarget) -> (char, Color) {
+pub(super) fn target_glyph(target: CompassTarget) -> (char, Color) {
     match target {
         CompassTarget::Home => ('#', hud::palette::glyph(GlyphColor::Gray)),
         CompassTarget::Town(_) => (
@@ -66,6 +66,7 @@ fn target_glyph(target: CompassTarget) -> (char, Color) {
             hud::palette::glyph(GlyphColor::Orange),
         ),
         CompassTarget::Link(_) => ('>', hud::palette::glyph(GlyphColor::Magenta)),
+        CompassTarget::Outpost(_) => ('⌂', hud::palette::glyph(GlyphColor::Green)),
     }
 }
 

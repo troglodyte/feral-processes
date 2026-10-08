@@ -70,7 +70,7 @@ Three tiers, and which one you want depends on what you are doing:
 | notifications | `references/notifications.md` | 6 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |
-| the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 23 |
+| the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 24 |
 | traps (honeypots: placing, the tick, what a catch is worth) | `references/traps.md` | 4 |
 | sieges (the board, besiegers, turrets, the siege save) | `references/sieges.md` | 10 |
 

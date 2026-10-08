@@ -2196,6 +2196,80 @@ pub struct FrameMapView {
     pub revealed: bool,
 }
 
+/// One cell of `WorldMapView`: one 32x32 chunk.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WorldMapCell {
+    /// Not revealed. The map says nothing about it, marks included.
+    Unknown,
+    /// Revealed, with the biome sampled at the chunk's centre tile.
+    Explored(Biome),
+}
+
+/// What a `WorldMapMark` is, with the facts the detail panel needs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WorldMapMarkKind {
+    Home,
+    Town {
+        standing: crate::settlements::Standing,
+        kind: crate::settlements::SettlementKind,
+        /// Mainframes only.
+        vitality: Option<crate::settlements::Vitality>,
+        /// Mainframes only: which way commerce is heading.
+        trend: Option<crate::settlements::growth::TownTrend>,
+        /// Servers only: how near growth is, in words.
+        outlook: Option<crate::settlements::growth::GrowthOutlook>,
+        sends_raiders: bool,
+        fields_patrols: bool,
+        preys_on_routes: bool,
+        refuses_service: bool,
+        allows_standing_route: bool,
+    },
+    Outpost {
+        trend: Trend,
+        dark: bool,
+    },
+    StackLink,
+    Nest,
+}
+
+/// A place on the world map. `target` is `None` for a nest, which is
+/// map-only.
+#[derive(Clone, PartialEq, Debug)]
+pub struct WorldMapMark {
+    pub chunk: (i32, i32),
+    pub kind: WorldMapMarkKind,
+    pub label: String,
+    pub target: Option<crate::settlements::CompassTarget>,
+}
+
+/// One dispatched route, drawn as a single straight segment between chunks.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct WorldMapRoute {
+    pub from_chunk: (i32, i32),
+    pub to_chunk: (i32, i32),
+    /// Towns that prey on this route, from `Game::route_predators`.
+    pub preyed_by: Vec<crate::settlements::SettlementKey>,
+}
+
+/// The surface at chunk scale: what the party has revealed, and the places
+/// in it. `Game::world_map` builds it; it writes nothing.
+#[derive(Clone, Debug)]
+pub struct WorldMapView {
+    /// The chunk at the grid's centre.
+    pub center: (i32, i32),
+    /// The grid is `2 * radius + 1` cells square.
+    pub radius: i32,
+    /// `cells[row][col]`, north-up; `cells[0][0]` is chunk
+    /// `(center.0 - radius, center.1 - radius)`.
+    pub cells: Vec<Vec<WorldMapCell>>,
+    /// Revealed marks inside the grid, nearest the party first.
+    pub marks: Vec<WorldMapMark>,
+    /// Every dispatched route, whether or not it is inside the grid.
+    pub routes: Vec<WorldMapRoute>,
+    /// The party's own chunk.
+    pub party: (i32, i32),
+}
+
 /// One entry in `Game::craft_recipes` — compiling `result` consumes `cost`.
 ///
 /// `cost` is what the player is actually charged, `Perk::LeanCompiler`

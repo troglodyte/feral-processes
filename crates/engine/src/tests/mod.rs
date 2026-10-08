@@ -133,4 +133,5 @@ mod weapon_reach;
 mod wielded;
 mod wild_density_probe;
 mod work_orders;
+mod world_map;
 mod zone;

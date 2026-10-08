@@ -2181,6 +2181,18 @@ pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 
+/// Every surface chunk the party has been near, for the world map's fog.
+///
+/// **Stores only where the party walked; derived reveals are never
+/// stored.** The base, each outpost and each route corridor are revealed by
+/// the view from `Outposts` and `Routes`, which already own that state.
+/// Unlike `PopulatedChunks` it is never wiped: a breach raises a tier and
+/// does not rebuild the map, so ground already seen stays seen.
+///
+/// Written only by `Game::mark_explored_chunks`, on the surface.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct ExploredChunks(pub BTreeSet<(i32, i32)>);
+
 /// Every settlement the party has reached, keyed by its region.
 ///
 /// **Keyed by `SettlementKey`, not by `Entity`** — `party_slot`'s reason,
@@ -2235,6 +2247,18 @@ pub struct Outposts(pub BTreeMap<(i32, i32), crate::outposts::Outpost>);
 /// state.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Standings(pub BTreeMap<crate::settlements::SettlementKey, crate::settlements::Relation>);
+
+impl KnownSettlement {
+    /// What the compass and the world map call this town: its name once the
+    /// party has walked there, a generic noun before that.
+    pub fn compass_label(&self) -> String {
+        if self.visited {
+            self.def.name.clone()
+        } else {
+            "a settlement".to_string()
+        }
+    }
+}
 
 /// A settlement that has been materialized onto the map.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]

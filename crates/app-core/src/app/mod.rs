@@ -49,3 +49,4 @@ mod tools;
 pub(crate) mod trade;
 mod transfer;
 pub(crate) mod travel;
+mod world_map;

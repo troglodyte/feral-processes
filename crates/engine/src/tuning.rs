@@ -1243,6 +1243,17 @@ pub const fn chunk_wild_population() -> usize {
 /// walked into rather than appearing on top of you.
 pub const POPULATION_CHUNK_MARGIN: i32 = 1;
 
+/// How many chunks around the party the world map reveals as it walks. One
+/// is the 3x3 block the party is standing in the middle of, which is as far
+/// as `POPULATION_CHUNK_MARGIN` already stocks and about what the pane
+/// shows.
+pub const WORLD_MAP_REVEAL_RADIUS_CHUNKS: i32 = 1;
+
+/// How close to its due date a Server must be for the world map to say it
+/// grows "soon" rather than "in time". The map speaks in words, never in
+/// ticks, so this is the one place the cut-off is a number.
+pub const WORLD_MAP_GROWTH_SOON_TICKS: u64 = 3000;
+
 /// How many Stack links a zone is seeded with — see
 /// `Game::spawn_surface_links`. Deliberately few: a link is
 /// something you go looking for, and one on every corner would make the

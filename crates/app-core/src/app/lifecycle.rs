@@ -161,6 +161,7 @@ impl App {
             drag_ticks_owed: 0,
             menu_selected: 0,
             work_column: 0,
+            world_map_center: (0, 0),
             research_graph_view: true,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),

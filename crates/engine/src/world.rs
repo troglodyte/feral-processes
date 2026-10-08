@@ -219,6 +219,13 @@ impl WorldMap {
         self.overrides = overrides;
     }
 
+    /// The biome at one tile from the three noise samples alone, loading no
+    /// chunk. The world map samples a chunk's centre with it; overrides are
+    /// ignored, which is fine at chunk scale.
+    pub(crate) fn biome_at(&self, wx: i32, wy: i32) -> Biome {
+        self.classify(wx, wy).biome
+    }
+
     fn classify(&self, wx: i32, wy: i32) -> Tile {
         let e = self.elevation.get([wx as f64 * 0.04, wy as f64 * 0.04]);
         let m = self.moisture.get([wx as f64 * 0.05, wy as f64 * 0.05]);

@@ -2057,11 +2057,7 @@ impl Game {
                     distance: dx.abs().max(dy.abs()),
                     tile: known.tile,
                     key: *key,
-                    label: if known.visited {
-                        known.def.name.clone()
-                    } else {
-                        "a settlement".to_string()
-                    },
+                    label: known.compass_label(),
                     visited: known.visited,
                 }
             })
@@ -2100,13 +2096,33 @@ impl Game {
         links.sort();
         for (_, tile) in links {
             let visited = walked.contains(&tile);
-            let label = if visited { "a walked link" } else { "a link" };
             rows.push(row(
                 CompassTarget::Link(tile),
-                label.to_string(),
+                link_compass_label(visited).to_string(),
                 visited,
                 tile,
             ));
+        }
+
+        // Nearest first, like the links. A lost outpost is simply absent
+        // here, so a bearing on it resolves to `None` exactly as a
+        // collapsed link's does. The party founded it, so it is visited.
+        let mut outposts: Vec<(i32, (i32, i32))> = self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .keys()
+            .map(|&tile| {
+                (
+                    (tile.0 - origin.x).abs().max((tile.1 - origin.y).abs()),
+                    tile,
+                )
+            })
+            .collect();
+        outposts.sort();
+        for (_, tile) in outposts {
+            let label = self.outpost_destination_name(tile);
+            rows.push(row(CompassTarget::Outpost(tile), label, true, tile));
         }
 
         rows
@@ -2602,4 +2618,9 @@ pub(crate) fn difficulty_color(ratio: f64) -> GlyphColor {
     } else {
         GlyphColor::Red
     }
+}
+
+/// What the compass and the world map call a surface link: walked or not.
+pub(crate) fn link_compass_label(visited: bool) -> &'static str {
+    if visited { "a walked link" } else { "a link" }
 }

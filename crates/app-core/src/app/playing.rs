@@ -445,6 +445,13 @@ impl App {
             self.handle_stack_key(key, is_move_key);
             return;
         }
+        // Above ground `g` is the world map. Before the walk queue below so
+        // it costs no step, and after the Stack dispatch so the Stack's own
+        // `g` (the frame map) is untouched.
+        if key == GameKey::Char('g') {
+            self.open_world_map();
+            return;
+        }
 
         // Not paused: queue the step for the clock to spend on its next
         // tick (`App::spend_walk_tick`) instead of moving right here — the

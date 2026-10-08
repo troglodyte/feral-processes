@@ -115,3 +115,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `handle_key` never ticks on an unpaused map arrow** — a paused arrow is
   still turn-based, and drag ground is paid as idle clock ticks
   (`drag_ticks_owed`) rather than spent inline.
+- **Fog stores only where the party walked; derived reveals are never
+  stored** — `Game::world_map` unions them in at read time.

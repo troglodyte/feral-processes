@@ -73,8 +73,11 @@ impl Game {
             .get(&key)
             .copied()
             .unwrap_or_default();
-        let floor = growth::vitality_floor(relation.traded, self.standing_band(key));
-        Some(growth::vitality(relation.commerce).max(floor))
+        Some(growth::vitality_with_floor(
+            relation.commerce,
+            relation.traded,
+            self.standing_band(key),
+        ))
     }
 
     /// Settles every known town's commerce drift, then latches any Server
@@ -154,28 +157,24 @@ impl Game {
     ///
     /// **The drift is a delta paid through `adjust_commerce`, not a write.**
     /// It owns `commerce_epoch` — the bookmark saying how far it has
-    /// settled — and nothing else, which is what keeps the door below the
-    /// only place `commerce` itself is assigned.
+    /// settled — and its snapshot `commerce_at_epoch`, and nothing else,
+    /// which is what keeps the door below the only place `commerce` itself
+    /// is assigned.
     pub(crate) fn settle_commerce_drift(&mut self, key: SettlementKey) {
         let epoch = self.current_tick() / crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS;
         let hostile = self.standing_band(key) == Standing::Hostile;
-        let elapsed = {
+        let delta = {
             let mut standings = self.world.resource_mut::<crate::resources::Standings>();
             let relation = standings.0.entry(key).or_default();
             if epoch <= relation.commerce_epoch {
                 return;
             }
-            let elapsed = (epoch - relation.commerce_epoch).min(i32::MAX as u64) as i32;
-            relation.commerce_epoch = epoch;
-            elapsed
+            let settled = growth::settle_commerce(relation, epoch, hostile);
+            relation.commerce_epoch = settled.commerce_epoch;
+            relation.commerce_at_epoch = settled.commerce_at_epoch;
+            settled.commerce - relation.commerce
         };
-        let rate = crate::tuning::SETTLEMENT_COMMERCE_DECAY
-            + if hostile {
-                crate::tuning::SETTLEMENT_COMMERCE_HOSTILE_DECAY
-            } else {
-                0
-            };
-        self.adjust_commerce(key, rate.saturating_mul(elapsed).saturating_neg());
+        self.adjust_commerce(key, delta);
     }
 
     /// Throws the latch if this Server is past its date. `true` if **this
@@ -197,7 +196,7 @@ impl Game {
             .0
             .get(&key)
             .map_or(0, |relation| relation.commerce);
-        let due = growth::due_tick(seed, key) as i64 - growth::pull_ticks(commerce);
+        let due = growth::due_with_pull(seed, key, commerce);
         if (self.current_tick() as i64) < due {
             return false;
         }

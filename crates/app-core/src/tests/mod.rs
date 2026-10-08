@@ -68,3 +68,4 @@ mod transfer;
 mod traps;
 mod travel;
 mod watch;
+mod world_map;

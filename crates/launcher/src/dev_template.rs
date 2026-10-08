@@ -439,6 +439,92 @@ mod tests {
         );
     }
 
+    /// The `world-map` README entry's claims, read off the view the `g`
+    /// screen draws: every kind of mark, both route colours, and a compass
+    /// target.
+    #[test]
+    fn the_world_map_template_has_something_of_every_kind_to_draw() {
+        use feral_processes_engine::outposts::Trend;
+        use feral_processes_engine::settlements::growth::TownTrend;
+        use feral_processes_engine::settlements::{
+            CompassTarget, SettlementKey, SettlementKind, Standing,
+        };
+        use feral_processes_engine::views::WorldMapMarkKind;
+        use feral_processes_engine::world::CHUNK_SIZE;
+
+        let out = std::env::temp_dir().join("feral_processes_template_world_map.bin");
+        generate("world-map", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let key = |rx, ry| CompassTarget::Town(SettlementKey { rx, ry });
+        let chunk = |(x, y): (i32, i32)| (x.div_euclid(CHUNK_SIZE), y.div_euclid(CHUNK_SIZE));
+        let tally = (-212, 71);
+        let kernel = (-281, -432);
+        let outpost = (-60, -250);
+        let around = |game: &mut Game, tile| game.world_map(chunk(tile), 1).unwrap();
+        let tally_view = around(&mut game, tally);
+        let kernel_view = around(&mut game, kernel);
+        let outpost_view = around(&mut game, outpost);
+        let named = |view: &feral_processes_engine::views::WorldMapView, target| {
+            view.marks
+                .iter()
+                .find(|m| m.target == Some(target))
+                .unwrap_or_else(|| panic!("{target:?} is not on the map"))
+                .kind
+        };
+
+        let town = |view: &_, target| match named(view, target) {
+            WorldMapMarkKind::Town {
+                standing,
+                kind,
+                trend,
+                ..
+            } => (standing, kind, trend),
+            other => panic!("{target:?} is {other:?}"),
+        };
+        assert_eq!(
+            town(&tally_view, key(-1, 0)),
+            (
+                Standing::Hostile,
+                SettlementKind::Mainframe,
+                Some(TownTrend::Falling)
+            )
+        );
+        assert_eq!(
+            town(&kernel_view, key(-2, -2)),
+            (
+                Standing::Warm,
+                SettlementKind::Mainframe,
+                Some(TownTrend::Rising)
+            )
+        );
+        assert!(matches!(
+            named(&outpost_view, CompassTarget::Outpost(outpost)),
+            WorldMapMarkKind::Outpost {
+                trend: Trend::Declining,
+                ..
+            }
+        ));
+
+        assert_eq!(tally_view.routes.len(), 2);
+        assert_eq!(
+            tally_view
+                .routes
+                .iter()
+                .filter(|r| !r.preyed_by.is_empty())
+                .count(),
+            1,
+            "one route is preyed on and one is not"
+        );
+
+        assert_eq!(
+            game.compass_bearing().map(|r| r.target),
+            Some(key(-2, -2)),
+            "the compass points at Kernel Reach"
+        );
+    }
+
     /// Loading is not the bar for `extraction` either. Its whole value is
     /// state that a format migration or a careless hand-edit can strip while
     /// the RON still parses perfectly: the original capture predated the

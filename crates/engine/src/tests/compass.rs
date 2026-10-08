@@ -58,6 +58,7 @@ fn the_rows_run_home_then_settlements_then_links_each_nearest_first() {
             CompassTarget::Home => "home",
             CompassTarget::Town(_) => "town",
             CompassTarget::Link(_) => "link",
+            CompassTarget::Outpost(_) => "outpost",
         })
         .collect();
     assert_eq!(
@@ -248,4 +249,83 @@ fn the_run_that_walked_past_two_towns_is_told_where_one_of_them_is() {
         town.label, "a settlement",
         "the name is still earned by walking there"
     );
+}
+
+fn found_outpost_record(game: &mut Game, tile: (i32, i32)) {
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(crate::world::Biome::Deadlock, 10),
+        );
+}
+
+#[test]
+fn an_outpost_is_a_compass_row_after_the_links_nearest_first() {
+    let mut game = game();
+    clear_links(&mut game);
+    let (px, py) = player_at(&game);
+    game.world.spawn((
+        crate::components::SurfaceLink,
+        Position { x: px + 40, y: py },
+    ));
+    found_outpost_record(&mut game, (px + 30, py));
+    found_outpost_record(&mut game, (px + 12, py));
+
+    let outposts: Vec<_> = game
+        .compass_targets()
+        .into_iter()
+        .filter(|r| matches!(r.target, CompassTarget::Outpost(_)))
+        .collect();
+    assert_eq!(
+        outposts.iter().map(|r| r.target).collect::<Vec<_>>(),
+        vec![
+            CompassTarget::Outpost((px + 12, py)),
+            CompassTarget::Outpost((px + 30, py))
+        ]
+    );
+    assert_eq!(outposts[0].distance, 12);
+    let rows = game.compass_targets();
+    let last_link = rows
+        .iter()
+        .rposition(|r| matches!(r.target, CompassTarget::Link(_)))
+        .unwrap();
+    let first_outpost = rows
+        .iter()
+        .position(|r| matches!(r.target, CompassTarget::Outpost(_)))
+        .unwrap();
+    assert!(last_link < first_outpost, "outposts follow the links");
+}
+
+#[test]
+fn an_outpost_bearing_resolves_survives_a_save_and_goes_none_when_it_is_lost() {
+    let mut game = game();
+    let (px, py) = player_at(&game);
+    let tile = (px + 8, py);
+    found_outpost_record(&mut game, tile);
+    game.set_compass_bearing(Some(CompassTarget::Outpost(tile)));
+    assert_eq!(
+        game.compass_bearing().unwrap().target,
+        CompassTarget::Outpost(tile)
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_compass_outpost_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).expect("save");
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        loaded.compass_bearing().map(|r| r.target),
+        Some(CompassTarget::Outpost(tile))
+    );
+
+    loaded
+        .world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .remove(&tile);
+    assert!(loaded.compass_bearing().is_none());
 }

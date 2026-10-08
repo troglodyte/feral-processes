@@ -32,6 +32,7 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 | `roster.png` | `--template bonds --keys "p Enter"` |
 | `downed.png` | `--template bonds --keys "D"` |
 | `towns.png` | `--template settlements` |
+| `world-map.png` | `--template world-map --keys "g"` |
 | `stack.png` | `--template stack` |
 | `intrusion.png` | `FERAL_DEV_ARENA=1`, `--keys "R l Down Down Down Down Down Down Down Enter f"` (dev-arenas `full-group.ron`) |
 | `sprite-forge.png` | `FERAL_DEV_SPRITES=1`, `--keys "d Down Down Down Down Down Down Down Down Down Down Enter"` (opens `construct`) |

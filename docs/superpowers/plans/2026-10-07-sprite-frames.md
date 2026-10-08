@@ -1,6 +1,6 @@
 # Plan: two-frame asset sprites
 
-**Spec:** `docs/superpowers/specs/2026-10-07-sprite-frames-design.md`
+**Spec:** `docs/superpowers/archive/specs/2026-10-07-sprite-frames-design.md`
 **Branch:** `sprite-frames`, primary checkout (the user plays from here, so no
 worktree).
 

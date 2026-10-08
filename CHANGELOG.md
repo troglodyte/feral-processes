@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.1
+
+**A sprite can have two frames that alternate.** A sprite drawn 32 pixels wide by 16 tall is split into two frames that take turns, 600 ms each by default; a `<name>.anim.ron` beside it sets `frame_ms`. Programs on the map start their cycle at different moments so a crowd does not blink in step. With effects off (`\`), every sprite shows its first frame. A sprite that is neither 16x16 nor 32x16 is now refused with a warning and the entity draws its letter instead; before, other sizes were stretched to fit.
+
+**The Sprite Forge edits both frames.** `[1]` and `[2]` switch frames (the first `[2]` copies frame 1), `[D]` deletes frame 2, and `[-]`/`[=]` set the speed in milliseconds. The preview plays the animation, and `[u]` undoes frame changes as well as painting. Saving two frames writes the wide image and its `.anim.ron`; saving one frame removes the `.anim.ron`.
+
 ## 0.18.0
 
 **Breaking: saves from before this version no longer load.** Destroyed structures are now remembered in the save, so the save format goes from 36 to 37.

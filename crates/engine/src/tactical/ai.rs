@@ -75,10 +75,9 @@ enum Intent {
     /// band is decided **before the walk** and `band` takes no actor — and
     /// because a range read at swing time would let a body plan a standoff
     /// and then draw the melee half of its move pair.
-    Swing {
-        range: u32,
-    },
-    Routine(AbilityDef),
+    Swing { range: u32 },
+    /// Boxed: an `AbilityDef` is several times the size of the other variants.
+    Routine(Box<AbilityDef>),
     /// Drinks a Power cell where the body already stands — the party arm's
     /// own choice, chosen only when its preferred routine is refused for
     /// Power alone and a cell in the pack covers the shortfall. Carries the
@@ -814,7 +813,7 @@ impl Game {
             && self.world.get::<Hostile>(actor).is_some()
             && self.hostile_routine_worth_choosing(actor, &def)
         {
-            return Intent::Routine(def);
+            return Intent::Routine(Box::new(def));
         }
         if turns == PartyTurns::Invoke
             && self.in_party(actor)
@@ -838,7 +837,7 @@ impl Game {
             return true;
         }
         let sides = self.tactical_sides(actor);
-        self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides)
+        self.aimable_this_turn(actor, &Intent::Routine(Box::new(def.clone())), &sides)
     }
 
     /// The party arm's own choice, once `tactical_intent` has confirmed it
@@ -868,13 +867,15 @@ impl Game {
         let candidates: Vec<AbilityDef> = self
             .ready_party_routines(actor)
             .into_iter()
-            .filter(|def| self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides))
+            .filter(|def| {
+                self.aimable_this_turn(actor, &Intent::Routine(Box::new(def.clone())), &sides)
+            })
             .collect();
         if let Some(def) = candidates
             .iter()
             .find(|def| self.ability_unavailable(actor, def).is_none())
         {
-            return Some(Intent::Routine(def.clone()));
+            return Some(Intent::Routine(Box::new(def.clone())));
         }
         let (_, cost) =
             candidates
@@ -1368,7 +1369,7 @@ impl Game {
         let battle = self.world.resource::<TacticalBattle>();
         let band = def.tactical_range();
         let shape = def.tactical_shape();
-        let helpful = Intent::Routine(def.clone()).helpful();
+        let helpful = Intent::Routine(Box::new(def.clone())).helpful();
         // The block the body covers anchored at `from` — one cell without a
         // `Squad`. `reach::in_range` measures the band off the whole
         // footprint, which is what `Game::tactical_use_routine` will

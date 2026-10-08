@@ -113,6 +113,13 @@ pub fn scaled_range(
     }
 }
 
+/// `value` as released after `k` of `n` charging turns. The one statement of
+/// the k/N scale: `AbilityDef::charged` and the AI's kill prediction
+/// (`game::charge::charge_choice`) both call it.
+pub fn charge_scaled(value: i32, k: u32, n: u32) -> i32 {
+    (i64::from(value) * i64::from(k) / i64::from(n.max(1))) as i32
+}
+
 /// The cooldown armed on a combatant right after it runs an ability whose
 /// authored value is `cooldown`, floored at `floor` rounds. Called from both
 /// `resolve_one_action` (party side, `floor = 0`, so the authored value is
@@ -1419,9 +1426,8 @@ impl AbilityDef {
     pub fn charged(&self, k: u32, n: u32) -> AbilityDef {
         let mut def = self.clone();
         if let AbilityEffect::Damage { power, spread, .. } = &mut def.effect {
-            let scale = |v: i32| (i64::from(v) * i64::from(k) / i64::from(n.max(1))) as i32;
-            *power = scale(*power);
-            *spread = scale(*spread);
+            *power = charge_scaled(*power, k, n);
+            *spread = charge_scaled(*spread, k, n);
         }
         def
     }

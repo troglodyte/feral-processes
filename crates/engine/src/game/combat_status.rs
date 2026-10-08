@@ -128,6 +128,17 @@ impl Game {
                 landed_this_round: true,
             }),
         }
+        // A stun breaks a charge where it lands, not at the victim's next
+        // turn: the battle map never reads stun at turn start, so this one
+        // hook is what covers both combat models.
+        let stuns = self
+            .world
+            .resource::<StatusDb>()
+            .get(id)
+            .is_some_and(|def| def.has_behaviour(|b| matches!(b, StatusBehaviour::SkipTurn)));
+        if stuns {
+            self.cancel_charge(entity);
+        }
     }
 
     /// Sums `f` over every behaviour of every status `entity` carries, each

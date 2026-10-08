@@ -879,6 +879,10 @@ impl Game {
     /// a fork's orders in one screen and not the others.
     pub(crate) fn slot_is_commanded(&self, slot: usize) -> bool {
         self.slot_can_act(slot)
+            // At full charge the release is automatic, so nobody is asked.
+            && !self
+                .actor_entity(battle::Actor::Party(slot))
+                .is_some_and(|e| self.charge_is_full(e))
             && self
                 .actor_entity(battle::Actor::Party(slot))
                 .is_some_and(|e| self.world.get::<crate::components::Summoned>(e).is_none())
@@ -1016,6 +1020,15 @@ impl Game {
             && self.world.get::<Emulation>(actor).is_none()
         {
             return Err("You aren't emulating.".to_string());
+        }
+        if matches!(
+            &action,
+            BattleAction::ChargeHold | BattleAction::ChargeRelease
+        ) && self
+            .actor_entity(battle::Actor::Party(slot))
+            .is_none_or(|e| self.world.get::<Charging>(e).is_none())
+        {
+            return Err("That member isn't charging.".to_string());
         }
         self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
         Ok(())
@@ -1806,6 +1819,10 @@ impl Game {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
+        // A winding-up member's whole turn is the charge: hold it or fire it.
+        if self.world.get::<Charging>(entity).is_some() {
+            return self.charge_action_options(entity);
+        }
         let mut options = vec![
             ActionOption {
                 kind: ActionKind::Attack,

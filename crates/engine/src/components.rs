@@ -1532,16 +1532,21 @@ pub struct ReachCharge {
 #[derive(Component, Clone, Debug)]
 pub struct Charging {
     pub ability: AbilityId,
-    /// Turns of charging that reach full power (`ChargeSpec::rounds`).
+    /// Turns of charging that reach full power (`ChargeSpec::rounds`), N.
     pub rounds: u32,
+    /// Turns spent charging so far, k: 1 on the turn it starts. At
+    /// `progress == rounds` the routine fires on its own.
+    pub progress: u32,
     pub aim: ChargeAim,
 }
 
 /// Where a charge was aimed when it began.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChargeAim {
-    /// Group battles: the target group locked at the start.
-    Group(Entity),
+    /// Group battles: the members of the target group at the start. A set and
+    /// not one body, because the front member dying must not read as the
+    /// group being gone; the group is whichever one still holds any of them.
+    Group(Vec<Entity>),
     /// Battle map: absolute board cells, so a victim can step out of them.
     Cells(Vec<(i32, i32)>),
 }

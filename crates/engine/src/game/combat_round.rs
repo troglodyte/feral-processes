@@ -120,7 +120,10 @@ impl Game {
             let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
                 continue;
             };
-            if self.creature_alive(entity) && !self.is_stunned(entity) {
+            if self.creature_alive(entity)
+                && !self.is_stunned(entity)
+                && self.world.get::<Charging>(entity).is_none()
+            {
                 self.begin_defend(entity);
             }
         }
@@ -158,8 +161,20 @@ impl Game {
             }
             match actor {
                 battle::Actor::Party(slot) => {
-                    if let Some(Some(action)) = plan.get(slot) {
-                        self.resolve_one_action(slot, entity, action.clone(), player);
+                    let planned = plan.get(slot).cloned().flatten();
+                    let charging = self.world.get::<Charging>(entity).is_some();
+                    match planned {
+                        // HOLD and RELEASE go through the ordinary door, so
+                        // they are recorded like any chosen action.
+                        Some(action @ (BattleAction::ChargeHold | BattleAction::ChargeRelease)) => {
+                            self.resolve_one_action(slot, entity, action, player)
+                        }
+                        // Whatever else a charging slot was handed (`[A]`,
+                        // `[D]`, no plan at the full-charge auto-fire) is
+                        // the AI's to read, not an order to obey.
+                        _ if charging => self.charge_turn(entity, None, player),
+                        Some(action) => self.resolve_one_action(slot, entity, action, player),
+                        None => {}
                     }
                 }
                 // The group it is standing in *now*: a group that fell
@@ -354,7 +369,13 @@ impl Game {
                     // cooldown armed afterwards would be written back onto an
                     // entity that has already been cleaned up, and survive
                     // into the next fight.
-                    self.arm_cooldown(entity, &ability);
+                    //
+                    // Not for a charge routine: its cooldown arms when the
+                    // charge ends (`Game::end_charge`), or it would tick down
+                    // through the wind-up.
+                    if ability.charge.is_none() {
+                        self.arm_cooldown(entity, &ability);
+                    }
                     // Charged here rather than in `use_ability`, for the same
                     // reason and at the same moment as the cooldown above.
                     // `use_ability` is also the path `proc_wielded_routine`
@@ -373,7 +394,12 @@ impl Game {
                     // entity: a successful capture drops the target out of
                     // its group. Every other effect only ever touches the
                     // recipients it lands on.
-                    if matches!(ability.effect, AbilityEffect::Decompile) {
+                    if ability.charge.is_some() {
+                        // Starting a charge lands nothing: the turn ends
+                        // here and the hit comes on a later one.
+                        let aim = self.group_charge_aim(entity, &ability, &target, player);
+                        self.start_charge(entity, &ability, aim);
+                    } else if matches!(ability.effect, AbilityEffect::Decompile) {
                         if let battle::SpecialTarget::EnemyGroup { group } = target
                             && let Some(group) = self.retarget(group)
                         {
@@ -445,6 +471,12 @@ impl Game {
             // `Game::drop_emulation`'s own guard.
             BattleAction::Revert => {
                 self.drop_emulation(entity, "You drop the emulation.");
+            }
+            // The charge turn, reached only for a body that is still
+            // charging. A stun that landed earlier in the round has already
+            // broken the charge, and a plan outliving it does nothing.
+            BattleAction::ChargeHold | BattleAction::ChargeRelease => {
+                self.charge_turn(entity, Some(&action), player);
             }
         }
     }
@@ -809,6 +841,8 @@ impl Game {
             BattleAction::Defend => "Defend".to_string(),
             BattleAction::UseItem { item } => format!("Use {}", self.item_name(item)),
             BattleAction::Revert => "Revert".to_string(),
+            BattleAction::ChargeHold => "Hold charge".to_string(),
+            BattleAction::ChargeRelease => "Release charge".to_string(),
         }
     }
 
@@ -828,14 +862,16 @@ impl Game {
             .enumerate()
             .filter_map(|(idx, group)| {
                 let front = group.front()?;
-                self.enemy_row(
+                let mut row = self.enemy_row(
                     front,
                     idx,
                     group.members.len(),
                     idx < ENGAGED_GROUPS,
                     catalyst_potency,
                     bonuses,
-                )
+                )?;
+                row.charge = self.group_charge_tag(&group.members);
+                Some(row)
             })
             .collect();
 
@@ -901,6 +937,7 @@ impl Game {
             decompile_chance: catalyst_potency
                 .filter(|_| !is_boss)
                 .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
+            charge: None,
         })
     }
 
@@ -942,6 +979,7 @@ impl Game {
             planned,
             front: slot < FRONT_SLOTS,
             gear: self.gear_tag(entity),
+            charge: self.charge_tag(entity),
         })
     }
 

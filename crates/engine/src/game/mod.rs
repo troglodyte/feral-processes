@@ -14,6 +14,7 @@ pub(crate) mod base_space;
 pub(crate) mod breeding;
 pub(crate) mod caravan;
 pub(crate) mod catalog;
+pub(crate) mod charge;
 pub(crate) mod combat;
 pub(crate) mod combat_damage;
 pub(crate) mod combat_enemy;

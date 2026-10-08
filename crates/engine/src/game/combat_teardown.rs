@@ -70,6 +70,9 @@ impl Game {
             name: None,
             target_slot: None,
         });
+        // Whether or not it gets clear: the attempt costs the whole party its
+        // round, and a wind-up does not survive that.
+        self.cancel_party_charges();
         let luck = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(JACK_OUT_LUCK_MIN..=JACK_OUT_LUCK_MAX)
@@ -179,6 +182,7 @@ impl Game {
         // left set, a reach weapon's first swing of the *next* fight would
         // be held narrow by a charge armed in this one.
         self.disarm_reach_charge(player);
+        self.remove_charging(player);
         // `Tampered` is battle-scoped for the same reason and with the same
         // consequence as the two above — but the player is never a tamper
         // *recipient*, so this clears nothing for them in practice and is
@@ -211,6 +215,7 @@ impl Game {
             }
             self.uncloak(hostile);
             self.disarm_reach_charge(hostile);
+            self.remove_charging(hostile);
             self.detamper(hostile);
         }
         let party = self.world.resource::<Party>().0.clone();
@@ -230,6 +235,7 @@ impl Game {
             }
             self.uncloak(companion);
             self.disarm_reach_charge(companion);
+            self.remove_charging(companion);
             self.detamper(companion);
             // Only the player is meant to ever carry `Emulation`
             // (`seam:only-the-player-emulates`), but this clears it here
@@ -238,6 +244,15 @@ impl Game {
             // and `ability_unavailable` already apply at the other two
             // doors.
             self.unemulate(companion);
+        }
+    }
+
+    /// Drops `entity`'s `Charging` with no line and no cooldown — a fight
+    /// ending cancels nothing, and the cooldowns are cleared beside it.
+    /// `uncloak`'s shape, for `uncloak`'s reason.
+    fn remove_charging(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<Charging>();
         }
     }
 

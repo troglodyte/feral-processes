@@ -4,7 +4,7 @@
 //! `all_wild_retaliate` (`game/combat_round.rs`) drives this once per
 //! engaged group; everything about *choosing* the strike lives here.
 
-use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, WILD_ABILITY_CHANCE};
+use crate::tuning::WILD_ABILITY_CHANCE;
 use crate::*;
 
 impl Game {
@@ -172,7 +172,22 @@ impl Game {
         // back-rank program has to physically reach, and a routine is
         // executed rather than swung — gating it would silently disable
         // every carrier behind the front groups.
+        if self.world.get::<Charging>(wild).is_some() {
+            self.charge_turn(wild, None, player);
+            return;
+        }
         if let Some(routine) = self.wild_routine_ready(wild) {
+            if routine.charge.is_some() {
+                // The cooldown arms when the charge ends, not now.
+                let aim = self.group_charge_aim(
+                    wild,
+                    &routine,
+                    &battle::SpecialTarget::EnemyGroup { group },
+                    player,
+                );
+                self.start_charge(wild, &routine, aim);
+                return;
+            }
             // Armed before the effect resolves, the same reason
             // `resolve_one_action` arms early: a killing blow ends the
             // battle inside `reap_dead_members` and `end_battle` wipes every
@@ -181,16 +196,7 @@ impl Game {
             //
             // Floored at `ENEMY_ROUTINE_MIN_COOLDOWN` — see
             // `abilities::armed_cooldown`, the one function both sides call.
-            let armed = abilities::armed_cooldown(routine.cooldown, ENEMY_ROUTINE_MIN_COOLDOWN);
-            let mut cooldowns = self
-                .world
-                .get::<AbilityCooldowns>(wild)
-                .map(|c| c.0.clone())
-                .unwrap_or_default();
-            cooldowns.insert(routine.id.clone(), armed);
-            self.world
-                .entity_mut(wild)
-                .insert(AbilityCooldowns(cooldowns));
+            self.arm_enemy_cooldown(wild, &routine);
 
             let name = self.creature_label(wild);
             self.log_kind(

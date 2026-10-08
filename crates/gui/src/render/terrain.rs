@@ -340,9 +340,9 @@ pub(crate) fn shade_color(shade: FloorShade) -> Color {
         FloorShade::Plum => Color::new(0.28, 0.10, 0.34, 1.0),
         FloorShade::Violet => Color::new(0.20, 0.12, 0.45, 1.0),
         FloorShade::Slate => Color::new(0.20, 0.23, 0.27, 1.0),
-        // The five added with the brush picker sit brighter than the first
-        // ten, in the gaps the census left: the nearest any of them comes
-        // to anything is Jade's 0.128 from Teal.
+        // The five added with the brush picker sit in the gaps the census
+        // left: the nearest any of them comes to anything is Jade's 0.128
+        // from Teal.
         FloorShade::Jade => Color::new(0.06, 0.40, 0.24, 1.0),
         FloorShade::Sky => Color::new(0.16, 0.36, 0.55, 1.0),
         FloorShade::Rose => Color::new(0.48, 0.16, 0.32, 1.0),

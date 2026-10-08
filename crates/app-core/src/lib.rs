@@ -2903,7 +2903,8 @@ pub struct App {
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
     /// Where the Excavation plan's cursor is aimed, in **base-space**
-    /// coordinates. `None` outside `Mode::Excavate` — opening the mode puts
+    /// coordinates. `None` outside `Mode::Excavate` and its brush picker —
+    /// opening the mode puts
     /// it on the party's own cell and leaving clears it.
     ///
     /// A different coordinate space from `App::field_cursor` above, which is
@@ -2915,8 +2916,8 @@ pub struct App {
     /// two-press verb rather than a drag.
     pub excavate_anchor: Option<(i32, i32)>,
     /// The Excavation plan's brush — `None` is today's plain cut-or-tile
-    /// mark, `[F]` cycles it through every loaded finish and then strip
-    /// before returning here. Reset to `None` whenever the mode opens, the
+    /// mark; `[F]` opens `Mode::ExcavateBrush` to pick a finish or strip
+    /// instead. Reset to `None` whenever the mode opens, the
     /// same way `excavate_anchor` is: a brush left over from the last visit
     /// would paint the first box drawn this time with a choice the player
     /// never made this session.

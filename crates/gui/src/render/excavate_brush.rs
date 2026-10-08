@@ -33,7 +33,13 @@ fn body_rows(rows: &[BrushRow], selected: usize) -> Vec<Row> {
         text_row(""),
     ];
     body.extend(rows.iter().enumerate().map(|(i, row)| {
-        let item = item_row(row.label.clone(), i == selected);
+        // The shortcut is printed because `selected_index` honours it: an
+        // unlabelled `h` picking a row is a keypress the plan's own `hjkl`
+        // walks straight into.
+        let item = item_row(
+            format!("[{}] {}", menu_shortcut(i), row.label),
+            i == selected,
+        );
         match row.shade {
             Some(shade) => with_icon(item, SWATCH, terrain::shade_color(shade)),
             None => item,
@@ -65,13 +71,19 @@ mod tests {
                 shade: Some(FloorShade::Wine),
             },
         ];
-        let icons: Vec<_> = body_rows(&rows, 0)
+        let items: Vec<_> = body_rows(&rows, 0)
             .into_iter()
             .filter_map(|row| match row {
-                Row::Item { icon, .. } => Some(icon),
+                Row::Item { icon, text, .. } => Some((icon, text)),
                 _ => None,
             })
             .collect();
+        let (icons, texts): (Vec<_>, Vec<_>) = items.into_iter().unzip();
+        assert_eq!(
+            texts,
+            vec!["[1] plain".to_string(), "[2] Wine".to_string()],
+            "every row prints the key that picks it"
+        );
         assert_eq!(
             icons,
             vec![None, Some((SWATCH, terrain::shade_color(FloorShade::Wine)))]

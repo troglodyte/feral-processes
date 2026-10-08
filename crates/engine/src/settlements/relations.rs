@@ -89,6 +89,9 @@ pub struct Relation {
     /// the world map's snapshot, so "now" against this reads as the town's
     /// direction. Written only by `Game::settle_commerce_drift`, from
     /// `growth::settle_commerce`, beside `commerce_epoch`.
+    ///
+    /// An older save loads it as 0, so the trend can read wrong until the
+    /// next epoch settles.
     #[serde(default)]
     pub commerce_at_epoch: i32,
     /// The commerce remainder, `trade_credits`' companion and its reason:

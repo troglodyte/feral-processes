@@ -131,12 +131,12 @@ use feral_processes_engine::{
     WorkTable, condense,
 };
 
-/// Radius (in tiles) scanned for the build/work menus, independent of the
-/// visible viewport size.
 /// Chunks from the centre to the edge of the world map's grid. The grid and
 /// the side list are both built with it, so a row is always a mark drawn.
 pub const WORLD_MAP_VIEW_RADIUS: i32 = 12;
 
+/// Radius (in tiles) scanned for the build/work menus, independent of the
+/// visible viewport size.
 pub const MENU_SCAN_RADIUS: i32 = 40;
 
 /// How many menu rows the digits `1`-`9` can address before `menu_shortcut`

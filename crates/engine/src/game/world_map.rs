@@ -42,14 +42,8 @@ impl Game {
             return;
         }
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
-        let r = WORLD_MAP_REVEAL_RADIUS_CHUNKS;
         let mut explored = self.world.resource_mut::<ExploredChunks>();
-        for cy in (py - r)..=(py + r) {
-            for cx in (px - r)..=(px + r) {
-                explored.0.insert((cx, cy));
-            }
-        }
+        insert_around(&mut explored.0, chunk_of((pos.x, pos.y)));
     }
 
     /// The surface at chunk scale, `radius` chunks either side of
@@ -60,7 +54,7 @@ impl Game {
     /// drift is `growth::settle_commerce` read, not applied).
     ///
     /// A chunk is revealed when the party walked near it (`ExploredChunks`)
-    /// or when it is derived here and never stored: around the base anchor,
+    /// or when it is derived here and never stored: around the party, the base anchor,
     /// around each outpost, and along each route's corridor. A mark appears
     /// only on a revealed chunk.
     pub fn world_map(&mut self, center_chunk: (i32, i32), radius: i32) -> Option<WorldMapView> {
@@ -88,6 +82,9 @@ impl Game {
         };
 
         let mut revealed = self.world.resource::<ExploredChunks>().0.clone();
+        // Before the first tick nothing has been stored, and the party's own
+        // chunk would read as fog.
+        insert_around(&mut revealed, chunk_of(party_tile));
         if let Some(anchor) = anchor {
             insert_around(&mut revealed, chunk_of(anchor));
         }
@@ -182,10 +179,9 @@ impl Game {
                 standing == crate::settlements::Standing::Hostile,
             );
             let mainframe = kind == SettlementKind::Mainframe;
-            let vitality = self.settlement_vitality(key).map(|_| {
-                growth::vitality(settled.commerce)
-                    .max(growth::vitality_floor(relation.traded, standing))
-            });
+            let vitality = self
+                .settlement_vitality(key)
+                .map(|_| growth::vitality_with_floor(settled.commerce, relation.traded, standing));
             push(
                 tile,
                 WorldMapMarkKind::Town {

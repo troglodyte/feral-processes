@@ -41,7 +41,13 @@ fn negative_tiles_floor_to_the_chunk_below() {
     game.world.resource_mut::<ExploredChunks>().0.clear();
     move_party_to(&mut game, -1, -1);
     game.idle_tick();
-    assert!(explored(&game).contains(&(-1, -1)));
+    let set = explored(&game);
+    assert!(set.contains(&(-1, -1)));
+    assert!(set.contains(&(-2, -2)), "floor division reaches chunk -2");
+    assert!(
+        !set.contains(&(1, 1)),
+        "truncating -1 to chunk 0 would reveal chunk 1"
+    );
 }
 
 #[test]
@@ -139,6 +145,21 @@ fn the_view_is_none_in_base_space_and_the_stack() {
     let mut game = bare();
     stand_in_base(&mut game);
     assert!(game.world_map((0, 0), 3).is_none());
+}
+
+#[test]
+fn the_party_chunk_is_revealed_before_the_first_tick() {
+    let mut game = bare();
+    let (x, y) = chunk_tile(60, -60);
+    move_party_to(&mut game, x, y);
+    let view = game.world_map((60, -60), 2).unwrap();
+    for row in 1..=3 {
+        for col in 1..=3 {
+            assert!(matches!(view.cells[row][col], WorldMapCell::Explored(_)));
+        }
+    }
+    assert!(matches!(view.cells[0][0], WorldMapCell::Unknown));
+    assert!(explored(&game).is_empty(), "the view stores nothing");
 }
 
 #[test]
@@ -277,11 +298,13 @@ fn a_routes_preyed_by_is_route_predators() {
         .entry(KEY)
         .or_default()
         .standing = -1000;
+    let neutral = SettlementKey { rx: 7, ry: 7 };
+    place_settlement(&mut game, neutral, anchor.0 + 40, anchor.1 - 2);
     let expected = game.route_predators(anchor, end);
     assert_eq!(
         expected,
         vec![KEY],
-        "the fixture town must prey on the route"
+        "the fixture town must prey on the route and the neutral one must not"
     );
     let ac = (
         anchor.0.div_euclid(CHUNK_SIZE),

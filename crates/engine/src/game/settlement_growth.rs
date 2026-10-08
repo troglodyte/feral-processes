@@ -73,8 +73,11 @@ impl Game {
             .get(&key)
             .copied()
             .unwrap_or_default();
-        let floor = growth::vitality_floor(relation.traded, self.standing_band(key));
-        Some(growth::vitality(relation.commerce).max(floor))
+        Some(growth::vitality_with_floor(
+            relation.commerce,
+            relation.traded,
+            self.standing_band(key),
+        ))
     }
 
     /// Settles every known town's commerce drift, then latches any Server

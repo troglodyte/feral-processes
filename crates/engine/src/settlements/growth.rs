@@ -208,6 +208,13 @@ pub fn vitality_floor(traded: bool, standing: Standing) -> Vitality {
     }
 }
 
+/// The band a town reads at: `commerce`'s, raised to the floor. The one place
+/// the two are combined, so the live read and the world map's pending-drift
+/// read cannot disagree.
+pub fn vitality_with_floor(commerce: i32, traded: bool, standing: Standing) -> Vitality {
+    vitality(commerce).max(vitality_floor(traded, standing))
+}
+
 impl Vitality {
     pub fn label(self) -> &'static str {
         match self {

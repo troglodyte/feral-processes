@@ -59,24 +59,17 @@ fn outpost_trend_arrow(trend: Trend) -> (char, Color) {
     }
 }
 
-/// The glyph and hue a mark is drawn in. The outpost's is the compass
-/// picker's (`compass::target_glyph`), so a place is one thing on both
-/// screens.
-fn mark_glyph(kind: &WorldMapMarkKind) -> (char, Color) {
-    match kind {
-        WorldMapMarkKind::Home => ('#', hud::palette::glyph(GlyphColor::Gray)),
-        WorldMapMarkKind::Town {
-            standing, kind: k, ..
-        } => (
-            match k {
-                SettlementKind::Mainframe => SettlementKind::Mainframe.glyph(),
-                SettlementKind::Server => SettlementKind::Server.glyph(),
-            },
-            standing_color(*standing),
-        ),
-        WorldMapMarkKind::Outpost { .. } => ('⌂', hud::palette::glyph(GlyphColor::Green)),
-        WorldMapMarkKind::StackLink => ('>', hud::palette::glyph(GlyphColor::Magenta)),
-        WorldMapMarkKind::Nest => ('&', hud::palette::glyph(GlyphColor::Red)),
+/// The glyph and hue a mark is drawn in. A mark that carries a compass
+/// target takes the picker's (`compass::target_glyph`), so a place is one
+/// thing on both screens; a town alone overrides it, since the map knows its
+/// kind and standing and the picker does not.
+fn mark_glyph(mark: &WorldMapMark) -> (char, Color) {
+    match (&mark.kind, mark.target) {
+        (WorldMapMarkKind::Town { standing, kind, .. }, _) => {
+            (kind.glyph(), standing_color(*standing))
+        }
+        (_, Some(target)) => compass::target_glyph(target),
+        (_, None) => ('&', hud::palette::glyph(GlyphColor::Red)),
     }
 }
 
@@ -276,7 +269,7 @@ fn draw_grid(
             continue;
         }
         let (cx, cy) = cell_center(view, mark.chunk, ox, oy, cell);
-        let (ch, color) = mark_glyph(&mark.kind);
+        let (ch, color) = mark_glyph(mark);
         draw_glyph(painter, ch, color, cx, cy, glyph_px);
         if let Some((arrow, ac)) = mark_arrow(&mark.kind) {
             let s = arrow.to_string();
@@ -332,16 +325,24 @@ fn draw_lines(
     y
 }
 
-const LEGEND: [&str; 8] = [
-    "@ you  # home  > Stack link  & nest  ⌂ outpost",
-    "M Mainframe  s Server",
-    "▲ rising  ▬ holding  ▼ falling",
-    "Towns: red Hostile, blue Cold, grey Neutral,",
-    "       green Warm, yellow Allied",
-    "Cyan line: a route.  Red line: preyed on.",
-    "Gold box: compass target.  Esc closes.",
-    "Arrows pan  a-z/1-9 pick  C compass  P centre",
-];
+/// The legend's lines. The town letters come off `SettlementKind::glyph`, the
+/// map's own, so the key cannot drift from what is drawn.
+fn legend() -> Vec<String> {
+    vec![
+        "@ you  # home  > Stack link  & nest  ⌂ outpost".to_string(),
+        format!(
+            "{} Mainframe  {} Server",
+            SettlementKind::Mainframe.glyph(),
+            SettlementKind::Server.glyph()
+        ),
+        "▲ rising  ▬ holding  ▼ falling".to_string(),
+        "Towns: red Hostile, blue Cold, grey Neutral,".to_string(),
+        "       green Warm, yellow Allied".to_string(),
+        "Cyan line: a route.  Red line: preyed on.".to_string(),
+        "Gold box: compass target.  Esc closes.".to_string(),
+        "Arrows pan  a-z/1-9 pick  C compass  P centre".to_string(),
+    ]
+}
 
 pub(super) fn draw_world_map(
     view: &WorldMapView,
@@ -379,7 +380,8 @@ pub(super) fn draw_world_map(
 
     // The legend takes the column's foot; the list and detail share what is
     // above it.
-    let legend_h = LEGEND.len() as f32 * m.line_height;
+    let legend = legend();
+    let legend_h = legend.len() as f32 * m.line_height;
     let legend_y = h - m.inset - legend_h + m.line_height;
     let body_h = (legend_y - m.line_height - top - m.gap * 2.0).max(0.0);
     let rows_total = (body_h / m.line_height) as usize;
@@ -417,13 +419,14 @@ pub(super) fn draw_world_map(
         );
     }
 
-    let legend: Vec<(String, Color)> = LEGEND.iter().map(|s| (s.to_string(), TEXT_DIM)).collect();
+    let legend: Vec<(String, Color)> = legend.into_iter().map(|s| (s, TEXT_DIM)).collect();
     draw_lines(painter, &legend, col_x, legend_y, col_w, m);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_app_core::WORLD_MAP_VIEW_RADIUS;
     use feral_processes_engine::settlements::SettlementKey;
     use feral_processes_engine::settlements::growth::{GrowthOutlook, Vitality};
 
@@ -546,7 +549,7 @@ mod tests {
 
     #[test]
     fn the_map_draws_its_pieces_and_nothing_outside_the_column() {
-        let v = view(WORLD_MAP_VIEW_RADIUS_FOR_TESTS);
+        let v = view(WORLD_MAP_VIEW_RADIUS);
         let (_, shapes) = crate::paint::with_painter(|p| {
             let m = ui_metrics(p.screen_h());
             draw_world_map(&v, 0, None, p, &m);
@@ -564,20 +567,42 @@ mod tests {
     fn the_longest_strings_fit_the_column() {
         crate::paint::with_painter(|p| {
             let m = ui_metrics(p.screen_h());
-            let v = view(WORLD_MAP_VIEW_RADIUS_FOR_TESTS);
+            let v = view(WORLD_MAP_VIEW_RADIUS);
             let (ox, _, cell) = grid_layout(v.cells.len(), p.screen_w(), p.screen_h(), 80.0, &m);
             let col_x = ox + cell * v.cells.len() as f32 + m.inset * 2.0;
             let col_w = p.screen_w() - col_x - m.inset;
-            let mut widest = LEGEND
+            let mark = |kind, label: &str| WorldMapMark {
+                chunk: (0, 0),
+                kind,
+                label: label.to_string(),
+                target: None,
+            };
+            let mut server = town(Standing::Hostile, Some(TownTrend::Rising));
+            if let WorldMapMarkKind::Town { kind, .. } = &mut server.kind {
+                *kind = SettlementKind::Server;
+            }
+            let marks = [
+                town(Standing::Hostile, Some(TownTrend::Rising)),
+                server,
+                mark(WorldMapMarkKind::Nest, "a nest"),
+                mark(
+                    WorldMapMarkKind::Outpost {
+                        trend: Trend::Stale,
+                        dark: true,
+                    },
+                    "Lowport",
+                ),
+            ];
+            let mut lines = legend();
+            for m_ in &marks {
+                lines.extend(detail_lines(m_));
+                lines.push(format!("> {}", list_row(35, m_)));
+            }
+            let widest = lines
                 .iter()
                 .map(|s| p.measure_ui_advance(s, m.font_size))
                 .fold(0.0, f32::max);
-            for l in detail_lines(&town(Standing::Hostile, Some(TownTrend::Rising))) {
-                widest = widest.max(p.measure_ui_advance(&l, m.font_size));
-            }
             assert!(widest <= col_w, "widest {widest} > column {col_w}");
         });
     }
-
-    const WORLD_MAP_VIEW_RADIUS_FOR_TESTS: i32 = 12;
 }

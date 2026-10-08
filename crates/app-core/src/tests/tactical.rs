@@ -2,8 +2,7 @@
 //! paces the wild side.
 
 use super::support::{
-    app_with_companions_in_the_party, install_player_routines, install_player_routines_in,
-    learn_image, test_app, walk,
+    app_with_companions_in_the_party, install_player_routines, learn_image, test_app, walk,
 };
 use crate::{
     App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
@@ -118,37 +117,6 @@ fn emulating_tactical_app() -> App {
     panic!("no seed under 200 put a lone wild program next to the player");
 }
 
-/// A scratch copy of `assets/` (symlinks) whose `abilities/` also holds a
-/// charge routine: no shipped ability charges until Phase 5's content, and
-/// `AbilityDb` has no public insert.
-fn assets_with_a_charge_routine() -> std::path::PathBuf {
-    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!("feral_processes_appcore_charge_assets_{unique}"));
-    let _ = std::fs::remove_dir_all(&root);
-    let source = super::support::test_assets_dir();
-    std::fs::create_dir_all(root.join("abilities")).unwrap();
-    for entry in std::fs::read_dir(&source).unwrap().flatten() {
-        let name = entry.file_name();
-        let dest = root.join(&name);
-        if name == "abilities" {
-            for ability in std::fs::read_dir(entry.path()).unwrap().flatten() {
-                std::os::unix::fs::symlink(ability.path(), dest.join(ability.file_name())).unwrap();
-            }
-        } else {
-            std::os::unix::fs::symlink(entry.path(), dest).unwrap();
-        }
-    }
-    std::fs::write(
-        root.join("abilities/test_charge.ron"),
-        r#"(id: "test_charge", name: "Test Charge", description: "d",
-        target: OneEnemyGroupFront, effect: Damage(power: 40), cooldown: 5,
-        power_cost: 0, charge: Some((rounds: 3)))"#,
-    )
-    .unwrap();
-    root
-}
-
 /// A battle-map fight whose player holds the charge routine and has started
 /// it on the adjacent hostile, then waited for their turn to come round: the
 /// acting body is a charger.
@@ -157,14 +125,14 @@ fn charging_app() -> App {
 }
 
 fn charging_app_in(tactical: bool) -> App {
-    let assets = assets_with_a_charge_routine();
+    let assets = super::support::test_assets_dir();
     for seed in 0..200u32 {
         let mut app = test_app(seed);
         app.profile.tactical_battles = tactical;
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets).unwrap();
         while game.take_notification().is_some() {}
         app.game = Some(game);
-        install_player_routines_in(&mut app, &assets, &["test_charge"]);
+        install_player_routines(&mut app, &["long_compile"]);
         let mut game = app.game.take().unwrap();
         game.install_profile(app.profile.clone());
         app.game = Some(game);

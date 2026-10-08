@@ -2169,16 +2169,6 @@ pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
 /// a tactical routine, since `app_with_player_routines` builds its own fresh
 /// fixture rather than editing one that already carries other state.
 pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
-    install_player_routines_in(app, &test_assets_dir(), routines);
-}
-
-/// `install_player_routines` against a scratch assets dir, for a routine
-/// only that dir ships.
-pub(crate) fn install_player_routines_in(
-    app: &mut App,
-    assets_dir: &std::path::Path,
-    routines: &[&str],
-) {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -2191,7 +2181,7 @@ pub(crate) fn install_player_routines_in(
     data.player.routines = routines.iter().map(|r| r.to_string()).collect();
     save::save_to_file(&path, &data).unwrap();
 
-    app.game = Some(Game::load(&path, assets_dir).unwrap());
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
 }
 
 /// Teaches the player `species` as a learned image on an existing fixture —

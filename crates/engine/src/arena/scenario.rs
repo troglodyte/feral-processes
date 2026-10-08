@@ -54,6 +54,11 @@ pub struct Scenario {
     /// Order is formation: `ENGAGED_GROUPS` is 2, so entries past the second
     /// are out of melee reach.
     pub opponents: Vec<OpponentSpec>,
+    /// Routines every authored opponent carries, as if each were a wild
+    /// carrier. A hostile's routines come only from the wild roll
+    /// (`roll_wild_routine`), never from its species kit, so this is the
+    /// only way to stage one deterministically. Ignored by `encounter`.
+    pub opponent_routines: Vec<AbilityId>,
     /// A context to roll, instead of naming `opponents`. Mutually exclusive
     /// with them — one scenario asks one question.
     pub encounter: Option<Encounter>,
@@ -89,6 +94,7 @@ impl Default for Scenario {
             party: Vec::new(),
             emulate: None,
             opponents: Vec::new(),
+            opponent_routines: Vec::new(),
             encounter: None,
             model: CombatModel::default(),
             approach: None,

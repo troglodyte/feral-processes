@@ -699,7 +699,7 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
     assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
 }
 
-/// The thirty-five hunt-only routines are reachable exactly one way: off a
+/// The thirty-six hunt-only routines are reachable exactly one way: off a
 /// wild carrier. A species file naming one would quietly restore the "just
 /// target the species" loop this set exists to break.
 ///
@@ -727,7 +727,7 @@ fn no_species_file_grants_a_wild_only_ability() {
         .into_iter()
         .map(|(d, _)| d.id.clone())
         .collect();
-    assert_eq!(wild_only.len(), 35, "thirty-five routines are hunt-only");
+    assert_eq!(wild_only.len(), 36, "thirty-six routines are hunt-only");
 
     for species in game.species_defs() {
         for ability in &species.abilities {

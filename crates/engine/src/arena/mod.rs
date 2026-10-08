@@ -323,7 +323,9 @@ pub fn stage(
         // A rolled encounter warns about nothing: nothing was asked for past
         // a ceiling, because nothing was asked for.
         Some(encounter) => (encounter::roll(&mut game, encounter)?, Vec::new()),
-        None => setup::build_opponents(&mut game, &scenario.opponents)?,
+        None => {
+            setup::build_opponents(&mut game, &scenario.opponents, &scenario.opponent_routines)?
+        }
     };
 
     // The arena's output is the blow-by-blow, so the prune that keeps a map

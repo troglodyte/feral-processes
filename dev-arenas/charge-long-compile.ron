@@ -1,0 +1,16 @@
+// The player's side of the charge routines, to be PLAYED
+// (`FERAL_DEV_ARENA=1 cargo run`, main menu [R], [L] this file, [F]).
+// The headless bin cannot measure it: the party plays All-Attack and never
+// invokes a routine, so `routine` changes nothing it reports. Here the
+// player starts with Long Compile and walks the wind-up by hand — [s] to
+// begin, then [H] hold or [X] release on each later turn, while the pack
+// closes in. Stand still too long and a sub_process's Haymaker lands first.
+(
+    player: Fresh(level: 8, zone: 3),
+    character: (routine: Some("long_compile")),
+    opponents: [(species: "sub_process", count: 3)],
+    model: Tactical,
+    approach: Some(East),
+    reps: 1,
+    seed: 3,
+)

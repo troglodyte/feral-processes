@@ -5,9 +5,9 @@
     // slightly bigger payoff for standing still where it can be seen. The
     // aim locks at the start, so a target that walks out of the cells
     // takes nothing.
-    description: "Compile for 3 turns, then hit one target within 6 cells for 22–32. Battle maps aim it; release early for less.",
+    description: "Compile for 3 turns, then hit one target within 6 cells for 18–26. Battle maps aim it; release early for less.",
     target: OneEnemyGroupFront,
-    effect: Damage(power: 27, spread: 5),
+    effect: Damage(power: 22, spread: 4),
     cooldown: 4,
     power_cost: 12.0,
     accuracy: 8,

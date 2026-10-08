@@ -214,7 +214,8 @@ fn board_washes(
     provoking: &[(i32, i32)],
     placeable: &[(i32, i32)],
     preview: &[(i32, i32)],
-    charges: (&[(i32, i32)], &[(i32, i32)]),
+    party_charge: &[(i32, i32)],
+    hostile_charge: &[(i32, i32)],
 ) -> Vec<(Wash, Vec<(i32, i32)>)> {
     let mut washes = Vec::new();
     // Movement is drawn for **either side**, off `TacticalView::reachable`
@@ -247,8 +248,8 @@ fn board_washes(
     // is drawn whether or not the aim field is showing and under the
     // preview.
     washes.extend([
-        (Wash::ChargeParty, charges.0.to_vec()),
-        (Wash::ChargeHostile, charges.1.to_vec()),
+        (Wash::ChargeParty, party_charge.to_vec()),
+        (Wash::ChargeHostile, hostile_charge.to_vec()),
     ]);
     // `placeable` is already empty for every shape but `Radius`
     // (`Game::tactical_placeable_cells`' own gate). The preview goes last,
@@ -523,7 +524,8 @@ pub(super) fn draw_tactical_map(
         &provoking,
         placeable,
         preview,
-        (&charge_cells(true), &charge_cells(false)),
+        &charge_cells(true),
+        &charge_cells(false),
     );
 
     for (cell, kind) in view.board.cells() {
@@ -3568,7 +3570,7 @@ mod tests {
         let covered = [sheltered, both];
         let provoking = [exposed, both];
         assert_eq!(
-            board_washes(&reachable, &covered, &provoking, &[], &[], (&[], &[])),
+            board_washes(&reachable, &covered, &provoking, &[], &[], &[], &[]),
             vec![
                 (Wash::Move, vec![open]),
                 (Wash::Cover, vec![sheltered]),
@@ -3582,7 +3584,7 @@ mod tests {
     /// the cells do.
     #[test]
     fn locked_charge_cells_get_their_own_washes() {
-        let washes = board_washes(&[], &[], &[], &[], &[], (&[(1, 1)], &[(2, 2), (2, 3)]));
+        let washes = board_washes(&[], &[], &[], &[], &[], &[(1, 1)], &[(2, 2), (2, 3)]);
         assert_eq!(
             washes,
             vec![

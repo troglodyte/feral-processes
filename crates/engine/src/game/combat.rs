@@ -1498,6 +1498,9 @@ impl Game {
             .filter(|d| !d.effect.field_only())
             .filter(|d| !matches!(d.effect, AbilityEffect::Decompile))
             .filter(|d| !d.effect.tactical_only())
+            // A proc has no turn to hold a wind-up across, so a charge
+            // routine would land at full power for free.
+            .filter(|d| d.charge.is_none())
             .filter(|d| !matches!(d.effect, AbilityEffect::Emulate { .. }))
             .collect()
     }

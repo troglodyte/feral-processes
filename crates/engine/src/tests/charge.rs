@@ -395,3 +395,43 @@ fn the_ai_releases_on_a_kill_cancels_on_an_empty_aim_and_otherwise_holds() {
         "a quarter of the hit does not reach 80"
     );
 }
+
+/// A charge routine's whole point is the wind-up, which neither a proc
+/// (no turn of its own to hold on) nor an off-screen squad swing (no turn
+/// order to spend a hold in) can honour, so both would land it at full power
+/// on the spot.
+#[test]
+fn a_wielded_program_never_procs_a_charge_routine() {
+    let mut game = Game::new(9113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<AbilityDb>()
+        .insert(charge_def(40, 3, 5, 0));
+    let program = spawn_tamed(&mut game, 40, 20);
+    game.world
+        .entity_mut(program)
+        .insert(Routines(vec![ID.to_string()]));
+
+    assert!(game.wieldable_routines(program).is_empty());
+}
+
+#[test]
+fn a_dispatched_squad_never_swings_a_charge_routine() {
+    let (mut game, squad) = super::sorties::a_dispatched_sortie(9508, DifficultyMode::Forgiving);
+    game.world
+        .resource_mut::<AbilityDb>()
+        .insert(charge_def(40, 3, 5, 0));
+    for &member in &squad {
+        game.world
+            .entity_mut(member)
+            .insert(Routines(vec![ID.to_string()]));
+    }
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
+
+    game.run_sorties();
+
+    assert!(game.world.resource::<Sorties>().0[0].battles_done > 0);
+    for &member in &squad {
+        assert!(!on_cooldown(&game, member), "a squad member fired it");
+    }
+}

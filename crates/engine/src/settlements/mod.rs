@@ -50,6 +50,9 @@ pub enum CompassTarget {
     /// A Stack entrance, named by its surface tile — the same key
     /// `resources::FrameKey` already hangs a frame's memory off.
     Link((i32, i32)),
+    /// One of the party's outposts, named by its tile — `resources::Outposts`'
+    /// own key. Appended last so a saved selection still parses.
+    Outpost((i32, i32)),
 }
 
 /// How big a settlement is, and how much it can do.

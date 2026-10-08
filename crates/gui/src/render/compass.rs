@@ -66,6 +66,7 @@ fn target_glyph(target: CompassTarget) -> (char, Color) {
             hud::palette::glyph(GlyphColor::Orange),
         ),
         CompassTarget::Link(_) => ('>', hud::palette::glyph(GlyphColor::Magenta)),
+        CompassTarget::Outpost(_) => ('⌂', hud::palette::glyph(GlyphColor::Green)),
     }
 }
 

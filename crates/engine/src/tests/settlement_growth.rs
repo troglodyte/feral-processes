@@ -1092,7 +1092,11 @@ fn the_pure_settle_equals_what_the_settler_writes() {
     game.settle_commerce_drift(key);
     let after = relation_of(&game, key);
     assert_eq!(
-        (after.commerce, after.commerce_epoch, after.commerce_at_epoch),
+        (
+            after.commerce,
+            after.commerce_epoch,
+            after.commerce_at_epoch
+        ),
         (
             predicted.commerce,
             predicted.commerce_epoch,

@@ -2057,11 +2057,7 @@ impl Game {
                     distance: dx.abs().max(dy.abs()),
                     tile: known.tile,
                     key: *key,
-                    label: if known.visited {
-                        known.def.name.clone()
-                    } else {
-                        "a settlement".to_string()
-                    },
+                    label: known.compass_label(),
                     visited: known.visited,
                 }
             })
@@ -2107,6 +2103,27 @@ impl Game {
                 visited,
                 tile,
             ));
+        }
+
+        // Nearest first, like the links. A lost outpost is simply absent
+        // here, so a bearing on it resolves to `None` exactly as a
+        // collapsed link's does. The party founded it, so it is visited.
+        let mut outposts: Vec<(i32, (i32, i32))> = self
+            .world
+            .resource::<crate::resources::Outposts>()
+            .0
+            .keys()
+            .map(|&tile| {
+                (
+                    (tile.0 - origin.x).abs().max((tile.1 - origin.y).abs()),
+                    tile,
+                )
+            })
+            .collect();
+        outposts.sort();
+        for (_, tile) in outposts {
+            let label = self.outpost_destination_name(tile);
+            rows.push(row(CompassTarget::Outpost(tile), label, true, tile));
         }
 
         rows

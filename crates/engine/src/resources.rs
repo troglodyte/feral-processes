@@ -2248,6 +2248,18 @@ pub struct Outposts(pub BTreeMap<(i32, i32), crate::outposts::Outpost>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Standings(pub BTreeMap<crate::settlements::SettlementKey, crate::settlements::Relation>);
 
+impl KnownSettlement {
+    /// What the compass and the world map call this town: its name once the
+    /// party has walked there, a generic noun before that.
+    pub fn compass_label(&self) -> String {
+        if self.visited {
+            self.def.name.clone()
+        } else {
+            "a settlement".to_string()
+        }
+    }
+}
+
 /// A settlement that has been materialized onto the map.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct KnownSettlement {

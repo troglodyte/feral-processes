@@ -661,7 +661,24 @@ impl Game {
     /// back off `TacticalBattle` by every beat after it, which is what holds
     /// this to **one `GameRng` draw a turn** rather than one a cell.
     fn run_tactical_beat(&mut self, actor: Entity, temperature: f32, turns: PartyTurns) -> AiBeat {
-        // **The one hook, ahead of everything below it.** The plan's own
+        // **A charger's whole turn, ahead of the walk, the pick and the besieger hook.** It
+        // cannot move (`movement_allowance`), so there is no walk to plan,
+        // and what it does is `charge_choice`'s. Every path out of it hands
+        // the turn on itself, so the beat must not hand on a second time.
+        if let Some(charging) = self
+            .world
+            .get::<crate::components::Charging>(actor)
+            .cloned()
+        {
+            let choice = if self.charge_is_full(actor) {
+                crate::game::charge::ChargeChoice::Release
+            } else {
+                self.charge_ai_choice(actor, &charging)
+            };
+            self.tactical_charge_turn(actor, choice);
+            return AiBeat::Acted;
+        }
+        // **The besieger hook, ahead of everything below the charger.** The plan's own
         // text points at `Game::tactical_ai_turn`'s top, but real play never
         // calls that door — `App::advance_tactical` drives
         // `Game::tactical_ai_beat`, which reaches `run_tactical_beat`
@@ -686,23 +703,6 @@ impl Game {
             } else {
                 AiBeat::Acted
             };
-        }
-        // **A charger's whole turn, ahead of the walk and the pick.** It
-        // cannot move (`movement_allowance`), so there is no walk to plan,
-        // and what it does is `charge_choice`'s. Every path out of it hands
-        // the turn on itself, so the beat must not hand on a second time.
-        if let Some(charging) = self
-            .world
-            .get::<crate::components::Charging>(actor)
-            .cloned()
-        {
-            let choice = if self.charge_is_full(actor) {
-                crate::game::charge::ChargeChoice::Release
-            } else {
-                self.charge_ai_choice(actor, &charging)
-            };
-            self.tactical_charge_turn(actor, choice);
-            return AiBeat::Acted;
         }
         let sides = self.tactical_sides(actor);
         if sides.targets.is_empty() {

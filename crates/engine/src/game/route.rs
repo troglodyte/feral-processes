@@ -813,7 +813,11 @@ impl Game {
     /// Hostile enough, to try preying on it — `routes::settlements_near_route`
     /// filtered to `Standing::preys_on_routes`, the module doc's own
     /// requirement of the caller.
-    fn route_predators(&self, base: (i32, i32), destination: (i32, i32)) -> Vec<SettlementKey> {
+    pub(crate) fn route_predators(
+        &self,
+        base: (i32, i32),
+        destination: (i32, i32),
+    ) -> Vec<SettlementKey> {
         let candidates: Vec<(SettlementKey, (i32, i32))> = self
             .world
             .resource::<resources::Settlements>()

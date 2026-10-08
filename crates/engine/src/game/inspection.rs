@@ -2096,10 +2096,9 @@ impl Game {
         links.sort();
         for (_, tile) in links {
             let visited = walked.contains(&tile);
-            let label = if visited { "a walked link" } else { "a link" };
             rows.push(row(
                 CompassTarget::Link(tile),
-                label.to_string(),
+                link_compass_label(visited).to_string(),
                 visited,
                 tile,
             ));
@@ -2619,4 +2618,9 @@ pub(crate) fn difficulty_color(ratio: f64) -> GlyphColor {
     } else {
         GlyphColor::Red
     }
+}
+
+/// What the compass and the world map call a surface link: walked or not.
+pub(crate) fn link_compass_label(visited: bool) -> &'static str {
+    if visited { "a walked link" } else { "a link" }
 }

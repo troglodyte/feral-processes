@@ -65,9 +65,10 @@ Reading and housekeeping:
   heading and distance. Enter points the compass at the highlighted place, and the zone map keeps
   that heading in view; X clears it. It reads the zone surface only, and costs no time.
 - g — on the zone surface, the world map: every region you have walked, with the towns, outposts,
-  Stack links, nests and routes you know of. The arrows pan it, 1-9 then a-z pick a place from the
-  list, C points the compass at the picked place (a nest is not a destination), P puts the view
-  back on you, and Esc closes it. A town's tint shows how it regards you, and its arrow shows
+  Stack links, nests and routes you know of. The arrows pan it; 1-9 then a-z, or a click on the map
+  or the list, pick a place (click a shared spot again for the next place on it), C points the
+  compass at the picked place (a nest is not a destination), P puts the view back on you, and Esc
+  closes it. A town's tint shows how it regards you, and its arrow shows
   whether its trade is rising, holding or falling. It costs no time. In the Stack, g is that
   frame's map instead.
 - f — filter the log: all, field, or base

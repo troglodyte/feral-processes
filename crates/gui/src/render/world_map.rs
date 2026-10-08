@@ -340,8 +340,112 @@ fn legend() -> Vec<String> {
         "       green Warm, yellow Allied".to_string(),
         "Cyan line: a route.  Red line: preyed on.".to_string(),
         "Gold box: compass target.  Esc closes.".to_string(),
-        "Arrows pan  a-z/1-9 pick  C compass  P centre".to_string(),
+        "Arrows pan  a-z/1-9/click pick  C compass  P centre".to_string(),
     ]
+}
+
+/// Where the screen's pieces land: one derivation the draw and the click
+/// both call, so a click resolves against what was drawn.
+struct Layout {
+    ox: f32,
+    oy: f32,
+    cell: f32,
+    /// The side column, or `None` when the window leaves it no width.
+    column: Option<Column>,
+}
+
+struct Column {
+    x: f32,
+    w: f32,
+    /// The baseline of the list's first row.
+    list_y: f32,
+    list: std::ops::Range<usize>,
+    legend_y: f32,
+}
+
+/// `None` when the window is too small to give the grid a cell.
+fn layout(view: &WorldMapView, selected: usize, w: f32, h: f32, m: &Metrics) -> Option<Layout> {
+    let head_y = m.inset + m.font_size as f32;
+    let top = head_y + m.gap + m.line_height * 0.5;
+    let (ox, oy, cell) = grid_layout(view.cells.len(), w, h, top, m);
+    if cell <= 0.0 {
+        return None;
+    }
+    let x = ox + cell * view.cells.len() as f32 + m.inset * 2.0;
+    let col_w = (w - x - m.inset).max(0.0);
+    let column = (col_w > 0.0).then(|| {
+        // The legend takes the column's foot; the list and detail share
+        // what is above it.
+        let legend_h = legend().len() as f32 * m.line_height;
+        let legend_y = h - m.inset - legend_h + m.line_height;
+        let body_h = (legend_y - m.line_height - top - m.gap * 2.0).max(0.0);
+        let rows_total = (body_h / m.line_height) as usize;
+        let detail_rows = rows_total.min(9) / 2 + 3;
+        let list_cap = rows_total.saturating_sub(detail_rows + 1);
+        Column {
+            x,
+            w: col_w,
+            list_y: top + m.line_height * 0.5,
+            list: list_window(view.marks.len(), selected, list_cap),
+            legend_y,
+        }
+    });
+    Some(Layout {
+        ox,
+        oy,
+        cell,
+        column,
+    })
+}
+
+/// What a click at a window pixel landed on.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum WorldMapHit {
+    Chunk((i32, i32)),
+    Row(usize),
+}
+
+/// The grid cell or list row under `(px, py)`, if any. A list row spans
+/// the line above its baseline, `draw_lines`' own convention.
+fn hit_at(
+    view: &WorldMapView,
+    selected: usize,
+    (w, h): (f32, f32),
+    m: &Metrics,
+    (px, py): (f32, f32),
+) -> Option<WorldMapHit> {
+    let l = layout(view, selected, w, h, m)?;
+    let side = view.cells.len() as i32;
+    let col = ((px - l.ox) / l.cell).floor() as i32;
+    let row = ((py - l.oy) / l.cell).floor() as i32;
+    if px >= l.ox && py >= l.oy && col < side && row < side {
+        let corner = (view.center.0 - view.radius, view.center.1 - view.radius);
+        return Some(WorldMapHit::Chunk((corner.0 + col, corner.1 + row)));
+    }
+    let c = l.column?;
+    if px < c.x || px >= c.x + c.w || py < c.list_y - m.line_height {
+        return None;
+    }
+    let k = ((py - (c.list_y - m.line_height)) / m.line_height) as usize;
+    let index = c.list.start + k;
+    c.list.contains(&index).then_some(WorldMapHit::Row(index))
+}
+
+/// The world map's click target under `pos`, or `None` off that screen —
+/// `sprite_forge::sprite_hits`' shape, so the pointer system needs no mode
+/// check of its own.
+pub(crate) fn world_map_hit(
+    app: &mut App,
+    painter: &Painter,
+    pos: (f32, f32),
+) -> Option<WorldMapHit> {
+    if app.mode != Mode::WorldMap {
+        return None;
+    }
+    let view = app.world_map()?;
+    let m = ui_metrics(painter.screen_h());
+    let size = (painter.screen_w(), painter.screen_h());
+    hit_at(&view, app.menu_selected, size, &m, pos)
 }
 
 pub(super) fn draw_world_map(
@@ -361,39 +465,28 @@ pub(super) fn draw_world_map(
         view.center.1,
         view.marks.len(),
     );
-    let head_y = m.inset + m.font_size as f32;
-    painter.ui(&heading, m.inset, head_y, m.font_size, CYAN);
+    painter.ui(
+        &heading,
+        m.inset,
+        m.inset + m.font_size as f32,
+        m.font_size,
+        CYAN,
+    );
 
-    let top = head_y + m.gap + m.line_height * 0.5;
-    let (ox, oy, cell) = grid_layout(view.cells.len(), w, h, top, m);
-    if cell <= 0.0 {
+    let Some(l) = layout(view, selected, w, h, m) else {
         return;
-    }
+    };
     let mark = view.marks.get(selected);
-    draw_grid(view, mark, pointing, painter, ox, oy, cell);
+    draw_grid(view, mark, pointing, painter, l.ox, l.oy, l.cell);
 
-    let col_x = ox + cell * view.cells.len() as f32 + m.inset * 2.0;
-    let col_w = (w - col_x - m.inset).max(0.0);
-    if col_w <= 0.0 {
+    let Some(c) = l.column else {
         return;
-    }
-
-    // The legend takes the column's foot; the list and detail share what is
-    // above it.
-    let legend = legend();
-    let legend_h = legend.len() as f32 * m.line_height;
-    let legend_y = h - m.inset - legend_h + m.line_height;
-    let body_h = (legend_y - m.line_height - top - m.gap * 2.0).max(0.0);
-    let rows_total = (body_h / m.line_height) as usize;
-    let detail_rows = rows_total.min(9) / 2 + 3;
-    let list_cap = rows_total.saturating_sub(detail_rows + 1);
-
-    let range = list_window(view.marks.len(), selected, list_cap);
+    };
     let mut list: Vec<(String, Color)> = Vec::new();
     if view.marks.is_empty() {
         list.push(("No places known yet. Walk to find some.".into(), TEXT_DIM));
     }
-    for i in range {
+    for i in c.list.clone() {
         let on = i == selected;
         let prefix = if on { "> " } else { "  " };
         list.push((
@@ -401,7 +494,7 @@ pub(super) fn draw_world_map(
             if on { TEXT } else { TEXT_DIM },
         ));
     }
-    let after_list = draw_lines(painter, &list, col_x, top + m.line_height * 0.5, col_w, m);
+    let after_list = draw_lines(painter, &list, c.x, c.list_y, c.w, m);
 
     if let Some(mark) = mark {
         let detail: Vec<(String, Color)> = detail_lines(mark)
@@ -409,18 +502,11 @@ pub(super) fn draw_world_map(
             .enumerate()
             .map(|(i, s)| (s, if i == 0 { CYAN } else { TEXT }))
             .collect();
-        draw_lines(
-            painter,
-            &detail,
-            col_x,
-            after_list + m.line_height,
-            col_w,
-            m,
-        );
+        draw_lines(painter, &detail, c.x, after_list + m.line_height, c.w, m);
     }
 
-    let legend: Vec<(String, Color)> = legend.into_iter().map(|s| (s, TEXT_DIM)).collect();
-    draw_lines(painter, &legend, col_x, legend_y, col_w, m);
+    let legend: Vec<(String, Color)> = legend().into_iter().map(|s| (s, TEXT_DIM)).collect();
+    draw_lines(painter, &legend, c.x, c.legend_y, c.w, m);
 }
 
 #[cfg(test)]
@@ -545,6 +631,47 @@ mod tests {
         let (x, y) = cell_center(&v, (-2, -2), 10.0, 20.0, 8.0);
         assert_eq!((x, y), (14.0, 24.0));
         assert!(in_grid(&v, (2, 2)) && !in_grid(&v, (3, 0)));
+    }
+
+    /// A click resolves through `layout`, the draw's own call, so the cell
+    /// drawn at a chunk is the cell a click there answers with.
+    #[test]
+    fn a_click_on_a_drawn_cell_finds_its_chunk() {
+        crate::paint::with_painter(|p| {
+            let m = ui_metrics(p.screen_h());
+            let size = (p.screen_w(), p.screen_h());
+            let v = view(WORLD_MAP_VIEW_RADIUS);
+            let l = layout(&v, 0, size.0, size.1, &m).unwrap();
+            for chunk in [
+                (-WORLD_MAP_VIEW_RADIUS, -WORLD_MAP_VIEW_RADIUS),
+                (0, 0),
+                (3, -5),
+            ] {
+                let at = cell_center(&v, chunk, l.ox, l.oy, l.cell);
+                assert_eq!(hit_at(&v, 0, size, &m, at), Some(WorldMapHit::Chunk(chunk)));
+            }
+            let side = l.cell * v.cells.len() as f32;
+            let below = (l.ox + 1.0, l.oy + side + 1.0);
+            assert_eq!(hit_at(&v, 0, size, &m, below), None);
+        });
+    }
+
+    #[test]
+    fn a_click_on_a_list_row_finds_its_index() {
+        crate::paint::with_painter(|p| {
+            let m = ui_metrics(p.screen_h());
+            let size = (p.screen_w(), p.screen_h());
+            let mut v = view(WORLD_MAP_VIEW_RADIUS);
+            v.marks = vec![town(Standing::Warm, None); 3];
+            let c = layout(&v, 0, size.0, size.1, &m).unwrap().column.unwrap();
+            let x = c.x + 4.0;
+            for i in 0..3 {
+                let y = c.list_y + i as f32 * m.line_height - m.line_height / 2.0;
+                assert_eq!(hit_at(&v, 0, size, &m, (x, y)), Some(WorldMapHit::Row(i)));
+            }
+            let past = c.list_y + 3.0 * m.line_height - m.line_height / 2.0;
+            assert_eq!(hit_at(&v, 0, size, &m, (x, past)), None);
+        });
     }
 
     #[test]

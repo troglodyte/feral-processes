@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.3
+
+**A world map of the surface.** Press `g` on the surface to open it (underground, `g` still opens the Stack map). The map starts in fog and clears where the party has walked. The areas around your base, your outposts and your trade routes show without being walked. Towns are coloured by how they regard you, from red Hostile to yellow Allied. A Mainframe shows ▲, ▬ or ▼ for whether its trade is rising, holding or falling, and a Server says whether it will grow into a Mainframe soon. Trade routes are drawn as lines, red where a hostile town preys on them. Pick a place with its row key to see its details; `C` points the compass at it, `P` re-centres on the party, the arrows pan and Esc closes. Nests are shown but the compass cannot point at them. Fog is saved, survives a breach, and an older save simply starts with none.
+
+**The compass can point at your outposts.** They are listed in the compass picker (`u`) after the Stack links, nearest first.
+
 ## 0.18.2
 
 **Picking a floor finish is a menu now.** In the Excavation plan (`m`), `[F]` used to step through the finishes one at a time. Now it opens a list of every finish, each with a colour swatch beside it, plus plain and strip. Pick one with its row key or the arrows and Enter; Esc goes back to the plan without changing the brush. A box you have started stays started.

@@ -252,35 +252,105 @@ fn esc_with_an_anchor_down_drops_the_anchor_and_stays_in_the_mode() {
 // The brush
 // ---------------------------------------------------------------------------
 
-/// `[F]` walks plain → every shipped finish, in id order → strip → plain.
+/// `[F]` opens the brush picker over the plan rather than cycling in place:
+/// a popup of plain, every shipped finish in id order, then strip.
 #[test]
-fn f_cycles_the_brush_through_every_shipped_finish_then_strip_then_plain() {
+fn f_opens_the_brush_picker_listing_plain_every_finish_then_strip() {
     let mut app = app_at_the_frontier(4306);
     app.handle_key(GameKey::Char('m'));
     assert_eq!(app.excavate_brush, None, "the brush opens plain");
 
     app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.mode, Mode::ExcavateBrush);
+    let rows = app.excavate_brush_rows();
+    let brushes: Vec<_> = rows.iter().map(|r| r.brush.clone()).collect();
+    assert_eq!(brushes.first(), Some(&None), "plain is the first row");
+    assert_eq!(brushes.last(), Some(&Some(FinishOrder::Strip)));
+    let finishes: Vec<_> = brushes[1..brushes.len() - 1]
+        .iter()
+        .map(|b| match b {
+            Some(FinishOrder::Apply(id)) => id.clone(),
+            other => panic!("a middle row must be a finish, got {other:?}"),
+        })
+        .collect();
+    let mut sorted = finishes.clone();
+    sorted.sort();
+    assert_eq!(finishes, sorted, "finishes are listed in id order");
     assert_eq!(
-        app.excavate_brush,
-        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet")))
+        finishes.len(),
+        app.game.as_ref().unwrap().floor_defs().len(),
+        "every loaded finish is offered"
     );
+    assert!(
+        rows[1..rows.len() - 1].iter().all(|r| r.shade.is_some()),
+        "every finish row carries its swatch"
+    );
+    assert!(rows[0].shade.is_none() && rows[rows.len() - 1].shade.is_none());
+}
+
+/// Picking a row sets the brush and drops back onto the plan with the
+/// cursor and a dropped anchor untouched — the picker is a detour, not an
+/// exit.
+#[test]
+fn picking_a_row_sets_the_brush_and_returns_to_the_plan() {
+    let mut app = app_at_the_frontier(4312);
+    app.handle_key(GameKey::Char('m'));
+    app.handle_key(GameKey::Char(' '));
+    let (cursor, anchor) = (app.excavate_cursor, app.excavate_anchor);
+    assert!(anchor.is_some());
+
     app.handle_key(GameKey::Char('F'));
+    let moss = app
+        .excavate_brush_rows()
+        .iter()
+        .position(|r| r.brush == Some(FinishOrder::Apply(FloorId::from("moss_weave"))))
+        .unwrap();
+    for _ in 0..moss {
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Excavate);
     assert_eq!(
         app.excavate_brush,
         Some(FinishOrder::Apply(FloorId::from("moss_weave")))
     );
-    app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.excavate_cursor, cursor);
     assert_eq!(
-        app.excavate_brush,
-        Some(FinishOrder::Apply(FloorId::from("slate_inlay")))
+        app.excavate_anchor, anchor,
+        "the anchor survives the picker"
     );
+}
+
+/// The picker opens on the brush already in hand, so Enter alone keeps it.
+#[test]
+fn the_picker_opens_highlighting_the_current_brush() {
+    let mut app = app_at_the_frontier(4313);
+    app.handle_key(GameKey::Char('m'));
     app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.menu_selected, 0, "plain is highlighted first");
+    let last = app.excavate_brush_rows().len() - 1;
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Enter);
     assert_eq!(app.excavate_brush, Some(FinishOrder::Strip));
+
     app.handle_key(GameKey::Char('F'));
-    assert_eq!(
-        app.excavate_brush, None,
-        "the cycle must wrap back to plain"
-    );
+    assert_eq!(app.menu_selected, last, "strip is highlighted on reopening");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.excavate_brush, Some(FinishOrder::Strip));
+}
+
+/// Esc backs out to the plan with the brush unchanged — one press is one
+/// step back, never the whole mode.
+#[test]
+fn esc_in_the_picker_returns_to_the_plan_unchanged() {
+    let mut app = app_at_the_frontier(4314);
+    app.handle_key(GameKey::Char('m'));
+    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Excavate);
+    assert_eq!(app.excavate_brush, None);
 }
 
 /// With no finish content loaded at all, `[F]` has nothing to offer and
@@ -293,6 +363,7 @@ fn f_is_inert_with_no_floor_catalogue_loaded() {
     assert_eq!(app.mode, Mode::Excavate);
 
     app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.mode, Mode::Excavate, "no picker over an empty FloorDb");
     assert_eq!(
         app.excavate_brush, None,
         "an empty FloorDb must leave the brush untouched"
@@ -304,14 +375,27 @@ fn f_is_inert_with_no_floor_catalogue_loaded() {
     );
 }
 
+/// Picks `brush` through the picker the way a player does: `[F]`, then the
+/// row's own key.
+fn pick_brush(app: &mut App, brush: Option<FinishOrder>) {
+    app.handle_key(GameKey::Char('F'));
+    let row = app
+        .excavate_brush_rows()
+        .iter()
+        .position(|r| r.brush == brush)
+        .expect("the brush is offered");
+    app.menu_selected = row;
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Excavate);
+}
+
 /// Opening the mode resets a brush left over from the last visit — the same
 /// rule `excavate_anchor` already follows.
 #[test]
 fn opening_the_mode_resets_the_brush_to_plain() {
     let mut app = app_at_the_frontier(4308);
     app.handle_key(GameKey::Char('m'));
-    app.handle_key(GameKey::Char('F'));
-    assert!(app.excavate_brush.is_some());
+    pick_brush(&mut app, Some(FinishOrder::Strip));
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -333,10 +417,9 @@ fn committing_with_a_finish_brush_marks_the_already_laid_floor_under_it() {
     let party = app.game.as_ref().unwrap().base_pos().unwrap();
 
     app.handle_key(GameKey::Char('m'));
-    app.handle_key(GameKey::Char('F'));
-    assert_eq!(
-        app.excavate_brush,
-        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet")))
+    pick_brush(
+        &mut app,
+        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet"))),
     );
     // A single-cell box on the party's own tile, which the pocket already
     // laid as floor — the one cell this fixture can be sure of without
@@ -362,14 +445,15 @@ fn excavate_brush_label_names_every_state() {
         Some("Brush: plain [F]")
     );
 
-    app.handle_key(GameKey::Char('F'));
+    pick_brush(
+        &mut app,
+        Some(FinishOrder::Apply(FloorId::from("cobalt_carpet"))),
+    );
     assert_eq!(
         app.excavate_brush_label().as_deref(),
         Some("Brush: Cobalt Carpet [F]")
     );
-    app.handle_key(GameKey::Char('F'));
-    app.handle_key(GameKey::Char('F'));
-    app.handle_key(GameKey::Char('F'));
+    pick_brush(&mut app, Some(FinishOrder::Strip));
     assert_eq!(
         app.excavate_brush_label().as_deref(),
         Some("Brush: strip [F]")

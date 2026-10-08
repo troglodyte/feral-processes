@@ -17,7 +17,7 @@ pub(crate) mod depot_filter;
 pub(crate) mod dev_console;
 pub(crate) mod dispatch;
 mod ending;
-mod excavate;
+pub(crate) mod excavate;
 mod extraction;
 mod field;
 pub(crate) mod group_menu;

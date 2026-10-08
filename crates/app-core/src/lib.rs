@@ -19,6 +19,7 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
+pub use app::excavate::BrushRow;
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -1995,6 +1996,10 @@ pub enum Mode {
     /// a wing of the base — however large — costs no turns. That is the
     /// property `excavation_plan_never_ticks_the_game` exists to hold.
     Excavate,
+    /// The Excavation plan's brush picker, `[F]` from `Mode::Excavate`:
+    /// plain, every loaded finish, strip. A detour off the plan — picking a
+    /// row or Esc lands back on it with the cursor and anchor untouched.
+    ExcavateBrush,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -2440,6 +2445,8 @@ impl Mode {
             | Mode::FieldRoutineAlly
             | Mode::FieldRoutineCell
             | Mode::Excavate
+            // Opened from the plan only, the plan's own reason.
+            | Mode::ExcavateBrush
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop

@@ -65,6 +65,26 @@ impl App {
         if !self.tactical_player_turn() {
             return;
         }
+        // A charger's turn is a decision (hold or release), not an action
+        // to pick: the engine refuses everything else for it, and saying so
+        // here keeps the refusal on the status line instead of silent.
+        if self.tactical_acting_charges()
+            && matches!(
+                key,
+                GameKey::Up
+                    | GameKey::Down
+                    | GameKey::Left
+                    | GameKey::Right
+                    | GameKey::UpLeft
+                    | GameKey::UpRight
+                    | GameKey::DownLeft
+                    | GameKey::DownRight
+                    | GameKey::Char('a' | 's' | 'U' | 'd' | 'V')
+            )
+        {
+            self.refuse("Charging: [H] hold or [X] release.");
+            return;
+        }
         match key {
             GameKey::Up => self.tactical_step((0, -1)),
             GameKey::Down => self.tactical_step((0, 1)),
@@ -144,8 +164,40 @@ impl App {
                 }
                 self.after_tactical_action();
             }
+            // Uppercase, `E`'s reason. `h` and `x` are the group model's
+            // lowercase rows for the same two choices.
+            GameKey::Char('H') => {
+                let held = self.game.as_mut().is_some_and(|g| g.tactical_charge_hold());
+                if !held {
+                    self.refuse("Not charging.");
+                }
+                self.after_tactical_action();
+            }
+            GameKey::Char('X') => {
+                let released = self
+                    .game
+                    .as_mut()
+                    .is_some_and(|g| g.tactical_charge_release());
+                if !released {
+                    self.refuse("Not charging.");
+                }
+                self.after_tactical_action();
+            }
             _ => {}
         }
+    }
+
+    /// Whether the body whose turn it is is winding up a charge.
+    fn tactical_acting_charges(&mut self) -> bool {
+        let Some(view) = self.game.as_mut().and_then(|g| g.tactical_view()) else {
+            return false;
+        };
+        let Some(acting) = view.active.map(|i| view.order[i].entity) else {
+            return false;
+        };
+        view.bodies
+            .iter()
+            .any(|b| b.entity == acting && b.charge.is_some())
     }
 
     /// Picks which consumable the acting body spends — `handle_battle_

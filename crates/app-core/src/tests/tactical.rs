@@ -2,13 +2,15 @@
 //! paces the wild side.
 
 use super::support::{
-    app_with_companions_in_the_party, install_player_routines, learn_image, test_app, walk,
+    app_with_companions_in_the_party, install_player_routines, install_player_routines_in,
+    learn_image, test_app, walk,
 };
 use crate::{
     App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
-use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
+use feral_processes_engine::resources::DifficultyMode;
+use feral_processes_engine::{Game, MESSAGE_LOG_CAP, MessageKind};
 
 /// An app standing in a fight opened by walking into a lone wild program.
 ///
@@ -114,6 +116,186 @@ fn emulating_tactical_app() -> App {
         }
     }
     panic!("no seed under 200 put a lone wild program next to the player");
+}
+
+/// A scratch copy of `assets/` (symlinks) whose `abilities/` also holds a
+/// charge routine: no shipped ability charges until Phase 5's content, and
+/// `AbilityDb` has no public insert.
+fn assets_with_a_charge_routine() -> std::path::PathBuf {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!("feral_processes_appcore_charge_assets_{unique}"));
+    let _ = std::fs::remove_dir_all(&root);
+    let source = super::support::test_assets_dir();
+    std::fs::create_dir_all(root.join("abilities")).unwrap();
+    for entry in std::fs::read_dir(&source).unwrap().flatten() {
+        let name = entry.file_name();
+        let dest = root.join(&name);
+        if name == "abilities" {
+            for ability in std::fs::read_dir(entry.path()).unwrap().flatten() {
+                std::os::unix::fs::symlink(ability.path(), dest.join(ability.file_name())).unwrap();
+            }
+        } else {
+            std::os::unix::fs::symlink(entry.path(), dest).unwrap();
+        }
+    }
+    std::fs::write(
+        root.join("abilities/test_charge.ron"),
+        r#"(id: "test_charge", name: "Test Charge", description: "d",
+        target: OneEnemyGroupFront, effect: Damage(power: 40), cooldown: 5,
+        power_cost: 0, charge: Some((rounds: 3)))"#,
+    )
+    .unwrap();
+    root
+}
+
+/// A battle-map fight whose player holds the charge routine and has started
+/// it on the adjacent hostile, then waited for their turn to come round: the
+/// acting body is a charger.
+fn charging_app() -> App {
+    charging_app_in(true)
+}
+
+fn charging_app_in(tactical: bool) -> App {
+    let assets = assets_with_a_charge_routine();
+    for seed in 0..200u32 {
+        let mut app = test_app(seed);
+        app.profile.tactical_battles = tactical;
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets).unwrap();
+        while game.take_notification().is_some() {}
+        app.game = Some(game);
+        install_player_routines_in(&mut app, &assets, &["test_charge"]);
+        let mut game = app.game.take().unwrap();
+        game.install_profile(app.profile.clone());
+        app.game = Some(game);
+
+        let game = app.game.as_mut().unwrap();
+        let player = game.player_status().position;
+        let Some(target) = game
+            .view_entities(12, 12)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1)
+        else {
+            continue;
+        };
+        walk(
+            &mut app,
+            match (target.pos.0 - player.0, target.pos.1 - player.1) {
+                (1, 0) => GameKey::Right,
+                (-1, 0) => GameKey::Left,
+                (0, 1) => GameKey::Down,
+                _ => GameKey::Up,
+            },
+        );
+        if !tactical {
+            if app.mode != Mode::Battle {
+                continue;
+            }
+            let game = app.game.as_mut().unwrap();
+            let special = game.battle_special_options(0)[0].index;
+            let action = feral_processes_engine::battle::BattleAction::Special {
+                ability: special,
+                target: feral_processes_engine::battle::SpecialTarget::EnemyGroup { group: 0 },
+                image: None,
+            };
+            app.commit_battle_action(0, action);
+            return app;
+        }
+        if app.mode != Mode::TacticalBattle {
+            continue;
+        }
+        wait_for_the_player(&mut app);
+        // The lone party body is the player; the other body is the hostile.
+        let view = app.game.as_mut().unwrap().tactical_view().unwrap();
+        let acting = view.order[view.active.unwrap()].entity;
+        let Some(cell) = view
+            .bodies
+            .iter()
+            .find(|b| b.entity != acting)
+            .map(|b| b.cell)
+        else {
+            continue;
+        };
+        if !app.game.as_mut().unwrap().tactical_use_routine(0, cell) {
+            continue;
+        }
+        wait_for_the_player(&mut app);
+        return app;
+    }
+    panic!("no seed under 200 put the player in a charge");
+}
+
+fn acting_body_charge(app: &mut App) -> Option<(u32, u32)> {
+    let view = app.game.as_mut()?.tactical_view()?;
+    let acting = view.order[view.active?].entity;
+    view.bodies.iter().find(|b| b.entity == acting)?.charge
+}
+
+#[test]
+fn a_charging_slot_in_the_group_model_offers_only_hold_and_release() {
+    let mut app = charging_app_in(false);
+    let game = app.game.as_mut().unwrap();
+    let keys: Vec<char> = game
+        .battle_action_options(0)
+        .iter()
+        .map(|o| o.key)
+        .collect();
+    assert_eq!(keys, vec!['h', 'x']);
+    app.handle_key(GameKey::Char('h'));
+    assert!(app.status_line.is_none(), "{:?}", app.status_line);
+}
+
+#[test]
+fn h_holds_a_charge_on_the_battle_map() {
+    let mut app = charging_app();
+    let (k, n) = acting_body_charge(&mut app).expect("the acting body is charging");
+    app.handle_key(GameKey::Char('H'));
+    wait_for_the_player(&mut app);
+    let (k2, n2) = acting_body_charge(&mut app).expect("still charging");
+    assert_eq!((k2, n2), (k + 1, n));
+}
+
+#[test]
+fn x_releases_a_charge_on_the_battle_map() {
+    let mut app = charging_app();
+    app.handle_key(GameKey::Char('X'));
+    wait_for_the_player(&mut app);
+    assert_eq!(acting_body_charge(&mut app), None);
+}
+
+#[test]
+fn a_charger_refuses_a_step_and_other_actions() {
+    let mut app = charging_app();
+    let before = acting_body_charge(&mut app);
+    let cell = acting_cell(&mut app);
+    for key in [
+        GameKey::Right,
+        GameKey::Left,
+        GameKey::Char('a'),
+        GameKey::Char('d'),
+        GameKey::Char('s'),
+        GameKey::Char('U'),
+        GameKey::Char('V'),
+    ] {
+        app.status_line = None;
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::TacticalBattle, "{key:?}");
+        assert!(app.status_line.is_some(), "{key:?} was not refused aloud");
+        assert_eq!(acting_cell(&mut app), cell, "{key:?}");
+        assert_eq!(acting_body_charge(&mut app), before, "{key:?}");
+    }
+}
+
+#[test]
+fn h_and_x_refuse_when_nothing_is_charging() {
+    let mut app = fighting(9102);
+    wait_for_the_player(&mut app);
+    for key in [GameKey::Char('H'), GameKey::Char('X')] {
+        app.status_line = None;
+        app.handle_key(key);
+        assert_eq!(app.status_line.as_deref(), Some("Not charging."));
+    }
 }
 
 #[test]

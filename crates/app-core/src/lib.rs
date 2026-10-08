@@ -2904,8 +2904,8 @@ pub struct App {
     pub tactical_auto: bool,
     /// Where the Excavation plan's cursor is aimed, in **base-space**
     /// coordinates. `None` outside `Mode::Excavate` and its brush picker —
-    /// opening the mode puts
-    /// it on the party's own cell and leaving clears it.
+    /// opening the mode puts it on the party's own cell and leaving clears
+    /// it.
     ///
     /// A different coordinate space from `App::field_cursor` above, which is
     /// in Stack frame coordinates. Nothing converts between them and nothing

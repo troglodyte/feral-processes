@@ -1799,6 +1799,10 @@ pub struct SaveData {
     /// stocked once on load and the rest arrives as they travel.
     #[serde(default)]
     pub populated_chunks: crate::resources::PopulatedChunks,
+    /// The world map's fog — `resources::ExploredChunks`. An older save
+    /// loads with nothing revealed.
+    #[serde(default)]
+    pub explored_chunks: crate::resources::ExploredChunks,
     /// Every settlement the party has reached, keyed by region.
     ///
     /// Additive behind `#[serde(default)]`, so a save written before
@@ -2381,6 +2385,7 @@ mod tests {
             stack_memory: crate::resources::StackMemory::default(),
             stack_memory_tiered: true,
             populated_chunks: crate::resources::PopulatedChunks::default(),
+            explored_chunks: crate::resources::ExploredChunks::default(),
             settlements: crate::resources::Settlements::default(),
             standings: crate::resources::Standings::default(),
             compass: crate::resources::CompassBearing::default(),
@@ -2514,6 +2519,7 @@ mod tests {
         ));
         data.populated_chunks.0.insert((3, -2));
         data.populated_chunks.0.insert((-14, 9));
+        data.explored_chunks.0.insert((5, -6));
         data.stack_memory.0.insert(
             ((4, -7), 2),
             crate::resources::FrameMemory {

@@ -128,6 +128,7 @@ mod traps;
 mod travel;
 mod turn;
 mod walls;
+mod world_map;
 mod watch;
 mod weapon_reach;
 mod wielded;

@@ -78,4 +78,5 @@ pub(crate) mod trade;
 pub(crate) mod travel;
 pub(crate) mod turn;
 pub(crate) mod unlocks;
+pub(crate) mod world_map;
 pub(crate) mod zone;

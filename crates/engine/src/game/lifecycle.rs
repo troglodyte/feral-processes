@@ -601,6 +601,7 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
@@ -1563,6 +1564,7 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
@@ -1889,6 +1891,7 @@ impl Game {
         // catalogue authored — correct all run, wrong on every load.
         game.world.insert_resource(data.standings);
         game.world.insert_resource(data.populated_chunks);
+        game.world.insert_resource(data.explored_chunks);
         game.restore_settlements(data.settlements);
         game.restore_outposts(data.outposts);
         game.attach_outpost_crew(pending_outpost_crew);
@@ -3369,6 +3372,10 @@ impl Game {
             populated_chunks: self
                 .world
                 .resource::<crate::resources::PopulatedChunks>()
+                .clone(),
+            explored_chunks: self
+                .world
+                .resource::<crate::resources::ExploredChunks>()
                 .clone(),
             trace: self.trace(),
             raid_pressure: *self.world.resource::<crate::resources::RaidPressure>(),

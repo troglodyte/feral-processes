@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.4
+
+**Some routines now wind up over several turns before they land.** Starting one spends its Power at once and roots the program in place. On each later turn you hold it (`h` in a group battle, `H` on a battle map) to build it up, or release it (`x` / `X`) early for a weaker hit. At full charge it fires on its own, and its cooldown only starts once it has fired or been cancelled. A stun cancels it, and so does fleeing a group battle. A charging program shows `charging k/N → target` in the battle rows, or a `CHG k/N` tag and a highlight on the aimed cells on a battle map. On a battle map the hit lands on whoever is standing in those cells when it fires, so a target can step out of the way, and an ally can step in.
+
+**Two new routines: Haymaker Single and Long Compile Single.** Haymaker winds up for 3 turns to hit one adjacent target for 15–21. Wild programs can roll it, so expect hostiles that telegraph a big hit you can stun, run from or race. Long Compile charges for 3 turns to hit one target up to 6 cells away for 18–26. Both are researchable.
+
 ## 0.18.3
 
 **A world map of the surface.** Press `g` on the surface to open it (underground, `g` still opens the Stack map). The map starts in fog and clears where the party has walked. The areas around your base, your outposts and your trade routes show without being walked. Towns are coloured by how they regard you, from red Hostile to yellow Allied. A Mainframe shows ▲, ▬ or ▼ for whether its trade is rising, holding or falling, and a Server says whether it will grow into a Mainframe soon. Trade routes are drawn as lines, red where a hostile town preys on them. Pick a place with its row key to see its details; `C` points the compass at it, `P` re-centres on the party, the arrows pan and Esc closes. Nests are shown but the compass cannot point at them. Fog is saved, survives a breach, and an older save simply starts with none.

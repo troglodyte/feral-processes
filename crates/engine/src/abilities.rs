@@ -1026,6 +1026,20 @@ pub struct AbilityDef {
     /// renderer's default.
     #[serde(default)]
     pub fx: Option<String>,
+    /// Makes this a **charge routine**: using it winds up over several turns
+    /// instead of landing at once, and `effect.power` is the *full-charge*
+    /// hit. `None` — every routine before this — lands on the turn it is
+    /// used. Valid only on a `Damage` effect, see `charge_mismatch`.
+    #[serde(default)]
+    pub charge: Option<ChargeSpec>,
+}
+
+/// The wind-up of a charge routine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChargeSpec {
+    /// Turns of charging that reach full power. At least 2: a one-turn
+    /// charge would be an ordinary routine with a delay.
+    pub rounds: u32,
 }
 
 /// What makes a passive routine fire.
@@ -1387,6 +1401,31 @@ impl AbilityDef {
         (*duration == 0).then_some("effect: Cloak needs a duration of at least one round")
     }
 
+    /// A `charge` on anything but `Damage`, or a charge of fewer than two
+    /// rounds. Refused at load, like the other mismatches: scaling is defined
+    /// only for a damage band, and a one-round charge is not a wind-up.
+    fn charge_mismatch(&self) -> Option<&'static str> {
+        let spec = self.charge?;
+        if !matches!(self.effect, AbilityEffect::Damage { .. }) {
+            return Some("charge requires effect: Damage");
+        }
+        (spec.rounds < 2).then_some("charge needs rounds of at least 2")
+    }
+
+    /// This routine as released after `k` of `n` charging turns: a copy whose
+    /// damage band is scaled by k/n, so firing goes through the ordinary
+    /// damage path with no second formula. The status rider is untouched.
+    /// Any other effect comes back unchanged.
+    pub fn charged(&self, k: u32, n: u32) -> AbilityDef {
+        let mut def = self.clone();
+        if let AbilityEffect::Damage { power, spread, .. } = &mut def.effect {
+            let scale = |v: i32| (i64::from(v) * i64::from(k) / i64::from(n.max(1))) as i32;
+            *power = scale(*power);
+            *spread = scale(*spread);
+        }
+        def
+    }
+
     /// A `triggers` set on a **field-only** effect. A `Phase` cannot fire
     /// when an ally drops: every `PassiveTrigger` names a moment inside a
     /// battle, and a field-only effect is by definition one that runs
@@ -1574,6 +1613,10 @@ impl AbilityDb {
                         continue;
                     }
                     if let Some(reason) = def.passive_field_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
+                    if let Some(reason) = def.charge_mismatch() {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
@@ -1959,6 +2002,68 @@ mod tests {
         let result = AbilityDb::load_dir(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         result
+    }
+
+    fn charge_file(effect: &str, charge: &str) -> String {
+        format!(
+            r#"(id: "test_charge", name: "Test Charge", description: "d",
+            target: OneEnemyGroupFront, effect: {effect}, charge: {charge})"#
+        )
+    }
+
+    #[test]
+    fn charged_scales_power_and_spread_but_not_the_rider() {
+        let (db, w) = load(
+            "charge_scale",
+            &[(
+                "test_charge",
+                &charge_file(
+                    "Damage(power: 30, spread: 6, status: Some((kind: \"bleed\", chance: 0.5, duration: 2, power: 6)))",
+                    "Some((rounds: 3))",
+                ),
+            )],
+        );
+        assert!(w.is_empty(), "{w:?}");
+        let def = db.get("test_charge").unwrap();
+        let AbilityEffect::Damage {
+            power,
+            spread,
+            status,
+        } = def.charged(2, 3).effect
+        else {
+            panic!()
+        };
+        assert_eq!((power, spread), (20, 4));
+        let AbilityEffect::Damage { status: full, .. } = &def.effect else {
+            panic!()
+        };
+        assert_eq!(format!("{status:?}"), format!("{full:?}"));
+        assert!(status.is_some());
+        let AbilityEffect::Damage { power, spread, .. } = def.charged(3, 3).effect else {
+            panic!()
+        };
+        assert_eq!((power, spread), (30, 6));
+    }
+
+    #[test]
+    fn a_malformed_charge_is_skipped_with_a_warning() {
+        let (db, w) = load(
+            "charge_bad",
+            &[
+                (
+                    "test_charge",
+                    &charge_file("Damage(power: 9)", "Some((rounds: 1))"),
+                ),
+                (
+                    "test_charge_heal",
+                    &charge_file("Heal(power: 9)", "Some((rounds: 3))")
+                        .replace("test_charge", "test_charge_heal"),
+                ),
+            ],
+        );
+        assert!(db.get("test_charge").is_none());
+        assert!(db.get("test_charge_heal").is_none());
+        assert_eq!(w.len(), 2, "{w:?}");
     }
 
     const VALID: &str = r#"(

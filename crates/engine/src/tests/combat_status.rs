@@ -1850,6 +1850,7 @@ fn test_ability(
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     }
 }
 

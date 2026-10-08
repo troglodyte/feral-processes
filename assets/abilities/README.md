@@ -655,6 +655,15 @@ way deleting the Currency item does.
     // routine's own field-runnable or battle-legal gating stays
     // level-based, same as before this field existed.
     research_zone: 2,
+
+    // Optional. Makes this a charge routine: it winds up over `rounds`
+    // turns instead of landing at once, and `effect`'s power is the
+    // full-charge hit. Valid only on a `Damage` effect, with `rounds` of at
+    // least 2; anything else is skipped at load with a warning. Releasing
+    // early deals power and spread scaled by turns charged / `rounds`; the
+    // status rider is never scaled. The cooldown starts when the charge
+    // fires or is cancelled, not when it begins.
+    charge: Some((rounds: 3)),
 )
 ```
 

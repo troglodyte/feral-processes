@@ -144,6 +144,31 @@ pub fn settlements_near_route(
         .collect()
 }
 
+/// The chunks a straight route from `from` to `to` crosses, both ends
+/// included, in order. A grid line over chunk coordinates (Bresenham), so a
+/// diagonal steps one chunk at a time and never skips a corner. The world
+/// map reveals these without storing them.
+pub fn corridor_chunks(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    let (dx, dy) = ((to.0 - from.0).abs(), -(to.1 - from.1).abs());
+    let (sx, sy) = ((to.0 - from.0).signum(), (to.1 - from.1).signum());
+    let mut err = dx + dy;
+    let (mut x, mut y) = from;
+    let mut out = vec![(x, y)];
+    while (x, y) != to {
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+        out.push((x, y));
+    }
+    out
+}
+
 /// Euclidean distance from `point` to the segment `a`-`b`. The projection of
 /// `point` onto the line through `a` and `b` is clamped to `0.0..=1.0` of
 /// the way along it, which is what makes this a *segment* distance rather
@@ -168,6 +193,38 @@ fn distance_to_segment(point: (i32, i32), a: (i32, i32), b: (i32, i32)) -> f64 {
 mod tests {
     use super::*;
     use crate::tuning::ROUTE_PREDATION_RADIUS;
+
+    #[test]
+    fn corridor_is_one_chunk_for_a_point() {
+        assert_eq!(corridor_chunks((3, -2), (3, -2)), vec![(3, -2)]);
+    }
+
+    #[test]
+    fn corridor_runs_straight_both_ways_and_across_zero() {
+        assert_eq!(
+            corridor_chunks((-2, 0), (1, 0)),
+            vec![(-2, 0), (-1, 0), (0, 0), (1, 0)]
+        );
+        assert_eq!(
+            corridor_chunks((1, 0), (-2, 0)),
+            vec![(1, 0), (0, 0), (-1, 0), (-2, 0)]
+        );
+    }
+
+    #[test]
+    fn corridor_steps_a_diagonal_through_negative_coordinates() {
+        assert_eq!(
+            corridor_chunks((-3, -3), (0, 0)),
+            vec![(-3, -3), (-2, -2), (-1, -1), (0, 0)]
+        );
+        let shallow = corridor_chunks((0, 0), (-4, -2));
+        assert_eq!(shallow.first(), Some(&(0, 0)));
+        assert_eq!(shallow.last(), Some(&(-4, -2)));
+        assert_eq!(shallow.len(), 5);
+        assert!(shallow.windows(2).all(|w| {
+            (w[1].0 - w[0].0).abs() <= 1 && (w[1].1 - w[0].1).abs() <= 1 && w[0] != w[1]
+        }));
+    }
 
     fn key(n: i32) -> SettlementKey {
         SettlementKey { rx: n, ry: n }

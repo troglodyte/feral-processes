@@ -687,6 +687,23 @@ impl Game {
                 AiBeat::Acted
             };
         }
+        // **A charger's whole turn, ahead of the walk and the pick.** It
+        // cannot move (`movement_allowance`), so there is no walk to plan,
+        // and what it does is `charge_choice`'s. Every path out of it hands
+        // the turn on itself, so the beat must not hand on a second time.
+        if let Some(charging) = self
+            .world
+            .get::<crate::components::Charging>(actor)
+            .cloned()
+        {
+            let choice = if self.charge_is_full(actor) {
+                crate::game::charge::ChargeChoice::Release
+            } else {
+                self.charge_ai_choice(actor, &charging)
+            };
+            self.tactical_charge_turn(actor, choice);
+            return AiBeat::Acted;
+        }
         let sides = self.tactical_sides(actor);
         if sides.targets.is_empty() {
             self.tactical_end_turn();

@@ -10,10 +10,10 @@ use crate::*;
 
 use super::support::*;
 
-const ID: &str = "test_charge";
-const TARGET_HP: i32 = 10_000;
+pub(super) const ID: &str = "test_charge";
+pub(super) const TARGET_HP: i32 = 10_000;
 
-fn charge_def(power: i32, rounds: u32, cooldown: u32, power_cost: u32) -> AbilityDef {
+pub(super) fn charge_def(power: i32, rounds: u32, cooldown: u32, power_cost: u32) -> AbilityDef {
     ron::from_str(&format!(
         r#"(id: "{ID}", name: "Test Charge", description: "d",
         target: OneEnemyGroupFront, effect: Damage(power: {power}), cooldown: {cooldown},
@@ -62,17 +62,17 @@ fn start_charge_round(game: &mut Game) {
     );
 }
 
-fn progress(game: &Game, entity: Entity) -> Option<u32> {
+pub(super) fn progress(game: &Game, entity: Entity) -> Option<u32> {
     game.world.get::<Charging>(entity).map(|c| c.progress)
 }
 
-fn on_cooldown(game: &Game, entity: Entity) -> bool {
+pub(super) fn on_cooldown(game: &Game, entity: Entity) -> bool {
     game.world
         .get::<AbilityCooldowns>(entity)
         .is_some_and(|c| c.0.contains_key(ID))
 }
 
-fn hp(game: &Game, entity: Entity) -> i32 {
+pub(super) fn hp(game: &Game, entity: Entity) -> i32 {
     game.world.get::<Stats>(entity).unwrap().hp
 }
 

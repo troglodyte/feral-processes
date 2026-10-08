@@ -13,6 +13,7 @@
 use crate::battle::{
     ActionKind, ActionOption, BattleAction, Combatant, DamageRange, Swing, TargetSpec,
 };
+use crate::tactical::TacticalBattle;
 use crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN;
 use crate::*;
 
@@ -101,8 +102,9 @@ impl Game {
     /// Called before the effect resolves, for `arm_cooldown`'s reason: a
     /// killing blow ends the battle and wipes battle-scoped components.
     ///
-    /// Group model only for now: the battle map arms through
-    /// `arm_tactical_cooldown` and its caller adds that branch.
+    /// A battle map arms through `arm_tactical_cooldown` with the same floor
+    /// a hostile's ordinary routine gets; the group model through its own
+    /// helpers. Exactly one runs, whichever fight is open.
     pub(crate) fn end_charge(&mut self, entity: Entity) {
         let Some(charging) = self.world.entity_mut(entity).take::<Charging>() else {
             return;
@@ -115,11 +117,41 @@ impl Game {
         else {
             return;
         };
-        if self.is_hostile(entity) {
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            let floor = if self.is_hostile(entity) {
+                ENEMY_ROUTINE_MIN_COOLDOWN
+            } else {
+                0
+            };
+            self.arm_tactical_cooldown(entity, &def, floor);
+        } else if self.is_hostile(entity) {
             self.arm_enemy_cooldown(entity, &def);
         } else {
             self.arm_cooldown(entity, &def);
         }
+    }
+
+    /// One more turn of winding up: k += 1, logged.
+    pub(crate) fn hold_charge(&mut self, entity: Entity) {
+        let Some(mut charging) = self.world.get_mut::<Charging>(entity) else {
+            return;
+        };
+        charging.progress += 1;
+        let (k, n) = (charging.progress, charging.rounds);
+        let name = self.charge_name(entity);
+        let kind = self.charge_log_kind(entity);
+        self.log_kind(kind, format!("{name} holds the charge ({k}/{n})."));
+    }
+
+    /// The line a release writes, shared by both models.
+    pub(crate) fn log_charge_release(&mut self, entity: Entity, def: &AbilityDef, k: u32, n: u32) {
+        let kind = self.charge_log_kind(entity);
+        let line = format!(
+            "{} releases {} at {k}/{n}.",
+            self.charge_name(entity),
+            def.name
+        );
+        self.log_kind(kind, line);
     }
 
     /// Breaks `entity`'s charge: logged, Power stays spent, cooldown arms.
@@ -174,17 +206,7 @@ impl Game {
         let scaled = def.charged(charging.progress, charging.rounds);
         self.end_charge(entity);
         let name = self.creature_label(entity);
-        let kind = self.charge_log_kind(entity);
-        self.log_kind(
-            kind,
-            format!(
-                "{} releases {} at {}/{}.",
-                self.charge_name(entity),
-                def.name,
-                charging.progress,
-                charging.rounds
-            ),
-        );
+        self.log_charge_release(entity, &def, charging.progress, charging.rounds);
         self.use_ability(&scaled, entity, &name, &bodies);
         self.reap_dead_members(player);
     }
@@ -213,21 +235,7 @@ impl Game {
             }
         };
         match choice {
-            ChargeChoice::Hold => {
-                if let Some(mut c) = self.world.get_mut::<Charging>(entity) {
-                    c.progress += 1;
-                }
-                let name = self.charge_name(entity);
-                let kind = self.charge_log_kind(entity);
-                self.log_kind(
-                    kind,
-                    format!(
-                        "{name} holds the charge ({}/{}).",
-                        charging.progress + 1,
-                        charging.rounds
-                    ),
-                );
-            }
+            ChargeChoice::Hold => self.hold_charge(entity),
             ChargeChoice::Release => self.fire_charge(entity, player),
             ChargeChoice::Cancel => self.cancel_charge(entity),
         }
@@ -235,7 +243,7 @@ impl Game {
 
     /// `charge_choice` for `entity`, with its aimed victims read off the
     /// world. Shared by hostiles, summons and party slots under `[A]`/`[R]`.
-    fn charge_ai_choice(&self, entity: Entity, charging: &Charging) -> ChargeChoice {
+    pub(crate) fn charge_ai_choice(&self, entity: Entity, charging: &Charging) -> ChargeChoice {
         let Some(def) = self.world.resource::<AbilityDb>().get(&charging.ability) else {
             return ChargeChoice::Cancel;
         };
@@ -271,16 +279,18 @@ impl Game {
     }
 
     /// The living bodies `aim` would land on right now, with no fallback: an
-    /// empty answer is "the aim is gone". Group model only; the battle map's
-    /// cells variant is added where it is first read.
+    /// empty answer is "the aim is gone". On the battle map these are the
+    /// bodies in the locked cells that `entity` is hostile to — the ones the
+    /// AI weighs; the release itself hits whoever stands there.
     pub(crate) fn charge_bodies(
         &self,
         entity: Entity,
         aim: &ChargeAim,
         def: &AbilityDef,
     ) -> Vec<Entity> {
-        let ChargeAim::Group(members) = aim else {
-            return Vec::new();
+        let members = match aim {
+            ChargeAim::Group(members) => members,
+            ChargeAim::Cells(cells) => return self.charged_cells_victims(entity, cells),
         };
         if self.is_hostile(entity) {
             return match def.target {
@@ -294,6 +304,17 @@ impl Game {
             };
         }
         self.party_charge_bodies(members, def)
+    }
+
+    fn charged_cells_victims(&self, entity: Entity, cells: &[(i32, i32)]) -> Vec<Entity> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let side = self.acts_for_hostiles(entity);
+        crate::tactical::reach::recipients_in_cells(battle, entity, cells)
+            .into_iter()
+            .filter(|&body| self.creature_alive(body) && self.acts_for_hostiles(body) != side)
+            .collect()
     }
 
     /// `charge_bodies` for a party charger: the group still holding any

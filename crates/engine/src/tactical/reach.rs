@@ -13,7 +13,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::abilities::{AbilityRange, AbilityShape};
-use crate::components::Creature;
+use crate::components::{Charging, Creature};
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
 use crate::tactical::map::{BattleCell, Board};
@@ -62,7 +62,15 @@ impl Game {
     /// decision 11).** An emulating player still has none, so this still
     /// derives off their own pace — footwork on the battle map is the
     /// fighter's own body, not the borrowed form's, `combat_speed`'s reason.
+    ///
+    /// **Zero while charging**: a charger spends its whole turn on the
+    /// wind-up, and this one figure binds `tactical_step`, the AI's
+    /// `movement_field` and `cell_merit` alike, so none of them needs to
+    /// know about charges.
     pub fn movement_allowance(&self, entity: Entity) -> u32 {
+        if self.world.get::<Charging>(entity).is_some() {
+            return 0;
+        }
         let authored = self
             .world
             .get::<Creature>(entity)
@@ -488,6 +496,30 @@ pub fn recipients_from(
     let covered: HashSet<(i32, i32)> = shape_cells(&battle.board, from, aim, shape)
         .into_iter()
         .collect();
+    bodies_caught(battle, actor, from, &covered)
+}
+
+/// `recipients` for cells fixed in advance — a charge's locked aim — rather
+/// than derived from a shape and an aim. Whoever stands in them is caught,
+/// whichever side, by the same footprint rule `recipients_from` applies.
+pub fn recipients_in_cells(
+    battle: &TacticalBattle,
+    actor: Entity,
+    cells: &[(i32, i32)],
+) -> Vec<Entity> {
+    let Some(from) = battle.cell_of(actor) else {
+        return Vec::new();
+    };
+    let covered: HashSet<(i32, i32)> = cells.iter().copied().collect();
+    bodies_caught(battle, actor, from, &covered)
+}
+
+fn bodies_caught(
+    battle: &TacticalBattle,
+    actor: Entity,
+    from: (i32, i32),
+    covered: &HashSet<(i32, i32)>,
+) -> Vec<Entity> {
     battle
         .bodies()
         .map(|(entity, _)| entity)
@@ -497,7 +529,7 @@ pub fn recipients_from(
             } else {
                 battle.cells_of(entity)
             };
-            footprint_hit(&footprint, &covered)
+            footprint_hit(&footprint, covered)
         })
         .collect()
 }

@@ -17,8 +17,8 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{AbilityShape, TamperKind};
 use crate::components::{
-    Creature, Experience, Glyph, GlyphColor, Hostile, Player, Rarity, Respawned, Squad, Stats,
-    Tampered,
+    ChargeAim, Charging, Creature, Experience, Glyph, GlyphColor, Hostile, Player, Rarity,
+    Respawned, Squad, Stats, Tampered,
 };
 use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
@@ -106,6 +106,17 @@ pub struct TacticalBody {
     /// footprint's own corner and the member count for anyone drawing the
     /// HP bar's own reading beside it.
     pub squad: Option<SquadView>,
+    /// `Some((k, n))` while this body is winding up a charge: turns spent so
+    /// far and turns to full power (`components::Charging`).
+    pub charge: Option<(u32, u32)>,
+}
+
+/// The cells a charge has locked, for the board to wash as a danger zone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChargeAimView {
+    pub cells: Vec<(i32, i32)>,
+    /// Whether the charger is on the player's side, which picks the tint.
+    pub party_side: bool,
 }
 
 /// What a folded squad's body draws that a single one does not.
@@ -238,6 +249,9 @@ pub struct TacticalView {
     /// Where every body killed on this board fell — kept on a frozen board,
     /// since the dead are what a finished fight has most of.
     pub fallen: Vec<Fallen>,
+    /// Every charge in progress and the cells it will land on, which is all
+    /// the renderer gets of a `Charging` — it never reads the component.
+    pub charge_aims: Vec<ChargeAimView>,
 }
 
 impl TacticalView {
@@ -279,6 +293,7 @@ impl TacticalView {
             bodies,
             order,
             decoys: Vec::new(),
+            charge_aims: Vec::new(),
             ..self
         }
     }
@@ -425,6 +440,19 @@ impl Game {
             })
             .unwrap_or_default();
 
+        let charge_aims: Vec<ChargeAimView> = placed
+            .iter()
+            .filter_map(
+                |&(entity, _)| match &self.world.get::<Charging>(entity)?.aim {
+                    ChargeAim::Cells(cells) => Some(ChargeAimView {
+                        cells: cells.clone(),
+                        party_side: !self.is_hostile(entity),
+                    }),
+                    ChargeAim::Group(_) => None,
+                },
+            )
+            .collect();
+
         Some(TacticalView {
             board,
             bodies,
@@ -439,6 +467,7 @@ impl Game {
             decoys,
             covered,
             fallen,
+            charge_aims,
         })
     }
 
@@ -575,6 +604,10 @@ impl Game {
             respawned: self.world.get::<Respawned>(entity).is_some(),
             statuses: self.status_tags(entity),
             squad,
+            charge: self
+                .world
+                .get::<Charging>(entity)
+                .map(|c| (c.progress, c.rounds)),
         }
     }
 

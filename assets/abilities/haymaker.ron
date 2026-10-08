@@ -1,0 +1,21 @@
+(
+    id: "haymaker",
+    name: "Haymaker Single",
+    // Three turns for one swing that is worth more than three ordinary
+    // ones, and the whole turn is the price: the charger cannot move, and a
+    // stun breaks it with the Power already spent. A hostile gets it only
+    // from the wild roll (a species kit is a companion's, and a Medic's
+    // kit cannot hold a damage routine), which is what lets a wind-up be
+    // read and answered in the field.
+    description: "Wind up 3 turns, then hit one target for 15–21. Release early for less.",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 18, spread: 3),
+    cooldown: 4,
+    power_cost: 10.0,
+    accuracy: 8,
+    wild_weight: 8,
+    research_zone: 2,
+    charge: Some((rounds: 3)),
+    shape: Some(Single),
+    range: Some((min: 0, max: 1)),
+)

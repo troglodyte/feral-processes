@@ -75,10 +75,9 @@ enum Intent {
     /// band is decided **before the walk** and `band` takes no actor — and
     /// because a range read at swing time would let a body plan a standoff
     /// and then draw the melee half of its move pair.
-    Swing {
-        range: u32,
-    },
-    Routine(AbilityDef),
+    Swing { range: u32 },
+    /// Boxed: an `AbilityDef` is several times the size of the other variants.
+    Routine(Box<AbilityDef>),
     /// Drinks a Power cell where the body already stands — the party arm's
     /// own choice, chosen only when its preferred routine is refused for
     /// Power alone and a cell in the pack covers the shortfall. Carries the
@@ -662,7 +661,24 @@ impl Game {
     /// back off `TacticalBattle` by every beat after it, which is what holds
     /// this to **one `GameRng` draw a turn** rather than one a cell.
     fn run_tactical_beat(&mut self, actor: Entity, temperature: f32, turns: PartyTurns) -> AiBeat {
-        // **The one hook, ahead of everything below it.** The plan's own
+        // **A charger's whole turn, ahead of the walk, the pick and the besieger hook.** It
+        // cannot move (`movement_allowance`), so there is no walk to plan,
+        // and what it does is `charge_choice`'s. Every path out of it hands
+        // the turn on itself, so the beat must not hand on a second time.
+        if let Some(charging) = self
+            .world
+            .get::<crate::components::Charging>(actor)
+            .cloned()
+        {
+            let choice = if self.charge_is_full(actor) {
+                crate::game::charge::ChargeChoice::Release
+            } else {
+                self.charge_ai_choice(actor, &charging)
+            };
+            self.tactical_charge_turn(actor, choice);
+            return AiBeat::Acted;
+        }
+        // **The besieger hook, ahead of everything below the charger.** The plan's own
         // text points at `Game::tactical_ai_turn`'s top, but real play never
         // calls that door — `App::advance_tactical` drives
         // `Game::tactical_ai_beat`, which reaches `run_tactical_beat`
@@ -814,7 +830,7 @@ impl Game {
             && self.world.get::<Hostile>(actor).is_some()
             && self.hostile_routine_worth_choosing(actor, &def)
         {
-            return Intent::Routine(def);
+            return Intent::Routine(Box::new(def));
         }
         if turns == PartyTurns::Invoke
             && self.in_party(actor)
@@ -838,7 +854,7 @@ impl Game {
             return true;
         }
         let sides = self.tactical_sides(actor);
-        self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides)
+        self.aimable_this_turn(actor, &Intent::Routine(Box::new(def.clone())), &sides)
     }
 
     /// The party arm's own choice, once `tactical_intent` has confirmed it
@@ -868,13 +884,15 @@ impl Game {
         let candidates: Vec<AbilityDef> = self
             .ready_party_routines(actor)
             .into_iter()
-            .filter(|def| self.aimable_this_turn(actor, &Intent::Routine(def.clone()), &sides))
+            .filter(|def| {
+                self.aimable_this_turn(actor, &Intent::Routine(Box::new(def.clone())), &sides)
+            })
             .collect();
         if let Some(def) = candidates
             .iter()
             .find(|def| self.ability_unavailable(actor, def).is_none())
         {
-            return Some(Intent::Routine(def.clone()));
+            return Some(Intent::Routine(Box::new(def.clone())));
         }
         let (_, cost) =
             candidates
@@ -1368,7 +1386,7 @@ impl Game {
         let battle = self.world.resource::<TacticalBattle>();
         let band = def.tactical_range();
         let shape = def.tactical_shape();
-        let helpful = Intent::Routine(def.clone()).helpful();
+        let helpful = Intent::Routine(Box::new(def.clone())).helpful();
         // The block the body covers anchored at `from` — one cell without a
         // `Squad`. `reach::in_range` measures the band off the whole
         // footprint, which is what `Game::tactical_use_routine` will

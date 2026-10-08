@@ -136,6 +136,17 @@ const COVER_SUN_RADIUS: f32 = 0.11;
 /// round at the largest tile, few enough to stay a cheap convex fan.
 const COVER_SUN_SEGMENTS: u16 = 8;
 
+/// Radians a second of the charge outline's pulse.
+const CHARGE_PULSE_RATE: f32 = 6.0;
+
+/// The dimmest the charge outline gets, so it never vanishes mid-pulse.
+const CHARGE_PULSE_MIN_ALPHA: f32 = 0.35;
+
+/// The tag on a charging body: `CHG k/N`.
+fn charge_tag_text(k: u32, n: u32) -> String {
+    format!("CHG {k}/{n}")
+}
+
 /// One kind of wash the battle map lays on the ground, and the word the
 /// legend gives it.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -145,6 +156,11 @@ pub(super) enum Wash {
     Danger,
     Aim,
     Hits,
+    /// Cells a party-side charge has locked.
+    ChargeParty,
+    /// Cells a hostile charge has locked: where the blow will land unless
+    /// the victim steps out or the charger is stunned.
+    ChargeHostile,
 }
 
 impl Wash {
@@ -161,6 +177,8 @@ impl Wash {
             Wash::Danger => palette::THREAT,
             Wash::Aim => palette::AIM,
             Wash::Hits => palette::EMPHASIS,
+            Wash::ChargeParty => palette::PLAYER,
+            Wash::ChargeHostile => palette::OFFLINE,
         }
     }
 
@@ -171,6 +189,8 @@ impl Wash {
             Wash::Danger => "danger",
             Wash::Aim => "aim",
             Wash::Hits => "hits",
+            Wash::ChargeParty => "your charge",
+            Wash::ChargeHostile => "their charge",
         }
     }
 }
@@ -194,6 +214,8 @@ fn board_washes(
     provoking: &[(i32, i32)],
     placeable: &[(i32, i32)],
     preview: &[(i32, i32)],
+    party_charge: &[(i32, i32)],
+    hostile_charge: &[(i32, i32)],
 ) -> Vec<(Wash, Vec<(i32, i32)>)> {
     let mut washes = Vec::new();
     // Movement is drawn for **either side**, off `TacticalView::reachable`
@@ -222,6 +244,13 @@ fn board_washes(
             (Wash::Danger, provoking.to_vec()),
         ]);
     }
+    // A locked charge is standing information, not a movement option, so it
+    // is drawn whether or not the aim field is showing and under the
+    // preview.
+    washes.extend([
+        (Wash::ChargeParty, party_charge.to_vec()),
+        (Wash::ChargeHostile, hostile_charge.to_vec()),
+    ]);
     // `placeable` is already empty for every shape but `Radius`
     // (`Game::tactical_placeable_cells`' own gate). The preview goes last,
     // over everything: a routine resolves wherever it is aimed whether or
@@ -482,7 +511,22 @@ pub(super) fn draw_tactical_map(
     let reachable = expand_to_footprint(&view.reachable, acting_footprint);
     let covered = expand_to_footprint(&view.covered, acting_footprint);
     let provoking = expand_to_footprint(&view.provoking, acting_footprint);
-    let washes = board_washes(&reachable, &covered, &provoking, placeable, preview);
+    let charge_cells = |party_side: bool| -> Vec<(i32, i32)> {
+        view.charge_aims
+            .iter()
+            .filter(|a| a.party_side == party_side)
+            .flat_map(|a| a.cells.iter().copied())
+            .collect()
+    };
+    let washes = board_washes(
+        &reachable,
+        &covered,
+        &provoking,
+        placeable,
+        preview,
+        &charge_cells(true),
+        &charge_cells(false),
+    );
 
     for (cell, kind) in view.board.cells() {
         let (px, py) = tile_origin_px(
@@ -923,12 +967,33 @@ fn draw_body(
             },
         );
     }
+    // A charge wind-up: a pulsing outline in the side's colour. The pulse
+    // rides the painter's animation clock and holds steady with effects off.
+    if body.charge.is_some() {
+        let phase = painter
+            .anim_now()
+            .map_or(1.0, |t| 0.5 + 0.5 * (t as f32 * CHARGE_PULSE_RATE).sin());
+        let mut c = if body.is_hostile {
+            palette::THREAT
+        } else {
+            palette::PLAYER
+        };
+        c.a = CHARGE_PULSE_MIN_ALPHA + (1.0 - CHARGE_PULSE_MIN_ALPHA) * phase;
+        painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, c);
+    }
     // Status tags ride the bottom edge, above the HP bar's row, left-aligned
     // and clipped to the footprint's width. A folded squad's mark owns the
     // bottom-right corner, so the tag stops short of it; the compact form
     // (no rounds left) is what fits.
-    if !body.statuses.is_empty() {
-        let text = super::battle::status_tags_compact_text(&body.statuses);
+    let mut tags = super::battle::status_tags_compact_text(&body.statuses);
+    if let Some((k, n)) = body.charge {
+        if !tags.is_empty() {
+            tags.push(' ');
+        }
+        tags.push_str(&charge_tag_text(k, n));
+    }
+    if !tags.is_empty() {
+        let text = tags;
         let size = (glyph_px / 2).max(1);
         let bar = marks::tactical_hp_bar_rect(px, py, cell_px);
         let right = if body.squad.is_some() {
@@ -1198,6 +1263,18 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
     }
     if !view.player_turn {
         return vec![(String::new(), "the wild side is moving".to_string())];
+    }
+    // A charger's turn is a decision, not an action: the only choices are
+    // the two the engine accepts, so the bar names them and nothing it
+    // would refuse.
+    if acting_body(view).is_some_and(|b| b.charge.is_some()) {
+        return vec![
+            ("H".to_string(), "hold".to_string()),
+            ("X".to_string(), "release".to_string()),
+            ("E".to_string(), "end turn".to_string()),
+            ("R".to_string(), "resolve".to_string()),
+            ("A".to_string(), "auto-attack".to_string()),
+        ];
     }
     let mut rows = vec![
         (
@@ -3493,13 +3570,80 @@ mod tests {
         let covered = [sheltered, both];
         let provoking = [exposed, both];
         assert_eq!(
-            board_washes(&reachable, &covered, &provoking, &[], &[]),
+            board_washes(&reachable, &covered, &provoking, &[], &[], &[], &[]),
             vec![
                 (Wash::Move, vec![open]),
                 (Wash::Cover, vec![sheltered]),
                 (Wash::Danger, vec![exposed, both]),
             ]
         );
+    }
+
+    /// A locked charge washes its cells in the charger's side's own tint,
+    /// and the legend reads the same list, so both words exist exactly when
+    /// the cells do.
+    #[test]
+    fn locked_charge_cells_get_their_own_washes() {
+        let washes = board_washes(&[], &[], &[], &[], &[], &[(1, 1)], &[(2, 2), (2, 3)]);
+        assert_eq!(
+            washes,
+            vec![
+                (Wash::ChargeParty, vec![(1, 1)]),
+                (Wash::ChargeHostile, vec![(2, 2), (2, 3)]),
+            ]
+        );
+        assert_ne!(Wash::ChargeParty.color(), Wash::Danger.color());
+        assert_ne!(Wash::ChargeHostile.color(), Wash::Danger.color());
+    }
+
+    /// A charging body wears `CHG k/N`, and a body that is not charging does
+    /// not.
+    #[test]
+    fn a_charging_body_wears_its_progress_tag() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let mut body = view.bodies[0].clone();
+        body.charge = Some((2, 3));
+        body.statuses = Vec::new();
+        view.bodies = vec![body];
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let drawn = crate::paint::painted_map_glyphs(&shapes);
+        assert!(
+            drawn.iter().any(|(t, _)| t == "CHG 2/3"),
+            "no CHG tag in {drawn:?}"
+        );
+        view.bodies[0].charge = None;
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            !crate::paint::painted_map_glyphs(&shapes)
+                .iter()
+                .any(|(t, _)| t.starts_with("CHG"))
+        );
+    }
+
+    /// A charger's bar offers the decision and nothing the engine refuses.
+    #[test]
+    fn a_chargers_action_bar_is_hold_and_release() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.player_turn = true;
+        view.acted = false;
+        let acting = acting_body(&view).expect("someone acts").entity;
+        for b in view.bodies.iter_mut().filter(|b| b.entity == acting) {
+            b.charge = Some((1, 3));
+        }
+        let keys: Vec<String> = action_bar(Mode::TacticalBattle, &view, false)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(&keys[..2], ["H", "X"]);
+        assert!(!keys.iter().any(|k| k == "a" || k == "s"));
     }
 
     /// The move edge is the reach's boundary, not the plain cells': a
@@ -3541,7 +3685,15 @@ mod tests {
         assert_eq!(painted_rect_fill_count(&shapes, wash(palette::THREAT)), 1);
     }
 
-    const ALL_WASHES: [Wash; 5] = [Wash::Move, Wash::Cover, Wash::Danger, Wash::Aim, Wash::Hits];
+    const ALL_WASHES: [Wash; 7] = [
+        Wash::Move,
+        Wash::Cover,
+        Wash::Danger,
+        Wash::Aim,
+        Wash::Hits,
+        Wash::ChargeParty,
+        Wash::ChargeHostile,
+    ];
 
     #[test]
     fn the_legend_draws_one_swatch_and_word_per_wash() {

@@ -1659,6 +1659,39 @@ mod raiders_steal {
         );
     }
 
+    /// A besieger mid-wind-up spends its turn on the charge: the besieger
+    /// hook runs after the charger's, or it would steal, wreck or leave with
+    /// the charge still standing.
+    #[test]
+    fn a_charging_raider_does_not_steal() {
+        let mut game = Game::new(985, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let def = super::super::charge::charge_def(40, 3, 5, 0);
+        game.world
+            .resource_mut::<crate::abilities::AbilityDb>()
+            .insert(def.clone());
+        let structure = spawn_stocked_structure(&mut game, 3);
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(structure, (2, 0));
+            battle.place(besieger, (3, 0));
+            battle.set_initiative(vec![besieger]);
+        }
+        game.start_charge(
+            besieger,
+            &def,
+            crate::components::ChargeAim::Cells(vec![(3, 1)]),
+        );
+
+        game.tactical_ai_beat();
+
+        assert!(
+            game.world.get::<Carrying>(besieger).is_none(),
+            "a charger's turn is the charge's, not the siege's"
+        );
+    }
+
     /// The carry cap bounds one raider's haul, against the shared constant
     /// rather than a literal.
     #[test]

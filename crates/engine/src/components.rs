@@ -1524,6 +1524,33 @@ pub struct ReachCharge {
     pub ready_on: u32,
 }
 
+/// Battle-scoped: a charge routine mid-wind-up. Removed only by
+/// `Game::end_charge`, and in `game/combat_teardown.rs` beside the other
+/// fight-only state, so it appears nowhere in `save.rs`.
+///
+/// Not `ReachCharge`, which is an unrelated weapon state.
+#[derive(Component, Clone, Debug)]
+pub struct Charging {
+    pub ability: AbilityId,
+    /// Turns of charging that reach full power (`ChargeSpec::rounds`), N.
+    pub rounds: u32,
+    /// Turns spent charging so far, k: 1 on the turn it starts. At
+    /// `progress == rounds` the routine fires on its own.
+    pub progress: u32,
+    pub aim: ChargeAim,
+}
+
+/// Where a charge was aimed when it began.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ChargeAim {
+    /// Group battles: the members of the target group at the start. A set and
+    /// not one body, because the front member dying must not read as the
+    /// group being gone; the group is whichever one still holds any of them.
+    Group(Vec<Entity>),
+    /// Battle map: absolute board cells, so a victim can step out of them.
+    Cells(Vec<(i32, i32)>),
+}
+
 /// The player's current image — `game::kit::Kit::Emulated`'s state, todo
 /// #100. Only the player ever carries this.
 ///

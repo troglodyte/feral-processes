@@ -26,6 +26,8 @@ mod building;
 mod caravans;
 mod catalog;
 mod chains;
+mod charge;
+mod charge_tactical;
 mod classes;
 mod cloak;
 mod combat;

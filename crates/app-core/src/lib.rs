@@ -2644,6 +2644,8 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
         ActionKind::Defend => Some(BattleAction::Defend),
         ActionKind::UseItem => Some(BattleAction::UseItem { item: c.item? }),
         ActionKind::Revert => Some(BattleAction::Revert),
+        ActionKind::ChargeHold => Some(BattleAction::ChargeHold),
+        ActionKind::ChargeRelease => Some(BattleAction::ChargeRelease),
     }
 }
 

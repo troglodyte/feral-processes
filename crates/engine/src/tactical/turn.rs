@@ -9,9 +9,10 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
-use crate::components::AbilityCooldowns;
+use crate::abilities::{self, AbilityDb, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
+use crate::components::{AbilityCooldowns, ChargeAim, Charging};
 use crate::components::{Emulation, Hostile, Perks, Player, PowerReserve, Squad, Stats, WanderAi};
+use crate::game::charge::ChargeChoice;
 use crate::game::combat::RoutineRefusal;
 use crate::game::combat_teardown::FightVerdict;
 use crate::items::ItemId;
@@ -255,7 +256,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return StepOutcome::Refused;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return StepOutcome::Refused;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -537,7 +538,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
@@ -733,7 +734,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
 
@@ -774,7 +775,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         if !self.in_party(actor) {
@@ -818,7 +819,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -897,7 +898,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -1054,7 +1055,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         if self.world.get::<Emulation>(actor).is_none() {
@@ -1097,7 +1098,7 @@ impl Game {
         let Some(actor) = battle.actor() else {
             return false;
         };
-        if battle.actions_left() == 0 {
+        if battle.actions_left() == 0 || self.is_charging(actor) {
             return false;
         }
         let Some(from) = battle.cell_of(actor) else {
@@ -1316,7 +1317,13 @@ impl Game {
     /// Queues the `RoutineCue` for a cast, over the cells `reach::shape_cells`
     /// names — the list `recipients` is read off, so a renderer draws what the
     /// routine will actually cover.
-    fn queue_routine_cue(&mut self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) {
+    fn queue_routine_cue(
+        &mut self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+        fixed: Option<&[(i32, i32)]>,
+    ) {
         let shape = self.routine_tactical_shape(ability);
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
@@ -1324,7 +1331,10 @@ impl Game {
         let Some(from) = battle.cell_of(actor) else {
             return;
         };
-        let cells = reach::shape_cells(&battle.board, from, aim, shape);
+        let cells = fixed.map_or_else(
+            || reach::shape_cells(&battle.board, from, aim, shape),
+            <[_]>::to_vec,
+        );
         let color = self
             .world
             .get::<crate::components::Glyph>(actor)
@@ -1379,13 +1389,32 @@ impl Game {
         aim: (i32, i32),
         cooldown_floor: u32,
     ) {
-        let round_before = self.world.resource::<TacticalBattle>().round;
+        // A charge is the one routine that does not resolve now: the start
+        // pays Power and locks the aim, and `end_charge` arms the cooldown.
+        if ability.charge.is_some() {
+            self.begin_tactical_charge(actor, ability, aim);
+            return;
+        }
         // Charged before the effect resolves, at the same moment and for the
         // same reason as the group model's own Special site: a killing blow
         // ends the fight below, and a cooldown armed afterwards would be
         // written onto an entity the teardown has already cleaned up.
         self.arm_tactical_cooldown(actor, ability, cooldown_floor);
         self.spend_power(actor, abilities::routine_power_cost(ability));
+        self.resolve_tactical_routine(actor, ability, aim, None);
+    }
+
+    /// Everything of a routine after its price: the reaction, the effect,
+    /// the reap and the hand-on. `fixed` is a charge's locked cells, which
+    /// replace the ones the shape would derive from `aim`.
+    pub(crate) fn resolve_tactical_routine(
+        &mut self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+        fixed: Option<&[(i32, i32)]>,
+    ) {
+        let round_before = self.world.resource::<TacticalBattle>().round;
 
         // Below the charge and above the effect — the fizzle keeps what the
         // charge took. A capture is exempt.
@@ -1412,7 +1441,7 @@ impl Game {
         // After the cut-off above, so a fizzle draws nothing, and before any
         // effect resolves, so a caster that dies to its own blast still gets
         // its cue — `BoltCue`'s rule. Every effect gets one, a capture too.
-        self.queue_routine_cue(actor, ability, aim);
+        self.queue_routine_cue(actor, ability, aim, fixed);
 
         let name = self.creature_label(actor);
         // A capture is aimed at a body rather than resolved over
@@ -1531,10 +1560,12 @@ impl Game {
             // can be asked of a body the reap has taken off the board.
             let passing = self.is_hallucinating(actor).then(|| {
                 let battle = self.world.resource::<TacticalBattle>();
-                let cells = battle
-                    .cell_of(actor)
-                    .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
-                    .unwrap_or_default();
+                let cells = fixed.map(<[_]>::to_vec).unwrap_or_else(|| {
+                    battle
+                        .cell_of(actor)
+                        .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+                        .unwrap_or_default()
+                });
                 let line = format!(
                     "{}'s {} passes through a decoy.",
                     self.tamper_label(actor),
@@ -1542,8 +1573,11 @@ impl Game {
                 );
                 (self.world.get::<Hostile>(actor).is_some(), cells, line)
             });
-            let recipients =
-                reach::recipients(self.world.resource::<TacticalBattle>(), actor, aim, shape);
+            let battle = self.world.resource::<TacticalBattle>();
+            let recipients = match fixed {
+                Some(cells) => reach::recipients_in_cells(battle, actor, cells),
+                None => reach::recipients(battle, actor, aim, shape),
+            };
             self.use_ability(ability, actor, &name, &recipients);
             if let Some((actor_hostile, cells, line)) = passing {
                 self.pass_through_decoys(actor_hostile, &cells, line);
@@ -1631,6 +1665,7 @@ impl Game {
         if self.world.resource::<TacticalBattle>().round > round_before {
             self.tactical_round_upkeep();
         }
+        self.fire_arriving_charger();
     }
 
     /// Advances past every AI-driven body with nothing in reach, so a round
@@ -1808,7 +1843,12 @@ impl Game {
     ///
     /// A `cooldown: 0` routine is armed by neither, so a hostile carrying one
     /// would otherwise run it every single turn of the fight.
-    fn arm_tactical_cooldown(&mut self, actor: Entity, ability: &AbilityDef, floor: u32) {
+    pub(crate) fn arm_tactical_cooldown(
+        &mut self,
+        actor: Entity,
+        ability: &AbilityDef,
+        floor: u32,
+    ) {
         if floor == 0 {
             self.arm_cooldown(actor, ability);
             return;
@@ -1846,6 +1886,166 @@ impl Game {
                 .resource_mut::<TacticalBattle>()
                 .forfeit_actions();
             self.hand_on_turn(actor, round_before);
+        }
+    }
+
+    /// Whether `body` is part-way through a charge. A charger spends its
+    /// whole turn on `tactical_charge_hold` / `tactical_charge_release`, so
+    /// every other door of a battle map's turn refuses it.
+    pub(crate) fn is_charging(&self, body: Entity) -> bool {
+        self.world.get::<Charging>(body).is_some()
+    }
+
+    /// Whether the body whose turn it is is winding up a charge. The cheap
+    /// question: a key press asks it, and `tactical_view` clones the board.
+    pub fn tactical_actor_charging(&self) -> bool {
+        self.tactical_actor().is_some_and(|a| self.is_charging(a))
+    }
+
+    /// The acting body, when it is a charger the player is asked about: a
+    /// party body (the AI's own chargers go through `charger_beat`) with
+    /// turn left to spend.
+    fn player_charger(&self) -> Option<Entity> {
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let actor = battle.actor()?;
+        (self.tactical_awaits_input() && battle.actions_left() > 0 && self.is_charging(actor))
+            .then_some(actor)
+    }
+
+    /// HOLD: the acting charger keeps winding up (k += 1) and its turn ends.
+    /// Refused unless the acting body is a charger the player commands.
+    pub fn tactical_charge_hold(&mut self) -> bool {
+        let Some(actor) = self.player_charger() else {
+            return false;
+        };
+        // Past full charge k/N would read above 1; arrival fires on its own,
+        // so a standing full charge is the release's to take.
+        if self.charge_is_full(actor) {
+            return false;
+        }
+        self.tactical_charge_turn(actor, ChargeChoice::Hold);
+        true
+    }
+
+    /// RELEASE: the acting charger fires now at k/N of full power, over the
+    /// cells it locked, and its turn ends. Refused unless the acting body is
+    /// a charger the player commands.
+    pub fn tactical_charge_release(&mut self) -> bool {
+        let Some(actor) = self.player_charger() else {
+            return false;
+        };
+        self.tactical_charge_turn(actor, ChargeChoice::Release);
+        true
+    }
+
+    /// One charger's turn: the player's HOLD/RELEASE, the AI's pick, or the
+    /// arrival at full charge, all spent here so each ends the turn once.
+    /// A release hands on through the routine it resolves; hold and cancel
+    /// forfeit and hand on themselves.
+    pub(crate) fn tactical_charge_turn(&mut self, actor: Entity, choice: ChargeChoice) {
+        match choice {
+            ChargeChoice::Release => self.fire_tactical_charge(actor),
+            ChargeChoice::Hold => {
+                self.hold_charge(actor);
+                self.end_charger_turn(actor);
+            }
+            ChargeChoice::Cancel => {
+                self.cancel_charge(actor);
+                self.end_charger_turn(actor);
+            }
+        }
+    }
+
+    /// The turn a charger spends without resolving a routine. Forfeits what
+    /// a squad has left, so the several-action formations lose them all.
+    fn end_charger_turn(&mut self, actor: Entity) {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let round_before = battle.round;
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .forfeit_actions();
+        self.hand_on_turn(actor, round_before);
+    }
+
+    /// Starts a charge on the battle map: pays the Power, locks the cells
+    /// the shape covers from here and now, and ends the turn. Nothing lands,
+    /// and the cooldown waits for `end_charge`.
+    ///
+    /// Deliberately provokes nobody: the wind-up does nothing yet, and the
+    /// release is the invocation.
+    fn begin_tactical_charge(&mut self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) {
+        self.spend_power(actor, abilities::routine_power_cost(ability));
+        let shape = self.routine_tactical_shape(ability);
+        let battle = self.world.resource::<TacticalBattle>();
+        let cells = battle
+            .cell_of(actor)
+            .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+            .unwrap_or_default();
+        self.start_charge(actor, ability, ChargeAim::Cells(cells));
+        self.end_charger_turn(actor);
+    }
+
+    /// Fires `actor`'s charge at k/N over its locked cells and hands the turn
+    /// on (once, inside the routine's own hand-on). Whoever stands in the
+    /// cells is hit, whichever side: a victim who stepped out is missed and
+    /// one who stepped in is not, exactly as a `reach::recipients` blast.
+    fn fire_tactical_charge(&mut self, actor: Entity) {
+        let Some(charging) = self.world.get::<Charging>(actor).cloned() else {
+            return;
+        };
+        let ChargeAim::Cells(cells) = &charging.aim else {
+            // Another model's aim has nothing to fire over; leaving it
+            // standing would stall the turn on a charger that can never act.
+            self.end_charge(actor);
+            self.end_charger_turn(actor);
+            return;
+        };
+        let Some(def) = self
+            .world
+            .resource::<AbilityDb>()
+            .get(&charging.ability)
+            .cloned()
+        else {
+            self.end_charge(actor);
+            return;
+        };
+        let scaled = def.charged(charging.progress, charging.rounds);
+        self.end_charge(actor);
+        self.log_charge_release(actor, &def, charging.progress, charging.rounds);
+        let battle = self.world.resource::<TacticalBattle>();
+        let nobody = reach::recipients_in_cells(battle, actor, cells).is_empty();
+        let aim = cells
+            .last()
+            .copied()
+            .or_else(|| battle.cell_of(actor))
+            .unwrap_or_default();
+        if nobody {
+            let line = format!("{} hits nothing.", def.name);
+            self.log(line);
+        }
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .forfeit_actions();
+        self.resolve_tactical_routine(actor, &scaled, aim, Some(cells));
+    }
+
+    /// The acting body arriving at full charge fires on its own, ahead of
+    /// anything it could choose. Run at the very end of `hand_on_turn`: the
+    /// round's upkeep has been spent by then, so the recursion through the
+    /// routine's own hand-on cannot spend it twice. Hooked there rather than
+    /// in the AI's beat loop, which a party body awaiting input never enters.
+    fn fire_arriving_charger(&mut self) {
+        let Some(actor) = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|b| b.actor())
+        else {
+            return;
+        };
+        if self.charge_is_full(actor) && self.creature_alive(actor) {
+            self.tactical_charge_turn(actor, ChargeChoice::Release);
         }
     }
 

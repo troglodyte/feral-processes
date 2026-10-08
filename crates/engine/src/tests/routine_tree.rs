@@ -173,6 +173,7 @@ fn fixture_ability(id: &str, name: &str, target: AbilityTarget) -> AbilityDef {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     }
 }
 

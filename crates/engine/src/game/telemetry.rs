@@ -342,6 +342,8 @@ impl Game {
             }
             BattleAction::Defend => (ActionKind::Defend, None, None),
             BattleAction::Revert => (ActionKind::Revert, None, None),
+            BattleAction::ChargeHold => (ActionKind::ChargeHold, None, None),
+            BattleAction::ChargeRelease => (ActionKind::ChargeRelease, None, None),
             BattleAction::UseItem { item } => (ActionKind::Item, Some(item.to_string()), None),
         }
     }

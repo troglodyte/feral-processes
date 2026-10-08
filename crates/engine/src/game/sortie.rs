@@ -667,6 +667,9 @@ impl Game {
             // model-blind through `use_ability`, which has no seat for one
             // outside a real tactical battle.
             .filter(|d| !d.effect.tactical_only())
+            // No turn order off-screen to hold a wind-up across: a charge
+            // routine would land at full power at once.
+            .filter(|d| d.charge.is_none())
             // Only the player emulates (`seam:only-the-player-emulates`),
             // and `ability_unavailable` below is that gate — a dispatched
             // squad member is never `player_entity()`, so its own Emulate

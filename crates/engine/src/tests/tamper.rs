@@ -58,6 +58,7 @@ fn tamper_def(kind: TamperKind, duration: u32) -> AbilityDef {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     }
 }
 

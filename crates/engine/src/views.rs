@@ -1971,6 +1971,19 @@ pub struct EnemyGroupView {
     /// holds no catalyst: there's no potency to quote odds for, and the
     /// action isn't available at all.
     pub decompile_chance: Option<f32>,
+    /// Set when some member of the group is mid-charge: the furthest along.
+    pub charge: Option<ChargeTag>,
+}
+
+/// A charge in progress as a roster row shows it: `charging k/N -> target`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChargeTag {
+    /// Turns spent charging so far.
+    pub k: u32,
+    /// Turns that reach full power.
+    pub n: u32,
+    /// Where it is aimed: a group letter, a body's label, or "the party".
+    pub target: String,
 }
 
 /// One row of the player's side of the roster.
@@ -2015,6 +2028,8 @@ pub struct PartySlotView {
     /// — a loadout must read one way wherever it is shown, and a fight is
     /// exactly where a member found to be wearing nothing matters most.
     pub gear: String,
+    /// Set while this member is mid-charge.
+    pub charge: Option<ChargeTag>,
 }
 
 pub struct BattleView {

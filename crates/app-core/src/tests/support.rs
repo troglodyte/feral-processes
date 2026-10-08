@@ -2172,7 +2172,6 @@ pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    let assets_dir = test_assets_dir();
     let path = std::env::temp_dir().join(format!("feral_processes_appcore_installed_{unique}.sav"));
     let _cleanup = RemoveOnDrop(&path);
     let game = app.game.as_mut().expect("a fixture with a game");
@@ -2182,7 +2181,7 @@ pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
     data.player.routines = routines.iter().map(|r| r.to_string()).collect();
     save::save_to_file(&path, &data).unwrap();
 
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
 }
 
 /// Teaches the player `species` as a learned image on an existing fixture —

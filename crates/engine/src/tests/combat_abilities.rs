@@ -795,6 +795,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
@@ -843,6 +844,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -889,6 +891,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -939,6 +942,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -988,6 +992,7 @@ fn drain_logs_what_it_actually_restored() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
@@ -1033,6 +1038,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
     assert!(
@@ -1087,6 +1093,7 @@ fn a_negative_power_buff_saps_effective_attack() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -1132,6 +1139,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "Enemy", &[player]);
 
@@ -1177,6 +1185,7 @@ fn a_heal_scales_with_the_users_level() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -1225,6 +1234,7 @@ fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
 
     let mut seen = std::collections::BTreeSet::new();
@@ -1279,6 +1289,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -1324,6 +1335,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -1375,6 +1387,7 @@ fn ability_damage_scales_with_the_users_level() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
 
     // Both invocations are forced to land. These tests are about what levelling
@@ -1432,6 +1445,7 @@ fn drain_scales_with_the_users_level() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
 
     // Both invocations are forced to land. These tests are about what levelling
@@ -1621,6 +1635,7 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
 
     game.use_ability(&patch, player, "You", &[player]);
@@ -1688,6 +1703,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     };
     let kinds = |game: &Game| -> Vec<MessageKind> {
         game.world
@@ -2562,6 +2578,7 @@ fn an_aimed_routine_lands_more_often_than_an_unaimed_one() {
                 shape: None,
                 range: None,
                 fx: None,
+                charge: None,
             };
             game.use_ability(&ability, player, "You", &[enemies[0]]);
             if game.world.get::<Stats>(enemies[0]).unwrap().hp < before {

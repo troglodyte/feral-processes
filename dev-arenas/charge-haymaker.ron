@@ -1,0 +1,19 @@
+// A sub_process pack wields Haymaker: three turns of wind-up, the
+// aim locked on the first, then one big hit. This is the HOSTILE half of
+// the charge tuning, the half the bin can measure — the bin's party plays
+// All-Attack and never invokes a routine, so it cannot throw the player's
+// own Haymaker (the played arena screen does; see `charge-long-compile.ron`).
+//
+// `opponent_routines` is how a hostile gets a routine here: in play it comes
+// only from the wild roll, never the species kit. Read the win rate against
+// the same file with that row removed, in the same build — arena numbers
+// compare within one build only.
+(
+    player: Fresh(level: 8, zone: 2),
+    opponents: [(species: "sub_process", count: 2)],
+    opponent_routines: ["haymaker"],
+    model: Tactical,
+    approach: Some(East),
+    reps: 50,
+    seed: 1,
+)

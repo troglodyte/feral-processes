@@ -238,3 +238,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **The level-up page's before column is a stored `Combatant`, never a
   re-derivation at the old level.**
 - **`arm_status` is the sole writer of `StatusEffects` (besides Cleanse and teardown) and every in-battle heal or drain goes through `restore_hp`, where `HealBlock` is read.**
+- **A charge is cancelled where the stun lands (`arm_status`), and its cooldown arms only in `Game::end_charge`, the one place `Charging` is removed.**

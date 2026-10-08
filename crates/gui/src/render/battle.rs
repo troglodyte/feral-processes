@@ -6,7 +6,7 @@ use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
-use feral_processes_engine::{PortraitView, StatusTagView};
+use feral_processes_engine::{ChargeTag, PortraitView, StatusTagView};
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
@@ -69,6 +69,20 @@ pub(super) fn status_tags_text(statuses: &[StatusTagView]) -> String {
         .map(status_tag_text)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// A charge as a roster row words it: `charging k/N → <target>`.
+///
+/// The hostile ledger's status cell is a fixed 13 wide, so it takes the
+/// short `chg` form, which keeps the progress ahead of the truncation.
+fn charge_text(tag: &ChargeTag, short: bool) -> String {
+    format!(
+        "{} {}/{} → {}",
+        if short { "chg" } else { "charging" },
+        tag.k,
+        tag.n,
+        tag.target
+    )
 }
 
 fn status_tag(statuses: &[StatusTagView]) -> String {
@@ -370,10 +384,17 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                     // defines no vocabulary of its own. `OK` rather than
                     // blank, because an empty cell in a ledger reads as
                     // missing data.
-                    &if g.statuses.is_empty() {
-                        "OK".to_string()
-                    } else {
-                        status_tags_text(&g.statuses)
+                    &match (&g.charge, g.statuses.is_empty()) {
+                        (Some(tag), true) => charge_text(tag, true),
+                        (Some(tag), false) => {
+                            format!(
+                                "{} {}",
+                                charge_text(tag, true),
+                                status_tags_text(&g.statuses)
+                            )
+                        }
+                        (None, true) => "OK".to_string(),
+                        (None, false) => status_tags_text(&g.statuses),
                     },
                     &odds_cell(g.decompile_chance),
                 ),
@@ -536,7 +557,11 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                     &power_cell(p.power, p.max_power),
                     &format!(
                         "{}{}",
-                        p.planned.as_deref().unwrap_or("—"),
+                        p.charge
+                            .as_ref()
+                            .map(|tag| charge_text(tag, false))
+                            .or_else(|| p.planned.clone())
+                            .unwrap_or_else(|| "—".to_string()),
                         status_tag(&p.statuses),
                     ),
                 ),
@@ -897,6 +922,17 @@ fn draw_battle_portrait(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_charge_reads_progress_then_target() {
+        let tag = ChargeTag {
+            k: 2,
+            n: 3,
+            target: "B".to_string(),
+        };
+        assert_eq!(charge_text(&tag, false), "charging 2/3 → B");
+        assert_eq!(charge_text(&tag, true), "chg 2/3 → B");
+    }
+
     use super::*;
     use crate::paint::SpriteTable;
     use bevy_egui::egui;

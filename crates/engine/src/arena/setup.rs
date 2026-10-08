@@ -164,7 +164,13 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
 pub(crate) fn build_opponents(
     game: &mut Game,
     opponents: &[OpponentSpec],
+    routines: &[crate::abilities::AbilityId],
 ) -> Result<(Vec<EnemyGroup>, Vec<String>), String> {
+    for id in routines {
+        if game.world.resource::<AbilityDb>().get(id).is_none() {
+            return Err(format!("unknown opponent routine `{id}`"));
+        }
+    }
     if opponents.len() > MAX_ENEMY_GROUPS {
         return Err(format!(
             "{} opponent entries, but a battle holds at most MAX_ENEMY_GROUPS ({MAX_ENEMY_GROUPS})",
@@ -211,6 +217,11 @@ pub(crate) fn build_opponents(
             let member = game
                 .spawn_wild_creature_scaled(&row.species, pos.x, pos.y, 1.0, false)
                 .ok_or_else(|| format!("unknown opponent species `{}`", row.species))?;
+            if !routines.is_empty() {
+                game.world
+                    .entity_mut(member)
+                    .insert(Routines(routines.to_vec()));
+            }
             members.push(member);
         }
         groups.push(EnemyGroup {
@@ -674,7 +685,7 @@ mod tests {
             "zone 1 fields one program; without that this asserts nothing"
         );
 
-        let (groups, _) = build_opponents(&mut game, &against(&[("glitch", 9)])).unwrap();
+        let (groups, _) = build_opponents(&mut game, &against(&[("glitch", 9)]), &[]).unwrap();
 
         assert_eq!(groups.len(), 1);
         assert_eq!(
@@ -687,7 +698,7 @@ mod tests {
     #[test]
     fn exceeding_the_zones_ceiling_warns_with_the_ask_the_ceiling_and_the_zone() {
         let mut game = arena(1);
-        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 9)])).unwrap();
+        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 9)]), &[]).unwrap();
 
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         let w = &warnings[0];
@@ -699,15 +710,39 @@ mod tests {
     #[test]
     fn a_composition_inside_the_zones_ceilings_warns_about_nothing() {
         let mut game = arena(1);
-        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 1)])).unwrap();
+        let (_, warnings) = build_opponents(&mut game, &against(&[("glitch", 1)]), &[]).unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn opponent_routines_are_installed_and_unknown_ones_refused() {
+        let mut game = arena(1);
+        let (groups, _) = build_opponents(
+            &mut game,
+            &against(&[("glitch", 2)]),
+            &["haymaker".to_string()],
+        )
+        .unwrap();
+        for &m in &groups[0].members {
+            assert_eq!(
+                game.world.get::<Routines>(m).map(|r| r.0.clone()),
+                Some(vec!["haymaker".to_string()])
+            );
+        }
+        let err = build_opponents(
+            &mut game,
+            &against(&[("glitch", 1)]),
+            &["no_such_routine".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.contains("no_such_routine"), "{err}");
     }
 
     #[test]
     fn two_entries_naming_one_species_stay_two_groups() {
         let mut game = arena(3);
         let (groups, _) =
-            build_opponents(&mut game, &against(&[("glitch", 1), ("glitch", 1)])).unwrap();
+            build_opponents(&mut game, &against(&[("glitch", 1), ("glitch", 1)]), &[]).unwrap();
 
         // Merging them would delete the one lever `ENGAGED_GROUPS` gives a
         // scenario: the same program, one in melee reach and one behind it.
@@ -720,7 +755,7 @@ mod tests {
     #[test]
     fn an_unknown_opponent_species_is_an_err_naming_it() {
         let mut game = arena(1);
-        let err = build_opponents(&mut game, &against(&[("not_a_program", 1)])).unwrap_err();
+        let err = build_opponents(&mut game, &against(&[("not_a_program", 1)]), &[]).unwrap_err();
         assert!(err.contains("not_a_program"), "{err}");
     }
 
@@ -735,22 +770,22 @@ mod tests {
             ("glitch", 1),
         ]);
         assert!(rows.len() > MAX_ENEMY_GROUPS);
-        let err = build_opponents(&mut game, &rows).unwrap_err();
+        let err = build_opponents(&mut game, &rows, &[]).unwrap_err();
         assert!(err.contains("MAX_ENEMY_GROUPS"), "{err}");
     }
 
     #[test]
     fn an_entry_with_a_count_of_zero_is_an_err() {
         let mut game = arena(1);
-        let err = build_opponents(&mut game, &against(&[("glitch", 0)])).unwrap_err();
+        let err = build_opponents(&mut game, &against(&[("glitch", 0)]), &[]).unwrap_err();
         assert!(err.contains("glitch"), "{err}");
     }
 
     #[test]
     fn an_entry_past_max_group_size_is_an_err() {
         let mut game = arena(6);
-        let err =
-            build_opponents(&mut game, &against(&[("glitch", MAX_GROUP_SIZE + 1)])).unwrap_err();
+        let err = build_opponents(&mut game, &against(&[("glitch", MAX_GROUP_SIZE + 1)]), &[])
+            .unwrap_err();
         assert!(err.contains("MAX_GROUP_SIZE"), "{err}");
     }
 

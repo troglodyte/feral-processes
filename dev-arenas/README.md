@@ -109,6 +109,7 @@ run rather than quietly changing the fight.
 | `inventory` | `[]` | `Fresh` only. Items in cargo |
 | `party` | `[]` | `Fresh` only. Companions to field |
 | `opponents` | — | The fight, authored. Required unless `encounter` is set |
+| `opponent_routines` | `[]` | Routine ids every authored opponent carries |
 | `encounter` | `None` | A context to roll instead of authoring one |
 | `model` | `Group` | Which combat model fights it — see below |
 | `approach` | `None` | `Tactical` only. Which way the pack is seated |
@@ -267,6 +268,18 @@ authoring is the point of a tester. Exceeding the zone's ceiling prints a
 warning naming the ask, the ceiling and the zone; it never silently caps.
 `MAX_ENEMY_GROUPS` (4) and `MAX_GROUP_SIZE` (100) are the exception and are
 a hard error, because past those the fight is not one the game can represent.
+
+### `opponent_routines`
+
+```ron
+opponent_routines: ["haymaker"],
+```
+
+A hostile's routines come only from the wild roll (`roll_wild_routine`), never
+from its species kit, so this is the only way to stage a carrier on purpose.
+Every authored opponent gets the list; an unknown id is an error. A rolled
+`encounter` ignores it. `charge-haymaker.ron` uses it to measure a pack of
+chargers.
 
 ### `encounter`
 

@@ -556,6 +556,11 @@ pub enum BattleAction {
     /// `Game::battle_action_options`/`Game::tactical_revert` are the two
     /// doors that decide whether the row is even offered.
     Revert,
+    /// A charging member keeps winding up. Offered only while that slot has
+    /// `components::Charging`; `Game::battle_set_action` refuses it otherwise.
+    ChargeHold,
+    /// A charging member fires now at k/N of full power.
+    ChargeRelease,
 }
 
 /// Which picker the UI opens after an ability is chosen — see
@@ -616,6 +621,8 @@ pub enum ActionKind {
     Defend,
     UseItem,
     Revert,
+    ChargeHold,
+    ChargeRelease,
 }
 
 /// What the UI must collect before an `ActionKind` becomes a

@@ -1364,6 +1364,9 @@ impl Game {
         if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(front) {
             c.0.clear();
         }
+        // A wind-up is battle-scoped too, and a companion has no turn
+        // that would ever release or cancel it.
+        self.world.entity_mut(front).remove::<Charging>();
         let parts = self.roster_parts();
         self.world.entity_mut(front).insert(parts);
         self.install_innate_routines(front);

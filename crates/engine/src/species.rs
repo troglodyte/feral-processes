@@ -124,6 +124,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         shape: None,
         range: None,
         fx: None,
+        charge: None,
     }
 }
 

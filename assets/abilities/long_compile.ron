@@ -1,0 +1,18 @@
+(
+    id: "long_compile",
+    name: "Long Compile Single",
+    // The ranged answer to Haymaker: the same wind-up, a longer reach, and a
+    // slightly bigger payoff for standing still where it can be seen. The
+    // aim locks at the start, so a target that walks out of the cells
+    // takes nothing.
+    description: "Compile for 3 turns, then hit one target within 6 cells for 18–26. Battle maps aim it; release early for less.",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 22, spread: 4),
+    cooldown: 4,
+    power_cost: 12.0,
+    accuracy: 8,
+    research_zone: 3,
+    charge: Some((rounds: 3)),
+    shape: Some(Single),
+    range: Some((min: 0, max: 6)),
+)

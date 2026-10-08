@@ -6156,3 +6156,34 @@ fn every_floor_shade_has_a_shipped_finish_and_every_file_parses() {
         );
     }
 }
+
+/// A charge routine winds up a damage hit, and a one-turn wind-up is an
+/// ordinary routine with a delay. The loader skips a malformed `charge`, so
+/// only a census over the shipped files notices one that quietly vanished.
+/// Both shipped charge routines also have to get a research node, or the
+/// player-side half of the feature is unreachable.
+#[test]
+fn every_shipped_charge_routine_is_a_multi_round_damage_with_a_node() {
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+    let charged: Vec<_> = db.all().filter(|d| d.charge.is_some()).collect();
+    for id in ["haymaker", "long_compile"] {
+        assert!(
+            charged.iter().any(|d| d.id == id),
+            "{id} must load as a charge routine"
+        );
+    }
+    for def in charged {
+        assert!(
+            matches!(def.effect, crate::abilities::AbilityEffect::Damage { .. }),
+            "{} charges a non-damage effect",
+            def.id
+        );
+        assert!(def.charge.as_ref().unwrap().rounds >= 2, "{}", def.id);
+        assert!(
+            crate::routine_tree::gets_node(db, def),
+            "{} gets no research node",
+            def.id
+        );
+    }
+}

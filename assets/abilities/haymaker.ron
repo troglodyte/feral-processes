@@ -1,0 +1,20 @@
+(
+    id: "haymaker",
+    name: "Haymaker Single",
+    // Three turns for one swing that is worth more than three ordinary
+    // ones, and the whole turn is the price: the charger cannot move, and a
+    // stun breaks it with the Power already spent. A hostile carrier
+    // (sub_process) is the only wild source; wild_weight 0 keeps it from
+    // spreading to other wild programs.
+    description: "Wind up 3 turns, then hit one target for 18–26. Release early for less.",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 22, spread: 4),
+    cooldown: 4,
+    power_cost: 10.0,
+    accuracy: 8,
+    wild_weight: 0,
+    research_zone: 2,
+    charge: Some((rounds: 3)),
+    shape: Some(Single),
+    range: Some((min: 0, max: 1)),
+)

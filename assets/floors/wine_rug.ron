@@ -1,0 +1,7 @@
+(
+    id: "wine_rug",
+    name: "Wine Rug",
+    description: "A heavy dark red rug, thick enough to sink into.",
+    shade: Wine,
+    comfort: Some("at_ease_on"),
+)

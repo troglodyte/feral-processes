@@ -1,0 +1,6 @@
+(
+    id: "teal_tile",
+    name: "Teal Tile",
+    description: "Glazed blue-green squares, cool and smooth.",
+    shade: Teal,
+)

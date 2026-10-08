@@ -1,0 +1,6 @@
+(
+    id: "sky_glass",
+    name: "Sky Glass",
+    description: "Pale blue glass panels, smooth and clean.",
+    shade: Sky,
+)

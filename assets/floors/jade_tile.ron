@@ -1,0 +1,6 @@
+(
+    id: "jade_tile",
+    name: "Jade Tile",
+    description: "Polished green stone, cool to the touch.",
+    shade: Jade,
+)

@@ -6136,3 +6136,23 @@ fn no_shipped_asset_calls_the_setting_the_grid() {
         "the Power Grid terms must survive the rename"
     );
 }
+
+/// Every shipped finish parses, and every `FloorShade` is worn by at least
+/// one of them — a shade the census in gui guards but no file paints is a
+/// colour the brush picker never offers.
+#[test]
+fn every_floor_shade_has_a_shipped_finish_and_every_file_parses() {
+    use crate::floors::{FloorDb, FloorShade};
+
+    let (floors, warnings) = FloorDb::load_dir(&test_assets_dir().join("floors")).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "shipped floor files skipped: {warnings:?}"
+    );
+    for shade in FloorShade::ALL {
+        assert!(
+            floors.iter().any(|d| d.shade == shade),
+            "no shipped finish wears {shade:?}"
+        );
+    }
+}

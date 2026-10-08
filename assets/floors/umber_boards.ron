@@ -1,0 +1,7 @@
+(
+    id: "umber_boards",
+    name: "Umber Boards",
+    description: "Brown planks, worn soft along the grain.",
+    shade: Umber,
+    comfort: Some("at_ease_on"),
+)

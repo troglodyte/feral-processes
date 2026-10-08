@@ -1,0 +1,6 @@
+(
+    id: "violet_mosaic",
+    name: "Violet Mosaic",
+    description: "Small purple chips set in a tight pattern.",
+    shade: Violet,
+)

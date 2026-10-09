@@ -533,3 +533,29 @@ pub(crate) fn tamed_base() -> Option<feral_processes_engine::progression::Derive
         ..feral_processes_engine::progression::DerivedBase::player()
     })
 }
+
+/// Where `with_creature_within_sight` puts the creature, relative to the
+/// player: inside any class's starting sight (4.67 tiles and up).
+pub(super) const WITHIN_SIGHT: (i32, i32) = (2, 0);
+
+/// `game` with the creature standing at `at` moved to `WITHIN_SIGHT` of the
+/// player, round-tripped through a save. A test that draws or aims at a wild
+/// creature needs it inside the fog's circle, and the fog has no bypass to
+/// reach for; moving the creature is the honest fix. The creature is then
+/// the one at the returned position.
+pub(super) fn with_creature_within_sight(mut game: Game, at: (i32, i32)) -> (Game, (i32, i32)) {
+    let path = scratch_path("creature_within_sight", 0);
+    let _cleanup = RemoveOnDrop(&path);
+    game.save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let moved = (px + WITHIN_SIGHT.0, py + WITHIN_SIGHT.1);
+    let creature = data
+        .creatures
+        .iter_mut()
+        .find(|c| c.position == at)
+        .expect("a creature stands at the given tile");
+    creature.position = moved;
+    save::save_to_file(&path, &data).unwrap();
+    (Game::load(&path, &test_assets_dir()).unwrap(), moved)
+}

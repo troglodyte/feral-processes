@@ -24,6 +24,7 @@ fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
                 after * 100.0
             )
         }
+        DerivedStat::Perception => format!("{label} {before:.1} \u{2192} {after:.1} tiles"),
         DerivedStat::StatusResist => format!("{label} {before:.0}% \u{2192} {after:.0}%"),
         _ => format!("{label} {before:.0} \u{2192} {after:.0}"),
     }
@@ -183,6 +184,14 @@ mod tests {
     use crate::paint::with_painter;
     use feral_processes_app_core::StatAllocation;
     use feral_processes_engine::{DifficultyMode, Game};
+
+    #[test]
+    fn perception_reads_to_one_decimal_in_tiles() {
+        assert_eq!(
+            effect_text(DerivedStat::Perception, 5.0, 5.5),
+            "Perception 5.0 \u{2192} 5.5 tiles"
+        );
+    }
 
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");

@@ -344,7 +344,8 @@ impl App {
             .is_some_and(|g| self.pending_manifest == Some(g.player_entity()))
     }
 
-    /// Only an owned program has SOCIAL and TALK faces; on anyone else the key is
+    /// Only an owned program has SOCIAL and TALK faces, and only the player a
+    /// SCORE face; on anyone else the key is
     /// not bound, so the tab can never be left pointing at nothing.
     fn toggle_manifest_tab(&mut self) {
         let owned = self
@@ -354,7 +355,12 @@ impl App {
             self.manifest_tab = match self.manifest_tab {
                 ManifestTab::Stats => ManifestTab::Social,
                 ManifestTab::Social => ManifestTab::Talk,
-                ManifestTab::Talk => ManifestTab::Stats,
+                ManifestTab::Talk | ManifestTab::Score => ManifestTab::Stats,
+            };
+        } else if self.manifest_is_own() {
+            self.manifest_tab = match self.manifest_tab {
+                ManifestTab::Score => ManifestTab::Stats,
+                _ => ManifestTab::Score,
             };
         }
     }

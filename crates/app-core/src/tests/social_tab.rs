@@ -1,4 +1,5 @@
-//! `Tab` on a manifest: STATS, SOCIAL and TALK, for programs you own.
+//! `Tab` on a manifest: STATS, SOCIAL and TALK for programs you own, STATS
+//! and SCORE for the player.
 
 use super::support::*;
 use crate::*;
@@ -66,15 +67,6 @@ fn leaving_the_manifest_resets_the_tab() {
 }
 
 #[test]
-fn tab_is_a_no_op_on_the_player() {
-    let (mut app, _, _) = owned_pair(7404);
-    let player = app.game.as_ref().unwrap().player_entity();
-    open(&mut app, player);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.manifest_tab, ManifestTab::Stats);
-}
-
-#[test]
 fn tab_is_a_no_op_on_a_wild_program() {
     let (mut app, _, _) = owned_pair(7405);
     let wild = place_wild_program_east(&mut app, 3);
@@ -105,4 +97,30 @@ fn watching_from_the_social_tab_resets_it() {
     app.handle_key(GameKey::Char('w'));
     assert_eq!(app.watching, Some(staff), "the watch must have started");
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}
+
+#[test]
+fn tab_toggles_stats_and_score_on_the_players_own_sheet() {
+    let (mut app, a, _) = owned_pair(7411);
+    let me = app.game.as_ref().unwrap().player_entity();
+    open(&mut app, me);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Score);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+    // A program's cycle is unchanged.
+    open(&mut app, a);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+}
+
+#[test]
+fn the_score_face_does_not_answer_the_stats_keys() {
+    let (mut app, _, _) = owned_pair(7412);
+    let me = app.game.as_ref().unwrap().player_entity();
+    open(&mut app, me);
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.mode, Mode::Manifest, "S is a Stats-face key");
 }

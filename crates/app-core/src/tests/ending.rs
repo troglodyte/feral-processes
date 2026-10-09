@@ -107,8 +107,10 @@ fn the_ending_pages_forward_back_and_then_resumes_play() {
         assert_eq!(app.mode, Mode::Ending);
         app.handle_key(GameKey::Enter);
     }
-    assert!(matches!(app.mode, Mode::Playing | Mode::Notification));
+    assert_eq!(app.mode, Mode::Escaped, "the score card sits before play");
     assert!(app.ending_screens.is_empty());
+    app.handle_key(GameKey::Enter);
+    assert!(matches!(app.mode, Mode::Playing | Mode::Notification));
 }
 
 #[test]
@@ -116,6 +118,8 @@ fn esc_skips_the_rest_of_the_ending() {
     let mut app = app_beside_the_exit(0x3FF);
     walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('y'));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Escaped);
     app.handle_key(GameKey::Esc);
     assert!(matches!(app.mode, Mode::Playing | Mode::Notification));
 }
@@ -134,6 +138,7 @@ fn play_goes_on_after_the_ending() {
     let mut app = app_beside_the_exit(0x3FF);
     walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('y'));
+    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     dismiss_notifications(&mut app);
     let tick = app.game.as_ref().unwrap().current_tick();
@@ -194,6 +199,7 @@ fn an_escape_then_a_death_sums_to_the_card_total() {
     assert_eq!(app.mode, Mode::Ending);
     let at_escape = banked(&app);
     assert!(at_escape > 0, "the escape banks on the spot");
+    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     dismiss_notifications(&mut app);
     flatline(&mut app);

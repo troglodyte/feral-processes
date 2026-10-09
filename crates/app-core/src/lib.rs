@@ -1246,13 +1246,16 @@ pub enum ManifestOrigin {
     Roster,
 }
 
-/// The three faces of an owned program's manifest, cycled with `Tab`.
+/// The faces of a manifest, cycled with `Tab`: an owned program's Stats,
+/// Social and Talk, and the player's Stats and Score.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ManifestTab {
     #[default]
     Stats,
     Social,
     Talk,
+    /// The player's run score card.
+    Score,
 }
 
 impl ManifestOrigin {
@@ -2293,6 +2296,10 @@ pub enum Mode {
     /// page, Left goes back, and past the last page (or Esc) play resumes.
     /// The escape has already happened by the time this opens.
     Ending,
+    /// The run score card, shown after the last ending page (or Esc) and
+    /// before play resumes. Banking already happened at the escape. Enter or
+    /// Esc returns to `Mode::Playing`.
+    Escaped,
     /// The dev arena's scenario editor, and the screen the whole family
     /// returns to. Reached from the main menu when `FERAL_DEV_ARENA` is set;
     /// Esc drops the session. Rows come from `App::arena_builder_rows`.
@@ -2509,6 +2516,7 @@ impl Mode {
             // can step onto a base structure.
             | Mode::BasinExitConfirm
             | Mode::Ending
+            | Mode::Escaped
             // The arena's own screens are not battle screens; the fight it
             // stages runs in `Mode::Battle` like any other.
             | Mode::ArenaBuilder

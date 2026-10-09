@@ -264,6 +264,14 @@ fn an_old_save_without_the_field_loads_with_only_the_start_remembered() {
     // Load re-marks around the player; the old trail is gone.
     assert_eq!(loaded.sight_at((px, py)), Sight::Unseen);
     assert_eq!(loaded.sight_at((px + 40, py)), Sight::InSight);
+    // `InSight` is computed live, so also read the memory itself: the load
+    // must have marked the circle around the player.
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::SeenTiles>()
+            .contains((px + 40, py))
+    );
 }
 
 fn view_of_player(game: &mut Game) -> EntityView {

@@ -18,6 +18,7 @@
 use feral_processes_engine::Game;
 use feral_processes_engine::tactical::map::BattleCell;
 use feral_processes_engine::tactical::view::{TacticalBody, TacticalView, TamperTag, TurnRow};
+use feral_processes_engine::world::Biome;
 
 use super::RARITY_BAR_PX;
 use super::base::{ConRead, tile_origin_px};
@@ -44,6 +45,62 @@ fn cell_color(kind: BattleCell) -> Color {
         BattleCell::Rough => Color::new(0.19, 0.18, 0.14, 1.0),
         BattleCell::Cover => Color::new(0.30, 0.31, 0.34, 1.0),
         BattleCell::Blocked => Color::new(0.05, 0.06, 0.08, 1.0),
+    }
+}
+
+/// A ground cell's sprite keys in the order they are tried: the biome's own
+/// tile, then the kind's default. One word a biome, so a key has exactly two
+/// underscores and a modder can read the name back into its parts.
+fn ground_sprite_keys(biome: Biome, kind: BattleCell) -> [String; 2] {
+    let kind = match kind {
+        BattleCell::Open => "open",
+        BattleCell::Rough => "rough",
+        BattleCell::Cover => "cover",
+        BattleCell::Blocked => "blocked",
+    };
+    let biome = match biome {
+        Biome::DataVoid => "datavoid",
+        Biome::Deadlock => "deadlock",
+        Biome::NullSector => "nullsector",
+        Biome::Backplane => "backplane",
+        Biome::OpenGrid => "opengrid",
+        Biome::BlackIce => "blackice",
+        Biome::Platform => "platform",
+        Biome::Excavated => "excavated",
+        Biome::Entropy => "entropy",
+    };
+    [format!("ground_{biome}_{kind}"), format!("ground_{kind}")]
+}
+
+/// How bright near-white ground art draws, by kind — `cell_color`'s order,
+/// lifted so the art's pattern shows through.
+fn ground_level(kind: BattleCell) -> f32 {
+    match kind {
+        BattleCell::Blocked => 0.18,
+        BattleCell::Open => 0.42,
+        BattleCell::Rough => 0.52,
+        BattleCell::Cover => 0.78,
+    }
+}
+
+/// The tint ground art draws with: the kind's brightness times the biome's
+/// muted cast, so the kind still spends brightness alone.
+fn ground_tint(biome: Biome, kind: BattleCell) -> Color {
+    let level = ground_level(kind);
+    let cast = palette::biome_tint(biome);
+    Color::new(cast.r * level, cast.g * level, cast.b * level, 1.0)
+}
+
+/// One cell's ground: the flat fill, then the first ground art that loads
+/// over it. The fill is both the look with no art and the backdrop under a
+/// transparent pixel.
+fn draw_ground(painter: &Painter, biome: Biome, kind: BattleCell, px: f32, py: f32, size: f32) {
+    painter.rect(px, py, size, size, cell_color(kind));
+    let tint = ground_tint(biome, kind);
+    for key in ground_sprite_keys(biome, kind) {
+        if painter.sprite(&key, px, py, size, tint, 0) {
+            break;
+        }
     }
 }
 
@@ -540,7 +597,7 @@ pub(super) fn draw_tactical_map(
         if !on_pane(px, py) {
             continue;
         }
-        painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, cell_color(kind));
+        draw_ground(painter, view.ground, kind, px, py, tile_px - 1.0);
 
         // What the legend reports is this list, so a key entry exists
         // exactly when its wash is drawn — `board_washes`' own doc.
@@ -1458,7 +1515,130 @@ mod tests {
     use crate::fx::FrameCues;
     use crate::paint::{painted_rect_fill_count, painted_text, with_painter};
     use crate::text::ui_metrics;
+    use feral_processes_engine::world::Biome;
     use feral_processes_engine::{DifficultyMode, Game};
+
+    const ALL_BIOMES: [Biome; 9] = [
+        Biome::DataVoid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+        Biome::OpenGrid,
+        Biome::BlackIce,
+        Biome::Platform,
+        Biome::Excavated,
+        Biome::Entropy,
+    ];
+    const WALKABLE_BIOMES: [Biome; 6] = [
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+        Biome::OpenGrid,
+        Biome::Platform,
+        Biome::Excavated,
+    ];
+    const ALL_KINDS: [BattleCell; 4] = [
+        BattleCell::Open,
+        BattleCell::Rough,
+        BattleCell::Cover,
+        BattleCell::Blocked,
+    ];
+    /// The most a biome's cast may spread its channels — well under any
+    /// wash's own hue, so a cast is never read as a wash.
+    const MAX_BIOME_SATURATION: f32 = 0.12;
+
+    fn luminance(c: Color) -> f32 {
+        0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+    }
+
+    #[test]
+    fn a_biomes_ground_tile_is_tried_before_the_kinds_default() {
+        for biome in ALL_BIOMES {
+            for kind in ALL_KINDS {
+                let [first, second] = ground_sprite_keys(biome, kind);
+                assert!(first.starts_with("ground_"), "{first}");
+                assert_eq!(first.matches('_').count(), 2, "one word a biome: {first}");
+                assert!(
+                    first.ends_with(&second["ground".len()..]),
+                    "{first} / {second}"
+                );
+                assert_eq!(second.matches('_').count(), 1, "{second}");
+            }
+        }
+        assert_eq!(
+            ground_sprite_keys(Biome::Backplane, BattleCell::Cover),
+            [
+                "ground_backplane_cover".to_string(),
+                "ground_cover".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn ground_tint_keeps_the_kinds_brightness_order_in_every_walkable_biome() {
+        for biome in WALKABLE_BIOMES {
+            let [blocked, open, rough, cover] = [
+                BattleCell::Blocked,
+                BattleCell::Open,
+                BattleCell::Rough,
+                BattleCell::Cover,
+            ]
+            .map(|k| luminance(ground_tint(biome, k)));
+            assert!(
+                blocked < open && open < rough && rough < cover,
+                "{biome:?}: {blocked} {open} {rough} {cover}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_biome_cast_is_saturated_enough_to_read_as_a_wash() {
+        for biome in ALL_BIOMES {
+            let t = palette::biome_tint(biome);
+            let spread = t.r.max(t.g).max(t.b) - t.r.min(t.g).min(t.b);
+            assert!(spread < MAX_BIOME_SATURATION, "{biome:?}: {spread}");
+        }
+    }
+
+    /// The textures each ground draw puts on screen, given which keys have
+    /// art loaded.
+    fn ground_drawn(keys: &[(&str, u64)]) -> (Vec<bevy_egui::egui::TextureId>, usize) {
+        let mut table = crate::paint::SpriteTable::default();
+        for &(key, id) in keys {
+            table.insert_still(key, bevy_egui::egui::TextureId::User(id));
+        }
+        let (_, shapes) = crate::paint::with_sprites(table, |p| {
+            draw_ground(p, Biome::Backplane, BattleCell::Cover, 10.0, 10.0, 15.0)
+        });
+        let images = crate::paint::painted_images(&shapes)
+            .into_iter()
+            .map(|(id, _, _)| id)
+            .collect();
+        (
+            images,
+            painted_rect_fill_count(&shapes, cell_color(BattleCell::Cover)),
+        )
+    }
+
+    #[test]
+    fn a_ground_cell_draws_its_biomes_tile_over_the_fill() {
+        let (images, fills) = ground_drawn(&[("ground_backplane_cover", 1), ("ground_cover", 2)]);
+        assert_eq!(images, vec![bevy_egui::egui::TextureId::User(1)]);
+        assert_eq!(fills, 1, "the flat fill stays under the art");
+    }
+
+    #[test]
+    fn a_ground_cell_without_a_biome_tile_draws_the_kinds_default() {
+        let (images, _) = ground_drawn(&[("ground_cover", 2)]);
+        assert_eq!(images, vec![bevy_egui::egui::TextureId::User(2)]);
+    }
+
+    #[test]
+    fn a_ground_cell_with_no_art_is_the_flat_fill_alone() {
+        let (images, fills) = ground_drawn(&[]);
+        assert!(images.is_empty(), "{images:?}");
+        assert_eq!(fills, 1);
+    }
 
     fn assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")

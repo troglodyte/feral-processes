@@ -231,8 +231,26 @@ fn the_card_reads_live_keys_structures_and_the_escape() {
             .get_mut::<crate::components::PhaseKeys>(player)
             .unwrap();
         keys.story_complete = true;
+        keys.held = 0b101;
+    }
+    let before = game.score_card();
+    for x in 0..2 {
+        game.world.spawn((
+            crate::components::Structure {
+                kind: "relay".to_string(),
+            },
+            crate::components::Position { x, y: 0 },
+        ));
     }
     let card = game.score_card();
+    let count_of = |card: &crate::score::ScoreCard, label: &str| {
+        card.lines.iter().find(|l| l.label == label).unwrap().count
+    };
+    assert_eq!(count_of(&card, "Phase keys held"), 2);
+    assert_eq!(
+        count_of(&card, "Structures standing"),
+        count_of(&before, "Structures standing") + 2
+    );
     let escape = card
         .lines
         .iter()

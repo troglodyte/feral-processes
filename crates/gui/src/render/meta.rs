@@ -4,6 +4,7 @@
 use super::popup::*;
 use super::score;
 use super::*;
+use feral_processes_engine::score::ScoreCard;
 
 pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let options = main_menu_options(
@@ -160,9 +161,23 @@ pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Paint
     draw_popup("Save", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// Where the death summary wraps: `Large` popups run well past this at any
-/// supported window, and the summary has no scroll.
-const SUMMARY_COLUMNS: usize = 60;
+/// The game-over popup's rows: the summary wrapped at the shared describe
+/// width, then the score card, then the way out.
+fn game_over_rows(summary: &str, card: Option<&ScoreCard>) -> Vec<Row> {
+    let mut rows = vec![Row::TextColored("FLATLINE".to_string(), RED), text_row("")];
+    rows.extend(
+        wrap_text(summary, DESCRIBE_WRAP_COLUMNS)
+            .into_iter()
+            .map(text_row),
+    );
+    rows.push(text_row(""));
+    if let Some(card) = card {
+        rows.extend(score::popup_rows(card));
+        rows.push(text_row(""));
+    }
+    rows.push(text_row("Press any key to return to the main menu"));
+    rows
+}
 
 pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let summary = app
@@ -170,18 +185,8 @@ pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Pai
         .as_mut()
         .and_then(|g| g.history_summary())
         .unwrap_or_else(|| "Connection lost.".to_string());
-    let mut rows = vec![Row::TextColored("FLATLINE".to_string(), RED), text_row("")];
-    rows.extend(
-        wrap_text(&summary, SUMMARY_COLUMNS)
-            .into_iter()
-            .map(text_row),
-    );
-    rows.push(text_row(""));
-    if let Some(game) = app.game.as_mut() {
-        rows.extend(score::popup_rows(&game.score_card()));
-        rows.push(text_row(""));
-    }
-    rows.push(text_row("Press any key to return to the main menu"));
+    let card = app.game.as_mut().map(|g| g.score_card());
+    let rows = game_over_rows(&summary, card.as_ref());
     draw_popup(
         "Session Terminated",
         PopupSize::Large,
@@ -253,6 +258,36 @@ pub(super) fn draw_quit_app_confirm(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The longest summary the engine can word (a long reason, big cycle
+    /// and counts) over the widest card must fit the popup both ways at
+    /// 1280x720; the popup has no scroll, so a dropped row is a lost score.
+    #[test]
+    fn the_game_over_popup_fits_its_window_at_1280x720() {
+        let summary = format!(
+            "Session ended at cycle {}: {}. Programs compiled: {}. Score: {}.",
+            u32::MAX,
+            "Your frame was overrun by a Garbage Collector sweep while the last process held the line",
+            9_999,
+            999_999_999_999u64
+        );
+        let rows = game_over_rows(&summary, Some(&score::tests::widest_card()));
+        let m = crate::text::ui_metrics(720.0);
+        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
+        assert!(
+            rows.len() + REFUSAL_MAX_LINES <= cap,
+            "{} rows into a {cap}-row popup",
+            rows.len()
+        );
+        let body = popup_body_width(1280.0, PopupSize::Large, &m);
+        crate::paint::with_painter(|p| {
+            for row in &rows {
+                let label = row_label_text(row);
+                let drawn = p.measure_ui_advance(&label, m.font_size);
+                assert!(drawn <= body, "{drawn}px into a {body}px body: {label:?}");
+            }
+        });
+    }
 
     #[test]
     fn the_main_menu_shows_arena_only_when_enabled() {

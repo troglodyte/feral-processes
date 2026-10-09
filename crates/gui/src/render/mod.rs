@@ -72,6 +72,7 @@ mod progression;
 mod research_graph;
 mod rig_tool;
 mod routines;
+mod score;
 mod settlement;
 mod settlement_board;
 mod settlement_market;
@@ -139,7 +140,7 @@ use inventory::{
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
-    draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_options,
+    draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use mod_copy::{draw_mod_copy, draw_mod_pick_affix};
@@ -675,6 +676,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         Mode::Ending => {
             draw_playing_base(app, fx, None, painter, &m, reveal);
             ending::draw_ending(&app.ending_screens, app.ending_page, painter, &m);
+        }
+        Mode::Escaped => {
+            draw_playing_base(app, fx, None, painter, &m, reveal);
+            draw_escaped(app, refusal, painter, &m);
         }
         Mode::Battle => draw_battle(app, fx, painter, &m),
         Mode::BattleTarget => {
@@ -1662,7 +1667,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 135] = [
+    const ALL_MODES: [Mode; 136] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1787,6 +1792,7 @@ mod tests {
         Mode::LevelUp,
         Mode::PerkBought,
         Mode::Ending,
+        Mode::Escaped,
         Mode::BasinExitConfirm,
         Mode::GameOver,
         Mode::QuitRunConfirm,

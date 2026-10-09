@@ -1866,6 +1866,27 @@ fn a_lifetime_score_raises_the_perk_and_credit_allowances() {
     assert_eq!(plain.creation_credits_left(), CREATION_CREDITS);
 }
 
+/// The Profile step names the lifetime score once there is one, and the
+/// Points step's note reads the same bonus the engine pays.
+#[test]
+fn the_profile_step_shows_the_lifetime_score_and_the_stat_bonus_is_exposed() {
+    let lifetime = 1_000_000;
+    let mut app = wizard_app_with_profile("score_summary", &profile_with_lifetime(lifetime));
+    press(&mut app, ch('n'));
+    assert!(
+        app.profile_preview_rows()
+            .iter()
+            .any(|r| r.contains(&lifetime.to_string())),
+        "{:?}",
+        app.profile_preview_rows()
+    );
+    assert_eq!(
+        app.creation_bonus_stat_points(),
+        feral_processes_engine::score::creation_bonus(lifetime).stat_points
+    );
+    assert!(app.creation_bonus_stat_points() > 0);
+}
+
 /// A rolled basket spends against the raised allowance too.
 #[test]
 fn a_lifetime_score_raises_the_rolled_basket_budget() {

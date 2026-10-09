@@ -2,6 +2,7 @@
 //! and the game-over page.
 
 use super::popup::*;
+use super::score;
 use super::*;
 
 pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
@@ -159,19 +160,28 @@ pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Paint
     draw_popup("Save", PopupSize::Large, &rows, refusal, painter, m);
 }
 
+/// Where the death summary wraps: `Large` popups run well past this at any
+/// supported window, and the summary has no scroll.
+const SUMMARY_COLUMNS: usize = 60;
+
 pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let summary = app
         .game
         .as_mut()
         .and_then(|g| g.history_summary())
         .unwrap_or_else(|| "Connection lost.".to_string());
-    let rows = vec![
-        Row::TextColored("FLATLINE".to_string(), RED),
-        text_row(""),
-        text_row(summary),
-        text_row(""),
-        text_row("Press any key to return to the main menu"),
-    ];
+    let mut rows = vec![Row::TextColored("FLATLINE".to_string(), RED), text_row("")];
+    rows.extend(
+        wrap_text(&summary, SUMMARY_COLUMNS)
+            .into_iter()
+            .map(text_row),
+    );
+    rows.push(text_row(""));
+    if let Some(game) = app.game.as_mut() {
+        rows.extend(score::popup_rows(&game.score_card()));
+        rows.push(text_row(""));
+    }
+    rows.push(text_row("Press any key to return to the main menu"));
     draw_popup(
         "Session Terminated",
         PopupSize::Large,
@@ -180,6 +190,23 @@ pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Pai
         painter,
         m,
     );
+}
+
+/// The score card after the ending pages, before play resumes. Over the map
+/// like the ending, since the run goes on.
+pub(super) fn draw_escaped(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
+    let mut rows = vec![Row::TextColored("ESCAPED".to_string(), GREEN), text_row("")];
+    if let Some(game) = app.game.as_mut() {
+        rows.extend(score::popup_rows(&game.score_card()));
+        rows.push(text_row(""));
+    }
+    rows.push(text_row(format!(
+        "Lifetime score {} - it pays a bonus at your next character creation",
+        app.profile().lifetime_score
+    )));
+    rows.push(text_row(""));
+    rows.push(text_row("Enter or Esc to keep playing"));
+    draw_popup("Escaped", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Confirms abandoning the run. Spells out what leaving costs rather than

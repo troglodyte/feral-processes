@@ -1035,6 +1035,22 @@ impl App {
     /// `+1 Perk Point` twice, where what they need to know is that they
     /// open holding two.
     pub fn profile_preview_rows(&self) -> Vec<String> {
-        feral_processes_engine::achievements::profile_summary(&self.profile, &self.achievement_db)
+        let mut rows = feral_processes_engine::achievements::profile_summary(
+            &self.profile,
+            &self.achievement_db,
+        );
+        if self.profile.lifetime_score > 0 {
+            rows.push(format!(
+                "Lifetime score {} - the run score bonus is in the Points, Perks and Kit steps",
+                self.profile.lifetime_score
+            ));
+        }
+        rows
+    }
+
+    /// Stat points the lifetime score pays after creation, for the Points
+    /// step to announce. Zero until a banked run is worth one.
+    pub fn creation_bonus_stat_points(&self) -> u32 {
+        score::creation_bonus(self.profile.lifetime_score).stat_points
     }
 }

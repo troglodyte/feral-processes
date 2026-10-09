@@ -72,20 +72,36 @@ const TAB_STATS: &str = "STATS";
 const TAB_SOCIAL: &str = "SOCIAL";
 const TAB_TALK: &str = "TALK";
 
+const TAB_SCORE: &str = "SCORE";
+
 /// The strip's pieces left to right, each with whether it is the open tab.
-fn strip_pieces(active: ManifestTab) -> [(&'static str, bool); 6] {
-    [
+/// The player's sheet has two faces, a program's three.
+fn strip_pieces(active: ManifestTab, player: bool) -> Vec<(&'static str, bool)> {
+    let mut pieces = vec![
         (TAB_KEY, false),
         (TAB_STATS, active == ManifestTab::Stats),
         (TAB_SEPARATOR, false),
-        (TAB_SOCIAL, active == ManifestTab::Social),
-        (TAB_SEPARATOR, false),
-        (TAB_TALK, active == ManifestTab::Talk),
-    ]
+    ];
+    if player {
+        pieces.push((TAB_SCORE, active == ManifestTab::Score));
+    } else {
+        pieces.extend([
+            (TAB_SOCIAL, active == ManifestTab::Social),
+            (TAB_SEPARATOR, false),
+            (TAB_TALK, active == ManifestTab::Talk),
+        ]);
+    }
+    pieces
 }
 
+/// A program's strip, the wider of the two.
+#[cfg(test)]
 pub(super) fn tab_strip_width(painter: &Painter, m: &Metrics) -> f32 {
-    strip_pieces(ManifestTab::Stats)
+    strip_width(ManifestTab::Stats, false, painter, m)
+}
+
+fn strip_width(active: ManifestTab, player: bool, painter: &Painter, m: &Metrics) -> f32 {
+    strip_pieces(active, player)
         .iter()
         .map(|(text, _)| painter.measure_ui_advance(text, m.small()))
         .sum()
@@ -94,13 +110,14 @@ pub(super) fn tab_strip_width(painter: &Painter, m: &Metrics) -> f32 {
 /// Right-aligned to `right`, the open tab lit and the other dim.
 pub(super) fn draw_tab_strip(
     active: ManifestTab,
+    player: bool,
     right: f32,
     baseline: f32,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let mut x = right - tab_strip_width(painter, m);
-    for (text, open) in strip_pieces(active) {
+    let mut x = right - strip_width(active, player, painter, m);
+    for (text, open) in strip_pieces(active, player) {
         painter.ui(
             text,
             x,

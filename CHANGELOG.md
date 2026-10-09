@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.7
+
+**A run now ends with a score card, and the score from past runs makes your next character a little stronger.** The card counts the foes you beat (weighted by their level), bosses, programs you compiled, achievements, your deepest Stack depth, phase keys and structures standing, then scales the total by mode and enemy strength. You see it on the death screen, on a new screen after the escape ending, and on a Score tab in your own manifest (Tab switches between Stats and Score). Each death or escape adds the run's score to a lifetime total. That total pays a capped bonus at character creation: extra stat points after creation, extra perk points and extra starting Credits. Abandoning a run adds nothing.
+
 ## 0.18.6
 
 **Character creation's Points step starts with nothing spent, and each attribute shows a bar again.** Before, the step opened with all 20 points already spread at random, so you had to take them back before placing your own. Now every point is yours to place. Each row also draws its points as a `[####----]` bar again, as wide as the most that one attribute could hold. The bar went missing when creation and the level-up screen started sharing one row layout.

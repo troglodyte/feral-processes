@@ -1803,6 +1803,11 @@ pub struct SaveData {
     /// loads with nothing revealed.
     #[serde(default)]
     pub explored_chunks: crate::resources::ExploredChunks,
+    /// Every surface tile the player has seen — `resources::SeenTiles`, the
+    /// tile map's fog. An older save loads with no memory, and it fills in
+    /// as the player walks.
+    #[serde(default)]
+    pub seen_tiles: crate::resources::SeenTiles,
     /// Every settlement the party has reached, keyed by region.
     ///
     /// Additive behind `#[serde(default)]`, so a save written before
@@ -2386,6 +2391,7 @@ mod tests {
             stack_memory_tiered: true,
             populated_chunks: crate::resources::PopulatedChunks::default(),
             explored_chunks: crate::resources::ExploredChunks::default(),
+            seen_tiles: crate::resources::SeenTiles::default(),
             settlements: crate::resources::Settlements::default(),
             standings: crate::resources::Standings::default(),
             compass: crate::resources::CompassBearing::default(),

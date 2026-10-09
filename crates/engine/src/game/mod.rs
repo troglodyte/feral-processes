@@ -60,6 +60,7 @@ pub(crate) mod settlement_market;
 pub(crate) mod settlement_patrol;
 pub(crate) mod settlement_relations;
 pub(crate) mod siege;
+pub(crate) mod sight;
 pub(crate) mod sortie;
 pub(crate) mod spawning;
 pub(crate) mod squads;

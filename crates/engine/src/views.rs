@@ -1114,6 +1114,11 @@ pub struct EntityView {
     pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
+    /// Whether this entity is a fixture that stays drawn (dim) once seen:
+    /// a settlement, the base anchor, a nest or a Stack link. Creatures,
+    /// caravans, patrols and traps are not; they show only in sight. Read
+    /// by `shown_at`.
+    pub is_landmark: bool,
     /// Whether this entity is the base anchor — `components::BaseAnchor`,
     /// the permanent door into base space that `Game::new` spawns under the
     /// party.
@@ -1364,6 +1369,35 @@ pub struct EntityView {
 /// two places use the same rule has to be a call, not a comment.
 pub fn drawn_on_surface_map(is_tamed: bool, position_is_honest: bool) -> bool {
     !is_tamed || position_is_honest
+}
+
+/// What the player sees of one surface tile — see `Game::sight_at`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sight {
+    Unseen,
+    Remembered,
+    InSight,
+}
+
+/// Whether a thing is drawn or addressable at `sight`.
+///
+/// Party members always show; landmarks (settlements, the base anchor,
+/// nests, Stack links) show once seen; everything else shows only in sight.
+/// The rule, so `shown_at` and `Game::find_target_in_direction`'s raw
+/// queries cannot drift.
+pub fn shown_in(sight: Sight, in_party: bool, is_landmark: bool) -> bool {
+    in_party
+        || match sight {
+            Sight::InSight => true,
+            Sight::Remembered => is_landmark,
+            Sight::Unseen => false,
+        }
+}
+
+/// [`shown_in`] for a built view. Outposts are not entities and are always
+/// drawn from `outpost_marks`, so they never come through here.
+pub fn shown_at(sight: Sight, view: &EntityView) -> bool {
+    shown_in(sight, view.is_player || view.is_companion, view.is_landmark)
 }
 
 /// One cell of the Excavation plan — see `Game::marked_cells`.

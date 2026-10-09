@@ -1820,6 +1820,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         stack_memory_tiered: true,
         populated_chunks: crate::resources::PopulatedChunks::default(),
         explored_chunks: crate::resources::ExploredChunks::default(),
+        seen_tiles: crate::resources::SeenTiles::default(),
         settlements: Default::default(),
         standings: Default::default(),
         trace: 0,

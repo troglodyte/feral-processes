@@ -2872,6 +2872,16 @@ pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 /// mining is what makes it grow again.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
+/// Tiles of surface sight a character at baseline attributes has. Slightly
+/// wider than `MAX_BUILD_DISTANCE_FROM_HOME`, so the opening base sits inside
+/// it, but a literal rather than computed from it: the starting base may grow,
+/// and sight shouldn't grow with it.
+pub const PERCEPTION_BASE_RADIUS: f32 = 5.0;
+
+/// The floor `progression::derive` clamps Perception to, so a character
+/// rolled low in Analysis and Entropy still sees the tiles beside them.
+pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
+
 /// How far the pre-cleared pocket reaches from base space's own origin when
 /// the first Home is deployed — `Game::lay_starting_pocket`, which lays
 /// `BaseCell::Floor` over the chamfered box this radius and

@@ -13,6 +13,14 @@ impl Game {
         crate::components::max_power_of(self.world.get::<Derived>(entity))
     }
 
+    /// How many tiles of the surface the player sees: their derived
+    /// Perception. Only the player's is read; companions don't scout.
+    pub fn perception_radius(&self) -> f32 {
+        self.world
+            .get::<Derived>(self.player_entity())
+            .map_or(crate::tuning::PERCEPTION_BASE_RADIUS, |d| d.perception)
+    }
+
     /// Spends banked stat points on attributes, then recomputes. The whole
     /// spend is validated first and a refused one writes nothing. Never
     /// touches `BoughtStats`: that is the perk receipt, and a perk respec
@@ -357,6 +365,7 @@ impl Game {
             extraction: derived.extraction,
             crit: derived.crit,
             fumble: derived.fumble,
+            perception: derived.perception,
         });
     }
 }

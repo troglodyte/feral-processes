@@ -75,6 +75,7 @@ mod nemesis_siege;
 mod notifications;
 mod outposts;
 mod party;
+mod perception;
 mod perks;
 mod permadeath;
 mod phase_keys;

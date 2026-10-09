@@ -2079,6 +2079,8 @@ pub struct Derived {
     pub crit: f64,
     /// The fumble band `Game::combatant_profile` hands to the roll.
     pub fumble: f64,
+    /// Tiles of surface sight; only the player's is read.
+    pub perception: f32,
 }
 
 impl Default for Derived {
@@ -2089,6 +2091,7 @@ impl Default for Derived {
             extraction: 0.0,
             crit: crate::tuning::CRIT_CHANCE,
             fumble: crate::tuning::FUMBLE_CHANCE,
+            perception: crate::tuning::PERCEPTION_BASE_RADIUS,
         }
     }
 }

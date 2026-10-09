@@ -47,6 +47,7 @@ pub mod rooms;
 pub mod routes;
 pub mod routine_tree;
 pub mod save;
+pub mod score;
 pub mod settlements;
 pub mod situations;
 pub mod sociability;

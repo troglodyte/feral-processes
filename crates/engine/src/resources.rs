@@ -62,7 +62,7 @@ impl EnemyStrength {
     /// ladder cannot develop a gap or a rung out of order — and so the one
     /// knob worth turning is `ENEMY_STRENGTH_BAND_STEP`.
     pub fn zone_steps(self) -> f32 {
-        self.rung() as f32 * crate::tuning::ENEMY_STRENGTH_BAND_STEP
+        self.ordinal() as f32 * crate::tuning::ENEMY_STRENGTH_BAND_STEP
     }
 
     /// What the player is told the band is called.
@@ -81,13 +81,13 @@ impl EnemyStrength {
     /// a single row on this.
     pub fn next(self) -> Self {
         let all = Self::all();
-        all[(self.rung() + 1) % all.len()]
+        all[(self.ordinal() + 1) % all.len()]
     }
 
     /// Position on the ladder. An exhaustive match rather than `as usize`,
     /// `cell_mark`'s rule: a sixth band with no rung fails to compile
     /// instead of silently landing on the floor.
-    fn rung(self) -> usize {
+    pub fn ordinal(self) -> usize {
         match self {
             Self::Standard => 0,
             Self::Elevated => 1,
@@ -149,6 +149,27 @@ pub struct MiningMode(pub bool);
 /// with its freebies unspent.
 #[derive(Resource, Default, Clone, Serialize, Deserialize)]
 pub struct FreeBuilds(pub std::collections::BTreeSet<crate::structures::StructureId>);
+
+/// What a run did that the world no longer shows, plus how much of its score
+/// is already in the profile. Read by `Game::score_card` beside live state.
+///
+/// Each field is written directly at its one site (not through a queue), so
+/// `RunFeats`' one-drainer rule is untouched. Additive behind a
+/// `#[serde(default)]`: an older save starts the tally at zero.
+#[derive(Resource, Default, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunTally {
+    /// Sum of `Game::foe_score_level` over every foe killed.
+    pub foe_levels: u64,
+    pub bosses: u32,
+    /// Programs decompiled, including ones since lost or sold.
+    pub compiled: u32,
+    /// Achievements earned this run, not the profile's lifetime count.
+    pub achievements: u32,
+    /// High-water mark of Stack depth; an ascent does not lower it.
+    pub deepest_depth: u32,
+    /// The part of this run's total already added to the profile.
+    pub banked: u64,
+}
 
 #[derive(Resource)]
 pub struct GameRng(pub StdRng);

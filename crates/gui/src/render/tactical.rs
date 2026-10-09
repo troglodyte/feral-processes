@@ -87,7 +87,7 @@ fn ground_level(kind: BattleCell) -> f32 {
 /// muted cast, so the kind still spends brightness alone.
 fn ground_tint(biome: Biome, kind: BattleCell) -> Color {
     let level = ground_level(kind);
-    let cast = palette::biome_tint(biome);
+    let cast = palette::ground_cast(biome);
     Color::new(cast.r * level, cast.g * level, cast.b * level, 1.0)
 }
 
@@ -1594,7 +1594,7 @@ mod tests {
     #[test]
     fn no_biome_cast_is_saturated_enough_to_read_as_a_wash() {
         for biome in ALL_BIOMES {
-            let t = palette::biome_tint(biome);
+            let t = palette::ground_cast(biome);
             let spread = t.r.max(t.g).max(t.b) - t.r.min(t.g).min(t.b);
             assert!(spread < MAX_BIOME_SATURATION, "{biome:?}: {spread}");
         }
@@ -1625,6 +1625,24 @@ mod tests {
         let (images, fills) = ground_drawn(&[("ground_backplane_cover", 1), ("ground_cover", 2)]);
         assert_eq!(images, vec![bevy_egui::egui::TextureId::User(1)]);
         assert_eq!(fills, 1, "the flat fill stays under the art");
+    }
+
+    /// The fill is opaque, so art painted before it would be hidden and the
+    /// board would read as flat squares again.
+    #[test]
+    fn a_ground_cells_art_is_painted_after_its_fill() {
+        let mut table = crate::paint::SpriteTable::default();
+        table.insert_still("ground_cover", bevy_egui::egui::TextureId::User(2));
+        let (_, shapes) = crate::paint::with_sprites(table, |p| {
+            draw_ground(p, Biome::Backplane, BattleCell::Cover, 10.0, 10.0, 15.0)
+        });
+        assert!(
+            matches!(
+                shapes.last().map(|s| &s.shape),
+                Some(bevy_egui::egui::Shape::Mesh(_))
+            ),
+            "the art must be the last thing drawn"
+        );
     }
 
     #[test]

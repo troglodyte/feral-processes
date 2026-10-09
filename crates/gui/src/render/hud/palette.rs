@@ -255,7 +255,7 @@ pub(crate) const fn glyph(c: GlyphColor) -> Color {
 /// hue on the board belongs to the washes and a cast must never be read as
 /// one. Exhaustive, so a new biome does not compile until it is given one;
 /// the unwalkable biomes never host a fight and stay neutral.
-pub(crate) fn biome_tint(biome: Biome) -> Color {
+pub(crate) fn ground_cast(biome: Biome) -> Color {
     match biome {
         Biome::OpenGrid => Color::new(0.95, 0.98, 1.0, 1.0),
         Biome::Deadlock => Color::new(1.0, 0.94, 0.90, 1.0),

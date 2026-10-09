@@ -132,7 +132,10 @@ def tile(name, kind, biome):
 
 
 def main():
-    force = "--force" in sys.argv[1:]
+    args = sys.argv[1:]
+    if args not in ([], ["--force"]):
+        sys.exit(f"usage: {sys.argv[0]} [--force]")
+    force = bool(args)
     jobs = [(f"ground_{k}", k, None) for k in KINDS]
     jobs += [(f"ground_{b}_{k}", k, b) for b in BIOMES for k in KINDS]
     for name, kind, biome in jobs:

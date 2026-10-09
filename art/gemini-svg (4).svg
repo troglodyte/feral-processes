@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" width="256" height="256">
+  <!-- Row 0: Top crystal pylon tip -->
+  <rect x="7" y="0" width="2" height="1" fill="#f8fafc"/>
+
+  <!-- Row 1: Upper crown spires -->
+  <rect x="4" y="1" width="1" height="1" fill="#67e8f9"/>
+  <rect x="6" y="1" width="4" height="1" fill="#e2e8f0"/>
+  <rect x="11" y="1" width="1" height="1" fill="#67e8f9"/>
+
+  <!-- Row 2: Symmetrical horn cowl -->
+  <rect x="3" y="2" width="2" height="1" fill="#0891b2"/>
+  <rect x="5" y="2" width="6" height="1" fill="#cbd5e1"/>
+  <rect x="11" y="2" width="2" height="1" fill="#0891b2"/>
+
+  <!-- Row 3: Shadow brow & lens cowl -->
+  <rect x="3" y="3" width="2" height="1" fill="#0f172a"/>
+  <rect x="5" y="3" width="6" height="1" fill="#475569"/>
+  <rect x="11" y="3" width="2" height="1" fill="#0f172a"/>
+
+  <!-- Row 4: Cycloptic Ocular Perimeter -->
+  <rect x="2" y="4" width="2" height="1" fill="#06b6d4"/>
+  <rect x="5" y="4" width="6" height="1" fill="#22d3ee"/>
+  <rect x="12" y="4" width="2" height="1" fill="#06b6d4"/>
+
+  <!-- Row 5: Singular Lens Focus (Pure white focal aperture) -->
+  <rect x="3" y="5" width="1" height="1" fill="#0891b2"/>
+  <rect x="5" y="5" width="2" height="1" fill="#22d3ee"/>
+  <rect x="7" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="9" y="5" width="2" height="1" fill="#22d3ee"/>
+  <rect x="12" y="5" width="1" height="1" fill="#0891b2"/>
+
+  <!-- Row 6: Lower rim & chin framing -->
+  <rect x="4" y="6" width="2" height="1" fill="#0f172a"/>
+  <rect x="6" y="6" width="4" height="1" fill="#0891b2"/>
+  <rect x="10" y="6" width="2" height="1" fill="#0f172a"/>
+
+  <!-- Row 7: Tapered chin node -->
+  <rect x="6" y="7" width="4" height="1" fill="#475569"/>
+
+  <!-- Row 8: Floating Diamond Core Top -->
+  <rect x="7" y="8" width="2" height="1" fill="#ffffff"/>
+
+  <!-- Row 9: Prismatic Cryo Core (Mid-section) -->
+  <rect x="4" y="9" width="1" height="1" fill="#22d3ee"/>
+  <rect x="5" y="9" width="2" height="1" fill="#06b6d4"/>
+  <rect x="7" y="9" width="2" height="1" fill="#f8fafc"/>
+  <rect x="9" y="9" width="2" height="1" fill="#06b6d4"/>
+  <rect x="11" y="9" width="1" height="1" fill="#22d3ee"/>
+
+  <!-- Row 10: Core lower brackets -->
+  <rect x="5" y="10" width="1" height="1" fill="#0891b2"/>
+  <rect x="6" y="10" width="4" height="1" fill="#cbd5e1"/>
+  <rect x="10" y="10" width="1" height="1" fill="#0891b2"/>
+
+  <!-- Row 11: Core tip & vertical bit lines -->
+  <rect x="3" y="11" width="1" height="1" fill="#67e8f9"/>
+  <rect x="7" y="11" width="2" height="1" fill="#0891b2"/>
+  <rect x="12" y="11" width="1" height="1" fill="#67e8f9"/>
+
+  <!-- Row 12: Icicle data needles -->
+  <rect x="5" y="12" width="1" height="1" fill="#22d3ee"/>
+  <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+  <rect x="10" y="12" width="1" height="1" fill="#22d3ee"/>
+
+  <!-- Row 13: Freezing bits -->
+  <rect x="5" y="13" width="1" height="1" fill="#0891b2"/>
+  <rect x="10" y="13" width="1" height="1" fill="#0891b2"/>
+
+  <!-- Row 14: Dissolving needle ends -->
+  <rect x="6" y="14" width="1" height="1" fill="#67e8f9"/>
+  <rect x="9" y="14" width="1" height="1" fill="#67e8f9"/>
+
+  <!-- Row 15: Ground contact pin -->
+  <rect x="7" y="15" width="2" height="1" fill="#0891b2"/>
+</svg>

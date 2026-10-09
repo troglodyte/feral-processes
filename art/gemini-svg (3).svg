@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" width="256" height="256">
+  <!-- Row 0: Feeler tendril tips -->
+  <rect x="3" y="0" width="1" height="1" fill="#4ade80"/>
+  <rect x="12" y="0" width="1" height="1" fill="#4ade80"/>
+
+  <!-- Row 1: Split cranial mandibles -->
+  <rect x="2" y="1" width="2" height="1" fill="#22c55e"/>
+  <rect x="7" y="1" width="2" height="1" fill="#86efac"/>
+  <rect x="12" y="1" width="2" height="1" fill="#22c55e"/>
+
+  <!-- Row 2: Armored brow ridge -->
+  <rect x="3" y="2" width="10" height="1" fill="#15803d"/>
+  <rect x="6" y="2" width="4" height="1" fill="#052e16"/>
+
+  <!-- Row 3: Shadow visor hood -->
+  <rect x="2" y="3" width="2" height="1" fill="#052e16"/>
+  <rect x="4" y="3" width="8" height="1" fill="#022c22"/>
+  <rect x="12" y="3" width="2" height="1" fill="#052e16"/>
+
+  <!-- Row 4: Venomous Ocular Slits -->
+  <rect x="1" y="4" width="2" height="1" fill="#22c55e"/>
+  <rect x="3" y="4" width="3" height="1" fill="#4ade80"/>
+  <rect x="6" y="4" width="4" height="1" fill="#022c22"/>
+  <rect x="10" y="4" width="3" height="1" fill="#4ade80"/>
+  <rect x="13" y="4" width="2" height="1" fill="#22c55e"/>
+
+  <!-- Row 5: Aware Pupil Hotspots -->
+  <rect x="2" y="5" width="2" height="1" fill="#16a34a"/>
+  <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="6" y="5" width="4" height="1" fill="#052e16"/>
+  <rect x="10" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="12" y="5" width="2" height="1" fill="#16a34a"/>
+
+  <!-- Row 6: Serrated data mouth / intake -->
+  <rect x="3" y="6" width="2" height="1" fill="#14532d"/>
+  <rect x="5" y="6" width="1" height="1" fill="#86efac"/>
+  <rect x="6" y="6" width="4" height="1" fill="#022c22"/>
+  <rect x="10" y="6" width="1" height="1" fill="#86efac"/>
+  <rect x="11" y="6" width="2" height="1" fill="#14532d"/>
+
+  <!-- Row 7: Tapered chin node & bypass core top -->
+  <rect x="4" y="7" width="2" height="1" fill="#052e16"/>
+  <rect x="6" y="7" width="4" height="1" fill="#22c55e"/>
+  <rect x="10" y="7" width="2" height="1" fill="#052e16"/>
+
+  <!-- Row 8: Logic Core Apex (Floating Diamond) -->
+  <rect x="6" y="8" width="4" height="1" fill="#86efac"/>
+
+  <!-- Row 9: Bio-synthetic payload heart -->
+  <rect x="4" y="9" width="1" height="1" fill="#22c55e"/>
+  <rect x="5" y="9" width="2" height="1" fill="#4ade80"/>
+  <rect x="7" y="9" width="2" height="1" fill="#ffffff"/>
+  <rect x="9" y="9" width="2" height="1" fill="#4ade80"/>
+  <rect x="11" y="9" width="1" height="1" fill="#22c55e"/>
+
+  <!-- Row 10: Segment ring flare -->
+  <rect x="3" y="10" width="2" height="1" fill="#16a34a"/>
+  <rect x="5" y="10" width="6" height="1" fill="#15803d"/>
+  <rect x="11" y="10" width="2" height="1" fill="#16a34a"/>
+
+  <!-- Row 11: Barbed lateral ribs -->
+  <rect x="2" y="11" width="1" height="1" fill="#4ade80"/>
+  <rect x="4" y="11" width="2" height="1" fill="#052e16"/>
+  <rect x="6" y="11" width="4" height="1" fill="#22c55e"/>
+  <rect x="10" y="11" width="2" height="1" fill="#052e16"/>
+  <rect x="13" y="11" width="1" height="1" fill="#4ade80"/>
+
+  <!-- Row 12: Narrowing abdomen segment -->
+  <rect x="4" y="12" width="1" height="1" fill="#22c55e"/>
+  <rect x="6" y="12" width="4" height="1" fill="#14532d"/>
+  <rect x="11" y="12" width="1" height="1" fill="#22c55e"/>
+
+  <!-- Row 13: Siphon barbs -->
+  <rect x="3" y="13" width="1" height="1" fill="#86efac"/>
+  <rect x="7" y="13" width="2" height="1" fill="#22c55e"/>
+  <rect x="12" y="13" width="1" height="1" fill="#86efac"/>
+
+  <!-- Row 14: Dissolving tail bits -->
+  <rect x="5" y="14" width="2" height="1" fill="#15803d"/>
+  <rect x="9" y="14" width="2" height="1" fill="#15803d"/>
+
+  <!-- Row 15: Single injection probe tip -->
+  <rect x="7" y="15" width="2" height="1" fill="#4ade80"/>
+</svg>

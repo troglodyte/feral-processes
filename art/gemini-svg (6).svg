@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" width="256" height="256">
+  <!-- Row 0: Antenna pulse / halo bits -->
+  <rect x="7" y="0" width="2" height="1" fill="#facc15"/>
+
+  <!-- Row 1: Crown crest nodes -->
+  <rect x="5" y="1" width="1" height="1" fill="#f59e0b"/>
+  <rect x="7" y="1" width="2" height="1" fill="#fef08a"/>
+  <rect x="10" y="1" width="1" height="1" fill="#f59e0b"/>
+
+  <!-- Row 2: Forehead shell & lateral bit wings -->
+  <rect x="3" y="2" width="1" height="1" fill="#fbbf24"/>
+  <rect x="5" y="2" width="6" height="1" fill="#d97706"/>
+  <rect x="12" y="2" width="1" height="1" fill="#fbbf24"/>
+
+  <!-- Row 3: Brow visor frame -->
+  <rect x="4" y="3" width="8" height="1" fill="#451a03"/>
+  <rect x="6" y="3" width="4" height="1" fill="#b45309"/>
+
+  <!-- Row 4: Wide Sentinel Visor (Sensory scan band) -->
+  <rect x="2" y="4" width="1" height="1" fill="#f59e0b"/>
+  <rect x="3" y="4" width="10" height="1" fill="#facc15"/>
+  <rect x="13" y="4" width="1" height="1" fill="#f59e0b"/>
+
+  <!-- Row 5: Visor core gleam & dual pupils -->
+  <rect x="3" y="5" width="2" height="1" fill="#d97706"/>
+  <rect x="5" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="7" y="5" width="2" height="1" fill="#fbbf24"/>
+  <rect x="9" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="11" y="5" width="2" height="1" fill="#d97706"/>
+
+  <!-- Row 6: Lower cheek casing & audio/data waveform -->
+  <rect x="4" y="6" width="1" height="1" fill="#78350f"/>
+  <rect x="5" y="6" width="6" height="1" fill="#f59e0b"/>
+  <rect x="11" y="6" width="1" height="1" fill="#78350f"/>
+
+  <!-- Row 7: Tapered chin node -->
+  <rect x="5" y="7" width="2" height="1" fill="#9a3412"/>
+  <rect x="7" y="7" width="2" height="1" fill="#fef08a"/>
+  <rect x="9" y="7" width="2" height="1" fill="#9a3412"/>
+
+  <!-- Row 8: Core apex & floating logic fragments -->
+  <rect x="3" y="8" width="1" height="1" fill="#facc15"/>
+  <rect x="7" y="8" width="2" height="1" fill="#ffffff"/>
+  <rect x="12" y="8" width="1" height="1" fill="#facc15"/>
+
+  <!-- Row 9: Matrix Core (Solar / gold logic reactor) -->
+  <rect x="5" y="9" width="1" height="1" fill="#d97706"/>
+  <rect x="6" y="9" width="4" height="1" fill="#fbbf24"/>
+  <rect x="10" y="9" width="1" height="1" fill="#d97706"/>
+
+  <!-- Row 10: Core mid-band expansion -->
+  <rect x="4" y="10" width="1" height="1" fill="#f59e0b"/>
+  <rect x="5" y="10" width="1" height="1" fill="#b45309"/>
+  <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+  <rect x="10" y="10" width="1" height="1" fill="#b45309"/>
+  <rect x="11" y="10" width="1" height="1" fill="#f59e0b"/>
+
+  <!-- Row 11: Core lower taper -->
+  <rect x="5" y="11" width="1" height="1" fill="#9a3412"/>
+  <rect x="6" y="11" width="4" height="1" fill="#d97706"/>
+  <rect x="10" y="11" width="1" height="1" fill="#9a3412"/>
+
+  <!-- Row 12: Stream emitters -->
+  <rect x="6" y="12" width="1" height="1" fill="#f59e0b"/>
+  <rect x="7" y="12" width="2" height="1" fill="#fbbf24"/>
+  <rect x="9" y="12" width="1" height="1" fill="#f59e0b"/>
+
+  <!-- Row 13: Floating data shards -->
+  <rect x="4" y="13" width="1" height="1" fill="#facc15"/>
+  <rect x="7" y="13" width="2" height="1" fill="#d97706"/>
+  <rect x="11" y="13" width="1" height="1" fill="#facc15"/>
+
+  <!-- Row 14: Dissolving bits -->
+  <rect x="6" y="14" width="1" height="1" fill="#b45309"/>
+  <rect x="9" y="14" width="1" height="1" fill="#b45309"/>
+
+  <!-- Row 15: Base magnetic anchor dot -->
+  <rect x="7" y="15" width="2" height="1" fill="#facc15"/>
+</svg>

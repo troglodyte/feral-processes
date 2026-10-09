@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" width="256" height="256">
+  <!-- Row 0: Uplink telemetry crown -->
+  <rect x="5" y="0" width="1" height="1" fill="#818cf8"/>
+  <rect x="10" y="0" width="1" height="1" fill="#818cf8"/>
+
+  <!-- Row 1: Resonant field horns -->
+  <rect x="4" y="1" width="2" height="1" fill="#c084fc"/>
+  <rect x="7" y="1" width="2" height="1" fill="#e0e7ff"/>
+  <rect x="10" y="1" width="2" height="1" fill="#c084fc"/>
+
+  <!-- Row 2: Cranial visor plating -->
+  <rect x="3" y="2" width="2" height="1" fill="#4338ca"/>
+  <rect x="5" y="2" width="6" height="1" fill="#6366f1"/>
+  <rect x="11" y="2" width="2" height="1" fill="#4338ca"/>
+
+  <!-- Row 3: Shadow visor hood -->
+  <rect x="2" y="3" width="2" height="1" fill="#1e1b4b"/>
+  <rect x="4" y="3" width="8" height="1" fill="#0f0e26"/>
+  <rect x="12" y="3" width="2" height="1" fill="#1e1b4b"/>
+
+  <!-- Row 4: Multi-Tiered Sensor Optics -->
+  <rect x="2" y="4" width="1" height="1" fill="#818cf8"/>
+  <rect x="3" y="4" width="2" height="1" fill="#a855f7"/>
+  <rect x="6" y="4" width="4" height="1" fill="#818cf8"/>
+  <rect x="11" y="4" width="2" height="1" fill="#a855f7"/>
+  <rect x="13" y="4" width="1" height="1" fill="#818cf8"/>
+
+  <!-- Row 5: Central Aware Focus (Dual bright psychic cores) -->
+  <rect x="3" y="5" width="1" height="1" fill="#4f46e5"/>
+  <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="6" y="5" width="1" height="1" fill="#c084fc"/>
+  <rect x="7" y="5" width="2" height="1" fill="#0f0e26"/>
+  <rect x="9" y="5" width="1" height="1" fill="#c084fc"/>
+  <rect x="10" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="12" y="5" width="1" height="1" fill="#4f46e5"/>
+
+  <!-- Row 6: Lower cheek structure -->
+  <rect x="4" y="6" width="2" height="1" fill="#312e81"/>
+  <rect x="6" y="6" width="4" height="1" fill="#a855f7"/>
+  <rect x="10" y="6" width="2" height="1" fill="#312e81"/>
+
+  <!-- Row 7: Tapered chin / throat junction -->
+  <rect x="5" y="7" width="2" height="1" fill="#1e1b4b"/>
+  <rect x="7" y="7" width="2" height="1" fill="#818cf8"/>
+  <rect x="9" y="7" width="2" height="1" fill="#1e1b4b"/>
+
+  <!-- Row 8: Logic prism apex -->
+  <rect x="6" y="8" width="4" height="1" fill="#c084fc"/>
+
+  <!-- Row 9: Resonant Crystal Core -->
+  <rect x="4" y="9" width="1" height="1" fill="#6366f1"/>
+  <rect x="5" y="9" width="2" height="1" fill="#a855f7"/>
+  <rect x="7" y="9" width="2" height="1" fill="#ffffff"/>
+  <rect x="9" y="9" width="2" height="1" fill="#a855f7"/>
+  <rect x="11" y="9" width="1" height="1" fill="#6366f1"/>
+
+  <!-- Row 10: Crystal base flare -->
+  <rect x="3" y="10" width="1" height="1" fill="#818cf8"/>
+  <rect x="5" y="10" width="6" height="1" fill="#4338ca"/>
+  <rect x="12" y="10" width="1" height="1" fill="#818cf8"/>
+
+  <!-- Row 11: Trailing logic ribbons -->
+  <rect x="4" y="11" width="1" height="1" fill="#a855f7"/>
+  <rect x="6" y="11" width="1" height="1" fill="#312e81"/>
+  <rect x="7" y="11" width="2" height="1" fill="#c084fc"/>
+  <rect x="9" y="11" width="1" height="1" fill="#312e81"/>
+  <rect x="11" y="11" width="1" height="1" fill="#a855f7"/>
+
+  <!-- Row 12: Suspended telemetry sparks -->
+  <rect x="2" y="12" width="1" height="1" fill="#818cf8"/>
+  <rect x="5" y="12" width="1" height="1" fill="#4338ca"/>
+  <rect x="10" y="12" width="1" height="1" fill="#4338ca"/>
+  <rect x="13" y="12" width="1" height="1" fill="#818cf8"/>
+
+  <!-- Row 13: Mid-air packet pulses -->
+  <rect x="6" y="13" width="1" height="1" fill="#6366f1"/>
+  <rect x="9" y="13" width="1" height="1" fill="#6366f1"/>
+
+  <!-- Row 14: Dissolving filament tips -->
+  <rect x="4" y="14" width="1" height="1" fill="#4338ca"/>
+  <rect x="7" y="14" width="2" height="1" fill="#818cf8"/>
+  <rect x="11" y="14" width="1" height="1" fill="#4338ca"/>
+
+  <!-- Row 15: Ground beacon spark -->
+  <rect x="7" y="15" width="2" height="1" fill="#c084fc"/>
+</svg>

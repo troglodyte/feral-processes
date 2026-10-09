@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges" width="256" height="256">
+  <!-- Row 0: Exhaust flare peaks -->
+  <rect x="4" y="0" width="1" height="1" fill="#f97316"/>
+  <rect x="11" y="0" width="1" height="1" fill="#f97316"/>
+
+  <!-- Row 1: Crown heat sinks -->
+  <rect x="3" y="1" width="2" height="1" fill="#ea580c"/>
+  <rect x="6" y="1" width="4" height="1" fill="#facc15"/>
+  <rect x="11" y="1" width="2" height="1" fill="#ea580c"/>
+
+  <!-- Row 2: Upper cowl & horn baffles -->
+  <rect x="2" y="2" width="2" height="1" fill="#c2410c"/>
+  <rect x="4" y="2" width="8" height="1" fill="#ea580c"/>
+  <rect x="12" y="2" width="2" height="1" fill="#c2410c"/>
+
+  <!-- Row 3: Brow visor housing -->
+  <rect x="2" y="3" width="12" height="1" fill="#451a03"/>
+  <rect x="5" y="3" width="6" height="1" fill="#7c2d12"/>
+
+  <!-- Row 4: Incandescent Ocular Slit -->
+  <rect x="1" y="4" width="2" height="1" fill="#ea580c"/>
+  <rect x="3" y="4" width="4" height="1" fill="#f97316"/>
+  <rect x="7" y="4" width="2" height="1" fill="#451a03"/>
+  <rect x="9" y="4" width="4" height="1" fill="#f97316"/>
+  <rect x="13" y="4" width="2" height="1" fill="#ea580c"/>
+
+  <!-- Row 5: Superheated Eye Cores -->
+  <rect x="2" y="5" width="2" height="1" fill="#9a3412"/>
+  <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="6" y="5" width="1" height="1" fill="#facc15"/>
+  <rect x="7" y="5" width="2" height="1" fill="#451a03"/>
+  <rect x="9" y="5" width="1" height="1" fill="#facc15"/>
+  <rect x="10" y="5" width="2" height="1" fill="#ffffff"/>
+  <rect x="12" y="5" width="2" height="1" fill="#9a3412"/>
+
+  <!-- Row 6: Lower cheek vents -->
+  <rect x="3" y="6" width="2" height="1" fill="#78350f"/>
+  <rect x="5" y="6" width="6" height="1" fill="#ea580c"/>
+  <rect x="11" y="6" width="2" height="1" fill="#78350f"/>
+
+  <!-- Row 7: Tapered chin burner port -->
+  <rect x="4" y="7" width="2" height="1" fill="#451a03"/>
+  <rect x="6" y="7" width="4" height="1" fill="#facc15"/>
+  <rect x="10" y="7" width="2" height="1" fill="#451a03"/>
+
+  <!-- Row 8: Core Corona Apex -->
+  <rect x="6" y="8" width="4" height="1" fill="#fbbf24"/>
+
+  <!-- Row 9: Supercritical Plasma Core -->
+  <rect x="3" y="9" width="2" height="1" fill="#ea580c"/>
+  <rect x="5" y="9" width="1" height="1" fill="#f59e0b"/>
+  <rect x="6" y="9" width="4" height="1" fill="#ffffff"/>
+  <rect x="10" y="9" width="1" height="1" fill="#f59e0b"/>
+  <rect x="11" y="9" width="2" height="1" fill="#ea580c"/>
+
+  <!-- Row 10: Thermal containment ring -->
+  <rect x="4" y="10" width="2" height="1" fill="#c2410c"/>
+  <rect x="6" y="10" width="4" height="1" fill="#f97316"/>
+  <rect x="10" y="10" width="2" height="1" fill="#c2410c"/>
+
+  <!-- Row 11: Radiator fins -->
+  <rect x="2" y="11" width="2" height="1" fill="#ea580c"/>
+  <rect x="5" y="11" width="1" height="1" fill="#78350f"/>
+  <rect x="6" y="11" width="4" height="1" fill="#facc15"/>
+  <rect x="10" y="11" width="1" height="1" fill="#78350f"/>
+  <rect x="12" y="11" width="2" height="1" fill="#ea580c"/>
+
+  <!-- Row 12: Heat plume columns -->
+  <rect x="4" y="12" width="2" height="1" fill="#f97316"/>
+  <rect x="7" y="12" width="2" height="1" fill="#ea580c"/>
+  <rect x="10" y="12" width="2" height="1" fill="#f97316"/>
+
+  <!-- Row 13: Floating embers -->
+  <rect x="3" y="13" width="1" height="1" fill="#facc15"/>
+  <rect x="6" y="13" width="1" height="1" fill="#ea580c"/>
+  <rect x="9" y="13" width="1" height="1" fill="#ea580c"/>
+  <rect x="12" y="13" width="1" height="1" fill="#facc15"/>
+
+  <!-- Row 14: Dissolving heat ash -->
+  <rect x="5" y="14" width="1" height="1" fill="#c2410c"/>
+  <rect x="10" y="14" width="1" height="1" fill="#c2410c"/>
+
+  <!-- Row 15: Molten ground reflection -->
+  <rect x="7" y="15" width="2" height="1" fill="#f97316"/>
+</svg>

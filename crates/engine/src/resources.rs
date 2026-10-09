@@ -158,7 +158,7 @@ pub struct FreeBuilds(pub std::collections::BTreeSet<crate::structures::Structur
 /// `#[serde(default)]`: an older save starts the tally at zero.
 #[derive(Resource, Default, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunTally {
-    /// Sum of `Game::foe_score_level` over every foe killed.
+    /// Sum of `Game::ability_user_level` over every foe killed.
     pub foe_levels: u64,
     pub bosses: u32,
     /// Programs decompiled, including ones since lost or sold.

@@ -506,7 +506,7 @@ impl Game {
             if self.creature_alive(hostile) {
                 continue;
             }
-            let score_level = u64::from(self.foe_score_level(hostile));
+            let score_level = u64::from(self.ability_user_level(hostile));
             self.world
                 .resource_mut::<crate::resources::RunTally>()
                 .foe_levels += score_level;

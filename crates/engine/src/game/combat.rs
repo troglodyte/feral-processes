@@ -1327,20 +1327,6 @@ impl Game {
             .unwrap_or_else(|| self.wild_body_level())
     }
 
-    /// What a fallen foe is worth to the run score: the level of the frame it
-    /// died in underground, `ability_user_level` anywhere else.
-    ///
-    /// Separate from `ability_user_level` so scoring can never move combat.
-    /// A wild body has no `Experience`, so that function falls back to the
-    /// surface `ZoneLevel`; underground the frame carries its own tier, and
-    /// this reads it from the frame rather than assuming the two agree.
-    pub(crate) fn foe_score_level(&self, entity: Entity) -> u32 {
-        match self.stack_pos() {
-            Some(pos) => self.frame_spec(pos.depth, pos.frames, pos.entrance).tier,
-            None => self.ability_user_level(entity),
-        }
-    }
-
     /// The invoker's multiplier for `effect`'s category — the affinity half
     /// of an ability's magnitude, alongside `ability_user_level`'s scale.
     /// Resolved from `actor`, never from a recipient: an affinity is a

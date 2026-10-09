@@ -75,6 +75,51 @@ fn a_sortie_kill_adds_the_foes_level() {
     );
 }
 
+/// Underground a wild body's level is still the surface `ZoneLevel`: a
+/// frame's tier is read live from it (`Game::frame_spec`), so there is no
+/// second formula for a kill's worth to drift from. Sortie hostiles are
+/// surface spawns and `run_sorties` keeps running while the player is down.
+#[test]
+fn an_underground_kill_is_worth_the_zone_level() {
+    let mut game = new_game(9107);
+    game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 7;
+    descend(&mut game);
+    assert!(game.stack_pos().is_some(), "the player is underground");
+    let tier = game
+        .stack_pos()
+        .map(|p| game.frame_spec(p.depth, p.frames, p.entrance).tier);
+    assert_eq!(tier, Some(7));
+    let wild = spawn_wild_on_player_tile(&mut game);
+    game.award_loot(wild, 0.0);
+
+    assert_eq!(tally(&game).foe_levels, 7);
+}
+
+#[test]
+fn a_sortie_kill_with_the_player_underground_counts_the_zone_level() {
+    let found = (5000..5020).any(|seed| {
+        let (mut game, _) = super::sorties::a_dispatched_sortie(seed, DifficultyMode::Forgiving);
+        let zone = game.world.resource::<crate::resources::ZoneLevel>().0;
+        descend(&mut game);
+        let total = game.world.resource::<crate::resources::Sorties>().0[0].ticks_total;
+        for _ in 0..(total - 1) {
+            game.wait();
+        }
+        let killed = !game.world.resource::<crate::resources::Sorties>().0[0]
+            .programs
+            .is_empty();
+        if killed {
+            let levels = tally(&game).foe_levels;
+            assert!(
+                levels > 0 && levels % u64::from(zone) == 0,
+                "{levels} vs zone {zone}"
+            );
+        }
+        killed
+    });
+    assert!(found, "no seed's sortie banked a kill underground");
+}
+
 #[test]
 fn a_decompile_moves_the_compiled_count() {
     let mut game = new_game(9103);

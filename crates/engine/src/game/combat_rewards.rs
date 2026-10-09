@@ -853,7 +853,7 @@ impl Game {
             .resource_mut::<crate::resources::RunFeats>()
             .kills
             .push(species_id.clone());
-        let score_level = u64::from(self.foe_score_level(wild));
+        let score_level = u64::from(self.ability_user_level(wild));
         self.world
             .resource_mut::<crate::resources::RunTally>()
             .foe_levels += score_level;

@@ -9,7 +9,7 @@ use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::DerivedStat;
 
 use super::level_up::{duel_heading, duel_lines};
-use super::popup::{PopupSize, ROW_WRAP_COLUMNS, Row, draw_popup, item_row, text_row};
+use super::popup::{PopupSize, ROW_WRAP_COLUMNS, Row, draw_popup, item_row, row_prefix, text_row};
 use super::*;
 
 /// One stat's before -> after, in the units the player reads it in.
@@ -32,9 +32,10 @@ fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
 
 /// The widest an attribute row's text runs, in characters, before its
 /// remaining effects drop to a continuation line. `ROW_WRAP_COLUMNS` less
-/// the selection prefix; `no_points_row_overflows_its_popup` and the
+/// the selection prefix `draw_row` puts in front of the text (an attribute
+/// row carries no icon); `no_points_row_overflows_its_popup` and the
 /// creation width census hold it against real glyph widths.
-const ATTRIBUTE_LINE_COLUMNS: usize = ROW_WRAP_COLUMNS - 8;
+const ATTRIBUTE_LINE_COLUMNS: usize = ROW_WRAP_COLUMNS - row_prefix(false).len();
 
 /// An attribute row as text lines: its name and legacy word, the value it
 /// will read, the points bought on it, and each stat it feeds as

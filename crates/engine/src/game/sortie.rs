@@ -506,6 +506,10 @@ impl Game {
             if self.creature_alive(hostile) {
                 continue;
             }
+            let score_level = u64::from(self.foe_score_level(hostile));
+            self.world
+                .resource_mut::<crate::resources::RunTally>()
+                .foe_levels += score_level;
             let paid = (self.kill_xp(hostile) as f32 * crate::tuning::SORTIE_XP_MULTIPLIER) as u32;
             earned += paid;
             for &member in &members {

@@ -16,7 +16,7 @@ use crate::components::{PhaseKeys, Player};
 use crate::notifications::Notification;
 use crate::resources::{
     DifficultyMode, GameClock, Locale, MessageKind, MessageLog, PendingProfileWrites, RunFeats,
-    ZoneLevel,
+    RunTally, ZoneLevel,
 };
 
 /// Where the run currently stands, as far as a threshold is concerned.
@@ -37,6 +37,15 @@ pub struct RunStanding<'w, 's> {
     keys: Query<'w, 's, &'static PhaseKeys, With<Player>>,
 }
 
+/// The run's own records this system writes: the per-tick kill queue it
+/// drains and the score tally it counts earns into. Bundled with
+/// `RunStanding`'s reason, and kept apart from it because these are written.
+#[derive(SystemParam)]
+pub struct RunRecords<'w> {
+    feats: ResMut<'w, RunFeats>,
+    tally: ResMut<'w, RunTally>,
+}
+
 /// Evaluates every authored rung against the run's current state, records
 /// what is newly earned into the `Profile`, and queues it for app-core to
 /// write to disk.
@@ -51,12 +60,16 @@ const ACHIEVEMENT_COLOR: crate::components::GlyphColor = crate::components::Glyp
 pub fn achievement_system(
     db: Res<AchievementDb>,
     mut profile: ResMut<Profile>,
-    mut feats: ResMut<RunFeats>,
     standing: RunStanding<'_, '_>,
     mut pending: ResMut<PendingProfileWrites>,
     mut notifications: ResMut<crate::resources::Notifications>,
     mut log: ResMut<MessageLog>,
+    records: RunRecords<'_>,
 ) {
+    let RunRecords {
+        mut feats,
+        mut tally,
+    } = records;
     let RunStanding {
         clock,
         zone,
@@ -92,6 +105,7 @@ pub fn achievement_system(
             permadeath,
         });
         pending.earned.push(def.id.clone());
+        tally.achievements += 1;
         // **A second source, not a second door.** The notification is built
         // from the achievement's own `name` and `description` rather than
         // from a `NotificationKind` arm repeating them — authoring the same

@@ -76,10 +76,10 @@ fn ground_sprite_keys(biome: Biome, kind: BattleCell) -> [String; 2] {
 /// lifted so the art's pattern shows through.
 fn ground_level(kind: BattleCell) -> f32 {
     match kind {
-        BattleCell::Blocked => 0.18,
-        BattleCell::Open => 0.42,
-        BattleCell::Rough => 0.52,
-        BattleCell::Cover => 0.78,
+        BattleCell::Blocked => 0.14,
+        BattleCell::Open => 0.22,
+        BattleCell::Rough => 0.27,
+        BattleCell::Cover => 0.42,
     }
 }
 

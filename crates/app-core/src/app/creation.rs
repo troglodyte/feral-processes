@@ -3,7 +3,7 @@
 //! `Mode::CreateCharacter` carries a [`CreationStep`] cursor rather than
 //! being nine modes — `Mode::Transfer`'s reason, written out on that
 //! variant. What lives here is the key table for each step, the rows each
-//! draws, and the roll `[R]` performs.
+//! draws, and the roll `[r]` performs.
 //!
 //! Three things are subtle enough to say twice:
 //!
@@ -20,7 +20,7 @@
 //! **`[r]` rerolls the kit, and only the kit.** It used to roll every
 //! choice the player had not made by hand and jump to the summary, which
 //! is a way to skip the wizard rather than a way to use a screen of it —
-//! and it cost a [`Decided`] flag per step to keep it from destroying a
+//! and it cost a `Decided` flag per step to keep it from destroying a
 //! character someone had walked eight steps to build. On the one screen
 //! whose choice is a *basket*, the player can see what changes and press
 //! it again for free, so none of that applies.
@@ -36,13 +36,8 @@
 //! wizard is walked; the only key that draws a random anything is `[r]` on
 //! the Kit step.
 //!
-//! **The Points step opens on a roll, not a blank form** —
-//! `enter_creation_step` seeds it the moment the cursor lands there, once,
-//! never inside [`App::creation_rows`] (rebuilt every frame; rolling there
-//! would reroll every frame too). The seed does not set `Decided::stats`:
-//! it is not a hand-made choice, so `[R]` stays free to replace it and
-//! re-entering the step after it *has* been touched by hand does not
-//! stomp the player's own spread.
+//! **The Points step opens on an empty pool.** Every point is the
+//! player's own placement; nothing on the screen arrives decided.
 
 use crate::app::icon_editor::{IconEditor, IconEditorOutcome};
 use crate::app::stat_allocation::{AllocationFor, StatAllocation, spend_adjustment, spent_cost};
@@ -82,36 +77,7 @@ pub const CREATION_ICONS: [(char, &str); 5] = [
 /// the two in step.
 pub const CREATION_COLOURS: u8 = 6;
 
-/// Which of the wizard's choices the player has settled **by hand**, and
-/// so which `[R]` must leave alone.
-///
-/// A separate record rather than reading the choice back for a sentinel,
-/// because three of the six have no unset value to read: the default look
-/// *is* `CREATION_ICONS[0]` in its default colour, and a declined routine
-/// and an untouched one are both `None`. Sentinels would have to be
-/// reintroduced for the roll's benefit alone, and each would be a second
-/// meaning on a field the engine already reads one way.
-///
-/// The rule at every site is the same one: **taking a row decides that
-/// choice, `[n]` skips the step.** A step walked past without a pick stays
-/// open to the roll.
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Decided {
-    stats: bool,
-}
-
-impl Decided {
-    /// Test-only window onto `stats`, because two random draws are not
-    /// guaranteed to differ and so cannot black-box-prove the entry seed
-    /// left this flag alone — the field is private to this module, so a
-    /// black-box test in `tests/creation.rs` has no other way to ask.
-    #[cfg(test)]
-    pub(crate) fn stats_decided(&self) -> bool {
-        self.stats
-    }
-}
-
-/// A xorshift64* stream for `[R]`.
+/// A xorshift64* stream for `[r]`.
 ///
 /// Its own rather than the engine's `resources::GameRng`: there is no
 /// `Game` yet when the wizard runs, and world generation's own rule —
@@ -148,9 +114,8 @@ impl Roll {
 /// A random basket that spends **as much of `CREATION_CREDITS` as the
 /// shelf allows**: one unit bought at a time from whichever rows are still
 /// affordable, so the loop can only halt once nothing affordable is left.
-/// `roll_points_spread`'s construction exactly, and for its reason — the
-/// spend is a consequence of the loop rather than something checked after
-/// it, so `[R]` can never hand out a basket the commit would refuse.
+/// The spend is a consequence of the loop rather than something checked
+/// after it, so `[r]` can never hand out a basket the commit would refuse.
 ///
 /// It does not always land on zero remaining, unlike the stat pool: the
 /// cheapest shipped row is 1 Credit, so it does, but a modded shelf whose
@@ -190,7 +155,6 @@ impl App {
         // the choice, and `default()` is the classless, allowance-less
         // player every `Game::new` builds.
         self.creation_choice = CharacterChoice::at_creation();
-        self.creation_decided = Decided::default();
         self.creation_difficulty = None;
         self.creation_icon_editor = None;
         self.creation_icon_seeded = false;
@@ -550,32 +514,19 @@ impl App {
     }
 
     /// Lands the cursor on `step` — Esc and every forward advance's shared
-    /// door. Seeds the Points step's roll on the way in, and only there:
-    /// **once**, on arrival, never inside [`App::creation_rows`], which is
-    /// rebuilt every frame and would reroll on every one of them. Guarded
-    /// on `!creation_decided.stats` so a spread the player has already
-    /// redistributed by hand survives walking away and back — the seed
-    /// itself never sets that flag, since it is not the hand-made decision
-    /// the flag records.
+    /// door. Seeds the Icon step on the way in, **once**, never inside
+    /// [`App::creation_rows`], which is rebuilt every frame.
     ///
-    /// **The Icon step seeds the same way, latched on `creation_icon_seeded`
-    /// rather than `creation_choice.icon.is_none()`.** `None` is also what
+    /// **The seed is latched on `creation_icon_seeded` rather than
+    /// `creation_choice.icon.is_none()`.** `None` is also what
     /// taking a preset row produces on purpose — guarding on the value
     /// instead of a one-shot flag would silently un-pick a preset the
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
-    /// This is not the `Decided` flag the doc comment above says the wizard
-    /// has none of: that rule is about protecting a hand-made choice from
-    /// `[r]`'s reroll, which nothing here does — the latch only decides
-    /// whether the entry seed still has something to do, exactly once.
     fn enter_creation_step(&mut self, step: CreationStep) {
         self.creation_step = step;
         self.menu_selected = 0;
         self.status_line = None;
-        if step == CreationStep::Points && !self.creation_decided.stats {
-            let mut roll = Roll::new();
-            self.creation_choice.stats = self.creation_allocation().roll_spread(|n| roll.below(n));
-        }
         if step == CreationStep::Icon && !self.creation_icon_seeded {
             self.creation_icon_seeded = true;
             self.creation_choice.icon = self
@@ -838,10 +789,7 @@ impl App {
     fn spend_on_row(&mut self, f: impl FnOnce(u32, u32) -> u32) {
         let allocation = self.creation_allocation();
         match allocation.spend_on_row(&mut self.creation_choice.stats, self.menu_selected, f) {
-            Ok(()) => {
-                self.creation_decided.stats = true;
-                self.status_line = None;
-            }
+            Ok(()) => self.status_line = None,
             Err(why) => self.refuse(why),
         }
     }

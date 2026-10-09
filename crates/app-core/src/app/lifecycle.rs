@@ -179,7 +179,6 @@ impl App {
             dev_templates: None,
             creation_step: CreationStep::Difficulty,
             creation_choice: CharacterChoice::default(),
-            creation_decided: Default::default(),
             creation_difficulty: None,
             creation_catalogue,
             creation_icon_editor: None,

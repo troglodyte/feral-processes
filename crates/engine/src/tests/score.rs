@@ -111,7 +111,7 @@ fn a_sortie_kill_with_the_player_underground_counts_the_zone_level() {
         if killed {
             let levels = tally(&game).foe_levels;
             assert!(
-                levels > 0 && levels % u64::from(zone) == 0,
+                levels > 0 && levels.is_multiple_of(u64::from(zone)),
                 "{levels} vs zone {zone}"
             );
         }

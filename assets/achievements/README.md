@@ -11,7 +11,8 @@ works.
 
 ## What an achievement is
 
-Achievements are the game's only cross-run progression. They are earned inside
+Achievements and the run score bonus (`crates/engine/src/score.rs`) are the
+game's only cross-run progression. Achievements are earned inside
 a run, recorded the moment they're earned into `profile.ron` at the repo root,
 and paid out at the **start of the next run** — never mid-run, and never when
 you load a save (a save already has its bonus baked into your stats).

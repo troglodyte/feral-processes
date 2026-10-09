@@ -636,6 +636,22 @@ impl App {
         }
     }
 
+    /// Banks the run's score into the profile file: the engine computes the
+    /// delta, this copy adds it and writes. Written here and now rather than
+    /// through `PendingProfileWrites`, because `after_tick` is not reached
+    /// on the game-over path.
+    pub(crate) fn bank_run_score(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let delta = game.bank_run_score();
+        if delta == 0 {
+            return;
+        }
+        self.profile.lifetime_score += delta;
+        if let Err(e) = self.profile.save(&self.profile_path) {
+            self.status_line = Some(format!("Could not write profile: {e}"));
+        }
+    }
+
     /// Writes `profile.ron` if this tick earned anything.
     ///
     /// Immediately, not at run end: a permadeath run that ends badly must not
@@ -702,6 +718,8 @@ impl App {
                 let _ = game.write_history(&self.history_path);
             }
             self.history_written = true;
+            // Before `seal_run`, so the sealed save carries `banked`.
+            self.bank_run_score();
             self.seal_run();
         }
         // The other exit from both results screens: a run that ends on the

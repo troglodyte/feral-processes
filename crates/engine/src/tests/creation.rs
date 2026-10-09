@@ -875,9 +875,10 @@ fn an_overspent_choice_moves_no_attribute() {
 fn game_with_lifetime_score(seed: u32, lifetime: u64, choice: &CharacterChoice) -> Game {
     let mut game =
         Game::new_with(seed, DifficultyMode::Forgiving, &test_assets_dir(), choice).unwrap();
-    let mut profile = crate::achievements::Profile::default();
-    profile.lifetime_score = lifetime;
-    game.install_profile(profile);
+    game.install_profile(crate::achievements::Profile {
+        lifetime_score: lifetime,
+        ..Default::default()
+    });
     game.grant_profile_rewards();
     game
 }

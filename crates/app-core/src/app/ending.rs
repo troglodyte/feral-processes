@@ -43,6 +43,7 @@ impl App {
         match game.escape_basin() {
             Ok(()) => {
                 self.ending_screens = game.ending_screens();
+                self.bank_run_score();
                 self.ending_page = 0;
                 self.mode = Mode::Ending;
             }

@@ -3577,17 +3577,25 @@ impl Game {
         }
         self.world.insert_resource(ProfileRewardsPaid);
 
-        let rewards: Vec<Reward> = {
+        let (rewards, score_stat_points): (Vec<Reward>, u32) = {
             let db = self.world.resource::<AchievementDb>();
             let profile = self.world.resource::<Profile>();
-            crate::achievements::profile_rewards(profile, db)
+            (
+                crate::achievements::profile_rewards(profile, db),
+                crate::score::creation_bonus(profile.lifetime_score).stat_points,
+            )
         };
-        if rewards.is_empty() {
+        if rewards.is_empty() && score_stat_points == 0 {
             return;
         }
 
         let player = self.player_entity();
-        let mut stat_points = 0;
+        // Paid here rather than added to the Points step's budget, so
+        // `MAX_CREATION_STAT_POINTS` stays the ceiling of creation itself.
+        if let Some(mut points) = self.world.get_mut::<crate::components::StatPoints>(player) {
+            points.0 += score_stat_points;
+        }
+        let mut stat_points = score_stat_points;
         let mut perk_points = 0;
         let mut programs = Vec::new();
         for reward in rewards {

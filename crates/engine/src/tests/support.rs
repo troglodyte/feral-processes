@@ -3488,3 +3488,23 @@ pub(super) fn research_decompiler(
         .0
         .insert(id.to_string());
 }
+
+/// Raises the player's Analysis until they see at least twelve tiles, so a
+/// test that places something at the examine range is not hidden by the
+/// fog. Goes through the real derivation; there is no sight bypass.
+pub(crate) fn see_twelve_tiles(game: &mut Game) {
+    let analysis = crate::attributes::AttributeId::from("analysis");
+    let player = game.player_entity();
+    let base = game
+        .world
+        .resource::<crate::attributes::AttributeDb>()
+        .get(&analysis)
+        .unwrap()
+        .base;
+    game.world
+        .get_mut::<crate::components::Attributes>(player)
+        .unwrap()
+        .set(&analysis, base + 14);
+    game.recompute_derived(player);
+    game.mark_seen_tiles();
+}

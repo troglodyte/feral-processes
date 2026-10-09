@@ -5,8 +5,9 @@ use crate::tuning::{
     ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, CRIT_CHANCE,
     CRIT_CHANCE_MAX, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
     FUMBLE_CHANCE, FUMBLE_CHANCE_MAX, HP_PER_LEVEL, MIN_MAX_POWER, MINING_EXTRACTION_CAP,
-    PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION, STAT_POINTS_PER_LEVEL, STATUS_RESIST_MAX,
-    STATUS_RESIST_MIN, XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
+    PERCEPTION_BASE_RADIUS, PERCEPTION_MIN_RADIUS, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION,
+    STAT_POINTS_PER_LEVEL, STATUS_RESIST_MAX, STATUS_RESIST_MIN, XP_CHALLENGE_CEIL,
+    XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 use bevy_ecs::entity::Entity;
 use std::collections::BTreeMap;
@@ -281,6 +282,15 @@ pub struct DerivedBase {
     pub extraction: f32,
     pub crit: f64,
     pub fumble: f64,
+    /// Tiles of surface sight. Defaulted on read because this struct is
+    /// saved: a record from before the field would otherwise read 0 and
+    /// clamp to the minimum.
+    #[serde(default = "default_perception")]
+    pub perception: f32,
+}
+
+fn default_perception() -> f32 {
+    PERCEPTION_BASE_RADIUS
 }
 
 impl DerivedBase {
@@ -296,6 +306,7 @@ impl DerivedBase {
             extraction: 0.0,
             crit: CRIT_CHANCE,
             fumble: FUMBLE_CHANCE,
+            perception: PERCEPTION_BASE_RADIUS,
         }
     }
 
@@ -332,6 +343,8 @@ pub struct DerivedStats {
     pub crit: f64,
     /// The fumble band, before its clamp to `1 - hit chance`.
     pub fumble: f64,
+    /// Tiles of surface sight, floored at `PERCEPTION_MIN_RADIUS`.
+    pub perception: f32,
 }
 
 impl DerivedStats {
@@ -349,6 +362,7 @@ impl DerivedStats {
             S::Extraction => self.extraction,
             S::Crit => self.crit as f32,
             S::Fumble => self.fumble as f32,
+            S::Perception => self.perception,
         }
     }
 }
@@ -432,6 +446,7 @@ pub fn attribute_contribution(attrs: &Attributes, db: &AttributeDb) -> DerivedSt
         extraction: sum(DerivedStat::Extraction),
         crit: sum(DerivedStat::Crit) as f64,
         fumble: sum(DerivedStat::Fumble) as f64,
+        perception: sum(DerivedStat::Perception),
     }
 }
 
@@ -452,6 +467,7 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
         extraction: (base.extraction + c.extraction).clamp(0.0, MINING_EXTRACTION_CAP),
         crit: (base.crit + c.crit).clamp(0.0, CRIT_CHANCE_MAX),
         fumble: (base.fumble + c.fumble).clamp(0.0, FUMBLE_CHANCE_MAX),
+        perception: (base.perception + c.perception).max(PERCEPTION_MIN_RADIUS),
     }
 }
 

@@ -62,7 +62,7 @@ Each file is one attribute:
 | `meaning` | The page's prose: what a high or low value says about this program. **Never what it does** — see below. |
 | `base` | The value a body with nothing authored for it mints around. **It is also the zero point of `effects`**: a player at `base` gets nothing from the attribute, and each point above it (or below, for a negative sum) moves the stats. Editing it therefore shifts every player's derived stats, not only new bodies. |
 | `spread` | How far either side of the base a creature's own value may land. `0` is legal and means every creature reads the same number. Keep it below `base`, or a creature can mint a negative attribute. The player has no spread; see below. |
-| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`, `Crit`, `Fumble`; an unknown name makes the file malformed, and it is skipped with a warning. |
+| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`, `Crit`, `Fumble`, `Perception`; an unknown name makes the file malformed, and it is skipped with a warning. |
 | `does` | `#[serde(default)]` — the one sentence saying what the effects do, in the player's words, shown beside the attribute on the Points screens. |
 
 The first seven fields are required. `effects` and `does` default to empty,

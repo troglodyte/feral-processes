@@ -155,6 +155,7 @@ fn find_target_in_direction_respects_max_range() {
         .find(|d| !d.is_hybrid())
         .unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
+    see_twelve_tiles(&mut game);
     game.world.spawn((
         Creature {
             species: species.id.clone(),
@@ -326,6 +327,7 @@ fn find_target_in_direction_stops_exactly_at_the_range_bound() {
     let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     clear_creatures_east_of_player(&mut game, start, 12);
+    see_twelve_tiles(&mut game);
 
     let creature = spawn_marker_creature(&mut game, start, 10, 0);
     assert_eq!(

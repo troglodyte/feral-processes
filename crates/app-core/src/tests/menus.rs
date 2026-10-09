@@ -274,6 +274,26 @@ fn inspecting_a_direction_still_lands_on_the_manifest() {
     );
 }
 
+/// Reloads the game with Analysis raised by 14, which is +7 tiles of
+/// Perception, so something at the examine range is inside the fog's
+/// reach. Goes through the real derivation on load; no sight bypass.
+fn see_twelve_tiles(app: &mut App) {
+    let game = app.game.as_mut().unwrap();
+    let analysis = game
+        .attributes_of(game.player_entity())
+        .get(&"analysis".into())
+        .unwrap();
+    let path = scratch_path("see_twelve_tiles", 79);
+    game.save(&path).unwrap();
+    let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+    data.player
+        .attributes
+        .insert("analysis".into(), analysis + 14);
+    feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 /// The shipped reach, pinned at the seam that chooses it.
 ///
 /// `find_target_in_direction` takes its range as a parameter so the engine's
@@ -287,6 +307,7 @@ fn inspecting_a_direction_reaches_no_further_than_the_examine_range() {
     use feral_processes_engine::tuning::EXAMINE_RANGE_TILES;
 
     let mut app = test_app(79);
+    see_twelve_tiles(&mut app);
     place_wild_program_east(&mut app, EXAMINE_RANGE_TILES + 1);
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Right);
@@ -302,6 +323,7 @@ fn inspecting_a_direction_reaches_no_further_than_the_examine_range() {
     );
 
     let mut app = test_app(79);
+    see_twelve_tiles(&mut app);
     place_wild_program_east(&mut app, EXAMINE_RANGE_TILES);
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Right);

@@ -125,6 +125,7 @@ pub enum DerivedStat {
     Extraction,
     Crit,
     Fumble,
+    Perception,
 }
 
 impl DerivedStat {
@@ -140,6 +141,7 @@ impl DerivedStat {
             DerivedStat::Extraction => "Extraction",
             DerivedStat::Crit => "Crit",
             DerivedStat::Fumble => "Fumble",
+            DerivedStat::Perception => "Perception",
         }
     }
 }
@@ -417,7 +419,16 @@ mod tests {
             vec![
                 (DerivedStat::Atk, 1.0),
                 (DerivedStat::Decompiler, 1.0),
-                (DerivedStat::Extraction, 0.005)
+                (DerivedStat::Extraction, 0.005),
+                (DerivedStat::Perception, 0.5)
+            ]
+        );
+        assert_eq!(
+            effects_of(&db, "entropy"),
+            vec![
+                (DerivedStat::Crit, 0.002),
+                (DerivedStat::Fumble, 0.001),
+                (DerivedStat::Perception, 0.033)
             ]
         );
         assert_eq!(

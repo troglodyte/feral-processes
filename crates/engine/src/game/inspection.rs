@@ -585,11 +585,20 @@ impl Game {
                 .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
                 .collect();
             candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
-                (self.stands_in_base_space(e) == in_base).then_some((step, CARAVAN_ON_TILE, e))
+                (self.stands_in_base_space(e) == in_base && self.is_shown(e, false)).then_some((
+                    step,
+                    CARAVAN_ON_TILE,
+                    e,
+                ))
             }));
         }
         candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
             if self.stands_in_base_space(e) != in_base {
+                return None;
+            }
+            // Examine names only what the map shows, so a creature past the
+            // player's Perception cannot be addressed by aiming at it.
+            if !self.is_shown(e, false) {
                 return None;
             }
             let tamed = self.world.get::<Tamed>(e).is_some();
@@ -613,7 +622,11 @@ impl Game {
                 .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
                 .collect();
             candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
-                (self.stands_in_base_space(e) == in_base).then_some((step, SETTLEMENT_ON_TILE, e))
+                (self.stands_in_base_space(e) == in_base && self.is_shown(e, true)).then_some((
+                    step,
+                    SETTLEMENT_ON_TILE,
+                    e,
+                ))
             }));
         }
         // An outpost carries no entity at all — `resources::Outposts`' own
@@ -1327,6 +1340,20 @@ impl Game {
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
                 let is_anchor = self.world.get::<BaseAnchor>(entity).is_some();
+                let is_landmark = is_anchor
+                    || self
+                        .world
+                        .get::<crate::components::Settlement>(entity)
+                        .is_some()
+                    || self
+                        .world
+                        .get::<crate::components::SettlementCentre>(entity)
+                        .is_some()
+                    || self.world.get::<crate::components::Nest>(entity).is_some()
+                    || self
+                        .world
+                        .get::<crate::components::SurfaceLink>(entity)
+                        .is_some();
                 let is_home = self
                     .world
                     .get::<Structure>(entity)
@@ -1443,6 +1470,7 @@ impl Game {
                     is_companion,
                     is_hostile,
                     is_structure,
+                    is_landmark,
                     is_anchor,
                     is_home,
                     tier,

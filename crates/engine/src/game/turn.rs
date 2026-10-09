@@ -231,6 +231,7 @@ impl Game {
         self.ensure_local_population();
         self.ensure_local_settlements();
         self.mark_explored_chunks();
+        self.mark_seen_tiles();
         self.maybe_spawn_wild_creature();
         // Beside the ambient roll because it is the same kind of work: a
         // `&mut Game` pass over the surface, keyed to a place rather than to

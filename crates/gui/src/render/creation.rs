@@ -115,7 +115,18 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
     let mut drawn: Vec<Row> = rows
         .iter()
         .enumerate()
-        .map(|(i, row)| build_row(step, row, i, selected == i))
+        .flat_map(|(i, row)| {
+            let mut out = vec![build_row(step, row, i, selected == i)];
+            // An attribute whose effects overflow continues on indented rows.
+            if let Some(lines) = points::attribute_lines(row, Some(CREATION_STAT_POINTS)) {
+                out.extend(
+                    points::attribute_item_rows(lines, false)
+                        .into_iter()
+                        .skip(1),
+                );
+            }
+            out
+        })
         .collect();
     if drawn.is_empty() {
         // A step with nothing to offer — an empty `assets/classes/`, say —
@@ -229,7 +240,10 @@ fn row_line(row: &CreationRow) -> String {
         // Shared with `Mode::AllocateStats` - one drawing of the Points
         // screen's row, with the bar only creation draws.
         CreationRow::Attribute { .. } => {
-            points::attribute_line(row, Some(CREATION_STAT_POINTS)).unwrap_or_default()
+            // First line only: `step_rows` adds the continuations.
+            points::attribute_lines(row, Some(CREATION_STAT_POINTS))
+                .and_then(|lines| lines.into_iter().next())
+                .unwrap_or_default()
         }
         // No bar: at 1 Credit an item's own
         // ceiling is the whole allowance, so a bar would be 25 cells wide on

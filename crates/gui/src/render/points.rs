@@ -1,6 +1,6 @@
 //! The Points screen's drawing, shared: the creation wizard's Points step
 //! and `Mode::AllocateStats` both draw the same `CreationRow::Attribute`
-//! rows through `attribute_line` and word their footer through `footer`.
+//! rows through `attribute_lines` and word their footer through `footer`.
 //! Creation is a step of a popup with its own title and numbering;
 //! `draw_allocate_stats` is the whole popup for the level-up spend.
 
@@ -9,7 +9,7 @@ use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::DerivedStat;
 
 use super::level_up::{duel_heading, duel_lines};
-use super::popup::{PopupSize, Row, draw_popup, item_row, text_row};
+use super::popup::{PopupSize, ROW_WRAP_COLUMNS, Row, draw_popup, item_row, row_prefix, text_row};
 use super::*;
 
 /// One stat's before -> after, in the units the player reads it in.
@@ -24,14 +24,24 @@ fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
                 after * 100.0
             )
         }
+        DerivedStat::Perception => format!("{label} {before:.1} \u{2192} {after:.1} tiles"),
         DerivedStat::StatusResist => format!("{label} {before:.0}% \u{2192} {after:.0}%"),
         _ => format!("{label} {before:.0} \u{2192} {after:.0}"),
     }
 }
 
-/// An attribute row as a line of text: its name and legacy word, the value
-/// it will read, the points bought on it, and each stat it feeds as
-/// before -> after. `None` for any other row kind.
+/// The widest an attribute row's text runs, in characters, before its
+/// remaining effects drop to a continuation line. `ROW_WRAP_COLUMNS` less
+/// the selection prefix `draw_row` puts in front of the text (an attribute
+/// row carries no icon); `no_points_row_overflows_its_popup` and the
+/// creation width census hold it against real glyph widths.
+const ATTRIBUTE_LINE_COLUMNS: usize = ROW_WRAP_COLUMNS - row_prefix(false).len();
+
+/// An attribute row as text lines: its name and legacy word, the value it
+/// will read, the points bought on it, and each stat it feeds as
+/// before -> after. Effects that would run past `ATTRIBUTE_LINE_COLUMNS`
+/// carry onto further lines indented to where the effects start; a row that
+/// fits is one line. `None` for any other row kind.
 ///
 /// `bar_pool` draws the points bought as a `[###---]` bar, creation's: its
 /// width is the most this row could hold if the *whole* pool went to it —
@@ -39,7 +49,7 @@ fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
 /// make the bar's length a second, unlabelled figure to read. The level-up
 /// spend passes `None`: its pool is a few points, too small for a bar to
 /// say anything the count does not.
-pub(super) fn attribute_line(row: &CreationRow, bar_pool: Option<u32>) -> Option<String> {
+pub(super) fn attribute_lines(row: &CreationRow, bar_pool: Option<u32>) -> Option<Vec<String>> {
     let CreationRow::Attribute {
         name,
         legacy,
@@ -61,15 +71,27 @@ pub(super) fn attribute_line(row: &CreationRow, bar_pool: Option<u32>) -> Option
             format!("[{cells}] ")
         })
         .unwrap_or_default();
-    let effects: Vec<String> = effects
-        .iter()
-        .map(|&(stat, before, after)| effect_text(stat, before, after))
-        .collect();
-    Some(format!(
-        "{:<24} {value:>3}  {bar}+{spent:<2}  {}",
-        format!("{name} ({legacy})"),
-        effects.join("  ")
-    ))
+    let head = format!(
+        "{:<24} {value:>3}  {bar}+{spent:<2}  ",
+        format!("{name} ({legacy})")
+    );
+    let indent = " ".repeat(head.chars().count());
+    let mut lines = vec![head];
+    let mut fresh = true;
+    for &(stat, before, after) in effects {
+        let text = effect_text(stat, before, after);
+        let line = lines.last_mut().expect("lines is never empty");
+        if !fresh && line.chars().count() + 2 + text.chars().count() > ATTRIBUTE_LINE_COLUMNS {
+            lines.push(format!("{indent}{text}"));
+        } else {
+            if !fresh {
+                line.push_str("  ");
+            }
+            line.push_str(&text);
+        }
+        fresh = false;
+    }
+    Some(lines)
 }
 
 /// The key line under the rows. `spends_pool` is creation: a pool that is
@@ -138,6 +160,17 @@ fn load_row((load, cap): (u32, u32)) -> Option<Row> {
     })
 }
 
+/// An attribute's lines as popup rows: the cursor highlight sits on the
+/// first, and the continuations stay `Row::Item` so the scroll body does not
+/// tear them off the row they belong to.
+pub(super) fn attribute_item_rows(lines: Vec<String>, selected: bool) -> Vec<Row> {
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(n, line)| item_row(line, selected && n == 0))
+        .collect()
+}
+
 /// The popup's rows, split out so the census can measure what is drawn.
 pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
     let mut rows: Vec<Row> = app
@@ -145,8 +178,10 @@ pub(super) fn allocate_stats_rows(app: &App) -> Vec<Row> {
         .iter()
         .enumerate()
         .filter_map(|(i, row)| {
-            attribute_line(row, None).map(|line| item_row(line, i == app.menu_selected))
+            attribute_lines(row, None)
+                .map(|lines| attribute_item_rows(lines, i == app.menu_selected))
         })
+        .flatten()
         .collect();
     if rows.is_empty() {
         rows.push(text_row("Nothing to spend points on."));
@@ -184,6 +219,14 @@ mod tests {
     use feral_processes_app_core::StatAllocation;
     use feral_processes_engine::{DifficultyMode, Game};
 
+    #[test]
+    fn perception_reads_to_one_decimal_in_tiles() {
+        assert_eq!(
+            effect_text(DerivedStat::Perception, 5.0, 5.5),
+            "Perception 5.0 \u{2192} 5.5 tiles"
+        );
+    }
+
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         Game::new(42, DifficultyMode::Forgiving, &assets).expect("shipped assets")
@@ -216,14 +259,20 @@ mod tests {
     /// spend draws none.
     #[test]
     fn a_creation_row_draws_its_spend_as_a_bar() {
-        let line = attribute_line(&attribute_row(3, 1), Some(8)).unwrap();
+        let line = attribute_lines(&attribute_row(3, 1), Some(8))
+            .unwrap()
+            .remove(0);
         assert!(line.contains("[###-----]"), "{line}");
-        let line = attribute_line(&attribute_row(0, 2), Some(8)).unwrap();
+        let line = attribute_lines(&attribute_row(0, 2), Some(8))
+            .unwrap()
+            .remove(0);
         assert!(
             line.contains("[----]"),
             "a 2-point row holds 4 of 8: {line}"
         );
-        let line = attribute_line(&attribute_row(3, 1), None).unwrap();
+        let line = attribute_lines(&attribute_row(3, 1), None)
+            .unwrap()
+            .remove(0);
         assert!(!line.contains('['), "{line}");
     }
 
@@ -235,6 +284,36 @@ mod tests {
             "Neural Load 3/4"
         );
         assert!(matches!(load_row((5, 4)), Some(Row::TextColored(_, c)) if c == ORANGE));
+    }
+
+    /// An attribute whose effects overflow the line carries the rest onto an
+    /// indented second line under where the effects start, keeping every
+    /// label whole; one that fits stays a single line.
+    #[test]
+    fn analysis_wraps_its_effects_onto_an_aligned_continuation() {
+        let game = shipped_game();
+        let rows = allocation(&game, 999).rows(&Default::default());
+        let lines_of = |id: &str| {
+            rows.iter()
+                .find_map(|r| match r {
+                    CreationRow::Attribute { id: i, .. } if i.as_str() == id => {
+                        attribute_lines(r, Some(8))
+                    }
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let analysis = lines_of("analysis");
+        assert!(analysis.len() >= 2, "{analysis:?}");
+        let start = analysis[0].find("ATK").expect("first effect on line one");
+        assert!(
+            analysis[1].starts_with(&" ".repeat(start))
+                && !analysis[1].trim_start().is_empty()
+                && analysis[1].len() - analysis[1].trim_start().len() == start,
+            "{analysis:?}"
+        );
+        assert!(analysis.join(" ").contains("tiles"), "{analysis:?}");
+        assert_eq!(lines_of("parity").len(), 1);
     }
 
     /// `draw_row` clips vertically only, so a row wider than the popup body
@@ -261,13 +340,14 @@ mod tests {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
-                let line = attribute_line(row, None).unwrap();
-                let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
-                assert!(
-                    drawn <= room,
-                    "a Points row overflows by {:.0}px:\n{line}",
-                    drawn - room
-                );
+                for line in attribute_lines(row, None).unwrap() {
+                    let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a Points row overflows by {:.0}px:\n{line}",
+                        drawn - room
+                    );
+                }
             }
         });
     }

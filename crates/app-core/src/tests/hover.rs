@@ -130,3 +130,17 @@ fn a_staff_member_on_its_handle_names_its_species_too() {
         "{lines:?}"
     );
 }
+
+/// Fog: a hostile past the player's sight is not on the map, so it is not
+/// named by the hover label either.
+#[test]
+fn a_hostile_outside_sight_is_not_named() {
+    let mut app = test_app(2806);
+    place_wild_program_east(&mut app, 8);
+    let start = player_pos(&app);
+    let tile = (start.0 + 8, start.1);
+
+    let lines = app.hover_lines(tile.0, tile.1);
+
+    assert_eq!(lines, vec![biome_at(&mut app, tile)]);
+}

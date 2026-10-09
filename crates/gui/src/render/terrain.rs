@@ -3,7 +3,7 @@
 
 use super::*;
 use feral_processes_engine::floors::FloorShade;
-use feral_processes_engine::views::FinishView;
+use feral_processes_engine::views::{FinishView, Sight};
 
 /// How far a bare tile's background may stray from its biome's flat colour,
 /// as a fraction either side. Enough to break up a field of identical tiles,
@@ -25,6 +25,47 @@ pub(super) const SHADE_JITTER: f32 = 0.08;
 /// smallest step that reads.
 pub(super) const VIGNETTE_FLOOR_FULL: f32 = 0.68;
 pub(super) const VIGNETTE_FLOOR_EMPTY: f32 = 0.52;
+
+/// How bright remembered ground and landmarks draw against live ones. Folded
+/// into the vignette multiplier, so ground, glyph ink and sprite tint all
+/// dim through the one path. Like the vignette floors, it is judged on
+/// screen at low Power, where the two stack.
+pub(super) const FOG_REMEMBERED_DIM: f32 = 0.45;
+
+/// What a tile the player has never seen is filled with.
+pub(super) const FOG_UNSEEN: Color = Color::new(0.0, 0.0, 0.0, 1.0);
+
+/// The fog's brightness multiplier for one drawn tile. A remembered tile is
+/// `FOG_REMEMBERED_DIM`; the outermost tile of the live circle blends from
+/// live toward it over one tile of distance, so the edge is soft. That blend
+/// is cosmetic only: `Sight` stays binary.
+///
+/// `neighbour_out_of_sight(dx, dy)` answers for the four adjacent tiles, and
+/// the blend applies only beside one: wherever fog is off (underground,
+/// `FERAL_DEV_REVEAL`) every tile is `InSight` and nothing is beside an edge.
+pub(super) fn fog_dim(
+    sight: Sight,
+    world: (i32, i32),
+    player: (i32, i32),
+    radius: f32,
+    neighbour_out_of_sight: impl Fn(i32, i32) -> bool,
+) -> f32 {
+    match sight {
+        Sight::Remembered => FOG_REMEMBERED_DIM,
+        Sight::Unseen => 0.0,
+        Sight::InSight => {
+            let edge = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .any(|(dx, dy)| neighbour_out_of_sight(dx, dy));
+            if !edge {
+                return 1.0;
+            }
+            let (dx, dy) = ((world.0 - player.0) as f32, (world.1 - player.1) as f32);
+            let inside = (radius - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            FOG_REMEMBERED_DIM + (1.0 - FOG_REMEMBERED_DIM) * inside
+        }
+    }
+}
 
 /// A tile's own brightness multiplier, so a field of one biome reads as
 /// ground rather than as a flat colour swatch.

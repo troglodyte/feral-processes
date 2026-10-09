@@ -603,6 +603,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
+        world.insert_resource(crate::resources::SeenTiles::default());
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
@@ -716,6 +717,7 @@ impl Game {
         // opens already has the chain's first mission in hand.
         game.ensure_tutorial_held();
         game.assess_situations();
+        game.mark_seen_tiles();
         Ok(game)
     }
 
@@ -1567,6 +1569,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
+        world.insert_resource(crate::resources::SeenTiles::default());
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Outposts::default());
         world.insert_resource(crate::resources::Standings::default());
@@ -1894,6 +1897,7 @@ impl Game {
         game.world.insert_resource(data.standings);
         game.world.insert_resource(data.populated_chunks);
         game.world.insert_resource(data.explored_chunks);
+        game.world.insert_resource(data.seen_tiles);
         game.restore_settlements(data.settlements);
         game.restore_outposts(data.outposts);
         game.attach_outpost_crew(pending_outpost_crew);
@@ -2040,6 +2044,7 @@ impl Game {
             .resource_mut::<crate::resources::LabourDemand>()
             .staff = on_shift;
         game.assess_situations();
+        game.mark_seen_tiles();
         Ok(game)
     }
 
@@ -3380,6 +3385,7 @@ impl Game {
                 .world
                 .resource::<crate::resources::ExploredChunks>()
                 .clone(),
+            seen_tiles: self.world.resource::<crate::resources::SeenTiles>().clone(),
             trace: self.trace(),
             raid_pressure: *self.world.resource::<crate::resources::RaidPressure>(),
             siege_pressure: *self.world.resource::<crate::resources::SiegePressure>(),

@@ -2214,6 +2214,40 @@ pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct ExploredChunks(pub BTreeSet<(i32, i32)>);
 
+/// One surface chunk's worth of remembered tiles: a bit per tile,
+/// `CHUNK_SIZE` squared of them, row-major in chunk-local coordinates.
+pub type ChunkSeen = [u64; 16];
+
+/// Every surface tile the player has had inside their Perception radius, for
+/// the tile map's fog. Keyed by chunk so the save stays small and, with
+/// sorted keys, deterministic.
+///
+/// **Per tile, not per chunk** (`ExploredChunks` is the chunk-scale
+/// overview's own fog): seeding it from chunks would mark whole blocks the
+/// player never saw. Written only by `Game::mark_seen_tiles`, on the surface;
+/// read through `Game::sight_at`, never directly.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct SeenTiles(pub BTreeMap<(i32, i32), ChunkSeen>);
+
+impl SeenTiles {
+    fn slot((x, y): (i32, i32)) -> ((i32, i32), usize, u64) {
+        use crate::world::CHUNK_SIZE;
+        let chunk = (x.div_euclid(CHUNK_SIZE), y.div_euclid(CHUNK_SIZE));
+        let bit = (y.rem_euclid(CHUNK_SIZE) * CHUNK_SIZE + x.rem_euclid(CHUNK_SIZE)) as usize;
+        (chunk, bit / 64, 1u64 << (bit % 64))
+    }
+
+    pub fn mark(&mut self, tile: (i32, i32)) {
+        let (chunk, word, mask) = Self::slot(tile);
+        self.0.entry(chunk).or_default()[word] |= mask;
+    }
+
+    pub fn contains(&self, tile: (i32, i32)) -> bool {
+        let (chunk, word, mask) = Self::slot(tile);
+        self.0.get(&chunk).is_some_and(|c| c[word] & mask != 0)
+    }
+}
+
 /// Every settlement the party has reached, keyed by its region.
 ///
 /// **Keyed by `SettlementKey`, not by `Entity`** — `party_slot`'s reason,

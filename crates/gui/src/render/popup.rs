@@ -767,7 +767,7 @@ fn suffix_x(label: &str, row_x: f32, painter: &Painter, m: &Metrics) -> f32 {
 /// keeping `suffix_x` honest on an icon row, and a test can say so where a
 /// comment can only claim it. A row with no icon reserves nothing, so the
 /// screens that never had an icon are drawn exactly where they always were.
-fn row_prefix(selected: bool) -> &'static str {
+pub(super) const fn row_prefix(selected: bool) -> &'static str {
     if selected { "> " } else { "  " }
 }
 

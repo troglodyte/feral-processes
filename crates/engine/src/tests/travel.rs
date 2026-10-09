@@ -225,7 +225,7 @@ fn a_hostile_goal_is_routed_to_and_last_is_answered_beside_it() {
     let mut game = Game::new(9007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     open_ground(&mut game, -3..=13, -6..=6);
     stand_player_at(&mut game, 0, 0);
-    let wild = spawn_wild_without_routine(&mut game, "scrapper", 6, 0);
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 4, 0);
 
     let (_visited, terminal) = walk_route(&mut game, TravelGoal::Creature(wild), false);
 
@@ -264,6 +264,28 @@ fn gone_after_the_creature_goal_is_despawned() {
     let mut game = Game::new(9009, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_wild_without_routine(&mut game, "scrapper", 8, 8);
     game.world.despawn(wild);
+    assert_eq!(
+        game.travel_step(TravelGoal::Creature(wild)),
+        TravelStep::Gone
+    );
+}
+
+/// A `Creature` goal that walks out of the player's sight answers `Gone`:
+/// steering toward its live position would leak where a hidden hostile is.
+#[test]
+fn gone_once_the_creature_goal_leaves_sight() {
+    let mut game = Game::new(9010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = *game
+        .world
+        .get::<Position>(game.player_entity())
+        .expect("the player has a position");
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", player.x + 2, player.y);
+    assert_ne!(
+        game.travel_step(TravelGoal::Creature(wild)),
+        TravelStep::Gone
+    );
+    let far = game.perception_radius().ceil() as i32 + 10;
+    game.world.get_mut::<Position>(wild).unwrap().x = player.x + far;
     assert_eq!(
         game.travel_step(TravelGoal::Creature(wild)),
         TravelStep::Gone

@@ -2057,6 +2057,7 @@ mod tests {
             is_companion: false,
             is_hostile: false,
             is_structure: true,
+            is_landmark: false,
             is_anchor: false,
             is_home: false,
             tier: Some(tier),

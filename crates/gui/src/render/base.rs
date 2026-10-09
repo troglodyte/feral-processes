@@ -9,6 +9,7 @@ use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
 use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
+use feral_processes_engine::views::{Sight, shown_at};
 
 /// A pending build site's slab and its edge.
 ///
@@ -701,6 +702,10 @@ fn draw_surface_map(
     // count — `view_finishes_at`'s own precedent, read once here instead.
     let station_floor = game.view_station_floor_at(center, hw, hh);
     let pinned = game.view_pinned_at(center, hw, hh);
+    // Same indexing again. Everywhere off the surface this is all `InSight`,
+    // so nothing below carries a locale check of its own.
+    let sights = game.sight_view_at(center, hw, hh);
+    let radius = game.perception_radius();
     let entities: Vec<_> = game
         .view_entities_at(center, hw, hh)
         .into_iter()
@@ -724,6 +729,17 @@ fn draw_surface_map(
         // because `Game::find_target_in_direction` filters its ray with the
         // same rule so that `x` can only name what this draws.
         .filter(|e| drawn_on_surface_map(e.is_tamed, e.position_is_honest))
+        // The fog: what is out of sight is not drawn, and so is not counted
+        // by the Threat readout or chased by a travel goal either — both
+        // read this Vec.
+        .filter(|e| {
+            let sight = sights
+                .get((e.pos.1 - center.1 + hh) as usize)
+                .and_then(|row| row.get((e.pos.0 - center.0 + hw) as usize))
+                .copied()
+                .unwrap_or(Sight::Unseen);
+            shown_at(sight, e)
+        })
         .collect();
     // Base space only: `marked_cells` answers in base-space coordinates, and
     // asking it on the surface would draw a plan over the zone map at
@@ -842,6 +858,11 @@ fn draw_surface_map(
                 || px + tile_px <= pane.x
                 || py + tile_px <= pane.y
             {
+                continue;
+            }
+            let sight = sights[ry][rx];
+            if sight == Sight::Unseen {
+                painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, FOG_UNSEEN);
                 continue;
             }
             let mut machine_status = None;
@@ -995,8 +1016,14 @@ fn draw_surface_map(
             // path below takes `vig` alone, so what stands on the ground
             // stays lit under a cloud. And `vignette` goes on meaning the
             // Power reserve and nothing else.
-            let cloud = if outdoors { fx.cloud_shade(world) } else { 1.0 };
-            let shade = if occupied {
+            let remembered = sight == Sight::Remembered;
+            // Memory is still: the world out there is not moving for you.
+            let cloud = if outdoors && !remembered {
+                fx.cloud_shade(world)
+            } else {
+                1.0
+            };
+            let shade = if occupied || remembered {
                 1.0
             } else {
                 tile_shade(world) * cloud
@@ -1007,7 +1034,12 @@ fn draw_surface_map(
                 pane.w / 2.0,
                 pane.h / 2.0,
                 floor,
-            );
+            ) * fog_dim(sight, world, status.position, radius, |dx, dy| {
+                sights
+                    .get((ry as i32 + dy) as usize)
+                    .and_then(|row| row.get((rx as i32 + dx) as usize))
+                    .is_some_and(|&s| s != Sight::InSight)
+            });
             let dim = shade * vig;
             let mut bg = at_level(bg_source, GROUND_LEVEL * dim);
             if critical {
@@ -1928,6 +1960,7 @@ mod tests {
             is_companion: false,
             is_hostile: false,
             is_structure: false,
+            is_landmark: false,
             is_anchor: false,
             is_home: false,
             tier: None,
@@ -3038,18 +3071,9 @@ mod tests {
     /// stale cell.
     #[test]
     fn a_targeted_hostile_is_outlined_where_it_is_drawn() {
-        let (mut game, hostile) = (0..50)
-            .find_map(|seed| {
-                let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
-                    .expect("the shipped assets must load");
-                let hostile = game.view_entities(12, 12).into_iter().find(|e| {
-                    e.is_hostile
-                        && !e.is_structure
-                        && drawn_on_surface_map(e.is_tamed, e.position_is_honest)
-                })?;
-                Some((game, hostile))
-            })
-            .expect("some seed under 50 puts a hostile in view");
+        let game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let (mut game, hostile) = a_wild_creature(game);
 
         let chased = destination_outlines(&mut game, Some(TravelGoal::Creature(hostile.entity)));
         let clicked = destination_outlines(
@@ -3552,7 +3576,8 @@ mod tests {
         );
     }
 
-    /// A wild creature the map can see, found through the public
+    /// A wild creature the map can see (moved into the player's sight, see
+    /// `near_the_player`), found through the public
     /// `Game::view_entities` rather than any of the spawn helpers a gui test
     /// cannot reach (`spawn_wild_creature_scaled`, `adopt_program` and
     /// friends are all `pub(crate)`). Seed 7's opening population always
@@ -3570,22 +3595,41 @@ mod tests {
     /// wild creature is always `Hostile` on the surface, which neither of
     /// those two is, and being hostile implies a `Creature` component,
     /// which is what guarantees the `sprite` below is never `None`.
-    fn a_wild_creature(game: &mut Game) -> EntityView {
-        game.view_entities(64, 64)
+    fn a_wild_creature(game: Game) -> (Game, EntityView) {
+        let mut game = game;
+        let far = game
+            .view_entities(64, 64)
             .into_iter()
             .find(|ev| ev.is_hostile)
-            .expect("seed 7's opening population must hold at least one wild creature")
+            .expect("seed 7's opening population must hold at least one wild creature");
+        near_the_player(game, far)
     }
 
     /// `a_wild_creature`, narrowed to one the Alt marker would flag — seed
     /// 7's opening population always carries at least one species whose
     /// level-1 kit is undiscovered, which is the common case a fresh run
     /// starts in.
-    fn an_unseen_wild_creature(game: &mut Game) -> EntityView {
-        game.view_entities(64, 64)
+    fn an_unseen_wild_creature(game: Game) -> (Game, EntityView) {
+        let mut game = game;
+        let far = game
+            .view_entities(64, 64)
             .into_iter()
             .find(|ev| ev.unseen_routine)
-            .expect("seed 7's opening population must hold an unseen carrier")
+            .expect("seed 7's opening population must hold an unseen carrier");
+        near_the_player(game, far)
+    }
+
+    /// The creature moved inside the player's sight and read back from the
+    /// reloaded game, because the fog hides anything beyond it and a test
+    /// has no business bypassing the fog.
+    fn near_the_player(game: Game, far: EntityView) -> (Game, EntityView) {
+        let (mut game, at) = super::test_support::with_creature_within_sight(game, far.pos);
+        let near = game
+            .view_entities(8, 8)
+            .into_iter()
+            .find(|ev| ev.pos == at && ev.is_hostile)
+            .expect("the moved creature stands where it was put");
+        (game, near)
     }
 
     /// `drawn_map`, centred on an arbitrary point instead of the player's
@@ -3638,9 +3682,9 @@ mod tests {
     /// rather than a hand-built fixture.
     #[test]
     fn a_creature_with_art_draws_its_sprite_and_not_its_glyph() {
-        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+        let game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
-        let creature = a_wild_creature(&mut game);
+        let (mut game, creature) = a_wild_creature(game);
         let name = creature
             .sprite
             .clone()
@@ -3661,9 +3705,9 @@ mod tests {
     /// its glyph, exactly as before this task.
     #[test]
     fn a_creature_with_no_art_draws_its_glyph() {
-        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+        let game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
-        let creature = a_wild_creature(&mut game);
+        let (mut game, creature) = a_wild_creature(game);
 
         let (images, glyphs) =
             drawn_map_centered_on(&mut game, SpriteTable::default(), creature.pos);
@@ -3699,19 +3743,43 @@ mod tests {
     /// come from the settlement.
     #[test]
     fn a_settlement_draws_its_glyph_on_the_surface_map() {
+        let (mut game, target) = game_with_settlement_at((1, 0), false);
+
+        // Not asserted against `SpriteTable::default()`: an empty table
+        // paints no texture no matter what the fixture spawns, which is
+        // what made this line read as coverage while proving nothing —
+        // `a_creature_with_no_art_draws_its_glyph` above already owns that
+        // fact.
+        let (_images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+
+        assert!(
+            glyphs.iter().any(|g| *g == "M"),
+            "a Mainframe settlement's glyph never reached the surface map: {glyphs:?}"
+        );
+    }
+
+    /// The fixture of the test above, `offset` from the player. `seen` writes
+    /// the tile into the saved `SeenTiles`, the way walking past it would
+    /// have, so the settlement can be remembered without being in sight.
+    fn game_with_settlement_at(offset: (i32, i32), seen: bool) -> (Game, (i32, i32)) {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         let path = std::env::temp_dir().join(format!(
-            "fp_gui_settlement_glyph_{}.sav",
-            std::process::id()
+            "fp_gui_settlement_glyph_{}_{}_{}.sav",
+            std::process::id(),
+            offset.0,
+            seen
         ));
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         let (px, py) = data.player.position;
-        let target = (px + 1, py);
+        let target = (px + offset.0, py + offset.1);
         data.creatures.retain(|c| c.position != target);
         data.nests.retain(|n| n.position != target);
         data.link_sites.retain(|&site| site != target);
+        if seen {
+            data.seen_tiles.mark(target);
+        }
         let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
         data.settlements.0.insert(
             key,
@@ -3729,19 +3797,69 @@ mod tests {
             },
         );
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
-        let mut game = Game::load(&path, &test_assets()).unwrap();
+        let game = Game::load(&path, &test_assets()).unwrap();
         let _ = std::fs::remove_file(&path);
+        (game, target)
+    }
 
-        // Not asserted against `SpriteTable::default()`: an empty table
-        // paints no texture no matter what the fixture spawns, which is
-        // what made this line read as coverage while proving nothing —
-        // `a_creature_with_no_art_draws_its_glyph` above already owns that
-        // fact.
-        let (_images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+    /// Out of sight and never seen, a settlement is black ground.
+    #[test]
+    fn an_unseen_settlement_is_not_drawn() {
+        let (mut game, target) = game_with_settlement_at((9, 0), false);
 
+        let (_, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+
+        assert!(!glyphs.iter().any(|g| *g == "M"), "{glyphs:?}");
+    }
+
+    /// Out of sight but seen once, a settlement stays on the map: a landmark.
+    #[test]
+    fn a_remembered_settlement_is_still_drawn() {
+        let (mut game, target) = game_with_settlement_at((9, 0), true);
+
+        let (_, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+
+        assert!(glyphs.iter().any(|g| *g == "M"), "{glyphs:?}");
+    }
+
+    /// A hostile past the circle draws no glyph, and so is not handed back to
+    /// the Threat count and the chase lookup that read the drawn Vec.
+    #[test]
+    fn a_hostile_outside_sight_is_neither_drawn_nor_counted() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let at = game.player_status().position;
+        let far = game
+            .view_entities(64, 64)
+            .into_iter()
+            .find(|e| e.is_hostile && (e.pos.0 - at.0).abs().max((e.pos.1 - at.1).abs()) > 8)
+            .expect("seed 7 has a wild creature past the circle");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let mut drawn = Vec::new();
+        let (_, shapes) = with_sprites(SpriteTable::default(), |p| {
+            let status = game.player_status();
+            drawn = draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                None,
+                far.pos,
+                false,
+            );
+        });
+
+        assert!(drawn.iter().all(|e| e.entity != far.entity));
         assert!(
-            glyphs.iter().any(|g| *g == "M"),
-            "a Mainframe settlement's glyph never reached the surface map: {glyphs:?}"
+            !painted_text(&shapes)
+                .iter()
+                .any(|g| *g == far.glyph.to_string()),
+            "the hidden creature's glyph was painted"
         );
     }
 
@@ -5780,9 +5898,9 @@ mod tests {
     /// draws no marker without it.
     #[test]
     fn the_map_draws_the_alt_marker_only_while_reveal_is_held() {
-        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+        let game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
-        let creature = an_unseen_wild_creature(&mut game);
+        let (mut game, creature) = an_unseen_wild_creature(game);
 
         let (_, revealed) =
             drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), creature.pos, true);

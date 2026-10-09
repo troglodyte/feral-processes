@@ -159,6 +159,11 @@ impl Game {
                 if self.stands_in_base_space(entity) != in_base {
                     return None;
                 }
+                // A hostile that walked out of sight is gone to the player,
+                // or steering toward its live tile would give it away.
+                if !self.is_shown(entity, false) {
+                    return None;
+                }
                 self.world.get::<Position>(entity).map(|p| (p.x, p.y))
             }
         }

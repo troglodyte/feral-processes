@@ -6,6 +6,6 @@
     meaning: "How well this program reads what it is handed and works out what it means. A high-Analysis program takes a structure apart and sees the join; a low one runs what it is given without asking why it was built that way.",
     base: 10,
     spread: 3,
-    effects: [(stat: Atk, per_point: 1.0), (stat: Decompiler, per_point: 1.0), (stat: Extraction, per_point: 0.005)],
-    does: "Each point above the baseline adds 1 attack and 1 decompiler skill, and a little to how often you mine a hard vein.",
+    effects: [(stat: Atk, per_point: 1.0), (stat: Decompiler, per_point: 1.0), (stat: Extraction, per_point: 0.005), (stat: Perception, per_point: 0.5)],
+    does: "Each point above the baseline adds 1 attack and 1 decompiler skill, a little to how often you mine a hard vein, and half a tile to how far you see on the surface.",
 )

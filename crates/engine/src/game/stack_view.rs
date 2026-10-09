@@ -46,7 +46,7 @@ pub const STACK_VIEW_HALF_WIDTH: usize = 1;
 /// The map only. The first-person view, the encounter rolls and everything
 /// the party can *do* are untouched, so a session with this on is still the
 /// real game with the lights on.
-fn dev_reveal() -> bool {
+pub(crate) fn dev_reveal() -> bool {
     static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
         std::env::var_os("FERAL_DEV_REVEAL").is_some_and(|v| !v.is_empty() && v != "0")
     });

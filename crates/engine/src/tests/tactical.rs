@@ -8344,3 +8344,27 @@ mod decompile_reach {
         );
     }
 }
+
+/// An ordinary fight's ground is the biome its board was generated from —
+/// what the renderer picks a ground texture by.
+#[test]
+fn a_field_fights_view_carries_its_spec_biome_as_ground() {
+    use crate::tactical::map::{BattleCell, BattleSpec, Board};
+    use crate::world::Biome;
+
+    let mut game = game();
+    let mut board = Board::solid(4);
+    board.set(0, 0, BattleCell::Open);
+    let spec = BattleSpec {
+        world_seed: 1,
+        site: (0, 0),
+        tick: 0,
+        zone: 1,
+        biome: Biome::Backplane,
+        bodies: 1,
+    };
+    game.world
+        .insert_resource(TacticalBattle::open(spec, board));
+
+    assert_eq!(game.tactical_view().unwrap().ground, Biome::Backplane);
+}

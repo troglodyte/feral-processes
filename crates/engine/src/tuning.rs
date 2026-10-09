@@ -3544,6 +3544,46 @@ pub const MAX_PROFILE_PERK_POINTS: u32 = 5;
 pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 
 // ---------------------------------------------------------------------------
+// Run score
+// ---------------------------------------------------------------------------
+
+/// Points per level of every foe defeated. A kill is worth the foe's level,
+/// so a deep or strong fight outscores farming the surface.
+pub const SCORE_PER_FOE_LEVEL: u64 = 10;
+/// Points per boss defeated, on top of the boss's own level.
+pub const SCORE_PER_BOSS: u64 = 500;
+/// Points per Stack depth reached (1..frames within one Stack).
+pub const SCORE_PER_DEPTH: u64 = 100;
+/// Points per Phase Key held.
+pub const SCORE_PER_KEY: u64 = 1000;
+/// Points for escaping the Basin.
+pub const SCORE_ESCAPE: u64 = 5000;
+/// Points per structure standing. Small on purpose: progression is earned by
+/// fighting, and `score::tests` pins that a fighter outscores a builder.
+pub const SCORE_PER_STRUCTURE: u64 = 20;
+/// Points per program ever decompiled this run.
+pub const SCORE_PER_PROGRAM: u64 = 50;
+/// Points per achievement earned this run.
+pub const SCORE_PER_ACHIEVEMENT: u64 = 100;
+/// Multiplier under `DifficultyMode::Permadeath`.
+pub const SCORE_PERMADEATH_MULT: f32 = 1.5;
+/// Multiplier added for each `EnemyStrength` band above `Standard`.
+pub const SCORE_PER_BAND: f32 = 0.25;
+
+/// Lifetime score per bonus stat point at character creation.
+pub const SCORE_PER_BONUS_STAT_POINT: u64 = 2000;
+/// Most bonus stat points the lifetime score may buy.
+pub const BONUS_STAT_POINT_CAP: u32 = 5;
+/// Lifetime score per bonus perk point at character creation.
+pub const SCORE_PER_BONUS_PERK_POINT: u64 = 5000;
+/// Most bonus perk points the lifetime score may buy.
+pub const BONUS_PERK_POINT_CAP: u32 = 3;
+/// Lifetime score per bonus creation credit.
+pub const SCORE_PER_BONUS_CREDIT: u64 = 200;
+/// Most bonus creation credits the lifetime score may buy.
+pub const BONUS_CREDIT_CAP: u32 = 20;
+
+// ---------------------------------------------------------------------------
 // Nemesis
 // ---------------------------------------------------------------------------
 

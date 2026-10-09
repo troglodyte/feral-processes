@@ -43,6 +43,8 @@ impl App {
         match game.escape_basin() {
             Ok(()) => {
                 self.ending_screens = game.ending_screens();
+                self.bank_run_score();
+                self.seal_run();
                 self.ending_page = 0;
                 self.mode = Mode::Ending;
             }
@@ -73,8 +75,15 @@ impl App {
     fn close_ending(&mut self) {
         self.ending_screens.clear();
         self.ending_page = 0;
-        self.mode = Mode::Playing;
-        // The escape's own achievement is waiting in the queue.
-        self.show_next_notification();
+        self.mode = Mode::Escaped;
+    }
+
+    /// Enter or Esc leaves the score card for the map.
+    pub(crate) fn handle_escaped_key(&mut self, key: GameKey) {
+        if matches!(key, GameKey::Enter | GameKey::Esc) {
+            self.mode = Mode::Playing;
+            // The escape's own achievement is waiting in the queue.
+            self.show_next_notification();
+        }
     }
 }

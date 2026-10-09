@@ -870,3 +870,92 @@ fn an_overspent_choice_moves_no_attribute() {
     };
     assert_eq!(attrs(&game), attrs(&base));
 }
+
+/// A profile carrying `lifetime` score, installed on a fresh run.
+fn game_with_lifetime_score(seed: u32, lifetime: u64, choice: &CharacterChoice) -> Game {
+    let mut game =
+        Game::new_with(seed, DifficultyMode::Forgiving, &test_assets_dir(), choice).unwrap();
+    game.install_profile(crate::achievements::Profile {
+        lifetime_score: lifetime,
+        ..Default::default()
+    });
+    game.grant_profile_rewards();
+    game
+}
+
+fn unspent_stat_points(game: &Game) -> u32 {
+    game.world
+        .get::<components::StatPoints>(game.player_entity())
+        .unwrap()
+        .0
+}
+
+/// The lifetime score pays unspent `StatPoints` after creation, by the same
+/// ladder the Points step quotes.
+#[test]
+fn lifetime_score_pays_bonus_stat_points_after_creation() {
+    let lifetime = tuning::SCORE_PER_BONUS_STAT_POINT * 2;
+    let game = game_with_lifetime_score(90_201, lifetime, &CharacterChoice::default());
+    assert_eq!(
+        unspent_stat_points(&game),
+        score::creation_bonus(lifetime).stat_points
+    );
+    assert!(unspent_stat_points(&game) > 0);
+}
+
+#[test]
+fn no_lifetime_score_pays_no_bonus_stat_points() {
+    let game = game_with_lifetime_score(90_202, 0, &CharacterChoice::default());
+    assert_eq!(unspent_stat_points(&game), 0);
+}
+
+/// The bonus rides the choice, so a creation that does not carry it (the
+/// arena's) gets none.
+#[test]
+fn bonus_credits_raise_the_basket_budget_only_when_the_choice_carries_them() {
+    let bonus = 7;
+    let items = vec![(ids::POWER_CELL.into(), 4)];
+    let with = Game::new_with(
+        90_203,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &CharacterChoice {
+            items: items.clone(),
+            bonus_credits: bonus,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        carried(&with, ids::CREDITS),
+        tuning::CREATION_CREDITS + bonus - 4
+    );
+    let without = game_with_items(90_204, items);
+    assert_eq!(
+        carried(&without, ids::CREDITS),
+        tuning::CREATION_CREDITS - 4
+    );
+}
+
+/// A basket that fits only because of the bonus is accepted; the same
+/// basket without it falls back to the class kit.
+#[test]
+fn bonus_credits_make_a_larger_basket_affordable() {
+    let items = vec![(ids::POWER_CELL.into(), tuning::CREATION_CREDITS + 1)];
+    let game = Game::new_with(
+        90_205,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &CharacterChoice {
+            items,
+            bonus_credits: 1,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        carried(&game, ids::POWER_CELL),
+        tuning::CREATION_CREDITS + 1
+    );
+    assert_eq!(carried(&game, ids::CREDITS), 0);
+}

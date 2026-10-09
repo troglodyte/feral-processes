@@ -47,6 +47,7 @@ pub mod rooms;
 pub mod routes;
 pub mod routine_tree;
 pub mod save;
+pub mod score;
 pub mod settlements;
 pub mod situations;
 pub mod sociability;
@@ -114,7 +115,9 @@ pub use game::caravan::CaravanReach;
 /// crate.
 pub use game::catalog::program_tier_required;
 pub use game::contracts::{BrokerReach, ContractRefusal};
-pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
+pub use game::creation::{
+    CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE, creation_credits,
+};
 pub use game::environment::TerrainRow;
 pub use game::extraction::ReinitBlock;
 pub use game::kit::EmulationOption;

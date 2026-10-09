@@ -1823,3 +1823,109 @@ fn taking_a_preset_leaves_the_profiles_drawing_alone() {
         "a character who wears a preset has no icon of their own in the save"
     );
 }
+
+fn profile_with_lifetime(lifetime: u64) -> Profile {
+    Profile {
+        lifetime_score: lifetime,
+        ..Profile::default()
+    }
+}
+
+/// The lifetime score raises the perk allowance and the Credit allowance the
+/// wizard opens on, by exactly `creation_bonus`'s amounts. A profile without
+/// a score gets nothing. Perks ride `CharacterChoice::perk_points` because
+/// the profile perk path is paid after creation, not into the picker.
+#[test]
+fn a_lifetime_score_raises_the_perk_and_credit_allowances() {
+    use feral_processes_engine::score::creation_bonus;
+    let lifetime = 1_000_000;
+    let bonus = creation_bonus(lifetime);
+    assert!(bonus.perk_points > 0 && bonus.credits > 0);
+
+    let mut app =
+        wizard_app_with_profile("score_bonus_allowance", &profile_with_lifetime(lifetime));
+    press(&mut app, ch('n'));
+    assert_eq!(
+        app.creation_choice().perk_points,
+        CREATION_PERK_POINTS + bonus.perk_points
+    );
+    assert_eq!(app.creation_choice().bonus_credits, bonus.credits);
+    assert_eq!(
+        app.creation_credits_left(),
+        CREATION_CREDITS + bonus.credits
+    );
+    assert_eq!(
+        app.creation_perk_points_left(),
+        CREATION_PERK_POINTS + bonus.perk_points
+    );
+
+    let mut plain = wizard_app_with_profile("score_bonus_none", &Profile::default());
+    press(&mut plain, ch('n'));
+    assert_eq!(plain.creation_choice().perk_points, CREATION_PERK_POINTS);
+    assert_eq!(plain.creation_choice().bonus_credits, 0);
+    assert_eq!(plain.creation_credits_left(), CREATION_CREDITS);
+}
+
+/// The Profile step names the lifetime score once there is one, and the
+/// Points step's note reads the same bonus the engine pays.
+#[test]
+fn the_profile_step_shows_the_lifetime_score_and_the_stat_bonus_is_exposed() {
+    let lifetime = 1_000_000;
+    let mut app = wizard_app_with_profile("score_summary", &profile_with_lifetime(lifetime));
+    press(&mut app, ch('n'));
+    assert!(
+        app.profile_preview_rows()
+            .iter()
+            .any(|r| r.contains(&lifetime.to_string())),
+        "{:?}",
+        app.profile_preview_rows()
+    );
+    assert_eq!(
+        app.creation_bonus_stat_points(),
+        feral_processes_engine::score::creation_bonus(lifetime).stat_points
+    );
+    assert!(app.creation_bonus_stat_points() > 0);
+}
+
+/// A rolled basket spends against the raised allowance too.
+#[test]
+fn a_lifetime_score_raises_the_rolled_basket_budget() {
+    let lifetime = 1_000_000;
+    let bonus = feral_processes_engine::score::creation_bonus(lifetime).credits;
+    let mut app = wizard_app_with_profile("score_bonus_roll", &profile_with_lifetime(lifetime));
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // the profile summary
+    press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // the class, onto the Kit step
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+    press(&mut app, ch('r'));
+    let budget = CREATION_CREDITS + app.creation_choice().bonus_credits;
+    let spend = budget - app.creation_credits_left();
+    assert!(
+        spend > CREATION_CREDITS,
+        "a roll against {} Credits spent only {spend}",
+        CREATION_CREDITS + bonus
+    );
+    assert_eq!(budget, CREATION_CREDITS + bonus);
+}
+
+/// The stat bonus is paid as unspent points after creation, not into the
+/// Points step's budget.
+#[test]
+fn a_lifetime_score_pays_unspent_stat_points_after_creation() {
+    let lifetime = 1_000_000;
+    let want = feral_processes_engine::score::creation_bonus(lifetime).stat_points;
+    assert!(want > 0);
+    let mut app = wizard_app_with_profile("score_bonus_stats", &profile_with_lifetime(lifetime));
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // the profile summary
+    press(&mut app, ch('1'));
+    walk_to_the_summary(&mut app);
+    press(&mut app, GameKey::Enter); // the summary
+    press(&mut app, GameKey::Enter); // no name, which starts the run
+    settle(&mut app);
+    let game = app.game.as_ref().expect("the run did not start");
+    assert_eq!(game.player_status().stat_points, want);
+}

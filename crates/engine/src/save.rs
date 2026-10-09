@@ -1657,6 +1657,11 @@ pub struct SaveData {
     /// answer should not be charged twice.
     #[serde(default)]
     pub free_builds: crate::resources::FreeBuilds,
+    /// What the run did that the world no longer shows — see
+    /// `resources::RunTally`. A save written before the score existed loads
+    /// at zero, with no backfill.
+    #[serde(default)]
+    pub run_tally: crate::resources::RunTally,
     /// The anchor's tile on the zone surface — see `components::BaseAnchor`.
     /// Persisted rather than derived from `spawn_point` on load: the two
     /// agree today (the anchor is auto-placed at each zone's spawn point and
@@ -2366,6 +2371,7 @@ mod tests {
             mining: false,
             enemy_strength: crate::resources::EnemyStrength::default(),
             free_builds: crate::resources::FreeBuilds::default(),
+            run_tally: crate::resources::RunTally::default(),
             anchor: None,
             zone: 1,
             spawn_point: (0, 0),
@@ -2602,6 +2608,22 @@ mod tests {
             loaded.enemy_strength,
             crate::resources::EnemyStrength::Standard
         );
+    }
+
+    #[test]
+    fn a_save_without_the_run_tally_field_loads_at_zero() {
+        let mut data = sample_data();
+        data.run_tally.foe_levels = 77;
+        let text = to_ron(&data).unwrap();
+        assert!(
+            text.contains("run_tally:"),
+            "the fixture must actually write the field to be a real test"
+        );
+        let start = text.find("run_tally:").unwrap();
+        let end = start + text[start..].find("),").unwrap() + 2;
+        let older = format!("{}{}", &text[..start], &text[end..]);
+        let loaded = from_ron(&older).expect("an absent field must still parse");
+        assert_eq!(loaded.run_tally, crate::resources::RunTally::default());
     }
 
     #[test]

@@ -636,6 +636,22 @@ impl App {
         }
     }
 
+    /// Banks the run's score into the profile file: the engine computes the
+    /// delta, this copy adds it and writes. Written here and now rather than
+    /// through `PendingProfileWrites`, because `after_tick` is not reached
+    /// on the game-over path.
+    pub(crate) fn bank_run_score(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let delta = game.bank_run_score();
+        if delta == 0 {
+            return;
+        }
+        self.profile.lifetime_score += delta;
+        if let Err(e) = self.profile.save(&self.profile_path) {
+            self.status_line = Some(format!("Could not write profile: {e}"));
+        }
+    }
+
     /// Writes `profile.ron` if this tick earned anything.
     ///
     /// Immediately, not at run end: a permadeath run that ends badly must not
@@ -662,10 +678,13 @@ impl App {
     /// arena return, for that call's own reason: an arena session touches no
     /// disk, and a fight lost against a Permadeath save is not the run.
     ///
+    /// Also the escape's save: it banks the card, and a reload of the
+    /// pre-escape file would otherwise bank it again.
+    ///
     /// A failed write is surfaced rather than swallowed — it is the one
     /// failure that hands the run back — and it is `flush_profile_writes`'
     /// wording because it is the same kind of news.
-    fn seal_run(&mut self) {
+    pub(crate) fn seal_run(&mut self) {
         let Some(path) = self.current_save_path.clone() else {
             return;
         };
@@ -702,6 +721,8 @@ impl App {
                 let _ = game.write_history(&self.history_path);
             }
             self.history_written = true;
+            // Before `seal_run`, so the sealed save carries `banked`.
+            self.bank_run_score();
             self.seal_run();
         }
         // The other exit from both results screens: a run that ends on the

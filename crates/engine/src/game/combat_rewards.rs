@@ -793,6 +793,16 @@ impl Game {
         -(past_zero / stats.max_hp as f32)
     }
 
+    /// A decompile landed: the contract deed and the run score's tally. One
+    /// helper for both decompile sites so they cannot drift about what
+    /// counts as compiled. Reinitialising and breeding are not decompiles.
+    fn note_compiled(&mut self) {
+        self.note_deed(crate::contracts::Deed::Tamed);
+        self.world
+            .resource_mut::<crate::resources::RunTally>()
+            .compiled += 1;
+    }
+
     /// Takes the overkill fraction rather than reading `overkill_term(wild)`
     /// itself, carried down to the one place inside this that actually
     /// reads it (`leave_downed_program`'s condition roll) —
@@ -843,11 +853,18 @@ impl Game {
             .resource_mut::<crate::resources::RunFeats>()
             .kills
             .push(species_id.clone());
+        let score_level = u64::from(self.ability_user_level(wild));
+        self.world
+            .resource_mut::<crate::resources::RunTally>()
+            .foe_levels += score_level;
 
         // Through the one door rather than off the species: a rolled boss is
         // an ordinary species carrying `components::Boss`, and would have paid
         // nothing here.
         if self.is_boss_creature(wild) {
+            self.world
+                .resource_mut::<crate::resources::RunTally>()
+                .bosses += 1;
             // Third consumer of the same "it actually died" guarantee. The
             // record is all that happens here: what it earned is
             // `achievement_system`'s to decide, in this same tick.
@@ -1325,7 +1342,7 @@ impl Game {
         if self.roll_decompile(player, front) != Some(true) {
             return false;
         }
-        self.note_deed(crate::contracts::Deed::Tamed);
+        self.note_compiled();
 
         // Taken while the program is still hostile: `kill_xp` reads its
         // `Stats`, and everything below this line is the act of turning it
@@ -1491,7 +1508,7 @@ impl Game {
         if self.roll_decompile(player, squad) != Some(true) {
             return false;
         }
-        self.note_deed(crate::contracts::Deed::Tamed);
+        self.note_compiled();
 
         let formation = self.world.get::<Squad>(squad).map(|s| s.formation);
         let Some(lead) = self

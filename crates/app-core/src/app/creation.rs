@@ -45,7 +45,8 @@ use crate::*;
 use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::progression::DerivedBase;
-use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS};
+use feral_processes_engine::tuning::CREATION_STAT_POINTS;
+use feral_processes_engine::{creation_credits, score};
 
 /// The (glyph, sprite name) pairs the Icon step offers.
 ///
@@ -111,7 +112,7 @@ impl Roll {
     }
 }
 
-/// A random basket that spends **as much of `CREATION_CREDITS` as the
+/// A random basket that spends **as much of `budget` as the
 /// shelf allows**: one unit bought at a time from whichever rows are still
 /// affordable, so the loop can only halt once nothing affordable is left.
 /// The spend is a consequence of the loop rather than something checked
@@ -124,9 +125,10 @@ impl Roll {
 fn roll_kit_basket(
     roll: &mut Roll,
     shelf: &[feral_processes_engine::StartingItemRow],
+    budget: u32,
 ) -> Vec<(ItemId, u32)> {
     let mut basket: Vec<(ItemId, u32)> = Vec::new();
-    let mut left = CREATION_CREDITS;
+    let mut left = budget;
     loop {
         let affordable: Vec<usize> = (0..shelf.len())
             .filter(|i| shelf[*i].price > 0 && shelf[*i].price <= left)
@@ -155,6 +157,11 @@ impl App {
         // the choice, and `default()` is the classless, allowance-less
         // player every `Game::new` builds.
         self.creation_choice = CharacterChoice::at_creation();
+        // Perk Points ride the choice rather than the profile perk path:
+        // that one is paid after creation and never reaches the picker.
+        let bonus = score::creation_bonus(self.profile.lifetime_score);
+        self.creation_choice.perk_points += bonus.perk_points;
+        self.creation_choice.bonus_credits = bonus.credits;
         self.creation_difficulty = None;
         self.creation_icon_editor = None;
         self.creation_icon_seeded = false;
@@ -583,10 +590,15 @@ impl App {
         self.advance_creation();
     }
 
+    /// The Kit step's whole Credit allowance, run-score bonus included.
+    fn creation_budget(&self) -> u32 {
+        creation_credits(self.creation_choice.bonus_credits)
+    }
+
     /// Credits still unspent on the Kit step. Always the whole allowance
     /// outside it, which is the only step that spends any.
     pub fn creation_credits_left(&self) -> u32 {
-        CREATION_CREDITS.saturating_sub(self.kit_spend())
+        self.creation_budget().saturating_sub(self.kit_spend())
     }
 
     /// What the basket costs, priced off the shelf. An item the shelf does
@@ -691,7 +703,7 @@ impl App {
         };
         let before = self.kit_taken(&row.id);
         let others = self.kit_spend() - row.price.saturating_mul(before);
-        let max = CREATION_CREDITS.saturating_sub(others) / row.price.max(1);
+        let max = self.creation_budget().saturating_sub(others) / row.price.max(1);
         let after = f(before, max).min(max);
         if after == before && before == max {
             self.refuse(format!(
@@ -978,8 +990,11 @@ impl App {
     /// A hand-made basket **is** replaced, deliberately. On the one screen
     /// the key lives on, asking for a reroll is the decision.
     fn reroll_the_kit(&mut self) {
-        self.creation_choice.items =
-            roll_kit_basket(&mut Roll::new(), &self.creation_catalogue.shelf_rows());
+        self.creation_choice.items = roll_kit_basket(
+            &mut Roll::new(),
+            &self.creation_catalogue.shelf_rows(),
+            self.creation_budget(),
+        );
         self.status_line = None;
     }
 
@@ -1020,6 +1035,22 @@ impl App {
     /// `+1 Perk Point` twice, where what they need to know is that they
     /// open holding two.
     pub fn profile_preview_rows(&self) -> Vec<String> {
-        feral_processes_engine::achievements::profile_summary(&self.profile, &self.achievement_db)
+        let mut rows = feral_processes_engine::achievements::profile_summary(
+            &self.profile,
+            &self.achievement_db,
+        );
+        if self.profile.lifetime_score > 0 {
+            rows.push(format!(
+                "Lifetime score {} - the run score bonus is in the Points, Perks and Kit steps",
+                self.profile.lifetime_score
+            ));
+        }
+        rows
+    }
+
+    /// Stat points the lifetime score pays after creation, for the Points
+    /// step to announce. Zero until a banked run is worth one.
+    pub fn creation_bonus_stat_points(&self) -> u32 {
+        score::creation_bonus(self.profile.lifetime_score).stat_points
     }
 }

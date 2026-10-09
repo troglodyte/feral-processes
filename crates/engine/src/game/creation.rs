@@ -85,6 +85,17 @@ pub struct CharacterChoice {
     /// allowance need no equivalent because neither is granted as a
     /// spendable thing.
     pub perk_points: u32,
+    /// Credits the run score adds to the kit step's allowance, from
+    /// `score::creation_bonus`. Rides the choice for `perk_points`' reason:
+    /// `default()` is the arena's and `Game::new`'s, and gets none.
+    pub bonus_credits: u32,
+}
+
+/// The kit step's whole Credit allowance: the flat grant plus what the run
+/// score bought. The one answer for the engine's basket check and
+/// app-core's budget row.
+pub fn creation_credits(bonus: u32) -> u32 {
+    crate::tuning::CREATION_CREDITS + bonus
 }
 
 /// Today's player exactly — no class, the `@` glyph wearing its
@@ -106,6 +117,7 @@ impl Default for CharacterChoice {
             items: Vec::new(),
             perks: Vec::new(),
             perk_points: 0,
+            bonus_credits: 0,
         }
     }
 }
@@ -287,7 +299,7 @@ impl Game {
     /// branch — crediting the fallback would hand today's kitted player an
     /// allowance they never chose.
     fn apply_creation_kit(&mut self, choice: &CharacterChoice) {
-        let Some(spent) = self.creation_basket_cost(&choice.items) else {
+        let Some(spent) = self.creation_basket_cost(&choice.items, choice.bonus_credits) else {
             crate::classes::apply_kit(self, choice.class);
             return;
         };
@@ -298,7 +310,7 @@ impl Game {
             inventory.add(item.clone(), *qty);
         }
         if let Some(credits) = credits {
-            inventory.add(credits, crate::tuning::CREATION_CREDITS - spent);
+            inventory.add(credits, creation_credits(choice.bonus_credits) - spent);
         }
     }
 
@@ -306,7 +318,7 @@ impl Game {
     /// it is not a basket the kit step could have produced — an item the
     /// shelf does not offer, or a total over the allowance. `None` for an
     /// empty basket too, which is what routes it to the class kit.
-    fn creation_basket_cost(&self, items: &[(ItemId, u32)]) -> Option<u32> {
+    fn creation_basket_cost(&self, items: &[(ItemId, u32)], bonus: u32) -> Option<u32> {
         if items.is_empty() {
             return None;
         }
@@ -315,7 +327,7 @@ impl Game {
             let row = shelf.iter().find(|r| &r.id == item)?;
             sum.checked_add(row.price.checked_mul(*qty)?)
         })?;
-        (total <= crate::tuning::CREATION_CREDITS).then_some(total)
+        (total <= creation_credits(bonus)).then_some(total)
     }
 }
 

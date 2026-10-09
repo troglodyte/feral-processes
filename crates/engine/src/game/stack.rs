@@ -550,6 +550,8 @@ impl Game {
     ) {
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
         let (x, y) = landing(&level);
+        let mut tally = self.world.resource_mut::<crate::resources::RunTally>();
+        tally.deepest_depth = tally.deepest_depth.max(depth);
         self.world.insert_resource(CurrentStack(Some(level)));
         self.world.insert_resource(Locale::Stack {
             depth,

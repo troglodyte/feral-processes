@@ -597,6 +597,7 @@ impl Game {
         // Empty at the start of a run: nothing has been built yet, so every
         // `first_free` structure is still owed. See `resources::FreeBuilds`.
         world.init_resource::<crate::resources::FreeBuilds>();
+        world.init_resource::<crate::resources::RunTally>();
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -1560,6 +1561,7 @@ impl Game {
         world.insert_resource(crate::resources::MiningMode(data.mining));
         world.insert_resource(data.enemy_strength);
         world.insert_resource(data.free_builds);
+        world.insert_resource(data.run_tally);
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -3266,6 +3268,7 @@ impl Game {
                 .world
                 .resource::<crate::resources::FreeBuilds>()
                 .clone(),
+            run_tally: self.world.resource::<crate::resources::RunTally>().clone(),
             anchor: self.anchor_position(),
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {
@@ -3448,9 +3451,59 @@ impl Game {
         let tick = self.world.resource::<GameClock>().tick;
         let mut query = self.world.query_filtered::<(), With<Tamed>>();
         let tamed_count = query.iter(&self.world).count();
+        let score = self.score_card().total;
         Some(format!(
-            "Session ended at cycle {tick}: {reason}. Programs compiled: {tamed_count}."
+            "Session ended at cycle {tick}: {reason}. Programs compiled: {tamed_count}. \
+             Score: {score}."
         ))
+    }
+
+    /// The run's score as it stands: the saved `RunTally` beside what is
+    /// still live. The one API every score display reads.
+    pub fn score_card(&mut self) -> crate::score::ScoreCard {
+        let tally = self.world.resource::<crate::resources::RunTally>().clone();
+        let keys = self
+            .world
+            .get::<crate::components::PhaseKeys>(self.player_entity())
+            .copied()
+            .unwrap_or_default();
+        let structures = self
+            .world
+            .query_filtered::<(), With<Structure>>()
+            .iter(&self.world)
+            .count();
+        crate::score::card(&crate::score::ScoreInputs {
+            foe_levels: tally.foe_levels,
+            bosses: u64::from(tally.bosses),
+            deepest_depth: u64::from(tally.deepest_depth),
+            keys: keys.count() as u64,
+            escaped: keys.story_complete,
+            structures: structures as u64,
+            compiled: u64::from(tally.compiled),
+            achievements: u64::from(tally.achievements),
+            mode: *self.world.resource::<DifficultyMode>(),
+            band: self.enemy_strength(),
+        })
+    }
+
+    /// Adds the part of this run's score not yet banked to the profile's
+    /// lifetime score and returns it. Idempotent: a second call with nothing
+    /// new returns 0. A total that has fallen since the last bank (structures
+    /// lost after an escape) banks nothing and leaves the mark where it was,
+    /// so later growth is never counted twice.
+    ///
+    /// The caller owns the file: app-core adds the returned delta to its own
+    /// profile copy and writes it, because `after_tick` is not reached on the
+    /// game-over path.
+    pub fn bank_run_score(&mut self) -> u64 {
+        let total = self.score_card().total;
+        let mut tally = self.world.resource_mut::<crate::resources::RunTally>();
+        let delta = total.saturating_sub(tally.banked);
+        tally.banked += delta;
+        self.world
+            .resource_mut::<crate::achievements::Profile>()
+            .lifetime_score += delta;
+        delta
     }
 
     pub fn write_history(&mut self, path: &Path) -> std::io::Result<()> {
@@ -3524,17 +3577,25 @@ impl Game {
         }
         self.world.insert_resource(ProfileRewardsPaid);
 
-        let rewards: Vec<Reward> = {
+        let (rewards, score_stat_points): (Vec<Reward>, u32) = {
             let db = self.world.resource::<AchievementDb>();
             let profile = self.world.resource::<Profile>();
-            crate::achievements::profile_rewards(profile, db)
+            (
+                crate::achievements::profile_rewards(profile, db),
+                crate::score::creation_bonus(profile.lifetime_score).stat_points,
+            )
         };
-        if rewards.is_empty() {
+        if rewards.is_empty() && score_stat_points == 0 {
             return;
         }
 
         let player = self.player_entity();
-        let mut stat_points = 0;
+        // Paid here rather than added to the Points step's budget, so
+        // `MAX_CREATION_STAT_POINTS` stays the ceiling of creation itself.
+        if let Some(mut points) = self.world.get_mut::<crate::components::StatPoints>(player) {
+            points.0 += score_stat_points;
+        }
+        let mut stat_points = score_stat_points;
         let mut perk_points = 0;
         let mut programs = Vec::new();
         for reward in rewards {

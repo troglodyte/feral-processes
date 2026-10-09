@@ -148,11 +148,24 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         drawn.push(text_row(""));
         drawn.extend(description_rows(&note));
     }
+    if step == CreationStep::Points
+        && let Some(note) = points_bonus_note(app.creation_bonus_stat_points())
+    {
+        drawn.push(text_row(""));
+        drawn.push(text_row(note));
+    }
     if step != CreationStep::Perks {
         drawn.push(text_row(""));
     }
     drawn.push(text_row(footer(app, step)));
     drawn
+}
+
+/// The run score's stat-point bonus is not part of the pool being spent here:
+/// it is paid as unspent points once the run starts.
+fn points_bonus_note(stat_points: u32) -> Option<String> {
+    (stat_points > 0)
+        .then(|| format!("+{stat_points} stat points from past runs, paid after creation"))
 }
 
 /// One `CreationRow` as a drawable menu row: numbered with its shortcut on
@@ -389,6 +402,24 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_points_note_appears_only_with_a_bonus_and_fits_the_popup() {
+        assert_eq!(points_bonus_note(0), None);
+        let note = points_bonus_note(u32::MAX).unwrap();
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(720.0);
+            let room = super::super::popup::popup_body_width(
+                1280.0,
+                super::super::popup::PopupSize::Large,
+                &m,
+            );
+            assert!(
+                p.measure_ui_advance(&note, m.font_size) <= room,
+                "the Points note overflows: {note}"
+            );
+        });
+    }
+
     use super::*;
     use feral_processes_app_core::{CREATION_COLOURS, GameKey};
 

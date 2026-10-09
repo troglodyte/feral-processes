@@ -376,6 +376,7 @@ impl App {
             Mode::QuitAppConfirm => self.handle_quit_app_confirm_key(key),
             Mode::BasinExitConfirm => self.handle_basin_exit_confirm_key(key),
             Mode::Ending => self.handle_ending_key(key),
+            Mode::Escaped => self.handle_escaped_key(key),
             Mode::ArenaBuilder => self.handle_arena_builder_key(key),
             Mode::ArenaLoad => self.handle_arena_load_key(key),
             Mode::ArenaSave => self.handle_arena_save_key(key),

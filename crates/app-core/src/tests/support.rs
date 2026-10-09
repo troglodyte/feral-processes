@@ -182,6 +182,23 @@ pub(crate) fn clear_the_area_around_player(app: &mut App) {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Drops the app's player to zero hp on a Permadeath run, through a save at
+/// `path` (left in place), since a save is the only door app-core has onto
+/// the engine's `World`. The loaded game gets the app's profile installed
+/// back, or its first `flush_profile_writes` would clobber the app's copy
+/// with the empty one `Game::load` leaves. The caller ticks, as a killing
+/// blow would.
+pub(crate) fn zero_the_players_hp(app: &mut App, path: &Path) {
+    app.game.as_mut().unwrap().save(path).unwrap();
+    let mut data = save::load_from_file(path).unwrap();
+    data.player.hp = 0;
+    data.difficulty = DifficultyMode::Permadeath;
+    save::save_to_file(path, &data).unwrap();
+    let mut game = Game::load(path, &test_assets_dir()).unwrap();
+    game.install_profile(app.profile.clone());
+    app.game = Some(game);
+}
+
 pub(crate) fn test_app(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));

@@ -4,6 +4,7 @@
 use super::bars::*;
 use super::manifest_layout::*;
 use super::popup::*;
+use super::score;
 use super::social::{draw_tab_strip, social_sections};
 use super::talk::talk_sections;
 use super::*;
@@ -85,7 +86,11 @@ pub(super) fn draw_manifest(
     // `Some` only for a program you own, which is also exactly who has a tab
     // strip: the strip never offers a face the subject does not have.
     let social = game.social(view.entity);
+    let own = matches!(view.subject, ManifestSubject::Player(_));
     let (meters, sections) = match (&social, nav.tab) {
+        _ if own && nav.tab == ManifestTab::Score => {
+            (Vec::new(), score::manifest_sections(&game.score_card()))
+        }
         (Some(s), ManifestTab::Social) => (Vec::new(), social_sections(s)),
         (Some(_), ManifestTab::Talk) => {
             let exchanges = game.conversations(view.entity).unwrap_or_default();
@@ -109,7 +114,7 @@ pub(super) fn draw_manifest(
     draw_header(
         &view,
         escaped,
-        social.is_some().then_some(nav.tab),
+        (social.is_some() || own).then_some(nav.tab),
         l.header,
         painter,
         m,
@@ -275,6 +280,7 @@ fn draw_header(
     if let Some(active) = tab {
         draw_tab_strip(
             active,
+            matches!(view.subject, ManifestSubject::Player(_)),
             rect.x + rect.w,
             rect.y + m.title() as f32,
             painter,

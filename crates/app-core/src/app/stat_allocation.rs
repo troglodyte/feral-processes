@@ -223,23 +223,6 @@ impl StatAllocation {
         Ok(())
     }
 
-    /// A random spread that spends **exactly** the pool: one point bought at
-    /// a time from whichever rows are still affordable, so the loop can only
-    /// halt once nothing affordable is left. The pool invariant is a
-    /// consequence of the construction rather than checked after the fact.
-    /// `pick(n)` draws below `n`.
-    pub fn roll_spread(&self, mut pick: impl FnMut(usize) -> usize) -> BTreeMap<AttributeId, u32> {
-        let mut spent = BTreeMap::new();
-        let mut left = self.pool;
-        let cost = self.purpose.cost();
-        while !self.rows.is_empty() && cost <= left {
-            let def = &self.rows[pick(self.rows.len())];
-            *spent.entry(def.id.clone()).or_insert(0) += 1;
-            left -= cost;
-        }
-        spent
-    }
-
     /// `(name, value)` for each offered attribute, once `spent` is applied -
     /// the Summary's lines.
     pub fn values(&self, spent: &BTreeMap<AttributeId, u32>) -> Vec<(String, i32)> {

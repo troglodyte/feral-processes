@@ -113,14 +113,9 @@ fn a_flatlined_permadeath_run_cannot_be_reloaded_from_the_load_list() {
         .clone()
         .expect("a new run owns a slot");
 
-    // Bring the player to zero through the save, which is the only door
-    // app-core has onto the engine's `World`. The tick below is what
-    // `death_handling_system` reacts to, exactly as a killing blow would be.
-    app.game.as_mut().unwrap().save(&path).unwrap();
-    let mut data = save::load_from_file(&path).unwrap();
-    data.player.hp = 0;
-    save::save_to_file(&path, &data).unwrap();
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    // The tick below is what `death_handling_system` reacts to, exactly as a
+    // killing blow would be.
+    super::support::zero_the_players_hp(&mut app, &path);
 
     app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::GameOver, "the run ends on the screen");

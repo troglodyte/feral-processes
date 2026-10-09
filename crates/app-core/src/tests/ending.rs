@@ -160,17 +160,11 @@ fn card_total(app: &mut App) -> u64 {
     app.game.as_mut().unwrap().score_card().total
 }
 
-/// Drops the player to zero hp through a save and ticks, as a killing blow
-/// would. Mirrors `saves.rs`' flatline fixture.
+/// Kills the player (`zero_the_players_hp`) and ticks, as a killing blow
+/// would.
 fn flatline(app: &mut App) {
     let path = scratch_path("score_flatline", 0);
-    app.game.as_mut().unwrap().save(&path).unwrap();
-    let mut data = save::load_from_file(&path).unwrap();
-    data.player.hp = 0;
-    // Forgiving respawns; only Permadeath ends the run.
-    data.difficulty = feral_processes_engine::DifficultyMode::Permadeath;
-    save::save_to_file(&path, &data).unwrap();
-    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    zero_the_players_hp(app, &path);
     let _ = std::fs::remove_file(&path);
     // The tick `death_handling_system` reacts to, then the same check the
     // map's key handler makes after it.

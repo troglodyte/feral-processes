@@ -214,8 +214,10 @@ fn row_line(row: &CreationRow) -> String {
         },
         CreationRow::Colour { index } => format!("Colour {}", index + 1),
         // Shared with `Mode::AllocateStats` - one drawing of the Points
-        // screen's row.
-        CreationRow::Attribute { .. } => points::attribute_line(row).unwrap_or_default(),
+        // screen's row, with the bar only creation draws.
+        CreationRow::Attribute { .. } => {
+            points::attribute_line(row, Some(CREATION_STAT_POINTS)).unwrap_or_default()
+        }
         // No bar: at 1 Credit an item's own
         // ceiling is the whole allowance, so a bar would be 25 cells wide on
         // most of two dozen rows. The remaining allowance rides the footer
@@ -260,9 +262,7 @@ fn row_line(row: &CreationRow) -> String {
 /// footers carrying a live figure: neither screen has anywhere else to put
 /// one. The Kit step has two dozen rows and no per-row bar; the Points step
 /// has a bar per row, but each bar is that axis's own ceiling rather than
-/// the pool, so four of them never add up to how much is left — and the
-/// step opens on a *rolled* spread that has already spent the lot, which
-/// the player has no way to tell from a blank one.
+/// the pool, so the bars never add up to how much is left.
 fn footer(app: &App, step: CreationStep) -> String {
     match step {
         CreationStep::Kit => format!(
@@ -960,30 +960,18 @@ mod tests {
                 .clone()
         };
 
-        // The step opens on a rolled spread that spends the pool exactly,
-        // so the fresh figures are the full ones — which is the state the
-        // player actually lands on and the one the missing footer made
-        // unreadable.
+        // The step opens on an empty pool, the state the player lands on.
         let fresh = pool_row(&app);
         assert!(
-            fresh.contains(&format!(
-                "{CREATION_STAT_POINTS}/{CREATION_STAT_POINTS} points spent"
-            )) && fresh.contains("0 left"),
-            "the rolled spread spends the whole pool and the footer must say so: {fresh:?}"
+            fresh.contains(&format!("0/{CREATION_STAT_POINTS} points spent"))
+                && fresh.contains(&format!("{CREATION_STAT_POINTS} left")),
+            "a fresh pool is unspent and the footer must say so: {fresh:?}"
         );
 
-        // Clear every row — which the roll landed on is not fixed, so
-        // walking all of them is what keeps this off the roll's luck.
-        for _ in 0..app.creation_rows().len() {
-            app.handle_key(GameKey::ShiftLeft);
-            app.handle_key(GameKey::Down);
-        }
+        app.handle_key(GameKey::Right);
         let left = app.creation_points_left();
         let spent = CREATION_STAT_POINTS - left;
-        assert_eq!(
-            left, CREATION_STAT_POINTS,
-            "clearing every axis frees the pool"
-        );
+        assert_eq!(spent, 1, "one Right buys one point");
         let after = pool_row(&app);
         assert!(
             after.contains(&format!("{spent}/{CREATION_STAT_POINTS} points spent"))

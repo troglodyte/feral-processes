@@ -233,3 +233,24 @@ fn abandoning_a_run_banks_nothing() {
     assert_eq!(banked(&app), 0);
     assert_eq!(app.profile().lifetime_score, 0);
 }
+
+/// Quit without saving, reload the pre-escape save, escape again: the first
+/// escape banked into the profile but the run on disk never learned it, so
+/// the second would have banked the same card a second time.
+#[test]
+fn an_escape_is_saved_so_a_reload_cannot_bank_it_twice() {
+    let mut app = app_beside_the_exit_seeded(5605, 0x3FF);
+    let path = scratch_path("escape_seal", 5605);
+    app.current_save_path = Some(path.clone());
+    walk(&mut app, GameKey::Right);
+    app.handle_key(GameKey::Char('y'));
+    assert!(banked(&app) > 0, "the escape banks on the spot");
+
+    let mut reloaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        reloaded.bank_run_score(),
+        0,
+        "the saved run carries `banked`, so banking again adds nothing"
+    );
+}

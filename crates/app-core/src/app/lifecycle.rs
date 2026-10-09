@@ -678,10 +678,13 @@ impl App {
     /// arena return, for that call's own reason: an arena session touches no
     /// disk, and a fight lost against a Permadeath save is not the run.
     ///
+    /// Also the escape's save: it banks the card, and a reload of the
+    /// pre-escape file would otherwise bank it again.
+    ///
     /// A failed write is surfaced rather than swallowed — it is the one
     /// failure that hands the run back — and it is `flush_profile_writes`'
     /// wording because it is the same kind of news.
-    fn seal_run(&mut self) {
+    pub(crate) fn seal_run(&mut self) {
         let Some(path) = self.current_save_path.clone() else {
             return;
         };

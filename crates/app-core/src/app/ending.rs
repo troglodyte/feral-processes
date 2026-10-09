@@ -44,6 +44,7 @@ impl App {
             Ok(()) => {
                 self.ending_screens = game.ending_screens();
                 self.bank_run_score();
+                self.seal_run();
                 self.ending_page = 0;
                 self.mode = Mode::Ending;
             }

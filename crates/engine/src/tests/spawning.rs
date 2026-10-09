@@ -1665,6 +1665,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         mining: false,
         enemy_strength: Default::default(),
         free_builds: crate::resources::FreeBuilds::default(),
+        run_tally: crate::resources::RunTally::default(),
         tick: 0,
         difficulty: DifficultyMode::Forgiving,
         player: save::PlayerSave {

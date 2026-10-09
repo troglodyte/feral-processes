@@ -96,6 +96,7 @@ mod routines;
 mod ruins;
 mod sabotage;
 mod save_roundtrip;
+mod score;
 mod settlement_aid_reach;
 mod settlement_boards;
 mod settlement_footprint;

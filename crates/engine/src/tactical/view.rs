@@ -28,6 +28,7 @@ use crate::tactical::reach;
 use crate::tactical::{Fallen, TacticalBattle};
 use crate::tuning::FORMATIONS;
 use crate::views::{FormLook, PlayerLook};
+use crate::world::Biome;
 
 /// One body standing on the battle map.
 ///
@@ -252,6 +253,10 @@ pub struct TacticalView {
     /// Every charge in progress and the cells it will land on, which is all
     /// the renderer gets of a `Charging` — it never reads the component.
     pub charge_aims: Vec<ChargeAimView>,
+    /// What the ground is made of, for the renderer's textures only. A
+    /// siege reads `Platform` although its spec carries the surface tile's
+    /// biome: its board is the base's own floor.
+    pub ground: Biome,
 }
 
 impl TacticalView {
@@ -361,6 +366,11 @@ impl Game {
         let battle = self.world.resource::<TacticalBattle>();
         let board = battle.board.clone();
         let round = battle.round;
+        let ground = if battle.siege_pack > 0 {
+            Biome::Platform
+        } else {
+            battle.spec.biome
+        };
         let acted = battle.actions_left() == 0;
         let spent = battle.spent();
         let actor = battle.actor();
@@ -468,6 +478,7 @@ impl Game {
             covered,
             fallen,
             charge_aims,
+            ground,
         })
     }
 

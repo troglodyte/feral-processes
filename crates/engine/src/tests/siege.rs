@@ -628,6 +628,27 @@ mod opening {
         assert!(game.in_tactical_battle());
     }
 
+    /// A siege board is the base's own floor, so it reads `Platform`
+    /// whatever surface tile the base sits under.
+    #[test]
+    fn a_siege_boards_ground_is_platform_not_the_surface_biome() {
+        let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+
+        assert!(game.open_siege());
+        let spec_biome = game.world.resource::<TacticalBattle>().spec.biome;
+        assert_ne!(
+            spec_biome,
+            crate::world::Biome::Platform,
+            "the fixture must prove the override"
+        );
+        assert_eq!(
+            game.tactical_view().unwrap().ground,
+            crate::world::Biome::Platform
+        );
+    }
+
     /// A posted program standing at its machine is on the board at that
     /// cell — nobody is deployed, the base's own arrangement is the opening
     /// position.
@@ -2524,6 +2545,12 @@ mod persist {
                 "the acting body must survive along with everything else"
             );
         }
+
+        assert_eq!(
+            loaded.tactical_view().unwrap().ground,
+            crate::world::Biome::Platform,
+            "a restored siege is still a siege, so still the base's floor"
+        );
 
         // The fight can be continued: ending the acting body's turn moves
         // the cursor on exactly as it would have before the reload.

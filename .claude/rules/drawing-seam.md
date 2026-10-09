@@ -53,3 +53,10 @@ dropped.
 **The battle portrait** (`render/battle.rs::draw_battle_portrait`) is the
 one sprite drawn as a picture pane rather than in a glyph's place; its glyph
 is only the `false`-return fallback (trap: `seams` skill, `hud.md`).
+
+**Battle-map ground tiles** (`render/tactical.rs::draw_ground`) are the
+second sprite with no glyph to replace: the flat `cell_color` fill is drawn
+first on purpose, as the no-art look and the backdrop under transparent
+pixels, and the art goes over it — not overdraw. Their tint is
+`palette::ground_cast`, deliberately not `terrain::biome_tint`'s saturated
+surface colour, because hue on the board belongs to the washes.

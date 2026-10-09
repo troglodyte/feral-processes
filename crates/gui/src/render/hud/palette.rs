@@ -30,6 +30,7 @@
 
 use crate::paint::Color;
 use feral_processes_engine::components::GlyphColor;
+use feral_processes_engine::world::Biome;
 
 /// One opaque colour from the hex form the handoff writes.
 const fn rgb(hex: u32) -> Color {
@@ -247,6 +248,22 @@ pub(crate) const fn glyph(c: GlyphColor) -> Color {
         GlyphColor::Magenta => rgb(0xcf8ee0),
         GlyphColor::Cyan => rgb(0x3fa9b5),
         GlyphColor::Brown => rgb(0x8a6a3a),
+    }
+}
+
+/// The faint cast a biome lends its battle-map ground — near white, because
+/// hue on the board belongs to the washes and a cast must never be read as
+/// one. Exhaustive, so a new biome does not compile until it is given one;
+/// the unwalkable biomes never host a fight and stay neutral.
+pub(crate) fn ground_cast(biome: Biome) -> Color {
+    match biome {
+        Biome::OpenGrid => Color::new(0.95, 0.98, 1.0, 1.0),
+        Biome::Deadlock => Color::new(1.0, 0.94, 0.90, 1.0),
+        Biome::NullSector => Color::new(0.97, 0.93, 1.0, 1.0),
+        Biome::Backplane => Color::new(0.92, 1.0, 0.97, 1.0),
+        Biome::Platform => Color::new(1.0, 0.98, 0.94, 1.0),
+        Biome::Excavated => Color::new(1.0, 0.97, 0.92, 1.0),
+        Biome::DataVoid | Biome::BlackIce | Biome::Entropy => Color::new(1.0, 1.0, 1.0, 1.0),
     }
 }
 

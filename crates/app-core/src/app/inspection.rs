@@ -335,6 +335,24 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+        self.fit_manifest_tab();
+    }
+
+    /// Paging crosses between the player and programs, which do not share
+    /// faces: a tab the new subject lacks would draw with no tab lit and
+    /// leave the Stats keys unbound, so it falls back to Stats.
+    fn fit_manifest_tab(&mut self) {
+        let owned = self
+            .pending_manifest
+            .is_some_and(|e| self.game.as_ref().is_some_and(|g| g.is_owned_program(e)));
+        let has_face = match self.manifest_tab {
+            ManifestTab::Stats => true,
+            ManifestTab::Social | ManifestTab::Talk => owned,
+            ManifestTab::Score => self.manifest_is_own(),
+        };
+        if !has_face {
+            self.manifest_tab = ManifestTab::Stats;
+        }
     }
 
     /// Whether the sheet is the player's own, the one face `L` answers on.

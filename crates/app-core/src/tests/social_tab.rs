@@ -124,3 +124,32 @@ fn the_score_face_does_not_answer_the_stats_keys() {
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::Manifest, "S is a Stats-face key");
 }
+
+#[test]
+fn paging_from_the_score_face_to_a_program_falls_back_to_stats() {
+    let (mut app, _, _) = owned_pair(7413);
+    let me = app.game.as_ref().unwrap().player_entity();
+    open(&mut app, me);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Score);
+    app.handle_key(GameKey::Right);
+    assert_ne!(app.pending_manifest, Some(me));
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}
+
+#[test]
+fn paging_from_the_social_face_to_the_player_falls_back_to_stats() {
+    let (mut app, a, _) = owned_pair(7414);
+    let me = app.game.as_ref().unwrap().player_entity();
+    open(&mut app, a);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    for _ in 0..app.manifest_subjects().len() {
+        app.handle_key(GameKey::Right);
+        if app.pending_manifest == Some(me) {
+            break;
+        }
+    }
+    assert_eq!(app.pending_manifest, Some(me), "paging reaches the player");
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+}

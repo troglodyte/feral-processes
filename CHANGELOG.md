@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.9
+
+**The battle map's ground is textured now, so open, rough, cover and blocked cells differ in pattern as well as in brightness, and each terrain looks its own.** OpenGrid, Deadlock, NullSector, Backplane and a siege's base floor each have their own tiles, and other ground uses a shared set. Every tile is a 16x16 image in `assets/sprites/` that can be redrawn in the Sprite Forge or replaced by a mod, and a cell with no image draws the flat colour it always did. The colours stay faint so the move, cover and danger highlights still read on top.
+
 ## 0.18.8
 
 **On the surface map you now see only a circle around you, and the rest is fog.** A new stat, Perception, sets how wide the circle is: 5 tiles at base attributes, wider with Analysis (0.5 a point) and a little with Entropy, with no cap. Ground you have walked past stays drawn dim and is kept in your save, ground you have never seen is black, and settlements, your base, nests and Stack links you have seen stay drawn. Creatures show only inside the circle, and hover, click-travel and examine ignore what you cannot see. Base space, the Stack and battles are unchanged. Older saves load with no memory of the map beyond where you stand.

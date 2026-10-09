@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.6
+
+**Character creation's Points step starts with nothing spent, and each attribute shows a bar again.** Before, the step opened with all 20 points already spread at random, so you had to take them back before placing your own. Now every point is yours to place. Each row also draws its points as a `[####----]` bar again, as wide as the most that one attribute could hold. The bar went missing when creation and the level-up screen started sharing one row layout.
+
 ## 0.18.5
 
 **On the world map, a click picks a place.** Click a square on the map or a row in the side list to select that place and see its details, the same as pressing its row key; `C` then points the compass at it. Where two places share a square, such as a nest beside home, clicking it again moves to the next one. Before, only the row keys could pick a place.

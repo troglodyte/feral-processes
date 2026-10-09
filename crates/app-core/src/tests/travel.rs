@@ -379,3 +379,22 @@ fn travel_goal_is_the_clicked_goal_and_never_an_arrow_step() {
         "an arrow step is not a destination"
     );
 }
+
+/// Fog: a hostile past sight is not on the map, so a click on its tile is
+/// a plain tile goal, not a chase of something the player cannot see.
+#[test]
+fn travel_to_a_hostile_outside_sight_queues_a_tile_goal() {
+    let mut app = test_app(2703);
+    place_wild_program_east(&mut app, 8);
+    let start = player_pos(&app);
+
+    app.travel_to(start.0 + 8, start.1);
+
+    assert_eq!(
+        app.walk,
+        Some(Walk::Travel {
+            goal: TravelGoal::Tile(start.0 + 8, start.1),
+            in_base: false,
+        })
+    );
+}

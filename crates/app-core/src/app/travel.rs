@@ -4,7 +4,7 @@
 //! an arrow from fast-forwarding the world past the speed setting
 //! (`travel-on-the-clock`'s whole point).
 
-use feral_processes_engine::views::drawn_on_surface_map;
+use feral_processes_engine::views::{drawn_on_surface_map, shown_at};
 
 use crate::*;
 
@@ -47,16 +47,22 @@ impl App {
     /// through the same rule the map draws by —
     /// `views::drawn_on_surface_map` — so a wild program mid-errand or a
     /// posted program whose `Position` has gone stale does not become a
-    /// chase target just because a query still turns it up there.
+    /// chase target just because a query still turns it up there. A hostile
+    /// the fog hides (`views::shown_at`) is not one either.
     pub fn travel_to(&mut self, x: i32, y: i32) {
         let Some(game) = self.surface_map_game() else {
             return;
         };
         let in_base = game.in_base();
+        let sight = game.sight_at((x, y));
         let goal = game
             .view_entities_at((x, y), 0, 0)
             .into_iter()
-            .find(|e| e.is_hostile && drawn_on_surface_map(e.is_tamed, e.position_is_honest))
+            .find(|e| {
+                e.is_hostile
+                    && drawn_on_surface_map(e.is_tamed, e.position_is_honest)
+                    && shown_at(sight, e)
+            })
             .map_or(TravelGoal::Tile(x, y), |e| TravelGoal::Creature(e.entity));
         self.walk = Some(Walk::Travel { goal, in_base });
     }

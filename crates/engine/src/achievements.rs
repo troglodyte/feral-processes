@@ -248,6 +248,12 @@ pub struct Profile {
     /// unparseable by a later build.
     #[serde(default)]
     pub tactical_battles: bool,
+    /// Every run's banked score, summed — see `score` and
+    /// `Game::bank_run_score`. Only ever grows; the next character creation
+    /// derives its bonus from it. A plain `u64` for `seen_notifications`'
+    /// reason: `load` discards the whole profile on a parse failure.
+    #[serde(default)]
+    pub lifetime_score: u64,
 }
 
 impl Profile {
@@ -465,6 +471,37 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(warning, None);
         assert_eq!(reloaded.earned, profile.earned);
+    }
+
+    #[test]
+    fn the_lifetime_score_survives_a_profile_round_trip() {
+        let path = temp_profile("lifetime_score");
+        let profile = Profile {
+            lifetime_score: 12_345,
+            ..Profile::default()
+        };
+        profile.save(&path).unwrap();
+
+        let (reloaded, warning) = Profile::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(warning, None);
+        assert_eq!(reloaded.lifetime_score, 12_345);
+    }
+
+    #[test]
+    fn a_profile_without_a_lifetime_score_keeps_its_achievements() {
+        let path = temp_profile("lifetime_score_absent");
+        std::fs::write(
+            &path,
+            "(earned:[(id:\"first_kill\",first_tick:12)],seen_notifications:[],player_icon:None)",
+        )
+        .unwrap();
+
+        let (profile, warning) = Profile::load(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(warning, None);
+        assert_eq!(profile.earned.len(), 1);
+        assert_eq!(profile.lifetime_score, 0);
     }
 
     #[test]

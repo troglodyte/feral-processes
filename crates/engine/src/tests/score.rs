@@ -108,3 +108,90 @@ fn depth_is_a_high_water_mark() {
     game.descend_to(2, 5, (10, 10));
     assert_eq!(tally(&game).deepest_depth, 3, "climbing does not lower it");
 }
+
+fn set_foe_levels(game: &mut Game, levels: u64) {
+    game.world.resource_mut::<RunTally>().foe_levels = levels;
+}
+
+fn lifetime(game: &Game) -> u64 {
+    game.profile().lifetime_score
+}
+
+#[test]
+fn a_death_banks_the_card_total() {
+    let mut game = new_game(9201);
+    set_foe_levels(&mut game, 50);
+    let total = game.score_card().total;
+    assert!(total > 0);
+
+    assert_eq!(game.bank_run_score(), total);
+    assert_eq!(lifetime(&game), total);
+    assert_eq!(tally(&game).banked, total);
+}
+
+#[test]
+fn an_escape_then_a_death_bank_exactly_the_total_overall() {
+    let mut game = new_game(9202);
+    set_foe_levels(&mut game, 50);
+    let at_escape = game.bank_run_score();
+    set_foe_levels(&mut game, 80);
+    let at_death = game.bank_run_score();
+
+    assert!(at_escape > 0 && at_death > 0);
+    assert_eq!(lifetime(&game), game.score_card().total);
+}
+
+#[test]
+fn banking_twice_with_nothing_new_banks_nothing() {
+    let mut game = new_game(9203);
+    set_foe_levels(&mut game, 50);
+    game.bank_run_score();
+    let before = lifetime(&game);
+
+    assert_eq!(game.bank_run_score(), 0);
+    assert_eq!(lifetime(&game), before);
+}
+
+#[test]
+fn a_total_that_fell_after_banking_is_not_banked_again_on_regrowth() {
+    let mut game = new_game(9204);
+    set_foe_levels(&mut game, 50);
+    let first = game.bank_run_score();
+    set_foe_levels(&mut game, 10);
+    assert_eq!(game.bank_run_score(), 0);
+    set_foe_levels(&mut game, 50);
+    assert_eq!(game.bank_run_score(), 0, "the first {first} is already in");
+}
+
+#[test]
+fn the_history_line_ends_with_the_score() {
+    let mut game = new_game(9205);
+    set_foe_levels(&mut game, 50);
+    let total = game.score_card().total;
+    game.world
+        .resource_mut::<crate::resources::GameOver>()
+        .reason = Some("Test over".into());
+
+    let line = game.history_summary().unwrap();
+    assert!(line.ends_with(&format!("Score: {total}.")), "{line}");
+}
+
+#[test]
+fn the_card_reads_live_keys_structures_and_the_escape() {
+    let mut game = new_game(9206);
+    let player = game.player_entity();
+    {
+        let mut keys = game
+            .world
+            .get_mut::<crate::components::PhaseKeys>(player)
+            .unwrap();
+        keys.story_complete = true;
+    }
+    let card = game.score_card();
+    let escape = card
+        .lines
+        .iter()
+        .find(|l| l.label == "Escaped the Basin")
+        .unwrap();
+    assert_eq!(escape.count, 1);
+}

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.8
+
+**On the surface map you now see only a circle around you, and the rest is fog.** A new stat, Perception, sets how wide the circle is: 5 tiles at base attributes, wider with Analysis (0.5 a point) and a little with Entropy, with no cap. Ground you have walked past stays drawn dim and is kept in your save, ground you have never seen is black, and settlements, your base, nests and Stack links you have seen stay drawn. Creatures show only inside the circle, and hover, click-travel and examine ignore what you cannot see. Base space, the Stack and battles are unchanged. Older saves load with no memory of the map beyond where you stand.
+
 ## 0.18.7
 
 **A run now ends with a score card, and the score from past runs makes your next character a little stronger.** The card counts the foes you beat (weighted by their level), bosses, programs you compiled, achievements, your deepest Stack depth, phase keys and structures standing, then scales the total by mode and enemy strength. You see it on the death screen, on a new screen after the escape ending, and on a Score tab in your own manifest (Tab switches between Stats and Score). Each death or escape adds the run's score to a lifetime total. That total pays a capped bonus at character creation: extra stat points after creation, extra perk points and extra starting Credits. Abandoning a run adds nothing.

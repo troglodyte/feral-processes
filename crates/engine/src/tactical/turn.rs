@@ -1579,7 +1579,21 @@ impl Game {
                 Some(cells) => reach::recipients_in_cells(battle, actor, cells),
                 None => reach::recipients(battle, actor, aim, shape),
             };
+            // The covered cells are read before the bodies take the hit,
+            // so the props on them are struck after, off the same board.
+            let prop_hit = self.routine_prop_damage(actor, ability).map(|dmg| {
+                let cells = fixed.map(<[_]>::to_vec).unwrap_or_else(|| {
+                    battle
+                        .cell_of(actor)
+                        .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+                        .unwrap_or_default()
+                });
+                (cells, dmg)
+            });
             self.use_ability(ability, actor, &name, &recipients);
+            if let Some((cells, dmg)) = prop_hit {
+                self.routine_hits_props(&cells, dmg);
+            }
             if let Some((actor_hostile, cells, line)) = passing {
                 self.pass_through_decoys(actor_hostile, &cells, line);
             }
@@ -2243,7 +2257,7 @@ impl Game {
     /// `finish_fight` wants cleared of combat-only effects even when the
     /// blow that ended the fight was struck at somebody else. `None` where
     /// the aim named an empty cell — a routine may be aimed at ground.
-    fn reap_tactical_dead(&mut self, wild: Option<Entity>) {
+    pub(crate) fn reap_tactical_dead(&mut self, wild: Option<Entity>) {
         let player = self.player_entity();
         let fallen: Vec<Entity> = self
             .world

@@ -406,7 +406,19 @@ pub fn shape_cells(
             let mut cells = Vec::new();
             for i in 1..=length as i32 {
                 let cell = (from.0 + step.0 * i, from.1 + step.1 * i);
-                if !board.in_bounds(cell.0, cell.1) || board.blocks_sight(cell.0, cell.1) {
+                if !board.in_bounds(cell.0, cell.1) {
+                    break;
+                }
+                if board.blocks_sight(cell.0, cell.1) {
+                    // A beam breaks the cover that stops it. The cell holds
+                    // no body: a prop that blocks sight and movement cannot
+                    // be stood on.
+                    if board
+                        .prop_at(cell.0, cell.1)
+                        .is_some_and(|p| p.destructible())
+                    {
+                        cells.push(cell);
+                    }
                     break;
                 }
                 cells.push(cell);
@@ -1249,6 +1261,21 @@ mod tests {
         let footprint = [(2, 2), (3, 2)];
         let covered: HashSet<(i32, i32)> = [(9, 9)].into_iter().collect();
         assert!(!footprint_hit(&footprint, &covered));
+    }
+
+    #[test]
+    fn a_beam_includes_the_destructible_prop_that_stops_it_and_not_other_cover() {
+        let beam = AbilityShape::Line { length: 6 };
+        let board = Board::from_rows(&[".....", ".....", ".D...", ".....", "....."]);
+        assert_eq!(
+            shape_cells(&board, (0, 2), (4, 2), beam),
+            vec![(1, 2)],
+            "the prop that stops the beam is in it"
+        );
+        let wall = Board::from_rows(&[".....", ".....", ".P...", ".....", "....."]);
+        assert!(shape_cells(&wall, (0, 2), (4, 2), beam).is_empty());
+        let boulder = Board::from_rows(&[".....", ".....", ".#...", ".....", "....."]);
+        assert!(shape_cells(&boulder, (0, 2), (4, 2), beam).is_empty());
     }
 
     #[test]

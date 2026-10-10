@@ -1017,6 +1017,8 @@ impl Fx {
                         start: now,
                     }),
                     TacticalFxKind::Landing => self.landings.push((cue.pos, now)),
+                    // Phase 3 draws the explosion.
+                    TacticalFxKind::PropDestroyed { .. } => {}
                 }
             }
         }

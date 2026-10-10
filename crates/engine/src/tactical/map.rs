@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::derive::{FNV_BASIS, fold, index};
 use crate::tactical::deploy;
-use crate::tactical::props::{Blast, PieceDef, PrefabDef, PropDb};
+use crate::tactical::props::{Blast, Leaves, PieceDef, PrefabDef, PropDb};
 use crate::tuning::{
     TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_DECOR_PER_MILLE,
     TACTICAL_LARGE_BODIES, TACTICAL_MEDIUM_BODIES, TACTICAL_PREFAB_ATTEMPTS,
@@ -202,6 +202,9 @@ pub struct PropCell {
     pub decoration: bool,
     pub sprite: String,
     pub move_cost: Option<u32>,
+    /// What destroying it puts on the cell, copied so the fight code needs
+    /// no `PropDb` lookup to know.
+    pub leaves: Leaves,
 }
 
 impl PropCell {
@@ -219,6 +222,7 @@ impl PropCell {
                 decoration: true,
                 sprite: def.sprite.clone(),
                 move_cost: None,
+                leaves: Leaves::Floor,
             };
         }
         PropCell {
@@ -233,6 +237,7 @@ impl PropCell {
             decoration: false,
             sprite: def.sprite.clone(),
             move_cost: def.move_cost,
+            leaves: def.leaves,
         }
     }
 
@@ -494,6 +499,7 @@ fn test_prop(piece: &str, hp: Option<u32>, volatile: Option<Blast>) -> PropCell 
         decoration: false,
         sprite: format!("prop_{piece}"),
         move_cost: None,
+        leaves: Leaves::Rubble,
     }
 }
 
@@ -1104,6 +1110,7 @@ mod tests {
             decoration: false,
             sprite: "prop_rubble".into(),
             move_cost: Some(TACTICAL_ROUGH_COST),
+            leaves: Leaves::Floor,
         }
     }
 

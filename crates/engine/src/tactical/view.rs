@@ -211,6 +211,35 @@ pub struct DecoyView {
     pub of_player: bool,
 }
 
+/// One prop standing on the battle map, as the frontend draws and reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropView {
+    pub cell: (i32, i32),
+    /// Spoken name, for a readout or a log line.
+    pub name: String,
+    /// Sprite key, `prop_<piece>` by convention.
+    pub sprite: String,
+    /// `None` for anything a blow cannot break.
+    pub hp: Option<u32>,
+    pub max_hp: Option<u32>,
+    pub volatile: bool,
+    pub decoration: bool,
+}
+
+impl PropView {
+    pub(crate) fn of(cell: (i32, i32), prop: &crate::tactical::map::PropCell) -> PropView {
+        PropView {
+            cell,
+            name: crate::tactical::prop_fight::prop_name(prop),
+            sprite: prop.sprite.clone(),
+            hp: prop.hp,
+            max_hp: prop.max_hp,
+            volatile: prop.volatile.is_some(),
+            decoration: prop.decoration,
+        }
+    }
+}
+
 /// A tactical fight, as a screen needs it.
 #[derive(Clone, Debug)]
 pub struct TacticalView {

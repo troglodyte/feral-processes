@@ -983,6 +983,9 @@ pub enum TacticalFxKind {
     Reaction,
     /// A drop trooper landed on this cell (`Game::call_reinforcement`).
     Landing,
+    /// A prop on this cell was destroyed; `volatile` ones also blast, which
+    /// the renderer draws bigger.
+    PropDestroyed { volatile: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

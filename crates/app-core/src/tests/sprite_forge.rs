@@ -106,11 +106,12 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
 
     assert_eq!(
         subjects.len(),
-        79,
+        99,
         "every species + every structure + player + anchor (minus one \
          shipped overlap de-duplicated away — the Home's `sprite:` names \
          \"anchor\", see `assets/structures/home.ron`) + the fifteen shipped \
-         floor finishes"
+         floor finishes + the thirteen shipped battle props and \
+         the seven `_cracked` twins of the destructible ones"
     );
     let names: Vec<&str> = subjects.iter().map(|s| s.name.as_str()).collect();
     assert!(
@@ -128,6 +129,23 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
     assert_eq!(
         names, sorted,
         "sprite_subjects must already be sorted and de-duplicated by name"
+    );
+}
+
+/// A battle prop is a sprite subject, and so is the cracked twin of a
+/// destructible one, so either can be redrawn in the Forge.
+#[test]
+fn sprite_subjects_lists_battle_props_and_their_cracked_twins() {
+    let mut app = app_with_sprite_forge(5);
+
+    let names: Vec<String> = app.sprite_subjects().into_iter().map(|s| s.name).collect();
+
+    assert!(names.contains(&"prop_server_rack".to_string()));
+    assert!(names.contains(&"prop_server_rack_cracked".to_string()));
+    assert!(names.contains(&"prop_cable_run".to_string()));
+    assert!(
+        !names.contains(&"prop_cable_run_cracked".to_string()),
+        "decoration cannot be damaged, so it has no cracked art"
     );
 }
 

@@ -121,9 +121,10 @@ so **no save-format change**.
   (`shape_cells`) damage any destructible prop on them. Line/Cone already
   stop at the first sight-blocking cell; that cell is now included in the
   hit set when it holds a prop, so a beam breaks the cover it is stopped by.
-- **Destruction:** HP 0 removes the `PropCell`, places `leaves`, and pushes
-  `PropEvent::Destroyed { cell, piece, volatile }` to a per-battle event
-  list the view drains. A `volatile` blast resolves through the same radius
+- **Destruction:** HP 0 removes the `PropCell`, places `leaves`, and cues
+  `TacticalFxKind::PropDestroyed { volatile }` on the existing
+  `TacticalFxQueue` (`resources.rs`), drained by `Game::take_tactical_fx`
+  — the seam rule's pattern, not a new event list. A `volatile` blast resolves through the same radius
   damage path a radius routine uses, hitting bodies and props; chained
   blasts are capped at `TACTICAL_PROP_CHAIN_MAX` depth.
 - **AI** (`tactical/ai.rs`): two new candidates in the existing scoring,
@@ -137,7 +138,8 @@ so **no save-format change**.
 ## View and app-core
 
 - `TacticalView` exposes props as `(cell, sprite key, hp, max_hp,
-  volatile, decoration)` and drains `PropEvent`s.
+  volatile, decoration)`; destruction reaches gui through
+  `take_tactical_fx`.
 - The attack target cursor in `crates/app-core/src/app/tactical.rs` can
   select a prop cell; the readout shows its HP and an "explosive" tag on
   volatile ones. Key bindings follow the existing attack flow (actions

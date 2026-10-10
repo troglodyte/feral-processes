@@ -13608,6 +13608,7 @@
     spawn_point: (0, 0),
     buyback_shelves: [],
     researched: [
+        "containment",
         "power_grid",
     ],
     active_research: None,

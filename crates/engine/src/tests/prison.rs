@@ -827,3 +827,14 @@ fn a_prisoner_rattles_only_while_its_cell_is_working() {
     game.world.entity_mut(warden).remove::<Task>();
     assert_eq!(mark(&game), crate::views::PinMark::Settled);
 }
+
+#[test]
+fn the_holding_cell_is_buildable_only_once_containment_is_researched() {
+    let mut game = Game::new(7390, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(!game.structure_unlocked(CELL));
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .insert("containment".into());
+    assert!(game.structure_unlocked(CELL));
+}

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.11
+
+**Battle maps now carry derelict set pieces: conduit walls, server racks, hull plates, fallen pylons, a crashed drone, coolant tanks and power cells, with scattered cables, glass and dead screens as decoration.** They block movement and sight and give cover, and most can be broken: aim a swing at one, or catch it in a routine, and it turns to rubble that slows movement but no longer blocks. Power cells and coolant tanks explode when destroyed, hurting every body in the blast on either side, and one explosion can set off the next, up to three in a row. Hostiles will smash a wall that keeps them from you and will set off an explosive beside your party; your companions on auto-attack never set one off where it would catch your own side. The aim readout names a prop with its condition and marks it explosive. Pieces and set pieces are files in `assets/battle-props/`, each with a 16x16 sprite that can be redrawn in the Sprite Forge or replaced by a mod. Siege boards are unchanged.
+
 ## 0.18.10
 
 **A downed program is now revived in a Holding Cell, a new base structure unlocked by the Containment research, instead of anywhere you stand.** Pick a downed program beside the cell and spend a Reinitialization Protocol: the program boots locked in the cell's pen, and a posted warden works on it. Each few beats it makes a decompile attempt, and each failure makes the next more likely. On success it joins your roster; after five failures it breaks down into salvage in the cell's output. A prisoner does not work, fight in a siege or count as staff, and a destroyed cell gives the program back as a downed record. The Teardown Rig no longer jams when its worst-case payout is larger than its output can hold.

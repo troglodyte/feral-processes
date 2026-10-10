@@ -172,17 +172,15 @@ impl Game {
     }
 
     /// A volatile prop's blast: full damage to every body within `radius` of
-    /// `cell` and a chain into any volatile prop it breaks, to
-    /// `TACTICAL_PROP_CHAIN_MAX` deep. Friendly fire is full — nothing here
+    /// `cell` and a chain into any volatile prop it breaks. The cap counts
+    /// blasts: a blast at the last depth leaves the volatile props near it
+    /// standing rather than setting off a dud. Friendly fire is full — nothing here
     /// reads `Hostile`, `reach::recipients`' rule.
     ///
     /// The radius is the one a radius routine covers, `reach::shape_cells`
     /// sight-clipped from the blast, so a standing wall shields what is
     /// behind it.
     fn detonate(&mut self, cell: (i32, i32), blast: Blast, depth: u32) {
-        if depth >= TACTICAL_PROP_CHAIN_MAX {
-            return;
-        }
         let (cells, caught) = self.blast_reach(cell, blast);
         for body in caught {
             let label = self.entity_label(body);
@@ -196,6 +194,7 @@ impl Game {
                 .board
                 .prop_at(c.0, c.1)
                 .filter(|p| p.destructible())
+                .filter(|p| p.volatile.is_none() || depth + 1 < TACTICAL_PROP_CHAIN_MAX)
                 .map(|p| blast.damage.saturating_sub(p.armour).max(1));
             if let Some(dmg) = hit {
                 self.strike_prop_at_depth(c, dmg, depth + 1);

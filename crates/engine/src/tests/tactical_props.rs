@@ -185,7 +185,16 @@ fn a_chain_of_volatile_props_stops_at_the_chain_cap() {
     for x in 1..=6 {
         weaken(&mut game, (x, 3), 1);
     }
+    game.take_tactical_fx();
     assert!(game.tactical_attack_prop((1, 3)));
+    let blasts = game
+        .take_tactical_fx()
+        .iter()
+        .filter(|c| c.kind == TacticalFxKind::PropDestroyed { volatile: true })
+        .count();
+    // The cap counts blasts: the last prop in the chain is left standing
+    // rather than going off as a dud.
+    assert_eq!(blasts, TACTICAL_PROP_CHAIN_MAX as usize);
     let battle = game.world.resource::<TacticalBattle>();
     let standing = (1..=6)
         .filter(|&x| {
@@ -195,8 +204,7 @@ fn a_chain_of_volatile_props_stops_at_the_chain_cap() {
                 .is_some_and(|p| p.volatile.is_some())
         })
         .count();
-    // The swung one and `CHAIN_MAX` blasts' worth of neighbours go; no more.
-    assert_eq!(standing, 6 - (1 + TACTICAL_PROP_CHAIN_MAX as usize));
+    assert_eq!(standing, 6 - TACTICAL_PROP_CHAIN_MAX as usize);
 }
 
 #[test]

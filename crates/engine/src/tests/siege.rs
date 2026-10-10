@@ -3985,6 +3985,34 @@ mod rereview_findings {
         );
     }
 
+    #[test]
+    fn a_jailed_prisoner_is_not_seated_on_the_siege_board() {
+        let mut game = Game::new(210_007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let prisoner = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(prisoner).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        let cell = game.world.spawn_empty().id();
+        game.world.entity_mut(prisoner).insert(crate::components::Jailed {
+            cell,
+            attempts: 0,
+            progress: 0,
+        });
+        stand_in_base_at(&mut game, 3, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+        assert!(
+            game.world
+                .resource::<TacticalBattle>()
+                .cell_of(prisoner)
+                .is_none(),
+            "a prisoner behind bars is no defender"
+        );
+    }
+
     // ---- M2-m: an unseatable pack falls back to an off-screen resolution
     // instead of holding the pressure and re-drawing `GameRng` forever.
 

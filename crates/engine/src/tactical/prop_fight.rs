@@ -230,20 +230,31 @@ impl Game {
     /// would do to its own — the actor included. Every body is hit for the
     /// blast's full figure (it rolls nothing), so this is exact for the
     /// bodies and silent on the chain it might set off.
-    pub(crate) fn blast_net_value(&self, actor: Entity, cell: (i32, i32), blast: Blast) -> f32 {
-        let own_side = self.acts_for_hostiles(actor);
-        self.blast_reach(cell, blast)
-            .1
-            .into_iter()
-            .map(|body| {
-                let dealt = self.mitigate_incoming_damage(body, blast.damage as i32) as f32;
-                if (self.world.get::<crate::components::Hostile>(body).is_some()) == own_side {
-                    -dealt
-                } else {
-                    dealt
+    ///
+    /// **The party's side vetoes, it does not merely subtract** — `None`
+    /// when a body fighting for the party would catch any of its own, the
+    /// rule `spares_own_side` holds for a routine's aim. A hostile only
+    /// subtracts.
+    pub(crate) fn blast_net_value(
+        &self,
+        actor: Entity,
+        cell: (i32, i32),
+        blast: Blast,
+    ) -> Option<f32> {
+        let acting_side = self.acts_for_hostiles(actor);
+        let mut net = 0.0;
+        for body in self.blast_reach(cell, blast).1 {
+            let dealt = self.mitigate_incoming_damage(body, blast.damage as i32) as f32;
+            if self.world.get::<crate::components::Hostile>(body).is_some() == acting_side {
+                if !acting_side {
+                    return None;
                 }
-            })
-            .sum()
+                net -= dealt;
+            } else {
+                net += dealt;
+            }
+        }
+        Some(net)
     }
 
     /// A prop swing the AI would rather take than `body`, or than nothing
@@ -291,7 +302,9 @@ impl Game {
             if blow.saturating_sub(prop.armour).max(1) < hp || !reaches(cell) {
                 continue;
             }
-            let value = self.blast_net_value(actor, cell, blast);
+            let Some(value) = self.blast_net_value(actor, cell, blast) else {
+                continue;
+            };
             if value > best {
                 best = value;
                 pick = Some(cell);

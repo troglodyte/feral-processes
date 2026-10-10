@@ -323,6 +323,49 @@ fn a_hostile_will_not_blow_a_volatile_prop_beside_itself() {
     assert_eq!(prop_hp(&game, (3, 3)), Some(5));
 }
 
+/// A party body beside a volatile prop with two hostiles in its blast, and
+/// a companion too when `with_companion`. Returns the swing the planner
+/// would take from the player's cell.
+fn party_swing_at_a_crowded_volatile(with_companion: bool) -> Option<(i32, i32)> {
+    let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = with_companion.then(|| {
+        let friend = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+        game.world
+            .resource_mut::<crate::resources::Party>()
+            .0
+            .push(friend);
+        friend
+    });
+    let wild = tactical_fight(&mut game, 2, 200);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    let grid = rows(&[((3, 3), 'V')]);
+    let refs: Vec<&str> = grid.iter().map(String::as_str).collect();
+    game.world.resource_mut::<TacticalBattle>().board = Board::from_rows(&refs);
+    place_one(&mut game, player, (3, 0));
+    place_one(&mut game, wild[0], (2, 4));
+    place_one(&mut game, wild[1], (4, 4));
+    if let Some(friend) = companion {
+        place_one(&mut game, friend, (3, 4));
+    }
+    let range = game.swing_range(player);
+    game.best_prop_swing(player, (3, 0), range, None, &[(2, 4), (4, 4)])
+}
+
+#[test]
+fn a_party_body_will_not_detonate_a_blast_that_catches_its_own_side() {
+    assert_eq!(
+        party_swing_at_a_crowded_volatile(false),
+        Some((3, 3)),
+        "two hostiles and no friend is worth a blast"
+    );
+    assert_eq!(
+        party_swing_at_a_crowded_volatile(true),
+        None,
+        "the companion in the blast should veto it, not be netted off"
+    );
+}
+
 #[test]
 fn the_same_board_gets_the_same_choice() {
     let wall: Marks = (0..SIDE).map(|x| ((x, 3), 'D')).collect();

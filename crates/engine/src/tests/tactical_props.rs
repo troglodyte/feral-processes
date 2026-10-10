@@ -216,7 +216,11 @@ fn a_body_killed_by_the_blast_it_set_off_hands_the_turn_on() {
     game.world.get_mut::<Stats>(wild[0]).unwrap().hp = 1;
     assert!(wait_for_turn(&mut game, wild[0]), "no turn for the hostile");
     place_one(&mut game, wild[0], (3, 4));
-    let order = game.world.resource::<TacticalBattle>().initiative().to_vec();
+    let order = game
+        .world
+        .resource::<TacticalBattle>()
+        .initiative()
+        .to_vec();
     let at = order.iter().position(|&b| b == wild[0]).unwrap();
     let next = order[(at + 1) % order.len()];
     assert!(game.tactical_attack_prop((3, 3)));

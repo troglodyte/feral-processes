@@ -321,4 +321,29 @@ mod tests {
         all.dedup();
         assert_eq!(all.len(), placed, "two footprints overlapped a cell");
     }
+
+    /// Prop placement keeps clear of exactly this set, so an empty (or
+    /// partial) answer lets a prefab land on a deployment anchor with every
+    /// other test still green.
+    #[test]
+    fn anchor_neighbourhoods_hold_every_anchor_of_every_bearing_and_its_ring() {
+        for side in [9, 12] {
+            let reserved = anchor_neighbourhoods(side);
+            for bearing in crate::tactical::map::NEIGHBOURS {
+                let (party, wild) = anchors(side, bearing);
+                for anchor in [party, wild] {
+                    for dx in -1..=1 {
+                        for dy in -1..=1 {
+                            let cell = (anchor.0 + dx, anchor.1 + dy);
+                            assert!(reserved.contains(&cell), "{cell:?} on side {side}");
+                        }
+                    }
+                }
+            }
+            assert!(
+                reserved.len() < (side * side) as usize,
+                "the whole board is reserved, so no prefab could ever land"
+            );
+        }
+    }
 }

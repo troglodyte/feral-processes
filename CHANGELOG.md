@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.10
+
+**A downed program is now revived in a Holding Cell, a new base structure unlocked by the Containment research, instead of anywhere you stand.** Pick a downed program beside the cell and spend a Reinitialization Protocol: the program boots locked in the cell's pen, and a posted warden works on it. Each few beats it makes a decompile attempt, and each failure makes the next more likely. On success it joins your roster; after five failures it breaks down into salvage in the cell's output. A prisoner does not work, fight in a siege or count as staff, and a destroyed cell gives the program back as a downed record. The Teardown Rig no longer jams when its worst-case payout is larger than its output can hold.
+
 ## 0.18.9
 
 **The battle map's ground is textured now, so open, rough, cover and blocked cells differ in pattern as well as in brightness, and each terrain looks its own.** OpenGrid, Deadlock, NullSector, Backplane and a siege's base floor each have their own tiles, and other ground uses a shared set. Every tile is a 16x16 image in `assets/sprites/` that can be redrawn in the Sprite Forge or replaced by a mod, and a cell with no image draws the flat colour it always did. The colours stay faint so the move, cover and danger highlights still read on top.

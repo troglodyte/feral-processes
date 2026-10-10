@@ -521,3 +521,15 @@ fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
         "a standing Research Station must offer the row"
     );
 }
+
+/// `Mode::PinPrisoner`'s row: hidden until a Holding Cell stands.
+#[test]
+fn the_hold_row_is_hidden_with_no_cell_and_shown_with_one() {
+    let mut app = app_owning_a_program_and_a_compiler(887, &[]);
+    stand_in_base(&mut app);
+    assert!(!labels(&app.base_menu_rows()).contains(&"Hold a program"));
+
+    let mut app = app_beside_a_holding_cell(888, Vec::new(), 0);
+    stand_in_base(&mut app);
+    assert!(labels(&app.base_menu_rows()).contains(&"Hold a program"));
+}

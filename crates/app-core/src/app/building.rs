@@ -547,6 +547,27 @@ impl App {
         self.mode = Mode::Playing;
     }
 
+    /// Confirms `Mode::PinPrisoner`'s picker: the row is a downed-program
+    /// record and `Game::jail_program` is the whole of the commit, refusing
+    /// through `Game::jail_blocker`'s own gate — the screen greys a row off
+    /// the same call, so the two cannot disagree.
+    pub(crate) fn handle_pin_prisoner_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let Some(rows) = self.game.as_ref().map(|g| g.downed_program_rows().len()) else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, rows) else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let outcome = game.jail_program(idx);
+        self.report(outcome);
+        self.mode = Mode::Playing;
+    }
+
     /// Which structure the pending order is for — the def id for a deploy,
     /// and the standing structure's own kind for an upgrade.
     ///

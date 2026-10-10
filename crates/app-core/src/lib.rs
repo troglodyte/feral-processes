@@ -1670,6 +1670,11 @@ pub enum Mode {
     /// two** — `Game::pinned_subject` decides which of the two the screen
     /// is showing, so there is nowhere for that rule to be stated twice.
     PinSubject,
+    /// Picking a downed program to boot as a prisoner in a Holding Cell
+    /// beside the party — `Game::downed_program_rows`, each greyed by
+    /// `Game::jail_blocker`. Nothing is spent until `App::handle_pin_prisoner_key`
+    /// resolves a row through `Game::jail_program`, so Esc simply closes it.
+    PinPrisoner,
     /// The Power Siphon beside the party: a staff picker when it is empty,
     /// one release row when it holds a program. `Game::siphon_holder` picks
     /// which, for the same reason as `PinSubject`'s single row — the screen
@@ -2386,6 +2391,8 @@ impl Mode {
             // Opened from the base menu, `BuildProgram`'s own reason —
             // never reachable mid-battle at all.
             | Mode::PinSubject
+            // Opened from the base menu, `PinSubject`'s own reason.
+            | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
             | Mode::Siphon

@@ -347,20 +347,19 @@ pub(crate) fn app_in_base_holding_a_downed_program(seed: u32) -> App {
     app
 }
 
-/// `app_holding_downed_programs` plus `protocols` Reinitialization Protocols
-/// in the player's pack — for the `R` key's own tests, which need both a
-/// record and the item that spends on it. Zero is a legitimate call: the
-/// refusal tests want a store holding a record and an empty pack.
-pub(crate) fn app_holding_downed_programs_and_protocols(
+/// A founded base with a Holding Cell at base-space `(2, 0)` (pen `(3, 1)`),
+/// the party standing beside it, `programs` in the downed store and
+/// `protocols` Reinitialization Protocols in the pack — `Mode::PinPrisoner`'s
+/// own fixture. Zero protocols is a legitimate call: the refusal test wants
+/// a record and an empty pack.
+pub(crate) fn app_beside_a_holding_cell(
     seed: u32,
     programs: Vec<feral_processes_engine::items::DownedProgram>,
     protocols: u32,
 ) -> App {
-    let assets_dir = test_assets_dir();
-    let mut app = test_app(seed);
-    let path = scratch_path("downed_programs_protocols", seed);
+    let mut app = app_owning_a_program_and_a_station_of("holding_cell", "holding_cell", seed);
+    let path = scratch_path("holding_cell_records", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
-
     let mut data = save::load_from_file(&path).unwrap();
     data.player.downed_programs = programs;
     if protocols > 0 {
@@ -370,42 +369,10 @@ pub(crate) fn app_holding_downed_programs_and_protocols(
         ));
     }
     save::save_to_file(&path, &data).unwrap();
-
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    app.game = Game::load(&path, &test_assets_dir()).ok();
     let _ = std::fs::remove_file(&path);
     app.mode = Mode::Playing;
-    app
-}
-
-/// `app_holding_downed_programs_and_protocols` with every installed tool
-/// pulled, `data.player.tools` cleared — the `R` key's own "works with no
-/// tool at all" test needs a fixture with no extraction-options rows to
-/// prove `R` isn't reached through one; every other fixture here carries
-/// the starter tool, which would leave that path untested.
-pub(crate) fn app_holding_downed_programs_and_protocols_with_no_tools(
-    seed: u32,
-    programs: Vec<feral_processes_engine::items::DownedProgram>,
-    protocols: u32,
-) -> App {
-    let assets_dir = test_assets_dir();
-    let mut app = test_app(seed);
-    let path = scratch_path("downed_programs_protocols_no_tools", seed);
-    app.game.as_mut().unwrap().save(&path).unwrap();
-
-    let mut data = save::load_from_file(&path).unwrap();
-    data.player.downed_programs = programs;
-    data.player.tools = Vec::new();
-    if protocols > 0 {
-        data.player.inventory.push((
-            ItemId::from(feral_processes_engine::items::ids::REINITIALIZATION_PROTOCOL),
-            protocols,
-        ));
-    }
-    save::save_to_file(&path, &data).unwrap();
-
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
-    let _ = std::fs::remove_file(&path);
-    app.mode = Mode::Playing;
+    stand_beside_the_compiler(&mut app);
     app
 }
 

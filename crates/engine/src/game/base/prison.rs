@@ -288,6 +288,11 @@ impl Game {
         found.into_iter().map(|(_, _, e)| e).collect()
     }
 
+    /// Whether any Holding Cell stands in the base, beside the party or not.
+    pub fn has_holding_cell(&self) -> bool {
+        !self.holding_cells().is_empty()
+    }
+
     /// One beat of every Holding Cell — `run_teardown_rigs`' shape and its
     /// place in the tick, after the schedule that writes `PowerGrid`.
     pub(crate) fn run_holding_cells(&mut self) {

@@ -189,6 +189,15 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Listed whenever a Holding Cell stands, adjacent or not: the
+        // picker's rows say `NoFreeCell` when the party is not beside one,
+        // so the screen is what tells the player where to stand.
+        label: "Hold a program",
+        target: Mode::PinPrisoner,
+        locality: Locality::Base,
+        available: |app| app.game.as_ref().is_some_and(|g| g.has_holding_cell()),
+    },
+    GroupEntry {
         label: "Routine research",
         target: Mode::RoutineResearch,
         locality: Locality::Anywhere,

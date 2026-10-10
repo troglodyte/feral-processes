@@ -3996,11 +3996,14 @@ mod rereview_findings {
             pos.y = 0;
         }
         let cell = game.world.spawn_empty().id();
-        game.world.entity_mut(prisoner).insert(crate::components::Jailed {
-            cell,
-            attempts: 0,
-            progress: 0,
-        });
+        game.world
+            .entity_mut(prisoner)
+            .insert(crate::components::Jailed {
+                cell,
+                attempts: 0,
+                progress: 0,
+                record: None,
+            });
         stand_in_base_at(&mut game, 3, 0);
         set_zone(&mut game, 2);
         assert!(game.open_siege());

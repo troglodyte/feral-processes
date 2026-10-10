@@ -65,8 +65,9 @@ Each failure raises the next attempt's odds through
   resolved to a `Position`, as `UnderStudy::station` is
   (`lifecycle.rs:2570`). **No `SAVE_FORMAT_VERSION` bump.** It needs a
   save→load test, not only a RON round trip.
-- **RNG:** each attempt and each breakdown takes one `GameRng` draw, and
-  only while a cell is running. A save with no cell keeps its stream.
+- **RNG:** each attempt takes one `GameRng` draw and each breakdown two
+  (the tool, then the band), and only while a cell is running. A breakdown
+  with no output room defers and draws nothing. A save with no cell keeps its stream.
 
 ## Decisions (not yet reviewed by the user — flag in the hand-back)
 

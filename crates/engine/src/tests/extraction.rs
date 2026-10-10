@@ -4106,8 +4106,8 @@ fn the_rigs_report_names_its_standing_tool_and_is_silent_without_one() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Reinitialization Protocol — phase 1 (engine + asset)
-// docs/superpowers/archive/specs/2026-09-28-reinitialization-protocol-design.md
+// Reinitialization Protocol item and pinned spawns — what the Holding Cell's
+// `jail_program` boots a body with
 // ─────────────────────────────────────────────────────────────────────────
 
 /// The item itself: it must load from the real asset set, and it must never

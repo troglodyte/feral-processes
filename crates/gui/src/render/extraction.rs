@@ -281,20 +281,6 @@ mod tests {
         tools: Option<Vec<ToolId>>,
         bench: Option<(String, u32, (i32, i32))>,
     ) -> Game {
-        game_with_state_and_inventory(seed, held, tools, bench, &[])
-    }
-
-    /// `game_with_state` plus items in the player's pack — the reinitialize
-    /// row's own tests need a held protocol, and every other caller here
-    /// wants none, which is why it stays a separate function rather than a
-    /// fifth positional argument on every existing call.
-    fn game_with_state_and_inventory(
-        seed: u32,
-        held: Vec<DownedProgram>,
-        tools: Option<Vec<ToolId>>,
-        bench: Option<(String, u32, (i32, i32))>,
-        inventory: &[(&str, u32)],
-    ) -> Game {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let assets = assets_dir();
@@ -308,11 +294,6 @@ mod tests {
         data.player.downed_programs = held;
         if let Some(tools) = tools {
             data.player.tools = tools;
-        }
-        for (id, qty) in inventory {
-            data.player
-                .inventory
-                .push((feral_processes_engine::items::ItemId::from(*id), *qty));
         }
         // Base space, standing on `(0, 0)`. `extraction_bench_tier` does not
         // care where the party is, but `Game::adjacent_teardown_rig` does —

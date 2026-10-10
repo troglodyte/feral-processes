@@ -1376,11 +1376,16 @@ pub struct CronjobSave {
 
 /// A prisoner's confinement, as `CreatureSave::jailed` — `components::Jailed`
 /// with its cell named by tile.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JailedSave {
     pub cell_pos: (i32, i32),
     pub attempts: u32,
     pub progress: u32,
+    /// The record the prisoner was booted from. Additive behind
+    /// `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump: a save without
+    /// it falls back to `downed_program_for`'s rebuild from the body.
+    #[serde(default)]
+    pub record: Option<crate::items::DownedProgram>,
 }
 
 #[derive(Serialize, Deserialize)]

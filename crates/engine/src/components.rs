@@ -2336,11 +2336,18 @@ pub struct UnderStudy {
 /// occupant is derived with a query (`Game::cell_prisoner`), never stored on
 /// the cell. `attempts` is decompile rolls already failed and `progress`
 /// the warden beats since the last roll.
-#[derive(Component, Clone, Copy, Debug)]
+///
+/// `record` is the `DownedProgram` the body was booted from, carried whole
+/// so a released prisoner hands back the kill it came from (level and
+/// condition included) and a breakdown is priced from that level rather than
+/// the level-1 body. `None` only for a prisoner loaded from a save that
+/// predates the field; the readers then rebuild one from the body.
+#[derive(Component, Clone, Debug)]
 pub struct Jailed {
     pub cell: Entity,
     pub attempts: u32,
     pub progress: u32,
+    pub record: Option<crate::items::DownedProgram>,
 }
 
 /// A tamed program held in a Power Siphon — the grid's supply from that

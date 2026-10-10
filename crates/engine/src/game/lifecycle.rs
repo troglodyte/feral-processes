@@ -1323,28 +1323,37 @@ impl Game {
     }
 
     /// Reattaches `components::Jailed` now that structures are restored —
-    /// `attach_siphoned`'s shape and leniency. **A tile naming no structure,
-    /// one that no longer declares `holds_prisoner`, or a cell an earlier
-    /// prisoner already fills drops the confinement silently**: the program
-    /// comes back as ordinary `Staff`.
+    /// `attach_siphoned`'s shape. **A tile naming no structure, one that no
+    /// longer declares `holds_prisoner`, or a cell an earlier prisoner
+    /// already fills releases the prisoner**: the body despawns and its record
+    /// goes back to the player's downed programs (`release_prisoner`'s rule),
+    /// rather than the program walking free as `Staff` having skipped the
+    /// decompile.
     fn attach_jailed(
         &mut self,
         pending: Vec<(Entity, save::JailedSave)>,
         structure_positions: &HashMap<(i32, i32), Entity>,
     ) {
         for (program, saved) in pending {
-            let Some(&cell) = structure_positions.get(&saved.cell_pos) else {
+            let cell = structure_positions
+                .get(&saved.cell_pos)
+                .copied()
+                .filter(|&c| self.prison_pen(c).is_some() && self.cell_prisoner(c).is_none());
+            let Some(cell) = cell else {
+                let record = saved.record.or_else(|| self.downed_program_for(program));
+                if let Some(record) = record {
+                    self.push_downed_program(record);
+                }
+                self.world.despawn(program);
                 continue;
             };
-            if self.prison_pen(cell).is_none() || self.cell_prisoner(cell).is_some() {
-                continue;
-            }
             self.world
                 .entity_mut(program)
                 .insert(crate::components::Jailed {
                     cell,
                     attempts: saved.attempts,
                     progress: saved.progress,
+                    record: saved.record,
                 });
         }
     }
@@ -2632,6 +2641,7 @@ impl Game {
                     cell_pos: (cell.x, cell.y),
                     attempts: j.attempts,
                     progress: j.progress,
+                    record: j.record.clone(),
                 })
             });
         // `(order, cell)` in an in-progress siege — `None` whenever there is

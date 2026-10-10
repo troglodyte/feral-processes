@@ -437,8 +437,13 @@ fn a_prisoners_attempts_and_progress_survive_a_save_and_load() {
         .expect("the prisoner is back on the roster")
         .entity;
     assert_eq!(loaded.program_role(back), Some(ProgramRole::Jailed));
-    let jailed = *loaded.world.get::<Jailed>(back).unwrap();
+    let jailed = loaded.world.get::<Jailed>(back).unwrap().clone();
     assert_eq!((jailed.attempts, jailed.progress), (3, 17));
+    assert_eq!(
+        jailed.record,
+        Some(record(MID_SPECIES, Rarity::Ordinary)),
+        "the booted-from record survives the round trip whole"
+    );
     let reloaded_cell = loaded
         .find_blocking_structure_at(ANCHOR.0, ANCHOR.1)
         .expect("the cell reloads standing");
@@ -451,7 +456,7 @@ fn a_prisoners_attempts_and_progress_survive_a_save_and_load() {
 }
 
 #[test]
-fn a_prisoner_whose_cell_is_gone_loads_as_staff() {
+fn a_prisoner_whose_cell_is_gone_returns_its_record_on_load() {
     let (mut game, cell) = base_with_a_cell();
     game.jail_program(0).unwrap();
     let body = the_prisoner(&game, cell);
@@ -468,13 +473,17 @@ fn a_prisoner_whose_cell_is_gone_loads_as_staff() {
     let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
     let _ = std::fs::remove_file(&path);
 
-    let back = loaded
-        .owned_pets()
-        .into_iter()
-        .find(|p| p.name.contains("Inmate"))
-        .expect("the program is back on the roster")
-        .entity;
-    assert_eq!(loaded.program_role(back), Some(ProgramRole::Staff));
+    assert!(
+        loaded
+            .owned_pets()
+            .into_iter()
+            .all(|p| !p.name.contains("Inmate")),
+        "the body is gone, not freed as staff"
+    );
+    assert_eq!(
+        records(&loaded),
+        vec![record(MID_SPECIES, Rarity::Ordinary)]
+    );
 }
 
 #[test]
@@ -485,6 +494,31 @@ fn a_standing_empty_cell_draws_nothing_from_the_rng() {
         stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
         if with_cell {
             spawn_structure_at(&mut game, CELL, ANCHOR.0, ANCHOR.1);
+        }
+        for _ in 0..30 {
+            game.tick();
+        }
+        game.world.resource_mut::<GameRng>().0.random()
+    };
+    assert_eq!(next(true), next(false));
+}
+
+#[test]
+fn a_warded_empty_cell_draws_nothing_from_the_rng() {
+    use rand::RngExt;
+    let next = |with_cell: bool| -> u64 {
+        let mut game = Game::new(7304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
+        if with_cell {
+            let cell = spawn_machine_at(&mut game, CELL, ANCHOR.0, ANCHOR.1);
+            stand_ample_grid_supply(&mut game);
+            let warden = spawn_tamed(&mut game, 10, 3);
+            game.world.entity_mut(warden).insert(Task {
+                kind: TaskKind::GatherResource,
+                target: cell,
+                progress: 0,
+                required: 1,
+            });
         }
         for _ in 0..30 {
             game.tick();
@@ -562,7 +596,7 @@ fn base_with_a_cell_seeded(seed: u64) -> (Game, Entity) {
 }
 
 fn jailed(game: &Game, body: Entity) -> Jailed {
-    *game.world.get::<Jailed>(body).unwrap()
+    game.world.get::<Jailed>(body).unwrap().clone()
 }
 
 #[test]
@@ -741,11 +775,11 @@ fn assert_door_returns_the_record(door: impl FnOnce(&mut Game, Entity)) {
     door(&mut game, cell);
 
     assert!(game.world.get_entity(body).is_err(), "the body despawns");
-    let back = records(&game);
-    assert_eq!(back.len(), 1, "the record returns");
-    assert_eq!(back[0].species, MID_SPECIES);
-    assert_eq!(back[0].rarity, Rarity::Platinum);
-    assert!(!back[0].boss);
+    assert_eq!(
+        records(&game),
+        vec![record(MID_SPECIES, Rarity::Platinum)],
+        "the record returns whole, level and condition included"
+    );
     assert_eq!(protocols(&game), packs, "the protocol is lost");
 }
 
@@ -837,4 +871,87 @@ fn the_holding_cell_is_buildable_only_once_containment_is_researched() {
         .0
         .insert("containment".into());
     assert!(game.structure_unlocked(CELL));
+}
+
+fn output_total(game: &Game, cell: Entity) -> u32 {
+    game.world.get::<Stock>(cell).unwrap().output.values().sum()
+}
+
+#[test]
+fn a_breakdown_is_priced_from_the_carried_record_not_the_level_one_body() {
+    let paid = |level: u32| -> u32 {
+        let (mut game, cell, body) = a_warded_cell(7301);
+        game.world.get_mut::<Jailed>(body).unwrap().record = Some(DownedProgram {
+            level,
+            ..record(MID_SPECIES, Rarity::Ordinary)
+        });
+        game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
+        game.settle_jail_attempt(cell, body, false);
+        output_total(&game, cell)
+    };
+    assert!(paid(60) > paid(1), "a higher-level kill pays more");
+}
+
+#[test]
+fn a_breakdown_is_priced_without_the_bench_bonus() {
+    let paid = |bench_tier: Option<u32>| -> Vec<(ItemId, u32)> {
+        let (mut game, cell, body) = a_warded_cell(7301);
+        if let Some(t) = bench_tier {
+            let bench = spawn_structure_at(&mut game, "compiler", 9, 9);
+            game.world.entity_mut(bench).insert(StructureTier(t));
+            assert!(game.extraction_bench_tier() >= t, "precondition");
+        }
+        {
+            let mut j = game.world.get_mut::<Jailed>(body).unwrap();
+            j.record = Some(DownedProgram {
+                level: 60,
+                ..record(MID_SPECIES, Rarity::Ordinary)
+            });
+            j.attempts = JAIL_MAX_ATTEMPTS - 1;
+        }
+        game.settle_jail_attempt(cell, body, false);
+        let mut rows: Vec<_> = game
+            .world
+            .get::<Stock>(cell)
+            .unwrap()
+            .output
+            .clone()
+            .into_iter()
+            .collect();
+        rows.sort();
+        rows
+    };
+    assert_eq!(paid(None), paid(Some(6)), "a cell is not a bench's work");
+}
+
+#[test]
+fn a_breakdown_with_no_room_waits_and_draws_nothing() {
+    use rand::RngExt;
+    let (mut game, cell, body) = a_warded_cell(7301);
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+        assert_eq!(stock.output_room(), 0);
+    }
+    game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
+    game.world.resource_mut::<GameRng>().0 = rand::SeedableRng::seed_from_u64(99);
+    let mut twin: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(99);
+
+    game.settle_jail_attempt(cell, body, false);
+    for _ in 0..5 {
+        game.run_holding_cells();
+    }
+
+    assert_eq!(game.cell_prisoner(cell), Some(body), "the prisoner waits");
+    assert_eq!(
+        game.world.resource_mut::<GameRng>().0.random::<u64>(),
+        twin.random::<u64>(),
+        "a deferred breakdown draws nothing"
+    );
+
+    game.world.get_mut::<Stock>(cell).unwrap().output.clear();
+    game.run_holding_cells();
+    assert!(game.cell_prisoner(cell).is_none(), "room lets it through");
+    assert!(output_total(&game, cell) > 0);
 }

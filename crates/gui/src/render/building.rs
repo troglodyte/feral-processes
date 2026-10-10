@@ -909,7 +909,7 @@ fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
         .into_iter()
         .enumerate()
         .map(|(i, r)| {
-            let mut label = format!("[{}] {} Lv{}", menu_shortcut(i), r.name, r.level);
+            let mut label = format!("[{}] {}", menu_shortcut(i), r.name);
             if let Some(tier) = r.rarity.label() {
                 label.push_str(&format!("  {tier}"));
             }

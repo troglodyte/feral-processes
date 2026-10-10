@@ -10,6 +10,7 @@
 use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::study::pen_corner;
+use crate::game::extraction::extraction_band_with_bench;
 use crate::game::spawning::SpawnPins;
 use crate::items::DownedProgram;
 use crate::resources::{GameRng, MessageKind, PowerGrid};
@@ -207,8 +208,9 @@ impl Game {
         let db = self.world.resource::<AbilityDb>();
         let carried: Vec<crate::abilities::AbilityId> = record
             .carried
-            .into_iter()
+            .iter()
             .filter(|id| db.get(id).is_some())
+            .cloned()
             .collect();
         let pins = SpawnPins {
             rarity: Some(record.rarity),
@@ -233,6 +235,7 @@ impl Game {
             cell,
             attempts: 0,
             progress: 0,
+            record: Some(record),
         });
         let label = self.creature_label(prisoner);
         self.log_kind(
@@ -372,6 +375,21 @@ impl Game {
             self.set_rig_status(cell, MachineStatus::Starved);
             return;
         };
+        // A breakdown the cell had no room to pay is retried every beat,
+        // not re-rolled: the last attempt already failed.
+        let spent = self
+            .world
+            .get::<components::Jailed>(prisoner)
+            .is_some_and(|j| j.attempts >= JAIL_MAX_ATTEMPTS);
+        if spent {
+            let status = if self.break_down_prisoner(cell, prisoner) {
+                MachineStatus::Running
+            } else {
+                MachineStatus::Clogged
+            };
+            self.set_rig_status(cell, status);
+            return;
+        }
         self.set_rig_status(cell, MachineStatus::Running);
         let due = self.attempt_ticks_of(cell).unwrap_or(u32::MAX);
         let progress = {
@@ -450,12 +468,11 @@ impl Game {
         self.extraction_yield(program, tool, scaled)
     }
 
-    /// The tool a breakdown is priced with, drawn uniformly from the pooled
-    /// tools sorted by id (`ToolDb::all`), at tier 1. Image and Routine tools
-    /// are skipped: they teach rather than pay.
-    fn breakdown_tool(&mut self) -> Option<ToolDef> {
-        let pool: Vec<ToolDef> = self
-            .world
+    /// The tools a breakdown may be priced with, sorted by id (`ToolDb::all`),
+    /// at tier 1. Image and Routine tools are skipped: they teach rather
+    /// than pay.
+    fn breakdown_pool(&self) -> Vec<ToolDef> {
+        self.world
             .resource::<ToolDb>()
             .all()
             .filter(|t| {
@@ -463,28 +480,73 @@ impl Game {
                     && !matches!(t.category, ToolCategory::Routines | ToolCategory::Image)
             })
             .cloned()
-            .collect();
-        if pool.is_empty() {
-            return None;
+            .map(|mut t| {
+                t.tier = 1;
+                t
+            })
+            .collect()
+    }
+
+    /// A breakdown's band: no bench term, because a cell is not a bench's
+    /// work (plan Decision 4).
+    fn breakdown_band(program: &DownedProgram, tool: &ToolDef) -> crate::battle::DamageRange {
+        extraction_band_with_bench(program, tool, 0)
+    }
+
+    /// The most a breakdown of `program` could pay, over every tool it might
+    /// draw — the room a cell must have before the tool is drawn at all.
+    fn breakdown_worst_case(&self, program: &DownedProgram) -> u32 {
+        self.breakdown_pool()
+            .iter()
+            .map(|tool| {
+                let band = Self::breakdown_band(program, tool);
+                self.breakdown_yield(program, tool, band.max)
+                    .iter()
+                    .map(|(_, qty)| *qty)
+                    .sum()
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The record `prisoner` was booted from. A prisoner from a save that
+    /// predates `Jailed::record` has none, so one is rebuilt from the body
+    /// (`downed_program_for`, which rolls a condition) and **stored back**,
+    /// so a deferred breakdown retried every beat rolls it once.
+    fn prisoner_record(&mut self, prisoner: Entity) -> Option<DownedProgram> {
+        if let Some(record) = self
+            .world
+            .get::<components::Jailed>(prisoner)
+            .and_then(|j| j.record.clone())
+        {
+            return Some(record);
         }
-        let pick = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..pool.len())
-        };
-        let mut tool = pool.into_iter().nth(pick)?;
-        tool.tier = 1;
-        Some(tool)
+        let rebuilt = self.downed_program_for(prisoner)?;
+        self.world.get_mut::<components::Jailed>(prisoner)?.record = Some(rebuilt.clone());
+        Some(rebuilt)
     }
 
     /// The prisoner's last failed attempt: the body despawns and a reduced
     /// extraction-style yield lands in the cell's `Stock::output`.
-    fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) {
+    ///
+    /// **Defers, drawing nothing, until the cell has room for the worst
+    /// payout** (the teardown rig's rule: a full output holds the program
+    /// rather than eating the yield); `false` means deferred and the
+    /// prisoner stays. Two `GameRng` draws when it goes ahead: the tool,
+    /// then the band.
+    fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) -> bool {
+        let program = self.prisoner_record(prisoner);
+        if let Some(program) = program.as_ref() {
+            let room = self.world.get::<Stock>(cell).map_or(0, |s| s.output_room());
+            if room < self.breakdown_worst_case(program) {
+                return false;
+            }
+        }
         let label = self.creature_label(prisoner);
-        let program = self.downed_program_for(prisoner);
         let granted = match (program.as_ref(), self.breakdown_tool()) {
             (Some(program), Some(tool)) => {
                 let rolled = {
-                    let band = self.extraction_band(program, &tool);
+                    let band = Self::breakdown_band(program, &tool);
                     let mut rng = self.world.resource_mut::<GameRng>();
                     band.roll(&mut rng.0)
                 };
@@ -508,6 +570,21 @@ impl Game {
             format!("{label} breaks down in the cell: {}.", parts.join(", "))
         };
         self.log_base_kind(MessageKind::Loot, line);
+        true
+    }
+
+    /// The tool a breakdown is priced with, drawn uniformly from
+    /// `breakdown_pool`.
+    fn breakdown_tool(&mut self) -> Option<ToolDef> {
+        let pool = self.breakdown_pool();
+        if pool.is_empty() {
+            return None;
+        }
+        let pick = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..pool.len())
+        };
+        pool.into_iter().nth(pick)
     }
 
     /// A destroyed or demolished cell lets its prisoner go: the body
@@ -521,7 +598,7 @@ impl Game {
             return;
         };
         let label = self.creature_label(prisoner);
-        if let Some(record) = self.downed_program_for(prisoner) {
+        if let Some(record) = self.prisoner_record(prisoner) {
             self.push_downed_program(record);
         }
         self.world.despawn(prisoner);

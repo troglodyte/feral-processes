@@ -171,10 +171,7 @@ impl Game {
         // never been upgraded pays nothing, and the upgrade is what sells
         // yield. See `tuning::TOOL_TIER_SCALE_STEP`'s neighbouring doc.
         let bench = self.extraction_bench_tier().saturating_sub(1);
-        let scale = tier_scale(tool.tier + bench);
-        let centre = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as i32;
-        let spread = (centre as f32 * tuning::EXTRACT_UNIT_SPREAD).round() as i32;
-        DamageRange::centred(centre, spread)
+        extraction_band_with_bench(program, tool, bench)
     }
 
     /// What extracting `program` with `tool` grants once the band has
@@ -952,4 +949,19 @@ impl Game {
         let held = self.world.get::<Hopper>(rig).map_or(0, |h| h.queue.len());
         capacity.saturating_sub(held)
     }
+}
+
+/// `Game::extraction_band`'s arithmetic with the bench's tier bonus (its
+/// `tier - 1`) supplied: a pure function so a payout that is not a bench's
+/// work (a Holding Cell's breakdown passes `0`) prices off the same formula
+/// instead of a copy.
+pub(crate) fn extraction_band_with_bench(
+    program: &DownedProgram,
+    tool: &ToolDef,
+    bench_bonus: u32,
+) -> DamageRange {
+    let scale = tier_scale(tool.tier + bench_bonus);
+    let centre = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as i32;
+    let spread = (centre as f32 * tuning::EXTRACT_UNIT_SPREAD).round() as i32;
+    DamageRange::centred(centre, spread)
 }

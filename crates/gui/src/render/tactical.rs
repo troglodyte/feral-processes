@@ -1467,9 +1467,17 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
     rows
 }
 
+/// The most characters of a prop's readout the keybar will carry.
+/// `strip::fitting` stops at the first segment that does not fit, so an
+/// unbounded readout — a modded piece id is as long as its author likes —
+/// would blank the rest of the bar rather than just itself.
+const AIM_READOUT_CHARS: usize = 28;
+
 /// The keybar row naming the prop under the aim cursor, first so
 /// `strip::fitting`, which drops from the end, never loses it. A body on the
-/// cell outranks a prop, as it does when the swing commits.
+/// cell outranks a prop, as it does when the swing commits. Cut to
+/// `AIM_READOUT_CHARS`, since being first means a long one blocks the keys
+/// behind it.
 pub(super) fn aim_readout(
     view: &TacticalView,
     cursor: Option<(i32, i32)>,
@@ -1479,7 +1487,29 @@ pub(super) fn aim_readout(
         return None;
     }
     let prop = view.props.iter().find(|p| p.cell == cell)?;
-    Some((String::new(), prop_readout(prop)))
+    let mut text = prop_readout(prop);
+    if text.chars().count() > AIM_READOUT_CHARS {
+        text = text.chars().take(AIM_READOUT_CHARS - 1).collect::<String>() + "…";
+    }
+    Some((String::new(), text))
+}
+
+/// The keybar's rows for a fight: `action_bar`, with the aim cursor's prop
+/// readout ahead of it while the cursor is open. One call for the renderer
+/// and the fit test, so the bar measured is the bar drawn.
+pub(super) fn keybar_rows(
+    mode: Mode,
+    view: &TacticalView,
+    auto: bool,
+    cursor: Option<(i32, i32)>,
+) -> Vec<(String, String)> {
+    let mut rows = action_bar(mode, view, auto);
+    if mode == Mode::TacticalAim
+        && let Some(row) = aim_readout(view, cursor)
+    {
+        rows.insert(0, row);
+    }
+    rows
 }
 
 /// Which consumable does the acting body spend? `[U]`'s picker, drawn as a
@@ -3322,12 +3352,46 @@ mod tests {
         // census over one of them passes against the other overflowing, and
         // the board's bar is one row longer while auto-attack is on offer —
         // which is the row that has to be measured rather than assumed to fit.
-        for (mode, auto) in [
-            (Mode::TacticalBattle, false),
-            (Mode::TacticalBattle, true),
-            (Mode::TacticalAim, false),
-        ] {
-            let actions = action_bar(mode, &view, auto);
+        // And the aim bar with the worst readout a modded piece id can make:
+        // it leads the bar, so one that does not fit blanks every key behind.
+        let cell = (
+            view.bodies.iter().map(|b| b.cell.0).max().unwrap_or(0) + 50,
+            0,
+        );
+        let mut long = view.clone();
+        long.props
+            .push(feral_processes_engine::tactical::view::PropView {
+                cell,
+                name: "an_extraordinarily_long_modded_piece_identifier".repeat(4),
+                sprite: String::new(),
+                hp: Some(88),
+                max_hp: Some(88),
+                volatile: true,
+                decoration: false,
+            });
+        let cases = [
+            (
+                Mode::TacticalBattle,
+                false,
+                action_bar(Mode::TacticalBattle, &view, false),
+            ),
+            (
+                Mode::TacticalBattle,
+                true,
+                action_bar(Mode::TacticalBattle, &view, true),
+            ),
+            (
+                Mode::TacticalAim,
+                false,
+                action_bar(Mode::TacticalAim, &view, false),
+            ),
+            (
+                Mode::TacticalAim,
+                false,
+                keybar_rows(Mode::TacticalAim, &long, false, Some(cell)),
+            ),
+        ];
+        for (mode, auto, actions) in cases {
             assert!(
                 auto || actions.len() >= 3,
                 "not a full bar for {mode:?}: {actions:?}"

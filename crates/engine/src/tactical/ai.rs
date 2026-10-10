@@ -162,6 +162,9 @@ enum TurnTarget {
     Body(Entity),
     Decoy((i32, i32)),
     Aim((i32, i32)),
+    /// A swing at the prop on this cell: a volatile one worth setting off, or
+    /// the cover between the body and everything it fights.
+    Prop((i32, i32)),
 }
 
 /// What a `Profiled` hostile will do with its next turn, published so the
@@ -346,6 +349,14 @@ impl Game {
         hostile != injected
     }
 
+    /// **The party's side vetoes, it does not merely subtract**: a body
+    /// fighting for the party never trades its own side's Integrity for
+    /// the other's, while a hostile only nets the two. The one door both a
+    /// harmful routine's aim and a prop detonation read.
+    pub(crate) fn vetoes_own_side_harm(&self, actor: Entity) -> bool {
+        !self.acts_for_hostiles(actor)
+    }
+
     /// Whether `body` is a companion the AI drives rather than the player —
     /// the design's "going mad": a `Temperature` or `Injected` entry takes it
     /// over for as long as the entry lasts, whether or not `App::tactical_auto`
@@ -498,7 +509,9 @@ impl Game {
             )
             .and_then(|target| match target {
                 TurnTarget::Body(entity) => battle.cell_of(entity),
-                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) => Some(cell),
+                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) | TurnTarget::Prop(cell) => {
+                    Some(cell)
+                }
             });
         Some(Forecast {
             action,
@@ -1398,7 +1411,7 @@ impl Game {
             i32::try_from(band.max).unwrap_or(0) + i32::from(battle.footprint_of(actor)) - 1;
         let acting_side = self.acts_for_hostiles(actor);
         let hallucinating = !helpful && self.is_hallucinating(actor);
-        let spares_own_side = !helpful && !acting_side;
+        let spares_own_side = !helpful && self.vetoes_own_side_harm(actor);
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {
@@ -1514,6 +1527,9 @@ impl Game {
             Some(TurnTarget::Body(target)) => {
                 self.tactical_attack(target);
             }
+            Some(TurnTarget::Prop(cell)) => {
+                self.tactical_attack_prop(cell);
+            }
             Some(TurnTarget::Aim(_)) | None => {}
         }
     }
@@ -1564,9 +1580,13 @@ impl Game {
                 x,
             )
         });
-        reachable
-            .first()
-            .map(|&(_, _, target)| TurnTarget::Body(target))
+        let body = reachable.first().map(|&(_, _, target)| target);
+        // A prop is a candidate beside the body swing and scored on its
+        // scale; `best_prop_swing` declines (and costs nothing) on a board
+        // with no props, so the swing above is untouched there.
+        self.best_prop_swing(actor, from, range, body, targets)
+            .map(TurnTarget::Prop)
+            .or(body.map(TurnTarget::Body))
     }
 }
 

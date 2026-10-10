@@ -16,7 +16,7 @@ use crate::abilities::{AbilityRange, AbilityShape};
 use crate::components::{Charging, Creature};
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
-use crate::tactical::map::{BattleCell, Board};
+use crate::tactical::map::Board;
 use crate::tactical::{TacticalBattle, deploy, footprint_cells_at, footprint_clear};
 use crate::tuning::{
     DEFAULT_BASE_SPEED, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX,
@@ -107,9 +107,21 @@ pub fn movement_field(
     body: Entity,
     allowance: u32,
 ) -> HashMap<(i32, i32), u32> {
-    let Some(origin) = battle.cell_of(body) else {
-        return HashMap::new();
-    };
+    match battle.cell_of(body) {
+        Some(origin) => movement_field_from(battle, body, origin, allowance),
+        None => HashMap::new(),
+    }
+}
+
+/// `movement_field` for a body standing on `origin` rather than where it
+/// is — a planner pricing a turn it has not yet walked to (a profiled
+/// forecast) asks from the cell that turn starts on.
+pub fn movement_field_from(
+    battle: &TacticalBattle,
+    body: Entity,
+    origin: (i32, i32),
+    allowance: u32,
+) -> HashMap<(i32, i32), u32> {
     // Gathered once rather than scanned per successor: the walk asks about
     // every neighbour of every cell it reaches, and `occupant` is a linear
     // scan over the fight's whole roster.
@@ -135,7 +147,7 @@ pub fn movement_field(
         if !footprint_clear(board, &footprint_cells_at(cell, side), &occupied) {
             return None;
         }
-        board.cell(cell.0, cell.1).movement_cost()
+        board.move_cost(cell.0, cell.1)
     });
     field.retain(|_, cost| *cost <= allowance);
     field
@@ -190,7 +202,7 @@ pub fn path_to(
     while cell != from {
         let Some(prev) = field
             .get(&cell)
-            .zip(board.cell(cell.0, cell.1).movement_cost())
+            .zip(board.move_cost(cell.0, cell.1))
             .and_then(|(&cost, entering)| cost.checked_sub(entering))
             .and_then(|before| {
                 let mut back: Vec<(i32, i32)> = NEIGHBOURS
@@ -279,8 +291,8 @@ pub fn in_range(from: &[(i32, i32)], aim: (i32, i32), range: AbilityRange) -> bo
 ///
 /// 1. The two are further apart than `TACTICAL_MELEE_RANGE`. A boulder is no
 ///    help against someone already standing on top of you.
-/// 2. One of the defender's eight neighbours is `BattleCell::Cover` **on the
-///    attacker's side** — the dot product of (neighbour - defender) with
+/// 2. One of the defender's eight neighbours is cover (`Board::is_cover`) **on
+///    the attacker's side** — the dot product of (neighbour - defender) with
 ///    (attacker - defender) is **strictly positive**. Strictly is the whole
 ///    of the ninety-degree rule: a boulder exactly abeam scores zero and is
 ///    beside you rather than between you and the shot. This is deliberately
@@ -290,19 +302,18 @@ pub fn in_range(from: &[(i32, i32)], aim: (i32, i32), range: AbilityRange) -> bo
 /// 3. The attacker can see the defender at all. A shot that cannot be taken
 ///    needs no modifier.
 ///
-/// Cover is read off `BattleCell::Cover` rather than `blocks_sight()`. The
-/// two are the same predicate today, and `blocks_sight` is the one that
-/// would grow a second member if a fifth cell kind ever landed — a glass
-/// wall would stop a shot without hiding anybody. Off-board neighbours read
-/// as `Blocked` through `Board::cell`, so the scan needs no bounds check.
+/// Cover is read off `Board::is_cover` rather than `blocks_sight()`: a
+/// destructible low barrier or a glass wall can stop a shot without hiding
+/// anybody, and a prop can hide without being a cover cell. Off-board
+/// neighbours read as `Blocked` through `Board::cell`, so the scan needs no
+/// bounds check.
 pub fn cover_between(board: &Board, attacker: (i32, i32), defender: (i32, i32)) -> bool {
     if distance(attacker, defender) <= TACTICAL_MELEE_RANGE {
         return false;
     }
     let toward = (attacker.0 - defender.0, attacker.1 - defender.1);
     let shielded = NEIGHBOURS.iter().any(|&(dx, dy)| {
-        dx * toward.0 + dy * toward.1 > 0
-            && board.cell(defender.0 + dx, defender.1 + dy) == BattleCell::Cover
+        dx * toward.0 + dy * toward.1 > 0 && board.is_cover(defender.0 + dx, defender.1 + dy)
     });
     shielded && line_of_sight(board, attacker, defender)
 }
@@ -316,16 +327,28 @@ pub fn cover_between(board: &Board, attacker: (i32, i32), defender: (i32, i32)) 
 /// than walked, so the line a `Cone` checks and the line a `Line` draws
 /// cannot disagree about which cells lie between two others.
 pub fn line_of_sight(board: &Board, from: (i32, i32), to: (i32, i32)) -> bool {
+    sight_line(from, to).all(|(x, y)| !board.blocks_sight(x, y))
+}
+
+/// The cells strictly between `from` and `to` that stop one seeing the other,
+/// in order along the line. `line_of_sight` is exactly "there are none".
+pub fn sight_blockers(board: &Board, from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    sight_line(from, to)
+        .filter(|&(x, y)| board.blocks_sight(x, y))
+        .collect()
+}
+
+/// The sampled cells between two others, endpoints excluded — the one line
+/// both sight questions walk.
+fn sight_line(from: (i32, i32), to: (i32, i32)) -> impl Iterator<Item = (i32, i32)> {
     let steps = distance(from, to);
-    for step in 1..steps {
+    (1..steps).map(move |step| {
         let t = f64::from(step) / f64::from(steps);
-        let x = from.0 + ((to.0 - from.0) as f64 * t).round() as i32;
-        let y = from.1 + ((to.1 - from.1) as f64 * t).round() as i32;
-        if board.blocks_sight(x, y) {
-            return false;
-        }
-    }
-    true
+        (
+            from.0 + ((to.0 - from.0) as f64 * t).round() as i32,
+            from.1 + ((to.1 - from.1) as f64 * t).round() as i32,
+        )
+    })
 }
 
 /// Whether a body at `from` may aim `shape` at `aim` at all, sight-wise.
@@ -407,7 +430,19 @@ pub fn shape_cells(
             let mut cells = Vec::new();
             for i in 1..=length as i32 {
                 let cell = (from.0 + step.0 * i, from.1 + step.1 * i);
-                if !board.in_bounds(cell.0, cell.1) || board.blocks_sight(cell.0, cell.1) {
+                if !board.in_bounds(cell.0, cell.1) {
+                    break;
+                }
+                if board.blocks_sight(cell.0, cell.1) {
+                    // A beam breaks the cover that stops it. The cell holds
+                    // no body: a prop that blocks sight and movement cannot
+                    // be stood on.
+                    if board
+                        .prop_at(cell.0, cell.1)
+                        .is_some_and(|p| p.destructible())
+                    {
+                        cells.push(cell);
+                    }
                     break;
                 }
                 cells.push(cell);
@@ -1250,5 +1285,95 @@ mod tests {
         let footprint = [(2, 2), (3, 2)];
         let covered: HashSet<(i32, i32)> = [(9, 9)].into_iter().collect();
         assert!(!footprint_hit(&footprint, &covered));
+    }
+
+    #[test]
+    fn a_beam_includes_the_destructible_prop_that_stops_it_and_not_other_cover() {
+        let beam = AbilityShape::Line { length: 6 };
+        let board = Board::from_rows(&[".....", ".....", ".D...", ".....", "....."]);
+        assert_eq!(
+            shape_cells(&board, (0, 2), (4, 2), beam),
+            vec![(1, 2)],
+            "the prop that stops the beam is in it"
+        );
+        let wall = Board::from_rows(&[".....", ".....", ".P...", ".....", "....."]);
+        assert!(shape_cells(&wall, (0, 2), (4, 2), beam).is_empty());
+        let boulder = Board::from_rows(&[".....", ".....", ".#...", ".....", "....."]);
+        assert!(shape_cells(&boulder, (0, 2), (4, 2), beam).is_empty());
+    }
+
+    #[test]
+    fn a_prop_blocks_sight_until_it_is_destroyed() {
+        let mut board = Board::from_rows(&[".....", ".....", "..D..", ".....", "....."]);
+        assert!(!line_of_sight(&board, (0, 2), (4, 2)));
+        assert!(matches!(
+            board.damage_prop((2, 2), 99),
+            crate::tactical::map::PropHit::Destroyed(_)
+        ));
+        assert!(line_of_sight(&board, (0, 2), (4, 2)));
+    }
+
+    #[test]
+    fn a_prop_blocks_the_movement_field() {
+        let (mut battle, bodies) =
+            fight(&["PPPPPP", "......", "......", "......", "......", "......"]);
+        battle.place(bodies[0], (0, 1));
+        let field = movement_field(&battle, bodies[0], 4);
+        assert!(!field.contains_key(&(2, 0)));
+        assert!(field.contains_key(&(2, 1)));
+    }
+
+    /// A prop is cover exactly where a cover cell would be: swapping one for
+    /// the other changes no answer, and the answer is sometimes yes.
+    #[test]
+    fn cover_between_behind_a_prop_matches_behind_a_cover_cell() {
+        let mut any = false;
+        for (nx, ny) in NEIGHBOURS {
+            for attacker in [
+                (7, 1),
+                (7, 4),
+                (7, 7),
+                (4, 7),
+                (1, 7),
+                (4, 1),
+                (1, 1),
+                (1, 4),
+            ] {
+                let at = (4 + nx, 4 + ny);
+                let build = |mark: char| {
+                    let mut rows = vec![vec!['.'; 9]; 9];
+                    rows[at.1 as usize][at.0 as usize] = mark;
+                    let rows: Vec<String> = rows.iter().map(|r| r.iter().collect()).collect();
+                    Board::from_rows(&rows.iter().map(String::as_str).collect::<Vec<_>>())
+                };
+                let wall = cover_between(&build('#'), attacker, (4, 4));
+                let prop = cover_between(&build('P'), attacker, (4, 4));
+                assert_eq!(wall, prop, "{at:?} vs attacker {attacker:?}");
+                any |= prop;
+            }
+        }
+        assert!(any, "the fixture never produced cover");
+    }
+
+    #[test]
+    fn a_decoration_is_not_cover_and_costs_nothing_extra() {
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        let def = crate::tactical::props::PieceDef {
+            id: "scorch".into(),
+            decoration: true,
+            blocks_move: true,
+            cover: true,
+            blocks_sight: true,
+            hp: None,
+            armour: 0,
+            volatile: None,
+            leaves: Default::default(),
+            sprite: String::new(),
+            move_cost: None,
+        };
+        board.place_prop((1, 1), crate::tactical::map::PropCell::from_def(&def));
+        assert!(line_of_sight(&board, (0, 1), (2, 1)));
+        assert!(!board.is_cover(1, 1));
+        assert_eq!(board.move_cost(1, 1), Some(1));
     }
 }

@@ -1,0 +1,5 @@
+(
+    id: "scorch",
+    decoration: true,
+    sprite: "prop_scorch",
+)

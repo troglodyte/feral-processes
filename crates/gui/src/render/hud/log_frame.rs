@@ -241,6 +241,10 @@ fn filter_pieces(filter: LogFilter, filtered_out: usize) -> Vec<Piece> {
 }
 
 fn keycap(key: &str, verb: &str) -> Vec<Piece> {
+    // A segment with no key is plain text, and owes the bar no gap before it.
+    if key.is_empty() {
+        return vec![(verb.to_string(), palette::FIELD_LABEL, false)];
+    }
     vec![
         (key.to_string(), palette::EMPHASIS, true),
         (format!(" {verb}"), palette::FIELD_LABEL, false),

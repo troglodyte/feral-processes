@@ -5774,6 +5774,10 @@ fn cover_is_reachable_on_every_biome_a_fight_opens_on() {
     use crate::tuning::TACTICAL_MELEE_RANGE;
     use crate::world::Biome;
 
+    let (props, _) = crate::tactical::props::PropDb::load_dir(
+        &crate::tests::support::test_assets_dir().join("battle-props"),
+    )
+    .unwrap();
     for biome in [
         Biome::OpenGrid,
         Biome::Deadlock,
@@ -5783,18 +5787,21 @@ fn cover_is_reachable_on_every_biome_a_fight_opens_on() {
         let (mut sighted, mut covered) = (0u32, 0u32);
         for seed in 1..=3u32 {
             for bodies in [2u32, 5, 8] {
-                let board = generate(BattleSpec {
-                    world_seed: seed,
-                    site: (seed as i32, 0),
-                    tick: u64::from(seed) * 17,
-                    zone: 1,
-                    biome,
-                    bodies,
-                });
+                let board = generate(
+                    BattleSpec {
+                        world_seed: seed,
+                        site: (seed as i32, 0),
+                        tick: u64::from(seed) * 17,
+                        zone: 1,
+                        biome,
+                        bodies,
+                    },
+                    &props,
+                );
                 let walkable: Vec<(i32, i32)> = board
                     .cells()
-                    .filter(|(_, kind)| kind.walkable())
                     .map(|(cell, _)| cell)
+                    .filter(|&(x, y)| board.walkable(x, y))
                     .collect();
                 let step = (walkable.len() / 60).max(1);
                 for &attacker in walkable.iter().step_by(step) {

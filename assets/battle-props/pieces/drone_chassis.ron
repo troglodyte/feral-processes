@@ -1,0 +1,9 @@
+(
+    id: "drone_chassis",
+    blocks_move: true,
+    cover: true,
+    hp: Some(15),
+    armour: 1,
+    leaves: Floor,
+    sprite: "prop_drone_chassis",
+)

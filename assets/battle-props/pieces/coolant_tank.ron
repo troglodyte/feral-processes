@@ -1,0 +1,9 @@
+(
+    id: "coolant_tank",
+    blocks_move: true,
+    cover: true,
+    hp: Some(14),
+    volatile: Some((radius: 2, damage: 8)),
+    leaves: Floor,
+    sprite: "prop_coolant_tank",
+)

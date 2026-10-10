@@ -1197,7 +1197,7 @@ fn a_drop_inside_a_tactical_fight_is_held_for_the_tally() {
         biome: Biome::OpenGrid,
         bodies: 2,
     };
-    let board = generate(spec);
+    let board = generate(spec, &crate::tactical::props::PropDb::default());
     game.world
         .insert_resource(TacticalBattle::open(spec, board));
 

@@ -10,14 +10,17 @@
 //! folded through `derive::fold` and reduced through `derive::index`, the
 //! way `rock::RockDb::kind_at` derives base space.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
 use crate::derive::{FNV_BASIS, fold, index};
+use crate::tactical::deploy;
+use crate::tactical::props::{Blast, Leaves, PieceDef, PrefabDef, PropDb};
 use crate::tuning::{
-    TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
-    TACTICAL_MEDIUM_BODIES, TACTICAL_ROUGH_COST,
+    TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_DECOR_PER_MILLE,
+    TACTICAL_LARGE_BODIES, TACTICAL_MEDIUM_BODIES, TACTICAL_PREFAB_ATTEMPTS,
+    TACTICAL_PREFABS_BY_SIDE, TACTICAL_ROUGH_COST,
 };
 use crate::world::Biome;
 
@@ -179,11 +182,92 @@ fn kind_at(spec: BattleSpec, x: i32, y: i32) -> BattleCell {
     BattleCell::Open
 }
 
+/// A prop standing on one cell of a board.
+///
+/// **Copied from its `PieceDef` at placement**, so a reach query never
+/// consults the `PropDb`: the board stays self-contained, like the terrain.
+/// A decoration is copied with every gameplay flag cleared, which is what
+/// makes "decoration blocks nothing" a property of the type rather than of
+/// each piece file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropCell {
+    pub piece: String,
+    pub hp: Option<u32>,
+    pub max_hp: Option<u32>,
+    pub armour: u32,
+    pub blocks_move: bool,
+    pub blocks_sight: bool,
+    pub cover: bool,
+    pub volatile: Option<Blast>,
+    pub decoration: bool,
+    pub sprite: String,
+    pub move_cost: Option<u32>,
+    /// What destroying it puts on the cell, copied so the fight code needs
+    /// no `PropDb` lookup to know.
+    pub leaves: Leaves,
+}
+
+impl PropCell {
+    pub fn from_def(def: &PieceDef) -> PropCell {
+        if def.decoration {
+            return PropCell {
+                piece: def.id.clone(),
+                hp: None,
+                max_hp: None,
+                armour: 0,
+                blocks_move: false,
+                blocks_sight: false,
+                cover: false,
+                volatile: None,
+                decoration: true,
+                sprite: def.sprite.clone(),
+                move_cost: None,
+                leaves: Leaves::Floor,
+            };
+        }
+        PropCell {
+            piece: def.id.clone(),
+            hp: def.hp,
+            max_hp: def.hp,
+            armour: def.armour,
+            blocks_move: def.blocks_move,
+            blocks_sight: def.blocks_sight,
+            cover: def.cover,
+            volatile: def.volatile,
+            decoration: false,
+            sprite: def.sprite.clone(),
+            move_cost: def.move_cost,
+            leaves: def.leaves,
+        }
+    }
+
+    /// Whether a blow can ever break it.
+    pub fn destructible(&self) -> bool {
+        !self.decoration && self.hp.is_some()
+    }
+}
+
+/// What `Board::damage_prop` did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PropHit {
+    /// Nothing stands on the cell.
+    Missing,
+    /// A decoration, or a piece with no hp: nothing changed.
+    Indestructible,
+    Damaged,
+    /// Already removed from the board; the caller places what it leaves.
+    Destroyed(PropCell),
+}
+
 /// A generated battle map. Never saved; discarded at teardown.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Board {
     pub side: i32,
     cells: Vec<BattleCell>,
+    /// Authored set pieces over the terrain. An overlay like `screens`, for
+    /// the same reason: the cells are what `SiegeSave` stores and a prop
+    /// is never saved, so a siege board has none.
+    props: BTreeMap<(i32, i32), PropCell>,
     /// Cells a standing body blocks sight through — a barrier structure on
     /// a siege board. An overlay rather than a `Cover` cell because the
     /// cells are what `SiegeSave` stores, and a body cannot be seated back
@@ -201,6 +285,7 @@ impl Board {
             side,
             cells: vec![BattleCell::Blocked; (side * side) as usize],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         }
     }
 
@@ -221,12 +306,75 @@ impl Board {
         self.cells[(y * self.side + x) as usize]
     }
 
+    /// What entering the cell costs, or `None` where it cannot be entered.
+    ///
+    /// **The one movement read.** The ground's cost, raised to a crossable
+    /// prop's own, and `None` under a prop that blocks movement — so the
+    /// movement field, the step and the carve all see props without a line
+    /// of their own.
+    pub fn move_cost(&self, x: i32, y: i32) -> Option<u32> {
+        let ground = self.cell(x, y).movement_cost()?;
+        match self.props.get(&(x, y)) {
+            None => Some(ground),
+            Some(prop) if prop.blocks_move => None,
+            Some(prop) => Some(ground.max(prop.move_cost.unwrap_or(1))),
+        }
+    }
+
+    /// Derived from `move_cost`, as `BattleCell::walkable` is from
+    /// `movement_cost`.
     pub fn walkable(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).walkable()
+        self.move_cost(x, y).is_some()
     }
 
     pub fn blocks_sight(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).blocks_sight() || self.screens.contains(&(x, y))
+        self.cell(x, y).blocks_sight()
+            || self.screens.contains(&(x, y))
+            || self.props.get(&(x, y)).is_some_and(|p| p.blocks_sight)
+    }
+
+    /// Whether a shot passing this cell is partly covered by it —
+    /// `reach::cover_between`'s one read.
+    pub fn is_cover(&self, x: i32, y: i32) -> bool {
+        self.cell(x, y) == BattleCell::Cover || self.props.get(&(x, y)).is_some_and(|p| p.cover)
+    }
+
+    pub fn prop_at(&self, x: i32, y: i32) -> Option<&PropCell> {
+        self.props.get(&(x, y))
+    }
+
+    /// Every prop in reading order of the map's key, `(x, y)`.
+    pub fn props(&self) -> impl Iterator<Item = (&(i32, i32), &PropCell)> {
+        self.props.iter()
+    }
+
+    /// A no-op off the board, `set`'s rule.
+    pub fn place_prop(&mut self, cell: (i32, i32), prop: PropCell) {
+        if self.in_bounds(cell.0, cell.1) {
+            self.props.insert(cell, prop);
+        }
+    }
+
+    pub fn remove_prop(&mut self, cell: (i32, i32)) -> Option<PropCell> {
+        self.props.remove(&cell)
+    }
+
+    /// Takes `amount` off the prop's hp. A prop taken to zero is removed
+    /// before this returns, so a caller never sees a standing prop at 0.
+    pub fn damage_prop(&mut self, cell: (i32, i32), amount: u32) -> PropHit {
+        let Some(prop) = self.props.get_mut(&cell) else {
+            return PropHit::Missing;
+        };
+        let Some(hp) = prop.hp.filter(|_| !prop.decoration) else {
+            return PropHit::Indestructible;
+        };
+        let left = hp.saturating_sub(amount);
+        if left == 0 {
+            let gone = self.props.remove(&cell).expect("just read");
+            return PropHit::Destroyed(gone);
+        }
+        prop.hp = Some(left);
+        PropHit::Damaged
     }
 
     /// Screens `cell` from sight, or stops screening it — `TacticalBattle::
@@ -262,27 +410,49 @@ impl Board {
 
     /// A board written out by hand, one string per row, for tests that need
     /// a known layout rather than a generated one: `.` open, `~` rough, `#`
-    /// cover, `X` blocked. Square, because `Board` has one `side`.
+    /// cover, `X` blocked, and over open ground: `P` an indestructible prop
+    /// that blocks sight and movement, `D` a destructible one (hp 10), `V` a
+    /// volatile one (hp 5, radius 1, damage 12). Square, because `Board` has
+    /// one `side`.
     #[cfg(test)]
     pub(crate) fn from_rows(rows: &[&str]) -> Board {
         let side = rows.len() as i32;
-        let cells: Vec<BattleCell> = rows
-            .iter()
-            .flat_map(|row| {
-                assert_eq!(row.chars().count() as i32, side, "a board is square");
-                row.chars().map(|c| match c {
-                    '.' => BattleCell::Open,
-                    '~' => BattleCell::Rough,
-                    '#' => BattleCell::Cover,
-                    'X' => BattleCell::Blocked,
+        let mut props = BTreeMap::new();
+        let mut cells = Vec::new();
+        for (y, row) in rows.iter().enumerate() {
+            assert_eq!(row.chars().count() as i32, side, "a board is square");
+            for (x, c) in row.chars().enumerate() {
+                let (kind, prop) = match c {
+                    '.' => (BattleCell::Open, None),
+                    '~' => (BattleCell::Rough, None),
+                    '#' => (BattleCell::Cover, None),
+                    'X' => (BattleCell::Blocked, None),
+                    'P' => (BattleCell::Open, Some(test_prop("P", None, None))),
+                    'D' => (BattleCell::Open, Some(test_prop("D", Some(10), None))),
+                    'V' => (
+                        BattleCell::Open,
+                        Some(test_prop(
+                            "V",
+                            Some(5),
+                            Some(Blast {
+                                radius: 1,
+                                damage: 12,
+                            }),
+                        )),
+                    ),
                     other => panic!("no such cell: {other}"),
-                })
-            })
-            .collect();
+                };
+                cells.push(kind);
+                if let Some(prop) = prop {
+                    props.insert((x as i32, y as i32), prop);
+                }
+            }
+        }
         Board {
             side,
             cells,
             screens: BTreeSet::new(),
+            props,
         }
     }
 
@@ -302,6 +472,7 @@ impl Board {
             side,
             cells,
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         }
     }
 
@@ -311,6 +482,24 @@ impl Board {
             .iter()
             .enumerate()
             .map(move |(i, &kind)| (((i as i32) % side, (i as i32) / side), kind))
+    }
+}
+
+#[cfg(test)]
+fn test_prop(piece: &str, hp: Option<u32>, volatile: Option<Blast>) -> PropCell {
+    PropCell {
+        piece: piece.into(),
+        hp,
+        max_hp: hp,
+        armour: 0,
+        blocks_move: true,
+        blocks_sight: true,
+        cover: true,
+        volatile,
+        decoration: false,
+        sprite: format!("prop_{piece}"),
+        move_cost: None,
+        leaves: Leaves::Rubble,
     }
 }
 
@@ -359,21 +548,35 @@ fn region(board: &Board, from: (i32, i32)) -> BTreeSet<(i32, i32)> {
 /// to a player, who finds a body that cannot leave the cell it deployed on
 /// and a fight that cannot finish. Each pass grows the mainland by at least
 /// one cell, so this terminates in at most `side * side` passes.
+///
+/// **A prop in the way is removed only when no way round it exists.** The
+/// corridor is first searched through noise and destructible props alone; an
+/// indestructible prop is a set piece the player was meant to see, and is
+/// opened only for a pocket that could not be reached any other way.
 fn carve_to_connect(board: &mut Board) {
     loop {
-        let Some(start) = board.cells().find(|(_, k)| k.walkable()).map(|(c, _)| c) else {
+        let Some(start) = board
+            .cells()
+            .map(|(c, _)| c)
+            .find(|c| board.walkable(c.0, c.1))
+        else {
             return;
         };
         let mainland = region(board, start);
         let stranded = board
             .cells()
-            .find(|((x, y), k)| k.walkable() && !mainland.contains(&(*x, *y)))
-            .map(|(c, _)| c);
+            .map(|(c, _)| c)
+            .find(|c| board.walkable(c.0, c.1) && !mainland.contains(c));
         let Some(stranded) = stranded else {
             return;
         };
-        for cell in corridor(board, &mainland, stranded) {
+        let mut path = corridor(board, &mainland, stranded, false);
+        if path.is_empty() {
+            path = corridor(board, &mainland, stranded, true);
+        }
+        for cell in path {
             board.set(cell.0, cell.1, BattleCell::Open);
+            board.remove_prop(cell);
         }
     }
 }
@@ -382,8 +585,14 @@ fn carve_to_connect(board: &mut Board) {
 ///
 /// A breadth-first walk that ignores walkability entirely and keeps
 /// predecessors, so the path it reports back is the fewest cells that have
-/// to be opened — the carve takes a corridor, not a demolition.
-fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) -> Vec<(i32, i32)> {
+/// to be opened — the carve takes a corridor, not a demolition. Unless
+/// `through_fixtures`, it will not step on an indestructible prop.
+fn corridor(
+    board: &Board,
+    mainland: &BTreeSet<(i32, i32)>,
+    from: (i32, i32),
+    through_fixtures: bool,
+) -> Vec<(i32, i32)> {
     let mut came_from: std::collections::BTreeMap<(i32, i32), (i32, i32)> =
         std::collections::BTreeMap::new();
     let mut seen = BTreeSet::from([from]);
@@ -402,7 +611,13 @@ fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) ->
         }
         for (dx, dy) in NEIGHBOURS {
             let next = (at.0 + dx, at.1 + dy);
-            if board.in_bounds(next.0, next.1) && seen.insert(next) {
+            let fixture = board
+                .prop_at(next.0, next.1)
+                .is_some_and(|p| p.blocks_move && !p.destructible());
+            if board.in_bounds(next.0, next.1)
+                && (through_fixtures || !fixture)
+                && seen.insert(next)
+            {
                 came_from.insert(next, at);
                 queue.push_back(next);
             }
@@ -411,9 +626,129 @@ fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) ->
     Vec::new()
 }
 
-/// The whole generator: derive every cell, then make sure the walkable
-/// ground is one piece.
-pub fn generate(spec: BattleSpec) -> Board {
+/// Salt for every fold prop placement draws from, so none of it can land on
+/// a word the noise already folds to.
+const PROP_SALT: u64 = 0x0070_726f_7073;
+
+/// One placement's seed.
+fn prop_seed(spec: BattleSpec, words: &[u64]) -> u64 {
+    let mut all = vec![PROP_SALT];
+    all.extend_from_slice(words);
+    fold(spec.base_seed(), &all)
+}
+
+/// A prefab's cells as a grid of characters, turned `quarters` times
+/// clockwise.
+fn rotated(rows: &[String], quarters: u32) -> Vec<Vec<char>> {
+    let mut grid: Vec<Vec<char>> = rows.iter().map(|r| r.chars().collect()).collect();
+    for _ in 0..quarters % 4 {
+        let (h, w) = (grid.len(), grid[0].len());
+        grid = (0..w)
+            .map(|x| (0..h).rev().map(|y| grid[y][x]).collect())
+            .collect();
+    }
+    grid
+}
+
+/// Picks one prefab by weight from `candidates`.
+fn pick_weighted<'a>(seed: u64, candidates: &[&'a PrefabDef]) -> &'a PrefabDef {
+    let total: u32 = candidates.iter().map(|p| p.weight).sum();
+    let mut n = index(seed, total as usize) as u32;
+    for p in candidates {
+        if n < p.weight {
+            return p;
+        }
+        n -= p.weight;
+    }
+    candidates[candidates.len() - 1]
+}
+
+/// Stamps the authored set pieces onto the noise, then scatters decoration.
+///
+/// Pure in `spec` and `props`, like the noise: every choice is a fold, no
+/// `GameRng` is drawn. Each prefab is tried at `TACTICAL_PREFAB_ATTEMPTS`
+/// hashed positions and rotations and dropped if none fits — a rectangle
+/// clear of every earlier prefab and of the cells a deployment could seat
+/// on. A cell under a solid piece becomes `Open` first, so destroying the
+/// piece leaves floor and not whatever noise it happened to stand on.
+fn place_props(board: &mut Board, spec: BattleSpec, props: &PropDb) {
+    let side = board.side;
+    let candidates: Vec<&PrefabDef> = props.prefabs_for(spec.biome).collect();
+    if !candidates.is_empty() {
+        let (_, min, max) = TACTICAL_PREFABS_BY_SIDE
+            .iter()
+            .find(|(s, _, _)| *s == side)
+            .copied()
+            .unwrap_or(TACTICAL_PREFABS_BY_SIDE[TACTICAL_PREFABS_BY_SIDE.len() - 1]);
+        let count = min + index(prop_seed(spec, &[0]), (max - min + 1) as usize) as u32;
+        let reserved = deploy::anchor_neighbourhoods(side);
+        let mut claimed: BTreeSet<(i32, i32)> = BTreeSet::new();
+        for slot in 0..count {
+            let prefab = pick_weighted(prop_seed(spec, &[1, slot as u64]), &candidates);
+            for attempt in 0..TACTICAL_PREFAB_ATTEMPTS {
+                let at = |tag: u64| prop_seed(spec, &[2, slot as u64, attempt as u64, tag]);
+                let grid = rotated(&prefab.rows, index(at(0), 4) as u32);
+                let (h, w) = (grid.len() as i32, grid[0].len() as i32);
+                if w > side || h > side {
+                    continue;
+                }
+                let x0 = index(at(1), (side - w + 1) as usize) as i32;
+                let y0 = index(at(2), (side - h + 1) as usize) as i32;
+                let rect: Vec<(i32, i32)> = (0..h)
+                    .flat_map(|y| (0..w).map(move |x| (x0 + x, y0 + y)))
+                    .collect();
+                let solid = |c: char| c != '.';
+                let touches_reserved = grid.iter().enumerate().any(|(y, row)| {
+                    row.iter().enumerate().any(|(x, &c)| {
+                        solid(c) && reserved.contains(&(x0 + x as i32, y0 + y as i32))
+                    })
+                });
+                if touches_reserved || rect.iter().any(|c| claimed.contains(c)) {
+                    continue;
+                }
+                for (y, row) in grid.iter().enumerate() {
+                    for (x, &c) in row.iter().enumerate() {
+                        let Some(def) = prefab.legend.get(&c).and_then(|id| props.piece(id)) else {
+                            continue;
+                        };
+                        let cell = (x0 + x as i32, y0 + y as i32);
+                        if !def.decoration {
+                            board.set(cell.0, cell.1, BattleCell::Open);
+                        }
+                        board.place_prop(cell, PropCell::from_def(def));
+                    }
+                }
+                claimed.extend(rect);
+                break;
+            }
+        }
+    }
+
+    let decor: Vec<&PieceDef> = props.pieces().filter(|p| p.decoration).collect();
+    if decor.is_empty() {
+        return;
+    }
+    for y in 0..side {
+        for x in 0..side {
+            if board.cell(x, y) != BattleCell::Open || board.prop_at(x, y).is_some() {
+                continue;
+            }
+            let seed = prop_seed(spec, &[3, x as u32 as u64, y as u32 as u64]);
+            if index(seed, 1000) as u32 >= TACTICAL_DECOR_PER_MILLE {
+                continue;
+            }
+            let pick = index(
+                prop_seed(spec, &[4, x as u32 as u64, y as u32 as u64]),
+                decor.len(),
+            );
+            board.place_prop((x, y), PropCell::from_def(decor[pick]));
+        }
+    }
+}
+
+/// The whole generator: derive every cell, stamp the set pieces, then make
+/// sure the walkable ground is one piece.
+pub fn generate(spec: BattleSpec, props: &PropDb) -> Board {
     let side = spec.side();
     let cells = (0..side * side)
         .map(|i| kind_at(spec, i % side, i / side))
@@ -422,7 +757,9 @@ pub fn generate(spec: BattleSpec) -> Board {
         side,
         cells,
         screens: BTreeSet::new(),
+        props: BTreeMap::new(),
     };
+    place_props(&mut board, spec, props);
     carve_to_connect(&mut board);
     board
 }
@@ -553,15 +890,15 @@ mod tests {
 
     #[test]
     fn the_same_spec_yields_an_identical_board() {
-        let a = generate(spec(4));
-        let b = generate(spec(4));
+        let a = generate(spec(4), &PropDb::default());
+        let b = generate(spec(4), &PropDb::default());
         assert_eq!(a.side, b.side);
         assert_eq!(a.cells().collect::<Vec<_>>(), b.cells().collect::<Vec<_>>());
     }
 
     #[test]
     fn a_board_is_its_tier_square() {
-        let board = generate(spec(9));
+        let board = generate(spec(9), &PropDb::default());
         assert_eq!(board.side, TACTICAL_BOARD_LARGE);
         assert_eq!(
             board.cells().count(),
@@ -582,14 +919,15 @@ mod tests {
         let mut city = spec(4);
         city.biome = Biome::Backplane;
         assert!(
-            blockers(&generate(city)) > blockers(&generate(plain)),
+            blockers(&generate(city, &PropDb::default()))
+                > blockers(&generate(plain, &PropDb::default())),
             "the biome does not reach the ground"
         );
     }
 
     #[test]
     fn out_of_bounds_is_seen_over_and_never_stepped_on() {
-        let board = generate(spec(4));
+        let board = generate(spec(4), &PropDb::default());
         assert!(!board.in_bounds(-1, 0));
         assert!(!board.in_bounds(board.side, 0));
         assert_eq!(board.cell(-1, 0), BattleCell::Blocked);
@@ -605,6 +943,7 @@ mod tests {
             side: 7,
             cells: vec![BattleCell::Open; 49],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);
@@ -631,6 +970,7 @@ mod tests {
             side: 7,
             cells: vec![BattleCell::Open; 49],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);
@@ -658,14 +998,17 @@ mod tests {
         ] {
             for bodies in [2_u32, 5, 9] {
                 for tick in 0..60_u64 {
-                    let board = generate(BattleSpec {
-                        world_seed: 77,
-                        site: (4, 4),
-                        tick,
-                        zone: 2,
-                        biome,
-                        bodies,
-                    });
+                    let board = generate(
+                        BattleSpec {
+                            world_seed: 77,
+                            site: (4, 4),
+                            tick,
+                            zone: 2,
+                            biome,
+                            bodies,
+                        },
+                        &PropDb::default(),
+                    );
                     let walkable = board.cells().filter(|(_, k)| k.walkable()).count();
                     let start = board
                         .cells()
@@ -753,5 +1096,301 @@ mod tests {
             let back: BattleCell = ron::from_str(&text).expect("BattleCell must deserialise");
             assert_eq!(kind, back);
         }
+    }
+    fn rubble() -> PropCell {
+        PropCell {
+            piece: "rubble".into(),
+            hp: None,
+            max_hp: None,
+            armour: 0,
+            blocks_move: false,
+            blocks_sight: false,
+            cover: false,
+            volatile: None,
+            decoration: false,
+            sprite: "prop_rubble".into(),
+            move_cost: Some(TACTICAL_ROUGH_COST),
+            leaves: Leaves::Floor,
+        }
+    }
+
+    #[test]
+    fn a_blocking_prop_stops_movement_and_sight_and_is_cover() {
+        let board = Board::from_rows(&["...", ".P.", "..."]);
+        assert_eq!(board.cell(1, 1), BattleCell::Open);
+        assert!(!board.walkable(1, 1));
+        assert_eq!(board.move_cost(1, 1), None);
+        assert!(board.blocks_sight(1, 1));
+        assert!(board.is_cover(1, 1));
+        assert!(board.walkable(0, 0) && !board.is_cover(0, 0));
+        assert_eq!(board.prop_at(1, 1).map(|p| p.piece.as_str()), Some("P"));
+    }
+
+    #[test]
+    fn an_indestructible_prop_never_changes() {
+        let mut board = Board::from_rows(&["...", ".P.", "..."]);
+        assert_eq!(board.damage_prop((1, 1), 999), PropHit::Indestructible);
+        assert!(board.prop_at(1, 1).is_some());
+        assert_eq!(board.damage_prop((0, 0), 5), PropHit::Missing);
+    }
+
+    #[test]
+    fn a_destructible_prop_is_removed_at_zero_and_opens_the_cell() {
+        let mut board = Board::from_rows(&["...", ".D.", "..."]);
+        assert_eq!(board.damage_prop((1, 1), 4), PropHit::Damaged);
+        assert_eq!(board.prop_at(1, 1).and_then(|p| p.hp), Some(6));
+        assert!(!board.walkable(1, 1));
+        let PropHit::Destroyed(gone) = board.damage_prop((1, 1), 6) else {
+            panic!("hp 6 less 6 should destroy it");
+        };
+        assert_eq!(gone.piece, "D");
+        assert!(board.prop_at(1, 1).is_none());
+        assert!(board.walkable(1, 1) && !board.blocks_sight(1, 1) && !board.is_cover(1, 1));
+    }
+
+    #[test]
+    fn rubble_costs_the_rough_price_and_gives_no_cover() {
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        assert_eq!(board.move_cost(1, 1), Some(1));
+        board.place_prop((1, 1), rubble());
+        assert_eq!(board.move_cost(1, 1), Some(TACTICAL_ROUGH_COST));
+        assert!(board.walkable(1, 1) && !board.is_cover(1, 1) && !board.blocks_sight(1, 1));
+    }
+
+    #[test]
+    fn a_prop_never_makes_rough_ground_cheaper() {
+        let mut board = Board::from_rows(&["~~~", "~~~", "~~~"]);
+        let mut cheap = rubble();
+        cheap.move_cost = None;
+        board.place_prop((0, 0), cheap);
+        assert_eq!(board.move_cost(0, 0), Some(TACTICAL_ROUGH_COST));
+    }
+
+    #[test]
+    fn a_decoration_blocks_nothing_whatever_its_piece_says() {
+        let def = PieceDef {
+            id: "scorch".into(),
+            blocks_move: true,
+            blocks_sight: true,
+            cover: true,
+            hp: Some(5),
+            armour: 0,
+            volatile: Some(Blast {
+                radius: 1,
+                damage: 1,
+            }),
+            leaves: crate::tactical::props::Leaves::Floor,
+            sprite: "prop_scorch".into(),
+            decoration: true,
+            move_cost: Some(9),
+        };
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        board.place_prop((0, 0), PropCell::from_def(&def));
+        assert_eq!(board.move_cost(0, 0), Some(1));
+        assert!(!board.blocks_sight(0, 0) && !board.is_cover(0, 0));
+        assert_eq!(board.damage_prop((0, 0), 99), PropHit::Indestructible);
+    }
+
+    #[test]
+    fn a_prop_off_the_board_is_ignored() {
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        board.place_prop((5, 5), rubble());
+        assert_eq!(board.props().count(), 0);
+    }
+
+    fn shipped() -> PropDb {
+        PropDb::load_dir(&crate::tests::support::test_assets_dir().join("battle-props"))
+            .unwrap()
+            .0
+    }
+
+    const FIGHT_BIOMES: [Biome; 4] = [
+        Biome::OpenGrid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+    ];
+
+    fn spec_at(biome: Biome, bodies: u32, tick: u64) -> BattleSpec {
+        BattleSpec {
+            world_seed: 77,
+            site: (4, 4),
+            tick,
+            zone: 2,
+            biome,
+            bodies,
+        }
+    }
+
+    #[test]
+    fn an_empty_prop_db_leaves_the_noise_as_it_was() {
+        for biome in FIGHT_BIOMES {
+            for tick in 0..20 {
+                let spec = spec_at(biome, 5, tick);
+                let side = spec.side();
+                let mut expected = Board {
+                    side,
+                    cells: (0..side * side)
+                        .map(|i| kind_at(spec, i % side, i / side))
+                        .collect(),
+                    screens: BTreeSet::new(),
+                    props: BTreeMap::new(),
+                };
+                carve_to_connect(&mut expected);
+                assert_eq!(generate(spec, &PropDb::default()), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn the_same_spec_and_db_yield_the_same_props() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            let spec = spec_at(biome, 9, 3);
+            assert_eq!(generate(spec, &db), generate(spec, &db));
+        }
+    }
+
+    #[test]
+    fn props_are_stamped_and_differ_between_fights() {
+        let db = shipped();
+        let a = generate(spec_at(Biome::Backplane, 9, 1), &db);
+        let b = generate(spec_at(Biome::Backplane, 9, 2), &db);
+        assert!(a.props().count() > 0);
+        let cells = |b: &Board| {
+            b.props()
+                .map(|(c, p)| (*c, p.piece.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(cells(&a), cells(&b));
+    }
+
+    /// Review focus 1: a long indestructible run must not wall a side in.
+    #[test]
+    fn props_never_strand_anybody_or_sit_on_a_deploy_cell() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            for bodies in [2_u32, 5, 9] {
+                for tick in 0..70_u64 {
+                    let board = generate(spec_at(biome, bodies, tick), &db);
+                    let walkable: Vec<(i32, i32)> = board
+                        .cells()
+                        .map(|(c, _)| c)
+                        .filter(|c| board.walkable(c.0, c.1))
+                        .collect();
+                    assert_eq!(
+                        region(&board, walkable[0]).len(),
+                        walkable.len(),
+                        "{biome:?} at {bodies} bodies, tick {tick}: ground is in pieces"
+                    );
+                    for bearing in NEIGHBOURS {
+                        let plan = deploy::plan(&board, bearing, 4, &[1; 4]);
+                        for cell in plan.party.iter().chain(plan.wild.iter()) {
+                            assert!(
+                                board.prop_at(cell.0, cell.1).is_none_or(|p| !p.blocks_move),
+                                "{biome:?} tick {tick}: deployed on a prop at {cell:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The census, `cover_is_reachable_on_every_biome_a_fight_opens_on`'s
+    /// pattern: a biome that never gets a set piece is a missing row.
+    #[test]
+    fn every_biome_a_fight_opens_on_gets_a_prefab_soon() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            let hit = (0..20_u64).any(|tick| {
+                generate(spec_at(biome, 5, tick), &db)
+                    .props()
+                    .any(|(_, p)| !p.decoration)
+            });
+            assert!(hit, "{biome:?} never got a prefab in 20 fights");
+        }
+    }
+
+    fn prop_def(id: &str, hp: Option<u32>) -> PieceDef {
+        PieceDef {
+            id: id.into(),
+            blocks_move: true,
+            blocks_sight: true,
+            cover: true,
+            hp,
+            armour: 0,
+            volatile: None,
+            leaves: crate::tactical::props::Leaves::Floor,
+            sprite: String::new(),
+            decoration: false,
+            move_cost: None,
+        }
+    }
+
+    /// The carve prefers noise to a set piece: with a one-cell opening of
+    /// cover in an otherwise indestructible wall, it opens the cover.
+    #[test]
+    fn the_carve_opens_noise_before_an_indestructible_prop() {
+        let mut board = Board::from_rows(&[
+            "...P...", "...P...", "...P...", "...#...", "...P...", "...P...", "...P...",
+        ]);
+        carve_to_connect(&mut board);
+        assert!(board.walkable(3, 3));
+        assert_eq!(board.props().count(), 6);
+    }
+
+    /// And never loops for want of a way round: a wall of fixtures edge to
+    /// edge costs exactly one of them.
+    #[test]
+    fn the_carve_breaks_a_fixture_only_when_nothing_else_connects() {
+        let mut board = Board::from_rows(&[
+            "...P...", "...P...", "...P...", "...P...", "...P...", "...P...", "...P...",
+        ]);
+        carve_to_connect(&mut board);
+        assert_eq!(board.props().count(), 6);
+        assert_eq!(
+            region(&board, (0, 0)).len(),
+            board
+                .cells()
+                .filter(|(c, _)| board.walkable(c.0, c.1))
+                .count()
+        );
+    }
+
+    #[test]
+    fn the_carve_removes_a_destructible_prop_to_connect() {
+        let mut board = Board::from_rows(&[
+            "...D...", "...D...", "...D...", "...D...", "...D...", "...D...", "...D...",
+        ]);
+        carve_to_connect(&mut board);
+        assert_eq!(board.props().count(), 6);
+    }
+
+    #[test]
+    fn a_prefab_rotates_through_four_quarters_back_to_itself() {
+        let rows = vec!["ab.".to_string(), "c..".to_string()];
+        let mut grid = rotated(&rows, 0);
+        assert_eq!(grid, vec![vec!['a', 'b', '.'], vec!['c', '.', '.']]);
+        grid = rotated(&rows, 1);
+        assert_eq!(grid, vec![vec!['c', 'a'], vec!['.', 'b'], vec!['.', '.']]);
+        assert_eq!(rotated(&rows, 4), rotated(&rows, 0));
+    }
+
+    #[test]
+    fn a_prefab_too_big_for_the_board_is_dropped_not_a_panic() {
+        let rows: Vec<String> = vec!["W".repeat(40)];
+        let db = PropDb::from_parts(
+            vec![prop_def("w", None)],
+            vec![PrefabDef {
+                id: "huge".into(),
+                biomes: vec![],
+                weight: 1,
+                rows,
+                legend: [('W', "w".to_string())].into(),
+            }],
+        );
+        let board = generate(spec_at(Biome::OpenGrid, 2, 0), &db);
+        assert_eq!(board.props().count(), 0);
     }
 }

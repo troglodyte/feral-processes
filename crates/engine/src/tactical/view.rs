@@ -211,6 +211,35 @@ pub struct DecoyView {
     pub of_player: bool,
 }
 
+/// One prop standing on the battle map, as the frontend draws and reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropView {
+    pub cell: (i32, i32),
+    /// Spoken name, for a readout or a log line.
+    pub name: String,
+    /// Sprite key, `prop_<piece>` by convention.
+    pub sprite: String,
+    /// `None` for anything a blow cannot break.
+    pub hp: Option<u32>,
+    pub max_hp: Option<u32>,
+    pub volatile: bool,
+    pub decoration: bool,
+}
+
+impl PropView {
+    pub(crate) fn of(cell: (i32, i32), prop: &crate::tactical::map::PropCell) -> PropView {
+        PropView {
+            cell,
+            name: crate::tactical::prop_fight::prop_name(prop),
+            sprite: prop.sprite.clone(),
+            hp: prop.hp,
+            max_hp: prop.max_hp,
+            volatile: prop.volatile.is_some(),
+            decoration: prop.decoration,
+        }
+    }
+}
+
 /// A tactical fight, as a screen needs it.
 #[derive(Clone, Debug)]
 pub struct TacticalView {
@@ -257,6 +286,10 @@ pub struct TacticalView {
     /// siege reads `Platform` although its spec carries the surface tile's
     /// biome: its board is the base's own floor.
     pub ground: Biome,
+    /// Every prop on the board, sorted by cell. The board carries the same
+    /// facts, but a screen reads the spoken name and the sprite key here
+    /// rather than reaching into `PropCell`.
+    pub props: Vec<PropView>,
 }
 
 impl TacticalView {
@@ -450,6 +483,12 @@ impl Game {
             })
             .unwrap_or_default();
 
+        // `BTreeMap` order is cell order, so the sort is the map's own.
+        let props: Vec<PropView> = board
+            .props()
+            .map(|(&cell, prop)| PropView::of(cell, prop))
+            .collect();
+
         let charge_aims: Vec<ChargeAimView> = placed
             .iter()
             .filter_map(
@@ -479,6 +518,7 @@ impl Game {
             fallen,
             charge_aims,
             ground,
+            props,
         })
     }
 

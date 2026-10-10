@@ -19,6 +19,7 @@ use crate::items::ItemId;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::species::SpeciesId;
 use crate::tactical::map::{BattleSpec, generate};
+use crate::tactical::props::PropDb;
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
 use crate::tuning::{FORMATIONS, TACTICAL_MELEE_RANGE};
 use crate::world::WorldMap;
@@ -127,7 +128,7 @@ impl Game {
                     .map(|&side| u32::from(side).pow(2))
                     .sum::<u32>(),
         };
-        let board = generate(spec);
+        let board = generate(spec, self.world.resource::<PropDb>());
         let plan = deploy::plan(&board, bearing, party.len() as u32, &wild_footprints);
 
         let mut battle = TacticalBattle::open(spec, board);
@@ -264,7 +265,7 @@ impl Game {
         };
         let to = (from.0 + dir.0, from.1 + dir.1);
         let spent = battle.spent();
-        let cost = battle.board.cell(to.0, to.1).movement_cost();
+        let cost = battle.board.move_cost(to.0, to.1);
         // A body departs if any footprint cell anchored at `to` leaves the
         // board — one cell today, without a `Squad`, so this is the same
         // check `in_bounds(to)` alone made.
@@ -1578,7 +1579,21 @@ impl Game {
                 Some(cells) => reach::recipients_in_cells(battle, actor, cells),
                 None => reach::recipients(battle, actor, aim, shape),
             };
+            // The covered cells are read before the bodies take the hit,
+            // so the props on them are struck after, off the same board.
+            let prop_hit = self.routine_prop_damage(actor, ability).map(|dmg| {
+                let cells = fixed.map(<[_]>::to_vec).unwrap_or_else(|| {
+                    battle
+                        .cell_of(actor)
+                        .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+                        .unwrap_or_default()
+                });
+                (cells, dmg)
+            });
             self.use_ability(ability, actor, &name, &recipients);
+            if let Some((cells, dmg)) = prop_hit {
+                self.routine_hits_props(&cells, dmg);
+            }
             if let Some((actor_hostile, cells, line)) = passing {
                 self.pass_through_decoys(actor_hostile, &cells, line);
             }
@@ -2242,7 +2257,7 @@ impl Game {
     /// `finish_fight` wants cleared of combat-only effects even when the
     /// blow that ended the fight was struck at somebody else. `None` where
     /// the aim named an empty cell — a routine may be aimed at ground.
-    fn reap_tactical_dead(&mut self, wild: Option<Entity>) {
+    pub(crate) fn reap_tactical_dead(&mut self, wild: Option<Entity>) {
         let player = self.player_entity();
         let fallen: Vec<Entity> = self
             .world

@@ -542,3 +542,52 @@ writing a member's `Stats`; a capture takes the lead and prices the roll as
 the lead, not as the summed block; and disbanding hands each member back at
 the squad's Integrity fraction, floored at 1, which is deliberately **not**
 damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.
+
+- **A prop is not a body, and its reach, sight and cover are asked of `Board`
+  methods, never `Board::cell`.** A prop holds no initiative slot, takes no
+  hit roll, pays no XP and touches no morale: it is struck through
+  `Board::damage_prop` in `tactical/prop_fight.rs` rather than seated beside
+  the creatures, the spec's rejected 'inert body' design, which would have
+  needed every `bodies()` reader taught to skip it and every payout path
+  taught not to pay it. What a destroyed prop does to a *body* still goes
+  through `Game::apply_damage`, the one damage door. Because a prop can hide,
+  block or cover without being a cell kind, `Board::cell` no longer answers
+  whether a cell blocks sight, is cover or can be walked: reach, sight and
+  cover read `Board::blocks_sight`, `Board::is_cover`, `walkable` and
+  `move_cost`, which fold props in. A reader that calls `Board::cell` and
+  matches on `BattleCell` sees the terrain under the prop and silently misses
+  it (the `reach.rs` cover doc still said `BattleCell::Cover` after the move).
+
+- **Prop damage takes no RNG draw: a swing is the plain figure less armour, a
+  routine's is the mean of its band.** `tactical_attack_prop` deals
+  `swing_damage` less the prop's armour (at least 1) and `routine_prop_damage`
+  the rounded mean of the scaled band plus attack, so a prop in a blast or
+  beside a swing never moves the seeded stream. Rolling would shift every
+  later draw in a seeded fight (see the RNG-stream-shift memories), and the
+  AI's argmaxes over props must stay draw-free like its other aim choices. A
+  blast's damage to bodies is likewise the blast's full figure and rolls
+  nothing, which is what lets `blast_net_value` be exact.
+
+- **A party-side body vetoes a detonation that would hit its own side, while a
+  hostile only subtracts.** `blast_net_value` returns `None` when the actor
+  fights for the party and any body of the party (the actor included) stands
+  in the blast, through `Game::vetoes_own_side_harm`, the door `ai.rs`' routine aim
+  reads too. Net
+  scoring alone fired a blast through a companion whenever two hostiles stood
+  beside it, which is a party AI trading its own side's Integrity for the
+  other's. Hostiles keep the subtraction: friendly fire is full and a wild
+  body that catches its own packmate in a profitable blast is the intended
+  behaviour. Both sides compute the same `blast_reach` as the blast itself, so
+  what is scored is what lands, and that reach skips bodies already at 0
+  Integrity so a chain does not hit a fallen-but-unreaped body twice.
+
+- **The prop chain cap counts blasts, so the last prop in a chain stays
+  standing.** `TACTICAL_PROP_CHAIN_MAX` bounds how many blasts a chain may set
+  off. `detonate` therefore does not strike a volatile prop once `depth + 1 >=
+  TACTICAL_PROP_CHAIN_MAX`; non-volatile props are still broken. The earlier
+  form returned early at the cap *after* the prop was destroyed, so the last
+  prop in a line was removed, logged 'detonates' and queued a volatile
+  destruction cue while dealing no damage: a dud, and a blast count one higher
+  than the cap said. A line of six volatile props shows exactly the cap's
+  worth of blasts and leaves the rest standing; the chain test asserts the cue
+  count as well as what stands.

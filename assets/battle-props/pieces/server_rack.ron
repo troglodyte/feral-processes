@@ -1,0 +1,10 @@
+(
+    id: "server_rack",
+    blocks_move: true,
+    blocks_sight: true,
+    cover: true,
+    hp: Some(30),
+    armour: 2,
+    leaves: Rubble,
+    sprite: "prop_server_rack",
+)

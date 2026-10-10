@@ -271,7 +271,7 @@ impl Game {
             let battle = self.world.resource::<TacticalBattle>();
             let field = reach::movement_field(battle, body, allowance);
             let door_field = walk_field(target, battle.board.side, |cell| {
-                battle.board.cell(cell.0, cell.1).movement_cost()
+                battle.board.move_cost(cell.0, cell.1)
             });
             let Some(&standing) = door_field.get(&from) else {
                 return false;

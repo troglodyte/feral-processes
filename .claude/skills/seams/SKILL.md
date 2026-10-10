@@ -59,7 +59,7 @@ Three tiers, and which one you want depends on what you are doing:
 | combat: spawning, bosses, difficulty & the roster doors | `references/combat-spawning.md` | 13 |
 | combat: battle flow, rewards, arena, rest & pursuit | `references/combat-battle.md` | 24 |
 | combat: tactical battles — turn flow, movement & targeting | `references/combat-tactical-core.md` | 25 |
-| combat: tactical battles — reactions, fx, AI aim & squads | `references/combat-tactical-actions.md` | 18 |
+| combat: tactical battles — reactions, fx, AI aim & squads | `references/combat-tactical-actions.md` | 22 |
 | items, gear copies, quality, crafting, the caravan, the economy | `references/items.md` | 34 |
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |
 | saves, the log, refusals, screens, the Broker board, paths | `references/screens.md` | 21 |

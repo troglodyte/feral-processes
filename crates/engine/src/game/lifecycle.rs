@@ -499,6 +499,7 @@ impl Game {
             rock: rock_db,
             floors: floor_db,
             rooms: room_db,
+            props: prop_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -547,6 +548,7 @@ impl Game {
         world.insert_resource(rock_db);
         world.insert_resource(floor_db);
         world.insert_resource(room_db);
+        world.insert_resource(prop_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -1461,6 +1463,7 @@ impl Game {
             rock: rock_db,
             floors: floor_db,
             rooms: room_db,
+            props: prop_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -1599,6 +1602,7 @@ impl Game {
         load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
         world.insert_resource(floor_db);
         world.insert_resource(room_db);
+        world.insert_resource(prop_db);
         world.insert_resource(data.base_grid);
         world.insert_resource(crate::resources::MiningMode(data.mining));
         world.insert_resource(data.enemy_strength);
@@ -3761,6 +3765,7 @@ struct AssetDbs {
     rock: crate::rock::RockDb,
     floors: crate::floors::FloorDb,
     rooms: crate::rooms::RoomDb,
+    props: crate::tactical::props::PropDb,
     items: ItemDb,
     perks: PerkDb,
     talents: crate::talents::TalentDb,
@@ -3953,6 +3958,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(floor_warnings);
     let (rooms, room_warnings) = crate::rooms::RoomDb::load_dir(&assets_dir.join("rooms"))?;
     warnings.extend(room_warnings);
+    // Absent is silent: an empty catalogue is the pre-prop battle map.
+    let (props, prop_warnings) =
+        crate::tactical::props::PropDb::load_dir(&assets_dir.join("battle-props"))?;
+    warnings.extend(prop_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -4002,6 +4011,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         rock,
         floors,
         rooms,
+        props,
         items,
         perks,
         affixes,

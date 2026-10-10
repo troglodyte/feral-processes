@@ -1,0 +1,9 @@
+(
+    id: "power_cell",
+    blocks_move: true,
+    cover: true,
+    hp: Some(8),
+    volatile: Some((radius: 1, damage: 12)),
+    leaves: Floor,
+    sprite: "prop_power_cell",
+)

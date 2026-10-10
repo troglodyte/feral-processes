@@ -1,0 +1,8 @@
+(
+    id: "conduit_wall_broken",
+    blocks_move: true,
+    cover: true,
+    hp: Some(12),
+    leaves: Rubble,
+    sprite: "prop_conduit_wall_broken",
+)

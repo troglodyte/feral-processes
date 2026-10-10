@@ -1,0 +1,5 @@
+(
+    id: "cable_run",
+    decoration: true,
+    sprite: "prop_cable_run",
+)

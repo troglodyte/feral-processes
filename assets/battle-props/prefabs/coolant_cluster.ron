@@ -1,0 +1,10 @@
+(
+    id: "coolant_cluster",
+    weight: 2,
+    rows: [
+        "T.T",
+        ".b.",
+        "T..",
+    ],
+    legend: { 'T': "coolant_tank", 'b': "conduit_wall_broken" },
+)

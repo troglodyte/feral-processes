@@ -1,0 +1,9 @@
+(
+    id: "fallen_pylon",
+    weight: 2,
+    rows: [
+        "PPPPPP",
+        "..s...",
+    ],
+    legend: { 'P': "pylon", 's': "scorch" },
+)

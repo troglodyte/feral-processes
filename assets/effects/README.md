@@ -53,4 +53,4 @@ flight when the next body acts.
 
 ## Shipped
 
-`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`, `heal` (green), `buff` (cyan). The last two are for ally-facing routines.
+`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`, `explosion_large` (a volatile prop going up), `heal` (green), `buff` (cyan). The last two are for ally-facing routines.

@@ -19,6 +19,7 @@ use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::icon::{Canvas, GREY_RAMP_LEN, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
+use feral_processes_engine::tactical::props::PropDb;
 
 use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_DEPTH, Tool};
 use crate::{App, GameKey, Mode};
@@ -75,6 +76,9 @@ const PLAYER_GLYPH: char = '@';
 /// rather than a glyph substituting for one the way `sprite` does. Chosen to
 /// read as "ground" rather than as a stray character.
 const FLOOR_SPRITE_GLYPH: char = '_';
+
+/// The glyph a prop subject previews against, `draw_prop`'s breakable class.
+const PROP_SPRITE_GLYPH: char = '%';
 
 /// Whether `FERAL_DEV_SPRITES` — or the `FERAL_DEV` master switch — was set
 /// when this `App` was built. Same predicate as `dev_arena_enabled` and
@@ -640,6 +644,8 @@ impl App {
             feral_processes_engine::floors::FloorDb::load_dir(&assets_dir.join("floors"))
                 .unwrap_or_default();
 
+        let (props, _) = PropDb::load_dir(&assets_dir.join("battle-props")).unwrap_or_default();
+
         let mut by_name: BTreeMap<String, (String, char, SubjectTint)> = BTreeMap::new();
         for def in species.all() {
             by_name.insert(
@@ -670,6 +676,20 @@ impl App {
                     SubjectTint::Shade(def.shade),
                 ),
             );
+        }
+        // A prop is drawn near-white and tinted by brightness alone, so it
+        // previews against a neutral grey. Destructible pieces list their
+        // `_cracked` twin too: it is a separate file the renderer swaps in.
+        for def in props.pieces().filter(|d| !d.sprite.is_empty()) {
+            let label = def.id.replace('_', " ");
+            let tint = SubjectTint::Glyph(Some(GlyphColor::Gray));
+            by_name.insert(def.sprite.clone(), (label.clone(), PROP_SPRITE_GLYPH, tint));
+            if def.hp.is_some() {
+                by_name.insert(
+                    format!("{}_cracked", def.sprite),
+                    (format!("{label} (cracked)"), PROP_SPRITE_GLYPH, tint),
+                );
+            }
         }
         // `Glyph(None)`, not `Glyph(Some(GlyphColor::Cyan))` — see
         // `SpriteSubject::tint`'s own doc comment for why the player has no

@@ -758,6 +758,7 @@ mod tests {
             },
             standing_tool: None,
             pod: None,
+            prison: None,
             line: None,
         }
     }

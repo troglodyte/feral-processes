@@ -288,6 +288,52 @@ impl Game {
         found.into_iter().map(|(_, _, e)| e).collect()
     }
 
+    /// Whether a worker holds the warden's post on `cell` — the same
+    /// predicate `assembler_system` and `step_teardown_rig` staff on, a
+    /// `TaskKind::GatherResource` aimed at the structure.
+    pub(crate) fn cell_has_warden(&self, cell: Entity) -> bool {
+        self.world.iter_entities().any(|e| {
+            e.get::<Task>()
+                .is_some_and(|t| t.target == cell && matches!(t.kind, TaskKind::GatherResource))
+        })
+    }
+
+    /// Whether `cell` is making progress this beat: warded and lit. The brackets
+    /// on the map read this, so a prisoner rattles exactly while the warden's
+    /// clock is running.
+    pub(crate) fn cell_is_working(&self, cell: Entity) -> bool {
+        self.cell_has_warden(cell) && !self.world.resource::<PowerGrid>().is_dark(cell)
+    }
+
+    /// The `attempt_ticks` of `cell`'s def, or `None` for a structure that
+    /// holds nobody.
+    fn attempt_ticks_of(&self, cell: Entity) -> Option<u32> {
+        let kind = &self.world.get::<Structure>(cell)?.kind;
+        let def = self.world.resource::<StructureDb>().get(kind)?;
+        Some(def.holds_prisoner.as_ref()?.attempt_ticks)
+    }
+
+    /// What the roster shows for `cell`, or `None` for a structure that is
+    /// not a Holding Cell.
+    pub fn prison_state(&self, cell: Entity) -> Option<crate::views::PrisonState> {
+        let attempt_ticks = self.attempt_ticks_of(cell)?;
+        let prisoner = self.cell_prisoner(cell).and_then(|body| {
+            let jailed = self.world.get::<components::Jailed>(body)?;
+            Some(crate::views::PrisonerState {
+                name: self.creature_label(body),
+                attempts: jailed.attempts,
+                max_attempts: JAIL_MAX_ATTEMPTS,
+                progress: jailed.progress,
+                attempt_ticks,
+                odds_percent: (self.jail_odds(body)? * 100.0).round() as u32,
+            })
+        });
+        Some(crate::views::PrisonState {
+            warded: self.cell_has_warden(cell),
+            prisoner,
+        })
+    }
+
     /// Whether any Holding Cell stands in the base, beside the party or not.
     pub fn has_holding_cell(&self) -> bool {
         !self.holding_cells().is_empty()
@@ -316,12 +362,7 @@ impl Game {
         if self.world.resource::<PowerGrid>().is_dark(cell) {
             return;
         }
-        let warded = {
-            let mut posted = self.world.query::<&Task>();
-            posted
-                .iter(&self.world)
-                .any(|t| t.target == cell && matches!(t.kind, TaskKind::GatherResource))
-        };
+        let warded = self.cell_has_warden(cell);
         if !warded {
             return;
         }
@@ -332,12 +373,7 @@ impl Game {
             return;
         };
         self.set_rig_status(cell, MachineStatus::Running);
-        let due = self
-            .world
-            .get::<Structure>(cell)
-            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-            .and_then(|d| d.holds_prisoner.as_ref())
-            .map_or(u32::MAX, |p| p.attempt_ticks);
+        let due = self.attempt_ticks_of(cell).unwrap_or(u32::MAX);
         let progress = {
             let mut jailed = self.world.get_mut::<components::Jailed>(prisoner).unwrap();
             jailed.progress += 1;

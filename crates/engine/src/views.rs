@@ -1788,9 +1788,34 @@ pub struct StructureReport {
     /// A drop pod terminal's charge, `None` on every structure that is not
     /// one (`StructureDef::drop_pod`).
     pub pod: Option<PodState>,
+    /// A Holding Cell's occupant and clock, `None` on every structure that is
+    /// not one (`StructureDef::holds_prisoner`).
+    pub prison: Option<PrisonState>,
     /// The production line this structure belongs to, `Some` only for a line
     /// of two or more.
     pub line: Option<crate::game::base::lines::LineKey>,
+}
+
+/// One Holding Cell as the roster draws it — `Game::prison_state`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrisonState {
+    /// Whether a worker holds the warden's post. Without one nothing runs.
+    pub warded: bool,
+    /// Who is inside, or `None` for an empty cell.
+    pub prisoner: Option<PrisonerState>,
+}
+
+/// The prisoner in a cell and everything its clock says. Every figure is a
+/// call into the engine's own rule: `odds_percent` is `Game::jail_odds`, the
+/// figure the next roll is made against.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrisonerState {
+    pub name: String,
+    pub attempts: u32,
+    pub max_attempts: u32,
+    pub progress: u32,
+    pub attempt_ticks: u32,
+    pub odds_percent: u32,
 }
 
 /// Whether a drop pod terminal can fire. There is no "spent with nothing

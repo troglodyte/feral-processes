@@ -191,21 +191,6 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         }
     }
 
-    // Shown even when blocked (a boss record, no protocol held, a full
-    // roster) rather than disappearing — `reinitialize_blocker`'s own
-    // reason appended after the label, `routine_slot_rows`' `(fixed)` tag
-    // in shape, and greyed on the whole row since `Row::Item` has no way to
-    // colour part of one line.
-    let reinit_label = "[R]einitialize — resurrect downed program";
-    rows.push(match game.reinitialize_blocker(index) {
-        Some(block) => colored_item_row(
-            format!("{reinit_label}  ({})", block.row_fragment()),
-            false,
-            TEXT_DIM,
-        ),
-        None => item_row(reinit_label, false),
-    });
-
     rows.push(text_row(""));
     rows.push(text_row("Esc to go back"));
     rows
@@ -234,7 +219,6 @@ fn draw_extraction_options(
 mod tests {
     use super::*;
     use feral_processes_engine::DifficultyMode;
-    use feral_processes_engine::ReinitBlock;
     use feral_processes_engine::items::DownedProgram;
     use feral_processes_engine::save;
     use feral_processes_engine::tools::{ToolDb, ToolId};
@@ -630,77 +614,6 @@ mod tests {
             joined.contains(&species.name),
             "an Image tool's row should name the species it would teach {:?}: {joined:?}",
             species.name
-        );
-    }
-
-    /// The reinitialize row's own two tests — `extraction_options_rows`' new
-    /// arm — exercised through `Game::reinitialize_blocker` rather than a
-    /// hand-built expectation, so the row and the engine's own gate cannot
-    /// quietly disagree.
-    #[test]
-    fn the_reinitialize_row_is_plain_when_nothing_blocks_it() {
-        let probe = Game::new(9707, DifficultyMode::Forgiving, &assets_dir()).unwrap();
-        let species = probe
-            .species_defs()
-            .into_iter()
-            .find(|d| !d.is_hybrid())
-            .unwrap()
-            .id;
-        let held = DownedProgram {
-            boss: false,
-            ..program(&species, 5, Rarity::Ordinary)
-        };
-        let game = game_with_state_and_inventory(
-            9708,
-            vec![held],
-            None,
-            None,
-            &[(
-                feral_processes_engine::items::ids::REINITIALIZATION_PROTOCOL,
-                1,
-            )],
-        );
-        assert_eq!(
-            game.reinitialize_blocker(0),
-            None,
-            "test premise: nothing should block this record"
-        );
-
-        let rows = extraction_options_rows(&game, 0, 0);
-        let reinit_row = rows
-            .iter()
-            .map(row_label_text)
-            .find(|label| label.contains("einitialize"))
-            .expect("the action row must be present when available");
-        assert!(
-            !reinit_row.contains('('),
-            "an available action must carry no blocker parenthetical: {reinit_row:?}"
-        );
-    }
-
-    #[test]
-    fn the_reinitialize_row_names_the_blocker_when_the_record_is_a_boss() {
-        let probe = Game::new(9709, DifficultyMode::Forgiving, &assets_dir()).unwrap();
-        let held = program(&widest_species_id(&probe), 5, Rarity::Ordinary);
-        let game = game_with_state(9710, vec![held], None, None);
-        let blocker = game
-            .reinitialize_blocker(0)
-            .expect("test premise: a boss record must be blocked");
-        assert_eq!(
-            blocker,
-            ReinitBlock::Boss,
-            "test premise: a boss record's own block"
-        );
-
-        let rows = extraction_options_rows(&game, 0, 0);
-        let joined: String = rows
-            .iter()
-            .map(row_label_text)
-            .collect::<Vec<_>>()
-            .join(" ");
-        assert!(
-            joined.contains("a boss won't reinitialize"),
-            "the row must show the boss fragment specifically: {joined:?}"
         );
     }
 }

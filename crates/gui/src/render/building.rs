@@ -878,6 +878,53 @@ pub(super) fn draw_pin_subject(
     );
 }
 
+/// `Mode::PinPrisoner` — one row per downed-program record, `draw_pin_subject`'s
+/// picker shape. A record `Game::jail_blocker` refuses is shown greyed with
+/// the blocker's own fragment after it, rather than hidden, so the player can
+/// read what to fix (stand beside a free cell, forge a protocol).
+pub(super) fn draw_pin_prisoner(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let rows = pin_prisoner_rows(game, selected);
+    draw_popup(
+        "Hold a program",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
+fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
+    let records = game.downed_program_rows();
+    if records.is_empty() {
+        return vec![text_row("(no downed programs to hold)")];
+    }
+    records
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut label = format!("[{}] {} Lv{}", menu_shortcut(i), r.name, r.level);
+            if let Some(tier) = r.rarity.label() {
+                label.push_str(&format!("  {tier}"));
+            }
+            match game.jail_blocker(i) {
+                Some(block) => colored_item_row(
+                    format!("{label}  ({})", block.row_fragment()),
+                    i == selected,
+                    TEXT_DIM,
+                ),
+                None => item_row(label, i == selected),
+            }
+        })
+        .collect()
+}
+
 /// The rows of `Mode::Siphon`, `draw_pin_subject`'s shape: an occupied
 /// siphon is the one row that releases its holder and quotes the price, an
 /// empty one is the staff picker. Which of the two is `App::handle_siphon_key`'s
@@ -1802,6 +1849,27 @@ pub(super) fn structure_detail_lines(
     if let Some(tool) = &s.standing_tool {
         lines.push((format!("  set up with the {tool}"), TEXT_DIM));
     }
+    // A Holding Cell: who is inside and how the next roll stands. The odds
+    // are the engine's own (`Game::jail_odds`), the figure the roll is made
+    // against, so this line cannot quote a different chance.
+    if let Some(prison) = &s.prison {
+        match &prison.prisoner {
+            Some(p) => {
+                lines.push((format!("  holds {}", p.name), TEXT_DIM));
+                lines.push((
+                    format!(
+                        "  attempts {}/{}  beats {}/{}  next roll {}%",
+                        p.attempts, p.max_attempts, p.progress, p.attempt_ticks, p.odds_percent
+                    ),
+                    TEXT_DIM,
+                ));
+            }
+            None => lines.push(("  empty".to_string(), TEXT_DIM)),
+        }
+        if !prison.warded {
+            lines.push(("  no warden — nothing is decompiling".to_string(), YELLOW));
+        }
+    }
     // Dim either way: the crew reloads a spent pod on its own, so there is
     // nothing here for the player to walk over and fix.
     match s.pod {
@@ -2723,6 +2791,7 @@ mod tests {
             assignees: Vec::new(),
             standing_tool: None,
             pod: None,
+            prison: None,
             line: None,
         }
     }
@@ -2743,6 +2812,33 @@ mod tests {
             missing: None,
             missing_text: missing_text.map(String::from),
         }
+    }
+
+    #[test]
+    fn a_cell_quotes_its_prisoner_its_clock_and_the_missing_warden() {
+        use feral_processes_engine::views::{PrisonState, PrisonerState};
+        let mut s = structure_report(MachineStatus::Idle);
+        s.prison = Some(PrisonState {
+            warded: false,
+            prisoner: Some(PrisonerState {
+                name: "Crawler 1".to_string(),
+                attempts: 2,
+                max_attempts: 5,
+                progress: 7,
+                attempt_ticks: 40,
+                odds_percent: 18,
+            }),
+        });
+        let text: Vec<String> = structure_detail_lines(&s, None, false)
+            .into_iter()
+            .map(|(t, _)| t)
+            .collect();
+        let joined = text.join("\n");
+        assert!(joined.contains("holds Crawler 1"), "{joined}");
+        assert!(joined.contains("attempts 2/5"), "{joined}");
+        assert!(joined.contains("beats 7/40"), "{joined}");
+        assert!(joined.contains("next roll 18%"), "{joined}");
+        assert!(joined.contains("no warden"), "{joined}");
     }
 
     #[test]

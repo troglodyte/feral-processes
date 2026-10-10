@@ -812,3 +812,18 @@ fn a_pin_with_no_carried_routine_draws_nothing_for_routines() {
 
     assert_eq!(after_baseline, after_pin);
 }
+
+#[test]
+fn a_prisoner_rattles_only_while_its_cell_is_working() {
+    let (mut game, cell, _body) = a_warded_cell(7301);
+    let mark = |game: &Game| game.view_pinned_at(PEN, 2, 2)[2][2];
+    assert_eq!(mark(&game), crate::views::PinMark::Strained);
+    let warden = game
+        .world
+        .iter_entities()
+        .find(|e| e.get::<Task>().is_some_and(|t| t.target == cell))
+        .map(|e| e.id())
+        .unwrap();
+    game.world.entity_mut(warden).remove::<Task>();
+    assert_eq!(mark(&game), crate::views::PinMark::Settled);
+}

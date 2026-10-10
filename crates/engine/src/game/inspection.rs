@@ -1673,6 +1673,7 @@ impl Game {
                                 .unwrap_or_else(|| id.0.clone())
                         }),
                     pod: self.pod_state(entity, pos),
+                    prison: self.prison_state(entity),
                     line: line_of.get(&entity).copied(),
                 }
             })

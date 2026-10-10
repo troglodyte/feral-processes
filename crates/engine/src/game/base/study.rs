@@ -473,6 +473,23 @@ impl Game {
                 };
             }
         }
+        // A prisoner is marked on its pen the same way: `Strained` while its
+        // cell is working (a lit, warded cell), `Settled` otherwise.
+        for e in self.world.iter_entities() {
+            let (Some(jailed), Some(pos)) = (e.get::<components::Jailed>(), e.get::<Position>())
+            else {
+                continue;
+            };
+            let (dx, dy) = (pos.x - cx, pos.y - cy);
+            if dx.abs() <= half_w && dy.abs() <= half_h {
+                rows[(dy + half_h) as usize][(dx + half_w) as usize] =
+                    if self.cell_is_working(jailed.cell) {
+                        PinMark::Strained
+                    } else {
+                        PinMark::Settled
+                    };
+            }
+        }
         rows
     }
 

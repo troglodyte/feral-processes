@@ -344,7 +344,9 @@ impl Game {
             .iter()
             .copied()
             .min_by_key(|&(x, y)| (reach::gap(cells, &[(x, y)]), y, x))?;
-        let field = reach::movement_field(battle, actor, self.movement_allowance(actor));
+        // From the cell the turn is planned from, not the one the body is on:
+        // a profiled forecast asks about a turn it has not walked to.
+        let field = reach::movement_field_from(battle, actor, from, self.movement_allowance(actor));
         let sees_a_target = field.keys().chain(cells).any(|&at| {
             targets
                 .iter()

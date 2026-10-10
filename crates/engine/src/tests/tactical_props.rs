@@ -379,6 +379,49 @@ fn the_same_board_gets_the_same_choice() {
     assert_eq!(run(), run());
 }
 
+/// `best_prop_swing` with no body to hit, from `from`, for a hostile whose
+/// live cell is where `ai_fight` put it.
+fn cover_swing(
+    game: &Game,
+    wild: Entity,
+    from: (i32, i32),
+    target: (i32, i32),
+) -> Option<(i32, i32)> {
+    game.best_prop_swing(wild, from, game.swing_range(wild), None, &[target])
+}
+
+#[test]
+fn cover_is_broken_only_when_no_reachable_cell_sees_a_target() {
+    // A wall across row 3 with a gap at (4, 3): the hostile steps to (4, 2)
+    // and sees the target, so the wall in front of it is not its problem.
+    let gapped: Marks = (0..SIDE)
+        .filter(|&x| x != 4)
+        .map(|x| ((x, 3), 'D'))
+        .collect();
+    let (game, wild) = ai_fight(&gapped, (3, 2), (3, 6));
+    assert_eq!(cover_swing(&game, wild, (3, 2), (3, 6)), None);
+
+    // Seal it and nothing reachable sees the target: break the one blocker.
+    let sealed: Marks = (0..SIDE).map(|x| ((x, 3), 'D')).collect();
+    let (game, wild) = ai_fight(&sealed, (3, 2), (3, 6));
+    assert_eq!(cover_swing(&game, wild, (3, 2), (3, 6)), Some((3, 3)));
+}
+
+#[test]
+fn the_cover_search_walks_from_the_cell_it_is_given() {
+    // The one gap is six cells from `from` and beside the body's live cell.
+    // The allowance is below six, so a planner asked about the turn from
+    // (0, 2) must not walk out of the live cell's field.
+    let wall: Marks = (0..SIDE - 1).map(|x| ((x, 3), 'D')).collect();
+    let (game, wild) = ai_fight(&wall, (6, 2), (3, 6));
+    assert!(
+        game.movement_allowance(wild) < 6,
+        "the fixture needs a short walk"
+    );
+    assert_eq!(cover_swing(&game, wild, (6, 2), (3, 6)), None);
+    assert_eq!(cover_swing(&game, wild, (0, 2), (3, 6)), Some((1, 3)));
+}
+
 #[test]
 fn a_hostile_with_a_way_round_does_not_break_the_wall() {
     let wall: Marks = (0..SIDE - 1).map(|x| ((x, 3), 'D')).collect();

@@ -107,9 +107,21 @@ pub fn movement_field(
     body: Entity,
     allowance: u32,
 ) -> HashMap<(i32, i32), u32> {
-    let Some(origin) = battle.cell_of(body) else {
-        return HashMap::new();
-    };
+    match battle.cell_of(body) {
+        Some(origin) => movement_field_from(battle, body, origin, allowance),
+        None => HashMap::new(),
+    }
+}
+
+/// `movement_field` for a body standing on `origin` rather than where it
+/// is — a planner pricing a turn it has not yet walked to (a profiled
+/// forecast) asks from the cell that turn starts on.
+pub fn movement_field_from(
+    battle: &TacticalBattle,
+    body: Entity,
+    origin: (i32, i32),
+    allowance: u32,
+) -> HashMap<(i32, i32), u32> {
     // Gathered once rather than scanned per successor: the walk asks about
     // every neighbour of every cell it reaches, and `occupant` is a linear
     // scan over the fight's whole roster.
@@ -279,8 +291,8 @@ pub fn in_range(from: &[(i32, i32)], aim: (i32, i32), range: AbilityRange) -> bo
 ///
 /// 1. The two are further apart than `TACTICAL_MELEE_RANGE`. A boulder is no
 ///    help against someone already standing on top of you.
-/// 2. One of the defender's eight neighbours is `BattleCell::Cover` **on the
-///    attacker's side** — the dot product of (neighbour - defender) with
+/// 2. One of the defender's eight neighbours is cover (`Board::is_cover`) **on
+///    the attacker's side** — the dot product of (neighbour - defender) with
 ///    (attacker - defender) is **strictly positive**. Strictly is the whole
 ///    of the ninety-degree rule: a boulder exactly abeam scores zero and is
 ///    beside you rather than between you and the shot. This is deliberately

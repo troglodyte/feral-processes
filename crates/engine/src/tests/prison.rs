@@ -955,3 +955,25 @@ fn a_breakdown_with_no_room_waits_and_draws_nothing() {
     assert!(game.cell_prisoner(cell).is_none(), "room lets it through");
     assert!(output_total(&game, cell) > 0);
 }
+
+#[test]
+fn a_worst_case_above_capacity_still_proceeds_once_the_stock_is_empty() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    {
+        let mut j = game.world.get_mut::<Jailed>(body).unwrap();
+        j.record = Some(DownedProgram {
+            level: 60,
+            ..record(MID_SPECIES, Rarity::Ordinary)
+        });
+        j.attempts = JAIL_MAX_ATTEMPTS - 1;
+    }
+    game.world.get_mut::<Stock>(cell).unwrap().capacity = 1;
+    game.settle_jail_attempt(cell, body, false);
+    for _ in 0..3 {
+        game.run_holding_cells();
+    }
+    assert!(
+        game.cell_prisoner(cell).is_none(),
+        "an empty output must never be Clogged by a payout larger than it"
+    );
+}

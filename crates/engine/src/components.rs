@@ -914,6 +914,14 @@ impl Stock {
     pub fn output_room(&self) -> u32 {
         self.capacity.saturating_sub(self.output_used())
     }
+
+    /// Whether `output` has room to take a payout of up to `worst`. The
+    /// payout is capped at `capacity`: a worst case larger than the whole
+    /// output would otherwise never fit and clog the machine for good, so an
+    /// empty output always takes it.
+    pub fn fits_payout(&self, worst: u32) -> bool {
+        self.output_room() >= worst.min(self.capacity)
+    }
 }
 
 /// A load a posted program is physically carrying to a depot.

@@ -537,8 +537,12 @@ impl Game {
     fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) -> bool {
         let program = self.prisoner_record(prisoner);
         if let Some(program) = program.as_ref() {
-            let room = self.world.get::<Stock>(cell).map_or(0, |s| s.output_room());
-            if room < self.breakdown_worst_case(program) {
+            let worst = self.breakdown_worst_case(program);
+            if !self
+                .world
+                .get::<Stock>(cell)
+                .is_some_and(|s| s.fits_payout(worst))
+            {
                 return false;
             }
         }

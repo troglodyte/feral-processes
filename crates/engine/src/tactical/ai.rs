@@ -349,6 +349,14 @@ impl Game {
         hostile != injected
     }
 
+    /// **The party's side vetoes, it does not merely subtract**: a body
+    /// fighting for the party never trades its own side's Integrity for
+    /// the other's, while a hostile only nets the two. The one door both a
+    /// harmful routine's aim and a prop detonation read.
+    pub(crate) fn vetoes_own_side_harm(&self, actor: Entity) -> bool {
+        !self.acts_for_hostiles(actor)
+    }
+
     /// Whether `body` is a companion the AI drives rather than the player —
     /// the design's "going mad": a `Temperature` or `Injected` entry takes it
     /// over for as long as the entry lasts, whether or not `App::tactical_auto`
@@ -1403,7 +1411,7 @@ impl Game {
             i32::try_from(band.max).unwrap_or(0) + i32::from(battle.footprint_of(actor)) - 1;
         let acting_side = self.acts_for_hostiles(actor);
         let hallucinating = !helpful && self.is_hallucinating(actor);
-        let spares_own_side = !helpful && !acting_side;
+        let spares_own_side = !helpful && self.vetoes_own_side_harm(actor);
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {

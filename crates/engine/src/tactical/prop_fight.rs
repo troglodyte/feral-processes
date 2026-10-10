@@ -234,10 +234,8 @@ impl Game {
     /// blast's full figure (it rolls nothing), so this is exact for the
     /// bodies and silent on the chain it might set off.
     ///
-    /// **The party's side vetoes, it does not merely subtract** — `None`
-    /// when a body fighting for the party would catch any of its own, the
-    /// rule `spares_own_side` holds for a routine's aim. A hostile only
-    /// subtracts.
+    /// `None` when `Game::vetoes_own_side_harm` holds for `actor` and the
+    /// blast would catch any of its own side.
     pub(crate) fn blast_net_value(
         &self,
         actor: Entity,
@@ -249,7 +247,7 @@ impl Game {
         for body in self.blast_reach(cell, blast).1 {
             let dealt = self.mitigate_incoming_damage(body, blast.damage as i32) as f32;
             if self.world.get::<crate::components::Hostile>(body).is_some() == acting_side {
-                if !acting_side {
+                if self.vetoes_own_side_harm(actor) {
                     return None;
                 }
                 net -= dealt;

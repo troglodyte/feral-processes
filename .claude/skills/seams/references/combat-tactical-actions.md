@@ -571,7 +571,8 @@ damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.
 - **A party-side body vetoes a detonation that would hit its own side, while a
   hostile only subtracts.** `blast_net_value` returns `None` when the actor
   fights for the party and any body of the party (the actor included) stands
-  in the blast, matching `spares_own_side` in `ai.rs`' routine aim. Net
+  in the blast, through `Game::vetoes_own_side_harm`, the door `ai.rs`' routine aim
+  reads too. Net
   scoring alone fired a blast through a companion whenever two hostiles stood
   beside it, which is a party AI trading its own side's Integrity for the
   other's. Hostiles keep the subtraction: friendly fire is full and a wild

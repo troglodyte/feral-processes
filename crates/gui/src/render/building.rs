@@ -1856,13 +1856,18 @@ pub(super) fn structure_detail_lines(
         match &prison.prisoner {
             Some(p) => {
                 lines.push((format!("  holds {}", p.name), TEXT_DIM));
-                lines.push((
+                let clock = if p.attempts >= p.max_attempts {
+                    format!(
+                        "  attempts {}/{}  waiting for room in the output",
+                        p.attempts, p.max_attempts
+                    )
+                } else {
                     format!(
                         "  attempts {}/{}  beats {}/{}  next roll {}%",
                         p.attempts, p.max_attempts, p.progress, p.attempt_ticks, p.odds_percent
-                    ),
-                    TEXT_DIM,
-                ));
+                    )
+                };
+                lines.push((clock, TEXT_DIM));
             }
             None => lines.push(("  empty".to_string(), TEXT_DIM)),
         }

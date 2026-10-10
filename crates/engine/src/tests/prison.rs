@@ -977,3 +977,28 @@ fn a_worst_case_above_capacity_still_proceeds_once_the_stock_is_empty() {
         "an empty output must never be Clogged by a payout larger than it"
     );
 }
+
+#[test]
+fn a_breakdown_with_no_room_clogs_the_cell_on_the_beat_it_defers() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+    {
+        let mut j = game.world.get_mut::<Jailed>(body).unwrap();
+        j.attempts = JAIL_MAX_ATTEMPTS - 1;
+        j.progress = ATTEMPT_TICKS - 1;
+    }
+    game.run_holding_cells();
+    assert_eq!(
+        game.cell_prisoner(cell),
+        Some(body),
+        "the seed must fail the last roll, or this tests nothing"
+    );
+    assert_eq!(
+        game.world.get::<MachineStatus>(cell),
+        Some(&MachineStatus::Clogged)
+    );
+}

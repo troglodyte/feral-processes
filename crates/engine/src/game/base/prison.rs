@@ -377,11 +377,7 @@ impl Game {
         };
         // A breakdown the cell had no room to pay is retried every beat,
         // not re-rolled: the last attempt already failed.
-        let spent = self
-            .world
-            .get::<components::Jailed>(prisoner)
-            .is_some_and(|j| j.attempts >= JAIL_MAX_ATTEMPTS);
-        if spent {
+        if self.prisoner_is_spent(prisoner) {
             let status = if self.break_down_prisoner(cell, prisoner) {
                 MachineStatus::Running
             } else {
@@ -410,6 +406,19 @@ impl Game {
             rng.0.random::<f32>() < chance
         };
         self.settle_jail_attempt(cell, prisoner, landed);
+        // A final failure the cell had no room to pay stays put: say so on
+        // this beat rather than showing Running until the next retry.
+        if self.prisoner_is_spent(prisoner) {
+            self.set_rig_status(cell, MachineStatus::Clogged);
+        }
+    }
+
+    /// Whether `prisoner` has used every attempt and is still in its cell —
+    /// a breakdown the cell had no room to pay.
+    fn prisoner_is_spent(&self, prisoner: Entity) -> bool {
+        self.world
+            .get::<components::Jailed>(prisoner)
+            .is_some_and(|j| j.attempts >= JAIL_MAX_ATTEMPTS)
     }
 
     /// Writes one decompile attempt's outcome. Split from the roll so the

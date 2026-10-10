@@ -794,7 +794,7 @@ mod tests {
             biome: Biome::OpenGrid,
             bodies: 4,
         };
-        let board = generate(spec);
+        let board = generate(spec, &crate::tactical::props::PropDb::default());
         let mut world = World::new();
         let bodies = (0..3).map(|_| world.spawn_empty().id()).collect();
         (TacticalBattle::open(spec, board), bodies)

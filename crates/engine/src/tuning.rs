@@ -5537,6 +5537,27 @@ pub const TOOL_CARRIER_VALUE: u32 = 2;
 /// choice and becomes a wall with extra steps.
 pub const TACTICAL_ROUGH_COST: u32 = 2;
 
+/// How many authored prefabs a board of a given side is stamped with, as
+/// `(side, min, max)`. A board of a side not listed takes the last row.
+///
+/// Scaled with the board's area, so a small board gets one or two set pieces
+/// and a large one reads as a place rather than a plain with a prop on it.
+pub const TACTICAL_PREFABS_BY_SIDE: [(i32, u32, u32); 3] = [
+    (TACTICAL_BOARD_SMALL, 1, 2),
+    (TACTICAL_BOARD_MEDIUM, 2, 4),
+    (TACTICAL_BOARD_LARGE, 4, 6),
+];
+
+/// Chance in a thousand that an open cell not under a prefab carries a
+/// decoration. Low: decoration is texture, and a floor that is mostly
+/// debris stops reading as a floor.
+pub const TACTICAL_DECOR_PER_MILLE: u32 = 25;
+
+/// Placements tried per prefab before it is dropped from the board. A prefab
+/// that will not fit after this many is not worth a long search; the board is
+/// pure in its spec, so dropping it is as deterministic as placing it.
+pub const TACTICAL_PREFAB_ATTEMPTS: u32 = 12;
+
 /// How deep a chain of volatile props may detonate one another.
 ///
 /// A line of explosive cells is a fuse; unbounded, one swing would resolve

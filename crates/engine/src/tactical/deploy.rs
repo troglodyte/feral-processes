@@ -54,10 +54,7 @@ pub struct Deployment {
 /// `the_smallest_board_seats_the_largest_fight` pins — at footprint 1 for
 /// every body, the shape squads narrow toward but never past.
 pub fn plan(board: &Board, bearing: (i32, i32), party: u32, wild: &[u8]) -> Deployment {
-    let centre = board.side / 2;
-    let half = TACTICAL_DEPLOY_GAP / 2;
-    let party_anchor = (centre - bearing.0 * half, centre - bearing.1 * half);
-    let wild_anchor = (centre + bearing.0 * half, centre + bearing.1 * half);
+    let (party_anchor, wild_anchor) = anchors(board.side, bearing);
     let across = (-bearing.1, bearing.0);
 
     let party_footprints = vec![1u8; party as usize];
@@ -66,6 +63,35 @@ pub fn plan(board: &Board, bearing: (i32, i32), party: u32, wild: &[u8]) -> Depl
         party: rank(board, party_anchor, across, &party_footprints, &mut taken),
         wild: rank(board, wild_anchor, across, wild, &mut taken),
     }
+}
+
+/// Where each side's rank is centred for a fight on `bearing`.
+fn anchors(side: i32, bearing: (i32, i32)) -> ((i32, i32), (i32, i32)) {
+    let centre = side / 2;
+    let half = TACTICAL_DEPLOY_GAP / 2;
+    (
+        (centre - bearing.0 * half, centre - bearing.1 * half),
+        (centre + bearing.0 * half, centre + bearing.1 * half),
+    )
+}
+
+/// The cells next to any anchor a fight could deploy on, whatever its
+/// bearing: what prop placement keeps clear so a set piece never decides
+/// where a fight starts. The board is generated before the bearing is
+/// known to it, so this is the union over all eight.
+pub(crate) fn anchor_neighbourhoods(side: i32) -> BTreeSet<(i32, i32)> {
+    let mut reserved = BTreeSet::new();
+    for bearing in crate::tactical::map::NEIGHBOURS {
+        let (party, wild) = anchors(side, bearing);
+        for anchor in [party, wild] {
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    reserved.insert((anchor.0 + dx, anchor.1 + dy));
+                }
+            }
+        }
+    }
+    reserved
 }
 
 /// One side's line, fanning out from its anchor: the anchor itself, then a
@@ -141,17 +167,24 @@ pub(crate) fn nearest_free(
 mod tests {
     use super::*;
     use crate::tactical::map::{BattleSpec, generate};
+    use crate::tactical::props::PropDb;
     use crate::world::Biome;
 
     fn board(bodies: u32) -> Board {
-        generate(BattleSpec {
-            world_seed: 31,
-            site: (2, 2),
-            tick: 44,
-            zone: 2,
-            biome: Biome::Backplane,
-            bodies,
-        })
+        let (props, _) =
+            PropDb::load_dir(&crate::tests::support::test_assets_dir().join("battle-props"))
+                .unwrap();
+        generate(
+            BattleSpec {
+                world_seed: 31,
+                site: (2, 2),
+                tick: 44,
+                zone: 2,
+                biome: Biome::Backplane,
+                bodies,
+            },
+            &props,
+        )
     }
 
     #[test]

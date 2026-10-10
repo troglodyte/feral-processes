@@ -15,10 +15,12 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::derive::{FNV_BASIS, fold, index};
-use crate::tactical::props::{Blast, PieceDef};
+use crate::tactical::deploy;
+use crate::tactical::props::{Blast, PieceDef, PrefabDef, PropDb};
 use crate::tuning::{
-    TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
-    TACTICAL_MEDIUM_BODIES, TACTICAL_ROUGH_COST,
+    TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_DECOR_PER_MILLE,
+    TACTICAL_LARGE_BODIES, TACTICAL_MEDIUM_BODIES, TACTICAL_PREFAB_ATTEMPTS,
+    TACTICAL_PREFABS_BY_SIDE, TACTICAL_ROUGH_COST,
 };
 use crate::world::Biome;
 
@@ -540,21 +542,35 @@ fn region(board: &Board, from: (i32, i32)) -> BTreeSet<(i32, i32)> {
 /// to a player, who finds a body that cannot leave the cell it deployed on
 /// and a fight that cannot finish. Each pass grows the mainland by at least
 /// one cell, so this terminates in at most `side * side` passes.
+///
+/// **A prop in the way is removed only when no way round it exists.** The
+/// corridor is first searched through noise and destructible props alone; an
+/// indestructible prop is a set piece the player was meant to see, and is
+/// opened only for a pocket that could not be reached any other way.
 fn carve_to_connect(board: &mut Board) {
     loop {
-        let Some(start) = board.cells().find(|(_, k)| k.walkable()).map(|(c, _)| c) else {
+        let Some(start) = board
+            .cells()
+            .map(|(c, _)| c)
+            .find(|c| board.walkable(c.0, c.1))
+        else {
             return;
         };
         let mainland = region(board, start);
         let stranded = board
             .cells()
-            .find(|((x, y), k)| k.walkable() && !mainland.contains(&(*x, *y)))
-            .map(|(c, _)| c);
+            .map(|(c, _)| c)
+            .find(|c| board.walkable(c.0, c.1) && !mainland.contains(c));
         let Some(stranded) = stranded else {
             return;
         };
-        for cell in corridor(board, &mainland, stranded) {
+        let mut path = corridor(board, &mainland, stranded, false);
+        if path.is_empty() {
+            path = corridor(board, &mainland, stranded, true);
+        }
+        for cell in path {
             board.set(cell.0, cell.1, BattleCell::Open);
+            board.remove_prop(cell);
         }
     }
 }
@@ -563,8 +579,14 @@ fn carve_to_connect(board: &mut Board) {
 ///
 /// A breadth-first walk that ignores walkability entirely and keeps
 /// predecessors, so the path it reports back is the fewest cells that have
-/// to be opened — the carve takes a corridor, not a demolition.
-fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) -> Vec<(i32, i32)> {
+/// to be opened — the carve takes a corridor, not a demolition. Unless
+/// `through_fixtures`, it will not step on an indestructible prop.
+fn corridor(
+    board: &Board,
+    mainland: &BTreeSet<(i32, i32)>,
+    from: (i32, i32),
+    through_fixtures: bool,
+) -> Vec<(i32, i32)> {
     let mut came_from: std::collections::BTreeMap<(i32, i32), (i32, i32)> =
         std::collections::BTreeMap::new();
     let mut seen = BTreeSet::from([from]);
@@ -583,7 +605,13 @@ fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) ->
         }
         for (dx, dy) in NEIGHBOURS {
             let next = (at.0 + dx, at.1 + dy);
-            if board.in_bounds(next.0, next.1) && seen.insert(next) {
+            let fixture = board
+                .prop_at(next.0, next.1)
+                .is_some_and(|p| p.blocks_move && !p.destructible());
+            if board.in_bounds(next.0, next.1)
+                && (through_fixtures || !fixture)
+                && seen.insert(next)
+            {
                 came_from.insert(next, at);
                 queue.push_back(next);
             }
@@ -592,9 +620,129 @@ fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) ->
     Vec::new()
 }
 
-/// The whole generator: derive every cell, then make sure the walkable
-/// ground is one piece.
-pub fn generate(spec: BattleSpec) -> Board {
+/// Salt for every fold prop placement draws from, so none of it can land on
+/// a word the noise already folds to.
+const PROP_SALT: u64 = 0x0070_726f_7073;
+
+/// One placement's seed.
+fn prop_seed(spec: BattleSpec, words: &[u64]) -> u64 {
+    let mut all = vec![PROP_SALT];
+    all.extend_from_slice(words);
+    fold(spec.base_seed(), &all)
+}
+
+/// A prefab's cells as a grid of characters, turned `quarters` times
+/// clockwise.
+fn rotated(rows: &[String], quarters: u32) -> Vec<Vec<char>> {
+    let mut grid: Vec<Vec<char>> = rows.iter().map(|r| r.chars().collect()).collect();
+    for _ in 0..quarters % 4 {
+        let (h, w) = (grid.len(), grid[0].len());
+        grid = (0..w)
+            .map(|x| (0..h).rev().map(|y| grid[y][x]).collect())
+            .collect();
+    }
+    grid
+}
+
+/// Picks one prefab by weight from `candidates`.
+fn pick_weighted<'a>(seed: u64, candidates: &[&'a PrefabDef]) -> &'a PrefabDef {
+    let total: u32 = candidates.iter().map(|p| p.weight).sum();
+    let mut n = index(seed, total as usize) as u32;
+    for p in candidates {
+        if n < p.weight {
+            return p;
+        }
+        n -= p.weight;
+    }
+    candidates[candidates.len() - 1]
+}
+
+/// Stamps the authored set pieces onto the noise, then scatters decoration.
+///
+/// Pure in `spec` and `props`, like the noise: every choice is a fold, no
+/// `GameRng` is drawn. Each prefab is tried at `TACTICAL_PREFAB_ATTEMPTS`
+/// hashed positions and rotations and dropped if none fits — a rectangle
+/// clear of every earlier prefab and of the cells a deployment could seat
+/// on. A cell under a solid piece becomes `Open` first, so destroying the
+/// piece leaves floor and not whatever noise it happened to stand on.
+fn place_props(board: &mut Board, spec: BattleSpec, props: &PropDb) {
+    let side = board.side;
+    let candidates: Vec<&PrefabDef> = props.prefabs_for(spec.biome).collect();
+    if !candidates.is_empty() {
+        let (_, min, max) = TACTICAL_PREFABS_BY_SIDE
+            .iter()
+            .find(|(s, _, _)| *s == side)
+            .copied()
+            .unwrap_or(TACTICAL_PREFABS_BY_SIDE[TACTICAL_PREFABS_BY_SIDE.len() - 1]);
+        let count = min + index(prop_seed(spec, &[0]), (max - min + 1) as usize) as u32;
+        let reserved = deploy::anchor_neighbourhoods(side);
+        let mut claimed: BTreeSet<(i32, i32)> = BTreeSet::new();
+        for slot in 0..count {
+            let prefab = pick_weighted(prop_seed(spec, &[1, slot as u64]), &candidates);
+            for attempt in 0..TACTICAL_PREFAB_ATTEMPTS {
+                let at = |tag: u64| prop_seed(spec, &[2, slot as u64, attempt as u64, tag]);
+                let grid = rotated(&prefab.rows, index(at(0), 4) as u32);
+                let (h, w) = (grid.len() as i32, grid[0].len() as i32);
+                if w > side || h > side {
+                    continue;
+                }
+                let x0 = index(at(1), (side - w + 1) as usize) as i32;
+                let y0 = index(at(2), (side - h + 1) as usize) as i32;
+                let rect: Vec<(i32, i32)> = (0..h)
+                    .flat_map(|y| (0..w).map(move |x| (x0 + x, y0 + y)))
+                    .collect();
+                let solid = |c: char| c != '.';
+                let touches_reserved = grid.iter().enumerate().any(|(y, row)| {
+                    row.iter().enumerate().any(|(x, &c)| {
+                        solid(c) && reserved.contains(&(x0 + x as i32, y0 + y as i32))
+                    })
+                });
+                if touches_reserved || rect.iter().any(|c| claimed.contains(c)) {
+                    continue;
+                }
+                for (y, row) in grid.iter().enumerate() {
+                    for (x, &c) in row.iter().enumerate() {
+                        let Some(def) = prefab.legend.get(&c).and_then(|id| props.piece(id)) else {
+                            continue;
+                        };
+                        let cell = (x0 + x as i32, y0 + y as i32);
+                        if !def.decoration {
+                            board.set(cell.0, cell.1, BattleCell::Open);
+                        }
+                        board.place_prop(cell, PropCell::from_def(def));
+                    }
+                }
+                claimed.extend(rect);
+                break;
+            }
+        }
+    }
+
+    let decor: Vec<&PieceDef> = props.pieces().filter(|p| p.decoration).collect();
+    if decor.is_empty() {
+        return;
+    }
+    for y in 0..side {
+        for x in 0..side {
+            if board.cell(x, y) != BattleCell::Open || board.prop_at(x, y).is_some() {
+                continue;
+            }
+            let seed = prop_seed(spec, &[3, x as u32 as u64, y as u32 as u64]);
+            if index(seed, 1000) as u32 >= TACTICAL_DECOR_PER_MILLE {
+                continue;
+            }
+            let pick = index(
+                prop_seed(spec, &[4, x as u32 as u64, y as u32 as u64]),
+                decor.len(),
+            );
+            board.place_prop((x, y), PropCell::from_def(decor[pick]));
+        }
+    }
+}
+
+/// The whole generator: derive every cell, stamp the set pieces, then make
+/// sure the walkable ground is one piece.
+pub fn generate(spec: BattleSpec, props: &PropDb) -> Board {
     let side = spec.side();
     let cells = (0..side * side)
         .map(|i| kind_at(spec, i % side, i / side))
@@ -605,6 +753,7 @@ pub fn generate(spec: BattleSpec) -> Board {
         screens: BTreeSet::new(),
         props: BTreeMap::new(),
     };
+    place_props(&mut board, spec, props);
     carve_to_connect(&mut board);
     board
 }
@@ -735,15 +884,15 @@ mod tests {
 
     #[test]
     fn the_same_spec_yields_an_identical_board() {
-        let a = generate(spec(4));
-        let b = generate(spec(4));
+        let a = generate(spec(4), &PropDb::default());
+        let b = generate(spec(4), &PropDb::default());
         assert_eq!(a.side, b.side);
         assert_eq!(a.cells().collect::<Vec<_>>(), b.cells().collect::<Vec<_>>());
     }
 
     #[test]
     fn a_board_is_its_tier_square() {
-        let board = generate(spec(9));
+        let board = generate(spec(9), &PropDb::default());
         assert_eq!(board.side, TACTICAL_BOARD_LARGE);
         assert_eq!(
             board.cells().count(),
@@ -764,14 +913,15 @@ mod tests {
         let mut city = spec(4);
         city.biome = Biome::Backplane;
         assert!(
-            blockers(&generate(city)) > blockers(&generate(plain)),
+            blockers(&generate(city, &PropDb::default()))
+                > blockers(&generate(plain, &PropDb::default())),
             "the biome does not reach the ground"
         );
     }
 
     #[test]
     fn out_of_bounds_is_seen_over_and_never_stepped_on() {
-        let board = generate(spec(4));
+        let board = generate(spec(4), &PropDb::default());
         assert!(!board.in_bounds(-1, 0));
         assert!(!board.in_bounds(board.side, 0));
         assert_eq!(board.cell(-1, 0), BattleCell::Blocked);
@@ -842,14 +992,17 @@ mod tests {
         ] {
             for bodies in [2_u32, 5, 9] {
                 for tick in 0..60_u64 {
-                    let board = generate(BattleSpec {
-                        world_seed: 77,
-                        site: (4, 4),
-                        tick,
-                        zone: 2,
-                        biome,
-                        bodies,
-                    });
+                    let board = generate(
+                        BattleSpec {
+                            world_seed: 77,
+                            site: (4, 4),
+                            tick,
+                            zone: 2,
+                            biome,
+                            bodies,
+                        },
+                        &PropDb::default(),
+                    );
                     let walkable = board.cells().filter(|(_, k)| k.walkable()).count();
                     let start = board
                         .cells()
@@ -1035,6 +1188,202 @@ mod tests {
     fn a_prop_off_the_board_is_ignored() {
         let mut board = Board::from_rows(&["...", "...", "..."]);
         board.place_prop((5, 5), rubble());
+        assert_eq!(board.props().count(), 0);
+    }
+
+    fn shipped() -> PropDb {
+        PropDb::load_dir(&crate::tests::support::test_assets_dir().join("battle-props"))
+            .unwrap()
+            .0
+    }
+
+    const FIGHT_BIOMES: [Biome; 4] = [
+        Biome::OpenGrid,
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Backplane,
+    ];
+
+    fn spec_at(biome: Biome, bodies: u32, tick: u64) -> BattleSpec {
+        BattleSpec {
+            world_seed: 77,
+            site: (4, 4),
+            tick,
+            zone: 2,
+            biome,
+            bodies,
+        }
+    }
+
+    #[test]
+    fn an_empty_prop_db_leaves_the_noise_as_it_was() {
+        for biome in FIGHT_BIOMES {
+            for tick in 0..20 {
+                let spec = spec_at(biome, 5, tick);
+                let side = spec.side();
+                let mut expected = Board {
+                    side,
+                    cells: (0..side * side)
+                        .map(|i| kind_at(spec, i % side, i / side))
+                        .collect(),
+                    screens: BTreeSet::new(),
+                    props: BTreeMap::new(),
+                };
+                carve_to_connect(&mut expected);
+                assert_eq!(generate(spec, &PropDb::default()), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn the_same_spec_and_db_yield_the_same_props() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            let spec = spec_at(biome, 9, 3);
+            assert_eq!(generate(spec, &db), generate(spec, &db));
+        }
+    }
+
+    #[test]
+    fn props_are_stamped_and_differ_between_fights() {
+        let db = shipped();
+        let a = generate(spec_at(Biome::Backplane, 9, 1), &db);
+        let b = generate(spec_at(Biome::Backplane, 9, 2), &db);
+        assert!(a.props().count() > 0);
+        let cells = |b: &Board| {
+            b.props()
+                .map(|(c, p)| (*c, p.piece.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(cells(&a), cells(&b));
+    }
+
+    /// Review focus 1: a long indestructible run must not wall a side in.
+    #[test]
+    fn props_never_strand_anybody_or_sit_on_a_deploy_cell() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            for bodies in [2_u32, 5, 9] {
+                for tick in 0..70_u64 {
+                    let board = generate(spec_at(biome, bodies, tick), &db);
+                    let walkable: Vec<(i32, i32)> = board
+                        .cells()
+                        .map(|(c, _)| c)
+                        .filter(|c| board.walkable(c.0, c.1))
+                        .collect();
+                    assert_eq!(
+                        region(&board, walkable[0]).len(),
+                        walkable.len(),
+                        "{biome:?} at {bodies} bodies, tick {tick}: ground is in pieces"
+                    );
+                    for bearing in NEIGHBOURS {
+                        let plan = deploy::plan(&board, bearing, 4, &[1; 4]);
+                        for cell in plan.party.iter().chain(plan.wild.iter()) {
+                            assert!(
+                                board.prop_at(cell.0, cell.1).is_none_or(|p| !p.blocks_move),
+                                "{biome:?} tick {tick}: deployed on a prop at {cell:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The census, `cover_is_reachable_on_every_biome_a_fight_opens_on`'s
+    /// pattern: a biome that never gets a set piece is a missing row.
+    #[test]
+    fn every_biome_a_fight_opens_on_gets_a_prefab_soon() {
+        let db = shipped();
+        for biome in FIGHT_BIOMES {
+            let hit = (0..20_u64).any(|tick| {
+                generate(spec_at(biome, 5, tick), &db)
+                    .props()
+                    .any(|(_, p)| !p.decoration)
+            });
+            assert!(hit, "{biome:?} never got a prefab in 20 fights");
+        }
+    }
+
+    fn prop_def(id: &str, hp: Option<u32>) -> PieceDef {
+        PieceDef {
+            id: id.into(),
+            blocks_move: true,
+            blocks_sight: true,
+            cover: true,
+            hp,
+            armour: 0,
+            volatile: None,
+            leaves: crate::tactical::props::Leaves::Floor,
+            sprite: String::new(),
+            decoration: false,
+            move_cost: None,
+        }
+    }
+
+    /// The carve prefers noise to a set piece: with a one-cell opening of
+    /// cover in an otherwise indestructible wall, it opens the cover.
+    #[test]
+    fn the_carve_opens_noise_before_an_indestructible_prop() {
+        let mut board = Board::from_rows(&[
+            "...P...", "...P...", "...P...", "...#...", "...P...", "...P...", "...P...",
+        ]);
+        carve_to_connect(&mut board);
+        assert!(board.walkable(3, 3));
+        assert_eq!(board.props().count(), 6);
+    }
+
+    /// And never loops for want of a way round: a wall of fixtures edge to
+    /// edge costs exactly one of them.
+    #[test]
+    fn the_carve_breaks_a_fixture_only_when_nothing_else_connects() {
+        let mut board = Board::from_rows(&[
+            "...P...", "...P...", "...P...", "...P...", "...P...", "...P...", "...P...",
+        ]);
+        carve_to_connect(&mut board);
+        assert_eq!(board.props().count(), 6);
+        assert_eq!(
+            region(&board, (0, 0)).len(),
+            board
+                .cells()
+                .filter(|(c, _)| board.walkable(c.0, c.1))
+                .count()
+        );
+    }
+
+    #[test]
+    fn the_carve_removes_a_destructible_prop_to_connect() {
+        let mut board = Board::from_rows(&[
+            "...D...", "...D...", "...D...", "...D...", "...D...", "...D...", "...D...",
+        ]);
+        carve_to_connect(&mut board);
+        assert_eq!(board.props().count(), 6);
+    }
+
+    #[test]
+    fn a_prefab_rotates_through_four_quarters_back_to_itself() {
+        let rows = vec!["ab.".to_string(), "c..".to_string()];
+        let mut grid = rotated(&rows, 0);
+        assert_eq!(grid, vec![vec!['a', 'b', '.'], vec!['c', '.', '.']]);
+        grid = rotated(&rows, 1);
+        assert_eq!(grid, vec![vec!['c', 'a'], vec!['.', 'b'], vec!['.', '.']]);
+        assert_eq!(rotated(&rows, 4), rotated(&rows, 0));
+    }
+
+    #[test]
+    fn a_prefab_too_big_for_the_board_is_dropped_not_a_panic() {
+        let rows: Vec<String> = vec!["W".repeat(40)];
+        let db = PropDb::from_parts(
+            vec![prop_def("w", None)],
+            vec![PrefabDef {
+                id: "huge".into(),
+                biomes: vec![],
+                weight: 1,
+                rows,
+                legend: [('W', "w".to_string())].into(),
+            }],
+        );
+        let board = generate(spec_at(Biome::OpenGrid, 2, 0), &db);
         assert_eq!(board.props().count(), 0);
     }
 }

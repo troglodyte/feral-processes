@@ -19,6 +19,7 @@ use crate::items::ItemId;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::species::SpeciesId;
 use crate::tactical::map::{BattleSpec, generate};
+use crate::tactical::props::PropDb;
 use crate::tactical::{TacticalBattle, deploy, opposes, reach};
 use crate::tuning::{FORMATIONS, TACTICAL_MELEE_RANGE};
 use crate::world::WorldMap;
@@ -127,7 +128,7 @@ impl Game {
                     .map(|&side| u32::from(side).pow(2))
                     .sum::<u32>(),
         };
-        let board = generate(spec);
+        let board = generate(spec, self.world.resource::<PropDb>());
         let plan = deploy::plan(&board, bearing, party.len() as u32, &wild_footprints);
 
         let mut battle = TacticalBattle::open(spec, board);

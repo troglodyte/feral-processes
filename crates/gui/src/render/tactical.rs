@@ -17,7 +17,9 @@
 
 use feral_processes_engine::Game;
 use feral_processes_engine::tactical::map::BattleCell;
-use feral_processes_engine::tactical::view::{TacticalBody, TacticalView, TamperTag, TurnRow};
+use feral_processes_engine::tactical::view::{
+    PropView, TacticalBody, TacticalView, TamperTag, TurnRow,
+};
 use feral_processes_engine::world::Biome;
 
 use super::RARITY_BAR_PX;
@@ -102,6 +104,76 @@ fn draw_ground(painter: &Painter, biome: Biome, kind: BattleCell, px: f32, py: f
             break;
         }
     }
+}
+
+/// How bright a prop's art draws, against `ground_level`'s 0.22 to 0.42: a
+/// set piece has to stand clear of the floor it is on, and brightness is all
+/// it spends, so the cast is the biome's muted one.
+const PROP_LEVEL: f32 = 0.85;
+
+/// Decoration draws dimmer than cover so it reads as background — scorch and
+/// cable are things on the floor, not things in the way.
+const DECORATION_LEVEL: f32 = 0.5;
+
+/// The sprite keys a prop tries, first hit wins: the cracked art once less
+/// than half its hit points remain, then the whole-piece art.
+fn prop_sprite_keys(prop: &PropView) -> Vec<String> {
+    let mut keys = Vec::new();
+    if let (Some(hp), Some(max)) = (prop.hp, prop.max_hp)
+        && hp * 2 < max
+    {
+        keys.push(format!("{}_cracked", prop.sprite));
+    }
+    keys.push(prop.sprite.clone());
+    keys
+}
+
+/// One glyph per class when no art loads: decoration, volatile, breakable,
+/// and the wall nothing breaks.
+fn prop_fallback_glyph(prop: &PropView) -> &'static str {
+    if prop.decoration {
+        ","
+    } else if prop.volatile {
+        "*"
+    } else if prop.hp.is_some() {
+        "%"
+    } else {
+        "#"
+    }
+}
+
+/// One prop over its cell's ground, before any body. Art or glyph, never
+/// both: a sprite substitutes for the glyph.
+fn draw_prop(
+    painter: &Painter,
+    biome: Biome,
+    prop: &PropView,
+    (px, py): (f32, f32),
+    size: f32,
+    glyph_px: u16,
+) {
+    let level = if prop.decoration {
+        DECORATION_LEVEL
+    } else {
+        PROP_LEVEL
+    };
+    let cast = palette::ground_cast(biome);
+    let tint = Color::new(cast.r * level, cast.g * level, cast.b * level, 1.0);
+    if prop_sprite_keys(prop)
+        .iter()
+        .any(|key| painter.sprite(key, px, py, size, tint, 0))
+    {
+        return;
+    }
+    let glyph = prop_fallback_glyph(prop);
+    let dims = painter.measure_map(glyph, glyph_px);
+    painter.map(
+        glyph,
+        px + (size - dims.width) / 2.0,
+        py + (size + dims.height) / 2.0,
+        glyph_px,
+        tint,
+    );
 }
 
 /// How far into a tile a body's art is inset, matching the surface map's own
@@ -585,6 +657,8 @@ pub(super) fn draw_tactical_map(
         &charge_cells(false),
     );
 
+    let props: std::collections::HashMap<(i32, i32), &PropView> =
+        view.props.iter().map(|p| (p.cell, p)).collect();
     for (cell, kind) in view.board.cells() {
         let (px, py) = tile_origin_px(
             cell,
@@ -598,6 +672,16 @@ pub(super) fn draw_tactical_map(
             continue;
         }
         draw_ground(painter, view.ground, kind, px, py, tile_px - 1.0);
+        if let Some(prop) = props.get(&cell) {
+            draw_prop(
+                painter,
+                view.ground,
+                prop,
+                (px, py),
+                tile_px - 1.0,
+                glyph_px,
+            );
+        }
 
         // What the legend reports is this list, so a key entry exists
         // exactly when its wash is drawn — `board_washes`' own doc.
@@ -2216,6 +2300,79 @@ mod tests {
             bar_count(Rarity::Gold) > bar_count(Rarity::Ordinary),
             "a gold body's tile drew no rarity bar — the player can't tell it apart on the board"
         );
+    }
+
+    fn test_prop(cell: (i32, i32), hp: Option<u32>, volatile: bool, decoration: bool) -> PropView {
+        PropView {
+            cell,
+            name: "test piece".into(),
+            sprite: "prop_test_piece".into(),
+            hp,
+            max_hp: hp.map(|_| 10),
+            volatile,
+            decoration,
+        }
+    }
+
+    /// With no art loaded, each class of prop draws its one glyph, the
+    /// decoration dimmer than the cover, and an empty board draws none.
+    #[test]
+    fn props_fall_back_to_one_glyph_per_class_and_decoration_is_dimmer() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let at = acting_body(&view).expect("somebody is acting").cell;
+        view.props = vec![
+            test_prop(at, None, false, false),
+            test_prop((at.0 + 1, at.1), Some(10), false, false),
+            test_prop((at.0 + 2, at.1), Some(5), true, false),
+            test_prop((at.0 + 3, at.1), None, false, true),
+        ];
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let glyphs = crate::paint::painted_map_glyphs(&shapes);
+        let ink = |g: &str| {
+            glyphs
+                .iter()
+                .find(|(t, _)| t == g)
+                .unwrap_or_else(|| panic!("no {g:?} among {glyphs:?}"))
+                .1
+        };
+        let (wall, debris, volatile, decor) = (ink("#"), ink("%"), ink("*"), ink(","));
+        assert_eq!(wall, debris);
+        assert_eq!(wall, volatile);
+        assert!(decor.g < wall.g, "decoration must read dimmer than cover");
+
+        let mut fx = Fx::new();
+        view.props.clear();
+        let (_, bare) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            !crate::paint::painted_map_glyphs(&bare)
+                .iter()
+                .any(|(t, _)| ["#", "%", "*", ","].contains(&t.as_str())),
+            "a board with no props drew a prop glyph"
+        );
+    }
+
+    /// A prop under half its hit points tries its cracked art first, and one
+    /// at full strength never does.
+    #[test]
+    fn a_damaged_prop_tries_its_cracked_sprite_first() {
+        let hurt = PropView {
+            hp: Some(4),
+            ..test_prop((0, 0), Some(10), false, false)
+        };
+        assert_eq!(
+            prop_sprite_keys(&hurt),
+            ["prop_test_piece_cracked", "prop_test_piece"]
+        );
+        let whole = test_prop((0, 0), Some(10), false, false);
+        assert_eq!(prop_sprite_keys(&whole), ["prop_test_piece"]);
+        let wall = test_prop((0, 0), None, false, false);
+        assert_eq!(prop_sprite_keys(&wall), ["prop_test_piece"]);
     }
 
     /// The cursor is drawn last, so it is never under a body it points at.

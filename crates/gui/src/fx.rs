@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use crate::effect_draw;
-use crate::effects::{EffectDef, EffectLibrary, Impact};
+use crate::effects::{EffectDef, EffectLibrary, Impact, Travel};
 use crate::paint::{Color, Painter};
 use crate::render::hud::palette;
 use crate::text::Metrics;
@@ -773,6 +773,11 @@ struct SpeechMark {
     start: f64,
 }
 
+/// The library effects a destroyed prop plays, and the ink they burn in.
+const PROP_BLAST_FX: &str = "explosion";
+const PROP_BLAST_LARGE_FX: &str = "explosion_large";
+const PROP_BLAST_COLOR: GlyphColor = GlyphColor::Orange;
+
 /// A blow in flight, drawn from a `BoltCue` the engine queued and forgot.
 ///
 /// **No stagger, where a `Walker` has one.** A squad files out of the base
@@ -1017,8 +1022,28 @@ impl Fx {
                         start: now,
                     }),
                     TacticalFxKind::Landing => self.landings.push((cue.pos, now)),
-                    // Phase 3 draws the explosion.
-                    TacticalFxKind::PropDestroyed { .. } => {}
+                    // Nothing flies to a prop, so the library effect's travel
+                    // is dropped and only its impacts and shake play; the
+                    // same bolt path then draws and shakes it with no second
+                    // mechanism.
+                    TacticalFxKind::PropDestroyed { volatile } => {
+                        let id = if volatile {
+                            PROP_BLAST_LARGE_FX
+                        } else {
+                            PROP_BLAST_FX
+                        };
+                        let mut def = self.library.get(Some(id)).clone();
+                        def.travel = Travel::None;
+                        self.bolts.push(Bolt {
+                            from: cue.pos,
+                            to: cue.pos,
+                            cells: Vec::new(),
+                            color: PROP_BLAST_COLOR,
+                            def,
+                            start: now,
+                            shaken: false,
+                        });
+                    }
                 }
             }
         }
@@ -1734,6 +1759,32 @@ impl Fx {
 
 #[cfg(test)]
 mod tests {
+
+    /// A volatile prop's destruction plays the bigger library effect, and a
+    /// plain one the ordinary explosion; both shake the board on the cue.
+    #[test]
+    fn a_destroyed_prop_plays_an_explosion_at_its_cell() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+        for (volatile, id) in [(false, "explosion"), (true, "explosion_large")] {
+            let mut fx = with_library();
+            fx.begin_frame(
+                0.0,
+                FrameCues {
+                    tactical_fx: vec![TacticalFxCue {
+                        pos: (4, 5),
+                        kind: TacticalFxKind::PropDestroyed { volatile },
+                    }],
+                    ..Default::default()
+                },
+                true,
+            );
+            assert_eq!(fx.bolts.len(), 1);
+            assert_eq!(fx.bolts[0].to, (4, 5));
+            assert_eq!(fx.bolts[0].def.id, id);
+            fx.begin_frame(0.01, FrameCues::default(), true);
+            assert!(fx.shake_energy > 0.0, "{id} did not shake the board");
+        }
+    }
 
     /// A trooper's landing washes its cell green for `LANDING_FLASH_SECONDS`
     /// and then clears — a board cell, so it reads through

@@ -109,7 +109,7 @@ fn draw_ground(painter: &Painter, biome: Biome, kind: BattleCell, px: f32, py: f
 /// How bright a prop's art draws, against `ground_level`'s 0.22 to 0.42: a
 /// set piece has to stand clear of the floor it is on, and brightness is all
 /// it spends, so the cast is the biome's muted one.
-const PROP_LEVEL: f32 = 0.85;
+const PROP_LEVEL: f32 = 0.72;
 
 /// Decoration draws dimmer than cover so it reads as background — scorch and
 /// cable are things on the floor, not things in the way.

@@ -209,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_library_loads_all_eight() {
+    fn the_shipped_library_loads_every_effect() {
         let mut lib = EffectLibrary::load_dir(&assets().join("effects"));
         for id in [
             "streak",
@@ -218,12 +218,13 @@ mod tests {
             "zap",
             "slash",
             "explosion",
+            "explosion_large",
             "heal",
             "buff",
         ] {
             assert_eq!(lib.get(Some(id)).id, id);
         }
-        assert_eq!(lib.defs.len(), 8);
+        assert_eq!(lib.defs.len(), 9);
         assert_eq!(
             lib.get(Some("laser_pulse")).travel,
             Travel::Pulses { count: 3 }

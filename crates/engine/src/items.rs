@@ -144,9 +144,9 @@ pub mod ids {
     pub const BLANK_SUBSTRATE: &str = "blank_substrate";
     pub const CHARGE_COIL: &str = "charge_coil";
     pub const PATCH_ROUTINE: &str = "patch_routine";
-    /// Spent by `Game::reinitialize_program` to resurrect a `DownedProgram`
-    /// record as staff — engine content the same way `ROUTINE_DISK` is:
-    /// what a reinitialize costs is read from Rust, not authored as a
+    /// Spent by `Game::jail_program` to boot a `DownedProgram`
+    /// record as a prisoner in a Holding Cell — engine content the same way `ROUTINE_DISK` is:
+    /// what a pin costs is read from Rust, not authored as a
     /// data-driven requirement, even though the item itself is an ordinary
     /// `.ron` file.
     pub const REINITIALIZATION_PROTOCOL: &str = "reinitialization_protocol";

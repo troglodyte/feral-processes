@@ -1934,3 +1934,60 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     };
     assert_eq!(app.pending_structure.as_deref(), Some(&*inner.defs[i].id));
 }
+
+fn a_downed_record() -> feral_processes_engine::items::DownedProgram {
+    feral_processes_engine::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    }
+}
+
+/// Picking a record on the Hold screen boots it as a prisoner in the cell
+/// beside the party: one record and one protocol spent, one body added.
+#[test]
+fn picking_a_record_in_the_hold_screen_jails_it_and_spends_a_protocol() {
+    let mut app = app_beside_a_holding_cell(889, vec![a_downed_record()], 1);
+    let pets = app.game.as_ref().unwrap().pet_count();
+
+    open_via_menu(&mut app, 'b', "Hold a program");
+    assert_eq!(app.mode, Mode::PinPrisoner);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.status_line, None, "a pin is not a refusal");
+    let game = app.game.as_mut().unwrap();
+    assert!(game.downed_program_rows().is_empty(), "the record is spent");
+    assert_eq!(game.pet_count(), pets + 1, "the prisoner is a roster body");
+}
+
+/// Enter spends the highlighted row exactly as its number does.
+#[test]
+fn enter_on_the_hold_screen_jails_the_highlighted_record() {
+    let mut app = app_beside_a_holding_cell(890, vec![a_downed_record()], 1);
+    open_via_menu(&mut app, 'b', "Hold a program");
+    app.handle_key(GameKey::Enter);
+    assert!(app.game.as_mut().unwrap().downed_program_rows().is_empty());
+}
+
+/// With no protocol in the pack the pick refuses with the blocker's own
+/// sentence and spends nothing.
+#[test]
+fn the_hold_screen_refuses_with_the_blockers_text_and_spends_nothing() {
+    let mut app = app_beside_a_holding_cell(891, vec![a_downed_record()], 0);
+    let pets = app.game.as_ref().unwrap().pet_count();
+
+    open_via_menu(&mut app, 'b', "Hold a program");
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("You need a Reinitialization Protocol.")
+    );
+    let game = app.game.as_mut().unwrap();
+    assert_eq!(game.downed_program_rows().len(), 1);
+    assert_eq!(game.pet_count(), pets);
+}

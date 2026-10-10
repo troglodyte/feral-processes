@@ -886,7 +886,7 @@ mod tests {
     /// shipped subjects must fit inside 1280x720 with no scroll, since this
     /// screen has none — the `memory-page-has-no-scroll` precedent.
     ///
-    /// 78 is `sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`'s
+    /// 79 is `sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`'s
     /// own pinned count (the Home's `sprite:` field naming "anchor" and
     /// de-duplicating away, plus the fifteen shipped floor finishes), asserted
     /// again here so a shrinking asset tree can't silently make this census
@@ -897,7 +897,7 @@ mod tests {
         let subjects = app.sprite_subjects();
         assert_eq!(
             subjects.len(),
-            78,
+            79,
             "the shipped subject count moved — re-check this census's premise"
         );
 

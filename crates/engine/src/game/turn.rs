@@ -382,6 +382,7 @@ impl Game {
         // `assembler_system` never meets this because it is in the schedule,
         // downstream of the grid. See `Game::run_teardown_rigs`.
         self.run_teardown_rigs();
+        self.run_holding_cells();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system
@@ -702,6 +703,7 @@ impl Game {
             // or the holder keeps a marker to a dead entity.
             self.release_siphon_at(entity);
             self.release_study_station(entity);
+            self.release_prisoner(entity);
             self.world.despawn(entity);
         }
     }
@@ -1575,7 +1577,7 @@ impl Game {
             // is whether this program is standing *with* the player, the
             // six roles answer it two and four, and there is no safe side
             // to default a seventh one to. `UnderStudy` falls on the `false`
-            // side with `Sortie`, `Outpost` and `Staff` — a pinned program is
+            // side (as does `Jailed`) with `Sortie`, `Outpost` and `Staff` — a pinned program is
             // not beside you either, and this is the one reader of the enum
             // a fifth role could not leave silently wrong: decision 2 in
             // `docs/superpowers/plans/2026-09-20-research-station-study.md`
@@ -1594,6 +1596,7 @@ impl Game {
                     | ProgramRole::Outpost
                     | ProgramRole::Staff
                     | ProgramRole::UnderStudy
+                    | ProgramRole::Jailed
                     | ProgramRole::Siphoned,
                 ) => false,
                 None => false,

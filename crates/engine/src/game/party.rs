@@ -63,6 +63,12 @@ pub enum ProgramRole {
     /// not by this enum. `Outpost` above widened the same three matches a
     /// second time.
     UnderStudy,
+    /// A prisoner in a Holding Cell's pen — `components::Jailed`. Beside
+    /// `UnderStudy` and for its reason: a body locked in a pen is out of the
+    /// pool, takes no job, joins nothing and walks nowhere. It already counts
+    /// as roster from the moment it is pinned, so a successful decompile can
+    /// never fail on a full roster.
+    Jailed,
     /// Held in a Power Siphon — `components::Siphoned`. Between `UnderStudy`
     /// and `Staff`: a body locked into a machine is out of the pool, takes no
     /// job and walks nowhere, and its consequences are omissions the same way.
@@ -78,6 +84,10 @@ pub enum ProgramRole {
 /// The refusal every door that never asked a role gives a held program,
 /// after its name (`fuse_companions`) or alone.
 pub(crate) const HELD_IN_SIPHON: &str = "held in a Power Siphon. Release it first.";
+
+/// `HELD_IN_SIPHON`'s counterpart for a Holding Cell. No "release it first":
+/// the only ways out are the cell's own decompile rolls or its breakdown.
+pub(crate) const HELD_IN_CELL: &str = "a prisoner in a Holding Cell.";
 
 /// `name` with its zone appended (`"Scrapper 2"`) when there is one.
 fn zone_tagged(name: String, zone: Option<u32>) -> String {
@@ -123,8 +133,9 @@ impl ProgramRole {
             ProgramRole::Sortie => 2,
             ProgramRole::Outpost => 3,
             ProgramRole::UnderStudy => 4,
-            ProgramRole::Siphoned => 5,
-            ProgramRole::Staff => 6,
+            ProgramRole::Jailed => 5,
+            ProgramRole::Siphoned => 6,
+            ProgramRole::Staff => 7,
         }
     }
 }
@@ -136,6 +147,7 @@ impl ProgramRole {
 pub(crate) struct RoleMarkers {
     pub posted_at_outpost: bool,
     pub under_study: bool,
+    pub jailed: bool,
     pub siphoned: bool,
 }
 
@@ -171,6 +183,9 @@ pub(crate) fn role_of(
     if markers.under_study {
         return Some(ProgramRole::UnderStudy);
     }
+    if markers.jailed {
+        return Some(ProgramRole::Jailed);
+    }
     if markers.siphoned {
         return Some(ProgramRole::Siphoned);
     }
@@ -205,7 +220,7 @@ pub(crate) fn role_of(
 /// is wanted rather than a side effect — a subject occupies ground the same
 /// as staff does, and the camera follows ground.
 pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) -> bool {
-    role == Some(ProgramRole::UnderStudy)
+    matches!(role, Some(ProgramRole::UnderStudy | ProgramRole::Jailed))
         || (role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard))
 }
 
@@ -230,6 +245,7 @@ pub struct Roles<'w, 's> {
     /// is pinned is per-entity state, not a resource, and every caller here
     /// already has the entity in hand to look it up against.
     under_study: Query<'w, 's, (), With<crate::components::UnderStudy>>,
+    jailed: Query<'w, 's, (), With<crate::components::Jailed>>,
     siphoned: Query<'w, 's, (), With<crate::components::Siphoned>>,
 }
 
@@ -245,6 +261,7 @@ impl Roles<'_, '_> {
             RoleMarkers {
                 posted_at_outpost: self.posted.contains(creature),
                 under_study: self.under_study.contains(creature),
+                jailed: self.jailed.contains(creature),
                 siphoned: self.siphoned.contains(creature),
             },
         )
@@ -859,6 +876,11 @@ impl Game {
             })
             .filter(|p| {
                 self.world
+                    .get::<crate::components::Jailed>(p.entity)
+                    .is_none()
+            })
+            .filter(|p| {
+                self.world
                     .get::<crate::components::Siphoned>(p.entity)
                     .is_none()
             })
@@ -1037,6 +1059,13 @@ impl Game {
         }
         if self
             .world
+            .get::<crate::components::Jailed>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {HELD_IN_CELL}"));
+        }
+        if self
+            .world
             .get::<crate::components::Siphoned>(creature)
             .is_some()
         {
@@ -1110,6 +1139,10 @@ impl Game {
                     .world
                     .get::<crate::components::UnderStudy>(creature)
                     .is_some(),
+                jailed: self
+                    .world
+                    .get::<crate::components::Jailed>(creature)
+                    .is_some(),
                 siphoned: self
                     .world
                     .get::<crate::components::Siphoned>(creature)
@@ -1176,6 +1209,13 @@ impl Game {
         }
         if self.wielded_program() == Some(creature) {
             return Err("You're already wielding that program.".into());
+        }
+        if self
+            .world
+            .get::<crate::components::Jailed>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {HELD_IN_CELL}"));
         }
         if self
             .world
@@ -1469,6 +1509,12 @@ impl Game {
                 return Err(format!(
                     "{name} is pinned in a Research Station's pen and can't be fused."
                 ));
+            }
+        }
+        for e in [a, b] {
+            if self.world.get::<crate::components::Jailed>(e).is_some() {
+                let name = self.creature_label(e);
+                return Err(format!("{name} is {HELD_IN_CELL}"));
             }
         }
         for e in [a, b] {
@@ -1857,6 +1903,11 @@ impl Game {
         if self.world.get::<crate::components::UnderStudy>(e).is_some() {
             return None;
         }
+        // A prisoner in a pen — the same exclusion: a spend would despawn a
+        // body its cell still counts as the occupant.
+        if self.world.get::<crate::components::Jailed>(e).is_some() {
+            return None;
+        }
         // Held in a Power Siphon — the same exclusion again: a spend would
         // despawn a body the siphon still counts as its supply.
         if self.world.get::<crate::components::Siphoned>(e).is_some() {
@@ -1943,6 +1994,7 @@ impl Game {
             pending_study,
             pending_outpost_crew,
             pending_siphon,
+            pending_jailed,
             pending_siege_members,
             pending_nemesis_band,
             pending_stolen_from,
@@ -2027,6 +2079,10 @@ impl Game {
         // a snapshot never carries `siphon`, and re-holding it here would
         // skip the checks `siphon_program` runs — revalidated by hand.
         drop(pending_siphon);
+        // And a prisoner: `commit_program` refuses one, so a snapshot never
+        // carries `jailed`, and a body re-confined here would skip the
+        // checks `jail_program` runs.
+        drop(pending_jailed);
         // The wield first, and the two arms are exclusive by construction:
         // `wield_program` stands a member down, so a snapshot is never both
         // wielded and holding a slot.

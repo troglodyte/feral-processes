@@ -1541,6 +1541,7 @@ impl Game {
             // The first of the two destruction paths for a subject pinned in
             // this structure's pen — see `Game::release_study_station`.
             self.release_study_station(target);
+            self.release_prisoner(target);
             self.release_siphon_at(target);
             self.announce_lost_shelf(target);
             self.world.despawn(target);

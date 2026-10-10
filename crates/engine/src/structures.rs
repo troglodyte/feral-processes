@@ -101,6 +101,18 @@ pub struct StripDef {
     pub hopper: u32,
 }
 
+/// A structure's prison capability — see `StructureDef::holds_prisoner`.
+///
+/// One figure, authored per machine like `StripDef::hopper`: how long a
+/// warden takes over each decompile attempt is a fact about *this* cell, and
+/// a modder's second cell should be able to differ. What an attempt is
+/// worth lives in `tuning.rs` and `Game::jail_odds`, not here.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PrisonSpec {
+    /// Warden beats between one decompile roll and the next.
+    pub attempt_ticks: u32,
+}
+
 /// A structure's carrier-storage capability — see `StructureDef::racks`.
 ///
 /// Mirrors `StripDef` rung for rung — one figure, authored per machine — and
@@ -682,6 +694,14 @@ pub struct StructureDef {
     /// structure file, including any mod, keeps parsing as an ordinary one.
     #[serde(default)]
     pub siphons: bool,
+    /// If set, this structure holds one downed program revived as a live
+    /// prisoner in the footprint cell diagonally opposite the anchor — see
+    /// `Game::jail_program` and `components::Jailed`. The pen is the same
+    /// corner a `studies` structure uses (`game::base::study::pen_corner`).
+    /// `#[serde(default)]` so every existing structure file, including any
+    /// mod, keeps parsing as a structure that holds nobody.
+    #[serde(default)]
+    pub holds_prisoner: Option<PrisonSpec>,
     /// How many children this structure incubates at once — see
     /// `Game::breed`. Above zero, a built one unlocks the Breed action. `0`,
     /// the default, is every structure but the Breeding Bay, so an existing
@@ -832,7 +852,10 @@ impl StructureDef {
     /// outline, because every consumer treats a missing status as "not a
     /// machine" rather than as an error.
     pub fn runs_a_job(&self) -> bool {
-        self.work.is_some() || self.assembles.is_some() || self.strips.is_some()
+        self.work.is_some()
+            || self.assembles.is_some()
+            || self.strips.is_some()
+            || self.holds_prisoner.is_some()
     }
 
     /// Whether raising or upgrading this structure costs a tamed program.
@@ -945,6 +968,19 @@ impl StructureDb {
                         warnings.push(format!(
                             "skipped invalid structure file {path:?}: footprint is 0, which \
                              claims no cells at all"
+                        ));
+                        continue;
+                    }
+                    // The pen is the footprint's far corner, which on a
+                    // footprint of 1 is the blocking anchor itself, and a
+                    // cell that never attempts anything holds its prisoner
+                    // forever.
+                    if let Some(prison) = &def.holds_prisoner
+                        && (def.footprint < 2 || prison.attempt_ticks == 0)
+                    {
+                        warnings.push(format!(
+                            "skipped invalid structure file {path:?}: holds_prisoner needs a \
+                             footprint of 2 or more and a non-zero attempt_ticks"
                         ));
                         continue;
                     }

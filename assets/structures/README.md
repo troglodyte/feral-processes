@@ -722,6 +722,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `power_supply` counts only while a program is loaded, and an empty one
     // supplies nothing. This is the Power Siphon's own field.
     siphons: true,
+
+    // Optional; can be left out entirely (defaults to none). Makes this a
+    // Holding Cell: it holds one revived downed program as a prisoner in the
+    // footprint cell diagonally opposite the anchor (the same corner a
+    // `studies` structure uses), and a posted warden works at decompiling
+    // it. `attempt_ticks` is the warden beats between one decompile roll and
+    // the next. The loader skips a file whose `footprint` is under 2 (the
+    // pen would be the blocking anchor) or whose `attempt_ticks` is 0. The
+    // odds and the number of attempts are in `tuning.rs`, not here.
+    holds_prisoner: Some((attempt_ticks: 40)),
 )
 ```
 

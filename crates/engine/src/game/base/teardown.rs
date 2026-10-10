@@ -142,12 +142,11 @@ impl Game {
             .iter()
             .map(|(_, qty)| *qty)
             .sum();
-        let room = self
+        if !self
             .world
             .get::<Stock>(rig)
-            .map(|s| s.output_room())
-            .unwrap_or(0);
-        if room < total {
+            .is_some_and(|s| s.fits_payout(total))
+        {
             self.set_rig_status(rig, MachineStatus::Clogged);
             return;
         }
@@ -335,7 +334,7 @@ impl Game {
     /// same `set_machine_status` door, reached through `resource_scope`
     /// because the log and the telemetry buffer are resources this world
     /// also holds the status component in.
-    fn set_rig_status(&mut self, rig: Entity, next: MachineStatus) {
+    pub(crate) fn set_rig_status(&mut self, rig: Entity, next: MachineStatus) {
         let Some(kind) = self.world.get::<Structure>(rig).map(|s| s.kind.clone()) else {
             return;
         };

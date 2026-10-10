@@ -1,7 +1,7 @@
 (
     id: "reinitialization_protocol",
     name: "Reinitialization Protocol",
-    description: "Resurrects a downed program as staff.",
+    description: "Revives a downed program in a Holding Cell.",
     value: Some(10),
     craftable: Some((cost: [("ice_breaker", 1), ("logic_wafer", 2), ("charge_coil", 1), ("cache_grain", 1)], requires_structure: Some("fabricator"))),
 )

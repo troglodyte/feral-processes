@@ -1,0 +1,12 @@
+(
+    id: "holding_cell",
+    name: "Holding Cell",
+    description: "A 2x2 pen for a downed program. Stand beside it and spend a Reinitialization Protocol to boot one as a prisoner; a posted warden works at decompiling it.",
+    glyph: 'J',
+    color: Red,
+    build_cost: [("core_fragment", 10)],
+    power_draw: 1,
+    footprint: 2,
+    holds_prisoner: Some((attempt_ticks: 40)),
+    room_tags: ["workshop"],
+)

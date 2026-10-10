@@ -914,6 +914,14 @@ impl Stock {
     pub fn output_room(&self) -> u32 {
         self.capacity.saturating_sub(self.output_used())
     }
+
+    /// Whether `output` has room to take a payout of up to `worst`. The
+    /// payout is capped at `capacity`: a worst case larger than the whole
+    /// output would otherwise never fit and clog the machine for good, so an
+    /// empty output always takes it.
+    pub fn fits_payout(&self, worst: u32) -> bool {
+        self.output_room() >= worst.min(self.capacity)
+    }
 }
 
 /// A load a posted program is physically carrying to a depot.
@@ -2321,6 +2329,33 @@ pub struct Downed;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct UnderStudy {
     pub station: Entity,
+}
+
+/// A tamed program revived as a prisoner in a Holding Cell's pen —
+/// `Game::jail_program`'s one door.
+///
+/// **Behaves exactly like `UnderStudy` at every site unless a comment says
+/// otherwise**: no `Task`, no sortie, no post, never moved, and it occupies
+/// its pen as ground (`party::walks_the_base`). The body is spawned on the
+/// pen cell, so unlike a subject nothing ever has to walk it there and
+/// `drift_idle_staff` never reads it.
+///
+/// `cell` is the structure `Entity`, `UnderStudy::station`'s shape; a cell's
+/// occupant is derived with a query (`Game::cell_prisoner`), never stored on
+/// the cell. `attempts` is decompile rolls already failed and `progress`
+/// the warden beats since the last roll.
+///
+/// `record` is the `DownedProgram` the body was booted from, carried whole
+/// so a released prisoner hands back the kill it came from (level and
+/// condition included) and a breakdown is priced from that level rather than
+/// the level-1 body. `None` only for a prisoner loaded from a save that
+/// predates the field; the readers then rebuild one from the body.
+#[derive(Component, Clone, Debug)]
+pub struct Jailed {
+    pub cell: Entity,
+    pub attempts: u32,
+    pub progress: u32,
+    pub record: Option<crate::items::DownedProgram>,
 }
 
 /// A tamed program held in a Power Siphon — the grid's supply from that

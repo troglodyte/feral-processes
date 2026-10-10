@@ -274,6 +274,7 @@ impl App {
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::BuildProgram => self.handle_build_program_key(key),
             Mode::PinSubject => self.handle_pin_subject_key(key),
+            Mode::PinPrisoner => self.handle_pin_prisoner_key(key),
             Mode::Siphon => self.handle_siphon_key(key),
             Mode::Craft => self.handle_craft_key(key),
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),

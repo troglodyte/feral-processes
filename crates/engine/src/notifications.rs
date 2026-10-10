@@ -204,6 +204,10 @@ pub enum NotificationKind {
     /// `Game::roll_phase_key`. `Always`: one per zone per run, so a latch
     /// would silence every run after the first.
     PhaseKeyFound,
+    /// A Holding Cell's warden lands a decompile and the prisoner joins the
+    /// roster — `Game::settle_jail_attempt`. `Always`: every prisoner is
+    /// news, and a run holds many. Templated off the program's label.
+    ProgramDecompiled,
 }
 
 /// One notification's authored copy.
@@ -236,7 +240,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 19] {
+    pub fn all() -> [NotificationKind; 20] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -257,6 +261,7 @@ impl NotificationKind {
             NotificationKind::ResearchComplete,
             NotificationKind::ResearchDiscovered,
             NotificationKind::PhaseKeyFound,
+            NotificationKind::ProgramDecompiled,
         ]
     }
 
@@ -494,6 +499,17 @@ impl NotificationKind {
                 color: GlyphColor::Yellow,
                 repeat: Repeat::Always,
             },
+            NotificationKind::ProgramDecompiled => NotificationDef {
+                title: "Program Decompiled",
+                body: "{name} accepts its new parameters and joins your roster.\n\nA warden \
+                       kept at the Holding Cell until the decompile took.",
+                sprite: None,
+                // The Holding Cell's own glyph and hue, `ResearchComplete`'s
+                // reason: the screen and the machine that did the work agree.
+                glyph: 'J',
+                color: GlyphColor::Red,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -536,6 +552,7 @@ impl NotificationKind {
             // on all the same.
             NotificationKind::ResearchDiscovered => "milestone_research_discovered",
             NotificationKind::PhaseKeyFound => "milestone_phase_key_found",
+            NotificationKind::ProgramDecompiled => "milestone_program_decompiled",
         }
     }
 }

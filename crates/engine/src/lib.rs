@@ -104,6 +104,7 @@ pub use game::auto_resolve::AutoResolve;
 pub use game::base::building::AwaitingSite;
 pub use game::base::interact::{Interaction, InteractionKind};
 pub use game::base::lines::LineKey;
+pub use game::base::prison::JailBlock;
 pub use game::base::transfer::TransferBasket;
 pub use game::base::work_orders::WorkOrder;
 pub use game::caravan::CaravanReach;
@@ -119,7 +120,6 @@ pub use game::creation::{
     CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE, creation_credits,
 };
 pub use game::environment::TerrainRow;
-pub use game::extraction::ReinitBlock;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};

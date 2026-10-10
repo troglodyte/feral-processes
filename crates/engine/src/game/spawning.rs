@@ -79,7 +79,7 @@ impl SpawnEscalation {
 /// delegate with today's exact `GameRng` order.
 ///
 /// Rarity and the wild routine pool only, deliberately: `Potential` mints
-/// fresh on every door, including a reinitialized program, per
+/// fresh on every door, including a jailed program, per
 /// `docs/superpowers/archive/specs/2026-09-28-reinitialization-protocol-design.md`
 /// — a `DownedProgram` record doesn't carry it, only what it *was* (rarity,
 /// the one routine it happened to be running), never what it might roll
@@ -300,7 +300,7 @@ impl Game {
 
     /// `spawn_wild_creature_scaled`, with `Rarity` and/or the wild
     /// `Routines` pool allowed to be pinned rather than rolled — the door
-    /// `Game::reinitialize_program` spawns a resurrected `DownedProgram`
+    /// `Game::jail_program` spawns a revived `DownedProgram`
     /// through, so its record's own rarity and carried routine land exactly
     /// rather than being re-rolled on top of what the kill already decided.
     ///
@@ -308,7 +308,7 @@ impl Game {
     /// other axis (`Potential` above all — see `Game::roll_potential`'s own
     /// doc: the record doesn't carry it, so it mints fresh) keeps rolling in
     /// exactly its old order, which is what keeps an unpinned call
-    /// (`SpawnPins::default()`, every real caller but the reinitialize door)
+    /// (`SpawnPins::default()`, every real caller but the Holding Cell pin)
     /// byte-for-byte the stream it always was.
     pub(crate) fn spawn_wild_creature_pinned(
         &mut self,
@@ -614,7 +614,7 @@ impl Game {
     }
 
     /// `adopt_program`, with `pins` threaded through to
-    /// `spawn_wild_creature_pinned` — `Game::reinitialize_program`'s door in.
+    /// `spawn_wild_creature_pinned` — `Game::jail_program`'s door in.
     /// The becoming-a-companion half (stripping `Hostile`/`WanderAi`,
     /// `roster_parts`, `install_innate_routines`) is identical either way;
     /// only what the body spawns holding differs.

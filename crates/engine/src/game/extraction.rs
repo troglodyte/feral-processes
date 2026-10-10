@@ -171,10 +171,7 @@ impl Game {
         // never been upgraded pays nothing, and the upgrade is what sells
         // yield. See `tuning::TOOL_TIER_SCALE_STEP`'s neighbouring doc.
         let bench = self.extraction_bench_tier().saturating_sub(1);
-        let scale = tier_scale(tool.tier + bench);
-        let centre = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as i32;
-        let spread = (centre as f32 * tuning::EXTRACT_UNIT_SPREAD).round() as i32;
-        DamageRange::centred(centre, spread)
+        extraction_band_with_bench(program, tool, bench)
     }
 
     /// What extracting `program` with `tool` grants once the band has
@@ -890,114 +887,6 @@ impl Game {
         Ok(())
     }
 
-    /// Why `index` can't be reinitialized right now, or `None` once every
-    /// refusal clears — `Game::reinitialize_program`'s own gate, shared so
-    /// the action row can grey on the same check it spends against.
-    ///
-    /// In order: the run itself, then the record, then what it would cost.
-    /// A boss record and no protocol held are both checked before the
-    /// roster room, on no particular ordering the player could observe —
-    /// only the first failing check is ever shown at once. The species
-    /// check runs last because it's the one refusal `reinitialize_program`
-    /// itself cannot recover from once index and boss are already known
-    /// good — see that function's own `expect`.
-    pub fn reinitialize_blocker(&self, index: usize) -> Option<ReinitBlock> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Some(ReinitBlock::NotNow);
-        }
-        let player = self.player_entity();
-        let Some(record) = self
-            .world
-            .get::<DownedPrograms>(player)
-            .and_then(|held| held.0.get(index))
-        else {
-            return Some(ReinitBlock::NoSuchRecord);
-        };
-        if record.boss {
-            return Some(ReinitBlock::Boss);
-        }
-        let held_protocols = self
-            .world
-            .get::<Inventory>(player)
-            .map(|inv| inv.count(&ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL)))
-            .unwrap_or(0);
-        if held_protocols == 0 {
-            return Some(ReinitBlock::NoProtocol);
-        }
-        if self.roster_room() == 0 {
-            return Some(ReinitBlock::RosterFull);
-        }
-        if self
-            .world
-            .resource::<SpeciesDb>()
-            .get(record.species.as_str())
-            .is_none()
-        {
-            return Some(ReinitBlock::UnknownSpecies);
-        }
-        None
-    }
-
-    /// The one door a `DownedProgram` record is resurrected through, rather
-    /// than spent for parts — `Game::extract_program`'s sibling and its
-    /// opposite trade: always succeeds, costs a crafted item instead of a
-    /// roll, and keeps the program instead of stripping it.
-    ///
-    /// Refused whole through `reinitialize_blocker` before anything spends
-    /// — same shape `extract_program`'s own refusals take. Once past it:
-    /// spend the protocol, remove the record, spawn the body with its own
-    /// rarity and carried routine pinned (`spawning::SpawnPins`, never
-    /// re-rolled), one log line. Always boots at level 1, through
-    /// `roster_parts`' fresh `Experience::default()`: `record.level` is the
-    /// kill's zone (wild bodies carry no `Experience`), not a level worth
-    /// restoring. Condition is not read.
-    /// No ticks spent — this happens wherever the player is standing, not
-    /// only at the Fabricator — and no `Deed`: `Deed::Tamed` reads
-    /// "Decompile a wild program", and this isn't one.
-    pub fn reinitialize_program(&mut self, index: usize) -> Result<(), String> {
-        if let Some(block) = self.reinitialize_blocker(index) {
-            return Err(block.refusal().to_string());
-        }
-        let player = self.player_entity();
-        self.world.get_mut::<Inventory>(player).unwrap().take(
-            ItemId::from(crate::items::ids::REINITIALIZATION_PROTOCOL),
-            1,
-        );
-        let record = self
-            .world
-            .get_mut::<DownedPrograms>(player)
-            .unwrap()
-            .0
-            .remove(index);
-        let pos = *self.world.get::<Position>(player).unwrap();
-        // Filtered against `AbilityDb` before pinning: a mod that pulled the
-        // ability out from under an old kill must not hand the new body a
-        // `Routines` entry `install_innate_routines` and every other reader
-        // assumes resolves — `routine_candidate_ids`' own tolerance, applied
-        // here instead of trusted to every later reader.
-        let db = self.world.resource::<AbilityDb>();
-        let carried: Vec<AbilityId> = record
-            .carried
-            .into_iter()
-            .filter(|id| db.get(id).is_some())
-            .collect();
-        let pins = crate::game::spawning::SpawnPins {
-            rarity: Some(record.rarity),
-            routines: Some(carried),
-        };
-        let program = self
-            .adopt_program_pinned(record.species.as_str(), pos.x, pos.y, 1.0, pins)
-            .expect("reinitialize_blocker already confirmed SpeciesDb resolves this species");
-        // The new body's label, not `downed_program_label`: that one prints
-        // `record.level`, which is the kill's zone and not this program's.
-        let label = self.creature_label(program);
-        self.log_kind(
-            MessageKind::Outcome,
-            format!("{label} boots back up and joins your roster."),
-        );
-        Ok(())
-    }
-
     /// The Teardown Rig the player is standing beside, lowest tile first
     /// when a base somehow has two touching the party's cell.
     ///
@@ -1062,41 +951,17 @@ impl Game {
     }
 }
 
-/// Why `index` can't be reinitialized right now — `Game::
-/// reinitialize_blocker`'s exhaustive answer, `stack_features::AdoptBlock`'s
-/// own shape: `row_fragment` is the few words the action row appends after
-/// its label, `refusal` the full sentence `Game::reinitialize_program` errs
-/// with, `extract_program`'s own tone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReinitBlock {
-    NotNow,
-    NoSuchRecord,
-    Boss,
-    NoProtocol,
-    RosterFull,
-    UnknownSpecies,
-}
-
-impl ReinitBlock {
-    pub fn row_fragment(self) -> &'static str {
-        match self {
-            Self::NotNow => "not now",
-            Self::NoSuchRecord => "no such record",
-            Self::Boss => "a boss won't reinitialize",
-            Self::NoProtocol => "no protocol held",
-            Self::RosterFull => "roster is full",
-            Self::UnknownSpecies => "unknown species",
-        }
-    }
-
-    pub fn refusal(self) -> &'static str {
-        match self {
-            Self::NotNow => "Can't do that right now.",
-            Self::NoSuchRecord => "No such downed program.",
-            Self::Boss => "A boss won't reinitialize.",
-            Self::NoProtocol => "You need a Reinitialization Protocol.",
-            Self::RosterFull => "Your roster is full.",
-            Self::UnknownSpecies => "That species no longer exists.",
-        }
-    }
+/// `Game::extraction_band`'s arithmetic with the bench's tier bonus (its
+/// `tier - 1`) supplied: a pure function so a payout that is not a bench's
+/// work (a Holding Cell's breakdown passes `0`) prices off the same formula
+/// instead of a copy.
+pub(crate) fn extraction_band_with_bench(
+    program: &DownedProgram,
+    tool: &ToolDef,
+    bench_bonus: u32,
+) -> DamageRange {
+    let scale = tier_scale(tool.tier + bench_bonus);
+    let centre = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as i32;
+    let spread = (centre as f32 * tuning::EXTRACT_UNIT_SPREAD).round() as i32;
+    DamageRange::centred(centre, spread)
 }

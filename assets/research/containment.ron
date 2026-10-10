@@ -1,0 +1,10 @@
+(
+    id: "containment",
+    name: "Containment",
+    description: "A cell that holds a downed program and tries to win it over, or breaks it down for parts if it can't. Needs a warden.",
+    cost: 10,
+    materials: [("bytecode_block", 6)],
+    requires: ["teardown"],
+    requires_subject: true,
+    unlocks_structures: ["holding_cell"],
+)

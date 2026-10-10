@@ -18,6 +18,15 @@ use crate::views::PinMark;
 use crate::world::NEIGHBOURS;
 use crate::*;
 
+/// The footprint cell diagonally opposite a structure's anchor — the pen
+/// every structure that keeps a body in a corner (a `studies` Research
+/// Station, a `holds_prisoner` Holding Cell) shares, so the two cannot
+/// disagree about where the body stands.
+pub(crate) fn pen_corner(anchor: Position, footprint: u8) -> (i32, i32) {
+    let side = i32::from(footprint);
+    (anchor.x + side - 1, anchor.y + side - 1)
+}
+
 impl Game {
     /// The footprint cell diagonally opposite `structure`'s anchor — its
     /// pen — or `None` when the structure's def does not declare `studies`.
@@ -37,8 +46,7 @@ impl Game {
             return None;
         }
         let pos = self.world.get::<Position>(structure)?;
-        let side = i32::from(def.footprint);
-        Some((pos.x + side - 1, pos.y + side - 1))
+        Some(pen_corner(*pos, def.footprint))
     }
 
     /// The `(x, y)`-sorted first standing `studies` structure, or `None` if
@@ -463,6 +471,23 @@ impl Game {
                 } else {
                     PinMark::Settled
                 };
+            }
+        }
+        // A prisoner is marked on its pen the same way: `Strained` while its
+        // cell is working (a lit, warded cell), `Settled` otherwise.
+        for e in self.world.iter_entities() {
+            let (Some(jailed), Some(pos)) = (e.get::<components::Jailed>(), e.get::<Position>())
+            else {
+                continue;
+            };
+            let (dx, dy) = (pos.x - cx, pos.y - cy);
+            if dx.abs() <= half_w && dy.abs() <= half_h {
+                rows[(dy + half_h) as usize][(dx + half_w) as usize] =
+                    if self.cell_is_working(jailed.cell) {
+                        PinMark::Strained
+                    } else {
+                        PinMark::Settled
+                    };
             }
         }
         rows

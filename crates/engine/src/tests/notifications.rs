@@ -308,6 +308,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::ResearchComplete => "Game::settle_research",
             NotificationKind::ResearchDiscovered => "Game::discover_research",
             NotificationKind::PhaseKeyFound => "Game::roll_phase_key, via announce_phase_key",
+            NotificationKind::ProgramDecompiled => "Game::settle_jail_attempt",
         }
     }
 
@@ -351,7 +352,8 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::LevelCapReached
             | NotificationKind::ResearchComplete
             | NotificationKind::ResearchDiscovered
-            | NotificationKind::PhaseKeyFound => Repeat::Always,
+            | NotificationKind::PhaseKeyFound
+            | NotificationKind::ProgramDecompiled => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
     }

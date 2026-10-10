@@ -6456,6 +6456,7 @@ mod tests {
                 study_station: None,
                 outpost: None,
                 siphon: None,
+                jailed: None,
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,

@@ -82,6 +82,7 @@ mod phase_keys;
 mod player_icon;
 mod policy;
 mod power;
+mod prison;
 mod racks;
 mod raids;
 mod reactions;

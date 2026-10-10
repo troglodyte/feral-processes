@@ -27,6 +27,7 @@ pub(crate) mod lines;
 pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;
+pub(crate) mod prison;
 pub(crate) mod repair;
 pub(crate) mod sabotage;
 pub(crate) mod siphon;

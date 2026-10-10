@@ -2323,6 +2323,26 @@ pub struct UnderStudy {
     pub station: Entity,
 }
 
+/// A tamed program revived as a prisoner in a Holding Cell's pen —
+/// `Game::jail_program`'s one door.
+///
+/// **Behaves exactly like `UnderStudy` at every site unless a comment says
+/// otherwise**: no `Task`, no sortie, no post, never moved, and it occupies
+/// its pen as ground (`party::walks_the_base`). The body is spawned on the
+/// pen cell, so unlike a subject nothing ever has to walk it there and
+/// `drift_idle_staff` never reads it.
+///
+/// `cell` is the structure `Entity`, `UnderStudy::station`'s shape; a cell's
+/// occupant is derived with a query (`Game::cell_prisoner`), never stored on
+/// the cell. `attempts` is decompile rolls already failed and `progress`
+/// the warden beats since the last roll.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Jailed {
+    pub cell: Entity,
+    pub attempts: u32,
+    pub progress: u32,
+}
+
 /// A tamed program held in a Power Siphon — the grid's supply from that
 /// siphon is counted off this marker, so a siphon with no holder supplies
 /// nothing.

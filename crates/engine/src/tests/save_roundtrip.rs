@@ -384,6 +384,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         study_station: _,
         outpost: _,
         siphon: _,
+        jailed: _,
         pursuing: _,
         carrying: _,
         carrying_program: _,
@@ -495,6 +496,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(saved.study_station.is_none(), "study_station");
     assert!(saved.outpost.is_none(), "outpost");
     assert!(saved.siphon.is_none(), "siphon");
+    assert!(saved.jailed.is_none(), "jailed");
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
     assert!(saved.carrying_program.is_none(), "carrying_program");

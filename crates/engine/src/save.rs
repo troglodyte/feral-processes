@@ -705,6 +705,22 @@ pub struct CreatureSave {
     /// held programs, which is what it had.
     #[serde(default)]
     pub siphon: Option<(i32, i32)>,
+    /// The Holding Cell this program is a prisoner of, if it is
+    /// `ProgramRole::Jailed` — `components::Jailed`, with the cell resolved to
+    /// its tile for `study_station`'s reason: entity ids aren't stable across
+    /// a save/load round trip. `None` for a program that isn't jailed.
+    ///
+    /// Resolved after `restore_structures`, `study_station`'s deferral. **A
+    /// tile resolving to no structure, to one that no longer declares
+    /// `holds_prisoner`, or to a cell an earlier prisoner already fills,
+    /// drops the confinement silently**: the program comes back as ordinary
+    /// `Staff`, a free roster member, `study_station`'s leniency.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** — an older save simply carries no prisoners, which is what it
+    /// had.
+    #[serde(default)]
+    pub jailed: Option<JailedSave>,
     /// Whether this creature is currently `Pursuing` the player — see that
     /// component's docs. Meaningless unless one of the two tethers above is
     /// also `Some`.
@@ -1356,6 +1372,15 @@ pub struct CronjobSave {
     pub progress: u32,
     pub required: u32,
     pub kind: CronjobKind,
+}
+
+/// A prisoner's confinement, as `CreatureSave::jailed` — `components::Jailed`
+/// with its cell named by tile.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JailedSave {
+    pub cell_pos: (i32, i32),
+    pub attempts: u32,
+    pub progress: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2455,6 +2480,7 @@ mod tests {
             study_station: None,
             outpost: None,
             siphon: None,
+            jailed: None,
             pursuing: false,
             carrying: None,
             carrying_program: None,

@@ -322,7 +322,11 @@ impl Game {
         // variant in the `Staff` comparison below, because the `Task` clause
         // there does not apply: pinning frees the `Task` itself, and a body
         // hidden under a machine's glyph is what that clause is about.
-        if self.program_role(entity) == Some(ProgramRole::UnderStudy) {
+        // A prisoner is the same case: spawned on its pen and never moved.
+        if matches!(
+            self.program_role(entity),
+            Some(ProgramRole::UnderStudy | ProgramRole::Jailed)
+        ) {
             return true;
         }
         self.wears_job_mark(entity)

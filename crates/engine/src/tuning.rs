@@ -1150,6 +1150,19 @@ pub const CAPTURE_CHANCE_MAX: f32 = 0.95;
 /// lookup failure neither gifts nor denies the capture.
 pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
 
+/// Decompile rolls a Holding Cell's prisoner gets before it breaks down.
+pub const JAIL_MAX_ATTEMPTS: u32 = 5;
+
+/// The `item_potency` of every decompile roll against a prisoner, so no
+/// catalyst is spent. Above the ICE Breaker's 0.4 on purpose: at 0.4 a
+/// full-Integrity, even-match prisoner of a mid-difficulty species (0.5) is
+/// taken on 11.6% of the first roll and only about 53% of the time across
+/// `JAIL_MAX_ATTEMPTS` rolls (each failure adds 10% of the base, up to
+/// `DECOMPILE_ATTEMPT_BONUS_CAP`), so nearly half the cells would end in a breakdown.
+/// 0.55 gives 15.9% on the first roll, rising to 22.2% on the fifth, and
+/// about 65% overall. `tests/prison.rs` holds that shape.
+pub const JAIL_BASE_POTENCY: f32 = 0.55;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Spawning & encounters
 // ─────────────────────────────────────────────────────────────────────────

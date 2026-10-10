@@ -225,6 +225,9 @@ pub(crate) struct CreatureRestore {
     /// Programs held in a Power Siphon, with the tile it stands on —
     /// `pending_study`'s deferral, since a siphon is a structure.
     pub(crate) pending_siphon: Vec<(Entity, (i32, i32))>,
+    /// Prisoners with the tile of the Holding Cell they fill —
+    /// `pending_siphon`'s deferral, since a cell is a structure.
+    pub(crate) pending_jailed: Vec<(Entity, save::JailedSave)>,
     /// `(siege_order, member, siege_cell)` — `sortie_members`' shape,
     /// applied to `game::siege::persist::restore` rather than
     /// `restore_sorties`: entity ids aren't stable across a save/load round
@@ -277,6 +280,7 @@ impl CreatureRestore {
             pending_study: Vec::new(),
             pending_outpost_crew: Vec::new(),
             pending_siphon: Vec::new(),
+            pending_jailed: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_nemesis_band: Vec::new(),
             pending_stolen_from: Vec::new(),
@@ -1318,6 +1322,33 @@ impl Game {
         }
     }
 
+    /// Reattaches `components::Jailed` now that structures are restored —
+    /// `attach_siphoned`'s shape and leniency. **A tile naming no structure,
+    /// one that no longer declares `holds_prisoner`, or a cell an earlier
+    /// prisoner already fills drops the confinement silently**: the program
+    /// comes back as ordinary `Staff`.
+    fn attach_jailed(
+        &mut self,
+        pending: Vec<(Entity, save::JailedSave)>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        for (program, saved) in pending {
+            let Some(&cell) = structure_positions.get(&saved.cell_pos) else {
+                continue;
+            };
+            if self.prison_pen(cell).is_none() || self.cell_prisoner(cell).is_some() {
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::Jailed {
+                    cell,
+                    attempts: saved.attempts,
+                    progress: saved.progress,
+                });
+        }
+    }
+
     /// Reattaches `components::PostedAt` now that `resources::Outposts` is
     /// restored — `attach_pinned_subjects`' shape, but with nothing to wait
     /// on: an outpost is a record keyed by tile, not a structure entity, so
@@ -1826,6 +1857,7 @@ impl Game {
             pending_study,
             pending_outpost_crew,
             pending_siphon,
+            pending_jailed,
             pending_siege_members,
             pending_nemesis_band,
             pending_stolen_from,
@@ -1868,6 +1900,7 @@ impl Game {
         game.attach_cronjobs(pending_cronjobs, &structure_positions);
         game.attach_pinned_subjects(pending_study, &structure_positions);
         game.attach_siphoned(pending_siphon, &structure_positions);
+        game.attach_jailed(pending_jailed, &structure_positions);
         game.attach_stolen_from(pending_stolen_from, &structure_positions);
         game.link_nemesis_bands(pending_nemesis_band);
         // After structures load, `attach_stolen_from`'s own reason: a
@@ -2409,6 +2442,12 @@ impl Game {
                 // held program is never also posted, and where a hand-edited
                 // save says both, the hold is the tether that survives.
                 ctx.pending_siphon.push((creature_id, tile));
+            } else if let Some(jailed) = c.jailed.clone() {
+                // Beside `siphon`, for its reason: `Game::jail_program` spawns
+                // the body with no `Task`, so a prisoner is never also
+                // posted, and a hand-edited save that says both keeps the
+                // cell.
+                ctx.pending_jailed.push((creature_id, jailed));
             } else if let Some(cronjob) = c.cronjob.clone() {
                 ctx.pending_cronjobs.push((creature_id, cronjob));
             }
@@ -2583,6 +2622,18 @@ impl Game {
             .map(|s| s.siphon)
             .and_then(|siphon| self.world.get::<Position>(siphon))
             .map(|pos| (pos.x, pos.y));
+        // The cell's tile, `study_station`'s reason.
+        let jailed = self
+            .world
+            .get::<crate::components::Jailed>(e)
+            .and_then(|j| {
+                let cell = self.world.get::<Position>(j.cell)?;
+                Some(save::JailedSave {
+                    cell_pos: (cell.x, cell.y),
+                    attempts: j.attempts,
+                    progress: j.progress,
+                })
+            });
         // `(order, cell)` in an in-progress siege — `None` whenever there is
         // no open `TacticalBattle`, the one open is not a siege
         // (`siege_pack == 0`, that field's own "not a siege" answer), or `e`
@@ -2690,6 +2741,7 @@ impl Game {
                 .get::<crate::components::PostedAt>(e)
                 .map(|p| p.0),
             siphon,
+            jailed,
             pursuing: self.world.get::<Pursuing>(e).is_some(),
             boss: self.world.get::<Boss>(e).is_some(),
             carrying: self

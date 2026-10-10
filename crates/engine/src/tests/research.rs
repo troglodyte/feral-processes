@@ -460,6 +460,9 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "defrag_bay".to_string(),
             "depot".to_string(),
             "door".to_string(),
+            // Ungated: inert until a Reinitialization Protocol is crafted,
+            // which is the real gate.
+            "holding_cell".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),

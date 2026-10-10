@@ -1575,7 +1575,7 @@ impl Game {
             // is whether this program is standing *with* the player, the
             // six roles answer it two and four, and there is no safe side
             // to default a seventh one to. `UnderStudy` falls on the `false`
-            // side with `Sortie`, `Outpost` and `Staff` — a pinned program is
+            // side (as does `Jailed`) with `Sortie`, `Outpost` and `Staff` — a pinned program is
             // not beside you either, and this is the one reader of the enum
             // a fifth role could not leave silently wrong: decision 2 in
             // `docs/superpowers/plans/2026-09-20-research-station-study.md`
@@ -1594,6 +1594,7 @@ impl Game {
                     | ProgramRole::Outpost
                     | ProgramRole::Staff
                     | ProgramRole::UnderStudy
+                    | ProgramRole::Jailed
                     | ProgramRole::Siphoned,
                 ) => false,
                 None => false,

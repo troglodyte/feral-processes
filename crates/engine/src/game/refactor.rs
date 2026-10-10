@@ -251,6 +251,16 @@ impl Game {
         }
         if self
             .world
+            .get::<crate::components::Jailed>(target)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::HELD_IN_CELL
+            ));
+        }
+        if self
+            .world
             .get::<crate::components::Siphoned>(target)
             .is_some()
         {

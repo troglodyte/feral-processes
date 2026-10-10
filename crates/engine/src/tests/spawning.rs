@@ -1758,6 +1758,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             study_station: None,
             outpost: None,
             siphon: None,
+            jailed: None,
             pursuing: true,
             carrying: None,
             carrying_program: None,

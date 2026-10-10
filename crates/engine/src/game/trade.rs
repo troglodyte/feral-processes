@@ -721,7 +721,18 @@ impl Game {
         if owner != self.player_entity() {
             return Err("You don't control that program.".into());
         }
-        // Selling would vanish a held program from the siphon with nothing said.
+        // Selling would vanish a prisoner from its cell with nothing said.
+        if self
+            .world
+            .get::<crate::components::Jailed>(creature)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::HELD_IN_CELL
+            ));
+        }
+        // The same again for a program held in a siphon.
         if self
             .world
             .get::<crate::components::Siphoned>(creature)

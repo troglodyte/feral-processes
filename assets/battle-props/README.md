@@ -23,8 +23,10 @@ Every field but `id` is optional.
 | `decoration` | `false` | Visual only: never blocks and cannot be damaged. |
 | `move_cost` | `None` | Cost of crossing a walkable prop; `None` is the ground's own. |
 
-A piece named `rubble` is required: destruction with `leaves: Rubble` places
-it (shipped: `move_cost: Some(2)`, no cover, indestructible).
+Destruction with `leaves: Rubble` places the piece named `rubble` (shipped:
+`move_cost: Some(2)`, no cover, indestructible). Without one the loader only
+logs a warning and a destroyed prop leaves bare floor, so a mod that ships
+pieces should ship a `rubble` too.
 
 ## `prefabs/*.ron`: where pieces go
 
@@ -32,12 +34,14 @@ it (shipped: `move_cost: Some(2)`, no cover, indestructible).
 (
     id: "rack_row",
     biomes: [Backplane, Deadlock],   // empty or absent = every biome
-    weight: 4,                       // relative pick weight, default 1
+    weight: 4,                       // relative pick weight, default 1; 0 is rejected
     rows: ["RR.R", "..c."],
     legend: { 'R': "server_rack", 'c': "cable_run" },
 )
 ```
 
+- A prefab with `weight: 0`, no rows, or empty rows is rejected (skipped with
+  a warning).
 - `rows` are equal-width strings. `.` leaves the noise underneath alone and
   may not be a legend key. Every other character must be in `legend`.
 - A legend entry naming an unknown piece skips the whole prefab.

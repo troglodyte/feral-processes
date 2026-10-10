@@ -193,3 +193,13 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A squad's death pays each remaining member, its capture is priced as the
   lead, and its disbanding is not damage** — so only the capture's cost goes
   through `Game::apply_damage`.
+- **A prop is not a body, and reach, sight and cover are asked of `Board`
+  methods (`blocks_sight`, `is_cover`, `walkable`, `move_cost`), never of
+  `Board::cell`** — it holds no initiative slot and pays no XP or morale.
+- **Prop damage takes no RNG draw** — a swing is the plain figure less
+  armour and a routine's is the mean of its band.
+- **A party-side body vetoes a detonation that would hit its own side,
+  while a hostile only subtracts** — `blast_net_value` is `None` for the
+  first, matching `spares_own_side`.
+- **The prop chain cap counts blasts**, so a volatile prop at the cap stays
+  standing rather than going off as a dud.

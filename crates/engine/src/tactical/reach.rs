@@ -315,16 +315,28 @@ pub fn cover_between(board: &Board, attacker: (i32, i32), defender: (i32, i32)) 
 /// than walked, so the line a `Cone` checks and the line a `Line` draws
 /// cannot disagree about which cells lie between two others.
 pub fn line_of_sight(board: &Board, from: (i32, i32), to: (i32, i32)) -> bool {
+    sight_line(from, to).all(|(x, y)| !board.blocks_sight(x, y))
+}
+
+/// The cells strictly between `from` and `to` that stop one seeing the other,
+/// in order along the line. `line_of_sight` is exactly "there are none".
+pub fn sight_blockers(board: &Board, from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    sight_line(from, to)
+        .filter(|&(x, y)| board.blocks_sight(x, y))
+        .collect()
+}
+
+/// The sampled cells between two others, endpoints excluded — the one line
+/// both sight questions walk.
+fn sight_line(from: (i32, i32), to: (i32, i32)) -> impl Iterator<Item = (i32, i32)> {
     let steps = distance(from, to);
-    for step in 1..steps {
+    (1..steps).map(move |step| {
         let t = f64::from(step) / f64::from(steps);
-        let x = from.0 + ((to.0 - from.0) as f64 * t).round() as i32;
-        let y = from.1 + ((to.1 - from.1) as f64 * t).round() as i32;
-        if board.blocks_sight(x, y) {
-            return false;
-        }
-    }
-    true
+        (
+            from.0 + ((to.0 - from.0) as f64 * t).round() as i32,
+            from.1 + ((to.1 - from.1) as f64 * t).round() as i32,
+        )
+    })
 }
 
 /// Whether a body at `from` may aim `shape` at `aim` at all, sight-wise.

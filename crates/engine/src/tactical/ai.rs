@@ -162,6 +162,9 @@ enum TurnTarget {
     Body(Entity),
     Decoy((i32, i32)),
     Aim((i32, i32)),
+    /// A swing at the prop on this cell: a volatile one worth setting off, or
+    /// the cover between the body and everything it fights.
+    Prop((i32, i32)),
 }
 
 /// What a `Profiled` hostile will do with its next turn, published so the
@@ -498,7 +501,9 @@ impl Game {
             )
             .and_then(|target| match target {
                 TurnTarget::Body(entity) => battle.cell_of(entity),
-                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) => Some(cell),
+                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) | TurnTarget::Prop(cell) => {
+                    Some(cell)
+                }
             });
         Some(Forecast {
             action,
@@ -1514,6 +1519,9 @@ impl Game {
             Some(TurnTarget::Body(target)) => {
                 self.tactical_attack(target);
             }
+            Some(TurnTarget::Prop(cell)) => {
+                self.tactical_attack_prop(cell);
+            }
             Some(TurnTarget::Aim(_)) | None => {}
         }
     }
@@ -1564,9 +1572,13 @@ impl Game {
                 x,
             )
         });
-        reachable
-            .first()
-            .map(|&(_, _, target)| TurnTarget::Body(target))
+        let body = reachable.first().map(|&(_, _, target)| target);
+        // A prop is a candidate beside the body swing and scored on its
+        // scale; `best_prop_swing` declines (and costs nothing) on a board
+        // with no props, so the swing above is untouched there.
+        self.best_prop_swing(actor, from, range, body, targets)
+            .map(TurnTarget::Prop)
+            .or(body.map(TurnTarget::Body))
     }
 }
 

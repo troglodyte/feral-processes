@@ -256,3 +256,87 @@ fn a_routine_leaves_an_indestructible_prop_alone() {
             .is_some()
     );
 }
+
+// --- The hostile AI ------------------------------------------------------
+
+/// A hostile standing on `wild_at` with the turn, the player on `player_at`
+/// and nothing else about; the board is `marks` over open ground.
+fn ai_fight(
+    marks: &[((usize, usize), char)],
+    wild_at: (i32, i32),
+    player_at: (i32, i32),
+) -> (Game, Entity) {
+    let (mut game, wild) = fight(marks, (0, 0), 1);
+    let player = game.player_entity();
+    place_one(&mut game, wild[0], wild_at);
+    place_one(&mut game, player, player_at);
+    // The hostile's turn, with the player's spent behind it.
+    assert!(wait_for_turn(&mut game, wild[0]));
+    (game, wild[0])
+}
+
+fn row_hp(game: &Game, y: i32) -> u32 {
+    (0..SIDE as i32).filter_map(|x| prop_hp(game, (x, y))).sum()
+}
+
+#[test]
+fn a_hostile_walled_off_from_its_target_breaks_the_wall() {
+    let wall: Marks = (0..SIDE).map(|x| ((x, 3), 'D')).collect();
+    let (mut game, _) = ai_fight(&wall, (3, 2), (3, 6));
+    let before = row_hp(&game, 3);
+    assert!(game.tactical_ai_turn_at(0.0));
+    assert!(row_hp(&game, 3) < before, "the wall was not touched");
+}
+
+#[test]
+fn a_hostile_with_a_clear_shot_leaves_the_props_alone() {
+    let (mut game, _) = ai_fight(&[((2, 2), 'D'), ((4, 2), 'V')], (3, 2), (3, 3));
+    assert!(game.tactical_ai_turn_at(0.0));
+    assert_eq!(prop_hp(&game, (2, 2)), Some(10));
+    assert_eq!(prop_hp(&game, (4, 2)), Some(5));
+}
+
+#[test]
+fn a_hostile_detonates_a_volatile_prop_over_its_target() {
+    let (mut game, wild) = ai_fight(&[((3, 3), 'V')], (3, 0), (3, 4));
+    equip_weapon(&mut game, wild, "plasma_router");
+    let player = game.player_entity();
+    let before = hp_of(&game, player);
+    assert!(game.tactical_ai_turn_at(0.0));
+    assert_eq!(prop_hp(&game, (3, 3)), None, "the cell was not set off");
+    assert!(hp_of(&game, player) <= before - 10, "the blast missed");
+}
+
+#[test]
+fn a_hostile_will_not_blow_a_volatile_prop_beside_itself() {
+    let (mut game, wild) = ai_fight(&[((3, 3), 'V')], (3, 2), (0, 6));
+    equip_weapon(&mut game, wild, "plasma_router");
+    assert!(game.tactical_ai_turn_at(0.0));
+    assert_eq!(prop_hp(&game, (3, 3)), Some(5));
+}
+
+#[test]
+fn the_same_board_gets_the_same_choice() {
+    let wall: Marks = (0..SIDE).map(|x| ((x, 3), 'D')).collect();
+    let run = || {
+        let (mut game, _) = ai_fight(&wall, (3, 2), (3, 6));
+        game.tactical_ai_turn_at(0.0);
+        (0..SIDE as i32)
+            .map(|x| prop_hp(&game, (x, 3)))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(run(), run());
+}
+
+#[test]
+fn a_hostile_with_a_way_round_does_not_break_the_wall() {
+    let wall: Marks = (0..SIDE - 1).map(|x| ((x, 3), 'D')).collect();
+    let (mut game, _) = ai_fight(&wall, (3, 2), (3, 6));
+    let before = row_hp(&game, 3);
+    assert!(game.tactical_ai_turn_at(0.0));
+    assert_eq!(
+        row_hp(&game, 3),
+        before,
+        "it hit the wall instead of going round"
+    );
+}

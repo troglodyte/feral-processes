@@ -183,22 +183,7 @@ impl Game {
         if depth >= TACTICAL_PROP_CHAIN_MAX {
             return;
         }
-        let battle = self.world.resource::<TacticalBattle>();
-        let cells = reach::shape_cells(
-            &battle.board,
-            cell,
-            cell,
-            AbilityShape::Radius {
-                radius: blast.radius,
-            },
-        );
-        let covered = cells.iter().copied().collect();
-        let caught: Vec<Entity> = battle
-            .bodies()
-            .map(|(body, _)| body)
-            .filter(|&body| reach::footprint_hit(&battle.cells_of(body), &covered))
-            .filter(|&body| self.world.get::<Stats>(body).is_some())
-            .collect();
+        let (cells, caught) = self.blast_reach(cell, blast);
         for body in caught {
             let label = self.entity_label(body);
             let dealt = self.apply_damage(body, blast.damage as i32);
@@ -216,5 +201,153 @@ impl Game {
                 self.strike_prop_at_depth(c, dmg, depth + 1);
             }
         }
+    }
+
+    /// The cells a blast at `cell` covers and the bodies standing in them —
+    /// one derivation for the blast and for the AI that weighs setting it
+    /// off, so what it scores is what lands.
+    fn blast_reach(&self, cell: (i32, i32), blast: Blast) -> (Vec<(i32, i32)>, Vec<Entity>) {
+        let battle = self.world.resource::<TacticalBattle>();
+        let cells = reach::shape_cells(
+            &battle.board,
+            cell,
+            cell,
+            AbilityShape::Radius {
+                radius: blast.radius,
+            },
+        );
+        let covered = cells.iter().copied().collect();
+        let caught = battle
+            .bodies()
+            .map(|(body, _)| body)
+            .filter(|&body| reach::footprint_hit(&battle.cells_of(body), &covered))
+            .filter(|&body| self.world.get::<Stats>(body).is_some())
+            .collect();
+        (cells, caught)
+    }
+
+    /// What `actor` stands to gain from the blast of the prop on `cell`, in
+    /// Integrity: the damage it would do to the other side, less what it
+    /// would do to its own — the actor included. Every body is hit for the
+    /// blast's full figure (it rolls nothing), so this is exact for the
+    /// bodies and silent on the chain it might set off.
+    pub(crate) fn blast_net_value(&self, actor: Entity, cell: (i32, i32), blast: Blast) -> f32 {
+        let own_side = self.acts_for_hostiles(actor);
+        self.blast_reach(cell, blast)
+            .1
+            .into_iter()
+            .map(|body| {
+                let dealt = self.mitigate_incoming_damage(body, blast.damage as i32) as f32;
+                if (self.world.get::<crate::components::Hostile>(body).is_some()) == own_side {
+                    -dealt
+                } else {
+                    dealt
+                }
+            })
+            .sum()
+    }
+
+    /// A prop swing the AI would rather take than `body`, or than nothing
+    /// when `body` is `None`: the cell to strike.
+    ///
+    /// Two candidates, both swings (`tactical_attack_prop`) from `cells`
+    /// at `range`, and both a plain argmax with no draw:
+    ///
+    /// - **Detonate** — a volatile prop one blow destroys, scored by
+    ///   `blast_net_value` against what the swing at `body` is expected to
+    ///   take off it after mitigation. Candidates are sorted by `(y, x)`
+    ///   before they are scored and the first of equals wins.
+    /// - **Break cover** — only with no `body` to hit, and only when no
+    ///   cell the actor can reach sees any of `targets`, and the one
+    ///   thing between the actor's cell and the nearest target is a single
+    ///   destructible prop it can reach. One blow is not required: it
+    ///   keeps swinging on later turns.
+    pub(crate) fn best_prop_swing(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        range: u32,
+        body: Option<Entity>,
+        targets: &[(i32, i32)],
+    ) -> Option<(i32, i32)> {
+        let battle = self.world.resource::<TacticalBattle>();
+        battle.board.props().next()?;
+        let cells = &crate::tactical::footprint_cells_at(from, battle.footprint_of(actor));
+        let reaches = |cell: (i32, i32)| reach::swing_reaches(&battle.board, cells, &[cell], range);
+        let blow = self.swing_damage(actor);
+
+        let mut volatile: Vec<((i32, i32), &PropCell)> = battle
+            .board
+            .props()
+            .filter(|(_, p)| p.destructible() && p.volatile.is_some())
+            .map(|(&cell, p)| (cell, p))
+            .collect();
+        volatile.sort_by_key(|&((x, y), _)| (y, x));
+        let mut best = body.map_or(0.0, |body| self.expected_swing_value(actor, body));
+        let mut pick = None;
+        for (cell, prop) in volatile {
+            let (Some(hp), Some(blast)) = (prop.hp, prop.volatile) else {
+                continue;
+            };
+            if blow.saturating_sub(prop.armour).max(1) < hp || !reaches(cell) {
+                continue;
+            }
+            let value = self.blast_net_value(actor, cell, blast);
+            if value > best {
+                best = value;
+                pick = Some(cell);
+            }
+        }
+        if pick.is_some() || body.is_some() {
+            return pick;
+        }
+        self.cover_to_break(actor, from, cells, targets)
+            .filter(|&cell| reaches(cell))
+    }
+
+    /// What a swing at `body` is expected to take off it, after mitigation —
+    /// `battle::expected_damage` over the real profiles, the scale
+    /// `walk_risk` already prices on.
+    fn expected_swing_value(&self, actor: Entity, body: Entity) -> f32 {
+        let swing = crate::battle::Swing::plain(self.natural_range_of(actor));
+        let expected = crate::battle::expected_damage(
+            self.combatant_profile(actor, swing),
+            self.defender_profile_against(actor, body, swing),
+        );
+        self.mitigate_incoming_damage(body, expected.round() as i32) as f32
+    }
+
+    /// The destructible prop that is the whole of what stands between the
+    /// actor and its nearest target, when no cell it can reach would show it
+    /// any target at all.
+    fn cover_to_break(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        cells: &[(i32, i32)],
+        targets: &[(i32, i32)],
+    ) -> Option<(i32, i32)> {
+        let battle = self.world.resource::<TacticalBattle>();
+        let nearest = targets
+            .iter()
+            .copied()
+            .min_by_key(|&(x, y)| (reach::gap(cells, &[(x, y)]), y, x))?;
+        let field = reach::movement_field(battle, actor, self.movement_allowance(actor));
+        let sees_a_target = field.keys().chain(cells).any(|&at| {
+            targets
+                .iter()
+                .any(|&t| reach::line_of_sight(&battle.board, at, t))
+        });
+        if sees_a_target {
+            return None;
+        }
+        let [blocker] = reach::sight_blockers(&battle.board, from, nearest)[..] else {
+            return None;
+        };
+        battle
+            .board
+            .prop_at(blocker.0, blocker.1)
+            .is_some_and(PropCell::destructible)
+            .then_some(blocker)
     }
 }

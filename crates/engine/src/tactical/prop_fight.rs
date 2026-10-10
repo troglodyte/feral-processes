@@ -221,6 +221,9 @@ impl Game {
             .map(|(body, _)| body)
             .filter(|&body| reach::footprint_hit(&battle.cells_of(body), &covered))
             .filter(|&body| self.world.get::<Stats>(body).is_some())
+            // A body a blast earlier in the chain dropped stays seated until
+            // the reap, and is not hit again.
+            .filter(|&body| self.creature_alive(body))
             .collect();
         (cells, caught)
     }

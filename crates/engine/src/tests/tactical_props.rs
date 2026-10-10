@@ -216,14 +216,34 @@ fn a_body_killed_by_the_blast_it_set_off_hands_the_turn_on() {
     game.world.get_mut::<Stats>(wild[0]).unwrap().hp = 1;
     assert!(wait_for_turn(&mut game, wild[0]), "no turn for the hostile");
     place_one(&mut game, wild[0], (3, 4));
+    let order = game.world.resource::<TacticalBattle>().initiative().to_vec();
+    let at = order.iter().position(|&b| b == wild[0]).unwrap();
+    let next = order[(at + 1) % order.len()];
     assert!(game.tactical_attack_prop((3, 3)));
     let battle = game.world.resource::<TacticalBattle>();
     assert!(
         battle.cell_of(wild[0]).is_none(),
         "it survived its own blast"
     );
-    assert_ne!(battle.actor(), Some(wild[0]));
-    assert!(battle.actor().is_some());
+    assert_eq!(
+        battle.actor(),
+        Some(next),
+        "the turn went to someone other than the next body in the order"
+    );
+}
+
+#[test]
+fn a_chain_of_blasts_catches_a_fallen_body_once() {
+    let (mut game, wild) = fight(&[((3, 3), 'V'), ((4, 3), 'V')], (3, 0), 1);
+    place_one(&mut game, wild[0], (3, 4));
+    game.world.get_mut::<Stats>(wild[0]).unwrap().hp = 1;
+    weaken(&mut game, (3, 3), 1);
+    assert!(game.tactical_attack_prop((3, 3)));
+    let catches = super::tactical::log_texts(&game)
+        .iter()
+        .filter(|l| l.contains("The blast catches"))
+        .count();
+    assert_eq!(catches, 1, "a body already down was hit again");
 }
 
 #[test]

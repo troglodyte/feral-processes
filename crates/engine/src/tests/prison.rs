@@ -1002,3 +1002,38 @@ fn a_breakdown_with_no_room_clogs_the_cell_on_the_beat_it_defers() {
         Some(&MachineStatus::Clogged)
     );
 }
+
+#[test]
+fn a_save_without_the_carried_record_still_releases_a_rebuilt_one() {
+    let (mut game, cell) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    let body = the_prisoner(&game, cell);
+    game.rename_companion(body, Some("Inmate".to_string()))
+        .expect("named");
+    game.world.get_mut::<Jailed>(body).unwrap().record = None;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_jailed_no_record_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let _ = std::fs::remove_file(&path);
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Inmate"))
+        .expect("the prisoner loads without a record")
+        .entity;
+    assert_eq!(loaded.world.get::<Jailed>(back).unwrap().record, None);
+    let reloaded_cell = loaded
+        .find_blocking_structure_at(ANCHOR.0, ANCHOR.1)
+        .expect("the cell reloads standing");
+    loaded.release_prisoner(reloaded_cell);
+
+    let released = records(&loaded);
+    assert_eq!(released.len(), 1, "a record is rebuilt from the body");
+    assert_eq!(released[0].species, MID_SPECIES);
+    assert_eq!(released[0].rarity, Rarity::Ordinary);
+}

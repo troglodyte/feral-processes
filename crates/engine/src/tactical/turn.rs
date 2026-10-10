@@ -264,7 +264,7 @@ impl Game {
         };
         let to = (from.0 + dir.0, from.1 + dir.1);
         let spent = battle.spent();
-        let cost = battle.board.cell(to.0, to.1).movement_cost();
+        let cost = battle.board.move_cost(to.0, to.1);
         // A body departs if any footprint cell anchored at `to` leaves the
         // board — one cell today, without a `Squad`, so this is the same
         // check `in_bounds(to)` alone made.

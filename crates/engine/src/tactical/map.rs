@@ -10,11 +10,12 @@
 //! folded through `derive::fold` and reduced through `derive::index`, the
 //! way `rock::RockDb::kind_at` derives base space.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
 use crate::derive::{FNV_BASIS, fold, index};
+use crate::tactical::props::{Blast, PieceDef};
 use crate::tuning::{
     TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
     TACTICAL_MEDIUM_BODIES, TACTICAL_ROUGH_COST,
@@ -179,11 +180,87 @@ fn kind_at(spec: BattleSpec, x: i32, y: i32) -> BattleCell {
     BattleCell::Open
 }
 
+/// A prop standing on one cell of a board.
+///
+/// **Copied from its `PieceDef` at placement**, so a reach query never
+/// consults the `PropDb`: the board stays self-contained, like the terrain.
+/// A decoration is copied with every gameplay flag cleared, which is what
+/// makes "decoration blocks nothing" a property of the type rather than of
+/// each piece file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropCell {
+    pub piece: String,
+    pub hp: Option<u32>,
+    pub max_hp: Option<u32>,
+    pub armour: u32,
+    pub blocks_move: bool,
+    pub blocks_sight: bool,
+    pub cover: bool,
+    pub volatile: Option<Blast>,
+    pub decoration: bool,
+    pub sprite: String,
+    pub move_cost: Option<u32>,
+}
+
+impl PropCell {
+    pub fn from_def(def: &PieceDef) -> PropCell {
+        if def.decoration {
+            return PropCell {
+                piece: def.id.clone(),
+                hp: None,
+                max_hp: None,
+                armour: 0,
+                blocks_move: false,
+                blocks_sight: false,
+                cover: false,
+                volatile: None,
+                decoration: true,
+                sprite: def.sprite.clone(),
+                move_cost: None,
+            };
+        }
+        PropCell {
+            piece: def.id.clone(),
+            hp: def.hp,
+            max_hp: def.hp,
+            armour: def.armour,
+            blocks_move: def.blocks_move,
+            blocks_sight: def.blocks_sight,
+            cover: def.cover,
+            volatile: def.volatile,
+            decoration: false,
+            sprite: def.sprite.clone(),
+            move_cost: def.move_cost,
+        }
+    }
+
+    /// Whether a blow can ever break it.
+    pub fn destructible(&self) -> bool {
+        !self.decoration && self.hp.is_some()
+    }
+}
+
+/// What `Board::damage_prop` did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PropHit {
+    /// Nothing stands on the cell.
+    Missing,
+    /// A decoration, or a piece with no hp: nothing changed.
+    Indestructible,
+    Damaged,
+    /// Already removed from the board; the caller places what it leaves.
+    Destroyed(PropCell),
+}
+
 /// A generated battle map. Never saved; discarded at teardown.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Board {
     pub side: i32,
     cells: Vec<BattleCell>,
+    /// Authored set pieces over the terrain. An overlay like `screens`, for
+    /// the same reason: the cells are what `SiegeSave` stores and a prop
+    /// is never saved, so a siege board has none.
+    props: BTreeMap<(i32, i32), PropCell>,
     /// Cells a standing body blocks sight through — a barrier structure on
     /// a siege board. An overlay rather than a `Cover` cell because the
     /// cells are what `SiegeSave` stores, and a body cannot be seated back
@@ -201,6 +278,7 @@ impl Board {
             side,
             cells: vec![BattleCell::Blocked; (side * side) as usize],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         }
     }
 
@@ -221,12 +299,75 @@ impl Board {
         self.cells[(y * self.side + x) as usize]
     }
 
+    /// What entering the cell costs, or `None` where it cannot be entered.
+    ///
+    /// **The one movement read.** The ground's cost, raised to a crossable
+    /// prop's own, and `None` under a prop that blocks movement — so the
+    /// movement field, the step and the carve all see props without a line
+    /// of their own.
+    pub fn move_cost(&self, x: i32, y: i32) -> Option<u32> {
+        let ground = self.cell(x, y).movement_cost()?;
+        match self.props.get(&(x, y)) {
+            None => Some(ground),
+            Some(prop) if prop.blocks_move => None,
+            Some(prop) => Some(ground.max(prop.move_cost.unwrap_or(1))),
+        }
+    }
+
+    /// Derived from `move_cost`, as `BattleCell::walkable` is from
+    /// `movement_cost`.
     pub fn walkable(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).walkable()
+        self.move_cost(x, y).is_some()
     }
 
     pub fn blocks_sight(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).blocks_sight() || self.screens.contains(&(x, y))
+        self.cell(x, y).blocks_sight()
+            || self.screens.contains(&(x, y))
+            || self.props.get(&(x, y)).is_some_and(|p| p.blocks_sight)
+    }
+
+    /// Whether a shot passing this cell is partly covered by it —
+    /// `reach::cover_between`'s one read.
+    pub fn is_cover(&self, x: i32, y: i32) -> bool {
+        self.cell(x, y) == BattleCell::Cover || self.props.get(&(x, y)).is_some_and(|p| p.cover)
+    }
+
+    pub fn prop_at(&self, x: i32, y: i32) -> Option<&PropCell> {
+        self.props.get(&(x, y))
+    }
+
+    /// Every prop in reading order of the map's key, `(x, y)`.
+    pub fn props(&self) -> impl Iterator<Item = (&(i32, i32), &PropCell)> {
+        self.props.iter()
+    }
+
+    /// A no-op off the board, `set`'s rule.
+    pub fn place_prop(&mut self, cell: (i32, i32), prop: PropCell) {
+        if self.in_bounds(cell.0, cell.1) {
+            self.props.insert(cell, prop);
+        }
+    }
+
+    pub fn remove_prop(&mut self, cell: (i32, i32)) -> Option<PropCell> {
+        self.props.remove(&cell)
+    }
+
+    /// Takes `amount` off the prop's hp. A prop taken to zero is removed
+    /// before this returns, so a caller never sees a standing prop at 0.
+    pub fn damage_prop(&mut self, cell: (i32, i32), amount: u32) -> PropHit {
+        let Some(prop) = self.props.get_mut(&cell) else {
+            return PropHit::Missing;
+        };
+        let Some(hp) = prop.hp.filter(|_| !prop.decoration) else {
+            return PropHit::Indestructible;
+        };
+        let left = hp.saturating_sub(amount);
+        if left == 0 {
+            let gone = self.props.remove(&cell).expect("just read");
+            return PropHit::Destroyed(gone);
+        }
+        prop.hp = Some(left);
+        PropHit::Damaged
     }
 
     /// Screens `cell` from sight, or stops screening it — `TacticalBattle::
@@ -262,27 +403,49 @@ impl Board {
 
     /// A board written out by hand, one string per row, for tests that need
     /// a known layout rather than a generated one: `.` open, `~` rough, `#`
-    /// cover, `X` blocked. Square, because `Board` has one `side`.
+    /// cover, `X` blocked, and over open ground: `P` an indestructible prop
+    /// that blocks sight and movement, `D` a destructible one (hp 10), `V` a
+    /// volatile one (hp 5, radius 1, damage 12). Square, because `Board` has
+    /// one `side`.
     #[cfg(test)]
     pub(crate) fn from_rows(rows: &[&str]) -> Board {
         let side = rows.len() as i32;
-        let cells: Vec<BattleCell> = rows
-            .iter()
-            .flat_map(|row| {
-                assert_eq!(row.chars().count() as i32, side, "a board is square");
-                row.chars().map(|c| match c {
-                    '.' => BattleCell::Open,
-                    '~' => BattleCell::Rough,
-                    '#' => BattleCell::Cover,
-                    'X' => BattleCell::Blocked,
+        let mut props = BTreeMap::new();
+        let mut cells = Vec::new();
+        for (y, row) in rows.iter().enumerate() {
+            assert_eq!(row.chars().count() as i32, side, "a board is square");
+            for (x, c) in row.chars().enumerate() {
+                let (kind, prop) = match c {
+                    '.' => (BattleCell::Open, None),
+                    '~' => (BattleCell::Rough, None),
+                    '#' => (BattleCell::Cover, None),
+                    'X' => (BattleCell::Blocked, None),
+                    'P' => (BattleCell::Open, Some(test_prop("P", None, None))),
+                    'D' => (BattleCell::Open, Some(test_prop("D", Some(10), None))),
+                    'V' => (
+                        BattleCell::Open,
+                        Some(test_prop(
+                            "V",
+                            Some(5),
+                            Some(Blast {
+                                radius: 1,
+                                damage: 12,
+                            }),
+                        )),
+                    ),
                     other => panic!("no such cell: {other}"),
-                })
-            })
-            .collect();
+                };
+                cells.push(kind);
+                if let Some(prop) = prop {
+                    props.insert((x as i32, y as i32), prop);
+                }
+            }
+        }
         Board {
             side,
             cells,
             screens: BTreeSet::new(),
+            props,
         }
     }
 
@@ -302,6 +465,7 @@ impl Board {
             side,
             cells,
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         }
     }
 
@@ -311,6 +475,23 @@ impl Board {
             .iter()
             .enumerate()
             .map(move |(i, &kind)| (((i as i32) % side, (i as i32) / side), kind))
+    }
+}
+
+#[cfg(test)]
+fn test_prop(piece: &str, hp: Option<u32>, volatile: Option<Blast>) -> PropCell {
+    PropCell {
+        piece: piece.into(),
+        hp,
+        max_hp: hp,
+        armour: 0,
+        blocks_move: true,
+        blocks_sight: true,
+        cover: true,
+        volatile,
+        decoration: false,
+        sprite: format!("prop_{piece}"),
+        move_cost: None,
     }
 }
 
@@ -422,6 +603,7 @@ pub fn generate(spec: BattleSpec) -> Board {
         side,
         cells,
         screens: BTreeSet::new(),
+        props: BTreeMap::new(),
     };
     carve_to_connect(&mut board);
     board
@@ -605,6 +787,7 @@ mod tests {
             side: 7,
             cells: vec![BattleCell::Open; 49],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);
@@ -631,6 +814,7 @@ mod tests {
             side: 7,
             cells: vec![BattleCell::Open; 49],
             screens: BTreeSet::new(),
+            props: BTreeMap::new(),
         };
         for y in 0..7 {
             board.set(3, y, BattleCell::Cover);
@@ -753,5 +937,104 @@ mod tests {
             let back: BattleCell = ron::from_str(&text).expect("BattleCell must deserialise");
             assert_eq!(kind, back);
         }
+    }
+    fn rubble() -> PropCell {
+        PropCell {
+            piece: "rubble".into(),
+            hp: None,
+            max_hp: None,
+            armour: 0,
+            blocks_move: false,
+            blocks_sight: false,
+            cover: false,
+            volatile: None,
+            decoration: false,
+            sprite: "prop_rubble".into(),
+            move_cost: Some(TACTICAL_ROUGH_COST),
+        }
+    }
+
+    #[test]
+    fn a_blocking_prop_stops_movement_and_sight_and_is_cover() {
+        let board = Board::from_rows(&["...", ".P.", "..."]);
+        assert_eq!(board.cell(1, 1), BattleCell::Open);
+        assert!(!board.walkable(1, 1));
+        assert_eq!(board.move_cost(1, 1), None);
+        assert!(board.blocks_sight(1, 1));
+        assert!(board.is_cover(1, 1));
+        assert!(board.walkable(0, 0) && !board.is_cover(0, 0));
+        assert_eq!(board.prop_at(1, 1).map(|p| p.piece.as_str()), Some("P"));
+    }
+
+    #[test]
+    fn an_indestructible_prop_never_changes() {
+        let mut board = Board::from_rows(&["...", ".P.", "..."]);
+        assert_eq!(board.damage_prop((1, 1), 999), PropHit::Indestructible);
+        assert!(board.prop_at(1, 1).is_some());
+        assert_eq!(board.damage_prop((0, 0), 5), PropHit::Missing);
+    }
+
+    #[test]
+    fn a_destructible_prop_is_removed_at_zero_and_opens_the_cell() {
+        let mut board = Board::from_rows(&["...", ".D.", "..."]);
+        assert_eq!(board.damage_prop((1, 1), 4), PropHit::Damaged);
+        assert_eq!(board.prop_at(1, 1).and_then(|p| p.hp), Some(6));
+        assert!(!board.walkable(1, 1));
+        let PropHit::Destroyed(gone) = board.damage_prop((1, 1), 6) else {
+            panic!("hp 6 less 6 should destroy it");
+        };
+        assert_eq!(gone.piece, "D");
+        assert!(board.prop_at(1, 1).is_none());
+        assert!(board.walkable(1, 1) && !board.blocks_sight(1, 1) && !board.is_cover(1, 1));
+    }
+
+    #[test]
+    fn rubble_costs_the_rough_price_and_gives_no_cover() {
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        assert_eq!(board.move_cost(1, 1), Some(1));
+        board.place_prop((1, 1), rubble());
+        assert_eq!(board.move_cost(1, 1), Some(TACTICAL_ROUGH_COST));
+        assert!(board.walkable(1, 1) && !board.is_cover(1, 1) && !board.blocks_sight(1, 1));
+    }
+
+    #[test]
+    fn a_prop_never_makes_rough_ground_cheaper() {
+        let mut board = Board::from_rows(&["~~~", "~~~", "~~~"]);
+        let mut cheap = rubble();
+        cheap.move_cost = None;
+        board.place_prop((0, 0), cheap);
+        assert_eq!(board.move_cost(0, 0), Some(TACTICAL_ROUGH_COST));
+    }
+
+    #[test]
+    fn a_decoration_blocks_nothing_whatever_its_piece_says() {
+        let def = PieceDef {
+            id: "scorch".into(),
+            blocks_move: true,
+            blocks_sight: true,
+            cover: true,
+            hp: Some(5),
+            armour: 0,
+            volatile: Some(Blast {
+                radius: 1,
+                damage: 1,
+            }),
+            leaves: crate::tactical::props::Leaves::Floor,
+            sprite: "prop_scorch".into(),
+            decoration: true,
+            move_cost: Some(9),
+        };
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        board.place_prop((0, 0), PropCell::from_def(&def));
+        assert_eq!(board.move_cost(0, 0), Some(1));
+        assert!(!board.blocks_sight(0, 0) && !board.is_cover(0, 0));
+        assert_eq!(board.damage_prop((0, 0), 99), PropHit::Indestructible);
+    }
+
+    #[test]
+    fn a_prop_off_the_board_is_ignored() {
+        let mut board = Board::from_rows(&["...", "...", "..."]);
+        board.place_prop((5, 5), rubble());
+        assert_eq!(board.props().count(), 0);
     }
 }

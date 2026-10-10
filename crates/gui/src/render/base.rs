@@ -353,7 +353,15 @@ pub(super) fn draw_playing_base(
         .as_mut()
         .filter(|_| !finished_fight)
         .and_then(|g| g.tactical_view())
-        .map(|v| tactical::action_bar(mode, &v, tactical_auto));
+        .map(|v| {
+            let mut rows = tactical::action_bar(mode, &v, tactical_auto);
+            if mode == Mode::TacticalAim
+                && let Some(row) = tactical::aim_readout(&v, tactical_cursor)
+            {
+                rows.insert(0, row);
+            }
+            rows
+        });
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();

@@ -28,6 +28,21 @@ use crate::{
 use feral_processes_engine::battle::{SpecialOption, SpecialTargeting};
 use feral_processes_engine::tactical::ai::AiBeat;
 use feral_processes_engine::tactical::turn::StepOutcome;
+use feral_processes_engine::tactical::view::PropView;
+
+/// What the aim cursor says about the prop under it: its name, what is left
+/// of it, and a tag when a blow sets it off. Decoration and indestructible
+/// pieces carry no hit points, so they read as bare names.
+pub fn prop_readout(prop: &PropView) -> String {
+    let mut line = prop.name.clone();
+    if let (Some(hp), Some(max)) = (prop.hp, prop.max_hp) {
+        line.push_str(&format!(" {hp}/{max}"));
+    }
+    if prop.volatile {
+        line.push_str(" explosive");
+    }
+    line
+}
 
 impl App {
     /// Arrows and the numpad step the acting body; a lowercase letter picks
@@ -490,9 +505,11 @@ impl App {
         self.mode = Mode::TacticalBattle;
         let Some(game) = &mut self.game else { return };
         let landed = match intent {
+            // A body outranks a prop on the same cell; the engine refuses a
+            // prop that cannot be broken, so no check is repeated here.
             TacticalIntent::Swing => match game.tactical_occupant(aim) {
                 Some(target) => game.tactical_attack(target),
-                None => false,
+                None => game.tactical_attack_prop(aim),
             },
             TacticalIntent::Routine(index) => game.tactical_use_routine(index, aim),
             // The first of a relocation's two cells spends nothing and

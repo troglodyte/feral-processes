@@ -34,6 +34,7 @@ pub use app::sprite_forge::{
     SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject, SpriteWrite, SubjectTint,
 };
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
+pub use app::tactical::prop_readout;
 pub use app::telemetry::append_records;
 pub use feral_processes_engine::ProgramRole;
 

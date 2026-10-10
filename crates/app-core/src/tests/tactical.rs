@@ -1602,3 +1602,59 @@ mod teleport {
         );
     }
 }
+
+fn prop(
+    name: &str,
+    hp: Option<u32>,
+    volatile: bool,
+) -> feral_processes_engine::tactical::view::PropView {
+    feral_processes_engine::tactical::view::PropView {
+        cell: (0, 0),
+        name: name.into(),
+        sprite: format!("prop_{}", name.replace(' ', "_")),
+        hp,
+        max_hp: hp,
+        volatile,
+        decoration: hp.is_none(),
+    }
+}
+
+#[test]
+fn a_volatile_props_readout_carries_hp_and_the_explosive_tag() {
+    let line = crate::prop_readout(&prop("power cell", Some(8), true));
+    assert_eq!(line, "power cell 8/8 explosive");
+    assert_eq!(
+        crate::prop_readout(&prop("cable run", None, false)),
+        "cable run"
+    );
+}
+
+/// An empty cell is not a target: the swing is refused with the status line
+/// and the action is not spent.
+#[test]
+fn a_swing_aimed_at_an_empty_cell_is_refused_and_spends_nothing() {
+    let mut app = fighting(9130);
+    wait_for_the_player(&mut app);
+    let view = app
+        .game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open");
+    let empty = (0..view.board.side)
+        .flat_map(|y| (0..view.board.side).map(move |x| (x, y)))
+        .find(|&c| {
+            !view.bodies.iter().any(|b| b.cell == c) && !view.props.iter().any(|p| p.cell == c)
+        })
+        .expect("a board has an empty cell");
+
+    app.handle_key(GameKey::Char('a'));
+    app.tactical_cursor = Some(empty);
+    app.handle_key(GameKey::Enter);
+
+    assert!(app.status_line.is_some(), "a refused swing says so");
+    assert!(
+        !app.game.as_mut().unwrap().tactical_view().unwrap().acted,
+        "a swing at nothing spent the action"
+    );
+}

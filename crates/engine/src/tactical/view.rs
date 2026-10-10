@@ -286,6 +286,10 @@ pub struct TacticalView {
     /// siege reads `Platform` although its spec carries the surface tile's
     /// biome: its board is the base's own floor.
     pub ground: Biome,
+    /// Every prop on the board, sorted by cell. The board carries the same
+    /// facts, but a screen reads the spoken name and the sprite key here
+    /// rather than reaching into `PropCell`.
+    pub props: Vec<PropView>,
 }
 
 impl TacticalView {
@@ -479,6 +483,12 @@ impl Game {
             })
             .unwrap_or_default();
 
+        // `BTreeMap` order is cell order, so the sort is the map's own.
+        let props: Vec<PropView> = board
+            .props()
+            .map(|(&cell, prop)| PropView::of(cell, prop))
+            .collect();
+
         let charge_aims: Vec<ChargeAimView> = placed
             .iter()
             .filter_map(
@@ -508,6 +518,7 @@ impl Game {
             fallen,
             charge_aims,
             ground,
+            props,
         })
     }
 

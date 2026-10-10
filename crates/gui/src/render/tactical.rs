@@ -31,7 +31,7 @@ use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_ro
 use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_app_core::{Mode, menu_shortcut};
+use feral_processes_app_core::{Mode, menu_shortcut, prop_readout};
 use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
@@ -1381,6 +1381,21 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         rows.retain(|(k, _)| k == "E" || k == "R" || k == "A");
     }
     rows
+}
+
+/// The keybar row naming the prop under the aim cursor, first so
+/// `strip::fitting`, which drops from the end, never loses it. A body on the
+/// cell outranks a prop, as it does when the swing commits.
+pub(super) fn aim_readout(
+    view: &TacticalView,
+    cursor: Option<(i32, i32)>,
+) -> Option<(String, String)> {
+    let cell = cursor?;
+    if view.bodies.iter().any(|b| b.cell == cell) {
+        return None;
+    }
+    let prop = view.props.iter().find(|p| p.cell == cell)?;
+    Some((String::new(), prop_readout(prop)))
 }
 
 /// Which consumable does the acting body spend? `[U]`'s picker, drawn as a
@@ -3217,6 +3232,34 @@ mod tests {
             running.iter().any(|(_, l)| l.contains("auto-attack")),
             "a running auto-attack went unsaid: {running:?}"
         );
+    }
+
+    /// The readout names a prop under the cursor, tags a volatile one, and
+    /// stays silent over a cell with nothing on it.
+    #[test]
+    fn the_aim_readout_names_the_prop_under_the_cursor() {
+        use feral_processes_engine::tactical::view::PropView;
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let cell = (
+            view.bodies.iter().map(|b| b.cell.0).max().unwrap_or(0) + 50,
+            0,
+        );
+        view.props.push(PropView {
+            cell,
+            name: "coolant tank".into(),
+            sprite: "prop_coolant_tank".into(),
+            hp: Some(6),
+            max_hp: Some(8),
+            volatile: true,
+            decoration: false,
+        });
+
+        let (_, text) = aim_readout(&view, Some(cell)).expect("a prop is under the cursor");
+
+        assert_eq!(text, "coolant tank 6/8 explosive");
+        assert!(aim_readout(&view, Some((cell.0 + 1, 0))).is_none());
+        assert!(aim_readout(&view, None).is_none());
     }
 
     /// The cursor is a different screen from the board, and offering the

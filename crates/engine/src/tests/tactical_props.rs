@@ -340,3 +340,16 @@ fn a_hostile_with_a_way_round_does_not_break_the_wall() {
         "it hit the wall instead of going round"
     );
 }
+
+#[test]
+fn the_view_lists_props_sorted_by_cell() {
+    let (mut game, _) = fight(&[((5, 4), 'V'), ((2, 3), 'D'), ((2, 1), 'P')], (0, 0), 1);
+
+    let view = game.tactical_view().expect("the fight is open");
+
+    let cells: Vec<(i32, i32)> = view.props.iter().map(|p| p.cell).collect();
+    assert_eq!(cells, vec![(2, 1), (2, 3), (5, 4)]);
+    assert!(view.props[2].volatile);
+    assert_eq!(view.props[1].hp, Some(10));
+    assert_eq!(view.props[0].hp, None);
+}

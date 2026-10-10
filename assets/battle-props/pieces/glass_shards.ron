@@ -1,0 +1,5 @@
+(
+    id: "glass_shards",
+    decoration: true,
+    sprite: "prop_glass_shards",
+)

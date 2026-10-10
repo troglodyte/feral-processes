@@ -5537,6 +5537,13 @@ pub const TOOL_CARRIER_VALUE: u32 = 2;
 /// choice and becomes a wall with extra steps.
 pub const TACTICAL_ROUGH_COST: u32 = 2;
 
+/// How deep a chain of volatile props may detonate one another.
+///
+/// A line of explosive cells is a fuse; unbounded, one swing would resolve
+/// the whole board in a single call. Three keeps a cluster dramatic and a
+/// long row finite.
+pub const TACTICAL_PROP_CHAIN_MAX: u32 = 3;
+
 /// The three board extents, in cells on a side.
 ///
 /// Three fixed tiers rather than a per-body formula so the player learns

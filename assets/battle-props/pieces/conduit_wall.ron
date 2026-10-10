@@ -1,0 +1,7 @@
+(
+    id: "conduit_wall",
+    blocks_move: true,
+    blocks_sight: true,
+    cover: true,
+    sprite: "prop_conduit_wall",
+)

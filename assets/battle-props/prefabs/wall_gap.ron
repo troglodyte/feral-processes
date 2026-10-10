@@ -1,0 +1,8 @@
+(
+    id: "wall_gap",
+    weight: 3,
+    rows: [
+        "WWWW.WWWW",
+    ],
+    legend: { 'W': "conduit_wall" },
+)

@@ -1,0 +1,9 @@
+(
+    id: "crashed_drone",
+    weight: 3,
+    rows: [
+        "dd.",
+        ".dP",
+    ],
+    legend: { 'd': "drone_chassis", 'P': "power_cell" },
+)

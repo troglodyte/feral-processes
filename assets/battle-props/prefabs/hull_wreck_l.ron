@@ -1,0 +1,10 @@
+(
+    id: "hull_wreck_l",
+    weight: 3,
+    rows: [
+        "H...",
+        "H...",
+        "HHH.",
+    ],
+    legend: { 'H': "hull_plate" },
+)

@@ -1,0 +1,10 @@
+(
+    id: "hull_plate",
+    blocks_move: true,
+    blocks_sight: true,
+    cover: true,
+    hp: Some(40),
+    armour: 4,
+    leaves: Rubble,
+    sprite: "prop_hull_plate",
+)

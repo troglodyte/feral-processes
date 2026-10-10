@@ -1,0 +1,5 @@
+(
+    id: "rubble",
+    move_cost: Some(2),
+    sprite: "prop_rubble",
+)

@@ -1,0 +1,9 @@
+(
+    id: "pylon",
+    blocks_move: true,
+    cover: true,
+    hp: Some(25),
+    armour: 1,
+    leaves: Rubble,
+    sprite: "prop_pylon",
+)

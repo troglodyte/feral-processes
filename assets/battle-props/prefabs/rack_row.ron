@@ -1,0 +1,9 @@
+(
+    id: "rack_row",
+    weight: 4,
+    rows: [
+        "RR.R",
+        "..c.",
+    ],
+    legend: { 'R': "server_rack", 'c': "cable_run" },
+)

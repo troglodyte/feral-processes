@@ -1,0 +1,5 @@
+(
+    id: "dead_screen",
+    decoration: true,
+    sprite: "prop_dead_screen",
+)

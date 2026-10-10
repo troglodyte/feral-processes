@@ -11,9 +11,15 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::study::pen_corner;
 use crate::game::spawning::SpawnPins;
+use crate::items::DownedProgram;
+use crate::resources::{GameRng, MessageKind, PowerGrid};
 use crate::taming::{TargetResistance, capture_chance};
-use crate::tuning::{DEFAULT_TAMING_DIFFICULTY, JAIL_BASE_POTENCY};
+use crate::tools::{ToolCategory, ToolDb, ToolDef};
+use crate::tuning::{
+    DEFAULT_TAMING_DIFFICULTY, JAIL_BASE_POTENCY, JAIL_BREAKDOWN_SCALE, JAIL_MAX_ATTEMPTS,
+};
 use crate::*;
+use rand::RngExt;
 
 /// Why `index` can't be jailed right now — `Game::jail_blocker`'s exhaustive
 /// answer. `row_fragment` is the few words an action row appends after its
@@ -261,5 +267,225 @@ impl Game {
             },
             self.player_decompiler_bonuses(),
         ))
+    }
+}
+
+impl Game {
+    /// Every standing Holding Cell, in tile order — `teardown_rigs`' reason:
+    /// bevy's iteration order is not stable and two cells finishing in a
+    /// different order between runs would reorder their log lines.
+    fn holding_cells(&self) -> Vec<Entity> {
+        let mut found: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter(|e| self.prison_pen(e.id()).is_some())
+            .filter_map(|e| {
+                let p = e.get::<Position>()?;
+                Some((p.x, p.y, e.id()))
+            })
+            .collect();
+        found.sort();
+        found.into_iter().map(|(_, _, e)| e).collect()
+    }
+
+    /// One beat of every Holding Cell — `run_teardown_rigs`' shape and its
+    /// place in the tick, after the schedule that writes `PowerGrid`.
+    pub(crate) fn run_holding_cells(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        for cell in self.holding_cells() {
+            self.step_holding_cell(cell);
+        }
+    }
+
+    /// The gates mirror `step_teardown_rig`: a dark cell and an unstaffed one
+    /// are left to `power_grid_system` and `idle_machine_system`, which write
+    /// `Unpowered` and `Idle` (read as "No warden") over anything written
+    /// here. The warden is the same predicate the rig's staffing uses — a
+    /// worker holding `TaskKind::GatherResource` on the cell.
+    ///
+    /// **A cell with nobody inside draws no `GameRng`**, so a save with an
+    /// empty cell keeps its stream.
+    fn step_holding_cell(&mut self, cell: Entity) {
+        if self.world.resource::<PowerGrid>().is_dark(cell) {
+            return;
+        }
+        let warded = {
+            let mut posted = self.world.query::<&Task>();
+            posted
+                .iter(&self.world)
+                .any(|t| t.target == cell && matches!(t.kind, TaskKind::GatherResource))
+        };
+        if !warded {
+            return;
+        }
+        // `Starved` and not `Idle` for an empty cell, `step_teardown_rig`'s
+        // reason: `idle_machine_system` never reaches a staffed machine.
+        let Some(prisoner) = self.cell_prisoner(cell) else {
+            self.set_rig_status(cell, MachineStatus::Starved);
+            return;
+        };
+        self.set_rig_status(cell, MachineStatus::Running);
+        let due = self
+            .world
+            .get::<Structure>(cell)
+            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
+            .and_then(|d| d.holds_prisoner.as_ref())
+            .map_or(u32::MAX, |p| p.attempt_ticks);
+        let progress = {
+            let mut jailed = self.world.get_mut::<components::Jailed>(prisoner).unwrap();
+            jailed.progress += 1;
+            jailed.progress
+        };
+        if progress < due {
+            return;
+        }
+        self.world
+            .get_mut::<components::Jailed>(prisoner)
+            .unwrap()
+            .progress = 0;
+        let chance = self.jail_odds(prisoner).unwrap_or(0.0);
+        let landed = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random::<f32>() < chance
+        };
+        self.settle_jail_attempt(cell, prisoner, landed);
+    }
+
+    /// Writes one decompile attempt's outcome. Split from the roll so the
+    /// outcome can be driven without a lucky seed.
+    ///
+    /// A success removes `Jailed` — the body is already a roster member from
+    /// the pin, so nothing can fail on a full roster. A failure raises the
+    /// next attempt's odds (`Jailed::attempts` feeds
+    /// `TargetResistance::prior_attempts`), and the `JAIL_MAX_ATTEMPTS`th one
+    /// breaks the program down.
+    pub(crate) fn settle_jail_attempt(&mut self, cell: Entity, prisoner: Entity, landed: bool) {
+        let label = self.creature_label(prisoner);
+        if landed {
+            self.world
+                .entity_mut(prisoner)
+                .remove::<components::Jailed>();
+            self.log_kind(
+                MessageKind::Outcome,
+                format!("{label} accepts its new parameters and joins your roster."),
+            );
+            self.notify_filled(
+                crate::notifications::NotificationKind::ProgramDecompiled,
+                &[("name", &label)],
+                None,
+            );
+            self.note_compiled();
+            return;
+        }
+        let attempts = {
+            let mut jailed = self.world.get_mut::<components::Jailed>(prisoner).unwrap();
+            jailed.attempts += 1;
+            jailed.attempts
+        };
+        if attempts >= JAIL_MAX_ATTEMPTS {
+            self.break_down_prisoner(cell, prisoner);
+        } else {
+            self.log_base(format!(
+                "The decompile of {label} slips ({attempts}/{JAIL_MAX_ATTEMPTS})."
+            ));
+        }
+    }
+
+    /// What a broken-down prisoner pays: `extraction_yield` at
+    /// `JAIL_BREAKDOWN_SCALE` of `rolled` units (never fewer than one). Pure, and a *call* — the
+    /// player's extraction, the rig and a failed cell price one program with
+    /// one formula.
+    pub fn breakdown_yield(
+        &self,
+        program: &DownedProgram,
+        tool: &ToolDef,
+        rolled: i32,
+    ) -> Vec<(ItemId, u32)> {
+        // At least one unit: a level-1 body's band is a handful of units, and
+        // rounding 0.4 of it down would make most breakdowns pay nothing.
+        let scaled = ((rolled as f32 * JAIL_BREAKDOWN_SCALE).round() as i32).max(1);
+        self.extraction_yield(program, tool, scaled)
+    }
+
+    /// The tool a breakdown is priced with, drawn uniformly from the pooled
+    /// tools sorted by id (`ToolDb::all`), at tier 1. Image and Routine tools
+    /// are skipped: they teach rather than pay.
+    fn breakdown_tool(&mut self) -> Option<ToolDef> {
+        let pool: Vec<ToolDef> = self
+            .world
+            .resource::<ToolDb>()
+            .all()
+            .filter(|t| {
+                !t.yields.is_empty()
+                    && !matches!(t.category, ToolCategory::Routines | ToolCategory::Image)
+            })
+            .cloned()
+            .collect();
+        if pool.is_empty() {
+            return None;
+        }
+        let pick = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..pool.len())
+        };
+        let mut tool = pool.into_iter().nth(pick)?;
+        tool.tier = 1;
+        Some(tool)
+    }
+
+    /// The prisoner's last failed attempt: the body despawns and a reduced
+    /// extraction-style yield lands in the cell's `Stock::output`.
+    fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) {
+        let label = self.creature_label(prisoner);
+        let program = self.downed_program_for(prisoner);
+        let granted = match (program.as_ref(), self.breakdown_tool()) {
+            (Some(program), Some(tool)) => {
+                let rolled = {
+                    let band = self.extraction_band(program, &tool);
+                    let mut rng = self.world.resource_mut::<GameRng>();
+                    band.roll(&mut rng.0)
+                };
+                self.breakdown_yield(program, &tool, rolled)
+            }
+            _ => Vec::new(),
+        };
+        self.world.despawn(prisoner);
+        if let Some(mut stock) = self.world.get_mut::<Stock>(cell) {
+            for (item, qty) in &granted {
+                *stock.output.entry(item.clone()).or_default() += qty;
+            }
+        }
+        let parts: Vec<String> = granted
+            .iter()
+            .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
+            .collect();
+        let line = if parts.is_empty() {
+            format!("{label} breaks down in the cell and leaves nothing usable.")
+        } else {
+            format!("{label} breaks down in the cell: {}.", parts.join(", "))
+        };
+        self.log_base_kind(MessageKind::Loot, line);
+    }
+
+    /// A destroyed or demolished cell lets its prisoner go: the body
+    /// despawns and its record goes back to the player's list, the protocol
+    /// lost. `CarryingProgram`'s rule (`return_carried_program`): destruction
+    /// returns the program rather than eating it, and the store being full
+    /// logs the loss through `push_downed_program`. A no-op for a structure
+    /// that holds nobody, so every destruction door can call it.
+    pub(crate) fn release_prisoner(&mut self, structure: Entity) {
+        let Some(prisoner) = self.cell_prisoner(structure) else {
+            return;
+        };
+        let label = self.creature_label(prisoner);
+        if let Some(record) = self.downed_program_for(prisoner) {
+            self.push_downed_program(record);
+        }
+        self.world.despawn(prisoner);
+        self.log_base(format!(
+            "{label} goes dark with the Holding Cell; its record returns to your pack."
+        ));
     }
 }

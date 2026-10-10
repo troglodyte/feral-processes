@@ -382,6 +382,7 @@ impl Game {
         // `assembler_system` never meets this because it is in the schedule,
         // downstream of the grid. See `Game::run_teardown_rigs`.
         self.run_teardown_rigs();
+        self.run_holding_cells();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system
@@ -702,6 +703,7 @@ impl Game {
             // or the holder keeps a marker to a dead entity.
             self.release_siphon_at(entity);
             self.release_study_station(entity);
+            self.release_prisoner(entity);
             self.world.despawn(entity);
         }
     }

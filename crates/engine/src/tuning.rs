@@ -1163,6 +1163,11 @@ pub const JAIL_MAX_ATTEMPTS: u32 = 5;
 /// about 65% overall. `tests/prison.rs` holds that shape.
 pub const JAIL_BASE_POTENCY: f32 = 0.55;
 
+/// The share of an ordinary extraction roll a broken-down prisoner pays out
+/// into its cell's `Stock::output`: a failed decompile still salvages
+/// something, but well under what stripping the same record on a rig pays.
+pub const JAIL_BREAKDOWN_SCALE: f32 = 0.4;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Spawning & encounters
 // ─────────────────────────────────────────────────────────────────────────

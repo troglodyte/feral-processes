@@ -852,7 +852,10 @@ impl StructureDef {
     /// outline, because every consumer treats a missing status as "not a
     /// machine" rather than as an error.
     pub fn runs_a_job(&self) -> bool {
-        self.work.is_some() || self.assembles.is_some() || self.strips.is_some()
+        self.work.is_some()
+            || self.assembles.is_some()
+            || self.strips.is_some()
+            || self.holds_prisoner.is_some()
     }
 
     /// Whether raising or upgrading this structure costs a tamed program.

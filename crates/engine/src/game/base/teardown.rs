@@ -335,7 +335,7 @@ impl Game {
     /// same `set_machine_status` door, reached through `resource_scope`
     /// because the log and the telemetry buffer are resources this world
     /// also holds the status component in.
-    fn set_rig_status(&mut self, rig: Entity, next: MachineStatus) {
+    pub(crate) fn set_rig_status(&mut self, rig: Entity, next: MachineStatus) {
         let Some(kind) = self.world.get::<Structure>(rig).map(|s| s.kind.clone()) else {
             return;
         };

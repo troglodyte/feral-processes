@@ -4,10 +4,12 @@
 use super::support::*;
 use crate::components::Jailed;
 use crate::components::Rarity;
+use crate::components::{Durability, MachineStatus, Task, TaskKind, Temporary};
 use crate::game::base::prison::JailBlock;
 use crate::items::DownedProgram;
-use crate::resources::{GameOver, Party};
+use crate::resources::{GameOver, GameRng, Party, PowerGrid};
 use crate::structures::StructureDb;
+use crate::tuning::JAIL_BREAKDOWN_SCALE;
 use crate::tuning::{JAIL_BASE_POTENCY, JAIL_MAX_ATTEMPTS, ROSTER_HARD_CAP};
 use crate::*;
 
@@ -49,7 +51,7 @@ fn records(game: &Game) -> Vec<DownedProgram> {
 fn base_with_a_cell() -> (Game, Entity) {
     let mut game = Game::new(7301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
-    let cell = spawn_structure_at(&mut game, CELL, ANCHOR.0, ANCHOR.1);
+    let cell = spawn_machine_at(&mut game, CELL, ANCHOR.0, ANCHOR.1);
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
         .lay_floor(PEN.0, PEN.1);
@@ -525,4 +527,251 @@ fn the_odds_rise_with_every_failed_attempt_and_are_worth_the_wait() {
         "a cell is never worse than the catalyst it saves"
     );
     assert_eq!(game.jail_odds(game.player_entity()), None);
+}
+
+// ---------------------------------------------------------------------
+// Phase B: the process.
+// ---------------------------------------------------------------------
+
+const ATTEMPT_TICKS: u32 = 40;
+
+/// A cell with a prisoner inside, a lit grid, and a worker holding the
+/// warden's `Task` — the `a_staffed_rig_*` fixtures' shape.
+fn a_warded_cell(seed: u64) -> (Game, Entity, Entity) {
+    let (mut game, cell) = base_with_a_cell_seeded(seed);
+    game.jail_program(0).unwrap();
+    stand_ample_grid_supply(&mut game);
+    let warden = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(warden).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: cell,
+        progress: 0,
+        required: 1,
+    });
+    let prisoner = the_prisoner(&game, cell);
+    (game, cell, prisoner)
+}
+
+fn base_with_a_cell_seeded(seed: u64) -> (Game, Entity) {
+    let (mut game, cell) = base_with_a_cell();
+    if seed != 7301 {
+        let rng = rand::SeedableRng::seed_from_u64(seed);
+        game.world.resource_mut::<GameRng>().0 = rng;
+    }
+    (game, cell)
+}
+
+fn jailed(game: &Game, body: Entity) -> Jailed {
+    *game.world.get::<Jailed>(body).unwrap()
+}
+
+#[test]
+fn a_cell_takes_a_warden_through_the_ordinary_cronjob_door() {
+    let (mut game, cell) = base_with_a_cell();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
+    assert!(game.accepts_a_program(cell));
+    game.assign_cronjob(worker, cell)
+        .expect("a cell is staffable");
+    assert_eq!(game.world.get::<Task>(worker).map(|t| t.target), Some(cell));
+    assert!(game.world.get::<MachineStatus>(cell).is_some());
+}
+
+#[test]
+fn no_warden_means_no_progress() {
+    let (mut game, cell) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    stand_ample_grid_supply(&mut game);
+    let body = the_prisoner(&game, cell);
+    for _ in 0..(ATTEMPT_TICKS * 2) {
+        game.tick();
+    }
+    let j = jailed(&game, body);
+    assert_eq!((j.attempts, j.progress), (0, 0));
+}
+
+#[test]
+fn a_warden_advances_progress_one_per_beat() {
+    let (mut game, _cell, body) = a_warded_cell(7301);
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert_eq!(jailed(&game, body).progress, 5);
+}
+
+#[test]
+fn a_dark_cell_advances_nothing() {
+    let (mut game, cell) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    let warden = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(warden).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: cell,
+        progress: 0,
+        required: 1,
+    });
+    let body = the_prisoner(&game, cell);
+    // No supply stood: the cell draws power and the grid has none to give it.
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert!(
+        game.world.resource::<PowerGrid>().is_dark(cell),
+        "precondition"
+    );
+    assert_eq!(jailed(&game, body).progress, 0);
+}
+
+#[test]
+fn an_attempt_fires_when_progress_reaches_attempt_ticks_and_counts() {
+    // The first roll is a long shot, so the first seed that leaves the
+    // prisoner jailed after it is the one that shows the counter moving.
+    let mut found = false;
+    for seed in 1..60u64 {
+        let (mut game, _cell, body) = a_warded_cell(seed);
+        game.world.get_mut::<Jailed>(body).unwrap().progress = ATTEMPT_TICKS - 1;
+        game.tick();
+        if game.world.get::<Jailed>(body).is_none() {
+            continue;
+        }
+        let j = jailed(&game, body);
+        assert_eq!((j.attempts, j.progress), (1, 0), "seed {seed}");
+        found = true;
+        break;
+    }
+    assert!(found, "no seed in range failed its first roll");
+}
+
+#[test]
+fn a_landed_decompile_joins_the_roster_and_is_a_deed() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    let compiled = game.world.resource::<crate::resources::RunTally>().compiled;
+    let queued = game.notifications_pending();
+    let pets = game.pet_count();
+
+    game.settle_jail_attempt(cell, body, true);
+
+    assert!(game.world.get::<Jailed>(body).is_none());
+    assert_eq!(game.program_role(body), Some(ProgramRole::Staff));
+    assert_eq!(game.pet_count(), pets, "already counted from the pin");
+    assert!(game.cell_prisoner(cell).is_none());
+    assert_eq!(
+        game.world.resource::<crate::resources::RunTally>().compiled,
+        compiled + 1
+    );
+    assert_eq!(game.notifications_pending(), queued + 1);
+    let label = game.creature_label(body);
+    assert!(
+        game.message_log(20)
+            .iter()
+            .any(|l| l.text.contains(&label) && l.text.contains("joins your roster"))
+    );
+}
+
+#[test]
+fn the_last_failure_breaks_the_prisoner_down_into_the_cells_output() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    let pets = game.pet_count();
+    for expected in 1..JAIL_MAX_ATTEMPTS {
+        game.settle_jail_attempt(cell, body, false);
+        assert_eq!(jailed(&game, body).attempts, expected);
+    }
+    assert!(game.world.get_entity(body).is_ok(), "still held");
+
+    game.settle_jail_attempt(cell, body, false);
+
+    assert!(game.world.get_entity(body).is_err(), "the body is gone");
+    assert!(game.cell_prisoner(cell).is_none());
+    assert_eq!(game.pet_count(), pets - 1, "nothing joins the roster");
+    let stock = game.world.get::<Stock>(cell).unwrap();
+    assert!(
+        stock.output.values().sum::<u32>() > 0,
+        "a breakdown salvages something: {:?}",
+        stock.output
+    );
+}
+
+#[test]
+fn a_breakdown_pays_the_scaled_extraction_yield() {
+    let (game, _cell) = base_with_a_cell();
+    let program = record(MID_SPECIES, Rarity::Ordinary);
+    let tool = game
+        .world
+        .resource::<crate::tools::ToolDb>()
+        .get("salvage_clamp")
+        .cloned()
+        .expect("the shipped salvage clamp");
+    let total = |rows: Vec<(ItemId, u32)>| rows.iter().map(|(_, q)| *q).sum::<u32>();
+    let full = total(game.extraction_yield(&program, &tool, 20));
+    let broken = total(game.breakdown_yield(&program, &tool, 20));
+    assert_eq!(
+        broken,
+        total(game.extraction_yield(&program, &tool, 8)),
+        "{JAIL_BREAKDOWN_SCALE} of the roll, through extraction_yield"
+    );
+    assert!(broken < full);
+}
+
+#[test]
+fn a_whole_unlucky_run_ends_in_the_roster_or_in_the_output() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    for _ in 0..(ATTEMPT_TICKS * JAIL_MAX_ATTEMPTS + 5) {
+        game.tick();
+    }
+    assert!(game.cell_prisoner(cell).is_none(), "the cell is settled");
+    let rostered = game.world.get_entity(body).is_ok();
+    let salvage: u32 = game.world.get::<Stock>(cell).unwrap().output.values().sum();
+    assert!(
+        rostered ^ (salvage > 0),
+        "either it joined the roster ({rostered}) or it paid out ({salvage})"
+    );
+}
+
+/// The three destruction doors, each with a prisoner inside.
+fn assert_door_returns_the_record(door: impl FnOnce(&mut Game, Entity)) {
+    let (mut game, cell) = base_with_a_cell();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![record(MID_SPECIES, Rarity::Platinum)];
+    game.jail_program(0).unwrap();
+    let body = the_prisoner(&game, cell);
+    assert!(records(&game).is_empty());
+    let packs = protocols(&game);
+
+    door(&mut game, cell);
+
+    assert!(game.world.get_entity(body).is_err(), "the body despawns");
+    let back = records(&game);
+    assert_eq!(back.len(), 1, "the record returns");
+    assert_eq!(back[0].species, MID_SPECIES);
+    assert_eq!(back[0].rarity, Rarity::Platinum);
+    assert!(!back[0].boss);
+    assert_eq!(protocols(&game), packs, "the protocol is lost");
+}
+
+#[test]
+fn a_demolished_cell_returns_the_record() {
+    assert_door_returns_the_record(|game, cell| {
+        game.remove_structure(cell).unwrap();
+    });
+}
+
+#[test]
+fn a_destroyed_cell_returns_the_record() {
+    assert_door_returns_the_record(|game, cell| {
+        game.world
+            .entity_mut(cell)
+            .insert(Durability { hp: 1, max_hp: 1 });
+        game.damage_structure(cell, 5, "The Holding Cell", "a GC Entropy Sweep");
+    });
+}
+
+#[test]
+fn an_expired_cell_returns_the_record() {
+    assert_door_returns_the_record(|game, cell| {
+        game.world
+            .entity_mut(cell)
+            .insert(Temporary { ticks_remaining: 1 });
+        game.tick();
+    });
 }

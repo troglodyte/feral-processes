@@ -1110,6 +1110,7 @@ impl Game {
             // The second of the two destruction paths for a subject pinned
             // in this structure's pen — see `Game::release_study_station`.
             self.release_study_station(structure);
+            self.release_prisoner(structure);
             self.release_siphon_at(structure);
             self.announce_lost_shelf(structure);
             self.announce_lost_children(structure);

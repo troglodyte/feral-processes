@@ -795,8 +795,8 @@ impl Game {
 
     /// A decompile landed: the contract deed and the run score's tally. One
     /// helper for both decompile sites so they cannot drift about what
-    /// counts as compiled. Reinitialising and breeding are not decompiles.
-    fn note_compiled(&mut self) {
+    /// counts as compiled. Breeding is not a decompile; a Holding Cell's success is.
+    pub(crate) fn note_compiled(&mut self) {
         self.note_deed(crate::contracts::Deed::Tamed);
         self.world
             .resource_mut::<crate::resources::RunTally>()

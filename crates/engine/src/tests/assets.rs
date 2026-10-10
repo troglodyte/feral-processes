@@ -1846,10 +1846,10 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 18,
+        checked, 19,
         "the plan's table named 15 machines, the Cache Tap is the \
-         sixteenth, the Teardown Rig the seventeenth and the Decoy Bench the \
-         eighteenth; if that count \
+         sixteenth, the Teardown Rig the seventeenth, the Decoy Bench the \
+         eighteenth and the Holding Cell the nineteenth; if that count \
          changed, change this deliberately rather than letting the check go \
          vacuous"
     );

@@ -39,8 +39,11 @@ draw from. The Gear Puller quotes the odds per item, and those odds are the ones
 rolls — the screen and the pull read the same figure.
 
 A record does not have to be spent on a tool at all. Forge a Reinitialization Protocol at the
-Fabricator and spend it on the record instead — it always works, no roll, and the body boots back
-up and joins your roster at level 1. A boss's record will not reinitialize.
+Fabricator, stand beside a Holding Cell and spend it on the record: the program boots up as a
+prisoner in the pen, level 1. Post a worker to the cell as its warden and it makes a decompile
+attempt at intervals, each failure making the next likelier. A success joins it to your roster. If
+every attempt fails it breaks down, and the cell is left holding a little salvage. A boss's record
+will not reinitialize.
 
 A Compiler changes both halves of that. Standing one anywhere makes every extraction quicker, and
 every tier you upgrade it past the first makes the same tool draw more out of the same body — more

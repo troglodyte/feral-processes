@@ -775,3 +775,40 @@ fn an_expired_cell_returns_the_record() {
         game.tick();
     });
 }
+
+/// A mod that pulled an ability out from under an old kill: the record's
+/// `carried` still names it, but `AbilityDb` no longer resolves it, and the
+/// pin must not hand the body a `Routines` entry nothing expects to fail.
+#[test]
+fn a_pin_drops_a_carried_routine_ability_db_no_longer_resolves() {
+    let (mut game, cell) = base_with_a_cell();
+    let player = game.player_entity();
+    let stale = "not_a_shipped_ability".to_string();
+    assert!(game.world.resource::<AbilityDb>().get(&stale).is_none());
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![DownedProgram {
+        carried: Some(stale.clone()),
+        ..record(MID_SPECIES, Rarity::Ordinary)
+    }];
+
+    game.jail_program(0).unwrap();
+
+    let body = the_prisoner(&game, cell);
+    assert!(!game.world.get::<Routines>(body).unwrap().0.contains(&stale));
+}
+
+/// A record with no carried routine pins an **empty** list rather than
+/// falling through to a roll, which would spend a `GameRng` draw. Checked on
+/// the stream: the pin draws only `roll_potential`.
+#[test]
+fn a_pin_with_no_carried_routine_draws_nothing_for_routines() {
+    use rand::RngExt;
+    let (mut baseline, _) = base_with_a_cell();
+    let _ = baseline.roll_potential();
+    let after_baseline: u64 = baseline.world.resource_mut::<GameRng>().0.random();
+
+    let (mut game, _) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    let after_pin: u64 = game.world.resource_mut::<GameRng>().0.random();
+
+    assert_eq!(after_baseline, after_pin);
+}

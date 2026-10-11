@@ -15,6 +15,7 @@ pub(super) struct Head<'a> {
     pub(super) tabs: Tabs<'a>,
     /// STATS alone carries a call to act.
     pub(super) call: Option<CallToAct>,
+    pub(super) level_up: Option<bool>,
 }
 
 /// Paints the frame, rail and band into `frame` and returns where the rest
@@ -61,6 +62,7 @@ pub(super) fn paint_chrome(
             tags: head.tags,
             tabs: head.tabs,
             call: head.call,
+            level_up: head.level_up,
         },
         painter,
         m,

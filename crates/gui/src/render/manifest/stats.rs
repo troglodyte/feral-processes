@@ -99,6 +99,7 @@ pub(super) fn paint_stats(frame: Rect, f: &StatsFace, painter: &Painter, m: &Met
                 Tabs::Faces(&f.faces, 0)
             },
             call: f.call,
+            level_up: f.keys.level_up,
         },
         painter,
         m,

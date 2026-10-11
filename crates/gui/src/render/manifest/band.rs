@@ -25,6 +25,8 @@ pub(super) struct BandHead<'a> {
     pub(super) tags: &'a [String],
     pub(super) tabs: Tabs<'a>,
     pub(super) call: Option<CallToAct>,
+    /// `App::level_up_reopenable`: `L` is named only when it does something.
+    pub(super) level_up: Option<bool>,
 }
 
 /// What holds the right end of line 1.
@@ -54,11 +56,16 @@ impl Tabs<'_> {
 
 /// The call to act as the band words it: the count, then the key that acts.
 ///
-/// `Idle` has no key because nothing on the sheet fixes it; the rail's `!`
-/// and this line say the same thing as `Game::attention`'s row for it.
-pub(super) fn call_text(call: CallToAct) -> String {
+/// `Idle` has no key because nothing on the sheet fixes it. `L` is named
+/// only when `level_up` is `Some(true)`: after a load, or for a
+/// profile-granted perk, there is no level-up report to reopen and the key
+/// does nothing.
+pub(super) fn call_text(call: CallToAct, level_up: Option<bool>) -> String {
     match call {
-        CallToAct::PerkPoints(n) => format!("▸ {n} perk pts  L level up"),
+        CallToAct::PerkPoints(n) if level_up == Some(true) => {
+            format!("▸ {n} perk pts  L level up")
+        }
+        CallToAct::PerkPoints(n) => format!("▸ {n} perk pts to spend"),
         CallToAct::DevPoints(n) => format!("▸ {n} dev points  S spend"),
         CallToAct::Idle => "▸ idle".to_string(),
     }
@@ -125,7 +132,7 @@ pub(super) fn draw_band(rect: Rect, head: &BandHead, painter: &Painter, m: &Metr
     draw_name(head, text_x, right - tabs_w, line1, painter, m);
 
     // And the call to act holds the right end of line 2.
-    let call = head.call.map(call_text);
+    let call = head.call.map(|c| call_text(c, head.level_up));
     let call_w = call.as_ref().map_or(0.0, |text| {
         let w = painter.measure_ui_advance(text, m.font_size);
         painter.ui_bold(text, right - w, line2, m.font_size, hud::palette::ATTENTION);
@@ -262,14 +269,23 @@ mod tests {
     #[test]
     fn the_call_to_act_names_its_count_and_its_key() {
         assert_eq!(
-            call_text(CallToAct::PerkPoints(5)),
+            call_text(CallToAct::PerkPoints(5), Some(true)),
             "▸ 5 perk pts  L level up"
         );
         assert_eq!(
-            call_text(CallToAct::DevPoints(2)),
+            call_text(CallToAct::DevPoints(2), None),
             "▸ 2 dev points  S spend"
         );
-        assert_eq!(call_text(CallToAct::Idle), "▸ idle");
+        assert_eq!(call_text(CallToAct::Idle, None), "▸ idle");
+    }
+
+    #[test]
+    fn a_perk_call_names_l_only_when_l_does_something() {
+        for level_up in [None, Some(false)] {
+            let text = call_text(CallToAct::PerkPoints(5), level_up);
+            assert!(!text.contains("L level up"), "{text}");
+            assert!(text.contains("5 perk pts"), "{text}");
+        }
     }
 
     #[test]

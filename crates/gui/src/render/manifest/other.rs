@@ -91,6 +91,7 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
             tags: &f.tags,
             tabs: f.body.tabs(&f.faces),
             call: None,
+            level_up: None,
         },
         painter,
         m,

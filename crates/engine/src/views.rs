@@ -1947,13 +1947,14 @@ pub struct AttentionRow {
 }
 
 /// What a manifest subject is asking of the player, derived by
-/// `Game::call_to_act` -- the same per-program function `Game::attention`
-/// counts its `ProgramPoints` row from, so the rail's `!` and the HUD badge
-/// cannot disagree.
+/// `Game::call_to_act` -- the same derivation `Game::attention` counts its
+/// point rows from, so the rail's `!` and the HUD badge cannot disagree.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CallToAct {
     /// The player has unspent perk points.
     PerkPoints(u32),
+    /// The player has banked stat points, spent with `S` on the perks screen.
+    StatPoints(u32),
     /// A program is holding banked attribute points for the player to spend.
     DevPoints(u32),
     /// A staff program with no post and no errand.

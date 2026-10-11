@@ -164,6 +164,46 @@ fn a_player_with_unspent_perk_points_is_flagged() {
 }
 
 #[test]
+fn a_player_with_only_stat_points_is_flagged_and_perk_points_lead_when_both_are_banked() {
+    let mut game = game();
+    let player = game.player_entity();
+    game.world.get_mut::<StatPoints>(player).unwrap().0 = 4;
+    assert_eq!(game.call_to_act(player), Some(CallToAct::StatPoints(4)));
+    game.world.get_mut::<Perks>(player).unwrap().points = 2;
+    assert_eq!(game.call_to_act(player), Some(CallToAct::PerkPoints(2)));
+    assert_eq!(
+        game.calls_to_act(player),
+        [CallToAct::PerkPoints(2), CallToAct::StatPoints(4)]
+    );
+}
+
+#[test]
+fn attention_reads_both_point_rows_from_the_calls_to_act() {
+    let mut game = game();
+    let player = game.player_entity();
+    game.world.get_mut::<StatPoints>(player).unwrap().0 = 4;
+    game.world.get_mut::<Perks>(player).unwrap().points = 2;
+    let texts: Vec<String> = game
+        .attention()
+        .into_iter()
+        .filter(|r| {
+            matches!(
+                r.kind,
+                AttentionKind::PerkPoints | AttentionKind::StatPoints
+            )
+        })
+        .map(|r| r.text)
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            "2 perk points unspent",
+            "4 stat points unspent (S on the perks screen)"
+        ]
+    );
+}
+
+#[test]
 fn the_roster_rows_follow_the_rail_with_party_and_call_to_act_filled() {
     let mut game = game();
     let a = named_program(&mut game, "a");

@@ -66,6 +66,7 @@ pub(super) fn call_text(call: CallToAct, level_up: Option<bool>) -> String {
             format!("▸ {n} perk pts  L level up")
         }
         CallToAct::PerkPoints(n) => format!("▸ {n} perk pts to spend"),
+        CallToAct::StatPoints(n) => format!("▸ {n} stat pts  S on the perks screen"),
         CallToAct::DevPoints(n) => format!("▸ {n} dev points  S spend"),
         CallToAct::Idle => "▸ idle".to_string(),
     }
@@ -275,6 +276,10 @@ mod tests {
         assert_eq!(
             call_text(CallToAct::DevPoints(2), None),
             "▸ 2 dev points  S spend"
+        );
+        assert_eq!(
+            call_text(CallToAct::StatPoints(3), None),
+            "▸ 3 stat pts  S on the perks screen"
         );
         assert_eq!(call_text(CallToAct::Idle, None), "▸ idle");
     }

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.12
+
+**The level cap now rises by 10 levels per sector instead of 11, so sector 2 caps at 11, sector 5 at 41 and sector 10 at 91.** Sector 1 still caps at 6. Each sector's level band is narrower, so gear matters sooner and levelling alone clears fewer sectors. From sector 11 on there is almost no room to spare: by the game's own projection a fully geared party at the cap of 111 is two levels short of sector 12, a deliberate tradeoff. A character already above the new cap keeps their level and stops gaining more until the next sector.
+
 ## 0.18.11
 
 **Battle maps now carry derelict set pieces: conduit walls, server racks, hull plates, fallen pylons, a crashed drone, coolant tanks and power cells, with scattered cables, glass and dead screens as decoration.** They block movement and sight and give cover, and most can be broken: aim a swing at one, or catch it in a routine, and it turns to rubble that slows movement but no longer blocks. Power cells and coolant tanks explode when destroyed, hurting every body in the blast on either side, and one explosion can set off the next, up to three in a row. Hostiles will smash a wall that keeps them from you and will set off an explosive beside your party; your companions on auto-attack never set one off where it would catch your own side. The aim readout names a prop with its condition and marks it explosive. Pieces and set pieces are files in `assets/battle-props/`, each with a 16x16 sprite that can be redrawn in the Sprite Forge or replaced by a mod. Siege boards are unchanged.

@@ -203,6 +203,22 @@
   `crowded`'s sense, so it steps off on its own next beat — pinned by its own
   test, since that is the half a save written before the fix depends on.
 
+- **A body on a footprint is moved aside, and there are exactly two places
+  that do it.** `placement_refusal` used to refuse "One of your programs is
+  standing there" — and the deploy popup is drawn over 88% of the screen
+  with the clock stopped, so the player was refused over a body they could
+  not see, which read as a program merely *heading* there. Wander positions
+  are never ahead of the body: every walker writes `Position` one cell per
+  step. `Game::displace_bodies_from` runs in `spawn_build_site`, so a deploy
+  and a rebuild share it, and again in `raise_one_tick`'s `New` arm, because
+  a filed site is still walkable — a hauler passes through, a radius walker
+  arrives on it — and only the raise turns it into a building. The wander
+  also declines `build_site_tiles`, so idle bodies do not loiter there. Only
+  `Position` moves (plus a half-paid `Squeezing`): walkers re-derive the next
+  step from where they stand. With no free floor the body is left in place
+  and the build files anyway; `step_cost` admits a body's own tile, so it
+  can still walk off.
+
 - **Three of the five classes do something at a post, each in a different
   system.** The Leech bonus rides the **scaled** branch only, which is why
   `CycleModifiers` carries the *class* rather than a finished bonus. The

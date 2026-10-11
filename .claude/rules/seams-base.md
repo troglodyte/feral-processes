@@ -204,8 +204,12 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
   the ring it replaced was absolute.
 - **A body may cross a structure's own floor but never stop on it**, the
-  wander declining `Game::structure_tiles` where `blocked_tiles` still emits
-  anchors alone.
+  wander declining `Game::structure_tiles` and `Game::build_site_tiles`
+  where `blocked_tiles` still emits anchors alone.
+- **A body on a footprint is moved, never a refusal**: `placement_refusal`
+  has no body check, and `Game::displace_bodies_from` runs in
+  `spawn_build_site` (deploy and rebuild alike) and again in
+  `raise_one_tick`'s `New` arm.
 - **A body is squeezed past and never stopped on** — `hauling::blocked_tiles`
   takes the structures and the bodies as two iterators into `Occupancy`, a
   posted walk crosses a body's cell for `SQUEEZE_EXTRA_TICKS` more and never

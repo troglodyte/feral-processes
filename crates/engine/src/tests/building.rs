@@ -4546,16 +4546,13 @@ fn a_full_store_is_told_what_a_demolished_rack_could_not_return() {
     );
 }
 
-/// **A deploy is refused onto a cell a program is standing in.**
-/// `place_structure` checked terrain, other structures and pending requests
-/// and never whether a body was there, so a machine went up on top of a
-/// wandering program — the dev save this was found in had seven staff
-/// standing *on* a row of Sandboxes. Its own refusal rather than one folded
-/// into the blocking-structure line above it, because the two leave the
-/// player different errands: one cell needs demolishing, the other needs a
-/// moment.
+/// **A deploy onto a cell a program is standing in files, and moves the
+/// program aside.** Idle staff wander the base, so a refusal that asked the
+/// player to wait for a body to step off was a refusal against something
+/// they could not see from behind the deploy popup. The body is moved to the
+/// nearest free laid floor instead.
 #[test]
-fn a_deploy_is_refused_onto_a_standing_program() {
+fn a_deploy_onto_a_standing_program_files_and_moves_it_aside() {
     let mut game = Game::new(927, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
@@ -4563,15 +4560,114 @@ fn a_deploy_is_refused_onto_a_standing_program() {
     let worker = spawn_tamed(&mut game, 10, 3);
     *game.world.get_mut::<Position>(worker).unwrap() = Position { x: 3, y: 0 };
 
-    let err = from_inside_the_base(&mut game, |game| {
+    from_inside_the_base(&mut game, |game| {
         game.place_structure("depot", 3, 0, None)
-            .expect_err("a program is standing on that cell")
+            .expect("a standing program no longer refuses a deploy")
     });
-    assert!(err.contains("standing there"), "unexpected error: {err}");
 
-    // The cell beside it is free, so the refusal is about the body and not
-    // about the ground.
-    place_now(&mut game, "depot", 3, 1).expect("the next cell along is clear");
+    assert!(
+        game.build_site_at(3, 0).is_some(),
+        "the request is filed on the cell the program stood in"
+    );
+    let moved = *game.world.get::<Position>(worker).unwrap();
+    assert_ne!((moved.x, moved.y), (3, 0), "the program was moved off it");
+    // `place_structure` ticks once after filing, so the moved body may have
+    // taken one wander step on from the neighbour it was put on.
+    assert!(
+        (moved.x - 3).abs().max(moved.y.abs()) <= 2,
+        "to a cell beside it, not across the base: {moved:?}"
+    );
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(moved.x, moved.y),
+        "onto laid floor: {moved:?}"
+    );
+}
+
+/// **A body anywhere in a wide footprint is moved outside the whole of it**,
+/// not merely off the anchor — a program left on a 2x2's floor cell would be
+/// standing inside the building once it is raised.
+#[test]
+fn a_deploy_moves_a_body_off_every_cell_of_a_wide_footprint() {
+    let mut game = base_with_footprint_fixture(931, "wide_fixture");
+    let worker = spawn_tamed(&mut game, 10, 3);
+    // The anchor is (3, 0); (4, 1) is the 2x2's far corner.
+    *game.world.get_mut::<Position>(worker).unwrap() = Position { x: 4, y: 1 };
+
+    from_inside_the_base(&mut game, |game| file_build(game, "wide_fixture", 3, 0))
+        .expect("a standing program no longer refuses a deploy");
+
+    let moved = *game.world.get::<Position>(worker).unwrap();
+    let footprint = crate::tactical::footprint_cells_at((3, 0), 2);
+    assert!(
+        !footprint.contains(&(moved.x, moved.y)),
+        "off every cell of the footprint, not just the anchor: {moved:?}"
+    );
+}
+
+/// **A body that wandered onto a filed site is moved aside when the crew
+/// raises it**, so nothing ends up standing inside a finished structure.
+/// Pinned back onto the site before every tick, so the raise is the only
+/// thing that can have moved it at the end.
+#[test]
+fn a_body_on_a_filed_site_is_moved_aside_when_the_crew_raises_it() {
+    let mut game = Game::new(933, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    spawn_tamed(&mut game, 500, 3);
+    file_build(&mut game, "mining_node", 3, 0).unwrap();
+    let sitter = spawn_tamed(&mut game, 500, 3);
+
+    let mut raised = false;
+    for _ in 0..400 {
+        if find_structure_by_kind(&mut game, "mining_node").is_some() {
+            raised = true;
+            break;
+        }
+        *game.world.get_mut::<Position>(sitter).unwrap() = Position { x: 3, y: 0 };
+        game.tick();
+    }
+
+    assert!(raised, "the crew raises the request");
+    let at = *game.world.get::<Position>(sitter).unwrap();
+    assert_ne!(
+        (at.x, at.y),
+        (3, 0),
+        "the raise moved the body off the structure it stood up"
+    );
+}
+
+/// **Idle wander never stops on a filed build site**, for the reason it
+/// never stops on a standing structure's footprint: it is ground already
+/// spoken for. Put back beside the site every beat, so across 200 beats the
+/// wander is offered the site cell many times over.
+#[test]
+fn idle_wander_never_stops_on_a_filed_build_site() {
+    let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    file_build(&mut game, "depot", 3, 0).unwrap();
+    let wanderer = spawn_tamed(&mut game, 500, 3);
+    *game.world.get_mut::<Position>(wanderer).unwrap() = Position { x: 2, y: 0 };
+    let amenities = game.amenities_for_test();
+    let bays = game.repair_bays();
+
+    for beat in 0..200u64 {
+        game.world
+            .resource_mut::<crate::resources::GameClock>()
+            .tick = beat * crate::tuning::IDLE_STAFF_STEP_TICKS;
+        *game.world.get_mut::<Position>(wanderer).unwrap() = Position { x: 2, y: 0 };
+        game.drift_idle_staff_for_test(&[wanderer], &amenities, &bays);
+        let at = *game.world.get::<Position>(wanderer).unwrap();
+        assert_ne!(
+            (at.x, at.y),
+            (3, 0),
+            "beat {beat}: the wander stopped on the site"
+        );
+    }
 }
 
 // --- Footprint (`StructureDef::footprint`/`studies`) ---

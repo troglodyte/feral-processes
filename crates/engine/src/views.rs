@@ -3694,8 +3694,9 @@ pub struct DepotFilterRow {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerClassView {
     pub name: String,
-    /// One term per non-neutral axis, `classes::format_affinity_bonuses`.
-    pub bonuses: String,
+    /// One `(axis label, multiplier)` per non-neutral axis,
+    /// `classes::affinity_bonuses`.
+    pub bonuses: Vec<(String, f32)>,
 }
 
 /// One class offered on the creation screen — see `Game::class_rows`.

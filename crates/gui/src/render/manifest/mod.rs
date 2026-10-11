@@ -1814,7 +1814,7 @@ mod tests {
             // a `None` fixture would measure a page the player never sees.
             class: Some(feral_processes_engine::PlayerClassView {
                 name: "Decompiler".to_string(),
-                bonuses: "Drain x1.25  Damage x0.85".to_string(),
+                bonuses: vec![("Drain".to_string(), 1.25), ("Damage".to_string(), 0.85)],
             }),
         }
     }

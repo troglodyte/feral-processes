@@ -151,17 +151,11 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
         sections.push(Section::ledger(
             format!("CLASS · {}", class.name),
             LedgerColumn::Growth,
-            // `bonuses` is `classes::format_affinity_bonuses`: one
-            // `<axis> x<mult>` term per non-neutral axis, two spaces apart.
             section_rows(
                 class
                     .bonuses
-                    .split("  ")
-                    .filter(|t| !t.is_empty())
-                    .map(|term| match term.rsplit_once(' ') {
-                        Some((axis, mult)) => stat(axis, mult),
-                        None => stat(term, ""),
-                    })
+                    .iter()
+                    .map(|(axis, mult)| stat(axis, format!("x{mult:.2}")))
                     .collect(),
             ),
         ));

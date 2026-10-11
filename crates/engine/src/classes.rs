@@ -345,21 +345,21 @@ fn spike_label(class: PlayerClass) -> Option<&'static str> {
     }
 }
 
-/// What a class's spread is *worth*, one term per non-neutral axis:
-/// `"Damage x1.25  Heal x0.75"`.
+/// What a class's spread is *worth*, one `(axis label, multiplier)` per
+/// non-neutral axis.
 ///
-/// The stat-sheet length. `format_trade` below is the picking length — the
-/// same axes as prose and with no magnitudes, which is what a catalogue row
-/// wants and what a stat sheet does not. Both read `Affinities::non_neutral`,
-/// which is the one definition of "an axis this class has an opinion about",
-/// so the two lengths cannot disagree about *which* axes they name.
-pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
+/// The stat-sheet length: structured so the sheet formats the figure for its
+/// own column. `format_trade` below is the picking length -- the same axes
+/// as prose and with no magnitudes, which is what a catalogue row wants and
+/// what a stat sheet does not. Both read `Affinities::non_neutral`, which is
+/// the one definition of "an axis this class has an opinion about", so the
+/// two lengths cannot disagree about *which* axes they name.
+pub fn affinity_bonuses(affinities: &Affinities) -> Vec<(String, f32)> {
     affinities
         .non_neutral()
         .into_iter()
-        .map(|(kind, value)| format!("{} x{value:.2}", kind.label()))
-        .collect::<Vec<_>>()
-        .join("  ")
+        .map(|(kind, value)| (kind.label().to_string(), value))
+        .collect()
 }
 
 /// What a class *trades*, as a sentence: `"Bonus to damage at the expense
@@ -372,7 +372,7 @@ pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
 /// class step is the second screen of a new game.
 ///
 /// Magnitudes are deliberately absent: the picker is choosing a *shape*,
-/// and `format_affinity_bonuses` is where the numbers are read back once
+/// and `affinity_bonuses` is where the numbers are read back once
 /// the run exists.
 fn format_trade(class: PlayerClass, affinities: &Affinities) -> String {
     let (up, down): (Vec<_>, Vec<_>) = affinities
@@ -477,7 +477,7 @@ impl Game {
         let def = self.world.resource::<ClassDb>().get(class)?;
         Some(views::PlayerClassView {
             name: def.name.clone(),
-            bonuses: format_affinity_bonuses(&def.affinities),
+            bonuses: affinity_bonuses(&def.affinities),
         })
     }
 

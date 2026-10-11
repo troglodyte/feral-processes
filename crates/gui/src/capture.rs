@@ -28,8 +28,20 @@ pub struct Capture {
     pub path: PathBuf,
 }
 
+/// `FERAL_DEV_CAPTURE_SIZE=1440x900` takes the capture at another size, for
+/// checking a layout above the 1280x720 floor. Unset, or anything that is
+/// not `WxH`, is the floor itself.
 pub(crate) fn resolution() -> WindowResolution {
-    WindowResolution::new(CAPTURE_WIDTH, CAPTURE_HEIGHT).with_scale_factor_override(1.0)
+    let (w, h) = std::env::var("FERAL_DEV_CAPTURE_SIZE")
+        .ok()
+        .and_then(|v| parse_size(&v))
+        .unwrap_or((CAPTURE_WIDTH, CAPTURE_HEIGHT));
+    WindowResolution::new(w, h).with_scale_factor_override(1.0)
+}
+
+fn parse_size(text: &str) -> Option<(u32, u32)> {
+    let (w, h) = text.split_once('x')?;
+    Some((w.parse().ok()?, h.parse().ok()?))
 }
 
 pub(crate) fn install(app: &mut bevy::app::App, capture: Capture) {
@@ -66,4 +78,16 @@ fn take_after_settling(mut commands: Commands, capture: Res<Capture>, mut frames
             }
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_size;
+
+    #[test]
+    fn a_capture_size_is_width_x_height_or_nothing() {
+        assert_eq!(parse_size("1440x900"), Some((1440, 900)));
+        assert_eq!(parse_size("1440"), None);
+        assert_eq!(parse_size("wide x tall"), None);
+    }
 }

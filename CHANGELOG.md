@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.18
+
+**A program's manifest now opens straight onto you, with the whole roster in a rail down the side.** The separate picker is gone. The rail lists you, then your party in slot order, then everyone else A–Z, and puts a `!` on anyone who needs you: unspent perk or stat points, banked points, or an idle program. ↑/↓ page like ←/→, a digit or lowercase letter jumps to that row, and watching moved to `W`.
+
+**The STATS page is a summary band and three columns, and each fighting figure shows where it ranks on your roster.** A band at the top names what needs doing and the key that does it. Damage, attack, mitigation and power carry a place (1st, 3rd…) and a pip bar, and so do a program's potential and work aptitude among the other programs. Long rows wrap instead of being shortened. SCORE, SOCIAL, TALK and the dossier sit in the same frame, and the dossier is no longer a separate popup.
+
 ## 0.18.17
 
 **A new base now starts 9 cells tall again, keeping its 19-cell width.** The last release meant to make the opening floor wider but made it taller as well. Bases in existing saves keep the floor they already have.

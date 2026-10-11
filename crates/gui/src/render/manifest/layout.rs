@@ -157,7 +157,7 @@ pub(in crate::render) fn section_rows_capped(
 
 /// The manifest's boxes. `sections` is index-aligned with the slice passed to
 /// `manifest_layout`.
-pub(in crate::render) struct ManifestLayout {
+pub(in crate::render) struct BoxLayout {
     pub(in crate::render) frame: Rect,
     pub(in crate::render) header: Rect,
     pub(in crate::render) meters: Vec<Rect>,
@@ -176,16 +176,21 @@ const FRAME_H_PCT: f32 = 0.90;
 /// own — which the 720px budget needs it not to.
 const HEADER_ROWS: f32 = 2.0;
 
+/// The sheet's frame, centred in the window.
+pub(in crate::render) fn frame_rect(screen_w: f32, screen_h: f32) -> Rect {
+    let w = screen_w * FRAME_W_PCT;
+    let h = screen_h * FRAME_H_PCT;
+    Rect::new((screen_w - w) / 2.0, (screen_h - h) / 2.0, w, h)
+}
+
 pub(in crate::render) fn manifest_layout(
     screen_w: f32,
     screen_h: f32,
     meters: usize,
     sections: &[Section],
     m: &Metrics,
-) -> ManifestLayout {
-    let w = screen_w * FRAME_W_PCT;
-    let h = screen_h * FRAME_H_PCT;
-    let frame = Rect::new((screen_w - w) / 2.0, (screen_h - h) / 2.0, w, h);
+) -> BoxLayout {
+    let frame = frame_rect(screen_w, screen_h);
 
     let inner_x = frame.x + m.pad;
     let inner_w = frame.w - m.pad * 2.0;
@@ -257,7 +262,7 @@ pub(in crate::render) fn manifest_layout(
         band_y += box_h + m.gap;
     }
 
-    ManifestLayout {
+    BoxLayout {
         frame,
         header,
         meters: meter_rects,
@@ -345,6 +350,272 @@ pub(in crate::render) fn section_row_h(m: &Metrics) -> f32 {
 /// above and below the rows.
 fn section_height(section: &Section, m: &Metrics) -> f32 {
     m.line_height + section_row_h(m) * section.rows.len() as f32 + m.gap * 2.0
+}
+
+/// The full roster rail's width, in cells: shortcut, glyph, name, `Lv N`
+/// and the `!` mark.
+const RAIL_FULL_CELLS: f32 = 30.0;
+/// The collapsed rail's width, in cells: the glyph and the `!` mark.
+const RAIL_COLLAPSED_CELLS: f32 = 4.0;
+/// The narrowest a ledger column may be for the rail to draw full. Below it
+/// a label and its value no longer sit beside each other with a compare
+/// cell, so the rail gives its width back instead.
+const LEDGER_MIN_CELLS: f32 = 32.0;
+const LEDGER_COLUMNS: usize = 3;
+
+/// Which kind of page the frame holds. Only STATS has a vitals line and may
+/// draw the rail full; SCORE, SOCIAL, TALK and the dossier are `Other`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+pub(in crate::render) enum Face {
+    Stats,
+    Other,
+}
+
+/// The roster rail down the sheet's left edge. Its divider is drawn on
+/// `rect`'s right edge.
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+pub(in crate::render) struct RailGeom {
+    /// The 30-cell rail with names, or the 4-cell glyph column.
+    pub(in crate::render) full: bool,
+    pub(in crate::render) rect: Rect,
+    /// The `ROSTER` title row. A collapsed rail has no room for one.
+    pub(in crate::render) title: Option<Rect>,
+    /// Where the subject rows, the party rule and the `↑`/`↓ N more` rows go.
+    pub(in crate::render) rows: Rect,
+    pub(in crate::render) row_h: f32,
+}
+
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+impl RailGeom {
+    /// How many rail rows `rows` holds, the overflow rows included.
+    pub(in crate::render) fn fits(&self) -> usize {
+        (self.rows.h / self.row_h).floor().max(0.0) as usize
+    }
+}
+
+/// Where every part of the redesigned sheet goes. Pure over `Metrics` and
+/// the caller's measured `char_w` (see `hud::layout` for why that is a
+/// parameter), so the census tests run without a window.
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+pub(in crate::render) struct ManifestLayout {
+    pub(in crate::render) frame: Rect,
+    /// `None` for a wild subject, which is not on the roster.
+    pub(in crate::render) rail: Option<RailGeom>,
+    /// The summary band: name and tier, tags, face tabs and call to act.
+    pub(in crate::render) band: Rect,
+    /// The vitals line, STATS only. A divider rule sits a `gap` above and
+    /// below it.
+    pub(in crate::render) vitals: Option<Rect>,
+    /// FIGHT, GROWTH and DUTY/RUN: equal widths, `pad × 2` apart.
+    pub(in crate::render) ledger: [Rect; LEDGER_COLUMNS],
+    /// The full-width bands below the ledger (PARTY, LATELY, TOTAL). Placed
+    /// before the ledger is given its height, so the ledger is what yields.
+    pub(in crate::render) bands: Rect,
+    /// A divider rule sits `gap / 2` above it.
+    pub(in crate::render) keybar: Rect,
+}
+
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+impl ManifestLayout {
+    /// `rail_rows` is how many rows the rail would draw (subjects plus the
+    /// party rule); zero means a wild subject and no rail. `band_rows` is the
+    /// bands' row count under their one subhead; zero means no bands.
+    pub(in crate::render) fn new(
+        frame: Rect,
+        m: &Metrics,
+        char_w: f32,
+        face: Face,
+        rail_rows: usize,
+        band_rows: usize,
+    ) -> ManifestLayout {
+        let inner = Rect::new(
+            frame.x + m.pad,
+            frame.y + m.pad,
+            frame.w - m.pad * 2.0,
+            frame.h - m.pad * 2.0,
+        );
+        let keybar = Rect::new(
+            inner.x,
+            inner.y + inner.h - m.line_height,
+            inner.w,
+            m.line_height,
+        );
+        let body_bottom = keybar.y - m.gap;
+        let row_h = section_row_h(m);
+
+        let full = face == Face::Stats
+            && ledger_col_w(inner.w - RAIL_FULL_CELLS * char_w - m.pad, m)
+                >= LEDGER_MIN_CELLS * char_w;
+        let rail = (rail_rows > 0).then(|| {
+            let cells = if full {
+                RAIL_FULL_CELLS
+            } else {
+                RAIL_COLLAPSED_CELLS
+            };
+            let rect = Rect::new(inner.x, inner.y, cells * char_w, body_bottom - inner.y);
+            let title = full.then(|| Rect::new(rect.x, rect.y, rect.w, m.line_height));
+            let rows_y = title.map_or(rect.y, |t| t.y + t.h);
+            RailGeom {
+                full,
+                rect,
+                title,
+                rows: Rect::new(rect.x, rows_y, rect.w, body_bottom - rows_y),
+                row_h,
+            }
+        });
+
+        let main_x = rail
+            .as_ref()
+            .map_or(inner.x, |r| r.rect.x + r.rect.w + m.pad);
+        let main_w = inner.x + inner.w - main_x;
+        let band = Rect::new(main_x, inner.y, main_w, m.line_height * HEADER_ROWS);
+        let mut y = band.y + band.h + m.gap;
+        let vitals = (face == Face::Stats).then(|| {
+            let r = Rect::new(main_x, y, main_w, m.line_height);
+            y += r.h + m.gap;
+            r
+        });
+
+        let bands_h = if band_rows == 0 {
+            0.0
+        } else {
+            m.line_height + band_rows as f32 * row_h
+        };
+        let bands = Rect::new(main_x, body_bottom - bands_h, main_w, bands_h);
+        let ledger_bottom = if band_rows == 0 {
+            body_bottom
+        } else {
+            bands.y - m.gap
+        };
+        let ledger_h = (ledger_bottom - y).max(0.0);
+        let col_w = ledger_col_w(main_w, m);
+        let ledger = std::array::from_fn(|i| {
+            Rect::new(
+                main_x + i as f32 * (col_w + ledger_gap(m)),
+                y,
+                col_w,
+                ledger_h,
+            )
+        });
+
+        ManifestLayout {
+            frame,
+            rail,
+            band,
+            vitals,
+            ledger,
+            bands,
+            keybar,
+        }
+    }
+}
+
+/// The space between two ledger columns.
+pub(in crate::render) fn ledger_gap(m: &Metrics) -> f32 {
+    m.pad * 2.0
+}
+
+/// One ledger column's width when the three share `main_w`.
+fn ledger_col_w(main_w: f32, m: &Metrics) -> f32 {
+    (main_w - ledger_gap(m) * (LEDGER_COLUMNS - 1) as f32) / LEDGER_COLUMNS as f32
+}
+
+/// Which slice of the rail is drawn, and how many rows each overflow row
+/// reports.
+#[derive(Debug, PartialEq, Eq)]
+pub(in crate::render) struct RailWindow {
+    pub(in crate::render) start: usize,
+    pub(in crate::render) end: usize,
+    /// Rows cut above the window, reported by a `↑ N more` row when not zero.
+    pub(in crate::render) above: usize,
+    /// Rows cut below the window, reported by a `↓ N more` row when not zero.
+    pub(in crate::render) below: usize,
+}
+
+/// The rows `start..end` of a `len`-row rail that fit `fits` rows with the
+/// `selected` row among them.
+///
+/// **`fitting_rows`' rule:** an overflow row costs one of the `fits` rows,
+/// and is reserved only when something is cut. The window is the topmost one
+/// holding the selection, so moving down the rail scrolls it only once the
+/// selection reaches its last row. With fewer than three rows there is no
+/// room for both overflow rows and the selection, so the selection alone is
+/// returned.
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+pub(in crate::render) fn rail_window(len: usize, selected: usize, fits: usize) -> RailWindow {
+    let window = |start: usize, end: usize| RailWindow {
+        start,
+        end,
+        above: start,
+        below: len - end,
+    };
+    if len <= fits {
+        return window(0, len);
+    }
+    let selected = selected.min(len - 1);
+    if fits < 3 {
+        return window(selected, selected + 1);
+    }
+    // One row goes to `↓ N more`.
+    if selected < fits - 1 {
+        return window(0, fits - 1);
+    }
+    // One row goes to `↑ N more`.
+    if selected >= len - (fits - 1) {
+        return window(len - (fits - 1), len);
+    }
+    // Both overflow rows, and the selection on the window's last row.
+    window(selected + 3 - fits, selected + 1)
+}
+
+/// A ledger section's height: its subhead (and the rule under it), its
+/// rows, and a gap before the next section.
+pub(in crate::render) fn ledger_section_h(rows: usize, m: &Metrics) -> f32 {
+    m.line_height + rows as f32 * section_row_h(m) + m.gap
+}
+
+/// What one ledger column keeps.
+#[derive(Debug, PartialEq, Eq)]
+pub(in crate::render) struct ColumnFit {
+    /// The leading sections drawn.
+    pub(in crate::render) kept: usize,
+    /// The trailing sections cut, reported in one `+N more` row when not
+    /// zero.
+    pub(in crate::render) dropped: usize,
+}
+
+/// How many of a column's sections fit `height`, given each one's row count
+/// after its own cap (`section_rows_capped`).
+///
+/// Whole trailing sections go, never a section's tail, so a section either
+/// reads complete or is counted. **`fitting_rows`' rule:** the `+N more` row
+/// is reserved only when something is cut. The bands below the ledger are
+/// not this function's business: `ManifestLayout` places them first.
+#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
+pub(in crate::render) fn fit_column(rows: &[usize], height: f32, m: &Metrics) -> ColumnFit {
+    let total: f32 = rows.iter().map(|&r| ledger_section_h(r, m)).sum();
+    if total <= height {
+        return ColumnFit {
+            kept: rows.len(),
+            dropped: 0,
+        };
+    }
+    let budget = height - section_row_h(m);
+    let mut used = 0.0;
+    let mut kept = 0;
+    for &r in rows {
+        let h = ledger_section_h(r, m);
+        if used + h > budget {
+            break;
+        }
+        used += h;
+        kept += 1;
+    }
+    ColumnFit {
+        kept,
+        dropped: rows.len() - kept,
+    }
 }
 
 #[cfg(test)]
@@ -754,5 +1025,235 @@ mod tests {
             panic!("the trailing row is a note");
         };
         assert_eq!(last, "+4 more");
+    }
+
+    /// The UI face's measured advance at `m`'s body size, as the drawers will
+    /// pass it.
+    fn char_w(m: &Metrics) -> f32 {
+        crate::paint::with_painter(|p| p.measure_ui_advance("M", m.font_size)).0
+    }
+
+    /// The tallest bands a sheet carries: the PARTY band's column header,
+    /// your row and a full party.
+    const WORST_BAND_ROWS: usize = 2 + feral_processes_engine::tuning::MAX_PARTY_SIZE;
+
+    /// Every swept window, with its metrics and measured advance.
+    fn sweep() -> Vec<(f32, f32, Metrics, f32)> {
+        let mut out = Vec::new();
+        for h in WINDOW_HEIGHTS {
+            let m = ui_metrics(h);
+            let cw = char_w(&m);
+            for w in WINDOW_WIDTHS {
+                out.push((w, h, ui_metrics(h), cw));
+            }
+        }
+        out
+    }
+
+    fn sheet(w: f32, h: f32, m: &Metrics, cw: f32, face: Face) -> ManifestLayout {
+        ManifestLayout::new(frame_rect(w, h), m, cw, face, 41, WORST_BAND_ROWS)
+    }
+
+    #[test]
+    fn the_rail_is_full_only_when_three_32_cell_columns_still_fit() {
+        let (mut full, mut collapsed) = (0, 0);
+        for (w, h, m, cw) in sweep() {
+            let l = sheet(w, h, &m, cw, Face::Stats);
+            let rail = l.rail.as_ref().expect("an owned subject has a rail");
+            // What the three columns would each gain or lose from the other
+            // rail width: the difference in cells, shared three ways.
+            let swing = (RAIL_FULL_CELLS - RAIL_COLLAPSED_CELLS) * cw / 3.0;
+            let min = LEDGER_MIN_CELLS * cw;
+            if rail.full {
+                full += 1;
+                assert!(rail.title.is_some(), "{w}x{h}: a full rail is titled");
+                assert!(
+                    l.ledger[0].w >= min,
+                    "{w}x{h}: full rail but a {:.0}px column under {min:.0}px",
+                    l.ledger[0].w
+                );
+            } else {
+                collapsed += 1;
+                assert!(
+                    l.ledger[0].w - swing < min,
+                    "{w}x{h}: collapsed though a full rail leaves {:.0}px columns",
+                    l.ledger[0].w - swing
+                );
+            }
+            let other = sheet(w, h, &m, cw, Face::Other);
+            assert!(
+                !other.rail.unwrap().full,
+                "{w}x{h}: only STATS has a full rail"
+            );
+        }
+        assert!(full > 0 && collapsed > 0, "the sweep must see both forms");
+    }
+
+    #[test]
+    fn a_wild_subject_gets_no_rail_and_the_ledger_starts_at_the_frame() {
+        let m = ui_metrics(900.0);
+        let l = ManifestLayout::new(frame_rect(1440.0, 900.0), &m, char_w(&m), Face::Stats, 0, 2);
+        assert!(l.rail.is_none());
+        assert_eq!(l.ledger[0].x, l.frame.x + m.pad);
+    }
+
+    #[test]
+    fn the_ledger_columns_are_equal_and_two_pads_apart() {
+        for (w, h, m, cw) in sweep() {
+            for face in [Face::Stats, Face::Other] {
+                let l = sheet(w, h, &m, cw, face);
+                for pair in l.ledger.windows(2) {
+                    assert!((pair[0].w - pair[1].w).abs() < 0.01, "{w}x{h}: unequal");
+                    let gap = pair[1].x - (pair[0].x + pair[0].w);
+                    assert!((gap - m.pad * 2.0).abs() < 0.01, "{w}x{h}: gap {gap}");
+                    assert_eq!((pair[0].y, pair[0].h), (pair[1].y, pair[1].h));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_part_of_the_sheet_sits_inside_the_frame_without_overlap() {
+        for (w, h, m, cw) in sweep() {
+            for face in [Face::Stats, Face::Other] {
+                let l = sheet(w, h, &m, cw, face);
+                let rail = l.rail.as_ref().unwrap();
+                let mut parts = vec![rail.rect, l.band, l.bands, l.keybar];
+                parts.extend(l.ledger);
+                parts.extend(l.vitals);
+                for (i, a) in parts.iter().enumerate() {
+                    assert!(
+                        contains(&l.frame, a),
+                        "{w}x{h} {face:?}: {a:?} leaves the frame"
+                    );
+                    for b in &parts[i + 1..] {
+                        assert!(!overlaps(a, b), "{w}x{h} {face:?}: {a:?} overlaps {b:?}");
+                    }
+                }
+                // The bands are placed first; what yields is the ledger,
+                // and it still holds a working column at every swept size.
+                assert!(
+                    l.ledger[0].h >= ledger_section_h(MAX_SECTION_ROWS, &m),
+                    "{w}x{h} {face:?}: a {:.0}px ledger holds not one full section",
+                    l.ledger[0].h
+                );
+                assert_eq!(l.vitals.is_some(), face == Face::Stats);
+                assert!(contains(&rail.rect, &rail.rows));
+            }
+        }
+    }
+
+    #[test]
+    fn the_rail_window_keeps_forty_subjects_selection_in_view() {
+        const SUBJECTS: usize = 40;
+        for (w, h, m, cw) in sweep() {
+            let fits = sheet(w, h, &m, cw, Face::Stats).rail.unwrap().fits();
+            for selected in 0..SUBJECTS {
+                let win = rail_window(SUBJECTS, selected, fits);
+                assert!(
+                    (win.start..win.end).contains(&selected),
+                    "{w}x{h}: {selected} outside {win:?}"
+                );
+                let drawn =
+                    win.end - win.start + usize::from(win.above > 0) + usize::from(win.below > 0);
+                assert!(drawn <= fits, "{w}x{h}: {drawn} rows into {fits}");
+                assert_eq!(win.above, win.start);
+                assert_eq!(win.below, SUBJECTS - win.end);
+            }
+        }
+    }
+
+    #[test]
+    fn a_rail_that_fits_shows_everything_and_reports_nothing() {
+        let all = RailWindow {
+            start: 0,
+            end: 5,
+            above: 0,
+            below: 0,
+        };
+        assert_eq!(rail_window(5, 4, 5), all);
+        assert_eq!(rail_window(0, 0, 5).end, 0);
+    }
+
+    #[test]
+    fn the_rail_window_scrolls_only_once_the_selection_reaches_its_edge() {
+        // Ten rows into five: the top window gives one row to `↓ 6 more`.
+        assert_eq!(
+            rail_window(10, 3, 5),
+            RailWindow {
+                start: 0,
+                end: 4,
+                above: 0,
+                below: 6
+            }
+        );
+        // The selection one past it: both overflow rows, selection last.
+        assert_eq!(
+            rail_window(10, 4, 5),
+            RailWindow {
+                start: 2,
+                end: 5,
+                above: 2,
+                below: 5
+            }
+        );
+        // Near the end: the bottom window gives one row to `↑ 6 more`.
+        assert_eq!(
+            rail_window(10, 7, 5),
+            RailWindow {
+                start: 6,
+                end: 10,
+                above: 6,
+                below: 0
+            }
+        );
+    }
+
+    #[test]
+    fn too_short_a_rail_still_shows_the_selection() {
+        assert_eq!(rail_window(10, 6, 2).start, 6);
+        assert_eq!(rail_window(10, 6, 0).end, 7);
+        assert_eq!(rail_window(10, 99, 1).start, 9);
+    }
+
+    #[test]
+    fn a_column_that_fits_keeps_every_section() {
+        let m = ui_metrics(900.0);
+        let rows = [6, 4, 2];
+        let total: f32 = rows.iter().map(|&r| ledger_section_h(r, &m)).sum();
+        assert_eq!(
+            fit_column(&rows, total, &m),
+            ColumnFit {
+                kept: 3,
+                dropped: 0
+            }
+        );
+    }
+
+    #[test]
+    fn a_column_too_tall_drops_whole_trailing_sections_and_counts_them() {
+        let m = ui_metrics(900.0);
+        let rows = [6, 4, 2, 1];
+        let first_two = ledger_section_h(6, &m) + ledger_section_h(4, &m);
+        // Room for two sections and the `+N more` row, not three.
+        let fit = fit_column(&rows, first_two + section_row_h(&m), &m);
+        assert_eq!(
+            fit,
+            ColumnFit {
+                kept: 2,
+                dropped: 2
+            }
+        );
+        // Exactly the first three plus not quite the `+N more` row: the
+        // reserved row costs the third section.
+        let first_three = first_two + ledger_section_h(2, &m);
+        let fit = fit_column(&rows, first_three + section_row_h(&m) - 1.0, &m);
+        assert_eq!(
+            fit,
+            ColumnFit {
+                kept: 2,
+                dropped: 2
+            }
+        );
     }
 }

@@ -1568,11 +1568,19 @@ mod raiders_steal {
             .unwrap_or(0);
         assert!(after_steal < 3, "stealing must take units off the shelf");
 
-        for _ in 0..20 {
+        // The door is more than one turn's walk away, so a beat that does
+        // nothing — the turn's allowance spent — hands the turn on as a real
+        // round would, or the spent walk is never cleared.
+        let beats = 4 * crate::tuning::STARTING_POCKET_RADIUS + 4;
+        for _ in 0..beats {
             if game.world.get_resource::<TacticalBattle>().is_none() {
                 break;
             }
-            game.besieger_turn(besieger);
+            if !game.besieger_turn(besieger)
+                && let Some(mut battle) = game.world.get_resource_mut::<TacticalBattle>()
+            {
+                battle.end_turn();
+            }
         }
 
         assert!(
@@ -3206,7 +3214,7 @@ mod review_findings {
         // on does not move with it.
         {
             let mut grid = game.world.resource_mut::<BaseGrid>();
-            grid.lay_floor(-5, 0);
+            grid.lay_floor(-crate::tuning::STARTING_POCKET_RADIUS - 1, 0);
         }
         let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().door;
         assert_ne!(

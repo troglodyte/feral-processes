@@ -1056,6 +1056,21 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
     );
 }
 
+/// The opening pocket is 19 cells across, double the 9 it was: at 9 the
+/// beginner structures did not all fit. Spelled as a literal so a change to
+/// `STARTING_POCKET_RADIUS` is a change this test sees.
+#[test]
+fn the_starting_pocket_is_nineteen_cells_wide() {
+    let mut game = game(3132);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    place_now(&mut game, "home", 1, 0).unwrap();
+
+    let grid = game.world.resource::<base_grid::BaseGrid>();
+    let row: Vec<i32> = (-20..=20).filter(|&x| grid.is_floor(x, 0)).collect();
+    assert_eq!(row.len(), 19, "the Home's row is floored edge to edge");
+    assert_eq!((row[0], row[18]), (-9, 9), "centred on base space's origin");
+}
+
 /// A machine goes up on pocket Floor exactly as it always went up on the
 /// slab, deployed relative to the cell the player is standing in.
 #[test]
@@ -1826,7 +1841,17 @@ fn a_swing_at_rock_does_not_move_the_party() {
 fn identical_swings_at_rock_do_identical_damage() {
     let mut game = game_at_the_frontier(3212);
     let east = WALL;
-    let north = (0, crate::tuning::STARTING_POCKET_RADIUS + 1);
+    // Rock kind varies cell to cell, so "identical" means a wall of the same
+    // kind: the first one along the pocket's north face that matches.
+    let kind = |game: &Game, (x, y): (i32, i32)| {
+        let wall = game.wall_at(x, y);
+        (wall.durability, wall.swing_cap)
+    };
+    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let north = (-r..=r)
+        .map(|x| (x, r + 1))
+        .find(|&at| kind(&game, at) == kind(&game, east))
+        .expect("the pocket's north face has a wall of the east wall's kind");
 
     let player = game.player_entity();
     game.strike_rock(player, east.0, east.1);
@@ -2215,8 +2240,20 @@ fn a_mark_survives_a_save_round_trip() {
 /// Two cells of solid rock well outside the opening pocket, drawn with the
 /// far corner *up-left* of the anchor so the box has to be normalised rather
 /// than assumed ordered.
-const PLAN_ANCHOR: (i32, i32) = (6, 6);
-const PLAN_FAR: (i32, i32) = (5, 5);
+const PLAN_ANCHOR: (i32, i32) = (
+    crate::tuning::STARTING_POCKET_RADIUS + 2,
+    crate::tuning::STARTING_POCKET_RADIUS + 2,
+);
+const PLAN_FAR: (i32, i32) = (
+    crate::tuning::STARTING_POCKET_RADIUS + 1,
+    crate::tuning::STARTING_POCKET_RADIUS + 1,
+);
+const PLAN_CELLS: [(i32, i32); 4] = [
+    PLAN_FAR,
+    (PLAN_FAR.0, PLAN_ANCHOR.1),
+    (PLAN_ANCHOR.0, PLAN_FAR.1),
+    PLAN_ANCHOR,
+];
 
 fn is_marked(game: &mut Game, (x, y): (i32, i32)) -> bool {
     game.dig_site_at(x, y)
@@ -2232,7 +2269,7 @@ fn dig_site_count(game: &mut Game) -> usize {
 #[test]
 fn marking_a_box_marks_every_solid_cell_in_it() {
     let mut game = game_at_the_frontier(3250);
-    for (x, y) in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+    for (x, y) in PLAN_CELLS {
         assert!(
             game.world.resource::<base_grid::BaseGrid>().is_solid(x, y),
             "the fixture must draw its box over solid rock"
@@ -2241,7 +2278,7 @@ fn marking_a_box_marks_every_solid_cell_in_it() {
 
     game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR, None);
 
-    for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+    for cell in PLAN_CELLS {
         assert!(
             is_marked(&mut game, cell),
             "{cell:?} is inside the box the player drew and took no mark"
@@ -2258,7 +2295,7 @@ fn an_anchor_on_a_marked_cell_clears_the_box_instead_of_marking_it() {
 
     game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR, None);
 
-    for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+    for cell in PLAN_CELLS {
         assert!(
             !is_marked(&mut game, cell),
             "{cell:?} kept its mark when the box was drawn again"
@@ -2381,7 +2418,9 @@ fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
 #[test]
 fn marked_cells_is_sorted() {
     let mut game = game_at_the_frontier(3256);
-    game.toggle_mark_box((7, 7), (5, 5), None);
+    let near = PLAN_FAR;
+    let far = (near.0 + 2, near.1 + 2);
+    game.toggle_mark_box(far, near, None);
 
     let cells: Vec<(i32, i32)> = game.marked_cells().into_iter().map(|m| m.pos).collect();
 

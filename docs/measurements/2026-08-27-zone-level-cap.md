@@ -161,3 +161,24 @@ scenario would need spent *talents* to stage a developed companion, which
   is about the *enemy* curve and not about a cap.
 - **`developed-companion.ron` needs authoring or deleting.** As it stands it
   is a duplicate of `full-group.ron` that reads as a measurement.
+
+## 2026-10-10: `STEP = 10`, by decision
+
+The step was lowered to 10, one under the fit, knowing what the table above
+said. Re-measured on that build:
+
+| Zone | Geared | Gear-free | Cap at STEP 10 |
+|---:|---:|---:|---:|
+| 2 | 5 | 6 | 11 |
+| 5 | 26 | 40 | 41 |
+| 11 | 100 | 147 | 101 |
+| 12 | 113 | 176 | **111** |
+| 13 | 121 | 189 | 121 |
+| 16 | 148 | 228 | 151 |
+
+Zone 12 is two levels under the geared requirement, the one zone where it is,
+and `tests/level_up.rs` names it in `ACCEPTED_GEARED_SHORTFALLS`. Zones 11 and
+13 clear with one level and none to spare. The grind overshoot fell to 5
+(zone 2), and `GRIND_TOLERANCE_LEVELS` followed it down. The keyed-fight pins
+in `balance_sim`'s `held_phase_keys_never_make_a_capped_zone_harder` moved by
+3-9 points of HP left; every capped fight is still won.

@@ -313,19 +313,21 @@ pub const ZONE_LEVEL_CAP_FLOOR: u32 = 6;
 
 /// Levels the cap rises per zone breached.
 ///
-/// **Derived, not chosen.** It is the smallest integer slope that keeps
-/// `balance_sim::min_level_to_clear_zone`'s *geared* requirement reachable
-/// at every zone measured out to 16 — a cap below that requirement is not
-/// difficulty, it is a run that cannot continue. Zone 11 (needs 100, capped
-/// at 111) and zone 12 (needs 113, capped at 122) are the binding zones; a
-/// slope of 10 leaves zone 12 unclearable.
+/// **Chosen, one under the fit.** 11 is the smallest integer slope that
+/// keeps `balance_sim::min_level_to_clear_zone`'s *geared* requirement
+/// reachable at every zone out to 16 — a cap below that requirement is not
+/// difficulty, it is a run that cannot continue. 10 was picked over it on
+/// 2026-10-10 knowing it leaves zone 12 two levels short (needs 113, capped
+/// at 111) and zones 11 and 13 with one and zero to spare; the sim models no
+/// abilities, so that is a floor projection, not a proof. The test that
+/// guards the bound names zone 12 as its one accepted exception.
 ///
-/// The consequence, recorded rather than hidden: the cap sits *above* the
-/// gear-free requirement in zones 2-6, so those can still be cleared by
-/// levelling alone. The two clear curves both pass near the origin and then
-/// diverge, so no single line can sit inside the band at both ends of the
-/// range. See `docs/measurements/2026-08-27-zone-level-cap.md`.
-pub const ZONE_LEVEL_CAP_STEP: u32 = 11;
+/// The cap still sits *above* the gear-free requirement in zones 2-5, so
+/// those can be cleared by levelling alone. The two clear curves both pass
+/// near the origin and then diverge, so no single line can sit inside the
+/// band at both ends of the range. See
+/// `docs/measurements/2026-08-27-zone-level-cap.md`.
+pub const ZONE_LEVEL_CAP_STEP: u32 = 10;
 
 /// XP for the first Perk Point bought with overflow — what a player at the
 /// level cap pays before they hold any perks.

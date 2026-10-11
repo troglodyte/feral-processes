@@ -285,7 +285,7 @@ fn dispatch_reach_reports_the_three_states() {
 fn the_far_side_of_the_base_still_reaches_the_relay() {
     let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
-    let edge = crate::tuning::STARTING_POCKET_RADIUS;
+    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
     assert!(edge - 1 > 2, "the far edge must be beyond arm's length");
     super::support::stand_in_base_at(&mut game, edge, 0);
     assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
@@ -1648,10 +1648,13 @@ fn a_walk_bends_around_solid_rock() {
     let member = staff[0];
     // A corridor east out of the pocket and then north, ending at a cell
     // whose straight line back to the door crosses unmined rock.
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
-    let corridor: Vec<(i32, i32)> = (r - 1..=r + 4)
-        .map(|x| (x, r - 1))
-        .chain((2 - r..r - 1).map(|y| (r + 4, y)))
+    let (w, h) = (
+        crate::tuning::STARTING_POCKET_HALF_WIDTH,
+        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+    );
+    let corridor: Vec<(i32, i32)> = (w - 1..=w + 4)
+        .map(|x| (x, h - 1))
+        .chain((2 - h..h - 1).map(|y| (w + 4, y)))
         .collect();
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
@@ -1659,7 +1662,7 @@ fn a_walk_bends_around_solid_rock() {
             grid.lay_floor(x, y);
         }
     }
-    let end = (r + 4, 2 - r);
+    let end = (w + 4, 2 - h);
     game.world
         .entity_mut(member)
         .insert(Position { x: end.0, y: end.1 });

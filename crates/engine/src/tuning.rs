@@ -2881,7 +2881,8 @@ pub const RAID_DAMAGE: u32 = 4;
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
 /// The radius the surface slab had, a 9x9 box, before the base moved into
-/// its own pocket dimension. `STARTING_POCKET_RADIUS` sizes the base now;
+/// its own pocket dimension. `STARTING_POCKET_HALF_WIDTH` and
+/// `STARTING_POCKET_HALF_HEIGHT` size the base now;
 /// this survives only as surface geometry around the anchor, which the
 /// Stack's link placement keeps clear of.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
@@ -2896,10 +2897,11 @@ pub const PERCEPTION_BASE_RADIUS: f32 = 5.0;
 /// rolled low in Analysis and Entropy still sees the tiles beside them.
 pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 
-/// How far the pre-cleared pocket reaches from base space's own origin when
-/// the first Home is deployed — `Game::lay_starting_pocket`, which lays
-/// `BaseCell::Floor` over the chamfered box this radius and
-/// `PLATFORM_CORNER_CUT` describe and writes nothing into `WorldMap` at all.
+/// How far the pre-cleared pocket reaches east and west of base space's own
+/// origin when the first Home is deployed — `Game::lay_starting_pocket`,
+/// which lays `BaseCell::Floor` over the chamfered box this,
+/// `STARTING_POCKET_HALF_HEIGHT` and `PLATFORM_CORNER_CUT` describe and
+/// writes nothing into `WorldMap` at all.
 ///
 /// 9 gives a 19-cell-wide pocket, double the 9 it opened at when it matched
 /// `MAX_BUILD_DISTANCE_FROM_HOME`'s old slab: at 9 wide the beginner
@@ -2909,7 +2911,13 @@ pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 /// This is the *starting* size, the way the old constant was the starting
 /// radius: slice 2's mining is what makes floor space something a player
 /// buys, and this is only the ground the run opens with.
-pub const STARTING_POCKET_RADIUS: i32 = 9;
+pub const STARTING_POCKET_HALF_WIDTH: i32 = 9;
+
+/// How far the starting pocket reaches north and south of base space's
+/// origin: 9 cells tall, the height it opened at. Separate from
+/// `STARTING_POCKET_HALF_WIDTH` because the base was asked to grow wider,
+/// not bigger — one radius for both made it twice as tall too.
+pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
 
 /// The widest a base was ever meant to get, from when it was a slab stamped
 /// onto the zone surface: `Game::build_radius` clamped here no matter how

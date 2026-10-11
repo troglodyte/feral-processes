@@ -484,7 +484,7 @@ fn a_request_no_program_can_reach_does_not_starve_the_base() {
     // laid tile is permanent while bare cut ground is not, so a player who
     // digs out to a spot, floors it, and lets the corridor behind them
     // revert to solid has exactly this.
-    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
@@ -529,7 +529,7 @@ fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() 
         .unwrap();
     game.tick();
 
-    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
@@ -2587,7 +2587,7 @@ fn a_cut_off_miner_does_not_hold_the_assembler_back() {
     let mut game = base(1203);
     builder(&mut game);
     give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
-    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();

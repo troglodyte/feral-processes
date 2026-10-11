@@ -1498,7 +1498,7 @@ fn caravan_reach_reports_the_three_states() {
 
     // The far edge of the pocket is still the base — the walk to the counter
     // is visibility, not a gate.
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
     assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
 
     game.world.insert_resource(Locale::Surface);

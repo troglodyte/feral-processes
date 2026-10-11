@@ -214,8 +214,8 @@ fn a_recalled_program_wanders_from_where_it_stood_not_from_the_home_ring() {
         .0
         .insert(tile, a_founded_outpost());
     let program = spawn_tamed(&mut game, 10, 3);
-    // Laid floor by `place_home`'s starting pocket (`STARTING_POCKET_RADIUS`
-    // 4), but at Chebyshev distance 1 from the Home — far enough from
+    // Laid floor by `place_home`'s starting pocket (`STARTING_POCKET_HALF_WIDTH`
+    // 9), but at Chebyshev distance 1 from the Home — far enough from
     // `IDLE_STAFF_RING_TILES`' own ring (radius 3) that no point on it can
     // land within a `wander_step`'s single-tile reach of here, so a wrongly
     // invoked `entry_tile` fallback cannot be mistaken for the real path by

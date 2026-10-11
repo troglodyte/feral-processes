@@ -1653,7 +1653,7 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
         sortie_index: None,
         boss: false,
         species,
-        // Inside `STARTING_POCKET_RADIUS`'s floored diamond around the
+        // Inside the starting pocket's floored box around the
         // origin, unlike a further offset that reads as "somewhere in the
         // base" but sits on unlaid rock with no route to anywhere —
         // `pin_subject`'s "no route to the pen" refusal is what a fixture

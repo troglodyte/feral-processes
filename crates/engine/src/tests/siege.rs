@@ -1571,7 +1571,7 @@ mod raiders_steal {
         // The door is more than one turn's walk away, so a beat that does
         // nothing — the turn's allowance spent — hands the turn on as a real
         // round would, or the spent walk is never cleared.
-        let beats = 4 * crate::tuning::STARTING_POCKET_RADIUS + 4;
+        let beats = 4 * crate::tuning::STARTING_POCKET_HALF_WIDTH + 4;
         for _ in 0..beats {
             if game.world.get_resource::<TacticalBattle>().is_none() {
                 break;
@@ -3214,7 +3214,7 @@ mod review_findings {
         // on does not move with it.
         {
             let mut grid = game.world.resource_mut::<BaseGrid>();
-            grid.lay_floor(-crate::tuning::STARTING_POCKET_RADIUS - 1, 0);
+            grid.lay_floor(-crate::tuning::STARTING_POCKET_HALF_WIDTH - 1, 0);
         }
         let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().door;
         assert_ne!(
@@ -3785,9 +3785,9 @@ mod rereview_findings {
         let mut game = Game::new(210_004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         place_home(&mut game);
         // A single-file corridor grafted onto the starting pocket's own
-        // edge — `lay_starting_pocket`'s loop bounds `dx`/`dy` to
-        // `STARTING_POCKET_RADIUS` (4) before the diamond formula ever
-        // applies, so `(4, 0)` is the pocket's own last floored cell along
+        // edge — `lay_starting_pocket`'s loop bounds `dx` to
+        // `STARTING_POCKET_HALF_WIDTH` (9) before the corner cut ever
+        // applies, so `(9, 0)` is the pocket's own last floored cell along
         // this row. East along `y == 0` to `x == 12`, then north up the
         // fixed `x == 12` column: every cell on that north leg is
         // Chebyshev distance exactly 12 from the door at every `y`, which

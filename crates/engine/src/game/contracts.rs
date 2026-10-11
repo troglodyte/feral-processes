@@ -651,7 +651,7 @@ impl Game {
         // to deliver or to build, neither of which is a question about the
         // ground.
         if let Some((cx, cy)) = self.anchor_position() {
-            let band = crate::tuning::STARTING_POCKET_RADIUS + 1;
+            let band = crate::tuning::STARTING_POCKET_HALF_WIDTH + 1;
             let perimeter = 8 * band;
             let samples = crate::tuning::CONTRACT_HABITAT_SAMPLES.min(perimeter);
             let mut species: Vec<String> = Vec::new();

@@ -214,11 +214,14 @@ fn unpausing_with_the_clock_key_does_not_cancel_a_paused_travel() {
 fn a_step_that_moves_nobody_still_spends_the_clocks_tick() {
     let mut app = test_app(2604);
     found_the_base(&mut app);
-    // (5, 0) sits outside the starting pocket `found_the_base` lays
-    // (`tuning::STARTING_POCKET_RADIUS` is 4), so it stays solid rock and
-    // mining is off by default — every eastward bump from (4, 0) refuses
-    // for free, spending no tick of its own.
-    stand_in_base_at(&mut app, 4, 0);
+    // One cell east of the pocket's east edge is solid rock and mining is
+    // off by default — every eastward bump from the edge refuses for free,
+    // spending no tick of its own.
+    stand_in_base_at(
+        &mut app,
+        feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
+        0,
+    );
     let start_tick = tick_of(&app);
 
     const HELD_SECONDS: u32 = 3;
@@ -506,7 +509,7 @@ fn a_swing_at_rock_in_base_space_is_an_action() {
     stand_in_base_at(
         &mut inside,
         0,
-        -feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
+        -feral_processes_engine::tuning::STARTING_POCKET_HALF_HEIGHT,
     );
     // Armed first: a disarmed bump is refused for free, which is the whole
     // of `MiningMode`. What this test is about is that an *armed* swing is

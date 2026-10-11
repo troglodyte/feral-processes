@@ -425,7 +425,7 @@ use crate::resources::GameClock;
 
 /// Far enough past the opening pocket's edge that a wall reverted along it
 /// leaves no floor to walk round the end of.
-const SEAL_REACH: i32 = crate::tuning::STARTING_POCKET_RADIUS + 2;
+const SEAL_REACH: i32 = crate::tuning::STARTING_POCKET_HALF_WIDTH + 2;
 
 /// Winds the clock rather than ticking it: a thousand ticks run every
 /// background system, and what these tests are about is the drift beat.

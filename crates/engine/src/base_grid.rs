@@ -156,7 +156,7 @@ impl BaseGrid {
     ///
     /// Bounds the Dijkstra field a posted worker walks (`tuning::
     /// haul_walk_radius`), which is why it is measured rather than taken
-    /// from `STARTING_POCKET_RADIUS`: a walk bounded by the size the pocket
+    /// from `STARTING_POCKET_HALF_WIDTH`: a walk bounded by the size the pocket
     /// *started* at would refuse postings across a base the player has since
     /// mined outward, which is a machine you can see from your Home and
     /// cannot staff.

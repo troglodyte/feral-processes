@@ -49,6 +49,7 @@ pub(crate) mod passives;
 pub(crate) mod phase_keys;
 pub(crate) mod preview;
 pub(crate) mod pursuit;
+pub(crate) mod ranking;
 pub(crate) mod refactor;
 pub(crate) mod reinforcement;
 pub(crate) mod respec;

@@ -67,6 +67,7 @@ mod kit;
 mod level_up;
 mod lines;
 mod listen;
+mod manifest_roster;
 mod memories;
 mod message_log;
 mod needs;

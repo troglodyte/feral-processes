@@ -1946,6 +1946,61 @@ pub struct AttentionRow {
     pub threat: bool,
 }
 
+/// What a manifest subject is asking of the player, derived by
+/// `Game::call_to_act` -- the same per-program function `Game::attention`
+/// counts its `ProgramPoints` row from, so the rail's `!` and the HUD badge
+/// cannot disagree.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CallToAct {
+    /// The player has unspent perk points.
+    PerkPoints(u32),
+    /// A program is holding banked attribute points for the player to spend.
+    DevPoints(u32),
+    /// A staff program with no post and no errand.
+    Idle,
+}
+
+/// One row of the manifest's roster rail -- see `Game::manifest_roster`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RosterRow {
+    pub entity: Entity,
+    pub name: String,
+    pub glyph: char,
+    pub color: GlyphColor,
+    pub level: u32,
+    pub in_party: bool,
+    pub needs_you: Option<CallToAct>,
+}
+
+/// A figure the manifest ranks a subject on.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RankedStat {
+    Damage,
+    Attack,
+    Mitigation,
+    Power,
+    /// Programs only: `Potential::quality_percent`.
+    Potential,
+    /// Programs only: the mean of the two build rolls.
+    WorkAptitude,
+}
+
+/// Where a subject stands on one stat: `place` of `of`, with a 1-5 `pips`
+/// reading of how far it sits between the weakest and the strongest.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct RankRow {
+    pub stat: RankedStat,
+    pub place: u32,
+    pub of: u32,
+    pub pips: u8,
+}
+
+/// Every stat a subject is ranked on -- see `Game::subject_ranks`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectRanks {
+    pub rows: Vec<RankRow>,
+}
+
 /// One place the compass can point at — see `Game::compass_targets`.
 ///
 /// The tier of knowledge lands **only** in `label`, so "a name is earned by

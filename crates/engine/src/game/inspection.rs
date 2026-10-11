@@ -1,7 +1,9 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect targeting.
 
+use crate::components::{HoldPoints, StatPoints};
 use crate::game::base::hauling::at_station;
+use crate::game::trade::IDLE_ACTIVITY;
 use crate::settlements::CompassTarget;
 use crate::tuning::{
     DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, FORMATIONS,
@@ -1800,6 +1802,31 @@ impl Game {
             .lifetime
             .values()
             .any(|t| t.produced() > 0)
+    }
+
+    /// What `entity` is asking of the player, for the manifest's rail.
+    ///
+    /// The per-program half of `attention`: its `ProgramPoints` row counts
+    /// the `DevPoints` this returns, so a rail mark and the HUD badge flip
+    /// together. Banked points only call when held (`HoldPoints`): an
+    /// unheld bank is spent by the next level, so there is nothing for the
+    /// player to do about it, and today's count has always read that way.
+    pub fn call_to_act(&self, entity: Entity) -> Option<CallToAct> {
+        if self.world.get::<Player>(entity).is_some() {
+            let points = self.world.get::<Perks>(entity).map_or(0, |p| p.points);
+            return (points > 0).then_some(CallToAct::PerkPoints(points));
+        }
+        if let (Some(hold), Some(points)) = (
+            self.world.get::<HoldPoints>(entity),
+            self.world.get::<StatPoints>(entity),
+        ) && hold.0
+            && points.0 > 0
+        {
+            return Some(CallToAct::DevPoints(points.0));
+        }
+        (self.program_role(entity) == Some(ProgramRole::Staff)
+            && self.program_activity(entity) == IDLE_ACTIVITY)
+            .then_some(CallToAct::Idle)
     }
 
     /// What needs the player right now, most urgent first.

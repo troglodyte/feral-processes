@@ -213,13 +213,13 @@ impl Game {
         Ok(())
     }
 
-    /// How many seated programs hold banked points: what the Manifest
-    /// attention row counts.
+    /// How many programs hold banked points: what the Manifest attention row
+    /// counts, folded from the same per-program `call_to_act` the rail flags
+    /// with.
     pub(crate) fn programs_holding_points(&mut self) -> usize {
-        let mut query = self.world.query::<(&HoldPoints, &StatPoints)>();
-        query
-            .iter(&self.world)
-            .filter(|(hold, points)| hold.0 && points.0 > 0)
+        self.manifest_subjects()
+            .into_iter()
+            .filter(|&e| matches!(self.call_to_act(e), Some(CallToAct::DevPoints(_))))
             .count()
     }
 

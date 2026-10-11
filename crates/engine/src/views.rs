@@ -2832,7 +2832,7 @@ pub struct ManifestView {
     /// Carried for both subjects even though only the player's are drawn:
     /// the combat block belongs to one struct, and the program page's
     /// omission is a row budget it has run out of (see
-    /// the manifest's frame tests' clearance sweep), not a fact the engine
+    /// the manifest's frame census tests), not a fact the engine
     /// declines to compute. That makes buying it room later a layout change
     /// rather than a data change.
     ///

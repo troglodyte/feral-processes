@@ -80,12 +80,10 @@ pub(in crate::render) const MAX_SECTION_ROWS: usize = 6;
 
 /// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Above 2,
 /// clearance at the tightest window shrinks fast enough that a mod pushing
-/// this constant up is a real layout risk — see
+/// this constant up is a real layout risk —
 /// `manifest::tests::the_stats_face_stays_in_its_frame_and_overlaps_nothing`
-/// for the current measured clearance at every value and every window size; that
-/// test is the one place this file lets a pixel figure live, precisely so
-/// a doc comment quoting numbers can't go stale the way this one has
-/// twice already. 2 costs nothing shipped regardless of the margin: every
+/// is what fails if a value no longer fits; no doc comment quotes pixel
+/// figures, so none can go stale. 2 costs nothing shipped regardless of the margin: every
 /// species Task 5 gave affinities to carries exactly one strength and one
 /// weakness. A modded species naming three or more only ever loses rows
 /// to the "+N more" note below, never crashes the page.
@@ -94,12 +92,12 @@ pub(in crate::render) const MAX_AFFINITY_ROWS: usize = 2;
 /// The MOVES box's own cap, separate from `MAX_SECTION_ROWS` because `MOVES`
 /// is the one box a mod can genuinely grow past what any shipped species
 /// needs, and the ledger's column fit changed how much of that growth the
-/// layout can absorb before a section is dropped — see
+/// layout can absorb before a section is dropped —
 /// `manifest::tests::the_stats_face_stays_in_its_frame_and_overlaps_nothing`
-/// for the current clearance figures rather than a restated copy here. Kept deliberately
-/// below `MAX_SECTION_ROWS` even where the exact partition alone would clear
-/// today's shipped worst case: this is the only defence against a mod-maximal
-/// `MOVES` list regardless of packer, and the headroom has value on its own,
+/// is what fails if it no longer fits. Kept deliberately below
+/// `MAX_SECTION_ROWS` even where `fit_column` alone would clear today's
+/// shipped worst case: this is the only defence against a mod-maximal
+/// `MOVES` list, and the headroom has value on its own,
 /// at the owner's explicit call. A separate constant rather than lowering
 /// `MAX_SECTION_ROWS` itself: at 6 rows the ROUTINES box already spends its
 /// last line on a "+N more" note for a kit near
@@ -138,8 +136,9 @@ pub(in crate::render) const MAX_MOVE_ROWS: usize = 1;
 /// already close. `assets/needs/` is data, so a mod can grow it without
 /// bound; the shipped catalogue is two, and a third costs nothing. Above
 /// that a row is traded for the "+N more" note rather than for a page that
-/// escapes the frame — `tests::the_real_worst_case_pages_fit_the_tightest_window`
-/// is what measures which values still fit.
+/// escapes the frame —
+/// `tests::the_stats_face_stays_in_its_frame_and_overlaps_nothing` is what
+/// fails if a value no longer fits.
 pub(in crate::render) const MAX_NEED_ROWS: usize = 2;
 
 /// POTENTIAL's own cap, and the one per-box constant here that is **wider**

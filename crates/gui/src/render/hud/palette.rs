@@ -24,9 +24,13 @@
 //! standing as colour nothing paints. The handoff still documents them if
 //! anything ever wants them.
 //!
-//! Scope is the HUD and the map's entity glyphs. The popup screens keep
-//! `render/mod.rs`'s colours; they draw *over* the HUD, so the seam between
-//! the two palettes is not visible in play.
+//! Scope is the HUD, the map's entity glyphs, every face of the manifest and
+//! the dossier. The manifest is read beside the HUD it sits over and compares
+//! the same numbers, so a second green or cyan there would read as a second
+//! meaning. The other popup screens keep `render/mod.rs`'s colours; they draw
+//! *over* the HUD, so the seam between the two palettes is not visible in
+//! play. The manifest modules may still take `glyph_color` (a call into
+//! [`glyph`]) and the rarity tier colours from `render/mod.rs`.
 
 use crate::paint::Color;
 use feral_processes_engine::components::GlyphColor;

@@ -58,9 +58,11 @@ use crate::text::Metrics;
 /// the two from drifting apart.
 const GUTTER_SAMPLE: &str = "ALERT  ";
 
-const INTEG_CELLS: usize = 16;
-const POWER_CELLS: usize = 10;
-const XP_CELLS: usize = 14;
+/// The vitals meters' widths, in cells. The manifest's vitals line draws the
+/// same three meters and takes its widths from here.
+pub(in crate::render) const INTEG_CELLS: usize = 16;
+pub(in crate::render) const POWER_CELLS: usize = 10;
+pub(in crate::render) const XP_CELLS: usize = 14;
 
 /// What the vitals strip reads.
 pub(in crate::render) struct Vitals<'a> {
@@ -240,7 +242,12 @@ fn filter_pieces(filter: LogFilter, filtered_out: usize) -> Vec<Piece> {
     pieces
 }
 
-fn keycap(key: &str, verb: &str) -> Vec<Piece> {
+/// A keybar segment: the key, then its verb.
+///
+/// Takes the key as a string, unlike [`super::panes::chip`], because a
+/// keybar names keys no `char` spells (`< >`, `↑/↓`, `Esc`). Its verb is in
+/// `FIELD_LABEL`, where a pane's chip uses the dimmer `LABEL`.
+pub(in crate::render) fn keycap(key: &str, verb: &str) -> Vec<Piece> {
     // A segment with no key is plain text, and owes the bar no gap before it.
     if key.is_empty() {
         return vec![(verb.to_string(), palette::FIELD_LABEL, false)];

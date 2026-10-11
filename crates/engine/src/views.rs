@@ -1946,6 +1946,62 @@ pub struct AttentionRow {
     pub threat: bool,
 }
 
+/// What a manifest subject is asking of the player, derived by
+/// `Game::call_to_act` -- the same derivation `Game::attention` counts its
+/// point rows from, so the rail's `!` and the HUD badge cannot disagree.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CallToAct {
+    /// The player has unspent perk points.
+    PerkPoints(u32),
+    /// The player has banked stat points, spent with `S` on the perks screen.
+    StatPoints(u32),
+    /// A program is holding banked attribute points for the player to spend.
+    DevPoints(u32),
+    /// A staff program with no post and no errand.
+    Idle,
+}
+
+/// One row of the manifest's roster rail -- see `Game::manifest_roster`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RosterRow {
+    pub entity: Entity,
+    pub name: String,
+    pub glyph: char,
+    pub color: GlyphColor,
+    pub level: u32,
+    pub in_party: bool,
+    pub needs_you: Option<CallToAct>,
+}
+
+/// A figure the manifest ranks a subject on.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RankedStat {
+    Damage,
+    Attack,
+    Mitigation,
+    Power,
+    /// Programs only: `Potential::quality_percent`.
+    Potential,
+    /// Programs only: the mean of the two build rolls.
+    WorkAptitude,
+}
+
+/// Where a subject stands on one stat: `place` of `of`, with a 1-5 `pips`
+/// reading of how far it sits between the weakest and the strongest.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct RankRow {
+    pub stat: RankedStat,
+    pub place: u32,
+    pub of: u32,
+    pub pips: u8,
+}
+
+/// Every stat a subject is ranked on -- see `Game::subject_ranks`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectRanks {
+    pub rows: Vec<RankRow>,
+}
+
 /// One place the compass can point at — see `Game::compass_targets`.
 ///
 /// The tier of knowledge lands **only** in `label`, so "a name is earned by
@@ -2776,7 +2832,7 @@ pub struct ManifestView {
     /// Carried for both subjects even though only the player's are drawn:
     /// the combat block belongs to one struct, and the program page's
     /// omission is a row budget it has run out of (see
-    /// `render/manifest_layout`'s clearance sweep), not a fact the engine
+    /// the manifest's frame census tests), not a fact the engine
     /// declines to compute. That makes buying it room later a layout change
     /// rather than a data change.
     ///
@@ -3639,8 +3695,9 @@ pub struct DepotFilterRow {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerClassView {
     pub name: String,
-    /// One term per non-neutral axis, `classes::format_affinity_bonuses`.
-    pub bonuses: String,
+    /// One `(axis label, multiplier)` per non-neutral axis,
+    /// `classes::affinity_bonuses`.
+    pub bonuses: Vec<(String, f32)>,
 }
 
 /// One class offered on the creation screen — see `Game::class_rows`.
@@ -3939,6 +3996,10 @@ pub struct RelationshipRow {
     /// so the row reads the bond as it stood; the band is derived from it.
     pub opinion: f32,
     pub gone: bool,
+    /// The live subject's own glyph; `None` once it has left. Carried on the
+    /// row because two programs can wear the same label, so no lookup by
+    /// name can say which one a row is.
+    pub glyph: Option<(char, GlyphColor)>,
 }
 
 /// One line of a rendered conversation: who says it, already named.
@@ -3946,6 +4007,9 @@ pub struct RelationshipRow {
 pub struct SpokenLine {
     pub who: String,
     pub text: String,
+    /// The program whose page this is said it. A flag and not a comparison
+    /// of `who`, because two programs can wear the same label.
+    pub own: bool,
 }
 
 /// One conversation as the TALK tab draws it, slots already filled.

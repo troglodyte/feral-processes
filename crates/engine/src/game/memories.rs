@@ -5,8 +5,8 @@
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
 use crate::components::{
-    Conversations, MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats,
-    Stranded, Structure, Tamed, Task, TaskKind,
+    Conversations, Glyph, MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId,
+    Stats, Stranded, Structure, Tamed, Task, TaskKind,
 };
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{GameClock, Party};
@@ -1166,6 +1166,7 @@ impl crate::Game {
                                 SpokenLine {
                                     who: by.clone(),
                                     text,
+                                    own: l.by == r.role,
                                 }
                             })
                             .collect()
@@ -1175,6 +1176,7 @@ impl crate::Game {
                         vec![SpokenLine {
                             who: speaker.clone(),
                             text: format!("{speaker} and {listener}: {name}"),
+                            own: r.role == Role::Speaker,
                         }]
                     });
                 ExchangeView { lines }
@@ -1208,7 +1210,11 @@ impl crate::Game {
             }
             seen.push(about);
             let opinion = self.opinion_about(e, &held.subject, false);
-            let (name, gone) = match self.program_entity(about) {
+            let live = self.program_entity(about);
+            let glyph = live
+                .and_then(|l| self.world.get::<Glyph>(l))
+                .map(|g| (g.ch, g.color));
+            let (name, gone) = match live {
                 Some(live) => (self.creature_short_label(live), false),
                 None => {
                     let stamped = store
@@ -1228,6 +1234,7 @@ impl crate::Game {
                 bond: crate::bonds::band(opinion),
                 opinion,
                 gone,
+                glyph,
             });
         }
         relationships.sort_by(|a, b| b.opinion.abs().total_cmp(&a.opinion.abs()));

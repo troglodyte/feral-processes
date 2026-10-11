@@ -442,3 +442,20 @@ fn a_new_class_survives_a_save_and_load() {
         );
     }
 }
+
+#[test]
+fn a_class_view_carries_its_bonuses_as_axis_and_multiplier() {
+    let game = game_as(9102, PlayerClass::Decompiler);
+    let view = game.player_class_view().expect("the class resolves");
+    let def = game.world.resource::<crate::classes::ClassDb>();
+    let want: Vec<(String, f32)> = def
+        .get(PlayerClass::Decompiler)
+        .unwrap()
+        .affinities
+        .non_neutral()
+        .into_iter()
+        .map(|(kind, v)| (kind.label().to_string(), v))
+        .collect();
+    assert!(!want.is_empty());
+    assert_eq!(view.bonuses, want);
+}

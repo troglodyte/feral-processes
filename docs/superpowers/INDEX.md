@@ -69,6 +69,7 @@ spec resolves to a release tag.
 | `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slices 1 and 2 shipped (slice 2 has its own archived spec); slices 3-4 deliberately deferred |
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
 | `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
+| `2026-10-11-manifest-redesign-design` | **specced**, not built; plan `plans/2026-10-11-manifest-redesign.md` | Roster rail (retires `Mode::ManifestPick`), summary band, three-column ledger on `hud::palette`; `Game::subject_ranks`, `Game::manifest_roster`; visual target: the feral-processes design system's Manifest proposal cards |
 
 **The settlement ladder is finished and has no open row.** The two settlement
 specs shipped everything they scoped, and the three things they deferred *by

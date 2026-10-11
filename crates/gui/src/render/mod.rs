@@ -58,7 +58,6 @@ mod icon_editor;
 mod inventory;
 mod level_up;
 mod manifest;
-mod manifest_layout;
 mod marks;
 mod meta;
 mod mod_copy;
@@ -138,7 +137,7 @@ use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
     draw_inventory_item_action, effect_lines,
 };
-use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
+use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
     draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
@@ -923,7 +922,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     };
     let graph_view = app.research_graph_view;
     let pending_manifest = app.pending_manifest;
-    let manifest_origin = app.manifest_origin;
     let manifest_tab = app.manifest_tab;
     let manifest_is_own = app.manifest_is_own();
     let level_up_reopenable = app.level_up_reopenable();
@@ -1277,8 +1275,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             let nav = ManifestNav {
                 cyclable: subjects.len() > 1
                     && pending_manifest.is_some_and(|e| subjects.contains(&e)),
-                back_to_list: manifest_origin.returns_to_list(),
-                // Only advertise `w` when it will work, `cyclable`'s rule:
+                // Only advertise `W` when it will work, `cyclable`'s rule:
                 // the roster reaches every program you own, including the
                 // ones whose tile is the one they were beaten on.
                 watchable: pending_manifest.is_some_and(|e| game.watch_position(e).is_some()),
@@ -1286,10 +1283,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 level_up: manifest_is_own.then_some(level_up_reopenable),
             };
             draw_manifest(game, pending_manifest, nav, refusal, painter, m)
-        }
-        Mode::ManifestPick => {
-            let subjects = game.manifest_subjects();
-            draw_manifest_pick(game, &subjects, selected, refusal, painter, m)
         }
         Mode::StructureManifest => structure_manifest::draw_structure_manifest(
             game,
@@ -1343,9 +1336,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Dossier => {
-            crate::render::dossier::draw_dossier(game, app.pending_manifest, refusal, painter, m)
-        }
+        Mode::Dossier => draw_dossier(game, app.pending_manifest, refusal, painter, m),
         Mode::EquipSwap => draw_equip_swap(
             game,
             app.pending_swap_slot,
@@ -1668,7 +1659,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 137] = [
+    const ALL_MODES: [Mode; 136] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1719,7 +1710,6 @@ mod tests {
         Mode::FrameMap,
         Mode::WorldMap,
         Mode::Manifest,
-        Mode::ManifestPick,
         Mode::StructureManifest,
         Mode::CellDescribe,
         Mode::Settlement,

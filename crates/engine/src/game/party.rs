@@ -962,13 +962,66 @@ impl Game {
         rows.into_iter().map(|(_, row)| row).collect()
     }
 
-    /// You, then every program you own — everyone the manifest screen can
-    /// page through. Same membership and order as `owned_pets` with the
-    /// player prepended, so the two can't disagree about what you have.
+    /// The manifest's rail, in the order ←/→ step through it: you; the party
+    /// in slot order; then every other owned program by name, A-Z and
+    /// case-insensitive, with `ProgramId` settling a tie.
+    ///
+    /// Same membership as `owned_pets` with the player prepended, so the two
+    /// can't disagree about what you have -- but not its order, which is
+    /// grouped by role for the roster screen. A rail wants the party first
+    /// and the rest findable by name.
     pub fn manifest_subjects(&mut self) -> Vec<Entity> {
+        let mut programs = self.owned_pets();
+        programs.sort_by_cached_key(|p| {
+            (
+                p.party_slot.map_or((1, 0), |slot| (0, slot)),
+                if p.party_slot.is_some() {
+                    String::new()
+                } else {
+                    p.short_name.to_lowercase()
+                },
+                self.world.get::<ProgramId>(p.entity).copied(),
+            )
+        });
         let mut subjects = vec![self.player_entity()];
-        subjects.extend(self.owned_pets().into_iter().map(|p| p.entity));
+        subjects.extend(programs.into_iter().map(|p| p.entity));
         subjects
+    }
+
+    /// One row per `manifest_subjects` entry, in the same order: what the
+    /// rail draws, with who is partied and what each is asking of the
+    /// player. A subject that has lost its stats since is skipped.
+    pub fn manifest_roster(&mut self) -> Vec<RosterRow> {
+        let party = self.world.resource::<Party>().0.clone();
+        self.manifest_subjects()
+            .into_iter()
+            .filter_map(|entity| {
+                let glyph = self.world.get::<Glyph>(entity)?;
+                Some(RosterRow {
+                    entity,
+                    name: self.manifest_name(entity),
+                    glyph: glyph.ch,
+                    color: glyph.color,
+                    level: self.world.get::<Experience>(entity).map_or(1, |e| e.level),
+                    in_party: party.contains(&entity),
+                    needs_you: self.call_to_act(entity),
+                })
+            })
+            .collect()
+    }
+
+    /// The name a rail row carries: the player's own, else
+    /// `creature_short_label` -- the label `manifest_subjects` sorts by. Not
+    /// `creature_label`, whose rarity prefix would sort a Rare "Overclocked
+    /// ..." among the Os whatever it is called.
+    fn manifest_name(&self, entity: Entity) -> String {
+        if self.world.get::<Player>(entity).is_some() {
+            return self
+                .world
+                .get::<CustomName>(entity)
+                .map_or_else(|| "You".to_string(), |n| n.0.clone());
+        }
+        self.creature_short_label(entity)
     }
 
     /// The statuses `entity` carries as structured tags, in the order they

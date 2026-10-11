@@ -1,118 +1,144 @@
 //! The TALK face of an owned program's manifest: what it has said and heard.
 //!
-//! One full-width CONVERSATIONS box built as `Section`s and laid out by
-//! `manifest_layout`, like SOCIAL, so the frame and footer are one
-//! implementation. The sheet does not scroll, so the page is as many whole
-//! exchanges as the frame has rows for, newest first.
+//! CONVERSATIONS, newest first, one block per exchange with a rule between
+//! blocks. The speaker sits in a fixed column and the words wrap in their own,
+//! so a long line hangs under its first word and not under its speaker. The
+//! sheet does not scroll, so the page is as many whole exchanges as the body
+//! has rows for.
 
-use super::manifest_layout::{Section, SectionRow, manifest_layout};
+use super::manifest::layout::{ManifestLayout, section_row_h};
+use super::manifest::{elided_to_fit, subhead, wrap_to_width};
 use super::*;
 use feral_processes_engine::ExchangeView;
 
 const NO_CONVERSATIONS: &str = "Nothing has been said yet.";
 
-/// Shown when the newest exchange alone is taller than the frame, so the
-/// page is not mistaken for an empty ring.
+/// Shown when the newest exchange alone is taller than the body, so the page
+/// is not mistaken for an empty ring.
 const TOO_LONG_TO_SHOW: &str = "The latest exchange is too long to show here.";
 
-/// Continuation rows of a wrapped line sit under the words, not the speaker.
-const CONTINUATION_INDENT: &str = "  ";
+/// The speaker column, in cells. A name is cut to it, which is the one thing
+/// on the page that is: a speaker is a label for the words beside it, and
+/// the words are what the page is for.
+const SPEAKER_CELLS: f32 = 12.0;
 
-/// Clear pixels kept between the last row and the footer, the figure the
-/// SOCIAL page's fit census holds too.
-pub(super) const FOOTER_CLEARANCE: f32 = 10.0;
-
-/// `text` broken at spaces into rows that each measure within `max_w`,
-/// continuation rows indented. A single word wider than `max_w` is the one
-/// thing left running wide, since there is no space to break it at.
-fn wrap_row(text: &str, max_w: f32, painter: &Painter, m: &Metrics) -> Vec<String> {
-    let mut rows: Vec<String> = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        if current.trim().is_empty() {
-            current.push_str(word);
-            continue;
-        }
-        let candidate = format!("{current} {word}");
-        if painter.measure_ui_advance(&candidate, m.font_size) <= max_w {
-            current = candidate;
-        } else {
-            rows.push(current);
-            current = format!("{CONTINUATION_INDENT}{word}");
-        }
-    }
-    if !current.trim().is_empty() {
-        rows.push(current);
-    }
-    rows
+/// One spoken line as drawn: who, whether it is the subject, and the words
+/// wrapped to the text column.
+#[derive(Debug, PartialEq)]
+pub(super) struct TalkLine {
+    pub(super) speaker: String,
+    pub(super) own: bool,
+    pub(super) text: Vec<String>,
 }
 
-fn exchange_rows(
+fn exchange_lines(
     exchange: &ExchangeView,
-    max_w: f32,
+    text_w: f32,
     painter: &Painter,
     m: &Metrics,
-) -> Vec<String> {
+) -> Vec<TalkLine> {
     exchange
         .lines
         .iter()
-        .flat_map(|l| wrap_row(&format!("{}: {}", l.who, l.text), max_w, painter, m))
+        .map(|l| TalkLine {
+            speaker: l.who.clone(),
+            own: l.own,
+            text: wrap_to_width(painter, &l.text, m.font_size, text_w)
+                .into_iter()
+                .map(|line| elided_to_fit(painter, &line, m.font_size, text_w))
+                .collect(),
+        })
         .collect()
 }
 
-fn conversations_section(rows: Vec<SectionRow>) -> Section {
-    Section {
-        title: "CONVERSATIONS",
-        rows,
-        full_width: true,
-        overflow: 0,
-        hint: "",
-    }
+fn rows_of(exchange: &[TalkLine]) -> usize {
+    exchange.iter().map(|l| l.text.len().max(1)).sum()
 }
 
-/// The page: whole exchanges, newest first, until the next would leave less
-/// than `FOOTER_CLEARANCE` above the footer. The fit is asked of
-/// `manifest_layout` itself, so the rows counted are the boxes drawn.
-pub(super) fn talk_sections(
+/// The page: whole exchanges, newest first, while `budget` rows hold them
+/// and the rule row between each pair.
+pub(super) fn page(
     exchanges: &[ExchangeView],
-    (w, h): (f32, f32),
+    text_w: f32,
+    budget: usize,
     painter: &Painter,
     m: &Metrics,
-) -> Vec<Section> {
-    let inner = manifest_layout(w, h, 0, &[], m).header.w - m.inset * 2.0;
-    let mut rows: Vec<SectionRow> = Vec::new();
+) -> Vec<Vec<TalkLine>> {
+    let mut blocks: Vec<Vec<TalkLine>> = Vec::new();
+    let mut used = 0;
     for exchange in exchanges {
-        let mut candidate = rows.clone();
-        if !candidate.is_empty() {
-            candidate.push(SectionRow::Note(String::new()));
-        }
-        candidate.extend(
-            exchange_rows(exchange, inner, painter, m)
-                .into_iter()
-                .map(SectionRow::Note),
-        );
-        let page = [conversations_section(candidate)];
-        let l = manifest_layout(w, h, 0, &page, m);
-        let bottom = l.sections[0].y + l.sections[0].h;
-        if l.footer.y - bottom < FOOTER_CLEARANCE {
+        let lines = exchange_lines(exchange, text_w, painter, m);
+        let cost = rows_of(&lines) + usize::from(!blocks.is_empty());
+        if used + cost > budget {
             break;
         }
-        let [section] = page;
-        rows = section.rows;
+        used += cost;
+        blocks.push(lines);
     }
-    if rows.is_empty() {
+    blocks
+}
+
+/// The subject's own lines (`SpokenLine::own`) in `hud-pane-title`, the others' in `hud-body`.
+pub(super) fn paint_talk(
+    exchanges: &[ExchangeView],
+    l: &ManifestLayout,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let rect = l.body();
+    subhead("CONVERSATIONS", "", rect, rect.y, painter, m);
+    let char_w = painter.measure_ui_advance("M", m.font_size);
+    let row_h = section_row_h(m);
+    let text_x = rect.x + (SPEAKER_CELLS + 1.0) * char_w;
+    let top = rect.y + m.line_height;
+    let budget = ((rect.h - m.line_height) / row_h).floor().max(0.0) as usize;
+    let blocks = page(exchanges, rect.x + rect.w - text_x, budget, painter, m);
+    if blocks.is_empty() {
         let note = if exchanges.is_empty() {
             NO_CONVERSATIONS
         } else {
             TOO_LONG_TO_SHOW
         };
-        rows.push(SectionRow::Note(note.to_string()));
+        painter.ui(
+            note,
+            rect.x,
+            top + row_h * 0.85,
+            m.font_size,
+            hud::palette::FAINT,
+        );
+        return;
     }
-    vec![conversations_section(rows)]
+    let mut row = 0;
+    for (i, block) in blocks.iter().enumerate() {
+        if i > 0 {
+            let y = top + row as f32 * row_h + row_h / 2.0;
+            painter.rect(rect.x, y, rect.w, 1.0, hud::palette::DIVIDER);
+            row += 1;
+        }
+        for line in block {
+            let base = |r: usize| top + (row + r) as f32 * row_h + row_h * 0.85;
+            let ink = if line.own {
+                hud::palette::PANE_TITLE
+            } else {
+                hud::palette::BODY
+            };
+            painter.ui(
+                elided_to_fit(painter, &line.speaker, m.font_size, SPEAKER_CELLS * char_w),
+                rect.x,
+                base(0),
+                m.font_size,
+                ink,
+            );
+            for (r, text) in line.text.iter().enumerate() {
+                painter.ui(text, text_x, base(r), m.font_size, hud::palette::BODY);
+            }
+            row += line.text.len().max(1);
+        }
+    }
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
@@ -159,7 +185,7 @@ mod tests {
 
     /// Every shipped exchange spoken between the widest names a program can
     /// have: a full custom name or a handle, with the zone suffix.
-    fn worst_exchanges() -> Vec<ExchangeView> {
+    pub(in crate::render) fn worst_exchanges() -> Vec<ExchangeView> {
         let (memories, _) = MemoryDb::load_dir(&assets().join("memories")).expect("memories");
         let (db, _) =
             InteractionDb::load_dir(&assets().join("interactions"), &memories).expect("defs");
@@ -182,6 +208,7 @@ mod tests {
                     .iter()
                     .map(|l| SpokenLine {
                         who: name.clone(),
+                        own: false,
                         text: fill(&l.text, |slot| match slot {
                             "topic" => topic.clone(),
                             _ => name.clone(),
@@ -194,142 +221,93 @@ mod tests {
         out
     }
 
-    fn short(n: usize) -> ExchangeView {
+    pub(in crate::render) fn short(n: usize) -> ExchangeView {
         ExchangeView {
             lines: vec![
                 SpokenLine {
                     who: "Kestrel".into(),
+                    own: true,
                     text: format!("Line {n}."),
                 },
                 SpokenLine {
                     who: "Wren".into(),
+                    own: false,
                     text: "Ack.".into(),
                 },
             ],
         }
     }
 
-    fn texts(section: &Section) -> Vec<String> {
-        section
-            .rows
-            .iter()
-            .map(|r| match r {
-                SectionRow::Note(t) => t.clone(),
-                SectionRow::Stat(a, b) => format!("{a} {b}"),
-            })
-            .collect()
-    }
-
-    /// The shipped worst case may fit one row at every window; a modded line
-    /// will not, and that is the path that must wrap rather than truncate.
-    #[test]
-    fn a_line_wider_than_the_box_wraps_and_indents() {
+    /// The page's rows for a text column `text_w` wide in a body of `budget`
+    /// rows.
+    fn paged(exchanges: &[ExchangeView], budget: usize, (w, h): (f32, f32)) -> Vec<Vec<TalkLine>> {
+        let m = ui_metrics(h);
         with_painter(|p| {
-            for (w, h) in WINDOWS {
-                let m = ui_metrics(h);
-                let max_w = manifest_layout(w, h, 0, &[], &m).header.w - m.inset * 2.0;
-                let rows = wrap_row(&"word ".repeat(120), max_w, p, &m);
-                assert!(rows.len() > 1, "no wrap at {w}x{h}");
-                assert!(rows[1].starts_with(CONTINUATION_INDENT));
-                for r in &rows {
-                    assert!(p.measure_ui_advance(r, m.font_size) <= max_w, "{r:?}");
-                }
-            }
-        });
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let text_w = w * 0.8 - (SPEAKER_CELLS + 1.0) * char_w;
+            page(exchanges, text_w, budget, p, &m)
+        })
+        .0
     }
 
+    /// A line wider than the column wraps and never runs past it; the
+    /// shipped worst case may fit one row, a modded line will not.
     #[test]
-    fn an_exchange_too_tall_for_the_frame_is_not_reported_as_silence() {
-        let huge = ExchangeView {
-            lines: vec![
-                SpokenLine {
-                    who: "Kestrel".into(),
-                    text: "word ".repeat(2000),
-                },
-                SpokenLine {
-                    who: "Wren".into(),
-                    text: "Ack.".into(),
-                },
-            ],
+    fn a_line_wider_than_the_column_wraps_inside_it() {
+        let long = ExchangeView {
+            lines: vec![SpokenLine {
+                who: "Kestrel".into(),
+                own: true,
+                text: "word ".repeat(120),
+            }],
         };
         with_painter(|p| {
-            let s = talk_sections(&[huge], (1440.0, 900.0), p, &ui_metrics(900.0));
-            assert_eq!(texts(&s[0]), vec![TOO_LONG_TO_SHOW.to_string()]);
-        });
-    }
-
-    #[test]
-    fn an_empty_ring_says_so_instead_of_drawing_a_hollow_box() {
-        with_painter(|p| {
-            let s = talk_sections(&[], (1440.0, 900.0), p, &ui_metrics(900.0));
-            assert_eq!(s.len(), 1);
-            assert_eq!(texts(&s[0]), vec![NO_CONVERSATIONS.to_string()]);
-        });
-    }
-
-    /// The longest shipped line between the widest names wraps inside the
-    /// frame at every window, and the worst exchange alone still fits.
-    #[test]
-    fn the_worst_exchange_wraps_inside_the_tightest_window() {
-        let exchanges = worst_exchanges();
-        with_painter(|p| {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &[], &m);
-                let max_w = l.header.w - m.inset * 2.0;
-                for ex in &exchanges {
-                    for row in exchange_rows(ex, max_w, p, &m) {
-                        assert!(
-                            p.measure_ui_advance(&row, m.font_size) <= max_w,
-                            "{row:?} runs past the box at {w}x{h}"
-                        );
-                    }
-                    let page = [conversations_section(
-                        exchange_rows(ex, max_w, p, &m)
-                            .into_iter()
-                            .map(SectionRow::Note)
-                            .collect(),
-                    )];
-                    let l = manifest_layout(w, h, 0, &page, &m);
-                    let bottom = l.sections[0].y + l.sections[0].h;
-                    assert!(
-                        l.footer.y - bottom >= FOOTER_CLEARANCE,
-                        "{ex:?} does not fit alone at {w}x{h}"
-                    );
+                let text_w = w * 0.6;
+                let lines = exchange_lines(&long, text_w, p, &m);
+                assert!(lines[0].text.len() > 1, "no wrap at {w}x{h}");
+                for row in &lines[0].text {
+                    assert!(p.measure_ui_advance(row, m.font_size) <= text_w, "{row:?}");
                 }
             }
         });
     }
 
-    /// At every window the rows drawn are whole exchanges, newest first: the
-    /// page is exactly the first k exchanges' own rows.
+    #[test]
+    fn only_the_subjects_own_lines_are_marked() {
+        let blocks = paged(&[short(1)], 10, (1440.0, 900.0));
+        let own: Vec<bool> = blocks[0].iter().map(|l| l.own).collect();
+        assert_eq!(own, [true, false], "Kestrel is the subject");
+    }
+
+    #[test]
+    fn an_exchange_too_tall_for_the_body_is_not_reported_as_silence() {
+        let huge = ExchangeView {
+            lines: vec![SpokenLine {
+                who: "Kestrel".into(),
+                own: true,
+                text: "word ".repeat(2000),
+            }],
+        };
+        assert!(paged(&[huge], 20, (1440.0, 900.0)).is_empty());
+    }
+
+    /// At every budget the page is exactly the first k exchanges, each
+    /// whole, and the rule rows between them are paid for.
     #[test]
     fn the_page_never_shows_part_of_an_exchange() {
-        let mut exchanges = worst_exchanges();
-        exchanges.extend((0..30).map(short));
-        with_painter(|p| {
-            for (w, h) in WINDOWS {
-                let m = ui_metrics(h);
-                let page = talk_sections(&exchanges, (w, h), p, &m);
-                let rows = texts(&page[0]);
-                assert!(rows.len() < exchanges.len() * 2, "the page should be cut");
-                let mut expected: Vec<String> = Vec::new();
-                let max_w = manifest_layout(w, h, 0, &[], &m).header.w - m.inset * 2.0;
-                for ex in &exchanges {
-                    if rows.len() == expected.len() {
-                        break;
-                    }
-                    if !expected.is_empty() {
-                        expected.push(String::new());
-                    }
-                    expected.extend(exchange_rows(ex, max_w, p, &m));
-                    assert!(
-                        rows.len() >= expected.len(),
-                        "the page ends inside an exchange"
-                    );
-                }
-                assert_eq!(rows, expected, "at {w}x{h}");
+        let exchanges: Vec<ExchangeView> = (0..30).map(short).collect();
+        for budget in 0..40 {
+            let blocks = paged(&exchanges, budget, (1440.0, 900.0));
+            let cost =
+                blocks.iter().map(|b| rows_of(b)).sum::<usize>() + blocks.len().saturating_sub(1);
+            assert!(cost <= budget, "{cost} rows in a budget of {budget}");
+            // Each short exchange is two rows.
+            assert_eq!(blocks.len(), (budget + 1) / 3, "budget {budget}");
+            for (i, block) in blocks.iter().enumerate() {
+                assert_eq!(block[0].text, vec![format!("Line {i}.")]);
             }
-        });
+        }
     }
 }

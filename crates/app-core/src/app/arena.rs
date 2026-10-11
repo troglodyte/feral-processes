@@ -84,7 +84,7 @@ impl ArenaCatalog {
 
 /// Where a picked id goes. `Some(index)` replaces an existing row's id,
 /// `None` appends a new one — one mode with four targets rather than four
-/// near-identical handlers to keep in step, following `Mode::ManifestPick`.
+/// near-identical handlers to keep in step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ArenaPickKind {
     PartySpecies(Option<usize>),

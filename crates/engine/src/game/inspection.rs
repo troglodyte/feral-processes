@@ -1,7 +1,9 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect targeting.
 
+use crate::components::{HoldPoints, StatPoints};
 use crate::game::base::hauling::at_station;
+use crate::game::trade::IDLE_ACTIVITY;
 use crate::settlements::CompassTarget;
 use crate::tuning::{
     DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, FORMATIONS,
@@ -1802,6 +1804,51 @@ impl Game {
             .any(|t| t.produced() > 0)
     }
 
+    /// What `entity` is asking of the player, for the manifest's rail and
+    /// band: the first of `calls_to_act`.
+    ///
+    /// A player with both kinds banked is told about perk points first --
+    /// the perks screen is where both are spent, and perks are the scarcer.
+    pub fn call_to_act(&self, entity: Entity) -> Option<CallToAct> {
+        self.calls_to_act(entity).into_iter().next()
+    }
+
+    /// Every call `entity` makes, most pressing first.
+    ///
+    /// The one derivation `attention` reads its `PerkPoints` and
+    /// `StatPoints` rows from, and whose `DevPoints` its `ProgramPoints`
+    /// row counts, so a rail mark and the HUD badge flip together. Banked
+    /// program points only call when held (`HoldPoints`): an unheld bank is
+    /// spent by the next level, so there is nothing for the player to do
+    /// about it, and today's count has always read that way.
+    pub fn calls_to_act(&self, entity: Entity) -> Vec<CallToAct> {
+        if self.world.get::<Player>(entity).is_some() {
+            let perks = self.world.get::<Perks>(entity).map_or(0, |p| p.points);
+            let stats = self.world.get::<StatPoints>(entity).map_or(0, |p| p.0);
+            return [
+                (perks > 0).then_some(CallToAct::PerkPoints(perks)),
+                (stats > 0).then_some(CallToAct::StatPoints(stats)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+        }
+        if let (Some(hold), Some(points)) = (
+            self.world.get::<HoldPoints>(entity),
+            self.world.get::<StatPoints>(entity),
+        ) && hold.0
+            && points.0 > 0
+        {
+            return vec![CallToAct::DevPoints(points.0)];
+        }
+        if self.program_role(entity) == Some(ProgramRole::Staff)
+            && self.program_activity(entity) == IDLE_ACTIVITY
+        {
+            return vec![CallToAct::Idle];
+        }
+        Vec::new()
+    }
+
     /// What needs the player right now, most urgent first.
     ///
     /// **One derivation, three readouts.** The HUD's status-bar badge, the
@@ -1929,32 +1976,28 @@ impl Game {
             });
         }
 
-        let points = self
-            .world
-            .get::<Perks>(self.player_entity())
-            .map_or(0, |p| p.points);
-        if points > 0 {
-            let noun = if points == 1 { "point" } else { "points" };
-            rows.push(AttentionRow {
-                kind: AttentionKind::PerkPoints,
-                text: format!("{points} perk {noun} unspent"),
-                key: 'p',
-                threat: false,
-            });
-        }
-
-        let stat_points = self
-            .world
-            .get::<crate::components::StatPoints>(self.player_entity())
-            .map_or(0, |p| p.0);
-        if stat_points > 0 {
-            let noun = if stat_points == 1 { "point" } else { "points" };
-            rows.push(AttentionRow {
-                kind: AttentionKind::StatPoints,
-                text: format!("{stat_points} stat {noun} unspent (S on the perks screen)"),
-                key: 'p',
-                threat: false,
-            });
+        for call in self.calls_to_act(self.player_entity()) {
+            match call {
+                CallToAct::PerkPoints(points) => {
+                    let noun = if points == 1 { "point" } else { "points" };
+                    rows.push(AttentionRow {
+                        kind: AttentionKind::PerkPoints,
+                        text: format!("{points} perk {noun} unspent"),
+                        key: 'p',
+                        threat: false,
+                    });
+                }
+                CallToAct::StatPoints(points) => {
+                    let noun = if points == 1 { "point" } else { "points" };
+                    rows.push(AttentionRow {
+                        kind: AttentionKind::StatPoints,
+                        text: format!("{points} stat {noun} unspent (S on the perks screen)"),
+                        key: 'p',
+                        threat: false,
+                    });
+                }
+                CallToAct::DevPoints(_) | CallToAct::Idle => {}
+            }
         }
 
         let holding = self.programs_holding_points();

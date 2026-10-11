@@ -517,7 +517,7 @@ fn m_reads_the_highlighted_programs_manifest_and_esc_returns_to_the_roster() {
 }
 
 /// Paging the sheet with ←/→ and then leaving lands the roster's highlight on
-/// whoever was on screen, the same rule `Mode::ManifestPick` follows: the list
+/// whoever was on screen, the same rule every list follows: the list
 /// should agree with the sheet just left.
 #[test]
 fn paging_the_sheet_moves_the_rosters_highlight_to_match() {

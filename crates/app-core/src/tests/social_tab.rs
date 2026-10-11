@@ -94,7 +94,7 @@ fn watching_from_the_social_tab_resets_it() {
     open(&mut app, staff);
     app.handle_key(GameKey::Tab);
     assert_eq!(app.manifest_tab, ManifestTab::Social);
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
     assert_eq!(app.watching, Some(staff), "the watch must have started");
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
 }

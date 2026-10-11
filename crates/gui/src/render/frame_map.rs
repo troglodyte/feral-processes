@@ -26,7 +26,7 @@ const INSET_FILL: f32 = 0.94;
 /// what pins this at 0.30 rather than the tidier quarter-pane. Run
 /// `inset_glyphs_stay_legible_at_the_smallest_window` for the figures — a
 /// doc comment restating them is a copy that goes stale, which this repo
-/// has already paid for three times in `manifest_layout`.
+/// has already paid for three times in the manifest's layout.
 ///
 /// Presentation, so it lives here and not in `tuning.rs` — how much of the
 /// corridor the map covers is not difficulty.

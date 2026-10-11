@@ -1,97 +1,140 @@
 //! The dossier — `[D]` from a program's manifest.
 //!
-//! A second sheet about the body `Mode::Manifest` is showing: five
-//! attributes with their old-school names beside them, over a derived
-//! header and one sentence of where this program came from.
-//!
-//! **Every figure comes out of `Game::dossier_report`**,
-//! `draw_companion_memories`' rule — a renderer that derived a header
-//! itself would be the fifth screen in this repo to keep a private copy of
-//! something the engine already owns.
+//! A second page about the body `Mode::Manifest` is showing, drawn in the
+//! manifest's frame under its band: where this program came from, then its
+//! attributes with their old-school names beside them. The figures are
+//! `Game::dossier_report`'s, and the entry point that fetches them is
+//! `manifest::draw_dossier`.
 //!
 //! **Nothing on this page is read for a mechanic.** See `attributes.rs`.
 //!
-//! Its own file rather than a third page in `render/party.rs`, which
-//! already holds the roster, the gear page, the fusion picker and the
-//! memories page: the dossier is read from the manifest rather than from
-//! the roster, and the two censuses below want a file to live in.
+//! The page has no scroll, so `MAX_ATTRIBUTE_ROWS` is what bounds it, and
+//! the fit census in `manifest` paints its tallest case at every window.
 
+use super::manifest::layout::section_row_h;
+use super::manifest::{elided_to_fit, subhead, wrap_to_width};
 use super::popup::*;
 use super::*;
+use feral_processes_engine::views::{AttributeRow, DossierReport};
 
-/// The dossier for `subject`, or a refusal when the body is gone —
-/// `draw_companion_memories`' shape, including the `PopupSize::Small`
-/// fallback.
-pub(super) fn draw_dossier(
-    game: &Game,
-    subject: Option<Entity>,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(report) = subject.and_then(|e| game.dossier_report(e)) else {
-        draw_popup(
-            "Dossier",
-            PopupSize::Small,
-            &[text_row("That program is gone.")],
-            refusal,
-            painter,
-            m,
-        );
-        return;
-    };
-    let rows = dossier_page_rows(&report, DESCRIBE_WRAP_COLUMNS);
-    draw_popup("Dossier", PopupSize::Large, &rows, refusal, painter, m);
+/// Where there is nothing to list. What an install with `assets/attributes/`
+/// deleted draws, which is the supported way to play without this feature.
+const NOTHING_ON_FILE: &str = "Nothing on file about this one.";
+
+/// Cells between the attribute table's columns.
+const COLUMN_GAP_CELLS: f32 = 2.0;
+
+/// The attribute table's column widths, in pixels, measured from its own
+/// rows so the columns hug what is in them: name, `WAS legacy`, value.
+struct Columns {
+    name: f32,
+    legacy: f32,
+    value: f32,
 }
 
-/// The page's rows, out of the engine's report rather than out of a `Game`
-/// — the split `memory_page_rows` makes, and for its reason: the height and
-/// width censuses have to measure the page at its **worst** case, and
-/// `MAX_ATTRIBUTE_ROWS` rows of the widest shipped def is a state a fixture
-/// can state and a `Game` would have to be played into.
+impl Columns {
+    fn of(rows: &[AttributeRow], painter: &Painter, m: &Metrics) -> Columns {
+        let widest = |text: fn(&AttributeRow) -> String| {
+            rows.iter()
+                .map(|r| painter.measure_ui_advance(text(r), m.font_size))
+                .fold(0.0_f32, f32::max)
+        };
+        Columns {
+            name: widest(|r| r.name.clone()),
+            legacy: widest(legacy_cell),
+            value: widest(|r| r.value.to_string()),
+        }
+    }
+}
+
+fn legacy_cell(row: &AttributeRow) -> String {
+    format!("WAS {}", row.legacy)
+}
+
+/// PROVENANCE, with the revision and checksum in its subhead, then
+/// ATTRIBUTES as a table of name, legacy name, value and short gloss.
 ///
 /// **One row per attribute, carrying the `short` gloss and not the
-/// `meaning` prose**, and the census is what decided that rather than an
-/// eye. The page has no scroll, and a `PopupSize::Large` popup holds 23
-/// rows at the narrowest supported window; the page as written builds 16
-/// at its worst case. `MAX_ATTRIBUTE_ROWS` (10) meanings wrapped at
-/// `DESCRIBE_WRAP_COLUMNS` is about thirty rows on top of that, and even
-/// the shipped five would overrun. `AttributeRow::meaning` stays in the
-/// report for the inspect page a later change adds.
-pub(super) fn dossier_page_rows(
-    report: &feral_processes_engine::views::DossierReport,
-    cols: usize,
-) -> Vec<Row> {
-    let mut rows = vec![
-        Row::TextColored(format!("{} — dossier", report.name), CYAN),
-        text_row(format!("{}    {}", report.revision, report.checksum)),
-    ];
+/// `meaning` prose**: with a table a gloss wraps under its own column and the
+/// census, not an eye, decided that the longer prose would not fit.
+/// `AttributeRow::meaning` stays in the report for the inspect page a later
+/// change adds.
+pub(super) fn paint_dossier(report: &DossierReport, body: Rect, painter: &Painter, m: &Metrics) {
+    let char_w = painter.measure_ui_advance("M", m.font_size);
+    let row_h = section_row_h(m);
+    let hint = format!("{}    {}", report.revision, report.checksum);
+    subhead("PROVENANCE", &hint, body, body.y, painter, m);
+    let mut y = body.y + m.line_height;
     if let Some(provenance) = &report.provenance {
-        rows.extend(wrap_text(provenance, cols).into_iter().map(text_row));
+        for line in wrap_text(provenance, DESCRIBE_WRAP_COLUMNS) {
+            painter.ui(
+                elided_to_fit(painter, &line, m.font_size, body.w),
+                body.x,
+                y + row_h * 0.85,
+                m.font_size,
+                hud::palette::BODY,
+            );
+            y += row_h;
+        }
     }
-    rows.push(text_row(""));
-
+    y += m.gap;
+    let below = Rect::new(body.x, y, body.w, (body.y + body.h - y).max(0.0));
+    subhead("ATTRIBUTES", "", below, y, painter, m);
     if report.rows.is_empty() {
-        // Also what an install with `assets/attributes/` deleted draws,
-        // which is the supported way to play without this feature at all.
-        rows.push(text_row("Nothing on file about this one."));
+        painter.ui(
+            NOTHING_ON_FILE,
+            below.x,
+            y + m.line_height + row_h * 0.85,
+            m.font_size,
+            hud::palette::FAINT,
+        );
+        return;
     }
+    let cols = Columns::of(&report.rows, painter, m);
+    let gap = COLUMN_GAP_CELLS * char_w;
+    let legacy_x = below.x + cols.name + gap;
+    let value_x = legacy_x + cols.legacy + gap;
+    let short_x = value_x + cols.value + gap;
+    let short_w = below.x + below.w - short_x;
+    let mut y = y + m.line_height;
     for row in &report.rows {
-        rows.push(text_row(format!(
-            "{} ({})  {}   {}",
-            row.name, row.legacy, row.value, row.short
-        )));
+        let base = y + row_h * 0.85;
+        painter.ui(&row.name, below.x, base, m.font_size, hud::palette::BODY);
+        painter.ui(
+            legacy_cell(row),
+            legacy_x,
+            base,
+            m.font_size,
+            hud::palette::FAINT,
+        );
+        let value = row.value.to_string();
+        let value_w = painter.measure_ui_advance(&value, m.font_size);
+        painter.ui_bold(
+            &value,
+            value_x + cols.value - value_w,
+            base,
+            m.font_size,
+            hud::palette::EMPHASIS,
+        );
+        // The gloss wraps under its own column, so a long one is more rows
+        // and never a cut word.
+        let lines = wrap_to_width(painter, &row.short, m.font_size, short_w);
+        for (i, line) in lines.iter().enumerate() {
+            painter.ui(
+                elided_to_fit(painter, line, m.font_size, short_w),
+                short_x,
+                base + row_h * i as f32,
+                m.font_size,
+                hud::palette::FIELD_LABEL,
+            );
+        }
+        y += row_h * lines.len().max(1) as f32;
     }
-
-    rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
-    rows
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
-    use crate::paint::with_painter;
     use feral_processes_engine::attributes::{AttributeDb, AttributeDef};
 
     fn assets_dir() -> std::path::PathBuf {
@@ -160,7 +203,7 @@ mod tests {
     /// be in. `MAX_ATTRIBUTE_ROWS` rows, each carrying the longest name,
     /// legacy word and gloss any shipped def uses, over a full header with
     /// the longest shipped provenance sentence.
-    fn tallest_dossier() -> Vec<Row> {
+    pub(in crate::render) fn tallest_dossier() -> DossierReport {
         let widest = |pick: fn(&AttributeDef) -> &str| {
             shipped_attribute_defs()
                 .iter()
@@ -168,7 +211,7 @@ mod tests {
                 .max_by_key(|s| s.chars().count())
                 .expect("the shipped catalogue is not empty")
         };
-        let row = feral_processes_engine::views::AttributeRow {
+        let row = AttributeRow {
             name: widest(|d| &d.name),
             legacy: widest(|d| &d.legacy),
             // The widest value the mint can produce from any shipped def,
@@ -178,63 +221,12 @@ mod tests {
             short: widest(|d| &d.short),
             meaning: widest(|d| &d.meaning),
         };
-        let report = feral_processes_engine::views::DossierReport {
+        DossierReport {
             name: longest_shipped_program_name(),
             revision: "rev 9.99".to_string(),
             checksum: "0xFFFFFF".to_string(),
             provenance: Some(longest_shipped_provenance()),
             rows: vec![row; feral_processes_engine::tuning::MAX_ATTRIBUTE_ROWS],
-        };
-        dossier_page_rows(&report, DESCRIBE_WRAP_COLUMNS)
-    }
-
-    /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span
-    /// and this page has none, so a row past the bottom is dropped in
-    /// silence — `the_tallest_memory_page_fits_its_popup`'s trap exactly.
-    /// Raising `MAX_ATTRIBUTE_ROWS` past what fits means giving the page a
-    /// scroll first.
-    ///
-    /// Swept rather than measured at one window: `ui_metrics` clamps the
-    /// font at both ends, so below the clamp the box keeps shrinking while
-    /// the line height stops and the tightest window is the smallest one.
-    #[test]
-    fn the_tallest_dossier_fits_its_popup() {
-        let rows = tallest_dossier().len();
-        for h in (600..=2160).step_by(60) {
-            let m = ui_metrics(h as f32);
-            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
-            assert!(
-                rows + REFUSAL_MAX_LINES <= cap,
-                "the dossier builds a {rows}-row page into a {cap}-row popup at {h}px"
-            );
         }
-    }
-
-    /// The other axis, and the one nothing clamps at all: `draw_row` clips
-    /// a row vertically and never horizontally, so a line past the right
-    /// edge is simply lost. On this page the tail of a row is the number
-    /// and the gloss — which is most of what the row is read for.
-    #[test]
-    fn no_dossier_row_overflows_its_popup() {
-        let rows = tallest_dossier();
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // 0.88 is `PopupSize::Large`'s width fraction, against the
-            // 1440x900 geometry `ui_metrics` is calibrated for.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for row in &rows {
-                let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) => t,
-                    _ => continue,
-                };
-                let drawn = p.measure_ui_advance(line, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "a dossier row overflows the page by {:.0}px \
-                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
-            }
-        });
     }
 }

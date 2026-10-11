@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::bonds::Bond;
-use crate::components::{Memories, Memory, MemorySubject, ProgramId};
+use crate::components::{Glyph, Memories, Memory, MemorySubject, ProgramId};
 use crate::memories::MemoryId;
 use crate::resources::Brawl;
 use crate::*;
@@ -676,6 +676,30 @@ fn social_rows_are_strongest_opinion_first() {
         view.relationships
     );
     assert!(view.relationships.iter().all(|r| !r.gone));
+}
+
+#[test]
+fn two_same_named_programs_each_get_their_own_glyph_on_a_row() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let holder = spawn_tamed(&mut game, 10, 3);
+    let (a, b) = (spawn_tamed(&mut game, 10, 3), spawn_tamed(&mut game, 10, 3));
+    for (e, ch, color) in [(a, 'A', GlyphColor::Red), (b, 'B', GlyphColor::Green)] {
+        game.rename_companion(e, Some("Twin".into())).unwrap();
+        game.world.get_mut::<Glyph>(e).unwrap().ch = ch;
+        game.world.get_mut::<Glyph>(e).unwrap().color = color;
+        let id = id_of(&game, e);
+        implant(&mut game, holder, "idled_with", MemorySubject::Program(id));
+    }
+    assert_eq!(game.creature_short_label(a), game.creature_short_label(b));
+
+    let view = game.social(holder).unwrap();
+
+    let mut glyphs: Vec<_> = view.relationships.iter().map(|r| r.glyph).collect();
+    glyphs.sort_by_key(|g| g.map(|(c, _)| c));
+    assert_eq!(
+        glyphs,
+        [Some(('A', GlyphColor::Red)), Some(('B', GlyphColor::Green))]
+    );
 }
 
 #[test]

@@ -48,7 +48,7 @@ fn w_on_a_staff_manifest_starts_watching_and_returns_to_the_map() {
     );
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
 
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
 
     assert_eq!(app.watching, Some(staff));
     assert_eq!(
@@ -72,7 +72,7 @@ fn w_on_a_program_the_sim_never_walks_is_refused() {
         .expect("a fresh party has room");
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
 
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
 
     assert_eq!(app.watching, None);
     assert_eq!(
@@ -90,7 +90,7 @@ fn w_on_a_program_the_sim_never_walks_is_refused() {
 fn esc_on_the_map_hands_the_camera_back() {
     let (mut app, staff) = watching_app(7);
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
     assert_eq!(app.watching, Some(staff));
 
     app.handle_key(GameKey::Esc);
@@ -106,7 +106,7 @@ fn esc_on_the_map_hands_the_camera_back() {
 fn a_step_hands_the_camera_back_and_still_steps() {
     let (mut app, staff) = watching_app(7);
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
     let before = app.game.as_ref().unwrap().base_pos().unwrap();
 
     walk(&mut app, GameKey::Right);
@@ -126,7 +126,7 @@ fn a_step_hands_the_camera_back_and_still_steps() {
 fn the_camera_lets_go_when_the_program_stops_being_watchable() {
     let (mut app, staff) = watching_app(7);
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
-    app.handle_key(GameKey::Char('w'));
+    app.handle_key(GameKey::Char('W'));
     assert_eq!(app.watching, Some(staff));
 
     app.game
@@ -145,4 +145,15 @@ fn the_camera_lets_go_when_the_program_stops_being_watchable() {
         "and the read is what clears the field, so the next frame does not \
          ask again"
     );
+}
+
+/// Lowercase `w` is a row key now, so on a roster of two it is row `w`, which
+/// does not exist, and nothing watches.
+#[test]
+fn lowercase_w_no_longer_watches() {
+    let (mut app, staff) = watching_app(11);
+    open_manifest(&mut app, staff, ManifestOrigin::Roster);
+    app.handle_key(GameKey::Char('w'));
+    assert_eq!(app.watching, None);
+    assert_eq!(app.mode, Mode::Manifest);
 }

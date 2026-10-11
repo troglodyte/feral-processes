@@ -73,10 +73,16 @@ fn zero_picks_no_row_rather_than_underflowing() {
 }
 
 #[test]
-fn the_party_menu_opens_the_manifest_picker_and_esc_backs_out() {
+fn the_party_menu_opens_the_manifest_on_you_and_esc_backs_out() {
     let mut app = test_app(70);
     open_via_menu(&mut app, 'p', "Read a manifest");
-    assert_eq!(app.mode, Mode::ManifestPick);
+    assert_eq!(app.mode, Mode::Manifest);
+    assert_eq!(app.manifest_origin, ManifestOrigin::Menu);
+    assert_eq!(
+        app.pending_manifest,
+        Some(app.game.as_ref().unwrap().player_entity()),
+        "the menu row opens subject 0, which is you"
+    );
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::PartyMenu, "Esc walks back up one level");
     app.handle_key(GameKey::Esc);
@@ -84,14 +90,13 @@ fn the_party_menu_opens_the_manifest_picker_and_esc_backs_out() {
 }
 
 #[test]
-fn the_picker_always_offers_you_as_its_first_row() {
+fn the_manifest_menu_row_opens_on_you() {
     let mut app = test_app(71);
     let player = app.game.as_ref().unwrap().player_status().position;
 
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Manifest);
-    let subject = app.pending_manifest.expect("row 1 picks a subject");
+    let subject = app.pending_manifest.expect("the row opens a subject");
     let view = app.game.as_ref().unwrap().manifest(subject).unwrap();
     assert_eq!(view.name, "You", "you are always the first row");
     let ManifestSubject::Player(p) = view.subject else {
@@ -101,13 +106,13 @@ fn the_picker_always_offers_you_as_its_first_row() {
 }
 
 #[test]
-fn the_picker_lists_every_owned_program_after_you() {
+fn paging_from_the_menu_row_reaches_every_owned_program_after_you() {
     let mut app = app_owning_distant_programs(72, 2);
     let subjects = app.manifest_subjects();
     assert_eq!(subjects.len(), 3, "you plus two programs");
 
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::Manifest);
     assert_eq!(app.pending_manifest, Some(subjects[1]));
 }
@@ -120,11 +125,10 @@ fn the_picker_lists_every_owned_program_after_you() {
 /// ends in a `_ => {}`. The manifest pager stands in for all of them: it is
 /// the nearest other Left/Right consumer that reports where it landed.
 #[test]
-fn a_modifier_is_stripped_outside_the_pickers() {
+fn a_modifier_is_stripped_outside_the_menus() {
     let mut app = app_owning_distant_programs(74, 2);
     let subjects = app.manifest_subjects();
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('1'));
     assert_eq!(app.pending_manifest, Some(subjects[0]));
 
     app.handle_key(GameKey::ShiftRight);
@@ -146,7 +150,6 @@ fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
     let mut app = app_owning_distant_programs(73, 2);
     let subjects = app.manifest_subjects();
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('1'));
     assert_eq!(app.pending_manifest, Some(subjects[0]));
 
     app.handle_key(GameKey::Right);
@@ -166,6 +169,66 @@ fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
         "before the first subject wraps to the last"
     );
     assert_eq!(app.mode, Mode::Manifest, "cycling never leaves the screen");
+}
+
+#[test]
+fn up_and_down_page_the_subjects_as_left_and_right_do() {
+    let mut app = app_owning_distant_programs(7501, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.pending_manifest, Some(subjects[1]));
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.pending_manifest, Some(subjects[2]), "Up wraps");
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+#[test]
+fn a_digit_or_lowercase_letter_jumps_to_that_subject_and_keeps_the_face() {
+    let mut app = app_owning_distant_programs(7502, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Char('3'));
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
+
+    // A program's Social face, then a jump to another program keeps it...
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    app.handle_key(GameKey::Char('3'));
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    // ...and a jump to you, who have no Social face, falls back to Stats.
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+
+    // Letters label rows from the tenth; this roster has three.
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]), "no row a");
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+#[test]
+fn a_wild_subject_ignores_digits_letters_and_up_down() {
+    let mut app = app_owning_distant_programs(7503, 2);
+    let (wild, direction) = a_wild_program_and_its_direction(&mut app);
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(direction);
+    assert_eq!(app.pending_manifest, Some(wild));
+    for key in [
+        GameKey::Char('1'),
+        GameKey::Char('2'),
+        GameKey::Char('a'),
+        GameKey::Up,
+        GameKey::Down,
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.pending_manifest, Some(wild), "{key:?}");
+        assert_eq!(app.mode, Mode::Manifest, "{key:?}");
+    }
 }
 
 /// A wild program three tiles due east of the player, and the key that
@@ -197,23 +260,16 @@ fn cycling_does_nothing_when_the_subject_is_a_program_you_do_not_own() {
 }
 
 #[test]
-fn esc_returns_to_the_picker_when_the_manifest_was_opened_from_it() {
+fn esc_returns_to_the_menu_when_the_manifest_was_opened_from_it() {
     let mut app = app_owning_distant_programs(75, 1);
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Manifest);
 
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::ManifestPick,
-        "back to the list you came from"
-    );
-    app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
         Mode::PartyMenu,
-        "a second Esc leaves for the menu the picker was opened from"
+        "Esc leaves for the menu the manifest was opened from"
     );
     assert_eq!(app.pending_manifest, None);
 }
@@ -232,31 +288,6 @@ fn esc_leaves_for_the_map_when_the_manifest_was_opened_from_the_world() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(app.pending_manifest, None);
-}
-
-/// The list re-opens on whoever the sheet was showing, not on the row
-/// originally picked — after paging with ←/→ those differ, and a highlight
-/// that disagrees with the screen you just left reads as a bug.
-#[test]
-fn returning_to_the_picker_highlights_the_subject_you_were_reading() {
-    let mut app = app_owning_distant_programs(78, 2);
-    open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
-    let showing = app.pending_manifest;
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::ManifestPick);
-    assert_eq!(
-        app.menu_selected, 2,
-        "the highlight follows the sheet, not the original pick"
-    );
-    app.handle_key(GameKey::Enter);
-    assert_eq!(
-        app.pending_manifest, showing,
-        "Enter on the restored row re-opens the same subject"
-    );
 }
 
 #[test]

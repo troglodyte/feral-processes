@@ -6,6 +6,10 @@ use crate::components::Downed;
 use crate::game::base::floor::drop_load;
 use crate::*;
 
+/// What `program_activity` says of a program with nothing to do, named so
+/// `call_to_act` tests for it rather than for a spelling.
+pub(crate) const IDLE_ACTIVITY: &str = "idle";
+
 impl Game {
     /// `entity`'s trading-post terms (see `StructureDef::trade`), if it's a
     /// structure with any — used both by `sell_item`/`buy_item` and by the
@@ -537,7 +541,7 @@ impl Game {
             Some((TaskKind::Guard, target)) => format!("guarding {target}"),
             Some((TaskKind::Excavate, target)) => format!("cutting {target}"),
             Some((TaskKind::Construct, target)) => format!("building {target}"),
-            None => "idle".to_string(),
+            None => IDLE_ACTIVITY.to_string(),
         }
     }
 

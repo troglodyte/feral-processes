@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.16
+
+**A new base now starts 19 cells across instead of 9.** The opening floor was too small to place all the beginner structures without digging first. Bases in existing saves keep the floor they already have.
+
 ## 0.18.15
 
 **On a battle map, a blade's slash now cuts away from the program that swung it.** Before, the cut always ran from the top-left of the target to its bottom-right, so a swing at something above or to the left of you looked like an attack coming back at you. Streaks, beams and other weapon effects already pointed the right way.

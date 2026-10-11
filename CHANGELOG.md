@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.15
+
+**On a battle map, a blade's slash now cuts away from the program that swung it.** Before, the cut always ran from the top-left of the target to its bottom-right, so a swing at something above or to the left of you looked like an attack coming back at you. Streaks, beams and other weapon effects already pointed the right way.
+
 ## 0.18.14
 
 **Placing a structure where one of your programs is standing now goes through, and the program steps aside to the nearest free floor.** Before, the placement was refused with "one of your programs is standing there", often for a wanderer hidden behind the deploy menu. Rebuilding a wreck works the same way instead of waiting for the program to move, idle programs no longer wander onto a placed build site, and a program that ends up on one is moved off before the structure goes up rather than being left inside it.

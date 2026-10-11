@@ -132,7 +132,13 @@ fn channel_tag(entry: &LogEntry) -> (&'static str, Color) {
 }
 
 /// A meter as three pieces: label, filled cells, trough cells.
-fn meter(name: &str, v: f32, max: f32, cells: usize, fill: Color) -> Vec<Piece> {
+pub(in crate::render) fn meter(
+    name: &str,
+    v: f32,
+    max: f32,
+    cells: usize,
+    fill: Color,
+) -> Vec<Piece> {
     let b = bar(v, max, cells);
     vec![
         label(name),

@@ -80,7 +80,7 @@ pub(super) fn talk_sections(
     painter: &Painter,
     m: &Metrics,
 ) -> Vec<Section> {
-    let inner = manifest_layout(w, h, 0, &[], m).header.w - m.inset * 2.0;
+    let inner = manifest_layout(w, h, &[], m).header.w - m.inset * 2.0;
     let mut rows: Vec<SectionRow> = Vec::new();
     for exchange in exchanges {
         let mut candidate = rows.clone();
@@ -93,7 +93,7 @@ pub(super) fn talk_sections(
                 .map(SectionRow::Note),
         );
         let page = [conversations_section(candidate)];
-        let l = manifest_layout(w, h, 0, &page, m);
+        let l = manifest_layout(w, h, &page, m);
         let bottom = l.sections[0].y + l.sections[0].h;
         if l.footer.y - bottom < FOOTER_CLEARANCE {
             break;
@@ -229,7 +229,7 @@ mod tests {
         with_painter(|p| {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
-                let max_w = manifest_layout(w, h, 0, &[], &m).header.w - m.inset * 2.0;
+                let max_w = manifest_layout(w, h, &[], &m).header.w - m.inset * 2.0;
                 let rows = wrap_row(&"word ".repeat(120), max_w, p, &m);
                 assert!(rows.len() > 1, "no wrap at {w}x{h}");
                 assert!(rows[1].starts_with(CONTINUATION_INDENT));
@@ -277,7 +277,7 @@ mod tests {
         with_painter(|p| {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &[], &m);
+                let l = manifest_layout(w, h, &[], &m);
                 let max_w = l.header.w - m.inset * 2.0;
                 for ex in &exchanges {
                     for row in exchange_rows(ex, max_w, p, &m) {
@@ -292,7 +292,7 @@ mod tests {
                             .map(SectionRow::Note)
                             .collect(),
                     )];
-                    let l = manifest_layout(w, h, 0, &page, &m);
+                    let l = manifest_layout(w, h, &page, &m);
                     let bottom = l.sections[0].y + l.sections[0].h;
                     assert!(
                         l.footer.y - bottom >= FOOTER_CLEARANCE,
@@ -316,7 +316,7 @@ mod tests {
                 let rows = texts(&page[0]);
                 assert!(rows.len() < exchanges.len() * 2, "the page should be cut");
                 let mut expected: Vec<String> = Vec::new();
-                let max_w = manifest_layout(w, h, 0, &[], &m).header.w - m.inset * 2.0;
+                let max_w = manifest_layout(w, h, &[], &m).header.w - m.inset * 2.0;
                 for ex in &exchanges {
                     if rows.len() == expected.len() {
                         break;

@@ -250,7 +250,7 @@ mod tests {
         let sections = social_sections(&view_with(MAX_RELATIONSHIP_ROWS + 5, known));
         for (w, h) in WINDOWS {
             let m = ui_metrics(h);
-            let l = manifest_layout(w, h, 0, &sections, &m);
+            let l = manifest_layout(w, h, &sections, &m);
             let bottom = l.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
             assert!(
                 l.footer.y - bottom >= 10.0,
@@ -277,7 +277,7 @@ mod tests {
         with_painter(|p| {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &sections, &m);
+                let l = manifest_layout(w, h, &sections, &m);
                 let fitted = fitted_stat_row(p, &label, &value, l.sections[0], &m);
                 assert_eq!(
                     (fitted.label.as_str(), fitted.value.as_str()),
@@ -311,7 +311,7 @@ mod tests {
         with_painter(|p| {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &sections, &m);
+                let l = manifest_layout(w, h, &sections, &m);
                 let room = l.sections[1].w - m.inset * 2.0;
                 let drawn = p.measure_ui_advance(&text, m.font_size);
                 assert!(
@@ -367,7 +367,7 @@ mod tests {
             with_painter(|p| {
                 for (w, h) in WINDOWS {
                     let m = ui_metrics(h);
-                    let l = manifest_layout(w, h, 0, &[], &m);
+                    let l = manifest_layout(w, h, &[], &m);
                     let glyph = p.measure_map("x", m.title() * 2).width + m.pad;
                     let title = p
                         .measure(crate::paint::Face::UiBold, &head, m.title())

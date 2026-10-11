@@ -80,12 +80,25 @@ pub(in crate::render) fn fitting(
     painter: &Painter,
     m: &Metrics,
 ) -> Vec<Piece> {
+    fitting_joined(segments, &sep(), avail, painter, m)
+}
+
+/// [`fitting`] with a caller-chosen joiner, for a bar whose segments are
+/// groups: the keybar joins its groups with `│`, and still drops them from
+/// the end by this same rule.
+pub(in crate::render) fn fitting_joined(
+    segments: &[Vec<Piece>],
+    joiner: &Piece,
+    avail: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> Vec<Piece> {
     let size = m.small();
     let mut taken: Vec<Piece> = Vec::new();
     for segment in segments {
         let mut next = taken.clone();
         if !next.is_empty() {
-            next.push(sep());
+            next.push(joiner.clone());
         }
         next.extend(segment.iter().cloned());
         let text: String = next.iter().map(|(t, _, _)| t.as_str()).collect();

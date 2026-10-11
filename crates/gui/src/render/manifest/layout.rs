@@ -5,7 +5,6 @@
 //! is then testable at every window size without a window.
 
 use crate::paint::Rect;
-use crate::render::bars::bar_row_height;
 use crate::text::Metrics;
 use feral_processes_engine::RankedStat;
 
@@ -38,6 +37,16 @@ pub(in crate::render) enum LedgerColumn {
     Fight,
     Growth,
     Duty,
+}
+
+impl LedgerColumn {
+    pub(in crate::render) fn index(self) -> usize {
+        match self {
+            LedgerColumn::Fight => 0,
+            LedgerColumn::Growth => 1,
+            LedgerColumn::Duty => 2,
+        }
+    }
 }
 
 /// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
@@ -191,12 +200,11 @@ pub(in crate::render) fn section_rows_capped(
     rows
 }
 
-/// The manifest's boxes. `sections` is index-aligned with the slice passed to
+/// The boxes of the faces the old packer still lays out. `sections` is index-aligned with the slice passed to
 /// `manifest_layout`.
 pub(in crate::render) struct BoxLayout {
     pub(in crate::render) frame: Rect,
     pub(in crate::render) header: Rect,
-    pub(in crate::render) meters: Vec<Rect>,
     pub(in crate::render) sections: Vec<Rect>,
     pub(in crate::render) footer: Rect,
 }
@@ -222,7 +230,6 @@ pub(in crate::render) fn frame_rect(screen_w: f32, screen_h: f32) -> Rect {
 pub(in crate::render) fn manifest_layout(
     screen_w: f32,
     screen_h: f32,
-    meters: usize,
     sections: &[Section],
     m: &Metrics,
 ) -> BoxLayout {
@@ -234,18 +241,6 @@ pub(in crate::render) fn manifest_layout(
 
     let header = Rect::new(inner_x, y, inner_w, m.line_height * HEADER_ROWS);
     y += header.h + m.gap;
-
-    let meter_rects: Vec<Rect> = (0..meters)
-        .map(|i| {
-            Rect::new(
-                inner_x,
-                y + i as f32 * bar_row_height(m),
-                inner_w,
-                bar_row_height(m),
-            )
-        })
-        .collect();
-    y += meters as f32 * bar_row_height(m) + m.gap;
 
     let footer = Rect::new(
         inner_x,
@@ -301,7 +296,6 @@ pub(in crate::render) fn manifest_layout(
     BoxLayout {
         frame,
         header,
-        meters: meter_rects,
         sections: placed.into_iter().flatten().collect(),
         footer,
     }
@@ -404,6 +398,7 @@ const LEDGER_COLUMNS: usize = 3;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::render) enum Face {
     Stats,
+    #[cfg_attr(not(test), expect(dead_code, reason = "Phase 5's faces"))]
     Other,
 }
 
@@ -431,6 +426,7 @@ impl RailGeom {
 /// the caller's measured `char_w` (see `hud::layout` for why that is a
 /// parameter), so the census tests run without a window.
 pub(in crate::render) struct ManifestLayout {
+    #[cfg_attr(not(test), expect(dead_code, reason = "the tests read it"))]
     pub(in crate::render) frame: Rect,
     /// `None` for a wild subject, which is not on the roster.
     pub(in crate::render) rail: Option<RailGeom>,
@@ -650,7 +646,6 @@ pub(in crate::render) fn fit_column(rows: &[usize], height: f32, m: &Metrics) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::manifest::MANIFEST_MEMORY_ROWS;
     use crate::text::ui_metrics;
 
     /// The same window heights `popup_layout`'s tests sweep — the layout's
@@ -674,117 +669,6 @@ mod tests {
         }
     }
 
-    /// The fullest page a program can produce, at every cap that actually
-    /// bounds `program_sections`' output: 3 combat stats, 5 potential lines,
-    /// `MAX_AFFINITY_ROWS` affinity lines, 5 species facts (a non-boss
-    /// species carrying a `work_resource` — Habitats, Work aptitude, the two
-    /// Decompile rows, Growth), 2 work facts in their own WORK box (Speed
-    /// and Analysis, split out of SPECIES so it can hold that fifth row
-    /// without hitting `MAX_SECTION_ROWS`), `COMPANION_ROUTINE_SLOT_CAP`
-    /// routines, and `MAX_MOVE_ROWS` moves. POTENTIAL and AFFINITIES
-    /// together are the ordinary case for a tamed Scrapper, not an edge
-    /// case — the balance sweep models a mid-grade party as three of them,
-    /// and `scrapper.ron` carries both a `Potential` roll and a non-neutral
-    /// `damage` affinity.
-    ///
-    /// Five affinity rows is *not* a layout state and must not be modeled
-    /// here: `program_sections` builds the AFFINITIES box through
-    /// `section_rows_capped(_, MAX_AFFINITY_ROWS)`, so a five-category
-    /// species renders 2 rows (one plus a "+4 more" note), the same as it
-    /// renders here. The real worst case this fixture has to defend is
-    /// `MAX_AFFINITY_ROWS` + `MAX_MOVE_ROWS` together, which is what made
-    /// the band overflow the footer in the first place — restoring either
-    /// to a pre-cap literal reintroduces a fixture state the renderer can
-    /// no longer produce.
-    fn worst_case_program() -> Vec<Section> {
-        vec![
-            // Damage, Attack, Mitigation, Power. The damage band joined this
-            // box with the combat model, and this fixture has to move with
-            // `sections_for` — drifting from what the renderer emits is a
-            // failure this project has already shipped once.
-            section("COMBAT", 4, false),
-            section("POTENTIAL", MAX_POTENTIAL_ROWS, false),
-            section("AFFINITIES", MAX_AFFINITY_ROWS, false),
-            section("SPECIES", 5, false),
-            // Speed, Analysis, Base job, and the post — a tameable program
-            // always has a class, and a posted one names the structure it
-            // works, so four is the real worst case. A boss has neither and
-            // sits at two.
-            // Speed, Analysis, Base job, the post, and one row per loaded
-            // `needs::NeedDef` up to `MAX_NEED_ROWS` — the needs share this
-            // box rather than taking one of their own, because the program
-            // page has the least clearance in the renderer and a box of its
-            // own did not fit at 1280x720.
-            section("WORK", 4 + MAX_NEED_ROWS, false),
-            // The mood line plus `MANIFEST_MEMORY_ROWS` entries. Emitted for
-            // every program the player owns — which is every program whose
-            // page can also carry EQUIPMENT, ROUTINES and DEVELOPMENT, so
-            // this box belongs in the same worst case as those three and not
-            // in a variant of its own.
-            section("MEMORIES", 1 + MANIFEST_MEMORY_ROWS, false),
-            // Rings with the ceiling they buy, talents, and the bank.
-            // Emitted for every seated program and any developed one.
-            section("DEVELOPMENT", 3, false),
-            // One row per occupied `EquipmentSlot`, so `EquipmentSlot::ALL`
-            // is the cap. Any program the player owns can wear gear as of
-            // 0.8.0, so a fully kitted companion is the worst case here and
-            // not an edge case.
-            section("EQUIPMENT", 3, false),
-            section("ROUTINES", 6, false),
-            // Columned, not the full-width band it was until MEMORIES
-            // arrived — see `MAX_MOVE_ROWS`. The program page now has no band
-            // at all; `a_full_width_section_spans_both_columns_below_the_grid`
-            // still holds that path, which the player's EQUIPMENT uses.
-            section("MOVES", MAX_MOVE_ROWS, false),
-        ]
-    }
-
-    /// The fullest page the player can produce — six columned boxes and the
-    /// EQUIPMENT band. Perks caps at `MAX_SECTION_ROWS` (there are 12 perk
-    /// types now, still well past the cap of 6), party at `MAX_PARTY_SIZE`.
-    ///
-    /// `manifest_layout`'s column packer is an exact 2-partition
-    /// (`best_column_split`), so *whether the page fits* no longer depends
-    /// on this list's order — only on the set of box heights. The order
-    /// below is still kept matching what `manifest::sections_for` +
-    /// `manifest::player_sections` actually emit — COMBAT, PROGRESSION,
-    /// EQUIPMENT, PERKS, PARTY, then ROUTINES **last**, since
-    /// `sections_for` appends it after `player_sections` returns rather
-    /// than as its fourth push — because a fixture that silently drops or
-    /// reorders a box relative to reality is still the failure mode this
-    /// file exists to catch, even though a wrong *order* alone can no
-    /// longer hide an overflow the way it could under the old greedy.
-    fn worst_case_player() -> Vec<Section> {
-        vec![
-            // Damage, Attack, Accuracy, Evasion, Mitigation, Power. Sitting
-            // exactly on `MAX_SECTION_ROWS` is safe here in a way it would
-            // not be for SPECIES: COMBAT's row list is fixed-length, so it
-            // cannot grow at runtime and `section_rows` can never trim it
-            // to a "+N more" the player reads as "that's all of them".
-            // Player-only — a program's COMBAT stays at 4, because the
-            // program page's clearance sweep has no room for a fifth row.
-            section("COMBAT", MAX_SECTION_ROWS, false),
-            section("PROGRESSION", 4, false),
-            section("PERKS", MAX_SECTION_ROWS, false),
-            section("PARTY", 5, false),
-            // Credits, Portal Fragments, difficulty, cycle, contracts —
-            // fixed-length like COMBAT, and one row under the cap.
-            section("RUN", 5, false),
-            // The one band on this page, and the program page's EQUIPMENT is
-            // deliberately *not* one — see `manifest::sections_for`. A gear
-            // row is the widest row on either sheet and only the full frame
-            // holds it; the program page has no clearance to spare for a
-            // second band, which is what that split is measured against.
-            section("EQUIPMENT", 3, true),
-            section("ROUTINES", 6, false),
-        ]
-    }
-
-    /// Meter counts: a program shows Integrity and Experience, the player
-    /// adds Power.
-    const PROGRAM_METERS: usize = 2;
-    const PLAYER_METERS: usize = 3;
-
     /// Boxes are expected to *touch* — stacked meters are laid out
     /// contiguously, and `y + h` of one is exactly the `y` of the next. In f32
     /// that sum can land a fraction of a pixel past the boundary, so the
@@ -806,86 +690,13 @@ mod tests {
             && inner.y + inner.h <= outer.y + outer.h + 0.5
     }
 
-    /// The floor this test holds the gap between the tallest content box and
-    /// the footer to, on top of "doesn't overlap". Chosen to be meaningful
-    /// rather than trivially true: far past `TOUCH_EPSILON` (0.5px) so this
-    /// is never satisfied by a rounding tail, comfortably below today's
-    /// measured minimums (see the test's own failure output for the current
-    /// numbers — a doc comment restating them would only go stale again,
-    /// which is exactly what happened three times on this branch) so
-    /// legitimate content changes don't trip it by accident, but tight
-    /// enough to catch a real regression while there's still room to see it
-    /// coming rather than after it's already an overlap.
-    const MIN_CLEARANCE_PX: f32 = 10.0;
-
-    /// The gate this whole module exists for: the fullest page either subject
-    /// can produce has to fit the tightest window, at every window size, with
-    /// nothing overlapping, nothing escaping the frame, and real clearance
-    /// left over — not just "doesn't overlap yet". This is the test to cite
-    /// for the current clearance figures at any window size: run it (or read
-    /// its `MIN_CLEARANCE_PX` failure message) rather than trusting a comment
-    /// elsewhere that copied a number out of it.
-    ///
-    /// 720px is usually the binding case — the UI font is 19px there, and the
-    /// header, four meters and the footer eat most of the box before a
-    /// single stat row is drawn — but which height actually binds depends on
-    /// the current box set, not a fixed fact about 720px specifically. If
-    /// this fails, the fix is content, not the assertion: lower
-    /// `MAX_SECTION_ROWS` or `MAX_MOVE_ROWS`, or merge two of the player's
-    /// boxes.
-    #[test]
-    fn the_real_worst_case_pages_fit_the_tightest_window() {
-        for window_h in WINDOW_HEIGHTS {
-            for window_w in WINDOW_WIDTHS {
-                let m = ui_metrics(window_h);
-                for (who, sections, meters) in [
-                    ("program", worst_case_program(), PROGRAM_METERS),
-                    ("player", worst_case_player(), PLAYER_METERS),
-                ] {
-                    let l = manifest_layout(window_w, window_h, meters, &sections, &m);
-
-                    let mut boxes = vec![l.header];
-                    boxes.extend(l.meters.iter().copied());
-                    boxes.extend(l.sections.iter().copied());
-                    boxes.push(l.footer);
-
-                    for (i, a) in boxes.iter().enumerate() {
-                        assert!(
-                            contains(&l.frame, a),
-                            "the fullest {who} page at {window_w}x{window_h}: box {i} ({a:?}) \
-                             escaped the frame ({:?})",
-                            l.frame
-                        );
-                        for (j, b) in boxes.iter().enumerate().skip(i + 1) {
-                            assert!(
-                                !overlaps(a, b),
-                                "the fullest {who} page at {window_w}x{window_h}: boxes {i} \
-                                 ({a:?}) and {j} ({b:?}) overlap"
-                            );
-                        }
-                    }
-
-                    let tallest_content_bottom =
-                        l.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
-                    let clearance = l.footer.y - tallest_content_bottom;
-                    assert!(
-                        clearance >= MIN_CLEARANCE_PX,
-                        "the fullest {who} page at {window_w}x{window_h}: only {clearance:.2}px \
-                         between the tallest box and the footer, below the {MIN_CLEARANCE_PX}px \
-                         floor this test holds"
-                    );
-                }
-            }
-        }
-    }
-
     #[test]
     fn the_frame_always_fits_the_window() {
         for window_h in WINDOW_HEIGHTS {
             for window_w in WINDOW_WIDTHS {
                 let m = ui_metrics(window_h);
-                let sections = worst_case_player();
-                let l = manifest_layout(window_w, window_h, PLAYER_METERS, &sections, &m);
+                let sections = vec![section("FIGHT", 6, false)];
+                let l = manifest_layout(window_w, window_h, &sections, &m);
                 let window = Rect::new(0.0, 0.0, window_w, window_h);
                 assert!(
                     contains(&window, &l.frame),
@@ -912,8 +723,8 @@ mod tests {
             section("ROUTINES", 3, false),
             section("SPECIES", 5, false),
         ];
-        let a = manifest_layout(1600.0, 1080.0, 2, &full, &m);
-        let b = manifest_layout(1600.0, 1080.0, 2, &without_potential, &m);
+        let a = manifest_layout(1600.0, 1080.0, &full, &m);
+        let b = manifest_layout(1600.0, 1080.0, &without_potential, &m);
 
         assert_eq!(a.sections.len(), 4);
         assert_eq!(b.sections.len(), 3);
@@ -935,7 +746,7 @@ mod tests {
     fn columned_sections_fill_left_then_right() {
         let m = ui_metrics(1080.0);
         let sections = vec![section("A", 3, false), section("B", 3, false)];
-        let l = manifest_layout(1600.0, 1080.0, 2, &sections, &m);
+        let l = manifest_layout(1600.0, 1080.0, &sections, &m);
         assert_eq!(l.sections[0].y, l.sections[1].y, "equal boxes share a row");
         assert!(
             l.sections[1].x > l.sections[0].x,
@@ -989,7 +800,7 @@ mod tests {
             section("B", 3, false),
             section("MOVES", 2, true),
         ];
-        let l = manifest_layout(1600.0, 1080.0, 2, &sections, &m);
+        let l = manifest_layout(1600.0, 1080.0, &sections, &m);
         let band = l.sections[2];
         assert!(
             band.y >= l.sections[0].y + l.sections[0].h,

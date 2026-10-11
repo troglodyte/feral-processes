@@ -195,7 +195,7 @@ pub(super) mod tests {
                 (2560.0, 1440.0),
             ] {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 0, &sections, &m);
+                let l = manifest_layout(w, h, &sections, &m);
                 let bottom = l.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
                 assert!(
                     l.footer.y - bottom >= MIN_CLEARANCE,

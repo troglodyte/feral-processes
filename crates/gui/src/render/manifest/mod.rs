@@ -1,14 +1,14 @@
 //! The manifest — one read-only stat sheet for the player, a program you own,
 //! or a wild one.
 
-// Lifted in the commit that draws the ledger: until then the builders and
-// their geometry are exercised by tests alone.
-#![cfg_attr(not(test), expect(dead_code))]
-
+mod band;
+mod keybar;
 pub(super) mod layout;
+mod ledger;
+mod rail;
 mod sections;
+mod stats;
 
-use super::bars::*;
 use super::popup::*;
 use super::score;
 use super::social::{draw_tab_strip, social_sections};
@@ -54,7 +54,7 @@ pub(super) struct ManifestNav {
     /// the roster — rather than to the map. Which of the two is app-core's
     /// business (`ManifestOrigin`); the footer only has to know there is one.
     pub(super) back_to_list: bool,
-    /// `w` sends the map's camera to this program and goes back to the map.
+    /// `W` sends the map's camera to this program and goes back to the map.
     ///
     /// False for anything the sim does not walk — a party member, your
     /// wielded program, a squad away on a sortie, a guard — and for every
@@ -95,25 +95,21 @@ pub(super) fn draw_manifest(
     // strip: the strip never offers a face the subject does not have.
     let social = game.social(view.entity);
     let own = matches!(view.subject, ManifestSubject::Player(_));
-    let (meters, sections) = match (&social, nav.tab) {
-        _ if own && nav.tab == ManifestTab::Score => {
-            (Vec::new(), score::manifest_sections(&game.score_card()))
-        }
-        (Some(s), ManifestTab::Social) => (Vec::new(), social_sections(s)),
+    let sections = match (&social, nav.tab) {
+        _ if own && nav.tab == ManifestTab::Score => score::manifest_sections(&game.score_card()),
+        (Some(s), ManifestTab::Social) => social_sections(s),
         (Some(_), ManifestTab::Talk) => {
             let exchanges = game.conversations(view.entity).unwrap_or_default();
             let screen = (painter.screen_w(), painter.screen_h());
-            (Vec::new(), talk_sections(&exchanges, screen, painter, m))
+            talk_sections(&exchanges, screen, painter, m)
         }
-        _ => (meter_rows(&view), sections_for(game, &view)),
+        _ => {
+            let face = stats::StatsFace::gather(game, view, &nav, social.is_some());
+            stats::draw_stats(&face, painter, m);
+            return;
+        }
     };
-    let l = manifest_layout(
-        painter.screen_w(),
-        painter.screen_h(),
-        meters.len(),
-        &sections,
-        m,
-    );
+    let l = manifest_layout(painter.screen_w(), painter.screen_h(), &sections, m);
 
     painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
     painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
@@ -127,22 +123,6 @@ pub(super) fn draw_manifest(
         painter,
         m,
     );
-    for (rect, meter) in l.meters.iter().zip(&meters) {
-        let g = BarGeometry {
-            x: rect.x,
-            y: rect.y + m.label() as f32,
-            w: rect.w,
-        };
-        draw_bar(
-            g,
-            &format!("{}  {}", meter.label, meter.readout),
-            meter.value,
-            meter.max,
-            BarStyle::plain(meter.color),
-            painter,
-            m,
-        );
-    }
     for (rect, section) in l.sections.iter().zip(&sections) {
         draw_section(section, *rect, painter, m);
     }
@@ -184,7 +164,7 @@ fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
         footer.push("←/→ programs");
     }
     if nav.watchable {
-        footer.push("[w] watch");
+        footer.push("[W] watch");
     }
     footer.push("[D] dossier");
     if remembers {
@@ -196,45 +176,6 @@ fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
         "Esc back"
     });
     footer.join(FOOTER_GAP)
-}
-
-/// One meter on the sheet.
-struct Meter {
-    label: &'static str,
-    readout: String,
-    value: f32,
-    max: f32,
-    color: Color,
-}
-
-fn meter_rows(view: &ManifestView) -> Vec<Meter> {
-    let mut meters = vec![Meter {
-        label: "INTEGRITY",
-        readout: format!("{}/{}", view.hp, view.max_hp),
-        value: view.hp as f32,
-        max: view.max_hp.max(1) as f32,
-        color: GREEN,
-    }];
-    if let Some((xp, to_next)) = view.xp {
-        meters.push(Meter {
-            label: "EXPERIENCE",
-            readout: format!("{xp}/{to_next}"),
-            value: xp as f32,
-            max: to_next.max(1) as f32,
-            color: CYAN,
-        });
-    }
-    // PowerReserve are player-only — no creature in the sim carries `PowerReserve`.
-    if let ManifestSubject::Player(p) = &view.subject {
-        meters.push(Meter {
-            label: "POWER",
-            readout: format!("{:.0}/{:.0}", p.power, p.max_power),
-            value: p.power,
-            max: p.max_power,
-            color: YELLOW,
-        });
-    }
-    meters
 }
 
 fn draw_header(
@@ -296,6 +237,18 @@ fn draw_header(
         );
     }
 
+    let tags = header_tags(view, escaped);
+    painter.ui(
+        tags.join("   "),
+        text_x,
+        rect.y + m.title() as f32 + m.line_height,
+        m.font_size,
+        TEXT_DIM,
+    );
+}
+
+/// The second line of the header: level, tier, post, and the statuses.
+pub(super) fn header_tags(view: &ManifestView, escaped: bool) -> Vec<String> {
     let mut tags: Vec<String> = Vec::new();
     if let Some(level) = view.level {
         tags.push(format!("Lv {level}"));
@@ -333,13 +286,7 @@ fn draw_header(
     if !view.statuses.is_empty() {
         tags.push(super::battle::status_tags_text(&view.statuses));
     }
-    painter.ui(
-        tags.join("   "),
-        text_x,
-        rect.y + m.title() as f32 + m.line_height,
-        m.font_size,
-        TEXT_DIM,
-    );
+    tags
 }
 
 fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
@@ -519,21 +466,26 @@ pub(super) fn header_title(view: &ManifestView) -> String {
 /// Neither half is guaranteed: a program whose species failed to resolve
 /// and a classless run both fall back to the name alone.
 fn subject_title(view: &ManifestView) -> String {
-    let kind = match &view.subject {
-        ManifestSubject::Program(p) => p.species_name.clone(),
-        ManifestSubject::Player(p) => p.class.as_ref().map(|c| c.name.clone()),
-    };
-    match kind {
+    match subject_kind(view) {
         Some(kind) => format!("{}  ({kind})", view.name),
         None => view.name.clone(),
     }
 }
 
+/// The parenthetical half of `subject_title`, on its own for the band.
+pub(super) fn subject_kind(view: &ManifestView) -> Option<String> {
+    match &view.subject {
+        ManifestSubject::Program(p) => p.species_name.clone(),
+        ManifestSubject::Player(p) => p.class.as_ref().map(|c| c.name.clone()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::ledger::fit_ledger_row;
     use super::*;
     use crate::paint::with_painter;
-    use crate::render::manifest::layout::manifest_layout;
+    use crate::render::manifest::layout::{ManifestLayout, frame_rect, manifest_layout};
     use crate::text::ui_metrics;
     use feral_processes_engine::{ProgramPoints, RankedStat};
 
@@ -932,66 +884,6 @@ mod tests {
         (row, prefix_word, suffix_word)
     }
 
-    /// Every EQUIPMENT row a *drop* can put on this sheet, paired with the
-    /// affix word in its name.
-    ///
-    /// `Game::grant_gear_drop` rolls **one** affix, so a single word — a
-    /// prefix or a suffix — is the shape a player meets before they ever fuse
-    /// anything, and it is the shape the bug was reported against. Every
-    /// equippable item against every shipped affix, at the top rare tier and
-    /// `QUALITY_MAX`, which are the two other axes `copy_name` spends
-    /// characters on.
-    fn dropped_equipment_rows(game: &Game) -> Vec<(ManifestEquipSlot, String)> {
-        use feral_processes_engine::components::Rarity;
-        use feral_processes_engine::items::{EquipmentSlot, GearCopy};
-        use feral_processes_engine::tuning::QUALITY_MAX;
-
-        let slot = EquipmentSlot::ALL
-            .into_iter()
-            .max_by_key(|s| s.short_label().chars().count())
-            .expect("EquipmentSlot::ALL is not empty");
-
-        let mut rows = Vec::new();
-        for def in game
-            .item_defs()
-            .into_iter()
-            .filter(|d| d.equipment.is_some())
-        {
-            for affix in game.affix_defs() {
-                let copy = GearCopy::with_affixes(
-                    def.id.clone(),
-                    Rarity::ALL[Rarity::ALL.len() - 1],
-                    0,
-                    vec![affix.id.clone()],
-                    QUALITY_MAX,
-                );
-                let Some(mods) = game.copy_bonus(&copy, 10) else {
-                    continue;
-                };
-                let word = affix
-                    .prefix
-                    .clone()
-                    .or_else(|| affix.suffix.clone())
-                    .expect("AffixDef::fault refuses an affix with neither");
-                rows.push((
-                    ManifestEquipSlot {
-                        slot: slot.short_label().to_string(),
-                        item_name: game.copy_name(&copy),
-                        gear_level: 10,
-                        fusion_tier: copy.tier,
-                        atk: mods.atk,
-                        mitigation: mods.mitigation,
-                        decompiler: mods.decompiler,
-                        deflection: mods.deflection,
-                    },
-                    word,
-                ));
-            }
-        }
-        assert!(!rows.is_empty(), "the shipped set has affixable gear");
-        rows
-    }
-
     /// The EQUIPMENT box's rect on both pages that draw one, at `w` x `h` —
     /// the real one, off `manifest_layout`, rather than a width written down
     /// here.
@@ -1001,7 +893,6 @@ mod tests {
     /// the rows say, but a taller box can land in the other column, and which
     /// column a box lands in is what decides its `x`.
     fn equipment_rects(game: &Game, w: f32, h: f32) -> Vec<(&'static str, Rect)> {
-        let m = ui_metrics(h);
         let mut program = plain_program(14, 12);
         program.base_job = Some(AffinityClass::Striker);
         program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
@@ -1010,19 +901,14 @@ mod tests {
         player.equipment = kit();
 
         let mut out = Vec::new();
-        for (who, view, meters) in [
-            ("program", program_view(program, kit()), 2),
-            ("player", player, 3),
+        for (who, view) in [
+            ("program", program_view(program, kit())),
+            ("player", player),
         ] {
-            let sections = sections_for(game, &view);
-            let l = manifest_layout(w, h, meters, &sections, &m);
-            for (rect, s) in l.sections.iter().zip(&sections) {
-                if s.title == "GEAR" {
-                    out.push((who, *rect));
-                }
-            }
+            let rect = ledger_rect(game, &view, "GEAR", w, h).expect("a kitted page draws GEAR");
+            out.push((who, rect));
         }
-        assert_eq!(out.len(), 2, "both pages draw an EQUIPMENT box");
+        assert_eq!(out.len(), 2, "both pages draw a GEAR box");
         out
     }
 
@@ -1035,6 +921,37 @@ mod tests {
         )
         .expect("shipped assets load")
     }
+
+    /// The column the ledger really gives section `title` on `view`'s page at
+    /// `w` x `h`, rather than a width written down here. `None` when the page
+    /// does not draw that section.
+    ///
+    /// A rail is present and the bands are at their tallest (`you`, the table
+    /// header and a full party): the full rail eats width and the bands eat
+    /// height, so a census measuring a thinner page would be measuring a
+    /// column the player never sees.
+    fn ledger_rect(game: &Game, view: &ManifestView, title: &str, w: f32, h: f32) -> Option<Rect> {
+        let m = ui_metrics(h);
+        let (char_w, _) = with_painter(|p| p.measure_ui_advance("M", m.font_size));
+        let l = ManifestLayout::new(
+            frame_rect(w, h),
+            &m,
+            char_w,
+            layout::Face::Stats,
+            WORST_RAIL_ROWS,
+            WORST_BAND_ROWS,
+        );
+        sections_for(game, view)
+            .iter()
+            .find(|s| s.title == title)
+            .and_then(|s| s.column)
+            .map(|c| l.ledger[c.index()])
+    }
+
+    /// A rail with forty subjects and its party rule.
+    const WORST_RAIL_ROWS: usize = 41;
+    /// The PARTY table at its tallest: its head, you and a full party.
+    const WORST_BAND_ROWS: usize = 2 + feral_processes_engine::tuning::MAX_PARTY_SIZE;
 
     /// The box `manifest_layout` really gives `title` on a program's page at
     /// `w` x `h`, rather than a width written down here. `None` when the page
@@ -1051,15 +968,8 @@ mod tests {
         w: f32,
         h: f32,
     ) -> Option<Rect> {
-        let m = ui_metrics(h);
         let view = program_view(program, vec![worn("WEP"), worn("ARM"), worn("MOD")]);
-        let sections = sections_for(game, &view);
-        let l = manifest_layout(w, h, 2, &sections, &m);
-        l.sections
-            .iter()
-            .zip(&sections)
-            .find(|(_, s)| s.title == title)
-            .map(|(rect, _)| *rect)
+        ledger_rect(game, &view, title, w, h)
     }
 
     /// The fullest program page there is: owned, developed, posted, kitted.
@@ -1077,19 +987,14 @@ mod tests {
         program
     }
 
-    /// **MOVES stopped being the page's full-width band to pay for MEMORIES**,
-    /// so every shipped move row now has to fit a half-width column instead
-    /// of the whole frame.
+    /// **MOVES sits in a third of the frame**, so a move's tag list can take
+    /// most of its column and the name is what `fit_ledger_row` elides.
     ///
-    /// **The bar is "drawn whole", not "does not overflow".** Containment is
-    /// not a testable property of this row: `fitted_stat_row` elides the
-    /// label into whatever the value leaves, so `label_end <= value_start`
-    /// holds by construction and a census asserting it passes against a move
-    /// name of any length whatever — measured, by widening every shipped name
-    /// by 34 characters and watching it stay green. What the demotion
-    /// actually put at risk is legibility: a name cut to `Cascade Log…ic`
-    /// costs the player the move's identity in silence, and that is what this
-    /// holds against.
+    /// Containment is not a testable property of this row: the label is cut
+    /// into whatever the value leaves, so `label_end <= value_start` holds by
+    /// construction. What is held is the rule itself: the value stays whole.
+    /// At 1280x720 the widest shipped names are middle-elided to a stub, which
+    /// the report on this change records rather than this test pinning.
     ///
     /// Over the real `assets/species/` catalogue rather than a hand-picked
     /// worst case — a move's width is its authored name plus its tag list,
@@ -1101,7 +1006,7 @@ mod tests {
     /// `m.small()` before it cuts anything, and a smaller row is still a
     /// complete one. Only the cut is a loss.
     #[test]
-    fn no_move_row_is_cut_to_fit_its_column() {
+    fn a_move_row_keeps_its_value_whole() {
         let game = census_game();
         let moves: Vec<MoveDef> = game
             .species_defs()
@@ -1126,14 +1031,286 @@ mod tests {
                     let SectionRow::Stat(label, value) = move_row(mv) else {
                         panic!("a move row is a stat row");
                     };
-                    let row = fitted_stat_row(p, &label, &value, rect, &m);
+                    let row = fit_ledger_row(p, &label, &value, rect.w, false, &m);
                     assert_eq!(
-                        (row.label.as_str(), row.value.as_str()),
-                        (label.as_str(), value.as_str()),
-                        "the MOVES row for {:?} is cut to fit its half-width column \
-                         at {w}x{h} — the player loses part of the move's name",
+                        row.value, value,
+                        "the value is the half that stays whole ({:?} at {w}x{h})",
                         mv.name
                     );
+                }
+            }
+        });
+    }
+
+    /// **Nothing on this sheet clips horizontally.** A ledger row is two
+    /// plain strings, the label from the column's left edge and the value
+    /// flushed to its right one, so a row wider than its column used to draw
+    /// over the neighbour or off the window in silence.
+    ///
+    /// Measured against the column `ManifestLayout` really gives GEAR, on both
+    /// pages, at every window in `CENSUS_WINDOWS`. It is the widest row on the
+    /// sheet by a distance and the only one that has ever needed cutting.
+    #[test]
+    fn no_gear_row_overflows_its_column() {
+        let game = census_game();
+        let (slot, _, _) = worst_equipment_row(&game);
+        let SectionRow::Stat(label, value) = equip_row(&slot) else {
+            panic!("an equipment row is a stat row");
+        };
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                for (who, rect) in equipment_rects(&game, w, h) {
+                    let row = fit_ledger_row(p, &label, &value, rect.w, false, &m);
+                    let label_w = p.measure_ui_advance(&row.label, row.size);
+                    assert!(
+                        label_w + row.value_w <= rect.w,
+                        "the widest GEAR row overflows its column by {:.0}px on the {who} \
+                         page at {w}x{h}:\n{}\n{}",
+                        label_w + row.value_w - rect.w,
+                        row.label,
+                        row.value
+                    );
+                }
+            }
+        });
+    }
+
+    /// A `StatsFace` around `view` without a `Game`: a roster of `subjects`
+    /// rows with the view's subject first, every ranked stat placed, and the
+    /// builders' real output for the rest.
+    fn stats_face(game: &Game, view: ManifestView, subjects: usize) -> stats::StatsFace {
+        use feral_processes_engine::{CallToAct, RankRow, RosterRow, SubjectRanks};
+        let roster: Vec<RosterRow> = (0..subjects)
+            .map(|i| RosterRow {
+                entity: if i == 0 {
+                    view.entity
+                } else {
+                    Entity::from_raw_u32(i as u32 + 100).expect("a valid entity index")
+                },
+                name: "Cascade Logic Longname".repeat(2),
+                glyph: 'x',
+                color: GlyphColor::Green,
+                level: 99,
+                in_party: i < 3,
+                needs_you: (i % 2 == 0).then_some(CallToAct::Idle),
+            })
+            .collect();
+        let rank = |stat| RankRow {
+            stat,
+            place: 17,
+            of: subjects as u32,
+            pips: 3,
+        };
+        let faces = stats::faces_of(
+            matches!(view.subject, ManifestSubject::Player(_)),
+            matches!(view.subject, ManifestSubject::Program(_)),
+        );
+        stats::StatsFace {
+            ranks: Some(SubjectRanks {
+                rows: [
+                    RankedStat::Damage,
+                    RankedStat::Attack,
+                    RankedStat::Mitigation,
+                    RankedStat::Power,
+                    RankedStat::Potential,
+                    RankedStat::WorkAptitude,
+                ]
+                .map(rank)
+                .to_vec(),
+            }),
+            call: Some(CallToAct::PerkPoints(12)),
+            sections: sections_for(game, &view),
+            band: band_for(&view, &roster),
+            tags: header_tags(&view, true),
+            keys: keybar::KeybarState {
+                cyclable: true,
+                faces: !faces.is_empty(),
+                remembers: true,
+                watchable: true,
+                level_up: Some(false),
+                points: true,
+            },
+            faces,
+            roster,
+            view,
+        }
+    }
+
+    /// The fullest page of each kind: a kitted, perked, developed, posted
+    /// subject, against a forty-strong roster.
+    fn fullest_faces(game: &Game) -> Vec<(&'static str, stats::StatsFace)> {
+        let mut player = plain_player();
+        player.perks = vec![("Obfuscation".to_string(), 2); 4];
+        player.party = (0..5)
+            .map(|i| feral_processes_engine::CompanionInfo {
+                entity: Entity::from_raw_u32(i + 100).expect("a valid entity index"),
+                name: "Cascade Logic Longname".to_string(),
+                hp: 1234,
+                max_hp: 1234,
+                atk: 99,
+                mitigation: 90,
+                power: 12,
+                ability: "priority_boost and a long ability".to_string(),
+                gear: String::new(),
+            })
+            .collect();
+        let kit =
+            || -> Vec<ManifestEquipSlot> { (0..3).map(|_| worst_equipment_row(game).0).collect() };
+        let mut pview = player_view(player);
+        pview.equipment = kit();
+        pview.routines = (0..6)
+            .map(|index| feral_processes_engine::RoutineSlotView {
+                index,
+                ability: None,
+                name: "(empty)".to_string(),
+                description: String::new(),
+                fixed: false,
+                unseen: index == 0,
+            })
+            .collect();
+        let program = worst_case_owned(
+            // The widest move row the catalogue can build leads, because
+            // MOVES names only the first.
+            {
+                let mut moves: Vec<MoveDef> = game
+                    .species_defs()
+                    .into_iter()
+                    .flat_map(|d| d.moves.clone())
+                    .collect();
+                let width = |mv: &MoveDef| match move_row(mv) {
+                    SectionRow::Stat(l, v) => l.chars().count() + v.chars().count(),
+                    _ => 0,
+                };
+                moves.sort_by_key(|mv| std::cmp::Reverse(width(mv)));
+                moves.truncate(3);
+                moves
+            },
+            vec![
+                memory("Mauled by", Some("Husk"), -8.0),
+                memory("Jammed here", Some("Lathe"), -4.0),
+            ],
+        );
+        let mut gview = program_view(program, kit());
+        gview.level = Some(7);
+        gview.xp = Some((40, 100));
+        vec![
+            ("player", stats_face(game, pview, 40)),
+            ("program", stats_face(game, gview, 40)),
+        ]
+    }
+
+    /// **The whole STATS face, painted at every census window.** Every piece
+    /// of ink lies inside the frame, and no two pieces of text overlap. The
+    /// second is what catches a label running into its value, a column
+    /// spilling into the next, or a tag line running under the call to act —
+    /// none of which a per-row measurement of the same strings can see,
+    /// because it is the *placement* that collides.
+    #[test]
+    fn the_stats_face_stays_in_its_frame_and_overlaps_nothing() {
+        let game = census_game();
+        for (w, h) in CENSUS_WINDOWS {
+            let m = ui_metrics(h);
+            let frame = frame_rect(w, h);
+            for (who, face) in fullest_faces(&game) {
+                let (_, shapes) = with_painter(|p| stats::paint_stats(frame, &face, p, &m));
+                let boxes = crate::paint::painted_text_boxes(&shapes);
+                let drawn: String = boxes.iter().map(|(_, t, _)| t.as_str()).collect();
+                for part in ["FIGHT", "Esc", "INTEG", "Tab"] {
+                    assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
+                }
+                for (_, text, b) in &boxes {
+                    assert!(
+                        b.x >= frame.x - 1.0
+                            && b.y >= frame.y - 1.0
+                            && b.x + b.w <= frame.x + frame.w + 1.0
+                            && b.y + b.h <= frame.y + frame.h + 1.0,
+                        "{who} at {w}x{h}: {text:?} at {b:?} leaves the frame {frame:?}"
+                    );
+                }
+                // A run of `█` is a meter, and a block glyph's ink is taller
+                // than the row it sits in at the larger fonts: the PARTY
+                // table's bars touch by design, like the bars they are.
+                let boxes: Vec<_> = boxes
+                    .into_iter()
+                    .filter(|(_, text, _)| !text.chars().all(|c| c == '█'))
+                    .collect();
+                for (i, (_, a_text, a)) in boxes.iter().enumerate() {
+                    for (_, b_text, b) in &boxes[i + 1..] {
+                        let overlap_w = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
+                        let overlap_h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
+                        assert!(
+                            overlap_w <= 1.0 || overlap_h <= 1.0,
+                            "{who} at {w}x{h}: {a_text:?} and {b_text:?} overlap ({a:?} {b:?})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The LATELY band puts each value just past the widest label, and the
+    /// widest memory label the shipped catalogue can build is never cut to
+    /// do it.
+    #[test]
+    fn no_lately_row_is_cut_to_fit_the_band() {
+        let game = census_game();
+        let mut subjects: Vec<String> = game
+            .species_defs()
+            .into_iter()
+            .map(|d| d.name.clone())
+            .chain(game.structure_defs().into_iter().map(|d| d.name.clone()))
+            .collect();
+        subjects.push("the base at (-128, -128)".to_string());
+        let widest_subject = subjects
+            .iter()
+            .max_by_key(|s| s.chars().count())
+            .expect("the shipped catalogues are not empty")
+            .clone();
+        let rows: Vec<MemoryRow> = game
+            .memory_defs()
+            .into_iter()
+            .map(|def| memory(&def.name, Some(&widest_subject), -99.0))
+            .collect();
+        assert!(!rows.is_empty(), "the shipped catalogue has memories");
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let band_w = ManifestLayout::new(
+                    frame_rect(w, h),
+                    &m,
+                    char_w,
+                    layout::Face::Stats,
+                    WORST_RAIL_ROWS,
+                    2,
+                )
+                .bands
+                .w;
+                for entry in &rows {
+                    let band = mood_rows(&ManifestMood {
+                        sum: -99.0,
+                        band: morale_band(-99.0),
+                        memories: vec![entry.clone(), entry.clone()],
+                    });
+                    let split = ledger::lately_split(p, &band, band_w, char_w, &m);
+                    for row in &band {
+                        let SectionRow::Stat(label, value) = row else {
+                            panic!("a LATELY row is a stat row");
+                        };
+                        let label_w = p.measure_ui_advance(label, m.font_size);
+                        let value_w = p.measure_ui_advance(value, m.font_size);
+                        assert!(
+                            label_w <= split - char_w,
+                            "{label} is cut to fit the LATELY band at {w}x{h}"
+                        );
+                        assert!(
+                            split + value_w <= band_w,
+                            "{value} overruns the LATELY band at {w}x{h}"
+                        );
+                    }
                 }
             }
         });
@@ -1431,6 +1608,42 @@ mod tests {
         );
     }
 
+    /// `n of 6` in the subhead, and the `N slots open` line survives a kit
+    /// long enough to need its own `+N more` note.
+    #[test]
+    fn routines_count_their_filled_slots_and_keep_the_open_line_past_the_cap() {
+        let game = census_game();
+        let slot = |index, filled: bool| feral_processes_engine::RoutineSlotView {
+            index,
+            ability: filled.then(|| "decompile".into()),
+            name: if filled {
+                "Decompile Single"
+            } else {
+                "(empty)"
+            }
+            .to_string(),
+            description: String::new(),
+            fixed: false,
+            unseen: false,
+        };
+        let mut view = program_view(plain_program(6, 6), Vec::new());
+        view.routines = (0..12).map(|i| slot(i, i < 7)).collect();
+        let sections = sections_for(&game, &view);
+        let routines = titled(&sections, "ROUTINES");
+        assert_eq!(routines.hint, "7 of 12");
+        assert_eq!(
+            routines.rows.last(),
+            Some(&SectionRow::Callout("5 slots open".to_string()))
+        );
+        assert!(
+            routines
+                .rows
+                .contains(&SectionRow::Note("+2 more".to_string())),
+            "{:?}",
+            routines.rows
+        );
+    }
+
     /// An unseen slot draws the concealment line — never the blanked name,
     /// never the ability id — because `sections_for` reads nothing but the
     /// `unseen` flag itself. Spec §4 "Concealment"'s inspect-sheet clause.
@@ -1575,7 +1788,7 @@ mod tests {
         for (w, h) in [(1280.0, 720.0), (1440.0, 900.0)] {
             with_painter(|p| {
                 let m = ui_metrics(h);
-                let l = manifest_layout(w, h, 4, &[], &m);
+                let l = manifest_layout(w, h, &[], &m);
                 // The glyph portrait and a pad sit left of the text; the tag
                 // line starts there and has the rest of the header to run into.
                 let portrait = p.measure_map("@", m.title() * 2).width + m.pad;
@@ -1816,11 +2029,11 @@ mod tests {
         };
 
         assert!(
-            footer(true).contains("[w] watch"),
+            footer(true).contains("W watch"),
             "the key has to be on the sheet or nobody finds it"
         );
         assert!(
-            !footer(false).contains("[w] watch"),
+            !footer(false).contains("W watch"),
             "and must not be offered where it would be refused"
         );
     }
@@ -1959,7 +2172,7 @@ mod tests {
             tab: ManifestTab::Stats,
             level_up: None,
         };
-        // Your own sheet is the only one with `[L]`, and never has `[w]` (the
+        // Your own sheet is the only one with `[L]`, and never has `[W]` (the
         // player walks no base: `Game::program_role` is `None` untamed) or
         // `[R]` (only an owned program remembers).
         let own = ManifestNav {
@@ -1973,7 +2186,7 @@ mod tests {
         ];
         for h in [720.0, 1080.0, 1440.0] {
             let m = ui_metrics(h);
-            let l = manifest_layout(1280.0, h, 4, &[], &m);
+            let l = manifest_layout(1280.0, h, &[], &m);
             for footer in &footers {
                 let (width, _) = with_painter(|p| p.measure_ui_advance(footer, m.small()));
                 assert!(

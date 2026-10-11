@@ -112,11 +112,14 @@ fn routines_section(view: &ManifestView) -> Section {
         .collect();
     let open = view.routines.len() - rows.len();
     let n = rows.len();
-    let mut rows = rows;
+    // The cap is on the filled slots alone: a note counting hidden routines
+    // must not swallow the `slots open` line, which is the one that asks
+    // something of the player.
+    let mut rows = section_rows(rows);
     if open > 0 {
         rows.push(SectionRow::Callout(format!("{open} slots open")));
     }
-    Section::ledger("ROUTINES", LedgerColumn::Fight, section_rows(rows))
+    Section::ledger("ROUTINES", LedgerColumn::Fight, rows)
         .with_hint(format!("{n} of {}", view.routines.len()))
 }
 
@@ -595,8 +598,8 @@ pub(super) fn move_row(mv: &MoveDef) -> SectionRow {
     }
     if let Some(effect) = &mv.effect {
         tags.push(format!(
-            "{:?} {:.0}% for {}",
-            effect.kind,
+            "{} {:.0}% for {}",
+            effect.kind.0,
             effect.chance * 100.0,
             effect.duration
         ));

@@ -13,7 +13,7 @@ mod stats;
 
 use super::popup::*;
 use super::score;
-use super::social::{draw_tab_strip, social_sections};
+use super::social::draw_tab_strip;
 use super::talk::talk_sections;
 use super::*;
 use feral_processes_app_core::ManifestTab;
@@ -24,7 +24,7 @@ use feral_processes_engine::{
     ProgramManifest,
 };
 use layout::*;
-pub(in crate::render) use ledger::draw_pairs;
+pub(in crate::render) use ledger::{PIPS, draw_pairs, pip_cells, subhead};
 use sections::*;
 
 /// How big the header glyph is drawn, relative to the UI title size — enough
@@ -105,7 +105,12 @@ pub(super) fn draw_manifest(
             other::draw_other(&face, painter, m);
             return;
         }
-        (Some(s), ManifestTab::Social) => social_sections(s),
+        (Some(s), ManifestTab::Social) => {
+            let face =
+                other::OtherFace::gather(game, view, &nav, true, other::Body::Social(s.clone()));
+            other::draw_other(&face, painter, m);
+            return;
+        }
         (Some(_), ManifestTab::Talk) => {
             let exchanges = game.conversations(view.entity).unwrap_or_default();
             let screen = (painter.screen_w(), painter.screen_h());
@@ -418,7 +423,12 @@ pub(super) fn fitted_stat_row(
 /// candidate is measured rather than divided out of a per-character advance,
 /// so this stays correct if the UI face is ever something other than the
 /// monospace it is today.
-fn elided_to_fit(painter: &Painter, text: &str, size: u16, room: f32) -> String {
+pub(in crate::render) fn elided_to_fit(
+    painter: &Painter,
+    text: &str,
+    size: u16,
+    room: f32,
+) -> String {
     if painter.measure_ui_advance(text, size) <= room {
         return text.to_string();
     }
@@ -438,6 +448,36 @@ fn elided_to_fit(painter: &Painter, text: &str, size: u16, room: f32) -> String 
         }
     }
     String::new()
+}
+
+/// `text` broken at spaces into lines that each measure within `room`. A
+/// single word wider than `room` is the one thing left running wide, since
+/// there is no space to break it at; callers that must not overflow
+/// `elided_to_fit` each line.
+pub(in crate::render) fn wrap_to_width(
+    painter: &Painter,
+    text: &str,
+    size: u16,
+    room: f32,
+) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        if current.is_empty() {
+            current.push_str(word);
+            continue;
+        }
+        let candidate = format!("{current} {word}");
+        if painter.measure_ui_advance(&candidate, size) <= room {
+            current = candidate;
+        } else {
+            lines.push(std::mem::replace(&mut current, word.to_string()));
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
 }
 
 fn is_boss(view: &ManifestView) -> bool {
@@ -1339,6 +1379,33 @@ mod tests {
             "score",
             &face,
             &["THE FIGHT", "THE RUN", "TOTAL", "Run score"],
+        );
+    }
+
+    #[test]
+    fn the_social_face_stays_in_its_frame_and_overlaps_nothing() {
+        use crate::render::social::MAX_RELATIONSHIP_ROWS;
+        use crate::render::social::tests::{view_with, widest_known_for};
+        let mut face = other_face(
+            program_view(plain_program(10, 10), Vec::new()),
+            other::Body::Social(view_with(MAX_RELATIONSHIP_ROWS + 5, widest_known_for())),
+        );
+        // Seven drawn and the count of the other six.
+        assert_face_fits(
+            "social",
+            &face,
+            &["RELATIONSHIPS", "KNOWN FOR", "TEMPERAMENT", "+6 more"],
+        );
+        face.body = other::Body::Social(view_with(0, Vec::new()));
+        assert_face_fits(
+            "an empty social page",
+            &face,
+            &[
+                "No opinions of the others yet.",
+                // The narrow column wraps it, so the two ends.
+                "The others",
+                "yet.",
+            ],
         );
     }
 

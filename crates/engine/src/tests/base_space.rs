@@ -2731,18 +2731,11 @@ const CUT_OFF: &str = "marked cell at";
 /// cell open and has no Blank Substrate anywhere to floor it with.
 const NO_SUBSTRATE: &str = "nothing to floor";
 
-/// The same shortage told one step earlier: a marked cell the crew will not
-/// cut, because nothing is spare to floor the cut with. A needle of its own,
-/// `CUT_OFF`'s rule — two stalls sharing one would let either satisfy the
-/// other's test.
-const HELD_OFF: &str = "holds off cutting";
-
 /// Enough Blank Substrate in the party's pack to floor `tiles` cells.
 ///
-/// **Every test below that expects a cut needs this**: a cut claims the
-/// tile it will hold, so a crew with nothing to floor with leaves the wall
-/// whole. The tests about the shortage itself deliberately leave the base
-/// empty.
+/// A cut needs none — the crew cuts with nothing in store and floors later
+/// — so this is for the tests that expect the cell floored, or that want
+/// the crew's next job to be something other than a dry tile.
 fn substrate_for(game: &mut Game, tiles: u32) {
     give(game, &ItemId::from(ids::BLANK_SUBSTRATE), tiles);
 }
@@ -2752,7 +2745,6 @@ fn substrate_for(game: &mut Game, tiles: u32) {
 #[test]
 fn a_crew_cuts_a_marked_wall_without_the_player() {
     let (mut game, staff) = base_with_a_crew(3260, 1);
-    substrate_for(&mut game, 1);
     mark(&mut game, WALL);
     assert!(
         game.world
@@ -2764,8 +2756,8 @@ fn a_crew_cuts_a_marked_wall_without_the_player() {
     let wait = ticks_to_cut(&game, staff[0]);
     pass(&mut game, wait);
 
-    // Not `Open`: the crew holds what it cuts now, so the same slack that
-    // covers the walk and the swings can also cover the tile going down.
+    // Any opened state, not `Open` alone: the test is about the cut, and
+    // whether a tile follows is the substrate tests' question.
     assert!(
         cell(&game, WALL).is_some(),
         "the crew never cut the wall the player marked"
@@ -2884,9 +2876,8 @@ fn a_crew_falls_back_to_the_player_s_pack() {
 #[test]
 fn a_crew_with_no_substrate_says_so_once() {
     let (mut game, staff) = base_with_a_crew(3282, 1);
-    // Cut open by hand rather than by the crew: a crew with nothing to floor
-    // with no longer cuts anything, so the floor job this test is about has
-    // to be put in front of it directly.
+    // Cut open by hand rather than by the crew, so the floor job this test
+    // is about is in front of it from the first tick.
     let tick = game.current_tick();
     game.world
         .resource_mut::<base_grid::BaseGrid>()
@@ -3006,12 +2997,13 @@ fn a_dry_dig_job_frees_the_body_for_production() {
     );
 }
 
-/// **The rule**: a cut claims the tile that will hold it. Cutting spends no
-/// substrate itself, so a crew that reads its own job alone always says yes
-/// — and opens the whole plan while flooring none of it, which is the base a
-/// player found 112 bare cells into with nobody laying tiles.
+/// **The rule**: cutting rock is never blocked by missing Blank Substrate.
+/// The crew mines the cell out now and floors it once substrate exists, so
+/// a base with no Lathe yet still digs. The open, still-marked cell is then
+/// an ordinary tile job, dry until a unit arrives — told once, in the tile
+/// job's own words.
 #[test]
-fn a_marked_solid_cell_waits_for_the_substrate_that_will_floor_it() {
+fn a_crew_cuts_with_no_substrate_and_floors_once_it_arrives() {
     let (mut game, staff) = base_with_a_crew(3285, 1);
     assert_eq!(
         count_item(&game, ids::BLANK_SUBSTRATE),
@@ -3024,54 +3016,37 @@ fn a_marked_solid_cell_waits_for_the_substrate_that_will_floor_it() {
     pass(&mut game, wait * 2);
 
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
-        "a marked cell must stay whole while there is nothing to floor the cut with"
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "a marked cell must be cut even with nothing to floor it with, got {:?}",
+        cell(&game, WALL)
     );
     assert!(
         is_marked(&mut game, WALL),
-        "the plan outlives the shortage — the cut starts when stock does"
+        "the plan outlives the shortage — the tile goes down when stock does"
     );
     assert_eq!(
-        lines_saying(&game, HELD_OFF),
+        lines_saying(&game, NO_SUBSTRATE),
         1,
-        "the held-off cut is news once, not once a cycle for the rest of the run"
-    );
-}
-
-/// The hold is a wait, not a refusal: the same mark is cut and floored once
-/// the base can pay for the tile, with nothing for the player to do but
-/// stock the shelf.
-#[test]
-fn a_held_off_cut_starts_when_the_substrate_arrives() {
-    let (mut game, staff) = base_with_a_crew(3286, 1);
-    mark(&mut game, WALL);
-    let dry_wait = ticks_to_cut(&game, staff[0]);
-    pass(&mut game, dry_wait);
-    assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
-        "precondition: the dry base must not have cut anything"
+        "the cut cell's floor job is dry, and that is news once"
     );
 
     substrate_for(&mut game, 1);
-    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
-    pass(&mut game, wait);
+    pass(
+        &mut game,
+        crate::tuning::BASE_DIG_TICKS_PER_SWING as usize + WALK_ALLOWANCE,
+    );
 
     assert_eq!(
         cell(&game, WALL),
         Some(base_grid::BaseCell::Floor),
-        "one Blank Substrate in store must buy the cut and the tile that holds it"
+        "the cut cell is floored once a Blank Substrate exists"
     );
 }
 
-/// **The budget is shared, and one unit pays for one cell.** Read per site
-/// the substrate is enough for every cut in the base at once — which is how
-/// a crew opens the whole plan and floors one cell of it.
+/// **The budget is shared, and one unit floors one cell** — while the cuts,
+/// which spend nothing, both go ahead.
 #[test]
-fn one_substrate_does_not_pay_for_two_cuts() {
+fn one_substrate_floors_one_of_two_cuts() {
     let (mut game, staff) = base_with_a_crew(3288, 2);
     let second = (WALL.0, WALL.1 + 1);
     assert!(
@@ -3084,17 +3059,22 @@ fn one_substrate_does_not_pay_for_two_cuts() {
     mark(&mut game, WALL);
     mark(&mut game, second);
 
-    let swings = swings_for(&game, staff[0], WALL).max(swings_for(&game, staff[1], second));
+    let swings = swings_for(&game, staff[0], WALL).max(swings_for(&game, staff[1], second)) + 1;
     let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE;
-    pass(&mut game, wait);
+    pass(&mut game, wait * 2);
 
-    let opened = [WALL, second]
-        .into_iter()
-        .filter(|c| cell(&game, *c).is_some())
+    let cells: Vec<_> = [WALL, second].into_iter().map(|c| cell(&game, c)).collect();
+    assert!(
+        cells.iter().all(Option::is_some),
+        "both marked cells must be cut, substrate or not: {cells:?}"
+    );
+    let floored = cells
+        .iter()
+        .filter(|c| **c == Some(base_grid::BaseCell::Floor))
         .count();
     assert_eq!(
-        opened, 1,
-        "two bodies and one Blank Substrate must open one cell, not both"
+        floored, 1,
+        "one Blank Substrate must floor one cell, not both: {cells:?}"
     );
 }
 

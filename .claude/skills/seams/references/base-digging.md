@@ -156,40 +156,42 @@
   one, so `DigErrand::Return` walks it back and gives the post up there.
 
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
-  crossed over**, and **a cut claims the tile that will hold it.** Cutting
-  spends nothing itself, so asked per site it is always affordable — and
-  0.13.239, which made a cut claim `0` when bare ground stopped reverting,
-  shipped a base that cut 112 cells and floored none. Bare ground is not
-  buildable, so an unfloored cut is still a plan half-done. The substrate is
-  a **budget** claimed in want order — a cut claims `1`, the tile job the
-  same cut turns into claims the same `1` (a site is only ever one of the
-  two), an `Apply` claims `FLOOR_FINISH_COST`, and a `Strip` claims nothing.
-  **Open cells sort ahead of solid ones** inside the `finish: None` block,
-  so a short-handed base floors what it has already cut before it opens
-  more. **Holding the cut is only half the fix**: nothing asked the Lathe
-  for substrate, so a plan with a dry shelf waited forever. The same pass
-  sums every claim and hands it to `Game::sync_dig_order`, which keeps one
+  crossed over**, and **a cut is never dry.** Cutting spends nothing, so a
+  solid cell claims `0` from the budget and is never dropped: the crew mines
+  the cell now and floors it later, once substrate exists. The cut cell keeps
+  its mark and becomes an ordinary tile job, which *is* dropped as dry until
+  a unit arrives. **This reverses a reversal.** 0.13.239 first made a cut
+  claim `0` and shipped a base that cut 112 cells and floored none, so a cut
+  was made to claim the tile that would hold it; the user later chose
+  cut-now, floor-later instead, because holding every cut left a base with
+  no Lathe yet unable to dig at all. What keeps the 112-cell base from
+  coming back is the other half of that old fix, which stays: the plan
+  *asks* for every tile it will spend. The substrate is a **budget**
+  claimed in want order — a tile job claims `1`, an `Apply` claims
+  `FLOOR_FINISH_COST`, a `Strip` claims nothing — while a solid cell adds
+  its future `1` to the plan's `need` but not to the budget. **Open cells
+  sort ahead of solid ones** inside the `finish: None` block, so the units
+  there are go to flooring what is already cut. The same pass sums every
+  ask and hands it to `Game::sync_dig_order`, which keeps one
   standing order flagged `WorkOrder::for_dig` at that level — filed at the
   bottom only where `chain_break` passes, resized silently, withdrawn at
   zero, and refused by `cancel_work_order` because a hand-cancelled one is
   filed again next tick. The flag is provenance (`for_research`'s rule),
   `#[serde(default)]` and not skipped, or a reload orphans the line and the
   plan files a second. The deadlock rule still holds in the direction that matters — a
-  dropped want frees the body, which is what sends it to the Mining Node and
-  the Lathe that make the substrate — and the player's own bump is
-  untouched, which is the bootstrap out of a base with nothing on its
-  shelves. `Game::drop_dry_dig_wants` is the one writer of
-  `DigSite::announced_dry`, both the set and the clear, and it owns both
-  wordings — a held cut has its own (`DigDryReason::Cut`), since told in
-  the tile job's words it reads as a cut that already happened, and it
-  must not borrow the *cut off* wording either (`CUT_OFF`'s rule — two
-  stalls sharing a needle is two tests each satisfied by the other's bug).
+  dropped tile job frees the body, which is what sends it to the Mining
+  Node and the Lathe that make the substrate (dig wants sit last in
+  `base_wants`, so a cut never outranks production). `Game::drop_dry_dig_wants`
+  is the one writer of `DigSite::announced_dry`, both the set and the
+  clear, and it owns both wordings (`DigDryReason::Tile`, `Finish`); neither
+  may borrow the *cut off* wording (`CUT_OFF`'s rule — two stalls sharing a
+  needle is two tests each satisfied by the other's bug).
   **The trap that moved it out of `dig_wants`**: a budget claimed there
   goes to sites in tile order,
   including the sealed pocket and the plan past `haul_walk_radius` that
   `schedule_base_labour` is about to drop anyway — the unroutable-mark
-  starvation, one dimension over, with the one cell a body could have cut
-  announced dry instead. So the claim is settled over the assembled want
+  starvation, one dimension over, with the one cell a body could have
+  floored announced dry instead. So the claim is settled over the assembled want
   list, **after** the unreachable drop and **before the matching runs**,
   where it also keeps a job nobody can pay for out of `record_labour_demand`.
   `dig_wants` keeps `hauling::has_station`, which is four grid lookups and

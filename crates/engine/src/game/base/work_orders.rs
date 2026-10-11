@@ -873,13 +873,10 @@ impl CrewFields {
     }
 }
 
-/// Which of the three things `Game::announce_dig_dry` ran out of Blank
-/// Substrate for — the three wordings share everything but this.
+/// Which of the two things `Game::announce_dig_dry` ran out of Blank
+/// Substrate for — the two wordings share everything but this. A cut is
+/// never one of them: cutting spends nothing and is never held back.
 enum DigDryReason {
-    /// A marked solid cell, held back because nothing is spare to floor the
-    /// cut with. Its own wording because the cell is still whole: told in
-    /// the tile job's words it reads as a cut that already happened.
-    Cut,
     Tile,
     Finish,
 }
@@ -1179,7 +1176,7 @@ impl Game {
         // question needs the bodies. A corridor gone missing after the fact,
         // or a plan drawn past `haul_walk_radius`, leaves a run of those —
         // and `drop_dry_dig_wants` below would spend the substrate budget on
-        // them, announcing the one cell the crew *could* cut as dry.
+        // them, announcing the one cell the crew *could* floor as dry.
         //
         // Asked of the staff rather than of a fixed reference point, and
         // short-circuited on the first body that routes: the answer is
@@ -2054,9 +2051,9 @@ impl Game {
     /// deliberately**: filled in list order, a short-handed base
     /// keeps holding its floor before it decorates it. **A cell already open
     /// outranks one still solid** for the same reason one rung down: laying
-    /// the tile spends the shared substrate and cutting more does not, so a
-    /// short-handed base finishes what it has already cut before it opens
-    /// more ground it cannot yet pay to floor.
+    /// the tile spends the shared substrate and cutting more does not, so
+    /// the units there are go to flooring what is already cut before a body
+    /// is spent opening more ground.
     ///
     /// **Structural only, never a stock count.** What a site can be *paid*
     /// for is `Game::drop_dry_dig_wants`, which runs over the assembled want
@@ -2106,22 +2103,23 @@ impl Game {
     /// base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
-    /// **A cut is dry when the tile that will hold it is**, which is what
-    /// makes the substrate a *budget* claimed in want order rather than a
-    /// figure each site reads for itself. Cutting spends nothing, so asked
-    /// per site the answer is always yes, and a crew holding no Blank
-    /// Substrate opens the whole plan and floors none of it — bare ground
-    /// no structure can stand on. So a cut claims the tile it will need
-    /// (`1`), the same claim the tile job it turns into makes, carried over
-    /// unchanged because a site is only ever one of the two; an `Apply`
-    /// claims `FLOOR_FINISH_COST`; a `Strip` claims nothing, spending
-    /// nothing and leaving nothing exposed.
+    /// **A cut is never dry.** Cutting spends nothing, so a solid cell claims
+    /// nothing from the budget and is never dropped: the crew mines the cell
+    /// out now and floors it later, once substrate exists. That is the
+    /// player's call — a base with no Lathe yet still digs, rather than
+    /// holding every cut on a tile it has no way to make. The cut cell stays
+    /// marked and becomes an ordinary tile job, which *is* dropped as dry
+    /// until a unit arrives. A tile job claims `1`, an `Apply` claims
+    /// `FLOOR_FINISH_COST`, a `Strip` claims nothing; the substrate is a
+    /// *budget* claimed in want order, so open cells — sorted first by
+    /// `dig_wants` — take the units before any finish does.
     ///
-    /// **The sum of those claims is what the plan asks the Lathe for**,
-    /// handed to `Game::sync_dig_order` from here because this is the one
-    /// pass that has priced every site the crew can reach. Holding the cut
-    /// without asking is the other half of the same stall: the crew waits
-    /// on a shelf nobody is told to fill.
+    /// **The plan still asks the Lathe for every tile it will spend**: a
+    /// solid cell adds the `1` its tile job will claim to `need`, though not
+    /// to the budget, and the total is handed to `Game::sync_dig_order` from
+    /// here because this is the one pass that has priced every site the crew
+    /// can reach. A cut cell waiting on a shelf nobody is told to fill would
+    /// stay bare for the rest of the run.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
     /// and before the matching**, and that placement is the budget's half
@@ -2160,17 +2158,22 @@ impl Game {
                 .get::<DigSite>(site)
                 .and_then(|d| d.finish.clone());
             let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
-            let claim = match &finish {
-                None => 1,
-                Some(FinishOrder::Apply(_)) => crate::tuning::FLOOR_FINISH_COST,
-                Some(FinishOrder::Strip) => 0,
+            // `(claim, asks)`: what the site takes from the budget now, and
+            // what it adds to the plan's order. They differ only for a cut.
+            let (claim, asks) = match &finish {
+                None if solid => (0, 1),
+                None => (1, 1),
+                Some(FinishOrder::Apply(_)) => {
+                    let cost = crate::tuning::FLOOR_FINISH_COST;
+                    (cost, cost)
+                }
+                Some(FinishOrder::Strip) => (0, 0),
             };
-            need += claim;
+            need += asks;
             if budget < claim {
-                let reason = match (&finish, solid) {
-                    (Some(_), _) => DigDryReason::Finish,
-                    (None, true) => DigDryReason::Cut,
-                    (None, false) => DigDryReason::Tile,
+                let reason = match finish {
+                    Some(_) => DigDryReason::Finish,
+                    None => DigDryReason::Tile,
                 };
                 self.announce_dig_dry(site, at.x, at.y, reason);
                 dry.push(site);
@@ -2197,7 +2200,7 @@ impl Game {
     /// `move_work_order` is how the player promotes it, and a resize keeps
     /// whatever position it has. Filed only where `queue_work_order` would
     /// accept it: a base with no Lathe gets no order the chain rule would
-    /// refuse by hand, and the held-off lines already say what is short. An
+    /// refuse by hand, and the dry lines already say what is short. An
     /// order already standing when the chain later breaks stays, and stalls
     /// the way a player's does.
     ///
@@ -2267,9 +2270,6 @@ impl Game {
             // announcement's own wording a few hundred lines up: two stalls
             // sharing a phrase is two tests each satisfied by the other's
             // bug.
-            DigDryReason::Cut => format!(
-                "Your crew holds off cutting ({x}, {y}) — no {name} to spare to floor the cut with."
-            ),
             DigDryReason::Tile => format!(
                 "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} to spare."
             ),

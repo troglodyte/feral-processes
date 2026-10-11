@@ -31,13 +31,36 @@ fn d_opens_the_dossier_and_esc_returns_to_the_manifest() {
 }
 
 /// Lowercase `d` is not it. On the map `d` is a verb already, and the rule
-/// across every screen in this game is that a lowercase letter picks a row.
+/// across every screen in this game is that a lowercase letter picks a row:
+/// row `d` is the 13th subject, which a one-program roster does not have.
 #[test]
-fn lowercase_d_does_nothing_on_a_manifest() {
-    let mut app = test_app(7302);
-    open_player_manifest(&mut app);
+fn lowercase_d_jumps_to_row_d() {
+    let mut app = app_owning_distant_programs(7302, 1);
+    let me = open_player_manifest(&mut app);
     app.handle_key(GameKey::Char('d'));
-    assert_eq!(app.mode, Mode::Manifest);
+    assert_eq!(app.mode, Mode::Manifest, "never the dossier");
+    assert_eq!(app.pending_manifest, me, "no row d, so nothing moved");
+}
+
+/// Paging and jumping from the dossier move the subject without leaving the
+/// page, so the dossier always describes whoever the rail would highlight.
+#[test]
+fn the_dossier_pages_and_jumps_and_stays_the_dossier() {
+    let mut app = app_owning_distant_programs(7304, 2);
+    let subjects = app.manifest_subjects();
+    open_player_manifest(&mut app);
+    app.handle_key(GameKey::Char('D'));
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.mode, Mode::Dossier);
+    assert_eq!(app.pending_manifest, Some(subjects[1]));
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
+    app.handle_key(GameKey::Char('3'));
+    assert_eq!(app.mode, Mode::Dossier);
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.pending_manifest, Some(subjects[2]), "no row b");
+    assert_eq!(app.mode, Mode::Dossier);
 }
 
 /// The dossier is a page of the manifest, and the manifest is where the

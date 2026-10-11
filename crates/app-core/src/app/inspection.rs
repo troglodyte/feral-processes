@@ -278,7 +278,7 @@ impl App {
     /// Unlike the popup this replaced, the manifest doesn't close on any key
     /// — ←/→ page between subjects, so only Esc leaves.
     pub(crate) fn handle_manifest_key(&mut self, key: GameKey) {
-        if key == GameKey::Char('w') {
+        if key == GameKey::Char('W') {
             self.start_watching();
             return;
         }
@@ -312,26 +312,64 @@ impl App {
                 return;
             }
         }
-        let step = match key {
-            GameKey::Left => -1,
-            GameKey::Right => 1,
-            GameKey::Esc => {
-                self.leave_manifest();
-                return;
+        if key == GameKey::Esc {
+            self.leave_manifest();
+            return;
+        }
+        self.manifest_nav_key(key);
+    }
+
+    /// The keys that move the sheet along the rail, shared by the manifest
+    /// and the dossier so the two cannot disagree about them. ↑/↓ and ←/→
+    /// page; a digit or lowercase letter jumps to that row of
+    /// `manifest_subjects`.
+    ///
+    /// The arrows are matched here and never reach `selected_index`, which
+    /// would also move `menu_selected` — the roster's parked row.
+    pub(crate) fn manifest_nav_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Left | GameKey::Up => self.page_manifest(-1),
+            GameKey::Right | GameKey::Down => self.page_manifest(1),
+            GameKey::Char(_) => {
+                let len = self.manifest_subjects().len();
+                if let Some(idx) = self.selected_index(key, len) {
+                    self.jump_manifest(idx);
+                }
             }
-            _ => return,
-        };
+            _ => {}
+        }
+    }
+
+    /// Steps the sheet `step` subjects along the rail, wrapping. A wild
+    /// program isn't on the rail, so there is nothing to step from.
+    pub(crate) fn page_manifest(&mut self, step: isize) {
         let subjects = self.manifest_subjects();
-        let Some(current) = self
-            .pending_manifest
-            .and_then(|e| subjects.iter().position(|&s| s == e))
-        else {
-            // A wild program isn't in the list, so there is nothing to cycle
-            // to — the footer doesn't offer the keys either.
+        let Some(current) = self.manifest_rail_position(&subjects) else {
             return;
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
-        self.pending_manifest = Some(subjects[next]);
+        self.show_manifest_subject(subjects[next]);
+    }
+
+    /// Puts the sheet on rail row `idx`. A wild program draws no rail, so a
+    /// row key on one does nothing.
+    pub(crate) fn jump_manifest(&mut self, idx: usize) {
+        let subjects = self.manifest_subjects();
+        if self.manifest_rail_position(&subjects).is_none() {
+            return;
+        }
+        if let Some(&subject) = subjects.get(idx) {
+            self.show_manifest_subject(subject);
+        }
+    }
+
+    fn manifest_rail_position(&self, subjects: &[Entity]) -> Option<usize> {
+        self.pending_manifest
+            .and_then(|e| subjects.iter().position(|&s| s == e))
+    }
+
+    fn show_manifest_subject(&mut self, subject: Entity) {
+        self.pending_manifest = Some(subject);
         self.fit_manifest_tab();
     }
 
@@ -436,18 +474,20 @@ impl App {
         self.mode = Mode::CompanionMemories;
     }
 
-    /// The dossier is a page, not a menu: nothing but Esc is bound, and Esc
-    /// steps back to the manifest it was opened from rather than out to
+    /// The dossier is a page, not a menu: Esc and the rail keys are bound, and
+    /// Esc steps back to the manifest it was opened from rather than out to
     /// wherever that manifest came from — `leave_manifest`'s job stays
     /// `leave_manifest`'s.
     pub(crate) fn handle_dossier_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.status_line = None;
             self.mode = Mode::Manifest;
+            return;
         }
+        self.manifest_nav_key(key);
     }
 
-    /// `w` on a manifest: put the map's camera on this program and go watch
+    /// `W` on a manifest: put the map's camera on this program and go watch
     /// it.
     ///
     /// **Drops the whole sheet rather than backing into the list it was
@@ -455,7 +495,7 @@ impl App {
     /// happens on the map, so `leave_manifest`'s return-to-your-list rule is
     /// the wrong one here — there would be nothing to see behind the list.
     ///
-    /// `Game::watch_position` is the one gate. The footer offers `w` exactly
+    /// `Game::watch_position` is the one gate. The footer offers `W` exactly
     /// when it answers `Some`, so this refusal is only ever reached by a
     /// player pressing a key the screen did not advertise — but it is a
     /// sentence rather than a swallowed press, because a key that does

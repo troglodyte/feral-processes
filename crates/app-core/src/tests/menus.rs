@@ -171,6 +171,66 @@ fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
     assert_eq!(app.mode, Mode::Manifest, "cycling never leaves the screen");
 }
 
+#[test]
+fn up_and_down_page_the_subjects_as_left_and_right_do() {
+    let mut app = app_owning_distant_programs(7501, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.pending_manifest, Some(subjects[1]));
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.pending_manifest, Some(subjects[2]), "Up wraps");
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+#[test]
+fn a_digit_or_lowercase_letter_jumps_to_that_subject_and_keeps_the_face() {
+    let mut app = app_owning_distant_programs(7502, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Char('3'));
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
+
+    // A program's Social face, then a jump to another program keeps it...
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    app.handle_key(GameKey::Char('3'));
+    assert_eq!(app.pending_manifest, Some(subjects[2]));
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    // ...and a jump to you, who have no Social face, falls back to Stats.
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+
+    // Letters label rows from the tenth; this roster has three.
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]), "no row a");
+    assert_eq!(app.mode, Mode::Manifest);
+}
+
+#[test]
+fn a_wild_subject_ignores_digits_letters_and_up_down() {
+    let mut app = app_owning_distant_programs(7503, 2);
+    let (wild, direction) = a_wild_program_and_its_direction(&mut app);
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(direction);
+    assert_eq!(app.pending_manifest, Some(wild));
+    for key in [
+        GameKey::Char('1'),
+        GameKey::Char('2'),
+        GameKey::Char('a'),
+        GameKey::Up,
+        GameKey::Down,
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.pending_manifest, Some(wild), "{key:?}");
+        assert_eq!(app.mode, Mode::Manifest, "{key:?}");
+    }
+}
+
 /// A wild program three tiles due east of the player, and the key that
 /// looks at it.
 ///

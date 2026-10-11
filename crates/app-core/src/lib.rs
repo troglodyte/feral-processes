@@ -2752,7 +2752,7 @@ pub struct App {
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
     /// Which owned program the map's camera is following, if any — started
-    /// with `w` on that program's manifest and handed back by `Esc`, by a
+    /// with `W` on that program's manifest and handed back by `Esc`, by a
     /// step, or by the program ceasing to be watchable.
     ///
     /// **Transient, and deliberately not saved**, `BattleReveal`'s

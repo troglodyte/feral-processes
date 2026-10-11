@@ -9,7 +9,7 @@ use super::manifest::layout::{ManifestLayout, section_row_h};
 use super::manifest::{PIPS, draw_pairs, elided_to_fit, pip_cells, subhead, wrap_to_width};
 use super::*;
 use feral_processes_engine::tuning::{BOND_CLOSE_AT, BOND_ENEMY_AT};
-use feral_processes_engine::{RelationshipRow, RosterRow, SocialView};
+use feral_processes_engine::{RelationshipRow, SocialView};
 
 /// The relationships list's cap, its last line spent on "+N more" when the
 /// holder has opinions of more programs than this.
@@ -50,26 +50,14 @@ fn shown(rows: &[RelationshipRow]) -> (&[RelationshipRow], usize) {
 }
 
 /// Paints the face's body: `l`'s ledger columns, the first two as one.
-pub(super) fn paint_social(
-    view: &SocialView,
-    roster: &[RosterRow],
-    l: &ManifestLayout,
-    painter: &Painter,
-    m: &Metrics,
-) {
+pub(super) fn paint_social(view: &SocialView, l: &ManifestLayout, painter: &Painter, m: &Metrics) {
     let [first, second, narrow] = l.ledger;
     let wide = Rect::new(first.x, first.y, second.x + second.w - first.x, first.h);
-    paint_relationships(view, roster, wide, painter, m);
+    paint_relationships(view, wide, painter, m);
     paint_narrow(view, narrow, painter, m);
 }
 
-fn paint_relationships(
-    view: &SocialView,
-    roster: &[RosterRow],
-    rect: Rect,
-    painter: &Painter,
-    m: &Metrics,
-) {
+fn paint_relationships(view: &SocialView, rect: Rect, painter: &Painter, m: &Metrics) {
     subhead("RELATIONSHIPS", "", rect, rect.y, painter, m);
     let row_h = section_row_h(m);
     let mut base = rect.y + m.line_height + row_h * 0.85;
@@ -82,24 +70,21 @@ fn paint_relationships(
     let name_x = rect.x + NAME_COL * char_w;
     let (rows, hidden) = shown(&view.relationships);
     for row in rows {
-        // The roster names every program you own by the label a
-        // relationship carries, so it is where the glyph comes from.
-        let owned = roster.iter().find(|r| r.name == row.name);
         let ink = if row.gone {
             hud::palette::FAINT
         } else {
             hud::palette::BODY
         };
-        match (row.gone, owned) {
-            (false, Some(r)) => painter.map(
-                r.glyph.to_string(),
+        match row.glyph {
+            Some((ch, color)) if !row.gone => painter.map(
+                ch.to_string(),
                 rect.x,
                 base,
                 m.font_size,
-                glyph_color(r.color),
+                glyph_color(color),
             ),
-            (true, _) => painter.ui("x", rect.x, base, m.font_size, hud::palette::FAINT),
-            (false, None) => painter.ui("·", rect.x, base, m.font_size, hud::palette::FAINT),
+            _ if row.gone => painter.ui("x", rect.x, base, m.font_size, hud::palette::FAINT),
+            _ => painter.ui("·", rect.x, base, m.font_size, hud::palette::FAINT),
         }
         let bond = bond_text(row);
         let bond_w = painter.measure_ui_advance(&bond, m.font_size);
@@ -186,6 +171,7 @@ pub(super) mod tests {
             bond,
             opinion,
             gone,
+            glyph: None,
         }
     }
 

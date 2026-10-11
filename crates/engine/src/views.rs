@@ -3994,6 +3994,10 @@ pub struct RelationshipRow {
     /// so the row reads the bond as it stood; the band is derived from it.
     pub opinion: f32,
     pub gone: bool,
+    /// The live subject's own glyph; `None` once it has left. Carried on the
+    /// row because two programs can wear the same label, so no lookup by
+    /// name can say which one a row is.
+    pub glyph: Option<(char, GlyphColor)>,
 }
 
 /// One line of a rendered conversation: who says it, already named.

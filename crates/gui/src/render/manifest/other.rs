@@ -98,7 +98,7 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
     );
     match &f.body {
         Body::Score(page) => paint_score(page, l.body(), painter, m),
-        Body::Social(view) => paint_social(view, &f.roster, &l, painter, m),
+        Body::Social(view) => paint_social(view, &l, painter, m),
         Body::Dossier(report) => paint_dossier(report, l.body(), painter, m),
         Body::Talk(exchanges) => paint_talk(exchanges, &l, painter, m),
     }

@@ -466,7 +466,7 @@ fn mixed_base(seed: u32) -> MixedBase {
     put_output(&mut game, store, "power_cell", 5);
     file_build(&mut game, "depot", -2, 2).unwrap();
     let site = game.build_site_at(-2, 2).expect("a request was filed");
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let r = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
     game.toggle_mark_box((0, r + 1), (1, r + 1), None);
     let mut digs: Vec<Entity> = [(0, r + 1), (1, r + 1)]
         .into_iter()
@@ -584,7 +584,7 @@ fn build_and_dig(seed: u32) -> (Game, Entity, Entity) {
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
     file_build(&mut game, "depot", -2, 2).unwrap();
     let site = game.build_site_at(-2, 2).expect("a request was filed");
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let r = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
     game.toggle_mark_box((0, r + 1), (0, r + 1), None);
     let dig = game
         .dig_site_at(0, r + 1)

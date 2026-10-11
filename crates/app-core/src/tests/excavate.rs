@@ -18,7 +18,7 @@ fn app_at_the_frontier(seed: u32) -> App {
     found_the_base(&mut app);
     stand_in_base_at(
         &mut app,
-        feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
+        feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
         0,
     );
     app
@@ -95,7 +95,7 @@ fn app_without_floors(seed: u32) -> (App, NoFloorsAssets) {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     data.locale = Locale::Base {
-        x: feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
+        x: feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
         y: 0,
     };
     save::save_to_file(&path, &data).unwrap();

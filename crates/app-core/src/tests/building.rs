@@ -934,13 +934,13 @@ fn node_row(app: &mut App) -> usize {
 /// at all.
 #[test]
 fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
-    use feral_processes_engine::tuning::STARTING_POCKET_RADIUS;
+    use feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH;
     use feral_processes_engine::world::Biome;
 
     let mut app =
         app_owning_a_program_and_a_compiler_with_cargo(750, &[], &[("blank_substrate", 1)]);
-    let edge = (STARTING_POCKET_RADIUS, 0);
-    let cut = (STARTING_POCKET_RADIUS + 1, 0);
+    let edge = (STARTING_POCKET_HALF_WIDTH, 0);
+    let cut = (STARTING_POCKET_HALF_WIDTH + 1, 0);
     stand_in_base_at(&mut app, edge.0, edge.1);
 
     // The bump only cuts once the tool is armed — `MiningMode` starts off so

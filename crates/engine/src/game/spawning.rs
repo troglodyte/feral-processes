@@ -720,7 +720,7 @@ impl Game {
     /// The reach is `BaseGrid::radius`, which answers 0 while base space is
     /// still solid everywhere — so the two branches this used to take are
     /// one expression, and it gives the same numbers it always did: nothing
-    /// subtracted before a Home is deployed, `STARTING_POCKET_RADIUS`
+    /// subtracted before a Home is deployed, `STARTING_POCKET_HALF_WIDTH`
     /// subtracted after. It read `Platform::center`/`radius` until the base
     /// went out of phase, and that pair is now set by a breach and nothing
     /// else — so a fresh run silently *shrank* its opening ring by four

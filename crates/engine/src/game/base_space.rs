@@ -205,8 +205,8 @@ impl Game {
     }
 
     /// Lays the pocket the run opens with: `BaseCell::Floor` over the
-    /// chamfered box of `STARTING_POCKET_RADIUS` around base space's own
-    /// origin.
+    /// chamfered box of `STARTING_POCKET_HALF_WIDTH` by
+    /// `STARTING_POCKET_HALF_HEIGHT` around base space's own origin.
     ///
     /// Called from the one site `Game::stamp_platform` used to be called
     /// from — deploying the first Home — and it is a one-for-one
@@ -225,12 +225,13 @@ impl Game {
     /// ever one — but a pocket that could be *shrunk* by re-laying it would
     /// be a much worse thing to have to reason about later.
     pub(crate) fn lay_starting_pocket(&mut self) {
-        let r = crate::tuning::STARTING_POCKET_RADIUS;
+        let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+        let h = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
         let cut = crate::tuning::PLATFORM_CORNER_CUT;
         let mut grid = self.world.resource_mut::<BaseGrid>();
-        for dy in -r..=r {
-            for dx in -r..=r {
-                if dx.abs() + dy.abs() <= 2 * r - cut {
+        for dy in -h..=h {
+            for dx in -w..=w {
+                if dx.abs() + dy.abs() <= w + h - cut {
                     grid.lay_floor(dx, dy);
                 }
             }

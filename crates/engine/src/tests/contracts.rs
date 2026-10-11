@@ -1284,7 +1284,7 @@ fn stand_off_base(game: &mut Game) {
 /// reach the board used to be reachable from. This is the case the whole rule
 /// exists for.
 fn stand_across_the_base(game: &mut Game) {
-    let edge = crate::tuning::STARTING_POCKET_RADIUS;
+    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
     stand_in_base_at(game, edge, 0);
     let broker_gap = edge - 1;
     assert!(
@@ -2613,7 +2613,7 @@ fn broker_reach_reports_the_three_states() {
 }
 
 /// The base's floor is laid, not derived from a radius, so the rule has to
-/// follow the floor — freezing the desk at `STARTING_POCKET_RADIUS` where the
+/// follow the floor — freezing the desk at `STARTING_POCKET_HALF_WIDTH` where the
 /// question is about a base that *exists* is the mistake this guards. Slice 2
 /// lets the player lay floor for a price; this lays it directly, because what
 /// is under test is the desk following it and not what it costs.
@@ -2621,7 +2621,7 @@ fn broker_reach_reports_the_three_states() {
 fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
     let mut game = fresh();
     deploy_broker(&mut game);
-    let grown = (crate::tuning::STARTING_POCKET_RADIUS + 3, 0);
+    let grown = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 3, 0);
     stand_in_base_at(&mut game, grown.0, grown.1);
     assert_eq!(
         game.broker_reach(),

@@ -637,7 +637,7 @@ fn game_with_a_base(seed: u32) -> Game {
 /// A base-space cell outside the starting pocket: solid rock, and the same
 /// cell whichever test asks. One step north of the pocket's north edge.
 fn solid_rock_north() -> (i32, i32) {
-    (0, -crate::tuning::STARTING_POCKET_RADIUS - 1)
+    (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT - 1)
 }
 
 /// The player's tile on the zone surface.
@@ -825,7 +825,7 @@ fn swinging_at_solid_rock_moves_nothing_in_either_space() {
     // different code path from the one this test is about.
     game.toggle_mining();
     // The pocket's north edge, so the step north leaves it.
-    let edge = (0, -crate::tuning::STARTING_POCKET_RADIUS);
+    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
     stand_in_base_at(&mut game, edge.0, edge.1);
     let standing = player_tile(&game);
     let tick = game.current_tick();
@@ -902,7 +902,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     let mut game = game_with_a_base(3129);
     // The pocket's north edge, with a machine beside it: a job to break off,
     // and solid rock one step further north to break it off against.
-    let edge = (0, -crate::tuning::STARTING_POCKET_RADIUS);
+    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
     let node = spawn_mining_node(&mut game, edge.0 + 1, edge.1);
     game.enter_base().unwrap();
     // Tools out: a disarmed bump is refused before it can swing, which is a
@@ -942,17 +942,18 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
 
 /// How many cells `Game::lay_starting_pocket` is supposed to floor, counted
 /// the long way round rather than read off the implementation: the chamfered
-/// box the base slab has always been, at `STARTING_POCKET_RADIUS`.
+/// box of `STARTING_POCKET_HALF_WIDTH` by `STARTING_POCKET_HALF_HEIGHT`.
 ///
 /// Spelled out here so a change to either constant is a change this test
 /// *sees* rather than one it silently follows.
 fn pocket_cells() -> usize {
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let h = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
     let cut = crate::tuning::PLATFORM_CORNER_CUT;
     let mut n = 0;
-    for dy in -r..=r {
-        for dx in -r..=r {
-            if dx.abs() + dy.abs() <= 2 * r - cut {
+    for dy in -h..=h {
+        for dx in -w..=w {
+            if dx.abs() + dy.abs() <= w + h - cut {
                 n += 1;
             }
         }
@@ -1037,7 +1038,7 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
     );
     assert!(grid.is_floor(0, 0), "including the cell the Home stands on");
     assert!(
-        grid.is_solid(crate::tuning::STARTING_POCKET_RADIUS + 1, 0),
+        grid.is_solid(crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0),
         "and it stops: past the radius is unmined rock"
     );
     assert_eq!(
@@ -1058,7 +1059,7 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
 
 /// The opening pocket is 19 cells across, double the 9 it was: at 9 the
 /// beginner structures did not all fit. Spelled as a literal so a change to
-/// `STARTING_POCKET_RADIUS` is a change this test sees.
+/// `STARTING_POCKET_HALF_WIDTH` is a change this test sees.
 #[test]
 fn the_starting_pocket_is_nineteen_cells_wide() {
     let mut game = game(3132);
@@ -1069,6 +1070,24 @@ fn the_starting_pocket_is_nineteen_cells_wide() {
     let row: Vec<i32> = (-20..=20).filter(|&x| grid.is_floor(x, 0)).collect();
     assert_eq!(row.len(), 19, "the Home's row is floored edge to edge");
     assert_eq!((row[0], row[18]), (-9, 9), "centred on base space's origin");
+}
+
+/// Twice as wide, not twice as big: the pocket kept the 9-cell height it
+/// opened at when it was widened.
+#[test]
+fn the_starting_pocket_is_nine_cells_tall() {
+    let mut game = game(3133);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    place_now(&mut game, "home", 1, 0).unwrap();
+
+    let grid = game.world.resource::<base_grid::BaseGrid>();
+    let column: Vec<i32> = (-20..=20).filter(|&y| grid.is_floor(0, y)).collect();
+    assert_eq!(column.len(), 9, "the Home's column is floored edge to edge");
+    assert_eq!(
+        (column[0], column[8]),
+        (-4, 4),
+        "centred on base space's origin"
+    );
 }
 
 /// A machine goes up on pocket Floor exactly as it always went up on the
@@ -1102,7 +1121,7 @@ fn deploying_off_the_pocket_floor_is_refused() {
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
     place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
-    let edge = crate::tuning::STARTING_POCKET_RADIUS;
+    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
     game.world.insert_resource(Locale::Base { x: edge, y: 0 });
     assert!(
         game.world
@@ -1161,7 +1180,7 @@ fn a_broker_is_out_of_reach_off_the_floor() {
     );
 
     game.enter_base().unwrap();
-    let outside = crate::tuning::STARTING_POCKET_RADIUS + 3;
+    let outside = crate::tuning::STARTING_POCKET_HALF_WIDTH + 3;
     game.world
         .insert_resource(Locale::Base { x: outside, y: 0 });
     assert!(
@@ -1500,7 +1519,7 @@ fn view_tiles_synthesises_the_three_base_biomes() {
     // A cell mined but not floored, just past the starting pocket's edge —
     // `BaseGrid::open` is `pub(crate)` and unused by any gameplay path this
     // slice, so this is the only way to put one on the board at all.
-    let open_at = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
+    let open_at = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(open_at.0, open_at.1, 0);
@@ -1509,7 +1528,7 @@ fn view_tiles_synthesises_the_three_base_biomes() {
     // A window wide enough to reach the Open cell just past the pocket and
     // solid rock well beyond it, centred on base space's own origin —
     // `stand_in_base` always lands the party there.
-    let half = crate::tuning::STARTING_POCKET_RADIUS + 3;
+    let half = crate::tuning::STARTING_POCKET_HALF_WIDTH + 3;
     let tiles = game.view_tiles(half, half);
     let at = |x: i32, y: i32| tiles[(half + y) as usize][(half + x) as usize];
 
@@ -1740,7 +1759,7 @@ fn game_at_the_frontier(seed: u32) -> Game {
     let mut game = game(seed);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     place_now(&mut game, "home", 1, 0).unwrap();
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
     game
 }
 
@@ -1775,7 +1794,7 @@ fn game_at_the_frontier_cutting(seed: u32) -> Game {
     game
 }
 
-const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
+const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
 
 fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
     game.world.resource::<base_grid::BaseGrid>().cell(x, y)
@@ -1847,9 +1866,13 @@ fn identical_swings_at_rock_do_identical_damage() {
         let wall = game.wall_at(x, y);
         (wall.durability, wall.swing_cap)
     };
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
-    let north = (-r..=r)
-        .map(|x| (x, r + 1))
+    let (w, h) = (
+        crate::tuning::STARTING_POCKET_HALF_WIDTH,
+        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+    );
+    let north = (-w..=w)
+        .filter(|&x| game.world.resource::<base_grid::BaseGrid>().is_floor(x, h))
+        .map(|x| (x, h + 1))
         .find(|&at| kind(&game, at) == kind(&game, east))
         .expect("the pocket's north face has a wall of the east wall's kind");
 
@@ -2241,12 +2264,12 @@ fn a_mark_survives_a_save_round_trip() {
 /// far corner *up-left* of the anchor so the box has to be normalised rather
 /// than assumed ordered.
 const PLAN_ANCHOR: (i32, i32) = (
-    crate::tuning::STARTING_POCKET_RADIUS + 2,
-    crate::tuning::STARTING_POCKET_RADIUS + 2,
+    crate::tuning::STARTING_POCKET_HALF_WIDTH + 2,
+    crate::tuning::STARTING_POCKET_HALF_WIDTH + 2,
 );
 const PLAN_FAR: (i32, i32) = (
-    crate::tuning::STARTING_POCKET_RADIUS + 1,
-    crate::tuning::STARTING_POCKET_RADIUS + 1,
+    crate::tuning::STARTING_POCKET_HALF_WIDTH + 1,
+    crate::tuning::STARTING_POCKET_HALF_WIDTH + 1,
 );
 const PLAN_CELLS: [(i32, i32); 4] = [
     PLAN_FAR,
@@ -3365,7 +3388,7 @@ fn a_site_that_becomes_reachable_again_can_complain_again() {
     // itself is not part of it — reverting the corridor below has to leave
     // a tile to stand on, or the site would come back as `BoxedIn` and be
     // silent for a different reason than the one under test.
-    let corridor = (crate::tuning::STARTING_POCKET_RADIUS + 1)..STRANDED_STATION.0;
+    let corridor = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1)..STRANDED_STATION.0;
     let tick = game.current_tick();
     for x in corridor.clone() {
         game.world
@@ -3464,7 +3487,7 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
     let digger = spawn_tamed(&mut game, 30, 3);
     game.world.entity_mut(digger).insert((
         Position {
-            x: crate::tuning::STARTING_POCKET_RADIUS,
+            x: crate::tuning::STARTING_POCKET_HALF_WIDTH,
             y: 0,
         },
         Task {
@@ -3953,9 +3976,9 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
     // Three cells in open rock, far enough out that nothing walkable
     // touches any of them, and every one of them sorts before `WALL`.
     let buried = [
-        (-crate::tuning::STARTING_POCKET_RADIUS - 3, -1),
-        (-crate::tuning::STARTING_POCKET_RADIUS - 3, 0),
-        (-crate::tuning::STARTING_POCKET_RADIUS - 3, 1),
+        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, -1),
+        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, 0),
+        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, 1),
     ];
     for cell in buried {
         mark(&mut game, cell);
@@ -3994,7 +4017,7 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
     substrate_for(&mut game, 1);
     // A sealed cell of open rock, walled in on every side: it gives its four
     // neighbours a face nothing can route to.
-    let sealed = (-crate::tuning::STARTING_POCKET_RADIUS - 4, 0);
+    let sealed = (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 4, 0);
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(sealed.0, sealed.1, 0);
@@ -4394,7 +4417,10 @@ fn arming_the_bump_spends_no_turn() {
 fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
     let game = game_at_the_frontier(9201);
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let (w, h) = (
+        crate::tuning::STARTING_POCKET_HALF_WIDTH,
+        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+    );
 
     assert!(
         grid.is_exposed(WALL.0, WALL.1),
@@ -4408,9 +4434,9 @@ fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
         !grid.is_exposed(0, 0),
         "walkable ground is not a face — the predicate must require solid"
     );
-    // The pocket is a diamond, so the cell diagonally off its corner touches
+    // The pocket's corners are cut, so the cell diagonally off one touches
     // walkable ground at a corner and nowhere else.
-    let diagonal = (r, r);
+    let diagonal = (w, h);
     if grid.is_solid(diagonal.0, diagonal.1) {
         let orthogonal_air = [(1, 0), (-1, 0), (0, 1), (0, -1)]
             .iter()
@@ -4560,7 +4586,7 @@ fn a_posted_digger_is_drawn_on_the_map() {
         .dig_site_at(target.0, target.1)
         .expect("a marked wall has a dig site");
 
-    let digger = spawn_tamed_on_map(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    let digger = spawn_tamed_on_map(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
     game.world.entity_mut(digger).insert(Task {
         kind: TaskKind::Excavate,
         target: site,

@@ -6,7 +6,7 @@ use crate::components::Squeezing;
 use crate::components::{Memories, MemorySubject};
 use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
 use crate::memories::MemoryId;
-use crate::tuning::STARTING_POCKET_RADIUS;
+use crate::tuning::STARTING_POCKET_HALF_WIDTH;
 use crate::*;
 
 /// A Home on the player's own tile — walkable by definition — plus enough
@@ -354,7 +354,7 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     // far side of the pocket is what buys the walk.
     stand_in_base_at(
         &mut game,
-        node_pos.x + STARTING_POCKET_RADIUS - 1,
+        node_pos.x + STARTING_POCKET_HALF_WIDTH - 1,
         node_pos.y,
     );
     game.assign_cronjob(worker, node).unwrap();
@@ -632,8 +632,18 @@ fn a_hauler_carries_a_load_through_a_door() {
     let mut game = base(21);
     let node = deploy(&mut game, "mining_node", 0, 2);
     let depot = deploy(&mut game, "depot", 4, 0);
+    // Across every floored cell of the column, since the pocket is wider
+    // than it is tall and its reach says nothing about this column's height.
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
     let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
-    for y in -radius..=radius {
+    let column: Vec<i32> = (-radius..=radius)
+        .filter(|&y| {
+            game.world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(px + 2, py + y)
+        })
+        .collect();
+    for y in column {
         let kind = if y == 0 { "door" } else { "wall" };
         deploy(&mut game, kind, 2, y);
     }
